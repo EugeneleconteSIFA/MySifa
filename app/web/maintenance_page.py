@@ -826,6 +826,15 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
+                  <option value="Cohésio 1">Cohésio 1</option>
+                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="DSI">DSI</option>
+                  <option value="Repiquage">Repiquage</option>
+                </select>
+              </div>
               <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
