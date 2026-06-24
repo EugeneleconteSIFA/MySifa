@@ -1224,6 +1224,30 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 body.light .portal-logout:hover{text-shadow:0 0 12px rgba(8,145,178,.35)}
 body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38,.35)}
 
+/* ── Cockpit post-it (haut gauche) — couleurs jaunes littérales, identiques aux deux thèmes ── */
+.cockpit-postit{position:fixed;top:22px;left:22px;z-index:120;width:256px;background:#fff6cf;border:1px solid #f0dd92;border-radius:14px;box-shadow:0 10px 28px rgba(120,100,20,.18);text-align:left;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif}
+.cockpit-postit.cockpit-postit--hidden{display:none}
+.cockpit-postit-h{display:flex;align-items:center;gap:8px;padding:12px 14px 8px}
+.cockpit-postit-h .cockpit-postit-dot{width:12px;height:12px;border-radius:50%;background:#f5c531;flex-shrink:0}
+.cockpit-postit-h b{font-size:13px;color:#6b5618;flex:1;font-weight:700}
+.cockpit-postit-close{background:none;border:none;color:#b29a4e;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:2px;line-height:0;border-radius:6px}
+.cockpit-postit-close:hover{color:#8a7330;background:rgba(120,100,20,.08)}
+.cockpit-postit-body{padding:4px 14px 12px}
+.cockpit-postit-item{display:flex;gap:9px;font-size:11.5px;color:#6b5618;line-height:1.5;cursor:pointer}
+.cockpit-postit-item input{margin-top:3px;accent-color:#c79a16;cursor:pointer;flex-shrink:0}
+.cockpit-postit-foot{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-top:1px solid #ecd87f}
+.cockpit-postit-foot .cockpit-postit-add{font-size:12px;font-weight:700;color:#b8860b;cursor:pointer;background:none;border:none;padding:0;font-family:inherit}
+.cockpit-postit-foot .cockpit-postit-add:hover{text-decoration:underline}
+.cockpit-postit-foot .cockpit-postit-multi{font-size:11px;color:#8a7330}
+.cockpit-postit-foot .cockpit-postit-multi b{color:#b8860b}
+
+/* ── Hover tuiles d'application — pastille icône qui passe du fond accent translucide au plein accent ── */
+.portal-app{transition:transform .34s cubic-bezier(.22,.61,.36,1),box-shadow .34s cubic-bezier(.22,.61,.36,1),border-color .34s cubic-bezier(.22,.61,.36,1),background-color .34s cubic-bezier(.22,.61,.36,1)}
+.portal-app:hover{transform:translateY(-3px);box-shadow:0 12px 26px rgba(27,37,71,.10);border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.portal-app-icon{background:var(--accent-bg);color:var(--accent);width:50px;height:50px;border-radius:13px;transition:background .34s cubic-bezier(.22,.61,.36,1),color .34s cubic-bezier(.22,.61,.36,1)}
+.portal-app:hover .portal-app-icon{background:var(--accent);color:#fff}
+.portal-app--disabled:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
+
 @media (max-width:900px){
   /* Portail mobile / tablette : layout vertical, tuiles compactes */
   .portal-page{padding:20px 16px 28px;gap:16px}
@@ -2504,6 +2528,8 @@ function icon(name,size=16){
     'users': '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'palette': '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
     'shield-check': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',
+    // Lucide sticky-note — pastille post-it avec coin replié
+    'sticky-note': '<path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/>',
     // Palette bois — vue de côté : deck supérieur + traverse + 3 pieds
     'pallet': '<rect x="2" y="7" width="20" height="3" rx="0.5"/><rect x="2" y="14" width="20" height="3" rx="0.5"/><line x1="5" y1="10" x2="5" y2="14"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="19" y1="10" x2="19" y2="14"/><line x1="5" y1="17" x2="5" y2="20"/><line x1="12" y1="17" x2="12" y2="20"/><line x1="19" y1="17" x2="19" y2="20"/>',
     'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
@@ -4268,7 +4294,41 @@ function renderPortal(){
   const _humeurVal=(S.user&&S.user.humeur_active&&S.user.humeur_valeur&&S.user.humeur_date===_todayIso)?S.user.humeur_valeur:null;
   const profHumeurBadge=_humeurVal?(()=>{const sp=document.createElement('span');sp.className='portal-humeur-badge';sp.textContent=_humeurVal;return sp;})():null;
 
+  // Post-it (haut gauche) — visible par défaut, persisté via localStorage 'mysifa-cockpit-postit'
+  const _postitHidden=(()=>{try{return localStorage.getItem('mysifa-cockpit-postit')==='0';}catch(e){return false;}})();
+  const postitCard=h('div',{
+    id:'cockpit-postit-card',
+    className:'cockpit-postit'+(_postitHidden?' cockpit-postit--hidden':'')
+  },
+    h('div',{className:'cockpit-postit-h'},
+      h('span',{className:'cockpit-postit-dot'}),
+      h('b',null,'Post-it à faire'),
+      h('button',{
+        type:'button',
+        className:'cockpit-postit-close',
+        'aria-label':'Fermer le post-it',
+        title:'Fermer',
+        onClick:()=>{
+          const el=document.getElementById('cockpit-postit-card');
+          if(el)el.classList.add('cockpit-postit--hidden');
+          try{localStorage.setItem('mysifa-cockpit-postit','0');}catch(e){}
+        }
+      },iconEl('x',14))
+    ),
+    h('div',{className:'cockpit-postit-body'},
+      h('label',{className:'cockpit-postit-item'},
+        h('input',{type:'checkbox'}),
+        h('span',null,"Tester l'entrée Z1 sur MyStock → Production, vérifier le pré-remplissage + bloc palettes, puis l'onglet Stats sur MyProd.")
+      )
+    ),
+    h('div',{className:'cockpit-postit-foot'},
+      h('button',{type:'button',className:'cockpit-postit-add'},'+ Ajouter'),
+      h('span',{className:'cockpit-postit-multi'},h('b',null,'Activer'),' (multi-page)')
+    )
+  );
+
   const portalEl=h('div',{className:'portal-page'},
+    postitCard,
     h('div',{className:'portal-corner-stack'},
       h('button',{
         type:'button',
@@ -4311,7 +4371,20 @@ function renderPortal(){
         'aria-label':'Base de données',
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
-      },iconEl('database',24)):null
+      },iconEl('database',24)):null,
+      h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'Post-it à faire',
+        title:'Post-it à faire',
+        onClick:()=>{
+          const el=document.getElementById('cockpit-postit-card');
+          if(!el)return;
+          const willHide=!el.classList.contains('cockpit-postit--hidden');
+          el.classList.toggle('cockpit-postit--hidden',willHide);
+          try{localStorage.setItem('mysifa-cockpit-postit',willHide?'0':'1');}catch(e){}
+        }
+      },iconEl('sticky-note',24))
     ),
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
@@ -7922,7 +7995,17 @@ function renderLogin(){
     doLogin(emailI.value,pwdI.value);
   };
   const themeBtn=h('button',{type:'button',className:'login-theme-btn','aria-label':'Basculer thème clair/sombre',
-    onClick:()=>{try{MySifaTheme.toggleMode();}catch(e){}render();}},
+    onClick:()=>{
+      try{
+        const _p=MySifaTheme.loadPrefs();
+        const _nm=_p.mode==='light'?'dark':'light';
+        // Sauver UNIQUEMENT le mode (la palette/style restent ceux du user pour le post-login),
+        // puis ré-appliquer le rendu neutre pétrole sur la page de login.
+        MySifaTheme.setPrefs({mode:_nm});
+        MySifaTheme.applyPrefs({mode:_nm,palette:'mysifa',style:'defaut',bgAnim:_p.bgAnim});
+      }catch(e){}
+      render();
+    }},
     h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
     h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
   );
@@ -13502,8 +13585,12 @@ function render(){
   if(S.app!=='prod'){stopMachineStatusPolling();}
 
   if(!S.user||S.app==='login'){
-    // Sur le login : respecter la pref stockée (défaut = light, cf. mysifa_theme.js)
-    try{ MySifaTheme.initFromStorage(); }catch(e){}
+    // Sur le login : forcer la palette pétrole (mysifa) + style défaut, ne garder que le mode.
+    // Évite que la palette/style d'un compte précédemment loggé persiste sur l'écran de connexion.
+    try{
+      const _lp=MySifaTheme.loadPrefs();
+      MySifaTheme.applyPrefs({mode:_lp.mode,palette:'mysifa',style:'defaut',bgAnim:_lp.bgAnim});
+    }catch(e){}
     root.appendChild(renderLogin());
   }
   else if(S.app==='portal'){
