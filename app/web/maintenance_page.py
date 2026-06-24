@@ -381,7 +381,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 /* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
-.maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
+.maint-group{margin-top:8px}
+.maint-group + .maint-group{margin-top:24px}
+.maint-group-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.maint-group-title{margin:0;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.8px}
+.maint-group-count{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
 .maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:180px;transition:border-color .15s,box-shadow .15s}
 .maint-frame .maint-frame-stats{flex:1}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
@@ -556,10 +561,11 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </div>
 
         <!-- Cartes des opérations de maintenance périodiques.
-             Une carte par code DB avec périodique=OUI. Le contenu est vide pour
-             l'instant (placeholder). La grille est régénérée automatiquement
-             quand les codes changent dans Paramètres → Maintenance. -->
-        <div class="maint-frames-grid" id="maint-cards-grid"></div>
+             Une carte par code DB avec périodique=OUI, groupées par intervalle
+             (Hebdomadaire, Mensuel, Trimestriel...). La grille est régénérée
+             automatiquement quand les codes changent dans Paramètres → Maintenance,
+             ou quand une nouvelle saisie d'opération / contrôle est enregistrée. -->
+        <div id="maint-cards-grid"></div>
       </div>
 
       <!-- View : Planning -->
@@ -2598,9 +2604,35 @@ function setMaintMachine(m){
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
   renderMaintCards();
 }
+// Convertit un nombre de jours en libellé standard (Hebdomadaire, Mensuel, etc.)
+function _freqDaysToLabel(d){
+  if(d == null) return 'Sans intervalle reconnu';
+  const map = {
+    1: 'Quotidien',
+    7: 'Hebdomadaire',
+    14: 'Bi-hebdomadaire',
+    30: 'Mensuel',
+    60: 'Bi-mensuel',
+    90: 'Trimestriel',
+    180: 'Semestriel',
+    365: 'Annuel',
+    730: 'Bi-annuel',
+  };
+  if(map[d]) return map[d];
+  if(d < 7) return 'Tous les ' + d + ' jours';
+  if(d % 7 === 0 && d <= 56) return 'Toutes les ' + (d/7) + ' semaines';
+  if(d % 30 === 0 && d <= 720) return 'Tous les ' + (d/30) + ' mois';
+  return 'Tous les ' + d + ' jours';
+}
+
 function renderMaintCards(){
   const grid = document.getElementById('maint-cards-grid');
   if(!grid) return;
+  // Recharge les historiques de saisies depuis localStorage avant de calculer la
+  // dernière intervention — couvre les cas multi-onglets (saisie dans un autre
+  // onglet) et garantit qu'on lit toujours l'état le plus à jour.
+  if(typeof loadOps === 'function') loadOps();
+  if(typeof loadCtrl === 'function') loadCtrl();
   // Met à jour l'état actif des boutons machine
   const machine = getMaintMachine();
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
@@ -2614,8 +2646,7 @@ function renderMaintCards(){
   }
   // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
   // sur la machine sélectionnée, et infos de retard. Source des saisies selon la
-  // catégorie : controles -> CTRL_STATE (saisies dans la vue Contrôles), sinon
-  // interventions -> OPS_STATE (saisies dans la vue Opérations).
+  // catégorie : controles -> CTRL_STATE, sinon interventions -> OPS_STATE.
   const enriched = baseItems.map(it => {
     const freqDays = _parseFrequenceDays(it.intervalle);
     const sourceList = (it.categorie === 'controles') ? CTRL_STATE.list : OPS_STATE.list;
@@ -2634,19 +2665,30 @@ function renderMaintCards(){
     const overdue = (daysOverdue != null && daysOverdue > 0);
     return { it, freqDays, last, daysSince, daysOverdue, overdue };
   });
-  // Calcule le plus grand retard pour mettre en exergue la carte la plus critique
+  // Calcule le plus grand retard (toutes catégories) pour mettre en exergue
   let maxOverdue = 0;
   enriched.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
-  // Tri : du plus petit intervalle au plus grand (null = à la fin),
-  // puis par retard décroissant à intervalle égal, puis alphabétique.
-  enriched.sort((a, b) => {
-    const fa = (a.freqDays == null) ? Infinity : a.freqDays;
-    const fb = (b.freqDays == null) ? Infinity : b.freqDays;
-    if(fa !== fb) return fa - fb;
-    const oa = a.daysOverdue || 0;
-    const ob = b.daysOverdue || 0;
-    if(ob !== oa) return ob - oa;
-    return (a.it.nom || '').localeCompare(b.it.nom || '', 'fr');
+  // Groupement par intervalle (en jours). Items sans intervalle reconnu -> groupe "null".
+  const groups = new Map();  // key = freqDays (number) ou 'unknown'
+  enriched.forEach(e => {
+    const key = (e.freqDays == null) ? 'unknown' : e.freqDays;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+  // Tri des groupes : plus petit intervalle en premier, 'unknown' à la fin
+  const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+    if(a === 'unknown') return 1;
+    if(b === 'unknown') return -1;
+    return a - b;
+  });
+  // Tri à l'intérieur de chaque groupe : retard décroissant, puis alphabétique
+  groups.forEach((arr) => {
+    arr.sort((a, b) => {
+      const oa = a.daysOverdue || 0;
+      const ob = b.daysOverdue || 0;
+      if(ob !== oa) return ob - oa;
+      return (a.it.nom || '').localeCompare(b.it.nom || '', 'fr');
+    });
   });
   const _fmtDateTime = (iso) => {
     if(!iso) return '—';
@@ -2658,71 +2700,74 @@ function renderMaintCards(){
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }catch(e){ return '—'; }
   };
-  grid.innerHTML = enriched.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
-    const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
-    // La carte la plus en retard (et au moins 1j de retard) est marquée "critical"
-    let frameCls = 'maint-frame';
-    if(overdue){
-      frameCls += ' is-overdue';
-      if(maxOverdue > 0 && daysOverdue === maxOverdue) frameCls += ' is-overdue-critical';
-    }
-    // Intervalle (juste la valeur brute, sans "Intervalle de temps : ")
-    const intervalleVal = (it.intervalle || '').trim();
-    const intervalleHtml = intervalleVal
-      ? '<span class="maint-frame-stat-value">' + escHtml(intervalleVal) + '</span>'
-      : '<span class="maint-frame-stat-value muted">À compléter</span>';
-    // Dernière intervention
-    const lastHtml = last
-      ? '<span class="maint-frame-stat-value">' + escHtml(_fmtDateTime(last)) + '</span>'
-      : '<span class="maint-frame-stat-value muted">Jamais</span>';
-    // Statut de retard
-    let badgeCls = 'unknown';
-    let badgeLbl = '';
-    let detailLbl = '';
-    if(daysOverdue != null){
-      if(daysOverdue > 0){
-        badgeCls = 'danger';
-        badgeLbl = 'Retard ' + daysOverdue + ' j';
-        detailLbl = daysSince + 'j depuis la dernière (intervalle ' + freqDays + 'j)';
-      } else {
-        badgeCls = 'ok';
-        const remaining = -daysOverdue;
-        badgeLbl = 'OK · J-' + remaining;
-        detailLbl = remaining + ' j avant prochaine échéance';
+  // Construit le HTML : un en-tête de section + une grille de cartes par groupe.
+  let html = '';
+  sortedKeys.forEach(key => {
+    const groupItems = groups.get(key);
+    const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
+    const cards = groupItems.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
+      const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+      let frameCls = 'maint-frame';
+      if(overdue){
+        frameCls += ' is-overdue';
+        if(maxOverdue > 0 && daysOverdue === maxOverdue) frameCls += ' is-overdue-critical';
       }
-    } else if(daysSince != null && freqDays == null){
-      badgeCls = 'unknown';
-      badgeLbl = 'Intervalle non reconnu';
-      detailLbl = 'Saisie il y a ' + daysSince + ' j';
-    } else if(last == null && freqDays != null){
-      badgeCls = 'warn';
-      badgeLbl = 'Jamais saisi';
-      detailLbl = 'Intervalle ' + freqDays + ' j';
-    } else {
-      badgeCls = 'unknown';
-      badgeLbl = 'Aucune donnée';
-    }
-    return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
-      '<div class="maint-frame-head">' +
-        '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
-        '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
-      '</div>' +
-      '<div class="maint-frame-stats">' +
-        '<div class="maint-frame-stat">' +
-          '<span class="maint-frame-stat-label">Intervalle</span>' +
-          intervalleHtml +
+      const lastHtml = last
+        ? '<span class="maint-frame-stat-value">' + escHtml(_fmtDateTime(last)) + '</span>'
+        : '<span class="maint-frame-stat-value muted">Jamais</span>';
+      // Statut de retard
+      let badgeCls = 'unknown';
+      let badgeLbl = '';
+      let detailLbl = '';
+      if(daysOverdue != null){
+        if(daysOverdue > 0){
+          badgeCls = 'danger';
+          badgeLbl = 'Retard ' + daysOverdue + ' j';
+          detailLbl = daysSince + 'j depuis la dernière (intervalle ' + freqDays + 'j)';
+        } else {
+          badgeCls = 'ok';
+          const remaining = -daysOverdue;
+          badgeLbl = 'OK · J-' + remaining;
+          detailLbl = remaining + ' j avant prochaine échéance';
+        }
+      } else if(daysSince != null && freqDays == null){
+        badgeCls = 'unknown';
+        badgeLbl = 'Intervalle non reconnu';
+        detailLbl = 'Saisie il y a ' + daysSince + ' j';
+      } else if(last == null && freqDays != null){
+        badgeCls = 'warn';
+        badgeLbl = 'Jamais saisi';
+        detailLbl = 'Intervalle ' + freqDays + ' j';
+      } else {
+        badgeCls = 'unknown';
+        badgeLbl = 'Aucune donnée';
+      }
+      return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+        '<div class="maint-frame-head">' +
+          '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
+          '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
         '</div>' +
-        '<div class="maint-frame-stat">' +
-          '<span class="maint-frame-stat-label">Dernière intervention</span>' +
-          lastHtml +
+        '<div class="maint-frame-stats" style="grid-template-columns:1fr">' +
+          '<div class="maint-frame-stat">' +
+            '<span class="maint-frame-stat-label">Dernière intervention</span>' +
+            lastHtml +
+          '</div>' +
         '</div>' +
-      '</div>' +
-      '<div class="maint-frame-retard">' +
-        '<span class="maint-frame-retard-badge ' + badgeCls + '">' + escHtml(badgeLbl) + '</span>' +
-        (detailLbl ? '<span class="maint-frame-retard-detail">' + escHtml(detailLbl) + '</span>' : '') +
-      '</div>' +
-    '</section>';
-  }).join('');
+        '<div class="maint-frame-retard">' +
+          '<span class="maint-frame-retard-badge ' + badgeCls + '">' + escHtml(badgeLbl) + '</span>' +
+          (detailLbl ? '<span class="maint-frame-retard-detail">' + escHtml(detailLbl) + '</span>' : '') +
+        '</div>' +
+      '</section>';
+    }).join('');
+    html += '<div class="maint-group">' +
+              '<div class="maint-group-head">' +
+                '<h3 class="maint-group-title">' + escHtml(groupLabel) + '</h3>' +
+                '<span class="maint-group-count">' + groupItems.length + ' opération' + (groupItems.length > 1 ? 's' : '') + '</span>' +
+              '</div>' +
+              '<div class="maint-frames-grid">' + cards + '</div>' +
+            '</div>';
+  });
+  grid.innerHTML = html;
 }
 function submitOpsType(e){
   e.preventDefault();
