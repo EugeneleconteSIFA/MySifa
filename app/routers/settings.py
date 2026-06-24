@@ -1372,3 +1372,34 @@ async def promote_run(request: Request):
             yield f"\n[script termine en erreur — code {rc}]\n".encode()
 
     return StreamingResponse(stream(), media_type="text/plain; charset=utf-8")
+
+
+# ─── Sync DB v2 → v1 ───────────────────────────────────────────────────────────
+# Recopie la base de production (v2) vers v1 en utilisant le script existant
+# /usr/local/bin/mysifa-v1-resync-db.sh (déjà installé pour le cron nightly).
+# Le script fait : stop v1, sqlite3 .backup (live-safe) v2 → v1, restart v1,
+# healthcheck. Backups pré-resync tournés dans /home/sifa/backups/v1-db-rotation/.
+RESYNC_SCRIPT = "/usr/local/bin/mysifa-v1-resync-db.sh"
+
+
+@router.post("/api/sync-db-v1")
+async def sync_db_v1(request: Request):
+    require_superadmin(request)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "sudo", "-n", RESYNC_SCRIPT,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out_bytes, _ = await proc.communicate()
+        out = (out_bytes or b"").decode("utf-8", errors="replace")
+        if proc.returncode != 0:
+            raise HTTPException(
+                500,
+                f"Script de resync en erreur (code {proc.returncode}).\n\n{out[-2000:]}",
+            )
+        return {"ok": True, "output": out[-2000:]}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Impossible de lancer le script de resync : {exc}")
