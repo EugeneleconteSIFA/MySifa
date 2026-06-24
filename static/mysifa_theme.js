@@ -38,14 +38,17 @@
 
   function loadPrefs() {
     try {
+      var storedMode = localStorage.getItem(LS_MODE);
+      // Défaut = light (sinon, respecte la pref stockée 'dark' ou 'light')
+      var mode = storedMode === 'dark' ? 'dark' : 'light';
       return {
         palette: normalizePalette(localStorage.getItem(LS_PALETTE) || 'mysifa'),
         style: normalizeStyle(localStorage.getItem(LS_STYLE) || 'defaut'),
-        mode: localStorage.getItem(LS_MODE) === 'light' ? 'light' : 'dark',
+        mode: mode,
         bgAnim: loadBgAnim(),
       };
     } catch (e) {
-      return { palette: 'mysifa', style: 'defaut', mode: 'dark', bgAnim: true };
+      return { palette: 'mysifa', style: 'defaut', mode: 'light', bgAnim: true };
     }
   }
 

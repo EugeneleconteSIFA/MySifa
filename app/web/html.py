@@ -100,6 +100,17 @@ button:focus:not(:focus-visible){outline:none}
 .saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto}
 .saisies-table-wrap table thead th{position:sticky;top:0;z-index:5;background:var(--card)}
 .login-page{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.login-theme-btn{position:fixed;top:18px;right:18px;z-index:10;
+  display:inline-flex;align-items:center;gap:8px;
+  padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);cursor:pointer;
+  font-size:12px;font-family:inherit;font-weight:600;
+  transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
+.login-theme-btn:hover{color:var(--accent);border-color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.14)}
+body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+.login-theme-btn .theme-ico{display:inline-flex;align-items:center;line-height:1}
+@media (max-width:480px){.login-theme-btn .theme-label{display:none}}
 .login-box{width:100%;max-width:420px;padding:24px}
 .login-logo{text-align:center;margin-bottom:40px}
 .brand{font-size:32px;font-weight:800;letter-spacing:-1px}.brand span{color:var(--accent)}
@@ -7878,6 +7889,7 @@ async function applyF(){
 
 // ── Login ───────────────────────────────────────────────────────
 function renderLogin(){
+  const isLight=document.body.classList.contains('light');
   const errEl=h('div',{className:'login-error'+(S.loginError?' show':''),id:'login-error'},S.loginError||'');
   const emailI=h('input',{type:'text',id:'login-email',name:'email',autocomplete:'username',placeholder:'identifiant ou email'});
   const pwdI=h('input',{type:'password',id:'login-password',name:'password',autocomplete:'current-password',placeholder:'••••••••'});
@@ -7886,7 +7898,13 @@ function renderLogin(){
     if(S.loginSubmitting)return;
     doLogin(emailI.value,pwdI.value);
   };
+  const themeBtn=h('button',{type:'button',className:'login-theme-btn','aria-label':'Basculer thème clair/sombre',
+    onClick:()=>{try{MySifaTheme.toggleMode();}catch(e){}render();}},
+    h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+    h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+  );
   return h('div',{className:'login-page'},
+    themeBtn,
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},
         h('div',{className:'brand'},'My',h('span',null,'Sifa')),
