@@ -61,6 +61,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1678,6 +1679,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script>window.__MYSIFA_APP__='stock';</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>

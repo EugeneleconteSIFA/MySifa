@@ -374,8 +374,10 @@ body.light .cal-allday-row{background:#f8fafc}
 <script>window.__MYSIFA_APP__='calendrier';</script>
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>

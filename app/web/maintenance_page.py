@@ -60,6 +60,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -586,6 +587,15 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count js-cat-count">0 opération</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
+                  <option value="Cohésio 1">Cohésio 1</option>
+                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="DSI">DSI</option>
+                  <option value="Repiquage">Repiquage</option>
+                </select>
+              </div>
               <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
@@ -697,10 +707,16 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-list-title">Liste de contrôles</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ctrl-cat-count">0 contrôle</div>
-              <button type="button" class="ops-btn-add" onclick="openCtrlCatModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Ajouter un contrôle à la liste
-              </button>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+                <select class="ops-select js-ctrl-cat-machine" onchange="setCtrlCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
+                  <option value="Cohésio 1">Cohésio 1</option>
+                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="DSI">DSI</option>
+                  <option value="Repiquage">Repiquage</option>
+                </select>
+              </div>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
@@ -708,6 +724,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
               <thead>
                 <tr>
                   <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -1129,6 +1146,11 @@ function switchView(name){
   if(name === 'maintenance' || name === 'operations'){
     if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
       loadOpsTypes().then(() => renderOpsTypes()).catch(() => {});
+    }
+  }
+  if(name === 'controles'){
+    if(typeof loadCtrlTypes === 'function' && typeof renderCtrlTypes === 'function'){
+      loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => {});
     }
   }
   const meta = VIEW_META[name];
@@ -2151,6 +2173,10 @@ function addOperation(e){
   });
   saveOps();
   renderOps();
+  // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
+  // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
+  try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
+  if(typeof renderOpsTypes === 'function') renderOpsTypes();
   closeOpsModal();
   showToast('Opération enregistrée.', 'info');
 }
@@ -2319,23 +2345,34 @@ function renderOps(){
 
 // =========================================================================
 // Catalogue des types d'opérations — source : Paramètres → Maintenance (DB)
-// On affiche uniquement les codes maintenance avec periodique=OUI.
-// Le code, le libellé, le niveau et la catégorie viennent du serveur (table
-// maintenance_codes). La date "Dernière intervention" est une donnée
-// opérationnelle locale, conservée en localStorage indexée par le code.
+// Filtre : "Interventions" (toutes) + "Contrôles" avec periodique=OUI.
+// La "Dernière intervention" est dérivée des saisies réelles (OPS_STATE),
+// filtrées par la machine sélectionnée au-dessus du catalogue.
 // =========================================================================
-const OPS_TYPES_LAST_KEY = 'mysifa_maint_optypes_last_intervention_v1';
+const OPS_CAT_MACHINE_KEY = 'mysifa_maint_ops_cat_machine_v1';
 const OPS_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
-function _loadLastInterventionMap(){
-  try{
-    const raw = localStorage.getItem(OPS_TYPES_LAST_KEY);
-    const m = raw ? JSON.parse(raw) : {};
-    return (m && typeof m === 'object') ? m : {};
-  }catch(e){ return {}; }
+function getOpsCatMachine(){
+  try{ return localStorage.getItem(OPS_CAT_MACHINE_KEY) || 'Cohésio 1'; }
+  catch(e){ return 'Cohésio 1'; }
 }
-function _saveLastInterventionMap(map){
-  try{ localStorage.setItem(OPS_TYPES_LAST_KEY, JSON.stringify(map || {})); }catch(e){}
+function setOpsCatMachine(m){
+  try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, m || ''); }catch(e){}
+  // Synchronise tous les selects (le catalogue est dupliqué dans 2 vues)
+  document.querySelectorAll('.js-ops-cat-machine').forEach(sel => { sel.value = m; });
+  renderOpsTypes();
+}
+// Retourne la date ISO la plus récente d'une saisie sur (label, machine).
+function _lastInterventionFor(label, machine, sourceList){
+  if(!label || !machine || !Array.isArray(sourceList)) return null;
+  let latest = null;
+  for(const it of sourceList){
+    if(it && it.type === label && it.machine === machine){
+      const d = it.date_saisie;
+      if(d && (!latest || d > latest)) latest = d;
+    }
+  }
+  return latest;
 }
 
 async function loadOpsTypes(){
@@ -2347,16 +2384,15 @@ async function loadOpsTypes(){
     }
     const data = await res.json();
     const items = Array.isArray(data && data.items) ? data.items : [];
-    const lastMap = _loadLastInterventionMap();
+    // Filtre demandé : Interventions (toutes) + Contrôles avec periodique=OUI.
     OPS_TYPES_STATE.list = items
-      .filter(it => !!it.periodique)
+      .filter(it => (it.categorie === 'interventions') || (it.categorie === 'controles' && !!it.periodique))
       .map(it => ({
         id: it.code,
         nom: it.label,
         niveau: parseInt(it.niveau, 10) || 1,
         categorie: it.categorie || 'controles',
         frequence: '',
-        derniere_intervention: lastMap[it.code] || null,
         detail: '',
         _readonly: true,
       }));
@@ -2364,7 +2400,7 @@ async function loadOpsTypes(){
     OPS_TYPES_STATE.list = [];
   }
 }
-// Conservé pour compat avec d'anciens handlers (no-op : géré dans Paramètres).
+// Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 function submitOpsType(e){
   e.preventDefault();
@@ -2499,23 +2535,24 @@ function _fmtDateFr(iso){
   if(!m) return iso;
   return m[3] + '/' + m[2] + '/' + m[1];
 }
-function updateLastIntervention(id, val){
-  const t = OPS_TYPES_STATE.list.find(x => x.id === id);
-  if(!t) return;
-  t.derniere_intervention = (val || null);
-  // Persiste la dernière intervention dans la map locale indexée par code.
-  // Le catalogue lui-même vient de la DB ; seule la date d'intervention
-  // reste opérationnelle et locale pour l'instant.
-  const lastMap = _loadLastInterventionMap();
-  if(val){ lastMap[id] = val; } else { delete lastMap[id]; }
-  _saveLastInterventionMap(lastMap);
-  renderOpsTypes();
-}
+// Conservé en no-op pour rétro-compat : la "Dernière intervention" est désormais
+// dérivée automatiquement des saisies réelles (OPS_STATE / CTRL_STATE), filtrées
+// par la machine sélectionnée au-dessus de chaque catalogue.
+function updateLastIntervention(id, val){ /* derive: see _lastInterventionFor */ }
 function renderOpsTypes(){
   refreshOpsTypeSelect();
   refreshOpsFiltersOptions();
   const tbodies = document.querySelectorAll('.js-cat-tbody');
   if(!tbodies.length) return;
+  // Synchronise les selects machine sur la valeur courante
+  const machine = getOpsCatMachine();
+  document.querySelectorAll('.js-ops-cat-machine').forEach(sel => {
+    if(sel.value !== machine) sel.value = machine;
+  });
+  // Calcule la dernière intervention par code, filtrée par machine
+  OPS_TYPES_STATE.list.forEach(t => {
+    t.derniere_intervention = _lastInterventionFor(t.nom, machine, OPS_STATE.list);
+  });
   const dir = OPS_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
   const f = OPS_TYPES_STATE.sortBy;
   const sorted = OPS_TYPES_STATE.list.slice().sort((a,b) => {
@@ -2561,13 +2598,26 @@ function renderOpsTypes(){
         : '';
       const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
       const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
+      // dt est ici une date ISO (datetime) issue de la dernière saisie sur la
+      // machine sélectionnée. On l'affiche au format JJ/MM/AAAA HH:MM.
+      let dtDisplay = '—';
+      if(dt){
+        try{
+          const d = new Date(dt);
+          if(!isNaN(d.getTime())){
+            const pad = n => (n < 10 ? '0' + n : '' + n);
+            dtDisplay = pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
+                      + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+          }
+        }catch(e){}
+      }
       return '<tr' + rowCls + '>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
         '<td class="col-last-intervention">' +
-          '<div class="last-intervention-wrap">' +
-            '<input type="date" class="last-intervention-input" value="' + escAttr(dt) + '" onchange="updateLastIntervention(\'' + escAttr(t.id) + '\', this.value)" aria-label="Dernière intervention">' +
+          '<div class="last-intervention-wrap" style="display:flex;flex-direction:column;gap:4px">' +
+            '<span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span>' +
             statusHtml +
           '</div>' +
         '</td>' +
@@ -2613,6 +2663,10 @@ function addControle(e){
   });
   saveCtrl();
   renderCtrl();
+  // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
+  // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
+  try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, machine); }catch(e){}
+  if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
   closeCtrlModal();
   showToast('Contrôle enregistré.', 'info');
 }
@@ -2762,19 +2816,46 @@ function renderCtrl(){
 // =========================================================================
 // Catalogue des types de contrôles (Liste de contrôles)
 // =========================================================================
-const CTRL_TYPES_STORAGE_KEY = 'mysifa_maint_ctrltypes_v1';
+// Source : table maintenance_codes (Paramètres → Maintenance).
+// Filtre demandé : seuls les codes avec categorie="controles" et periodique=NON.
+// La "Dernière intervention" est calculée à partir de CTRL_STATE filtré par machine.
+const CTRL_CAT_MACHINE_KEY = 'mysifa_maint_ctrl_cat_machine_v1';
 const CTRL_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
-function loadCtrlTypes(){
+function getCtrlCatMachine(){
+  try{ return localStorage.getItem(CTRL_CAT_MACHINE_KEY) || 'Cohésio 1'; }
+  catch(e){ return 'Cohésio 1'; }
+}
+function setCtrlCatMachine(m){
+  try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, m || ''); }catch(e){}
+  document.querySelectorAll('.js-ctrl-cat-machine').forEach(sel => { sel.value = m; });
+  renderCtrlTypes();
+}
+
+async function loadCtrlTypes(){
   try{
-    const raw = localStorage.getItem(CTRL_TYPES_STORAGE_KEY);
-    CTRL_TYPES_STATE.list = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(CTRL_TYPES_STATE.list)) CTRL_TYPES_STATE.list = [];
-  }catch(e){ CTRL_TYPES_STATE.list = []; }
+    const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
+    if(!res.ok){
+      CTRL_TYPES_STATE.list = [];
+      return;
+    }
+    const data = await res.json();
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    CTRL_TYPES_STATE.list = items
+      .filter(it => it.categorie === 'controles' && !it.periodique)
+      .map(it => ({
+        id: it.code,
+        nom: it.label,
+        niveau: parseInt(it.niveau, 10) || 1,
+        detail: '',
+        _readonly: true,
+      }));
+  }catch(e){
+    CTRL_TYPES_STATE.list = [];
+  }
 }
-function saveCtrlTypes(){
-  try{ localStorage.setItem(CTRL_TYPES_STORAGE_KEY, JSON.stringify(CTRL_TYPES_STATE.list)); }catch(e){}
-}
+// Conservé pour compat (no-op : gestion centralisée dans Paramètres → Maintenance).
+function saveCtrlTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 function submitCtrlType(e){
   e.preventDefault();
   const nom = (document.getElementById('ctrl-cat-nom').value || '').trim();
@@ -2861,6 +2942,14 @@ function renderCtrlTypes(){
   const tbody = document.getElementById('ctrl-cat-tbody');
   const count = document.getElementById('ctrl-cat-count');
   if(!tbody) return;
+  const machine = getCtrlCatMachine();
+  document.querySelectorAll('.js-ctrl-cat-machine').forEach(sel => {
+    if(sel.value !== machine) sel.value = machine;
+  });
+  // Calcule la dernière intervention par code, filtrée par machine
+  CTRL_TYPES_STATE.list.forEach(t => {
+    t.derniere_intervention = _lastInterventionFor(t.nom, machine, CTRL_STATE.list);
+  });
   const dir = CTRL_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
   const f = CTRL_TYPES_STATE.sortBy;
   const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => {
@@ -2877,22 +2966,27 @@ function renderCtrlTypes(){
     if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="3" class="ops-empty">Aucun contrôle dans la liste. Cliquez sur « Ajouter un contrôle à la liste » pour en créer un.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres → Maintenance.</td></tr>';
   } else {
-    const rows = sorted.map(t =>
-      '<tr>' +
+    const rows = sorted.map(t => {
+      let dtDisplay = '—';
+      if(t.derniere_intervention){
+        try{
+          const d = new Date(t.derniere_intervention);
+          if(!isNaN(d.getTime())){
+            const pad = n => (n < 10 ? '0' + n : '' + n);
+            dtDisplay = pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
+                      + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+          }
+        }catch(e){}
+      }
+      return '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
+        '<td><span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span></td>' +
         '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
-        '<td class="col-actions">' +
-          '<button type="button" class="ops-row-btn edit" onclick="editCtrlType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          '</button>' +
-          '<button type="button" class="ops-row-btn del" onclick="deleteCtrlType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
-        '</td>' +
-      '</tr>'
-    );
+        '<td class="col-actions"></td>' +
+      '</tr>';
+    });
     tbody.innerHTML = rows.join('');
   }
   if(count){
@@ -2947,13 +3041,12 @@ async function loadMe(){
   }catch(e){}
   loadMe();
   loadOps();
-  // loadOpsTypes() est async (fetch /api/maintenance/codes) — on re-render quand prêt.
+  // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
   loadOpsTypes().then(() => renderOpsTypes()).catch(() => renderOpsTypes());
   loadCtrl();
-  loadCtrlTypes();
+  loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
   renderOps();
-  renderCtrlTypes();
   renderCtrl();
   try{
     const h = (location.hash || '').replace('#','').trim();
@@ -2964,6 +3057,7 @@ async function loadMe(){
 </script>
 <script>window.__MYSIFA_APP__='maintenance';</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
 <script>
 if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
   window.MySifaDock.bootPageWidgets();

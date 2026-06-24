@@ -859,6 +859,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       ICO_SEND +
       '</button></div></div>';
     document.body.appendChild(panel);
+    setupChatPanelResize(panel);
 
     document.getElementById('cw-close').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1155,6 +1156,29 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     panel.style.right = 'auto';
     panel.style.bottom = window.innerHeight - rect.top + gap + 'px';
     panel.style.top = 'auto';
+  }
+
+  /** Handles de resize aux 4 coins du panneau messagerie (desktop uniquement —
+      les media queries du chat_widget gèrent déjà l'affichage plein-écran
+      sur mobile). Persiste largeur/hauteur en localStorage. */
+  function setupChatPanelResize(panel) {
+    if (!panel || !window.MySifaResize) return;
+    const CW_MIN_W = 440;
+    const CW_MIN_H = 580;
+    window.MySifaResize.attach(panel, {
+      storageKey: 'mysifa_cw_panel_size',
+      minWidth: CW_MIN_W,
+      minHeight: CW_MIN_H,
+      maxWidth: function () {
+        return Math.max(CW_MIN_W + 120, window.innerWidth * 0.5);
+      },
+      maxHeight: function () {
+        return Math.max(CW_MIN_H + 80, window.innerHeight * 0.5);
+      },
+      onResizeEnd: function () {
+        // Rien à persister côté API — la taille reste locale au navigateur.
+      },
+    });
   }
 
   function attachmentHtml(msg) {

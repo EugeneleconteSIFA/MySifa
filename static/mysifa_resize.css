@@ -1,0 +1,57 @@
+/* MySifa — Handles de redimensionnement (post-its + messagerie)
+   4 coins, discrets, toujours visibles. La couleur s'adapte via currentColor —
+   chaque conteneur surcharge .mysifa-resize-handle{color:…} pour rester cohérent
+   avec son ambiance (papier doré pour le post-it, --muted pour la messagerie). */
+.mysifa-resize-handle{
+  position:absolute;
+  width:16px;
+  height:16px;
+  z-index:50;
+  background:transparent;
+  border:none;
+  padding:0;
+  color:var(--muted);
+  opacity:.45;
+  transition:opacity .15s;
+  -webkit-user-select:none;
+  user-select:none;
+}
+.mysifa-resize-handle:hover,
+.mysifa-resize-handle.is-active{opacity:.9}
+.mysifa-resize-handle::before{
+  content:'';
+  position:absolute;
+  width:8px;
+  height:8px;
+  border:1.5px solid currentColor;
+  background:transparent;
+}
+.mysifa-resize-handle.rh-nw{top:0;left:0;cursor:nwse-resize}
+.mysifa-resize-handle.rh-nw::before{top:3px;left:3px;border-right:none;border-bottom:none;border-top-left-radius:3px}
+.mysifa-resize-handle.rh-ne{top:0;right:0;cursor:nesw-resize}
+.mysifa-resize-handle.rh-ne::before{top:3px;right:3px;border-left:none;border-bottom:none;border-top-right-radius:3px}
+.mysifa-resize-handle.rh-sw{bottom:0;left:0;cursor:nesw-resize}
+.mysifa-resize-handle.rh-sw::before{bottom:3px;left:3px;border-right:none;border-top:none;border-bottom-left-radius:3px}
+.mysifa-resize-handle.rh-se{bottom:0;right:0;cursor:nwse-resize}
+.mysifa-resize-handle.rh-se::before{bottom:3px;right:3px;border-left:none;border-top:none;border-bottom-right-radius:3px}
+
+/* Post-it — handles dans la teinte du papier (cohérent avec --postit-ink-muted). */
+.postit .mysifa-resize-handle{color:var(--postit-ink-muted)}
+/* Quand le post-it est replié en bas, on cache les handles. */
+.postit.is-hidden .mysifa-resize-handle{display:none}
+/* Une fois redimensionné, le body scrolle si besoin pour ne pas déborder. */
+.postit.is-resized .postit-body{overflow-y:auto;min-height:0}
+
+/* Messagerie — handles dans --muted, mais on les cache en mobile (le panneau
+   prend déjà toute la largeur via les media-queries existants). */
+#cw-panel .mysifa-resize-handle{color:var(--muted)}
+@media (max-width:900px){
+  #cw-panel .mysifa-resize-handle{display:none}
+}
+
+/* En mobile, la messagerie passe en plein écran via les règles dans
+   chat_widget.js (!important) — on annule la taille mémorisée desktop pour
+   éviter qu'elle ne fuite via le style inline. */
+@media (max-width:900px){
+  #cw-panel{width:auto!important;height:auto!important}
+}
