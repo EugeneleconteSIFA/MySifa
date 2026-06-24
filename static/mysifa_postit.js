@@ -566,7 +566,42 @@
     applyPostitColor(el, postitResolveColor(p));
     setupPostitColorDot(el, p.id);
     setupPostitInteractions(el, p);
+    setupPostitResize(el, p);
     return el;
+  }
+
+  function setupPostitResize(el, p) {
+    if (!el || !window.MySifaResize) return;
+    var pid = p && p.id;
+    if (!pid) return;
+    window.MySifaResize.attach(el, {
+      storageKey: 'mysifa_postit_size_' + pid,
+      minWidth: POSTIT_WIDTH,
+      minHeight: 120,
+      maxWidth: function () { return Math.max(POSTIT_WIDTH + 120, window.innerWidth * 0.5); },
+      maxHeight: function () { return Math.max(220, window.innerHeight * 0.5); },
+      onResize: function () {
+        if (!el.classList.contains('is-resized')) el.classList.add('is-resized');
+      },
+      onResizeEnd: function (info) {
+        if (!info || !info.moved) return;
+        // Si le coin NW ou SW a déplacé la position, on persiste pos_x/pos_y.
+        var nx = parseInt(el.style.left, 10);
+        var ny = parseInt(el.style.top, 10);
+        if (!isNaN(nx) && !isNaN(ny) && (nx !== p.pos_x || ny !== p.pos_y)) {
+          p.pos_x = nx;
+          p.pos_y = ny;
+          postitApi('/api/postits/' + pid + '/pos', {
+            method: 'PATCH',
+            body: JSON.stringify({ x: nx, y: ny }),
+          }).catch(function () {});
+        }
+      },
+    });
+    // Restaure la classe is-resized si une taille est déjà enregistrée.
+    if (window.MySifaResize.readStored('mysifa_postit_size_' + pid)) {
+      el.classList.add('is-resized');
+    }
   }
 
   function autoResizePostitTask(el) {

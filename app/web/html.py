@@ -35,6 +35,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
+<link rel="stylesheet" href="/static/mysifa_resize.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
@@ -1248,14 +1249,19 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-corner-stack .portal-humeur-badge{bottom:-2px;left:-2px}
 
 /* ── ⌘K badge in the Google search input ── */
+.portal-search button.portal-search-cmdk-badge,
 .portal-search-cmdk-badge{
   position:absolute;right:14px;top:50%;transform:translateY(-50%);
   display:inline-flex;align-items:center;gap:3px;padding:4px 9px;
-  background:transparent;border:none;color:var(--muted);
+  background:transparent!important;border:none!important;border-radius:0!important;
+  color:var(--muted)!important;box-shadow:none!important;
   font-family:ui-monospace,'Cascadia Code',monospace;font-size:11px;font-weight:700;
   letter-spacing:.04em;line-height:1;cursor:pointer;user-select:none;
   transition:color .15s;pointer-events:auto;z-index:2}
-.portal-search-cmdk-badge:hover{color:var(--accent)}
+.portal-search button.portal-search-cmdk-badge:hover,
+.portal-search-cmdk-badge:hover{color:var(--accent)!important;filter:none!important;box-shadow:none!important}
+.portal-search button.portal-search-cmdk-badge:active,
+.portal-search-cmdk-badge:active{transform:translateY(-50%)!important}
 .portal-search .portal-search-input-wrap input{padding-right:80px}
 
 @media (max-width:900px){
@@ -2118,6 +2124,7 @@ __STAGING_BANDEAU_HTML__
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_resize.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
