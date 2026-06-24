@@ -4124,6 +4124,23 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 127, "expe_transporteurs_portail_emails")
 
+    # v128 — Codes maintenance : migration localStorage → table SQLite.
+    # Permet la synchronisation v2 → v1 et l'accès depuis n'importe quel navigateur.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=128 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_codes (
+                code TEXT PRIMARY KEY,
+                label TEXT NOT NULL,
+                niveau INTEGER NOT NULL DEFAULT 1,
+                categorie TEXT NOT NULL DEFAULT 'controles',
+                periodique INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 128, "maintenance_codes_table")
+
 
 
 def create_default_admin():
