@@ -2951,20 +2951,45 @@ async function importOpsJson() {
   } catch (e) { toast(e.message, true); }
 }
 
-// ── Codes maintenance (stockage client localStorage) ─────────────────
+// ── Codes maintenance (stockage SQLite cote serveur) ─────────────────
+// Cle localStorage conservee pour migration one-shot des codes existants
+// (anciennement stockes cote navigateur, perdus entre v1/v2 et entre appareils).
 const MAINT_CODES_STORAGE_KEY = 'mysifa_settings_maint_codes_v1';
 let _maintItems = [];
 let _maintEditCode = null;
-function loadMaintCodes() {
+async function loadMaintCodes() {
   try {
-    const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
-    _maintItems = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(_maintItems)) _maintItems = [];
-  } catch (e) { _maintItems = []; }
+    const r = await api('/api/maintenance/codes');
+    _maintItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
+    _maintItems = [];
+  }
+  // Migration one-shot : si la liste serveur est vide ET qu'on a des codes en
+  // localStorage (heritage de l'ancienne implementation), on propose l'import.
+  if (_maintItems.length === 0) {
+    try {
+      const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
+      const local = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(local) && local.length > 0) {
+        if (confirm(local.length + ' code(s) maintenance trouve(s) dans le stockage local du navigateur.\n\nLes importer dans la base de donnees ? (recommande, ils seront ensuite disponibles sur tous les navigateurs et synchronises v2 -> v1)')) {
+          try {
+            const res = await api('/api/maintenance/codes/bulk-import', {
+              method: 'POST',
+              body: JSON.stringify({ items: local }),
+            });
+            toast((res?.imported || 0) + ' code(s) importe(s)');
+            try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
+            const r2 = await api('/api/maintenance/codes');
+            _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
+          } catch (e) {
+            toast('Echec de l\\'import : ' + (e && e.message ? e.message : e), true);
+          }
+        }
+      }
+    } catch (e) {}
+  }
   renderMaintList();
-}
-function saveMaintCodes() {
-  try { localStorage.setItem(MAINT_CODES_STORAGE_KEY, JSON.stringify(_maintItems)); } catch (e) {}
 }
 function _maintCatLabel(cat) {
   return cat === 'interventions' ? 'Interventions' : 'Contrôles';
@@ -3073,7 +3098,7 @@ function closeMaintForm() {
   const wrap = document.getElementById('maint-form-wrap');
   if (wrap) wrap.classList.add('hidden');
 }
-function saveMaintForm() {
+async function saveMaintForm() {
   const code = (document.getElementById('maint-code').value || '').trim();
   const label = (document.getElementById('maint-label').value || '').trim();
   const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
@@ -3084,27 +3109,38 @@ function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  if (_maintEditCode) {
-    const idx = _maintItems.findIndex(x => String(x.code) === String(_maintEditCode));
-    if (idx === -1) { toast('Code introuvable', true); return; }
-    _maintItems[idx] = Object.assign({}, _maintItems[idx], { label, niveau, categorie, periodique, updated_at: new Date().toISOString() });
-    toast('Code mis à jour');
-  } else {
-    const dup = _maintItems.find(x => String(x.code) === code);
-    if (dup) { toast('Ce code existe déjà', true); return; }
-    _maintItems.push({ code, label, niveau, categorie, periodique, created_at: new Date().toISOString() });
-    toast('Code ajouté');
+  const payload = { code, label, niveau, categorie, periodique };
+  try {
+    if (_maintEditCode) {
+      await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      toast('Code mis à jour');
+    } else {
+      await api('/api/maintenance/codes', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      toast('Code ajouté');
+    }
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur lors de l\\'enregistrement', true);
+    return;
   }
-  saveMaintCodes();
   closeMaintForm();
-  renderMaintList();
+  await loadMaintCodes();
 }
-function deleteMaintCode(code) {
+async function deleteMaintCode(code) {
   if (!confirm('Supprimer le code ' + code + ' ?')) return;
-  _maintItems = _maintItems.filter(x => String(x.code) !== String(code));
-  saveMaintCodes();
-  renderMaintList();
-  toast('Code supprimé');
+  try {
+    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Code supprimé');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
+    return;
+  }
+  await loadMaintCodes();
 }
 
 async function deleteUpdate(id) {

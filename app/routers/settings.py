@@ -1423,3 +1423,161 @@ async def sync_db_v1(request: Request):
         raise
     except Exception as exc:
         raise HTTPException(500, f"Impossible de lancer le script de resync : {exc}")
+
+
+# ─── Codes maintenance (CRUD) ──────────────────────────────────────────────────
+# Référentiel des codes d'opérations de maintenance, stockés en base SQLite
+# (anciennement localStorage côté navigateur). Migrés via la migration v128.
+# Endpoints super admin uniquement (cohérent avec les autres référentiels settings).
+
+
+def _maint_row_to_dict(r) -> dict:
+    return {
+        "code": r["code"],
+        "label": r["label"],
+        "niveau": int(r["niveau"] or 1),
+        "categorie": r["categorie"] or "controles",
+        "periodique": bool(r["periodique"]),
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+    }
+
+
+def _normalize_maint_payload(body: dict) -> dict:
+    code = (body.get("code") or "").strip()
+    label = (body.get("label") or "").strip()
+    try:
+        niveau = int(body.get("niveau") or 1)
+    except (TypeError, ValueError):
+        niveau = 1
+    if niveau < 1 or niveau > 3:
+        raise HTTPException(422, "Niveau invalide (1-3).")
+    categorie = (body.get("categorie") or "controles").strip()
+    if categorie not in ("controles", "interventions"):
+        categorie = "controles"
+    periodique = 1 if body.get("periodique") else 0
+    if not code:
+        raise HTTPException(422, "Code obligatoire.")
+    if not label:
+        raise HTTPException(422, "Libelle obligatoire.")
+    return {
+        "code": code,
+        "label": label,
+        "niveau": niveau,
+        "categorie": categorie,
+        "periodique": periodique,
+    }
+
+
+@router.get("/api/maintenance/codes")
+def maintenance_codes_list(request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT code,label,niveau,categorie,periodique,created_at,updated_at
+               FROM maintenance_codes
+               ORDER BY categorie ASC, code ASC"""
+        ).fetchall()
+    return {"items": [_maint_row_to_dict(r) for r in rows]}
+
+
+@router.post("/api/maintenance/codes")
+async def maintenance_codes_create(request: Request):
+    require_superadmin(request)
+    body = await request.json()
+    data = _normalize_maint_payload(body)
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (data["code"],)
+        ).fetchone()
+        if existing:
+            raise HTTPException(409, f"Le code {data['code']} existe deja.")
+        conn.execute(
+            """INSERT INTO maintenance_codes
+               (code,label,niveau,categorie,periodique,created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (data["code"], data["label"], data["niveau"], data["categorie"],
+             data["periodique"], now, now),
+        )
+        conn.commit()
+    log_action(request, "CREATE", "maintenance_codes", data["code"], data["label"])
+    return {"ok": True, "code": data["code"]}
+
+
+@router.put("/api/maintenance/codes/{code}")
+async def maintenance_codes_update(code: str, request: Request):
+    require_superadmin(request)
+    body = await request.json()
+    # On force le code de l'URL (immuable apres creation)
+    body["code"] = code
+    data = _normalize_maint_payload(body)
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            """UPDATE maintenance_codes
+               SET label=?, niveau=?, categorie=?, periodique=?, updated_at=?
+               WHERE code=?""",
+            (data["label"], data["niveau"], data["categorie"],
+             data["periodique"], now, data["code"]),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"Code {code} introuvable.")
+    log_action(request, "UPDATE", "maintenance_codes", data["code"], data["label"])
+    return {"ok": True, "code": data["code"]}
+
+
+@router.delete("/api/maintenance/codes/{code}")
+def maintenance_codes_delete(code: str, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"Code {code} introuvable.")
+    log_action(request, "DELETE", "maintenance_codes", code, "")
+    return {"ok": True}
+
+
+class _MaintBulkImport(BaseModel):
+    items: list
+
+
+@router.post("/api/maintenance/codes/bulk-import")
+async def maintenance_codes_bulk_import(request: Request):
+    """Import en masse depuis le localStorage du navigateur (migration one-shot).
+    N'ecrase pas les codes existants : INSERT OR IGNORE.
+    """
+    require_superadmin(request)
+    body = await request.json()
+    items = body.get("items") or []
+    if not isinstance(items, list):
+        raise HTTPException(422, "Format invalide : 'items' doit etre une liste.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    imported = 0
+    with get_db() as conn:
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                data = _normalize_maint_payload(raw)
+            except HTTPException:
+                continue
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO maintenance_codes
+                   (code,label,niveau,categorie,periodique,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (data["code"], data["label"], data["niveau"], data["categorie"],
+                 data["periodique"], raw.get("created_at") or now, now),
+            )
+            if cur.rowcount:
+                imported += 1
+        conn.commit()
+    log_action(request, "IMPORT", "maintenance_codes", "bulk", f"{imported} codes")
+    return {"ok": True, "imported": imported, "received": len(items)}
