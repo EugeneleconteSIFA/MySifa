@@ -382,10 +382,16 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 /* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
 .maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
-.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:280px}
-.maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
+.maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
 .maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
-.maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px}
+.maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
+.maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
+.maint-machine-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
+.maint-machine-btn:hover{background:var(--bg);color:var(--text)}
+.maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -519,20 +525,24 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <div class="maint-frames-grid">
-          <section class="maint-frame">
-            <div class="maint-frame-head">
-              <div class="maint-frame-title">Couteaux</div>
-            </div>
-            <div class="maint-frame-body"></div>
-          </section>
-          <section class="maint-frame">
-            <div class="maint-frame-head">
-              <div class="maint-frame-title">Contre-couteaux</div>
-            </div>
-            <div class="maint-frame-body"></div>
-          </section>
+        <!-- Sélecteur de machine pour la vue Maintenance.
+             Détermine quelles cartes "code maintenance périodique" s'affichent
+             (Cohésio 1 ou Cohésio 2). Les cartes sont vides pour l'instant et
+             seront alimentées par les saisies opérations/contrôles. -->
+        <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
+          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1</button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2</button>
+          </div>
+          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
         </div>
+
+        <!-- Cartes des opérations de maintenance périodiques.
+             Une carte par code DB avec périodique=OUI. Le contenu est vide pour
+             l'instant (placeholder). La grille est régénérée automatiquement
+             quand les codes changent dans Paramètres → Maintenance. -->
+        <div class="maint-frames-grid" id="maint-cards-grid"></div>
       </div>
 
       <!-- View : Planning -->
@@ -606,8 +616,8 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -826,6 +836,15 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
+                  <option value="Cohésio 1">Cohésio 1</option>
+                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="DSI">DSI</option>
+                  <option value="Repiquage">Repiquage</option>
+                </select>
+              </div>
               <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
@@ -836,8 +855,8 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -884,6 +903,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-field-hint" id="ops-type-hint" style="display:none">
               Aucun type défini. Ajoutez-en dans « Liste d'opérations de maintenance ».
             </div>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ops-date">Date d'opération<span class="req">*</span></label>
+            <input type="datetime-local" id="ops-date" class="ops-select" required>
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ops-comment">Commentaires</label>
@@ -942,6 +965,37 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <button type="submit" class="ops-btn-add" id="cat-submit-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span id="cat-submit-label">Ajouter à la liste</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Détails d'un type d'opération (info DB + notes locales modifiables) -->
+<div class="modal-overlay" id="ops-type-details-modal" onclick="if(event.target===this) closeOpsTypeDetailsModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ops-type-details-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ops-type-details-title">Détails de l'opération</div>
+      <button type="button" class="modal-close" onclick="closeOpsTypeDetailsModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ops-type-details-form" onsubmit="saveOpsTypeDetails(event)">
+      <div class="modal-body">
+        <!-- Bloc info DB (lecture seule) -->
+        <div id="ops-type-details-info" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;font-size:13px"></div>
+        <!-- Notes locales modifiables -->
+        <div class="ops-field ops-field--full">
+          <label class="ops-field-label" for="ops-type-details-text">Détails / Notes</label>
+          <textarea id="ops-type-details-text" class="ops-textarea" rows="6" placeholder="Notes libres : procédure, points d'attention, pièces concernées, contacts… (non stocké en base, propre à ce navigateur)"></textarea>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Ces notes ne sont pas enregistrées en base de données — uniquement sur ce navigateur.</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeOpsTypeDetailsModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Enregistrer
         </button>
       </div>
     </form>
@@ -1145,7 +1199,10 @@ function switchView(name){
   // l'utilisent, pour refleter les changements faits dans Parametres -> Maintenance.
   if(name === 'maintenance' || name === 'operations'){
     if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
-      loadOpsTypes().then(() => renderOpsTypes()).catch(() => {});
+      loadOpsTypes().then(() => {
+        renderOpsTypes();
+        if(typeof renderMaintCards === 'function') renderMaintCards();
+      }).catch(() => {});
     }
   }
   if(name === 'controles'){
@@ -2008,6 +2065,14 @@ function openOpsModal(){
   refreshOpsTypeSelect();
   const nameEl = document.getElementById('ops-saisi-par-name');
   if(nameEl) nameEl.textContent = currentUserName();
+  // Pré-remplit la date avec maintenant (format datetime-local : YYYY-MM-DDTHH:MM)
+  const dateEl = document.getElementById('ops-date');
+  if(dateEl){
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    dateEl.value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
+                 + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+  }
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
 }
 function closeOpsModal(){
@@ -2166,10 +2231,17 @@ function addOperation(e){
   const operateur = currentUserName();
   if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
+  // Date d'opération : input datetime-local. Si vide ou invalide, fallback maintenant.
+  const dateInput = (document.getElementById('ops-date')?.value || '').trim();
+  let dateSaisie = new Date().toISOString();
+  if(dateInput){
+    const parsed = new Date(dateInput);
+    if(!isNaN(parsed.getTime())) dateSaisie = parsed.toISOString();
+  }
   OPS_STATE.list.push({
     id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
     machine, operateur, type, commentaire,
-    date_saisie: new Date().toISOString()
+    date_saisie: dateSaisie
   });
   saveOps();
   renderOps();
@@ -2392,7 +2464,9 @@ async function loadOpsTypes(){
         nom: it.label,
         niveau: parseInt(it.niveau, 10) || 1,
         categorie: it.categorie || 'controles',
-        frequence: '',
+        periodique: !!it.periodique,
+        intervalle: (it.intervalle || '').toString(),
+        frequence: (it.intervalle || '').toString(),  // alias compat _parseFrequenceDays
         detail: '',
         _readonly: true,
       }));
@@ -2402,6 +2476,144 @@ async function loadOpsTypes(){
 }
 // Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
+
+// =========================================================================
+// Détails libres par code (notes locales, non stockées en base)
+// =========================================================================
+const OPS_TYPES_DETAILS_KEY = 'mysifa_maint_optypes_details_v1';
+let _opsTypeDetailsEditingId = null;
+
+function _loadOpsTypeDetailsMap(){
+  try{
+    const raw = localStorage.getItem(OPS_TYPES_DETAILS_KEY);
+    const m = raw ? JSON.parse(raw) : {};
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
+}
+function _saveOpsTypeDetailsMap(map){
+  try{ localStorage.setItem(OPS_TYPES_DETAILS_KEY, JSON.stringify(map || {})); }catch(e){}
+}
+function getOpsTypeDetails(code){
+  if(!code) return '';
+  const map = _loadOpsTypeDetailsMap();
+  return map[code] || '';
+}
+function openOpsTypeDetailsModal(code){
+  const t = OPS_TYPES_STATE.list.find(x => String(x.id) === String(code));
+  if(!t) return;
+  _opsTypeDetailsEditingId = code;
+  const modal = document.getElementById('ops-type-details-modal');
+  const titleEl = document.getElementById('ops-type-details-title');
+  const infoEl = document.getElementById('ops-type-details-info');
+  const textEl = document.getElementById('ops-type-details-text');
+  if(!modal || !infoEl || !textEl) return;
+  if(titleEl) titleEl.textContent = t.nom || 'Détails de l\'opération';
+  // Bloc info DB (lecture seule) : catégorie, niveau, intervalle, dernière intervention
+  const machine = getOpsCatMachine();
+  const lastDt = _lastInterventionFor(t.nom, machine, OPS_STATE.list);
+  let lastDisplay = '—';
+  if(lastDt){
+    try{
+      const d = new Date(lastDt);
+      if(!isNaN(d.getTime())){
+        const pad = n => (n < 10 ? '0' + n : '' + n);
+        lastDisplay = pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
+                    + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+    }catch(e){}
+  }
+  const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+  const intervalleTxt = t.periodique
+    ? (t.intervalle || 'À compléter (Paramètres → Maintenance)')
+    : '— (non périodique)';
+  const _kv = (lbl, val) =>
+    '<div><div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">' + lbl + '</div>' +
+    '<div style="color:var(--text);font-weight:500">' + val + '</div></div>';
+  infoEl.innerHTML = ''
+    + _kv('Code', escHtml(String(t.id)))
+    + _kv('Catégorie', '<span class="op-pill ' + ((t.categorie === 'interventions') ? 'interventions' : 'controles') + '">' + escHtml(catLabel) + '</span>')
+    + _kv('Niveau', '<span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span>')
+    + _kv('Intervalle', escHtml(intervalleTxt))
+    + _kv('Machine sélectionnée', escHtml(machine))
+    + _kv('Dernière intervention', escHtml(lastDisplay));
+  textEl.value = getOpsTypeDetails(code);
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => textEl.focus(), 50);
+}
+function closeOpsTypeDetailsModal(){
+  const modal = document.getElementById('ops-type-details-modal');
+  if(!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  _opsTypeDetailsEditingId = null;
+}
+function saveOpsTypeDetails(e){
+  if(e && e.preventDefault) e.preventDefault();
+  if(!_opsTypeDetailsEditingId) return;
+  const textEl = document.getElementById('ops-type-details-text');
+  if(!textEl) return;
+  const val = (textEl.value || '').trim();
+  const map = _loadOpsTypeDetailsMap();
+  if(val){ map[_opsTypeDetailsEditingId] = val; }
+  else { delete map[_opsTypeDetailsEditingId]; }
+  _saveOpsTypeDetailsMap(map);
+  showToast('Détails enregistrés.', 'info');
+  closeOpsTypeDetailsModal();
+}
+
+// =========================================================================
+// Vue Maintenance (accueil) : cartes par opération périodique, par machine
+// =========================================================================
+const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
+
+function getMaintMachine(){
+  try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'Cohésio 1'; }
+  catch(e){ return 'Cohésio 1'; }
+}
+function setMaintMachine(m){
+  if(!m) return;
+  try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
+  renderMaintCards();
+}
+function renderMaintCards(){
+  const grid = document.getElementById('maint-cards-grid');
+  if(!grid) return;
+  // Met à jour l'état actif des boutons machine
+  const machine = getMaintMachine();
+  document.querySelectorAll('.maint-machine-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
+  });
+  // Filtre les codes avec periodique=OUI (toutes catégories confondues).
+  // OPS_TYPES_STATE contient déjà les Interventions (toutes) + Contrôles périodiques.
+  // On garde uniquement ceux marqués periodique=true.
+  const items = (OPS_TYPES_STATE.list || [])
+    .filter(it => !!it.periodique)
+    .slice()
+    .sort((a, b) => {
+      // Contrôles d'abord, puis Interventions, ordre alphabétique dans chaque groupe
+      const ca = (a.categorie === 'interventions') ? 1 : 0;
+      const cb = (b.categorie === 'interventions') ? 1 : 0;
+      if(ca !== cb) return ca - cb;
+      return (a.nom || '').localeCompare(b.nom || '', 'fr');
+    });
+  if(!items.length){
+    grid.innerHTML = '<div class="maint-frames-empty">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
+    return;
+  }
+  grid.innerHTML = items.map(it => {
+    const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+    return '<section class="maint-frame" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+      '<div class="maint-frame-head">' +
+        '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
+        '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
+      '</div>' +
+      '<div class="maint-frame-body">À compléter</div>' +
+    '</section>';
+  }).join('');
+}
 function submitOpsType(e){
   e.preventDefault();
   const nom = (document.getElementById('cat-nom').value || '').trim();
@@ -2611,22 +2823,35 @@ function renderOpsTypes(){
           }
         }catch(e){}
       }
-      return '<tr' + rowCls + '>' +
+      // Intervalle de temps : vide pour les non-périodiques (Interventions one-shot)
+      const intervalleCell = t.periodique
+        ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
+        : '<span style="color:var(--muted)">—</span>';
+      // Ligne entière cliquable (double-clic) pour ouvrir la modale d'édition
+      // des détails (notes libres, stockées en localStorage par code).
+      return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les détails">' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
+        '<td>' + intervalleCell + '</td>' +
         '<td class="col-last-intervention">' +
           '<div class="last-intervention-wrap" style="display:flex;flex-direction:column;gap:4px">' +
             '<span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span>' +
             statusHtml +
           '</div>' +
         '</td>' +
-        '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
         '<td class="col-actions"></td>' +
       '</tr>';
     }).join('');
   }
   tbodies.forEach(tb => { tb.innerHTML = html; });
+  // Double-clic sur une ligne -> modale d'édition des détails (notes locales)
+  document.querySelectorAll('tr[data-ops-type-row]').forEach(tr => {
+    tr.addEventListener('dblclick', () => {
+      const code = tr.getAttribute('data-ops-type-row');
+      if(code) openOpsTypeDetailsModal(code);
+    });
+  });
   const n = OPS_TYPES_STATE.list.length;
   const lbl = n + ' opération' + (n > 1 ? 's' : '');
   document.querySelectorAll('.js-cat-count').forEach(c => { c.textContent = lbl; });
@@ -3042,7 +3267,13 @@ async function loadMe(){
   loadMe();
   loadOps();
   // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
-  loadOpsTypes().then(() => renderOpsTypes()).catch(() => renderOpsTypes());
+  loadOpsTypes().then(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }).catch(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  });
   loadCtrl();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
