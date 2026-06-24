@@ -1,15 +1,28 @@
-/* MySifa — Post-its (portail + pages applicatives si multi-page, desktop >= 1024px) */
+/* MySifa — Post-its (portail + pages applicatives si multi-page, desktop >= 1024px)
+   Ton chaud littéral (jaune chaleureux du redesign portail). Volontairement non
+   thématisé : le post-it garde la même teinte dorée en clair et en sombre, pour
+   ressortir comme un objet « papier » sur la page. La couleur perso d'un post-it
+   (--postit-color) reste utilisée par la pastille, l'accent du checkbox et le
+   bouton « + tâche » pour conserver le classement par l'utilisateur. */
 .postit-layer{display:none}
 @media (min-width:1024px){.postit-layer{display:block}}
 .postit{
-  --postit-color:var(--accent);
+  --postit-color:#c79a16;
+  --postit-paper:#fff6cf;
+  --postit-paper-edge:#f0dd92;
+  --postit-paper-sep:#ecd87f;
+  --postit-ink:#6b5618;
+  --postit-ink-soft:#8a7330;
+  --postit-ink-muted:#b29a4e;
+  --postit-ink-strong:#b8860b;
+  --postit-shadow:0 10px 28px rgba(120,100,20,.18);
   position:fixed;
-  background:var(--card);
-  border:1px solid var(--border);
-  border-radius:12px;
+  background:var(--postit-paper);
+  border:1px solid var(--postit-paper-edge);
+  border-radius:14px;
   width:260px;
   min-height:120px;
-  box-shadow:0 4px 24px rgba(0,0,0,0.18);
+  box-shadow:var(--postit-shadow);
   z-index:200;
   display:flex;
   flex-direction:column;
@@ -19,21 +32,20 @@
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:10px 12px 8px;
+  padding:12px 14px 8px;
   cursor:grab;
-  border-radius:12px 12px 0 0;
-  background:var(--card);
+  border-radius:14px 14px 0 0;
+  background:transparent;
   gap:8px;
-  border-top:3px solid var(--postit-color);
 }
 .postit-header:active{cursor:grabbing}
 .postit-color-dot{
-  width:14px;
-  height:14px;
+  width:12px;
+  height:12px;
   border-radius:50%;
   flex-shrink:0;
   background:var(--postit-color);
-  border:2px solid color-mix(in srgb,var(--postit-color) 55%,var(--border));
+  border:2px solid color-mix(in srgb,var(--postit-color) 55%,var(--postit-paper-edge));
   cursor:pointer;
   padding:0;
   transition:transform .15s,box-shadow .15s;
@@ -52,10 +64,10 @@
   flex-wrap:wrap;
   gap:8px;
   padding:10px;
-  background:var(--card);
-  border:1px solid var(--border);
+  background:var(--postit-paper);
+  border:1px solid var(--postit-paper-edge);
   border-radius:12px;
-  box-shadow:0 8px 28px rgba(0,0,0,0.28);
+  box-shadow:var(--postit-shadow);
   z-index:8030;
   width:200px;
   min-height:52px;
@@ -80,22 +92,24 @@
 }
 #postit-color-palette .postit-color-swatch:hover{transform:scale(1.1)}
 #postit-color-palette .postit-color-swatch.active{
-  border-color:var(--text);
-  box-shadow:0 0 0 2px var(--card);
+  border-color:var(--postit-ink);
+  box-shadow:0 0 0 2px var(--postit-paper);
 }
 .postit-title{
   flex:1;
   background:transparent;
   border:none;
-  color:var(--text);
+  color:var(--postit-ink);
   font-size:13px;
-  font-weight:600;
+  font-weight:700;
   outline:none;
   min-width:0;
+  font-family:inherit;
 }
-.postit-body{padding:4px 12px 6px;flex:1}
-.postit-task{display:flex;align-items:flex-start;gap:6px;padding:0;margin:0}
-.postit-task+.postit-task{margin-top:2px}
+.postit-title::placeholder{color:var(--postit-ink-muted);opacity:1}
+.postit-body{padding:4px 14px 6px;flex:1}
+.postit-task{display:flex;align-items:flex-start;gap:9px;padding:0;margin:0}
+.postit-task+.postit-task{margin-top:3px}
 .postit-task input[type="checkbox"]{
   margin-top:3px;
   accent-color:var(--postit-color);
@@ -103,24 +117,25 @@
   cursor:pointer;
 }
 .postit-task-text{
-  font-size:13px;
-  color:var(--text);
+  font-size:12px;
+  color:var(--postit-ink);
   flex:1;
   background:transparent;
   border:none;
   outline:none;
   resize:none;
-  line-height:1.4;
+  line-height:1.5;
   padding:0;
   margin:0;
-  min-height:1.4em;
+  min-height:1.5em;
   overflow:hidden;
   box-sizing:border-box;
   font-family:inherit;
 }
+.postit-task-text::placeholder{color:var(--postit-ink-muted);opacity:1}
 .postit-task.done .postit-task-text{
   text-decoration:line-through;
-  color:var(--muted);
+  color:var(--postit-ink-muted);
 }
 .postit:not(.is-hidden) .postit-footer{
   cursor:grab;
@@ -134,41 +149,45 @@
   justify-content:space-between;
   flex-wrap:wrap;
   gap:4px 8px;
-  padding:6px 12px 10px;
-  border-top:1px solid var(--border);
+  padding:9px 14px;
+  border-top:1px solid var(--postit-paper-sep);
 }
 .postit-clear-btn{
   font-size:11px;
-  color:var(--muted);
+  color:var(--postit-ink-soft);
   background:none;
   border:none;
   cursor:pointer;
   padding:2px 4px;
+  font-family:inherit;
 }
 .postit-clear-btn:hover{color:var(--danger)}
 .postit-add-task-btn{
-  font-size:11px;
-  color:var(--postit-color);
+  font-size:12px;
+  color:var(--postit-ink-strong);
   background:none;
   border:none;
   cursor:pointer;
   padding:2px 4px;
-  font-weight:600;
+  font-weight:700;
+  font-family:inherit;
 }
+.postit-add-task-btn:hover{text-decoration:underline}
 .postit-multipage-btn{
   font-size:11px;
-  color:var(--muted);
+  color:var(--postit-ink-soft);
   background:none;
   border:none;
   cursor:pointer;
   padding:2px 4px;
   font-weight:600;
   white-space:nowrap;
+  font-family:inherit;
 }
-.postit-multipage-btn:hover{color:var(--text2)}
-.postit-multipage-btn.on{color:var(--accent)}
-.postit-multipage-btn.on .postit-multipage-label{color:var(--accent)}
-.postit-multipage-label{font-weight:500;color:var(--muted)}
+.postit-multipage-btn:hover{color:var(--postit-ink)}
+.postit-multipage-btn.on{color:var(--postit-ink-strong)}
+.postit-multipage-btn.on .postit-multipage-label{color:var(--postit-ink-strong)}
+.postit-multipage-label{font-weight:500;color:var(--postit-ink-soft)}
 .postit-header-actions{
   display:flex;
   align-items:center;
@@ -179,14 +198,14 @@
 .postit-delete-btn{
   background:none;
   border:none;
-  color:var(--muted);
+  color:var(--postit-ink-muted);
   cursor:pointer;
   font-size:16px;
   line-height:1;
   padding:0 4px;
   transition:color .15s;
 }
-.postit-hide-btn:hover{color:var(--accent)}
+.postit-hide-btn:hover{color:var(--postit-ink-strong)}
 .postit-delete-btn:hover{color:var(--danger)}
 .postit.is-hidden{
   overflow:hidden;
@@ -197,7 +216,7 @@
 }
 .postit.is-hidden .postit-header{
   cursor:pointer;
-  border-radius:12px;
+  border-radius:14px;
 }
 .postit.is-hidden .postit-body,
 .postit.is-hidden .postit-footer{
@@ -209,7 +228,7 @@
 .postit.is-hidden.is-peek{
   overflow:visible;
   z-index:450;
-  box-shadow:0 8px 32px rgba(0,0,0,0.28);
+  box-shadow:0 12px 32px rgba(120,100,20,.28);
   transform:translateY(calc(-1 * var(--postit-peek-up, 140px)));
 }
 .postit.is-hidden:hover .postit-body,
@@ -224,6 +243,8 @@
   transition:left .35s cubic-bezier(.4,0,.2,1),top .35s cubic-bezier(.4,0,.2,1);
 }
 
+/* Dock de création (menu de choix today/someday) — reste sur les tokens app
+   pour rester cohérent avec les autres FAB du dock (calc, IA, messagerie). */
 #postit-dock-root{display:none}
 #postit-dock-menu{
   position:fixed;
