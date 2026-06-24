@@ -580,15 +580,13 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </section>
 
         <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
+        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count js-cat-count">0 opération</div>
-              <button type="button" class="ops-btn-add" onclick="openCatModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Ajouter une opération à la liste
-              </button>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
@@ -597,7 +595,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 <tr>
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="frequence" onclick="sortOpsTypes('frequence')">Fréquence<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
@@ -783,7 +781,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
               <div class="ops-list-count" id="ops-count">0 opération</div>
               <button type="button" class="ops-btn-add" onclick="openOpsModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Nouvelle opération
+                Nouvelle saisie
               </button>
             </div>
           </div>
@@ -805,15 +803,13 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </div>
 
         <!-- Liste d'opérations de maintenance (catalogue) -->
+        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
-              <button type="button" class="ops-btn-add" onclick="openCatModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Ajouter une opération à la liste
-              </button>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
@@ -822,7 +818,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 <tr>
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="frequence" onclick="sortOpsTypes('frequence')">Fréquence<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
@@ -1127,6 +1123,13 @@ function switchView(name){
     // Toujours afficher la vue Semaine en arrivant dans Planning
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
+  }
+  // Recharge la liste des codes maintenance a chaque arrivee sur les vues qui
+  // l'utilisent, pour refleter les changements faits dans Parametres -> Maintenance.
+  if(name === 'maintenance' || name === 'operations'){
+    if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
+      loadOpsTypes().then(() => renderOpsTypes()).catch(() => {});
+    }
   }
   const meta = VIEW_META[name];
   const t = document.querySelector('.mobile-topbar-title');
@@ -2284,7 +2287,7 @@ function renderOps(){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
       ? 'Aucune opération ne correspond aux filtres.'
-      : 'Aucune opération enregistrée. Cliquez sur « Nouvelle opération » pour commencer.';
+      : 'Aucune opération enregistrée. Cliquez sur « Nouvelle saisie » pour commencer.';
     tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
     const rows = filtered.map(o =>
@@ -2315,21 +2318,54 @@ function renderOps(){
 }
 
 // =========================================================================
-// Catalogue des types d'opérations
+// Catalogue des types d'opérations — source : Paramètres → Maintenance (DB)
+// On affiche uniquement les codes maintenance avec periodique=OUI.
+// Le code, le libellé, le niveau et la catégorie viennent du serveur (table
+// maintenance_codes). La date "Dernière intervention" est une donnée
+// opérationnelle locale, conservée en localStorage indexée par le code.
 // =========================================================================
-const OPS_TYPES_STORAGE_KEY = 'mysifa_maint_optypes_v1';
+const OPS_TYPES_LAST_KEY = 'mysifa_maint_optypes_last_intervention_v1';
 const OPS_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
-function loadOpsTypes(){
+function _loadLastInterventionMap(){
   try{
-    const raw = localStorage.getItem(OPS_TYPES_STORAGE_KEY);
-    OPS_TYPES_STATE.list = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(OPS_TYPES_STATE.list)) OPS_TYPES_STATE.list = [];
-  }catch(e){ OPS_TYPES_STATE.list = []; }
+    const raw = localStorage.getItem(OPS_TYPES_LAST_KEY);
+    const m = raw ? JSON.parse(raw) : {};
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
 }
-function saveOpsTypes(){
-  try{ localStorage.setItem(OPS_TYPES_STORAGE_KEY, JSON.stringify(OPS_TYPES_STATE.list)); }catch(e){}
+function _saveLastInterventionMap(map){
+  try{ localStorage.setItem(OPS_TYPES_LAST_KEY, JSON.stringify(map || {})); }catch(e){}
 }
+
+async function loadOpsTypes(){
+  try{
+    const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
+    if(!res.ok){
+      OPS_TYPES_STATE.list = [];
+      return;
+    }
+    const data = await res.json();
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    const lastMap = _loadLastInterventionMap();
+    OPS_TYPES_STATE.list = items
+      .filter(it => !!it.periodique)
+      .map(it => ({
+        id: it.code,
+        nom: it.label,
+        niveau: parseInt(it.niveau, 10) || 1,
+        categorie: it.categorie || 'controles',
+        frequence: '',
+        derniere_intervention: lastMap[it.code] || null,
+        detail: '',
+        _readonly: true,
+      }));
+  }catch(e){
+    OPS_TYPES_STATE.list = [];
+  }
+}
+// Conservé pour compat avec d'anciens handlers (no-op : géré dans Paramètres).
+function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 function submitOpsType(e){
   e.preventDefault();
   const nom = (document.getElementById('cat-nom').value || '').trim();
@@ -2467,8 +2503,12 @@ function updateLastIntervention(id, val){
   const t = OPS_TYPES_STATE.list.find(x => x.id === id);
   if(!t) return;
   t.derniere_intervention = (val || null);
-  t.date_modification = new Date().toISOString();
-  saveOpsTypes();
+  // Persiste la dernière intervention dans la map locale indexée par code.
+  // Le catalogue lui-même vient de la DB ; seule la date d'intervention
+  // reste opérationnelle et locale pour l'instant.
+  const lastMap = _loadLastInterventionMap();
+  if(val){ lastMap[id] = val; } else { delete lastMap[id]; }
+  _saveLastInterventionMap(lastMap);
   renderOpsTypes();
 }
 function renderOpsTypes(){
@@ -2502,7 +2542,7 @@ function renderOpsTypes(){
   const finalRows = overdueRows.concat(normalRows);
   let html;
   if(!finalRows.length){
-    html = '<tr><td colspan="6" class="ops-empty">Aucune opération dans la liste. Cliquez sur « Ajouter une opération à la liste » pour en créer une.</td></tr>';
+    html = '<tr><td colspan="6" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
   } else {
     html = finalRows.map(({t, info}) => {
       const rowCls = info.overdue ? ' class="row-overdue"' : '';
@@ -2513,18 +2553,18 @@ function renderOpsTypes(){
       } else if(info.daysSince != null && info.freqDays != null){
         const remaining = info.freqDays - info.daysSince;
         statusHtml = '<span class="last-intervention-status ok" title="Prochaine intervention recommandée dans ' + remaining + ' jour' + (remaining>1?'s':'') + '">✓ OK (J-' + Math.max(0, remaining) + ')</span>';
-      } else if(info.daysSince != null){
-        statusHtml = '<span class="last-intervention-status unknown">Fréquence non reconnue</span>';
       } else if(!dt){
         statusHtml = '<span class="last-intervention-status unknown">Jamais enregistré</span>';
       }
       const overdueBadge = info.overdue
         ? '<span class="row-overdue-badge" title="Intervention en retard">⚠ En retard</span>'
         : '';
+      const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+      const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
       return '<tr' + rowCls + '>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
-        '<td>' + escHtml(t.frequence) + '</td>' +
+        '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
         '<td class="col-last-intervention">' +
           '<div class="last-intervention-wrap">' +
             '<input type="date" class="last-intervention-input" value="' + escAttr(dt) + '" onchange="updateLastIntervention(\'' + escAttr(t.id) + '\', this.value)" aria-label="Dernière intervention">' +
@@ -2532,14 +2572,7 @@ function renderOpsTypes(){
           '</div>' +
         '</td>' +
         '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
-        '<td class="col-actions">' +
-          '<button type="button" class="ops-row-btn edit" onclick="editOpsType(\'' + escAttr(t.id) + '\')" title="Modifier">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          '</button>' +
-          '<button type="button" class="ops-row-btn del" onclick="deleteOpsType(\'' + escAttr(t.id) + '\')" title="Supprimer">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
-        '</td>' +
+        '<td class="col-actions"></td>' +
       '</tr>';
     }).join('');
   }
@@ -2914,11 +2947,11 @@ async function loadMe(){
   }catch(e){}
   loadMe();
   loadOps();
-  loadOpsTypes();
+  // loadOpsTypes() est async (fetch /api/maintenance/codes) — on re-render quand prêt.
+  loadOpsTypes().then(() => renderOpsTypes()).catch(() => renderOpsTypes());
   loadCtrl();
   loadCtrlTypes();
   loadPlanning();
-  renderOpsTypes();
   renderOps();
   renderCtrlTypes();
   renderCtrl();
