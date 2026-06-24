@@ -382,12 +382,29 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 /* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
 .maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
-.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
+.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:180px;transition:border-color .15s,box-shadow .15s}
+.maint-frame .maint-frame-stats{flex:1}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
 .maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
 .maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
+.maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 20px}
+.maint-frame-stat{display:flex;flex-direction:column;gap:4px;min-width:0}
+.maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
+.maint-frame-retard{padding:10px 20px 16px;display:flex;align-items:center;gap:8px;font-size:12px;border-top:1px solid var(--border)}
+.maint-frame-retard-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.maint-frame-retard-badge.ok{background:rgba(52,211,153,.15);color:var(--ok,#34d399)}
+.maint-frame-retard-badge.warn{background:rgba(251,191,36,.15);color:var(--warn,#fbbf24)}
+.maint-frame-retard-badge.danger{background:rgba(248,113,113,.15);color:var(--danger,#f87171)}
+.maint-frame-retard-badge.unknown{background:var(--bg);color:var(--muted)}
+.maint-frame-retard-detail{color:var(--text2);font-size:11px}
+.maint-frame.is-overdue{border-color:var(--danger,#f87171);box-shadow:0 0 0 1px var(--danger,#f87171),0 4px 12px rgba(248,113,113,.20)}
+.maint-frame.is-overdue .maint-frame-head{border-bottom-color:rgba(248,113,113,.25)}
+.maint-frame.is-overdue .maint-frame-title{color:var(--danger,#f87171)}
+.maint-frame.is-overdue-critical{border-color:var(--danger,#dc2626);box-shadow:0 0 0 2px var(--danger,#dc2626),0 6px 16px rgba(220,38,38,.30);transform:scale(1.01);transform-origin:top center}
 .maint-machine-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
@@ -2248,7 +2265,10 @@ function addOperation(e){
   // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
   // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
+  // Aligne aussi la vue Maintenance (cartes) sur la machine de la saisie.
+  try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderOpsTypes === 'function') renderOpsTypes();
+  if(typeof renderMaintCards === 'function') renderMaintCards();
   closeOpsModal();
   showToast('Opération enregistrée.', 'info');
 }
@@ -2587,30 +2607,120 @@ function renderMaintCards(){
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
   // Filtre les codes avec periodique=OUI (toutes catégories confondues).
-  // OPS_TYPES_STATE contient déjà les Interventions (toutes) + Contrôles périodiques.
-  // On garde uniquement ceux marqués periodique=true.
-  const items = (OPS_TYPES_STATE.list || [])
-    .filter(it => !!it.periodique)
-    .slice()
-    .sort((a, b) => {
-      // Contrôles d'abord, puis Interventions, ordre alphabétique dans chaque groupe
-      const ca = (a.categorie === 'interventions') ? 1 : 0;
-      const cb = (b.categorie === 'interventions') ? 1 : 0;
-      if(ca !== cb) return ca - cb;
-      return (a.nom || '').localeCompare(b.nom || '', 'fr');
-    });
-  if(!items.length){
+  const baseItems = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
+  if(!baseItems.length){
     grid.innerHTML = '<div class="maint-frames-empty">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
-  grid.innerHTML = items.map(it => {
+  // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
+  // sur la machine sélectionnée, et infos de retard. Source des saisies selon la
+  // catégorie : controles -> CTRL_STATE (saisies dans la vue Contrôles), sinon
+  // interventions -> OPS_STATE (saisies dans la vue Opérations).
+  const enriched = baseItems.map(it => {
+    const freqDays = _parseFrequenceDays(it.intervalle);
+    const sourceList = (it.categorie === 'controles') ? CTRL_STATE.list : OPS_STATE.list;
+    const last = _lastInterventionFor(it.nom, machine, sourceList);
+    let daysSince = null;
+    if(last){
+      try{
+        const d = new Date(last);
+        const today = new Date();
+        const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+      }catch(e){}
+    }
+    const daysOverdue = (freqDays != null && daysSince != null) ? (daysSince - freqDays) : null;
+    const overdue = (daysOverdue != null && daysOverdue > 0);
+    return { it, freqDays, last, daysSince, daysOverdue, overdue };
+  });
+  // Calcule le plus grand retard pour mettre en exergue la carte la plus critique
+  let maxOverdue = 0;
+  enriched.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
+  // Tri : du plus petit intervalle au plus grand (null = à la fin),
+  // puis par retard décroissant à intervalle égal, puis alphabétique.
+  enriched.sort((a, b) => {
+    const fa = (a.freqDays == null) ? Infinity : a.freqDays;
+    const fb = (b.freqDays == null) ? Infinity : b.freqDays;
+    if(fa !== fb) return fa - fb;
+    const oa = a.daysOverdue || 0;
+    const ob = b.daysOverdue || 0;
+    if(ob !== oa) return ob - oa;
+    return (a.it.nom || '').localeCompare(b.it.nom || '', 'fr');
+  });
+  const _fmtDateTime = (iso) => {
+    if(!iso) return '—';
+    try{
+      const d = new Date(iso);
+      if(isNaN(d.getTime())) return '—';
+      const pad = n => (n < 10 ? '0' + n : '' + n);
+      return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
+             ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }catch(e){ return '—'; }
+  };
+  grid.innerHTML = enriched.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
     const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
-    return '<section class="maint-frame" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+    // La carte la plus en retard (et au moins 1j de retard) est marquée "critical"
+    let frameCls = 'maint-frame';
+    if(overdue){
+      frameCls += ' is-overdue';
+      if(maxOverdue > 0 && daysOverdue === maxOverdue) frameCls += ' is-overdue-critical';
+    }
+    // Intervalle (juste la valeur brute, sans "Intervalle de temps : ")
+    const intervalleVal = (it.intervalle || '').trim();
+    const intervalleHtml = intervalleVal
+      ? '<span class="maint-frame-stat-value">' + escHtml(intervalleVal) + '</span>'
+      : '<span class="maint-frame-stat-value muted">À compléter</span>';
+    // Dernière intervention
+    const lastHtml = last
+      ? '<span class="maint-frame-stat-value">' + escHtml(_fmtDateTime(last)) + '</span>'
+      : '<span class="maint-frame-stat-value muted">Jamais</span>';
+    // Statut de retard
+    let badgeCls = 'unknown';
+    let badgeLbl = '';
+    let detailLbl = '';
+    if(daysOverdue != null){
+      if(daysOverdue > 0){
+        badgeCls = 'danger';
+        badgeLbl = 'Retard ' + daysOverdue + ' j';
+        detailLbl = daysSince + 'j depuis la dernière (intervalle ' + freqDays + 'j)';
+      } else {
+        badgeCls = 'ok';
+        const remaining = -daysOverdue;
+        badgeLbl = 'OK · J-' + remaining;
+        detailLbl = remaining + ' j avant prochaine échéance';
+      }
+    } else if(daysSince != null && freqDays == null){
+      badgeCls = 'unknown';
+      badgeLbl = 'Intervalle non reconnu';
+      detailLbl = 'Saisie il y a ' + daysSince + ' j';
+    } else if(last == null && freqDays != null){
+      badgeCls = 'warn';
+      badgeLbl = 'Jamais saisi';
+      detailLbl = 'Intervalle ' + freqDays + ' j';
+    } else {
+      badgeCls = 'unknown';
+      badgeLbl = 'Aucune donnée';
+    }
+    return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
         '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
       '</div>' +
-      '<div class="maint-frame-body">À compléter</div>' +
+      '<div class="maint-frame-stats">' +
+        '<div class="maint-frame-stat">' +
+          '<span class="maint-frame-stat-label">Intervalle</span>' +
+          intervalleHtml +
+        '</div>' +
+        '<div class="maint-frame-stat">' +
+          '<span class="maint-frame-stat-label">Dernière intervention</span>' +
+          lastHtml +
+        '</div>' +
+      '</div>' +
+      '<div class="maint-frame-retard">' +
+        '<span class="maint-frame-retard-badge ' + badgeCls + '">' + escHtml(badgeLbl) + '</span>' +
+        (detailLbl ? '<span class="maint-frame-retard-detail">' + escHtml(detailLbl) + '</span>' : '') +
+      '</div>' +
     '</section>';
   }).join('');
 }
@@ -2891,7 +3001,11 @@ function addControle(e){
   // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
   // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
   try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, machine); }catch(e){}
+  // Aligne aussi la vue Maintenance (cartes) — un contrôle périodique fait partie
+  // des cartes de la vue principale.
+  try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
+  if(typeof renderMaintCards === 'function') renderMaintCards();
   closeCtrlModal();
   showToast('Contrôle enregistré.', 'info');
 }
