@@ -616,6 +616,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
@@ -855,6 +856,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
@@ -903,6 +905,10 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <div class="ops-field-hint" id="ops-type-hint" style="display:none">
               Aucun type défini. Ajoutez-en dans « Liste d'opérations de maintenance ».
             </div>
+          </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ops-date">Date d'opération<span class="req">*</span></label>
+            <input type="datetime-local" id="ops-date" class="ops-select" required>
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ops-comment">Commentaires</label>
@@ -2030,6 +2036,14 @@ function openOpsModal(){
   refreshOpsTypeSelect();
   const nameEl = document.getElementById('ops-saisi-par-name');
   if(nameEl) nameEl.textContent = currentUserName();
+  // Pré-remplit la date avec maintenant (format datetime-local : YYYY-MM-DDTHH:MM)
+  const dateEl = document.getElementById('ops-date');
+  if(dateEl){
+    const now = new Date();
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    dateEl.value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
+                 + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+  }
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
 }
 function closeOpsModal(){
@@ -2188,10 +2202,17 @@ function addOperation(e){
   const operateur = currentUserName();
   if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
+  // Date d'opération : input datetime-local. Si vide ou invalide, fallback maintenant.
+  const dateInput = (document.getElementById('ops-date')?.value || '').trim();
+  let dateSaisie = new Date().toISOString();
+  if(dateInput){
+    const parsed = new Date(dateInput);
+    if(!isNaN(parsed.getTime())) dateSaisie = parsed.toISOString();
+  }
   OPS_STATE.list.push({
     id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
     machine, operateur, type, commentaire,
-    date_saisie: new Date().toISOString()
+    date_saisie: dateSaisie
   });
   saveOps();
   renderOps();
@@ -2415,7 +2436,8 @@ async function loadOpsTypes(){
         niveau: parseInt(it.niveau, 10) || 1,
         categorie: it.categorie || 'controles',
         periodique: !!it.periodique,
-        frequence: '',
+        intervalle: (it.intervalle || '').toString(),
+        frequence: (it.intervalle || '').toString(),  // alias compat _parseFrequenceDays
         detail: '',
         _readonly: true,
       }));
@@ -2653,7 +2675,7 @@ function renderOpsTypes(){
   const finalRows = overdueRows.concat(normalRows);
   let html;
   if(!finalRows.length){
-    html = '<tr><td colspan="6" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
+    html = '<tr><td colspan="7" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
   } else {
     html = finalRows.map(({t, info}) => {
       const rowCls = info.overdue ? ' class="row-overdue"' : '';
@@ -2685,10 +2707,15 @@ function renderOpsTypes(){
           }
         }catch(e){}
       }
+      // Intervalle de temps : vide pour les non-périodiques (Interventions one-shot)
+      const intervalleCell = t.periodique
+        ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
+        : '<span style="color:var(--muted)">—</span>';
       return '<tr' + rowCls + '>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
+        '<td>' + intervalleCell + '</td>' +
         '<td class="col-last-intervention">' +
           '<div class="last-intervention-wrap" style="display:flex;flex-direction:column;gap:4px">' +
             '<span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span>' +
