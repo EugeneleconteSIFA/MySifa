@@ -13502,7 +13502,8 @@ function render(){
   if(S.app!=='prod'){stopMachineStatusPolling();}
 
   if(!S.user||S.app==='login'){
-    try{ MySifaTheme.applyDefault(); }catch(e){}
+    // Sur le login : respecter la pref stockée (défaut = light, cf. mysifa_theme.js)
+    try{ MySifaTheme.initFromStorage(); }catch(e){}
     root.appendChild(renderLogin());
   }
   else if(S.app==='portal'){
