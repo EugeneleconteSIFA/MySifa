@@ -381,13 +381,35 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-btn-add:hover{filter:brightness(1.08)}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 /* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
-.maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
-.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
+.maint-group{margin-top:8px}
+.maint-group + .maint-group{margin-top:24px}
+.maint-group-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.maint-group-title{margin:0;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.8px}
+.maint-group-count{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px}
+.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:180px;transition:border-color .15s,box-shadow .15s}
+.maint-frame .maint-frame-stats{flex:1}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
 .maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
 .maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
+.maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 20px}
+.maint-frame-stat{display:flex;flex-direction:column;gap:4px;min-width:0}
+.maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
+.maint-frame-retard{padding:10px 20px 16px;display:flex;align-items:center;gap:8px;font-size:12px;border-top:1px solid var(--border)}
+.maint-frame-retard-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.maint-frame-retard-badge.ok{background:rgba(52,211,153,.15);color:var(--ok,#34d399)}
+.maint-frame-retard-badge.warn{background:rgba(251,191,36,.15);color:var(--warn,#fbbf24)}
+.maint-frame-retard-badge.danger{background:rgba(248,113,113,.15);color:var(--danger,#f87171)}
+.maint-frame-retard-badge.unknown{background:var(--bg);color:var(--muted)}
+.maint-frame-retard-detail{color:var(--text2);font-size:11px}
+.maint-frame.is-overdue{border-color:var(--danger,#f87171);box-shadow:0 0 0 1px var(--danger,#f87171),0 4px 12px rgba(248,113,113,.20)}
+.maint-frame.is-overdue .maint-frame-head{border-bottom-color:rgba(248,113,113,.25)}
+.maint-frame.is-overdue .maint-frame-title{color:var(--danger,#f87171)}
+.maint-frame.is-overdue-critical{border-color:var(--danger,#dc2626);box-shadow:0 0 0 2px var(--danger,#dc2626),0 6px 16px rgba(220,38,38,.30);transform:scale(1.01);transform-origin:top center}
 .maint-machine-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
@@ -539,10 +561,11 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </div>
 
         <!-- Cartes des opérations de maintenance périodiques.
-             Une carte par code DB avec périodique=OUI. Le contenu est vide pour
-             l'instant (placeholder). La grille est régénérée automatiquement
-             quand les codes changent dans Paramètres → Maintenance. -->
-        <div class="maint-frames-grid" id="maint-cards-grid"></div>
+             Une carte par code DB avec périodique=OUI, groupées par intervalle
+             (Hebdomadaire, Mensuel, Trimestriel...). La grille est régénérée
+             automatiquement quand les codes changent dans Paramètres → Maintenance,
+             ou quand une nouvelle saisie d'opération / contrôle est enregistrée. -->
+        <div id="maint-cards-grid"></div>
       </div>
 
       <!-- View : Planning -->
@@ -2048,7 +2071,10 @@ function fmtDate(iso){
 }
 
 // --- Modales ---
-function openOpsModal(){
+// État d'édition : id de l'opération en cours de modification, sinon null.
+let _opsEditingId = null;
+
+function openOpsModal(editId){
   const m = document.getElementById('ops-modal');
   if(!m) return;
   if(!OPS_TYPES_STATE.list.length){
@@ -2059,25 +2085,62 @@ function openOpsModal(){
     showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
     return;
   }
+  // Si on est en mode édition, récupère l'opération existante.
+  let editing = null;
+  if(editId){
+    editing = OPS_STATE.list.find(o => String(o.id) === String(editId));
+    if(!editing){
+      showToast('Opération introuvable.', 'danger');
+      return;
+    }
+  }
+  _opsEditingId = editing ? editing.id : null;
+
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
+  // Titre & label bouton selon le mode (édition vs création)
+  const titleEl = document.getElementById('ops-modal-title');
+  if(titleEl) titleEl.textContent = editing ? 'Modifier l\'opération' : 'Nouvelle opération';
+  const submitBtn = document.querySelector('#ops-form button[type="submit"]');
+  if(submitBtn){
+    const labelSpan = submitBtn.querySelector('span') || submitBtn;
+    // Préserve l'icône SVG : on cible juste le texte
+    submitBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+      (editing ? ' Enregistrer les modifications' : ' Enregistrer l\'opération');
+  }
   const nameEl = document.getElementById('ops-saisi-par-name');
-  if(nameEl) nameEl.textContent = currentUserName();
-  // Pré-remplit la date avec maintenant (format datetime-local : YYYY-MM-DDTHH:MM)
+  if(nameEl) nameEl.textContent = editing ? (editing.operateur || currentUserName()) : currentUserName();
+  // Pré-remplit la date (mode édition = date saisie ; mode création = maintenant)
   const dateEl = document.getElementById('ops-date');
   if(dateEl){
-    const now = new Date();
     const pad = n => (n < 10 ? '0' + n : '' + n);
-    dateEl.value = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
-                 + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+    const sourceDate = editing && editing.date_saisie ? new Date(editing.date_saisie) : new Date();
+    if(!isNaN(sourceDate.getTime())){
+      dateEl.value = sourceDate.getFullYear() + '-' + pad(sourceDate.getMonth()+1) + '-' + pad(sourceDate.getDate())
+                   + 'T' + pad(sourceDate.getHours()) + ':' + pad(sourceDate.getMinutes());
+    }
+  }
+  // Pré-remplit machine / type / commentaire en mode édition
+  const machineEl = document.getElementById('ops-machine');
+  const typeEl = document.getElementById('ops-type');
+  const commentEl = document.getElementById('ops-comment');
+  if(editing){
+    if(machineEl) machineEl.value = editing.machine || '';
+    if(typeEl) typeEl.value = editing.type || '';
+    if(commentEl) commentEl.value = editing.commentaire || '';
+  } else {
+    if(machineEl) machineEl.value = '';
+    if(typeEl) typeEl.value = '';
+    if(commentEl) commentEl.value = '';
   }
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
 }
 function closeOpsModal(){
   const m = document.getElementById('ops-modal');
   if(!m) return;
+  _opsEditingId = null;
   m.classList.remove('open');
   m.setAttribute('aria-hidden', 'true');
   document.body.style.overflow = '';
@@ -2238,19 +2301,41 @@ function addOperation(e){
     const parsed = new Date(dateInput);
     if(!isNaN(parsed.getTime())) dateSaisie = parsed.toISOString();
   }
-  OPS_STATE.list.push({
-    id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-    machine, operateur, type, commentaire,
-    date_saisie: dateSaisie
-  });
+  // Mode édition : remplace l'opération existante en conservant son id et son
+  // opérateur d'origine (date_modification est ajoutée pour traçabilité locale).
+  // Mode création : push une nouvelle opération.
+  const isEdit = !!_opsEditingId;
+  if(isEdit){
+    const idx = OPS_STATE.list.findIndex(o => String(o.id) === String(_opsEditingId));
+    if(idx === -1){
+      showToast('Opération introuvable — peut-être supprimée entre-temps.', 'danger');
+      return;
+    }
+    const original = OPS_STATE.list[idx];
+    OPS_STATE.list[idx] = Object.assign({}, original, {
+      machine, type, commentaire,
+      date_saisie: dateSaisie,
+      date_modification: new Date().toISOString(),
+      modifie_par: operateur,
+    });
+  } else {
+    OPS_STATE.list.push({
+      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
+      machine, operateur, type, commentaire,
+      date_saisie: dateSaisie
+    });
+  }
   saveOps();
   renderOps();
   // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
-  // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
+  // pour que la "Dernière intervention" reflète immédiatement la modification.
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
+  // Aligne aussi la vue Maintenance (cartes) sur la machine de la saisie.
+  try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderOpsTypes === 'function') renderOpsTypes();
+  if(typeof renderMaintCards === 'function') renderMaintCards();
   closeOpsModal();
-  showToast('Opération enregistrée.', 'info');
+  showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
 }
 function deleteOp(id){
   if(!confirm('Supprimer cette opération ?')) return;
@@ -2396,6 +2481,9 @@ function renderOps(){
         '<td>' + escHtml(o.type) + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
+          '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+          '</button>' +
           '<button type="button" class="ops-row-btn del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
           '</button>' +
@@ -2578,41 +2666,170 @@ function setMaintMachine(m){
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
   renderMaintCards();
 }
+// Convertit un nombre de jours en libellé standard (Hebdomadaire, Mensuel, etc.)
+function _freqDaysToLabel(d){
+  if(d == null) return 'Sans intervalle reconnu';
+  const map = {
+    1: 'Quotidien',
+    7: 'Hebdomadaire',
+    14: 'Bi-hebdomadaire',
+    30: 'Mensuel',
+    60: 'Bi-mensuel',
+    90: 'Trimestriel',
+    180: 'Semestriel',
+    365: 'Annuel',
+    730: 'Bi-annuel',
+  };
+  if(map[d]) return map[d];
+  if(d < 7) return 'Tous les ' + d + ' jours';
+  if(d % 7 === 0 && d <= 56) return 'Toutes les ' + (d/7) + ' semaines';
+  if(d % 30 === 0 && d <= 720) return 'Tous les ' + (d/30) + ' mois';
+  return 'Tous les ' + d + ' jours';
+}
+
 function renderMaintCards(){
   const grid = document.getElementById('maint-cards-grid');
   if(!grid) return;
+  // Recharge les historiques de saisies depuis localStorage avant de calculer la
+  // dernière intervention — couvre les cas multi-onglets (saisie dans un autre
+  // onglet) et garantit qu'on lit toujours l'état le plus à jour.
+  if(typeof loadOps === 'function') loadOps();
+  if(typeof loadCtrl === 'function') loadCtrl();
   // Met à jour l'état actif des boutons machine
   const machine = getMaintMachine();
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
   // Filtre les codes avec periodique=OUI (toutes catégories confondues).
-  // OPS_TYPES_STATE contient déjà les Interventions (toutes) + Contrôles périodiques.
-  // On garde uniquement ceux marqués periodique=true.
-  const items = (OPS_TYPES_STATE.list || [])
-    .filter(it => !!it.periodique)
-    .slice()
-    .sort((a, b) => {
-      // Contrôles d'abord, puis Interventions, ordre alphabétique dans chaque groupe
-      const ca = (a.categorie === 'interventions') ? 1 : 0;
-      const cb = (b.categorie === 'interventions') ? 1 : 0;
-      if(ca !== cb) return ca - cb;
-      return (a.nom || '').localeCompare(b.nom || '', 'fr');
-    });
-  if(!items.length){
+  const baseItems = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
+  if(!baseItems.length){
     grid.innerHTML = '<div class="maint-frames-empty">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
-  grid.innerHTML = items.map(it => {
-    const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
-    return '<section class="maint-frame" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
-      '<div class="maint-frame-head">' +
-        '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
-        '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
-      '</div>' +
-      '<div class="maint-frame-body">À compléter</div>' +
-    '</section>';
-  }).join('');
+  // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
+  // sur la machine sélectionnée, et infos de retard. Source des saisies selon la
+  // catégorie : controles -> CTRL_STATE, sinon interventions -> OPS_STATE.
+  const enriched = baseItems.map(it => {
+    const freqDays = _parseFrequenceDays(it.intervalle);
+    const sourceList = (it.categorie === 'controles') ? CTRL_STATE.list : OPS_STATE.list;
+    const last = _lastInterventionFor(it.nom, machine, sourceList);
+    let daysSince = null;
+    if(last){
+      try{
+        const d = new Date(last);
+        const today = new Date();
+        const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+      }catch(e){}
+    }
+    const daysOverdue = (freqDays != null && daysSince != null) ? (daysSince - freqDays) : null;
+    const overdue = (daysOverdue != null && daysOverdue > 0);
+    return { it, freqDays, last, daysSince, daysOverdue, overdue };
+  });
+  // Calcule le plus grand retard (toutes catégories) pour mettre en exergue
+  let maxOverdue = 0;
+  enriched.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
+  // Groupement par intervalle (en jours). Items sans intervalle reconnu -> groupe "null".
+  const groups = new Map();  // key = freqDays (number) ou 'unknown'
+  enriched.forEach(e => {
+    const key = (e.freqDays == null) ? 'unknown' : e.freqDays;
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+  // Tri des groupes : plus petit intervalle en premier, 'unknown' à la fin
+  const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+    if(a === 'unknown') return 1;
+    if(b === 'unknown') return -1;
+    return a - b;
+  });
+  // Tri à l'intérieur de chaque groupe : retard décroissant, puis alphabétique
+  groups.forEach((arr) => {
+    arr.sort((a, b) => {
+      const oa = a.daysOverdue || 0;
+      const ob = b.daysOverdue || 0;
+      if(ob !== oa) return ob - oa;
+      return (a.it.nom || '').localeCompare(b.it.nom || '', 'fr');
+    });
+  });
+  const _fmtDateTime = (iso) => {
+    if(!iso) return '—';
+    try{
+      const d = new Date(iso);
+      if(isNaN(d.getTime())) return '—';
+      const pad = n => (n < 10 ? '0' + n : '' + n);
+      return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
+             ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }catch(e){ return '—'; }
+  };
+  // Construit le HTML : un en-tête de section + une grille de cartes par groupe.
+  let html = '';
+  sortedKeys.forEach(key => {
+    const groupItems = groups.get(key);
+    const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
+    const cards = groupItems.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
+      const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+      let frameCls = 'maint-frame';
+      if(overdue){
+        frameCls += ' is-overdue';
+        if(maxOverdue > 0 && daysOverdue === maxOverdue) frameCls += ' is-overdue-critical';
+      }
+      const lastHtml = last
+        ? '<span class="maint-frame-stat-value">' + escHtml(_fmtDateTime(last)) + '</span>'
+        : '<span class="maint-frame-stat-value muted">Jamais</span>';
+      // Statut de retard
+      let badgeCls = 'unknown';
+      let badgeLbl = '';
+      let detailLbl = '';
+      if(daysOverdue != null){
+        if(daysOverdue > 0){
+          badgeCls = 'danger';
+          badgeLbl = 'Retard ' + daysOverdue + ' j';
+          detailLbl = daysSince + 'j depuis la dernière (intervalle ' + freqDays + 'j)';
+        } else {
+          badgeCls = 'ok';
+          const remaining = -daysOverdue;
+          badgeLbl = 'OK · J-' + remaining;
+          detailLbl = remaining + ' j avant prochaine échéance';
+        }
+      } else if(daysSince != null && freqDays == null){
+        badgeCls = 'unknown';
+        badgeLbl = 'Intervalle non reconnu';
+        detailLbl = 'Saisie il y a ' + daysSince + ' j';
+      } else if(last == null && freqDays != null){
+        badgeCls = 'warn';
+        badgeLbl = 'Jamais saisi';
+        detailLbl = 'Intervalle ' + freqDays + ' j';
+      } else {
+        badgeCls = 'unknown';
+        badgeLbl = 'Aucune donnée';
+      }
+      return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+        '<div class="maint-frame-head">' +
+          '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
+          '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
+        '</div>' +
+        '<div class="maint-frame-stats" style="grid-template-columns:1fr">' +
+          '<div class="maint-frame-stat">' +
+            '<span class="maint-frame-stat-label">Dernière intervention</span>' +
+            lastHtml +
+          '</div>' +
+        '</div>' +
+        '<div class="maint-frame-retard">' +
+          '<span class="maint-frame-retard-badge ' + badgeCls + '">' + escHtml(badgeLbl) + '</span>' +
+          (detailLbl ? '<span class="maint-frame-retard-detail">' + escHtml(detailLbl) + '</span>' : '') +
+        '</div>' +
+      '</section>';
+    }).join('');
+    html += '<div class="maint-group">' +
+              '<div class="maint-group-head">' +
+                '<h3 class="maint-group-title">' + escHtml(groupLabel) + '</h3>' +
+                '<span class="maint-group-count">' + groupItems.length + ' opération' + (groupItems.length > 1 ? 's' : '') + '</span>' +
+              '</div>' +
+              '<div class="maint-frames-grid">' + cards + '</div>' +
+            '</div>';
+  });
+  grid.innerHTML = html;
 }
 function submitOpsType(e){
   e.preventDefault();
@@ -2891,7 +3108,11 @@ function addControle(e){
   // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
   // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
   try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, machine); }catch(e){}
+  // Aligne aussi la vue Maintenance (cartes) — un contrôle périodique fait partie
+  // des cartes de la vue principale.
+  try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
+  if(typeof renderMaintCards === 'function') renderMaintCards();
   closeCtrlModal();
   showToast('Contrôle enregistré.', 'info');
 }
