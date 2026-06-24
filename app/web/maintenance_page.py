@@ -618,7 +618,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -858,7 +857,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
                   <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
                   <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -967,6 +965,37 @@ body.light .toast.info{background:#fff;color:var(--text)}
         <button type="submit" class="ops-btn-add" id="cat-submit-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           <span id="cat-submit-label">Ajouter à la liste</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Détails d'un type d'opération (info DB + notes locales modifiables) -->
+<div class="modal-overlay" id="ops-type-details-modal" onclick="if(event.target===this) closeOpsTypeDetailsModal()" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ops-type-details-title">
+    <div class="modal-head">
+      <div class="modal-title" id="ops-type-details-title">Détails de l'opération</div>
+      <button type="button" class="modal-close" onclick="closeOpsTypeDetailsModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="ops-type-details-form" onsubmit="saveOpsTypeDetails(event)">
+      <div class="modal-body">
+        <!-- Bloc info DB (lecture seule) -->
+        <div id="ops-type-details-info" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;font-size:13px"></div>
+        <!-- Notes locales modifiables -->
+        <div class="ops-field ops-field--full">
+          <label class="ops-field-label" for="ops-type-details-text">Détails / Notes</label>
+          <textarea id="ops-type-details-text" class="ops-textarea" rows="6" placeholder="Notes libres : procédure, points d'attention, pièces concernées, contacts… (non stocké en base, propre à ce navigateur)"></textarea>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Ces notes ne sont pas enregistrées en base de données — uniquement sur ce navigateur.</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeOpsTypeDetailsModal()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Enregistrer
         </button>
       </div>
     </form>
@@ -2449,6 +2478,93 @@ async function loadOpsTypes(){
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 
 // =========================================================================
+// Détails libres par code (notes locales, non stockées en base)
+// =========================================================================
+const OPS_TYPES_DETAILS_KEY = 'mysifa_maint_optypes_details_v1';
+let _opsTypeDetailsEditingId = null;
+
+function _loadOpsTypeDetailsMap(){
+  try{
+    const raw = localStorage.getItem(OPS_TYPES_DETAILS_KEY);
+    const m = raw ? JSON.parse(raw) : {};
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
+}
+function _saveOpsTypeDetailsMap(map){
+  try{ localStorage.setItem(OPS_TYPES_DETAILS_KEY, JSON.stringify(map || {})); }catch(e){}
+}
+function getOpsTypeDetails(code){
+  if(!code) return '';
+  const map = _loadOpsTypeDetailsMap();
+  return map[code] || '';
+}
+function openOpsTypeDetailsModal(code){
+  const t = OPS_TYPES_STATE.list.find(x => String(x.id) === String(code));
+  if(!t) return;
+  _opsTypeDetailsEditingId = code;
+  const modal = document.getElementById('ops-type-details-modal');
+  const titleEl = document.getElementById('ops-type-details-title');
+  const infoEl = document.getElementById('ops-type-details-info');
+  const textEl = document.getElementById('ops-type-details-text');
+  if(!modal || !infoEl || !textEl) return;
+  if(titleEl) titleEl.textContent = t.nom || 'Détails de l\'opération';
+  // Bloc info DB (lecture seule) : catégorie, niveau, intervalle, dernière intervention
+  const machine = getOpsCatMachine();
+  const lastDt = _lastInterventionFor(t.nom, machine, OPS_STATE.list);
+  let lastDisplay = '—';
+  if(lastDt){
+    try{
+      const d = new Date(lastDt);
+      if(!isNaN(d.getTime())){
+        const pad = n => (n < 10 ? '0' + n : '' + n);
+        lastDisplay = pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
+                    + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+    }catch(e){}
+  }
+  const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+  const intervalleTxt = t.periodique
+    ? (t.intervalle || 'À compléter (Paramètres → Maintenance)')
+    : '— (non périodique)';
+  const _kv = (lbl, val) =>
+    '<div><div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">' + lbl + '</div>' +
+    '<div style="color:var(--text);font-weight:500">' + val + '</div></div>';
+  infoEl.innerHTML = ''
+    + _kv('Code', escHtml(String(t.id)))
+    + _kv('Catégorie', '<span class="op-pill ' + ((t.categorie === 'interventions') ? 'interventions' : 'controles') + '">' + escHtml(catLabel) + '</span>')
+    + _kv('Niveau', '<span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span>')
+    + _kv('Intervalle', escHtml(intervalleTxt))
+    + _kv('Machine sélectionnée', escHtml(machine))
+    + _kv('Dernière intervention', escHtml(lastDisplay));
+  textEl.value = getOpsTypeDetails(code);
+  modal.classList.add('open');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => textEl.focus(), 50);
+}
+function closeOpsTypeDetailsModal(){
+  const modal = document.getElementById('ops-type-details-modal');
+  if(!modal) return;
+  modal.classList.remove('open');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  _opsTypeDetailsEditingId = null;
+}
+function saveOpsTypeDetails(e){
+  if(e && e.preventDefault) e.preventDefault();
+  if(!_opsTypeDetailsEditingId) return;
+  const textEl = document.getElementById('ops-type-details-text');
+  if(!textEl) return;
+  const val = (textEl.value || '').trim();
+  const map = _loadOpsTypeDetailsMap();
+  if(val){ map[_opsTypeDetailsEditingId] = val; }
+  else { delete map[_opsTypeDetailsEditingId]; }
+  _saveOpsTypeDetailsMap(map);
+  showToast('Détails enregistrés.', 'info');
+  closeOpsTypeDetailsModal();
+}
+
+// =========================================================================
 // Vue Maintenance (accueil) : cartes par opération périodique, par machine
 // =========================================================================
 const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
@@ -2675,7 +2791,7 @@ function renderOpsTypes(){
   const finalRows = overdueRows.concat(normalRows);
   let html;
   if(!finalRows.length){
-    html = '<tr><td colspan="7" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
+    html = '<tr><td colspan="6" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
   } else {
     html = finalRows.map(({t, info}) => {
       const rowCls = info.overdue ? ' class="row-overdue"' : '';
@@ -2711,7 +2827,9 @@ function renderOpsTypes(){
       const intervalleCell = t.periodique
         ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
         : '<span style="color:var(--muted)">—</span>';
-      return '<tr' + rowCls + '>' +
+      // Ligne entière cliquable (double-clic) pour ouvrir la modale d'édition
+      // des détails (notes libres, stockées en localStorage par code).
+      return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les détails">' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
@@ -2722,12 +2840,18 @@ function renderOpsTypes(){
             statusHtml +
           '</div>' +
         '</td>' +
-        '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
         '<td class="col-actions"></td>' +
       '</tr>';
     }).join('');
   }
   tbodies.forEach(tb => { tb.innerHTML = html; });
+  // Double-clic sur une ligne -> modale d'édition des détails (notes locales)
+  document.querySelectorAll('tr[data-ops-type-row]').forEach(tr => {
+    tr.addEventListener('dblclick', () => {
+      const code = tr.getAttribute('data-ops-type-row');
+      if(code) openOpsTypeDetailsModal(code);
+    });
+  });
   const n = OPS_TYPES_STATE.list.length;
   const lbl = n + ' opération' + (n > 1 ? 's' : '');
   document.querySelectorAll('.js-cat-count').forEach(c => { c.textContent = lbl; });
