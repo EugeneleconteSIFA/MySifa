@@ -4567,7 +4567,7 @@ async function syncDbV1() {
   const btn = document.getElementById('db-sync-btn');
   const status = document.getElementById('db-sync-status');
   if (!btn) return;
-  if (!confirm('Synchroniser la base de données v2 vers v1 ?\\n\\nLa base de v1 sera ECRASEE par une copie live de la prod (v2).\\nUn backup pre-resync est conserve automatiquement.\\nv1 sera redemarre.')) return;
+  if (!confirm('Synchroniser la base de données v2 vers v1 ?\n\nLa base de v1 sera ECRASEE par une copie live de la prod (v2).\nUn backup pre-resync est conserve automatiquement.\nv1 sera redemarre.')) return;
   const original = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Synchronisation…';

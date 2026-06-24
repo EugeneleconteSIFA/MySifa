@@ -1380,6 +1380,9 @@ async def promote_run(request: Request):
 # Le script fait : stop v1, sqlite3 .backup (live-safe) v2 → v1, restart v1,
 # healthcheck. Backups pré-resync tournés dans /home/sifa/backups/v1-db-rotation/.
 RESYNC_SCRIPT = "/usr/local/bin/mysifa-v1-resync-db.sh"
+# systemd lance le service avec un PATH minimal qui ne contient pas /usr/bin :
+# on résout sudo une fois au boot avec un PATH explicite, fallback /usr/bin/sudo.
+_SUDO_BIN = _shutil.which("sudo", path="/usr/bin:/bin:/usr/local/bin") or "/usr/bin/sudo"
 
 
 @router.post("/api/sync-db-v1")
@@ -1387,7 +1390,7 @@ async def sync_db_v1(request: Request):
     require_superadmin(request)
     try:
         proc = await asyncio.create_subprocess_exec(
-            "sudo", "-n", RESYNC_SCRIPT,
+            _SUDO_BIN, "-n", RESYNC_SCRIPT,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
