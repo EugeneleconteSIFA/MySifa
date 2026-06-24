@@ -2983,7 +2983,7 @@ async function loadMaintCodes() {
             const r2 = await api('/api/maintenance/codes');
             _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
           } catch (e) {
-            toast('Echec de l\\'import : ' + (e && e.message ? e.message : e), true);
+            toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
           }
         }
       }
@@ -3125,7 +3125,7 @@ async function saveMaintForm() {
       toast('Code ajouté');
     }
   } catch (e) {
-    toast(e && e.message ? e.message : 'Erreur lors de l\\'enregistrement', true);
+    toast(e && e.message ? e.message : 'Erreur lors de l\'enregistrement', true);
     return;
   }
   closeMaintForm();
