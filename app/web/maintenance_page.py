@@ -382,10 +382,15 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .ops-list{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:18px}
 /* Cadres Maintenance : Couteaux / Contre-couteaux (vides pour l'instant) */
 .maint-frames-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;margin-top:8px}
-.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:280px}
-.maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}
+.maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
+.maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
 .maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
-.maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px}
+.maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
+.maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
+.maint-machine-btn:hover{background:var(--bg);color:var(--text)}
+.maint-machine-btn.active{background:var(--accent);color:var(--bg)}
+.maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -519,20 +524,24 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
-        <div class="maint-frames-grid">
-          <section class="maint-frame">
-            <div class="maint-frame-head">
-              <div class="maint-frame-title">Couteaux</div>
-            </div>
-            <div class="maint-frame-body"></div>
-          </section>
-          <section class="maint-frame">
-            <div class="maint-frame-head">
-              <div class="maint-frame-title">Contre-couteaux</div>
-            </div>
-            <div class="maint-frame-body"></div>
-          </section>
+        <!-- Sélecteur de machine pour la vue Maintenance.
+             Détermine quelles cartes "code maintenance périodique" s'affichent
+             (Cohésio 1 ou Cohésio 2). Les cartes sont vides pour l'instant et
+             seront alimentées par les saisies opérations/contrôles. -->
+        <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
+          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')" style="border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,color .15s">Cohésio 1</button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')" style="border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,color .15s">Cohésio 2</button>
+          </div>
+          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
         </div>
+
+        <!-- Cartes des opérations de maintenance périodiques.
+             Une carte par code DB avec périodique=OUI. Le contenu est vide pour
+             l'instant (placeholder). La grille est régénérée automatiquement
+             quand les codes changent dans Paramètres → Maintenance. -->
+        <div class="maint-frames-grid" id="maint-cards-grid"></div>
       </div>
 
       <!-- View : Planning -->
@@ -1154,7 +1163,10 @@ function switchView(name){
   // l'utilisent, pour refleter les changements faits dans Parametres -> Maintenance.
   if(name === 'maintenance' || name === 'operations'){
     if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
-      loadOpsTypes().then(() => renderOpsTypes()).catch(() => {});
+      loadOpsTypes().then(() => {
+        renderOpsTypes();
+        if(typeof renderMaintCards === 'function') renderMaintCards();
+      }).catch(() => {});
     }
   }
   if(name === 'controles'){
@@ -2401,6 +2413,7 @@ async function loadOpsTypes(){
         nom: it.label,
         niveau: parseInt(it.niveau, 10) || 1,
         categorie: it.categorie || 'controles',
+        periodique: !!it.periodique,
         frequence: '',
         detail: '',
         _readonly: true,
@@ -2411,6 +2424,57 @@ async function loadOpsTypes(){
 }
 // Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
+
+// =========================================================================
+// Vue Maintenance (accueil) : cartes par opération périodique, par machine
+// =========================================================================
+const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
+
+function getMaintMachine(){
+  try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'Cohésio 1'; }
+  catch(e){ return 'Cohésio 1'; }
+}
+function setMaintMachine(m){
+  if(!m) return;
+  try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
+  renderMaintCards();
+}
+function renderMaintCards(){
+  const grid = document.getElementById('maint-cards-grid');
+  if(!grid) return;
+  // Met à jour l'état actif des boutons machine
+  const machine = getMaintMachine();
+  document.querySelectorAll('.maint-machine-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
+  });
+  // Filtre les codes avec periodique=OUI (toutes catégories confondues).
+  // OPS_TYPES_STATE contient déjà les Interventions (toutes) + Contrôles périodiques.
+  // On garde uniquement ceux marqués periodique=true.
+  const items = (OPS_TYPES_STATE.list || [])
+    .filter(it => !!it.periodique)
+    .slice()
+    .sort((a, b) => {
+      // Contrôles d'abord, puis Interventions, ordre alphabétique dans chaque groupe
+      const ca = (a.categorie === 'interventions') ? 1 : 0;
+      const cb = (b.categorie === 'interventions') ? 1 : 0;
+      if(ca !== cb) return ca - cb;
+      return (a.nom || '').localeCompare(b.nom || '', 'fr');
+    });
+  if(!items.length){
+    grid.innerHTML = '<div class="maint-frames-empty">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
+    return;
+  }
+  grid.innerHTML = items.map(it => {
+    const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+    return '<section class="maint-frame" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+      '<div class="maint-frame-head">' +
+        '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
+        '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
+      '</div>' +
+      '<div class="maint-frame-body">À compléter</div>' +
+    '</section>';
+  }).join('');
+}
 function submitOpsType(e){
   e.preventDefault();
   const nom = (document.getElementById('cat-nom').value || '').trim();
@@ -3051,7 +3115,13 @@ async function loadMe(){
   loadMe();
   loadOps();
   // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
-  loadOpsTypes().then(() => renderOpsTypes()).catch(() => renderOpsTypes());
+  loadOpsTypes().then(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }).catch(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  });
   loadCtrl();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
