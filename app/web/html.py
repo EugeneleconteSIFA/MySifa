@@ -1213,7 +1213,7 @@ body.light .portal-app--busy::after{background:rgba(255,255,255,.88);color:var(-
 .portal-app-name{font-size:14px;font-weight:800;color:var(--text);flex-shrink:0;text-align:center;line-height:1.2}
 .portal-app-desc{font-size:11px;color:var(--muted);text-align:center;max-width:152px;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
-  flex:0 0 auto;margin:0}
+  flex:0 0 auto;margin:0;min-height:calc(11px * 1.3 * 3)}
 .portal-user{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .portal-logout{background:none;border:none;color:var(--muted);cursor:pointer;
   font-size:12px;font-family:inherit;text-decoration:underline;
