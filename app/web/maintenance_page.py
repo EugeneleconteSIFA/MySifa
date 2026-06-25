@@ -435,6 +435,19 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
 .maint-wp-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .maint-wp-btn.active:hover{filter:brightness(1.05)}
+.maint-wp-sections{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)}
+.maint-wp-section{padding:14px 18px;display:flex;flex-direction:column;gap:8px}
+.maint-wp-section + .maint-wp-section{border-left:1px solid var(--border)}
+.maint-wp-section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.maint-wp-ref-row{display:flex;flex-direction:column;gap:4px}
+.maint-wp-ref-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.maint-wp-ref-input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;font-family:inherit;width:100%;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+.maint-wp-ref-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.maint-wp-ref-input::placeholder{color:var(--muted)}
+@media (max-width:700px){
+  .maint-wp-sections{grid-template-columns:1fr}
+  .maint-wp-section + .maint-wp-section{border-left:none;border-top:1px solid var(--border)}
+}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -2718,9 +2731,42 @@ function setWearPartPos(pieceId, pos){
   _saveWearPartMap(m);
   renderMaintCards();
 }
+// Références d'usure (temps & métrage) — état localStorage :
+//   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
+const WEARPART_REFS_KEY = 'mysifa_maint_wearparts_refs_v1';
+function _loadWearPartRefs(){
+  try{
+    const m = JSON.parse(localStorage.getItem(WEARPART_REFS_KEY) || '{}');
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
+}
+function _saveWearPartRefs(m){
+  try{ localStorage.setItem(WEARPART_REFS_KEY, JSON.stringify(m || {})); }catch(e){}
+}
+function getWearPartRef(pieceId, machine, pos, kind){
+  // kind = 'temps' | 'metrage'
+  const m = _loadWearPartRefs();
+  return ((m[pieceId] || {})[machine] || {})[pos] && m[pieceId][machine][pos][kind] || '';
+}
+function setWearPartRef(pieceId, kind, value){
+  if(kind !== 'temps' && kind !== 'metrage') return;
+  const machine = getMaintMachine();
+  const pos = getWearPartPos(pieceId, machine);
+  const m = _loadWearPartRefs();
+  if(!m[pieceId]) m[pieceId] = {};
+  if(!m[pieceId][machine]) m[pieceId][machine] = {};
+  if(!m[pieceId][machine][pos]) m[pieceId][machine][pos] = {};
+  m[pieceId][machine][pos][kind] = (value || '').toString().trim();
+  _saveWearPartRefs(m);
+  // Pas besoin de re-render : la valeur est déjà dans l'input. On évite ainsi
+  // de perdre le focus pendant que l'utilisateur tape.
+}
+
 function _renderWearPartsGroup(machine){
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
+    const refTemps = getWearPartRef(p.id, machine, pos, 'temps');
+    const refMetrage = getWearPartRef(p.id, machine, pos, 'metrage');
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
@@ -2733,7 +2779,28 @@ function _renderWearPartsGroup(machine){
           _b('Rive', 'rive') +
         '</div>' +
       '</div>' +
-      '<div class="maint-frame-body">À compléter</div>' +
+      '<div class="maint-wp-sections">' +
+        '<div class="maint-wp-section">' +
+          '<div class="maint-wp-section-title">Temps</div>' +
+          '<div class="maint-wp-ref-row">' +
+            '<label class="maint-wp-ref-label" for="wp-' + escAttr(p.id) + '-temps">Référence intervalle de temps</label>' +
+            '<input type="text" id="wp-' + escAttr(p.id) + '-temps" class="maint-wp-ref-input" ' +
+              'value="' + escAttr(refTemps) + '" ' +
+              'placeholder="ex. 90 jours, 3 mois" ' +
+              'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'temps\', this.value)">' +
+          '</div>' +
+        '</div>' +
+        '<div class="maint-wp-section">' +
+          '<div class="maint-wp-section-title">Métrage</div>' +
+          '<div class="maint-wp-ref-row">' +
+            '<label class="maint-wp-ref-label" for="wp-' + escAttr(p.id) + '-metrage">Référence métrage</label>' +
+            '<input type="text" id="wp-' + escAttr(p.id) + '-metrage" class="maint-wp-ref-input" ' +
+              'value="' + escAttr(refMetrage) + '" ' +
+              'placeholder="ex. 5000 m, 10 km" ' +
+              'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'metrage\', this.value)">' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
     '</section>';
   }).join('');
   return '<div class="maint-group">' +
