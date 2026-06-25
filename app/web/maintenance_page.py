@@ -2715,12 +2715,18 @@ function renderMaintCards(){
     return;
   }
   // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
-  // sur la machine sélectionnée, et infos de retard. Source des saisies selon la
-  // catégorie : controles -> CTRL_STATE, sinon interventions -> OPS_STATE.
+  // sur la machine sélectionnée, et infos de retard.
+  //
+  // Source des saisies : TOUJOURS OPS_STATE.
+  // Les cartes affichent les codes periodique=OUI (interventions + controles).
+  // Le select de la modale Contrôles ne propose que les controles periodique=NON,
+  // donc un code controle periodique=OUI ne peut être saisi que via la modale
+  // Opérations -> il atterrit dans OPS_STATE. Si on lit CTRL_STATE pour les
+  // controles, on rate ces saisies (bug observé : cartes restant à "Jamais"
+  // alors que des entrées existent dans l'historique des opérations).
   const enriched = baseItems.map(it => {
     const freqDays = _parseFrequenceDays(it.intervalle);
-    const sourceList = (it.categorie === 'controles') ? CTRL_STATE.list : OPS_STATE.list;
-    const last = _lastInterventionFor(it.nom, machine, sourceList);
+    const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
     let daysSince = null;
     if(last){
       try{
