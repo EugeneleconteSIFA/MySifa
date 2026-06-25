@@ -4141,6 +4141,20 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 128, "maintenance_codes_table")
 
+    # v130 — Demandes de devis transporteur : champ client + pièce jointe.
+    # Le client est renseigné par l'utilisateur à la création. La pièce jointe
+    # est un fichier uploadé optionnellement, stocké sous data/uploads/devis/.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=130 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_demandes_devis)").fetchall()}
+        if "client" not in cols:
+            conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN client TEXT")
+        if "piece_jointe_path" not in cols:
+            conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN piece_jointe_path TEXT")
+        if "piece_jointe_filename" not in cols:
+            conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN piece_jointe_filename TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 130, "expe_demandes_devis_client_piece_jointe")
+
     # v129 — Codes maintenance : intervalle de temps pour les codes périodiques.
     # Texte libre (ex. "Quotidien", "Hebdo", "30 jours", "1 mois", "6 mois").
     # Ignoré côté UI quand periodique=0.

@@ -1488,11 +1488,13 @@ async function chargerProspects(){
 function ouvrirModalNouvelleDemande(departPreRempli){
   const d=departPreRempli||{};
   set({expeDevisModal:{type:'nouvelle',departId:d.id||null,form:{
+    client:d.client||'',
     poids_total_kg:d.poids_total_kg!=null?String(d.poids_total_kg):'',
     nb_palette:d.nb_palette!=null?String(d.nb_palette):'',
     code_postal_destination:d.code_postal_destination||'',
     type_envoi:(d.nb_palette||0)>=6?'affretement':(d.type_envoi||'messagerie'),
-    contraintes:''
+    contraintes:'',
+    piece_jointe_file:null
   }}});
 }
 
@@ -1501,12 +1503,15 @@ async function validerNouvelleDemande(){
   if(!m||m.type!=='nouvelle')return;
   const f=m.form||{};
   const cp=(f.code_postal_destination||'').trim();
+  const client=(f.client||'').trim();
+  if(!client){showToast('Client obligatoire','danger');return;}
   if(!cp){showToast('Code postal destination obligatoire','danger');return;}
   try{
     const demande=await api('/api/expe/devis/demandes',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
+        client,
         depart_id:m.departId||null,
         poids_total_kg:parseFloat(f.poids_total_kg)||null,
         nb_palette:parseFloat(f.nb_palette)||null,
@@ -1515,6 +1520,26 @@ async function validerNouvelleDemande(){
         contraintes:(f.contraintes||'').trim()||null
       })
     });
+    // Si un fichier a été sélectionné, on l'upload après la création.
+    // Le second appel ne bloque pas la création si l'upload échoue (on prévient).
+    const fileObj=f.piece_jointe_file;
+    if(fileObj&&fileObj instanceof File){
+      try{
+        const fd=new FormData();
+        fd.append('file',fileObj);
+        const r=await fetch('/api/expe/devis/demandes/'+demande.id+'/piece-jointe',{
+          method:'POST',
+          credentials:'include',
+          body:fd
+        });
+        if(!r.ok){
+          const txt=await r.text().catch(()=>String(r.status));
+          showToast('Demande créée mais pièce jointe non sauvée : '+(txt||r.status),'danger');
+        }
+      }catch(e){
+        showToast('Demande créée mais pièce jointe non sauvée : '+(e.message||e),'danger');
+      }
+    }
     fermerExpeDevisModal();
     showToast('Demande créée.','success');
     await chargerDemandes();
@@ -1739,14 +1764,33 @@ function renderExpeDevisModal(){
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Nouvelle demande de devis'),closeBtn));
     box.appendChild(h('div',{className:'expe-devis-grid'},
+      (()=>{
+        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',placeholder:'Nom du client'});
+        c.addEventListener('input',e=>{m.form.client=e.target.value;});
+        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',c);
+      })(),
       mk('Poids (kg)','poids_total_kg',{type:'number',step:'0.1'}),
       mk('Palettes','nb_palette',{type:'number',step:'1'}),
-      mk('CP destination','code_postal_destination'),
+      mk('CP destination *','code_postal_destination'),
       h('label',{className:'expe-devis-label'},'Type d\'envoi',typeSel),
       (()=>{
         const c=h('input',{type:'text',className:'expe-devis-inp',value:f.contraintes||'',placeholder:'Délai, RDV…'});
         c.addEventListener('input',e=>{m.form.contraintes=e.target.value;});
         return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Contraintes',c);
+      })(),
+      (()=>{
+        // Pièce jointe : input file + indicateur du fichier sélectionné. Pas
+        // d'aperçu, juste le nom. Max 20 Mo côté serveur.
+        const fileInp=h('input',{type:'file',className:'expe-devis-inp',style:{padding:'6px'}});
+        const info=h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px'}},
+          m.form.piece_jointe_file?('Sélectionné : '+(m.form.piece_jointe_file.name||'')):'Optionnel — max 20 Mo'
+        );
+        fileInp.addEventListener('change',e=>{
+          const ff=(e.target.files&&e.target.files[0])||null;
+          m.form.piece_jointe_file=ff;
+          info.textContent=ff?('Sélectionné : '+(ff.name||'')):'Optionnel — max 20 Mo';
+        });
+        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Pièce jointe',fileInp,info);
       })()
     ));
     box.appendChild(h('div',{className:'expe-devis-modal-foot'},
@@ -1760,11 +1804,22 @@ function renderExpeDevisModal(){
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},devisRefLabel(d)+' — '+escHtml(d.code_postal_destination||'')),
       closeBtn));
     box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'16px'}},
+      (d.client?escHtml(d.client)+' · ':'')+
       (d.poids_total_kg?d.poids_total_kg+' kg · ':'')+
       (d.nb_palette?d.nb_palette+' pal. · ':'')+
       escHtml(d.type_envoi||'')+
       (d.contraintes?' · '+escHtml(d.contraintes):'')
     ));
+    // Lien vers la pièce jointe si présente
+    if(d.piece_jointe_path){
+      const a=h('a',{
+        href:'/api/expe/devis/demandes/'+d.id+'/piece-jointe',
+        target:'_blank',
+        rel:'noopener',
+        style:{display:'inline-flex',alignItems:'center',gap:'6px',marginBottom:'14px',fontSize:'13px',color:'var(--accent)',textDecoration:'none'}
+      },'Pièce jointe : '+escHtml(d.piece_jointe_filename||'fichier'));
+      box.appendChild(a);
+    }
     if(d.statut==='ouverte'&&expeCanWrite()){
       box.appendChild(h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}},
         h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'),

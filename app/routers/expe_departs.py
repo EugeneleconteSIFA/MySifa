@@ -2503,14 +2503,15 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
     email = (user.get("email") or user.get("identifiant") or "").strip() or None
     year = now[:4]
+    client = (body.get("client") or "").strip() or None
     with get_db() as conn:
         reference = _next_demande_reference(conn, year)
         cur = conn.execute(
             """
             INSERT INTO expe_demandes_devis
             (depart_id, poids_total_kg, nb_palette, code_postal_destination,
-             type_envoi, contraintes, statut, created_at, created_by_email, reference)
-            VALUES (?,?,?,?,?,?,'ouverte',?,?,?)
+             type_envoi, contraintes, statut, created_at, created_by_email, reference, client)
+            VALUES (?,?,?,?,?,?,'ouverte',?,?,?,?)
             """,
             (
                 body.get("depart_id"),
@@ -2522,6 +2523,7 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
                 now,
                 email,
                 reference,
+                client,
             ),
         )
         conn.commit()
@@ -2529,6 +2531,80 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
             "SELECT * FROM expe_demandes_devis WHERE id=?", (cur.lastrowid,)
         ).fetchone()
     return dict(demande)
+
+
+# Répertoire pour les pièces jointes des demandes de devis.
+# Chemins relatifs stockés en DB ; le path absolu se construit avec BASE_DIR.
+_DEVIS_UPLOAD_SUBDIR = "uploads/devis"
+
+
+def _devis_upload_dir() -> Path:
+    from config import BASE_DIR
+    d = Path(BASE_DIR) / _DEVIS_UPLOAD_SUBDIR
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _devis_safe_filename(name: str) -> str:
+    """Conserve la lettres/chiffres + . _ - et remplace le reste par _ ."""
+    name = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._-")
+    return name or "fichier"
+
+
+@router.post("/devis/demandes/{demande_id}/piece-jointe")
+async def upload_demande_devis_piece_jointe(
+    request: Request,
+    demande_id: int,
+    file: UploadFile = File(...),
+):
+    _require_expe_write(request)
+    # Limite raisonnable : 20 Mo
+    MAX_BYTES = 20 * 1024 * 1024
+    contents = await file.read()
+    if len(contents) > MAX_BYTES:
+        raise HTTPException(413, "Fichier trop volumineux (max 20 Mo).")
+    orig = (file.filename or "fichier").strip()
+    safe = _devis_safe_filename(orig)
+    # Préfixe avec l'id de la demande + uuid court pour éviter les collisions
+    unique = f"{demande_id}_{uuid.uuid4().hex[:8]}_{safe}"
+    path_abs = _devis_upload_dir() / unique
+    with open(path_abs, "wb") as out:
+        out.write(contents)
+    rel = f"{_DEVIS_UPLOAD_SUBDIR}/{unique}"
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE expe_demandes_devis SET piece_jointe_path=?, piece_jointe_filename=? WHERE id=?",
+            (rel, orig, demande_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            try:
+                path_abs.unlink()
+            except Exception:
+                pass
+            raise HTTPException(404, "Demande introuvable.")
+    return {"ok": True, "path": rel, "filename": orig}
+
+
+@router.get("/devis/demandes/{demande_id}/piece-jointe")
+def download_demande_devis_piece_jointe(request: Request, demande_id: int):
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT piece_jointe_path, piece_jointe_filename FROM expe_demandes_devis WHERE id=?",
+            (demande_id,),
+        ).fetchone()
+    if not row or not row["piece_jointe_path"]:
+        raise HTTPException(404, "Pas de pièce jointe.")
+    from config import BASE_DIR
+    path_abs = Path(BASE_DIR) / row["piece_jointe_path"]
+    if not path_abs.exists():
+        raise HTTPException(404, "Fichier introuvable sur le disque.")
+    return FileResponse(
+        path=str(path_abs),
+        filename=row["piece_jointe_filename"] or path_abs.name,
+    )
 
 
 @router.get("/devis/demandes")
