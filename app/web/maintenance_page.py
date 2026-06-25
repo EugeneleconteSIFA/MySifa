@@ -444,6 +444,7 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-ref-input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;font-family:inherit;width:100%;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
 .maint-wp-ref-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .maint-wp-ref-input::placeholder{color:var(--muted)}
+.maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
 @media (max-width:700px){
   .maint-wp-sections{grid-template-columns:1fr}
   .maint-wp-section + .maint-wp-section{border-left:none;border-top:1px solid var(--border)}
@@ -2698,8 +2699,59 @@ function getMaintMachine(){
 function setMaintMachine(m){
   if(!m) return;
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
+  // Invalide le cache des dates wearparts : nouvelle machine = nouveau fetch
+  WEARPART_LAST_DATES_STATE.machine = null;
+  WEARPART_LAST_DATES_STATE.dates = {};
   renderMaintCards();
 }
+// --- Dernières dates de changement couteaux/contre-couteaux (source : MyProd) ---
+// On interroge l'API /api/maintenance/wearparts/last qui scanne la table
+// production_data pour la machine sélectionnée. Cache local pour éviter de
+// refetch à chaque render — invalidé sur changement de machine.
+const WEARPART_LAST_DATES_STATE = { machine: null, dates: {}, loading: false };
+
+async function loadWearPartLastDates(machine){
+  if(!machine) return;
+  if(WEARPART_LAST_DATES_STATE.machine === machine && !WEARPART_LAST_DATES_STATE.loading) return;
+  WEARPART_LAST_DATES_STATE.loading = true;
+  try{
+    const res = await fetch('/api/maintenance/wearparts/last?machine=' + encodeURIComponent(machine), { credentials: 'include' });
+    if(res.ok){
+      const data = await res.json();
+      WEARPART_LAST_DATES_STATE.machine = machine;
+      WEARPART_LAST_DATES_STATE.dates = (data && data.dates) ? data.dates : {};
+    }
+  }catch(e){
+    // En cas d'erreur on conserve l'ancien cache
+  }finally{
+    WEARPART_LAST_DATES_STATE.loading = false;
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }
+}
+function _getWearPartLastDateKey(pieceId, pos){
+  return pieceId + '_' + pos;  // ex. "couteaux_bande", "contre_couteaux_rive"
+}
+function _daysSinceFromIso(iso){
+  if(!iso) return null;
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return null;
+    const today = new Date();
+    const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+  }catch(e){ return null; }
+}
+function _fmtDateOnly(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear();
+  }catch(e){ return ''; }
+}
+
 // --- Pièces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
 // Une carte par pièce, position mémorisée par machine + par pièce.
 // État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
@@ -2763,10 +2815,35 @@ function setWearPartRef(pieceId, kind, value){
 }
 
 function _renderWearPartsGroup(machine){
+  // Déclenche le fetch des dernières dates si la machine a changé
+  // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
+  if(WEARPART_LAST_DATES_STATE.machine !== machine){
+    loadWearPartLastDates(machine);
+  }
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
     const refTemps = getWearPartRef(p.id, machine, pos, 'temps');
     const refMetrage = getWearPartRef(p.id, machine, pos, 'metrage');
+    // Dernière date du changement correspondant dans production_data (MyProd)
+    const lastDate = (WEARPART_LAST_DATES_STATE.machine === machine)
+      ? (WEARPART_LAST_DATES_STATE.dates[_getWearPartLastDateKey(p.id, pos)] || null)
+      : null;
+    const daysSince = _daysSinceFromIso(lastDate);
+    let elapsedHtml = '';
+    if(WEARPART_LAST_DATES_STATE.machine !== machine){
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
+    } else if(daysSince == null){
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré dans MyProd</span>';
+    } else {
+      const lbl = daysSince === 0 ? 'Aujourd\'hui'
+                : daysSince === 1 ? 'Hier (1 jour)'
+                : daysSince + ' jours';
+      elapsedHtml =
+        '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
+          '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(lbl) + '</span>' +
+          '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(lastDate)) + '</span>' +
+        '</div>';
+    }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
@@ -2788,6 +2865,10 @@ function _renderWearPartsGroup(machine){
               'value="' + escAttr(refTemps) + '" ' +
               'placeholder="ex. 90 jours, 3 mois" ' +
               'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'temps\', this.value)">' +
+          '</div>' +
+          '<div class="maint-wp-elapsed">' +
+            '<div class="maint-wp-ref-label">Depuis la dernière opération</div>' +
+            elapsedHtml +
           '</div>' +
         '</div>' +
         '<div class="maint-wp-section">' +
