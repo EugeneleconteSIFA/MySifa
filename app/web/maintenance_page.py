@@ -392,6 +392,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
 .maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-badges{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.maint-frame-cat-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;white-space:nowrap}
+.maint-frame-cat-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
+.maint-frame-cat-pill.interventions{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+body.light .maint-frame-cat-pill.controles{color:var(--ok,#059669);background:rgba(5,150,105,.10)}
+body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124,58,237,.10);border-color:rgba(124,58,237,.35)}
 .maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
 .maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
 .maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 20px}
@@ -2854,10 +2860,15 @@ function renderMaintCards(){
           '</div>';
       }
       // Si freqDays est null (intervalle non reconnu), pas de barre.
+      const catCls = (it.categorie === 'interventions') ? 'interventions' : 'controles';
+      const nivNum = parseInt(it.niveau, 10) || 1;
       return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
         '<div class="maint-frame-head">' +
           '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
-          '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
+          '<div class="maint-frame-badges">' +
+            '<span class="maint-frame-cat-pill ' + catCls + '">' + escHtml(catLabel) + '</span>' +
+            '<span class="niv-badge" data-niv="' + nivNum + '">N' + nivNum + '</span>' +
+          '</div>' +
         '</div>' +
         '<div class="maint-frame-stats" style="grid-template-columns:1fr">' +
           '<div class="maint-frame-stat">' +
