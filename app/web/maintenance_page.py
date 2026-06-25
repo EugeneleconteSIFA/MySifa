@@ -399,6 +399,14 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
+.maint-frame-progress{padding:0 20px 12px}
+.maint-frame-progress-track{height:8px;background:var(--bg);border:1px solid var(--border);border-radius:5px;overflow:hidden;position:relative}
+.maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
+.maint-frame-progress-fill.warn{background:var(--warn,#fbbf24)}
+.maint-frame-progress-fill.danger{background:var(--danger,#f87171)}
+.maint-frame-progress-label{display:flex;justify-content:space-between;gap:8px;margin-top:5px;font-size:11px;color:var(--muted);font-weight:500}
+.maint-frame-progress-label .pct{color:var(--text2);font-weight:600}
+.maint-frame-progress.is-empty .maint-frame-progress-track{opacity:.4}
 .maint-frame-retard{padding:10px 20px 16px;display:flex;align-items:center;gap:8px;font-size:12px;border-top:1px solid var(--border)}
 .maint-frame-retard-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .maint-frame-retard-badge.ok{background:rgba(52,211,153,.15);color:var(--ok,#34d399)}
@@ -2804,6 +2812,39 @@ function renderMaintCards(){
         badgeCls = 'unknown';
         badgeLbl = 'Aucune donnée';
       }
+      // Barre de progression : pourcentage écoulé depuis la dernière intervention
+      // sur l'intervalle. Clamp à 100% visuellement, couleur selon avancement :
+      //   < 70%  -> vert (ok)
+      //   70-100 -> orange (warn)
+      //   > 100% -> rouge (danger, retard)
+      let progressHtml = '';
+      if(freqDays != null && freqDays > 0 && daysSince != null){
+        const ratio = daysSince / freqDays;
+        const pct = Math.max(0, Math.min(100, ratio * 100));
+        let fillCls = '';
+        if(ratio >= 1) fillCls = 'danger';
+        else if(ratio >= 0.7) fillCls = 'warn';
+        const pctLbl = Math.round(ratio * 100) + '%';
+        progressHtml =
+          '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la dernière intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
+            '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill ' + fillCls + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+            '<div class="maint-frame-progress-label">' +
+              '<span>' + daysSince + ' j sur ' + freqDays + ' j</span>' +
+              '<span class="pct">' + escHtml(pctLbl) + '</span>' +
+            '</div>' +
+          '</div>';
+      } else if(freqDays != null && freqDays > 0 && daysSince == null){
+        // Intervalle défini mais jamais saisi : barre vide grisée
+        progressHtml =
+          '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opération sur cette machine. Intervalle prévu : ' + freqDays + ' jour(s).') + '">' +
+            '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:0%"></div></div>' +
+            '<div class="maint-frame-progress-label">' +
+              '<span>—</span>' +
+              '<span class="pct">0 / ' + freqDays + ' j</span>' +
+            '</div>' +
+          '</div>';
+      }
+      // Si freqDays est null (intervalle non reconnu), pas de barre.
       return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
         '<div class="maint-frame-head">' +
           '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
@@ -2815,6 +2856,7 @@ function renderMaintCards(){
             lastHtml +
           '</div>' +
         '</div>' +
+        progressHtml +
         '<div class="maint-frame-retard">' +
           '<span class="maint-frame-retard-badge ' + badgeCls + '">' + escHtml(badgeLbl) + '</span>' +
           (detailLbl ? '<span class="maint-frame-retard-detail">' + escHtml(detailLbl) + '</span>' : '') +
