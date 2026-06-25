@@ -2813,21 +2813,30 @@ function renderMaintCards(){
         badgeLbl = 'Aucune donnée';
       }
       // Barre de progression : pourcentage écoulé depuis la dernière intervention
-      // sur l'intervalle. Clamp à 100% visuellement, couleur selon avancement :
-      //   < 70%  -> vert (ok)
-      //   70-100 -> orange (warn)
-      //   > 100% -> rouge (danger, retard)
+      // sur l'intervalle. Largeur clamp à 100% visuellement. Couleur :
+      //   ratio <= 1   -> vert (default via CSS)
+      //   1 < ratio <2 -> dégradé orange -> rouge en fonction de (ratio - 1)
+      //   ratio >= 2   -> rouge pur
       let progressHtml = '';
       if(freqDays != null && freqDays > 0 && daysSince != null){
         const ratio = daysSince / freqDays;
         const pct = Math.max(0, Math.min(100, ratio * 100));
         let fillCls = '';
-        if(ratio >= 1) fillCls = 'danger';
-        else if(ratio >= 0.7) fillCls = 'warn';
+        let fillStyleExtra = '';
+        if(ratio > 1){
+          // Interpolation linéaire orange (#fb923c) -> rouge (#dc2626) sur [1, 2]
+          const t = Math.min(1, ratio - 1);  // 0 à 1%>100, 1 à 200%+
+          const orange = [251, 146, 60];
+          const red    = [220,  38, 38];
+          const r = Math.round(orange[0] + (red[0] - orange[0]) * t);
+          const g = Math.round(orange[1] + (red[1] - orange[1]) * t);
+          const b = Math.round(orange[2] + (red[2] - orange[2]) * t);
+          fillStyleExtra = ';background:rgb(' + r + ',' + g + ',' + b + ')';
+        }
         const pctLbl = Math.round(ratio * 100) + '%';
         progressHtml =
           '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la dernière intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
-            '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill ' + fillCls + '" style="width:' + pct.toFixed(1) + '%"></div></div>' +
+            '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill ' + fillCls + '" style="width:' + pct.toFixed(1) + '%' + fillStyleExtra + '"></div></div>' +
             '<div class="maint-frame-progress-label">' +
               '<span>' + daysSince + ' j sur ' + freqDays + ' j</span>' +
               '<span class="pct">' + escHtml(pctLbl) + '</span>' +
