@@ -1607,8 +1607,11 @@ async def maintenance_codes_bulk_import(request: Request):
 
 @router.get("/api/maintenance/wearparts/last")
 def maintenance_wearparts_last(request: Request, machine: str = ""):
-    """Dates des derniers 'changements couteaux/contre-couteaux bande/rive' pour
+    """Dernières opérations 'changement couteaux/contre-couteaux bande/rive' pour
     une machine donnée. Source : table production_data (alimentée par MyProd).
+    Retourne : pour chaque combinaison, la date du dernier changement, le métrage
+    machine à ce moment-là, et le métrage parcouru depuis (= dernier_metrage
+    machine - metrage_at_change).
     Lecture seule, accessible à tout utilisateur connecté.
     Distingue 'contre-couteaux' de 'couteaux' via NOT LIKE.
     """
@@ -1624,17 +1627,55 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
         ("contre_couteaux_bande",  "%contre%couteaux%bande%", None),
         ("contre_couteaux_rive",   "%contre%couteaux%rive%",  None),
     ]
-    result = {}
+    items: dict[str, dict] = {}
     with get_db() as conn:
+        # Compteur de mètres courant de la machine (mis à jour à chaque saisie
+        # de début/fin de production dans MyProd).
+        m_row = conn.execute(
+            "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
+            (machine,),
+        ).fetchone()
+        current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, pat, exclude in queries:
             sql = (
-                "SELECT MAX(date_operation) FROM production_data "
+                "SELECT date_operation, "
+                "COALESCE(metrage_total_fin, metrage_total_debut, metrage_reel, metrage_prevu) AS m_change "
+                "FROM production_data "
                 "WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
             )
             params = [machine, pat]
             if exclude:
                 sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
                 params.append(exclude)
+            sql += " ORDER BY date_operation DESC LIMIT 1"
             row = conn.execute(sql, params).fetchone()
-            result[key] = row[0] if (row and row[0]) else None
-    return {"machine": machine, "dates": result}
+            if row and row["date_operation"]:
+                m_at_change = row["m_change"]
+                metrage_since = None
+                if current_metrage is not None and m_at_change is not None:
+                    try:
+                        diff = float(current_metrage) - float(m_at_change)
+                        # On clamp à 0 si négatif (cas exotique de compteur remis à zéro)
+                        metrage_since = max(0.0, diff)
+                    except (TypeError, ValueError):
+                        metrage_since = None
+                items[key] = {
+                    "last_date": row["date_operation"],
+                    "metrage_at_change": m_at_change,
+                    "metrage_since": metrage_since,
+                }
+            else:
+                items[key] = {
+                    "last_date": None,
+                    "metrage_at_change": None,
+                    "metrage_since": None,
+                }
+    # Rétro-compat : on garde l'ancien champ "dates" pour les clients qui ne
+    # lisent que ça (ne devrait être personne en pratique).
+    dates = {k: v["last_date"] for k, v in items.items()}
+    return {
+        "machine": machine,
+        "current_metrage": current_metrage,
+        "dates": dates,
+        "items": items,
+    }

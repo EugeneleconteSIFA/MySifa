@@ -2704,11 +2704,17 @@ function setMaintMachine(m){
   WEARPART_LAST_DATES_STATE.dates = {};
   renderMaintCards();
 }
-// --- Dernières dates de changement couteaux/contre-couteaux (source : MyProd) ---
-// On interroge l'API /api/maintenance/wearparts/last qui scanne la table
-// production_data pour la machine sélectionnée. Cache local pour éviter de
-// refetch à chaque render — invalidé sur changement de machine.
-const WEARPART_LAST_DATES_STATE = { machine: null, dates: {}, loading: false };
+// --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
+// On interroge /api/maintenance/wearparts/last qui scanne production_data
+// pour la machine sélectionnée. Réponse : { items: { "couteaux_bande": {
+// last_date, metrage_at_change, metrage_since }, ... }, current_metrage }.
+// Cache invalidé sur changement de machine.
+const WEARPART_LAST_DATES_STATE = {
+  machine: null,
+  items: {},          // { piece_pos: { last_date, metrage_at_change, metrage_since } }
+  current_metrage: null,
+  loading: false,
+};
 
 async function loadWearPartLastDates(machine){
   if(!machine) return;
@@ -2719,10 +2725,11 @@ async function loadWearPartLastDates(machine){
     if(res.ok){
       const data = await res.json();
       WEARPART_LAST_DATES_STATE.machine = machine;
-      WEARPART_LAST_DATES_STATE.dates = (data && data.dates) ? data.dates : {};
+      WEARPART_LAST_DATES_STATE.items = (data && data.items) ? data.items : {};
+      WEARPART_LAST_DATES_STATE.current_metrage = (data && data.current_metrage != null) ? data.current_metrage : null;
     }
   }catch(e){
-    // En cas d'erreur on conserve l'ancien cache
+    // Conserve l'ancien cache en cas d'erreur
   }finally{
     WEARPART_LAST_DATES_STATE.loading = false;
     if(typeof renderMaintCards === 'function') renderMaintCards();
@@ -2730,6 +2737,17 @@ async function loadWearPartLastDates(machine){
 }
 function _getWearPartLastDateKey(pieceId, pos){
   return pieceId + '_' + pos;  // ex. "couteaux_bande", "contre_couteaux_rive"
+}
+function _getWearPartItem(pieceId, pos){
+  const k = _getWearPartLastDateKey(pieceId, pos);
+  return (WEARPART_LAST_DATES_STATE.items && WEARPART_LAST_DATES_STATE.items[k]) || null;
+}
+// Formate un nombre de mètres avec séparateurs d'espaces (style FR).
+function _fmtMetres(m){
+  if(m == null) return '—';
+  const n = Math.round(Number(m));
+  if(!isFinite(n)) return '—';
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' m';
 }
 function _daysSinceFromIso(iso){
   if(!iso) return null;
@@ -2824,10 +2842,13 @@ function _renderWearPartsGroup(machine){
     const pos = getWearPartPos(p.id, machine);
     const refTemps = getWearPartRef(p.id, machine, pos, 'temps');
     const refMetrage = getWearPartRef(p.id, machine, pos, 'metrage');
-    // Dernière date du changement correspondant dans production_data (MyProd)
-    const lastDate = (WEARPART_LAST_DATES_STATE.machine === machine)
-      ? (WEARPART_LAST_DATES_STATE.dates[_getWearPartLastDateKey(p.id, pos)] || null)
+    // Dernier changement correspondant dans production_data (MyProd) +
+    // métrage parcouru depuis ce changement.
+    const wpItem = (WEARPART_LAST_DATES_STATE.machine === machine)
+      ? _getWearPartItem(p.id, pos)
       : null;
+    const lastDate = wpItem ? wpItem.last_date : null;
+    const metrageSince = wpItem ? wpItem.metrage_since : null;
     const daysSince = _daysSinceFromIso(lastDate);
     // Mise en exergue : si l'intervalle écoulé dépasse la référence Temps,
     // on applique la même classe que les cartes des sections Hebdo/Mensuel.
@@ -2896,6 +2917,29 @@ function _renderWearPartsGroup(machine){
               'placeholder="ex. 5000 m, 10 km" ' +
               'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'metrage\', this.value)">' +
           '</div>' +
+          (function(){
+            // Métrage parcouru depuis la dernière opération correspondante.
+            // Source : compteur machine.dernier_metrage - métrage au moment du
+            // dernier changement (lu sur la ligne production_data).
+            let body;
+            if(WEARPART_LAST_DATES_STATE.machine !== machine){
+              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
+            } else if(!wpItem || wpItem.last_date == null){
+              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré</span>';
+            } else if(metrageSince == null){
+              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Métrage non disponible</span>';
+            } else {
+              body =
+                '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
+                  '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(_fmtMetres(metrageSince)) + '</span>' +
+                  '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(wpItem.last_date)) + '</span>' +
+                '</div>';
+            }
+            return '<div class="maint-wp-elapsed">' +
+              '<div class="maint-wp-ref-label">Métrage depuis la dernière opération</div>' +
+              body +
+            '</div>';
+          })() +
         '</div>' +
       '</div>' +
     '</section>';
