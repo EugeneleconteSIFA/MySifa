@@ -1629,18 +1629,17 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
     ]
     items: dict[str, dict] = {}
     with get_db() as conn:
-        # Compteur de mètres courant de la machine (mis à jour à chaque saisie
-        # de début/fin de production dans MyProd).
+        # Compteur de mètres COURANT de la machine (mis à jour par chaque saisie
+        # de début/fin de production code 01/89 dans MyProd).
         m_row = conn.execute(
             "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
             (machine,),
         ).fetchone()
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, pat, exclude in queries:
+            # 1) Date du dernier changement correspondant
             sql = (
-                "SELECT date_operation, "
-                "COALESCE(metrage_total_fin, metrage_total_debut, metrage_reel, metrage_prevu) AS m_change "
-                "FROM production_data "
+                "SELECT date_operation FROM production_data "
                 "WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
             )
             params = [machine, pat]
@@ -1649,27 +1648,36 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
                 params.append(exclude)
             sql += " ORDER BY date_operation DESC LIMIT 1"
             row = conn.execute(sql, params).fetchone()
-            if row and row["date_operation"]:
-                m_at_change = row["m_change"]
-                metrage_since = None
-                if current_metrage is not None and m_at_change is not None:
-                    try:
-                        diff = float(current_metrage) - float(m_at_change)
-                        # On clamp à 0 si négatif (cas exotique de compteur remis à zéro)
-                        metrage_since = max(0.0, diff)
-                    except (TypeError, ValueError):
-                        metrage_since = None
-                items[key] = {
-                    "last_date": row["date_operation"],
-                    "metrage_at_change": m_at_change,
-                    "metrage_since": metrage_since,
-                }
-            else:
-                items[key] = {
-                    "last_date": None,
-                    "metrage_at_change": None,
-                    "metrage_since": None,
-                }
+            if not row or not row["date_operation"]:
+                items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
+                continue
+            change_date = row["date_operation"]
+            # 2) Compteur machine AU MOMENT du changement : on prend le dernier
+            #    metrage_total_fin/_debut d'une saisie début/fin de prod (01 ou 89)
+            #    enregistrée à cette date ou avant. C'est la même logique que celle
+            #    qui met à jour machines.dernier_metrage côté MyProd.
+            m_at_row = conn.execute(
+                """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
+                   FROM production_data
+                   WHERE machine=? AND operation_code IN ('01','89')
+                     AND date_operation <= ?
+                     AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL)
+                   ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                (machine, change_date),
+            ).fetchone()
+            m_at_change = m_at_row["m"] if m_at_row else None
+            metrage_since = None
+            if current_metrage is not None and m_at_change is not None:
+                try:
+                    diff = float(current_metrage) - float(m_at_change)
+                    metrage_since = max(0.0, diff)  # clamp si compteur remis à zéro
+                except (TypeError, ValueError):
+                    metrage_since = None
+            items[key] = {
+                "last_date": change_date,
+                "metrage_at_change": m_at_change,
+                "metrage_since": metrage_since,
+            }
     # Rétro-compat : on garde l'ancien champ "dates" pour les clients qui ne
     # lisent que ça (ne devrait être personne en pratique).
     dates = {k: v["last_date"] for k, v in items.items()}
