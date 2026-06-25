@@ -1256,6 +1256,11 @@ function switchView(name){
   // Recharge la liste des codes maintenance a chaque arrivee sur les vues qui
   // l'utilisent, pour refleter les changements faits dans Parametres -> Maintenance.
   if(name === 'maintenance' || name === 'operations'){
+    // Invalide le cache wearparts pour forcer un nouveau fetch (sinon on garde
+    // les dernieres dates / metrage en memoire alors que la DB a evolue).
+    if(typeof WEARPART_LAST_DATES_STATE === 'object' && WEARPART_LAST_DATES_STATE){
+      WEARPART_LAST_DATES_STATE.machine = null;
+    }
     if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
       loadOpsTypes().then(() => {
         renderOpsTypes();
