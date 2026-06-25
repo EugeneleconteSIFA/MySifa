@@ -2829,6 +2829,15 @@ function _renderWearPartsGroup(machine){
       ? (WEARPART_LAST_DATES_STATE.dates[_getWearPartLastDateKey(p.id, pos)] || null)
       : null;
     const daysSince = _daysSinceFromIso(lastDate);
+    // Mise en exergue : si l'intervalle écoulé dépasse la référence Temps,
+    // on applique la même classe que les cartes des sections Hebdo/Mensuel.
+    // is-overdue dès le dépassement, is-overdue-critical quand on est à >200%.
+    const refDays = _parseFrequenceDays(refTemps);
+    let frameClsExtra = '';
+    if(refDays != null && refDays > 0 && daysSince != null && daysSince > refDays){
+      frameClsExtra = ' is-overdue';
+      if(daysSince > refDays * 2) frameClsExtra += ' is-overdue-critical';
+    }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
       elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
@@ -2838,17 +2847,24 @@ function _renderWearPartsGroup(machine){
       const lbl = daysSince === 0 ? 'Aujourd\'hui'
                 : daysSince === 1 ? 'Hier (1 jour)'
                 : daysSince + ' jours';
+      // Badge "Retard" si on dépasse la référence
+      let retardBadge = '';
+      if(refDays != null && refDays > 0 && daysSince > refDays){
+        const over = daysSince - refDays;
+        retardBadge = ' <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px">Retard ' + over + ' j</span>';
+      }
       elapsedHtml =
         '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
           '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(lbl) + '</span>' +
           '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(lastDate)) + '</span>' +
+          retardBadge +
         '</div>';
     }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
     };
-    return '<section class="maint-frame maint-wearpart" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
         '<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
