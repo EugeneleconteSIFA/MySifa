@@ -435,6 +435,20 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
 .maint-wp-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.12)}
 .maint-wp-btn.active:hover{filter:brightness(1.05)}
+.maint-wp-sections{display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid var(--border)}
+.maint-wp-section{padding:14px 18px;display:flex;flex-direction:column;gap:8px}
+.maint-wp-section + .maint-wp-section{border-left:1px solid var(--border)}
+.maint-wp-section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.maint-wp-ref-row{display:flex;flex-direction:column;gap:4px}
+.maint-wp-ref-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.maint-wp-ref-input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;font-family:inherit;width:100%;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
+.maint-wp-ref-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.maint-wp-ref-input::placeholder{color:var(--muted)}
+.maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
+@media (max-width:700px){
+  .maint-wp-sections{grid-template-columns:1fr}
+  .maint-wp-section + .maint-wp-section{border-left:none;border-top:1px solid var(--border)}
+}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -2685,8 +2699,59 @@ function getMaintMachine(){
 function setMaintMachine(m){
   if(!m) return;
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
+  // Invalide le cache des dates wearparts : nouvelle machine = nouveau fetch
+  WEARPART_LAST_DATES_STATE.machine = null;
+  WEARPART_LAST_DATES_STATE.dates = {};
   renderMaintCards();
 }
+// --- Dernières dates de changement couteaux/contre-couteaux (source : MyProd) ---
+// On interroge l'API /api/maintenance/wearparts/last qui scanne la table
+// production_data pour la machine sélectionnée. Cache local pour éviter de
+// refetch à chaque render — invalidé sur changement de machine.
+const WEARPART_LAST_DATES_STATE = { machine: null, dates: {}, loading: false };
+
+async function loadWearPartLastDates(machine){
+  if(!machine) return;
+  if(WEARPART_LAST_DATES_STATE.machine === machine && !WEARPART_LAST_DATES_STATE.loading) return;
+  WEARPART_LAST_DATES_STATE.loading = true;
+  try{
+    const res = await fetch('/api/maintenance/wearparts/last?machine=' + encodeURIComponent(machine), { credentials: 'include' });
+    if(res.ok){
+      const data = await res.json();
+      WEARPART_LAST_DATES_STATE.machine = machine;
+      WEARPART_LAST_DATES_STATE.dates = (data && data.dates) ? data.dates : {};
+    }
+  }catch(e){
+    // En cas d'erreur on conserve l'ancien cache
+  }finally{
+    WEARPART_LAST_DATES_STATE.loading = false;
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }
+}
+function _getWearPartLastDateKey(pieceId, pos){
+  return pieceId + '_' + pos;  // ex. "couteaux_bande", "contre_couteaux_rive"
+}
+function _daysSinceFromIso(iso){
+  if(!iso) return null;
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return null;
+    const today = new Date();
+    const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+  }catch(e){ return null; }
+}
+function _fmtDateOnly(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear();
+  }catch(e){ return ''; }
+}
+
 // --- Pièces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
 // Une carte par pièce, position mémorisée par machine + par pièce.
 // État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
@@ -2718,14 +2783,88 @@ function setWearPartPos(pieceId, pos){
   _saveWearPartMap(m);
   renderMaintCards();
 }
+// Références d'usure (temps & métrage) — état localStorage :
+//   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
+const WEARPART_REFS_KEY = 'mysifa_maint_wearparts_refs_v1';
+function _loadWearPartRefs(){
+  try{
+    const m = JSON.parse(localStorage.getItem(WEARPART_REFS_KEY) || '{}');
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
+}
+function _saveWearPartRefs(m){
+  try{ localStorage.setItem(WEARPART_REFS_KEY, JSON.stringify(m || {})); }catch(e){}
+}
+function getWearPartRef(pieceId, machine, pos, kind){
+  // kind = 'temps' | 'metrage'
+  const m = _loadWearPartRefs();
+  return ((m[pieceId] || {})[machine] || {})[pos] && m[pieceId][machine][pos][kind] || '';
+}
+function setWearPartRef(pieceId, kind, value){
+  if(kind !== 'temps' && kind !== 'metrage') return;
+  const machine = getMaintMachine();
+  const pos = getWearPartPos(pieceId, machine);
+  const m = _loadWearPartRefs();
+  if(!m[pieceId]) m[pieceId] = {};
+  if(!m[pieceId][machine]) m[pieceId][machine] = {};
+  if(!m[pieceId][machine][pos]) m[pieceId][machine][pos] = {};
+  m[pieceId][machine][pos][kind] = (value || '').toString().trim();
+  _saveWearPartRefs(m);
+  // Pas besoin de re-render : la valeur est déjà dans l'input. On évite ainsi
+  // de perdre le focus pendant que l'utilisateur tape.
+}
+
 function _renderWearPartsGroup(machine){
+  // Déclenche le fetch des dernières dates si la machine a changé
+  // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
+  if(WEARPART_LAST_DATES_STATE.machine !== machine){
+    loadWearPartLastDates(machine);
+  }
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
+    const refTemps = getWearPartRef(p.id, machine, pos, 'temps');
+    const refMetrage = getWearPartRef(p.id, machine, pos, 'metrage');
+    // Dernière date du changement correspondant dans production_data (MyProd)
+    const lastDate = (WEARPART_LAST_DATES_STATE.machine === machine)
+      ? (WEARPART_LAST_DATES_STATE.dates[_getWearPartLastDateKey(p.id, pos)] || null)
+      : null;
+    const daysSince = _daysSinceFromIso(lastDate);
+    // Mise en exergue : si l'intervalle écoulé dépasse la référence Temps,
+    // on applique la même classe que les cartes des sections Hebdo/Mensuel.
+    // is-overdue dès le dépassement, is-overdue-critical quand on est à >200%.
+    const refDays = _parseFrequenceDays(refTemps);
+    let frameClsExtra = '';
+    if(refDays != null && refDays > 0 && daysSince != null && daysSince > refDays){
+      frameClsExtra = ' is-overdue';
+      if(daysSince > refDays * 2) frameClsExtra += ' is-overdue-critical';
+    }
+    let elapsedHtml = '';
+    if(WEARPART_LAST_DATES_STATE.machine !== machine){
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
+    } else if(daysSince == null){
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré dans MyProd</span>';
+    } else {
+      const lbl = daysSince === 0 ? 'Aujourd\'hui'
+                : daysSince === 1 ? 'Hier (1 jour)'
+                : daysSince + ' jours';
+      // Badge "Retard" si on dépasse la référence
+      let retardBadge = '';
+      if(refDays != null && refDays > 0 && daysSince > refDays){
+        const over = daysSince - refDays;
+        retardBadge = ' <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px">Retard ' + over + ' j</span>';
+      }
+      elapsedHtml =
+        '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
+          '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(lbl) + '</span>' +
+          '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(lastDate)) + '</span>' +
+          retardBadge +
+        '</div>';
+    }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
     };
-    return '<section class="maint-frame maint-wearpart" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
         '<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
@@ -2733,7 +2872,32 @@ function _renderWearPartsGroup(machine){
           _b('Rive', 'rive') +
         '</div>' +
       '</div>' +
-      '<div class="maint-frame-body">À compléter</div>' +
+      '<div class="maint-wp-sections">' +
+        '<div class="maint-wp-section">' +
+          '<div class="maint-wp-section-title">Temps</div>' +
+          '<div class="maint-wp-ref-row">' +
+            '<label class="maint-wp-ref-label" for="wp-' + escAttr(p.id) + '-temps">Référence intervalle de temps</label>' +
+            '<input type="text" id="wp-' + escAttr(p.id) + '-temps" class="maint-wp-ref-input" ' +
+              'value="' + escAttr(refTemps) + '" ' +
+              'placeholder="ex. 90 jours, 3 mois" ' +
+              'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'temps\', this.value)">' +
+          '</div>' +
+          '<div class="maint-wp-elapsed">' +
+            '<div class="maint-wp-ref-label">Depuis la dernière opération</div>' +
+            elapsedHtml +
+          '</div>' +
+        '</div>' +
+        '<div class="maint-wp-section">' +
+          '<div class="maint-wp-section-title">Métrage</div>' +
+          '<div class="maint-wp-ref-row">' +
+            '<label class="maint-wp-ref-label" for="wp-' + escAttr(p.id) + '-metrage">Référence métrage</label>' +
+            '<input type="text" id="wp-' + escAttr(p.id) + '-metrage" class="maint-wp-ref-input" ' +
+              'value="' + escAttr(refMetrage) + '" ' +
+              'placeholder="ex. 5000 m, 10 km" ' +
+              'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'metrage\', this.value)">' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
     '</section>';
   }).join('');
   return '<div class="maint-group">' +

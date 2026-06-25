@@ -1603,3 +1603,38 @@ async def maintenance_codes_bulk_import(request: Request):
     log_action(user=user, action="IMPORT", module="maintenance_codes",
                objet="bulk", detail=f"{imported} codes")
     return {"ok": True, "imported": imported, "received": len(items)}
+
+
+@router.get("/api/maintenance/wearparts/last")
+def maintenance_wearparts_last(request: Request, machine: str = ""):
+    """Dates des derniers 'changements couteaux/contre-couteaux bande/rive' pour
+    une machine donnée. Source : table production_data (alimentée par MyProd).
+    Lecture seule, accessible à tout utilisateur connecté.
+    Distingue 'contre-couteaux' de 'couteaux' via NOT LIKE.
+    """
+    get_current_user(request)
+    machine = (machine or "").strip()
+    if not machine:
+        raise HTTPException(422, "Param 'machine' requis.")
+    from database import get_db
+    # (clé, pattern_match, pattern_exclude)
+    queries = [
+        ("couteaux_bande",         "%couteaux%bande%", "%contre%couteaux%bande%"),
+        ("couteaux_rive",          "%couteaux%rive%",  "%contre%couteaux%rive%"),
+        ("contre_couteaux_bande",  "%contre%couteaux%bande%", None),
+        ("contre_couteaux_rive",   "%contre%couteaux%rive%",  None),
+    ]
+    result = {}
+    with get_db() as conn:
+        for key, pat, exclude in queries:
+            sql = (
+                "SELECT MAX(date_operation) FROM production_data "
+                "WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
+            )
+            params = [machine, pat]
+            if exclude:
+                sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
+                params.append(exclude)
+            row = conn.execute(sql, params).fetchone()
+            result[key] = row[0] if (row and row[0]) else None
+    return {"machine": machine, "dates": result}
