@@ -2754,6 +2754,21 @@ function _fmtMetres(m){
   if(!isFinite(n)) return '—';
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' m';
 }
+// Parse une référence métrage en mètres. Accepte "5000", "5000 m", "5 km",
+// "1.5 km", "5000m", "10 kms", etc. Renvoie un nombre de mètres, ou null
+// si le texte n'est pas interprétable.
+function _parseMetrageRef(text){
+  if(!text) return null;
+  const s = String(text).toLowerCase().trim();
+  if(!s) return null;
+  const m = s.match(/([0-9]+(?:[.,][0-9]+)?)\s*(km|kms|kilom\w*|m|mt|mtr|metres?|mètres?)?/);
+  if(!m) return null;
+  const n = parseFloat(m[1].replace(',', '.'));
+  if(!isFinite(n) || n <= 0) return null;
+  const unit = m[2] || '';
+  if(unit.startsWith('km') || unit.startsWith('kilom')) return n * 1000;
+  return n;  // par défaut : mètres
+}
 function _daysSinceFromIso(iso){
   if(!iso) return null;
   try{
@@ -2855,14 +2870,19 @@ function _renderWearPartsGroup(machine){
     const lastDate = wpItem ? wpItem.last_date : null;
     const metrageSince = wpItem ? wpItem.metrage_since : null;
     const daysSince = _daysSinceFromIso(lastDate);
-    // Mise en exergue : si l'intervalle écoulé dépasse la référence Temps,
-    // on applique la même classe que les cartes des sections Hebdo/Mensuel.
-    // is-overdue dès le dépassement, is-overdue-critical quand on est à >200%.
-    const refDays = _parseFrequenceDays(refTemps);
+    // Mise en exergue : déclenchée par DÉPASSEMENT DE TEMPS ou DÉPASSEMENT DE
+    // MÉTRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
+    // le dépassement, is-overdue-critical quand on est à >200%.
+    const refDays   = _parseFrequenceDays(refTemps);
+    const refMetres = _parseMetrageRef(refMetrage);
+    const timeOver     = (refDays   != null && refDays   > 0 && daysSince    != null && daysSince    > refDays);
+    const timeCritical = (timeOver && daysSince    > refDays   * 2);
+    const metresOver     = (refMetres != null && refMetres > 0 && metrageSince != null && metrageSince > refMetres);
+    const metresCritical = (metresOver && metrageSince > refMetres * 2);
     let frameClsExtra = '';
-    if(refDays != null && refDays > 0 && daysSince != null && daysSince > refDays){
+    if(timeOver || metresOver){
       frameClsExtra = ' is-overdue';
-      if(daysSince > refDays * 2) frameClsExtra += ' is-overdue-critical';
+      if(timeCritical || metresCritical) frameClsExtra += ' is-overdue-critical';
     }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
@@ -2934,10 +2954,17 @@ function _renderWearPartsGroup(machine){
             } else if(metrageSince == null){
               body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Métrage non disponible</span>';
             } else {
+              // Badge "Retard" si on dépasse la référence métrage
+              let retardMetres = '';
+              if(metresOver){
+                const overM = metrageSince - refMetres;
+                retardMetres = ' <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
+              }
               body =
                 '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
                   '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(_fmtMetres(metrageSince)) + '</span>' +
                   '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(wpItem.last_date)) + '</span>' +
+                  retardMetres +
                 '</div>';
             }
             return '<div class="maint-wp-elapsed">' +
