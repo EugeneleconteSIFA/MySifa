@@ -428,6 +428,13 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
+.maint-wearparts-stack{display:flex;flex-direction:column;gap:14px}
+.maint-wearpart{min-height:140px}
+.maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+.maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
+.maint-wp-btn:hover{background:var(--card);color:var(--text)}
+.maint-wp-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.maint-wp-btn.active:hover{filter:brightness(1.05)}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -2680,6 +2687,64 @@ function setMaintMachine(m){
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
   renderMaintCards();
 }
+// --- Pièces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
+// Une carte par pièce, position mémorisée par machine + par pièce.
+// État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
+const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
+const WEARPART_PIECES = [
+  { id: 'couteaux',         label: 'Couteaux' },
+  { id: 'contre_couteaux',  label: 'Contre-couteaux' },
+];
+
+function _loadWearPartMap(){
+  try{
+    const m = JSON.parse(localStorage.getItem(WEARPART_KEY) || '{}');
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
+}
+function _saveWearPartMap(m){
+  try{ localStorage.setItem(WEARPART_KEY, JSON.stringify(m || {})); }catch(e){}
+}
+function getWearPartPos(pieceId, machine){
+  const m = _loadWearPartMap();
+  return (m[pieceId] && m[pieceId][machine]) || 'bande';
+}
+function setWearPartPos(pieceId, pos){
+  if(pos !== 'bande' && pos !== 'rive') return;
+  const machine = getMaintMachine();
+  const m = _loadWearPartMap();
+  if(!m[pieceId]) m[pieceId] = {};
+  m[pieceId][machine] = pos;
+  _saveWearPartMap(m);
+  renderMaintCards();
+}
+function _renderWearPartsGroup(machine){
+  const cards = WEARPART_PIECES.map(p => {
+    const pos = getWearPartPos(p.id, machine);
+    const _b = (label, value) => {
+      const active = (pos === value) ? ' active' : '';
+      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
+    };
+    return '<section class="maint-frame maint-wearpart" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+      '<div class="maint-frame-head">' +
+        '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
+        '<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
+          _b('Bande', 'bande') +
+          _b('Rive', 'rive') +
+        '</div>' +
+      '</div>' +
+      '<div class="maint-frame-body">À compléter</div>' +
+    '</section>';
+  }).join('');
+  return '<div class="maint-group">' +
+           '<div class="maint-group-head">' +
+             '<h3 class="maint-group-title">Pièces d\'usure</h3>' +
+             '<span class="maint-group-count">' + WEARPART_PIECES.length + ' pièces</span>' +
+           '</div>' +
+           '<div class="maint-wearparts-stack">' + cards + '</div>' +
+         '</div>';
+}
+
 // Convertit un nombre de jours en libellé standard (Hebdomadaire, Mensuel, etc.)
 function _freqDaysToLabel(d){
   if(d == null) return 'Sans intervalle reconnu';
@@ -2714,10 +2779,14 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
+  // La section "Pièces d'usure" est toujours rendue, indépendamment des codes
+  // périodiques configurés en DB.
+  const wearPartsHtml = _renderWearPartsGroup(machine);
   // Filtre les codes avec periodique=OUI (toutes catégories confondues).
   const baseItems = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
   if(!baseItems.length){
-    grid.innerHTML = '<div class="maint-frames-empty">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
+    grid.innerHTML = wearPartsHtml +
+      '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
   // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
@@ -2782,8 +2851,8 @@ function renderMaintCards(){
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }catch(e){ return '—'; }
   };
-  // Construit le HTML : un en-tête de section + une grille de cartes par groupe.
-  let html = '';
+  // Construit le HTML : pièces d'usure d'abord, puis sections par intervalle.
+  let html = wearPartsHtml;
   sortedKeys.forEach(key => {
     const groupItems = groups.get(key);
     const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
