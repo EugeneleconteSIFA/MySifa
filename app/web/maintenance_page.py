@@ -392,6 +392,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
 .maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-badges{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.maint-frame-cat-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;white-space:nowrap}
+.maint-frame-cat-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
+.maint-frame-cat-pill.interventions{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+body.light .maint-frame-cat-pill.controles{color:var(--ok,#059669);background:rgba(5,150,105,.10)}
+body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124,58,237,.10);border-color:rgba(124,58,237,.35)}
 .maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
 .maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
 .maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 20px}
@@ -399,6 +405,14 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
+.maint-frame-progress{padding:0 20px 12px}
+.maint-frame-progress-track{height:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
+.maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
+.maint-frame-progress-fill.warn{background:var(--warn,#fbbf24)}
+.maint-frame-progress-fill.danger{background:var(--danger,#f87171)}
+.maint-frame-progress-label{display:flex;justify-content:space-between;gap:8px;margin-top:5px;font-size:11px;color:var(--muted);font-weight:500}
+.maint-frame-progress-label .pct{color:var(--text2);font-weight:600}
+.maint-frame-progress.is-empty .maint-frame-progress-track{opacity:.4}
 .maint-frame-retard{padding:10px 20px 16px;display:flex;align-items:center;gap:8px;font-size:12px;border-top:1px solid var(--border)}
 .maint-frame-retard-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
 .maint-frame-retard-badge.ok{background:rgba(52,211,153,.15);color:var(--ok,#34d399)}
@@ -414,6 +428,13 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
+.maint-wearparts-stack{display:flex;flex-direction:column;gap:14px}
+.maint-wearpart{min-height:140px}
+.maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
+.maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
+.maint-wp-btn:hover{background:var(--card);color:var(--text)}
+.maint-wp-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.maint-wp-btn.active:hover{filter:brightness(1.05)}
 .ops-list-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
@@ -2666,6 +2687,64 @@ function setMaintMachine(m){
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
   renderMaintCards();
 }
+// --- Pièces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
+// Une carte par pièce, position mémorisée par machine + par pièce.
+// État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
+const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
+const WEARPART_PIECES = [
+  { id: 'couteaux',         label: 'Couteaux' },
+  { id: 'contre_couteaux',  label: 'Contre-couteaux' },
+];
+
+function _loadWearPartMap(){
+  try{
+    const m = JSON.parse(localStorage.getItem(WEARPART_KEY) || '{}');
+    return (m && typeof m === 'object') ? m : {};
+  }catch(e){ return {}; }
+}
+function _saveWearPartMap(m){
+  try{ localStorage.setItem(WEARPART_KEY, JSON.stringify(m || {})); }catch(e){}
+}
+function getWearPartPos(pieceId, machine){
+  const m = _loadWearPartMap();
+  return (m[pieceId] && m[pieceId][machine]) || 'bande';
+}
+function setWearPartPos(pieceId, pos){
+  if(pos !== 'bande' && pos !== 'rive') return;
+  const machine = getMaintMachine();
+  const m = _loadWearPartMap();
+  if(!m[pieceId]) m[pieceId] = {};
+  m[pieceId][machine] = pos;
+  _saveWearPartMap(m);
+  renderMaintCards();
+}
+function _renderWearPartsGroup(machine){
+  const cards = WEARPART_PIECES.map(p => {
+    const pos = getWearPartPos(p.id, machine);
+    const _b = (label, value) => {
+      const active = (pos === value) ? ' active' : '';
+      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
+    };
+    return '<section class="maint-frame maint-wearpart" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+      '<div class="maint-frame-head">' +
+        '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
+        '<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
+          _b('Bande', 'bande') +
+          _b('Rive', 'rive') +
+        '</div>' +
+      '</div>' +
+      '<div class="maint-frame-body">À compléter</div>' +
+    '</section>';
+  }).join('');
+  return '<div class="maint-group">' +
+           '<div class="maint-group-head">' +
+             '<h3 class="maint-group-title">Pièces d\'usure</h3>' +
+             '<span class="maint-group-count">' + WEARPART_PIECES.length + ' pièces</span>' +
+           '</div>' +
+           '<div class="maint-wearparts-stack">' + cards + '</div>' +
+         '</div>';
+}
+
 // Convertit un nombre de jours en libellé standard (Hebdomadaire, Mensuel, etc.)
 function _freqDaysToLabel(d){
   if(d == null) return 'Sans intervalle reconnu';
@@ -2700,19 +2779,29 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
+  // La section "Pièces d'usure" est toujours rendue, indépendamment des codes
+  // périodiques configurés en DB.
+  const wearPartsHtml = _renderWearPartsGroup(machine);
   // Filtre les codes avec periodique=OUI (toutes catégories confondues).
   const baseItems = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
   if(!baseItems.length){
-    grid.innerHTML = '<div class="maint-frames-empty">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
+    grid.innerHTML = wearPartsHtml +
+      '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
   // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
-  // sur la machine sélectionnée, et infos de retard. Source des saisies selon la
-  // catégorie : controles -> CTRL_STATE, sinon interventions -> OPS_STATE.
+  // sur la machine sélectionnée, et infos de retard.
+  //
+  // Source des saisies : TOUJOURS OPS_STATE.
+  // Les cartes affichent les codes periodique=OUI (interventions + controles).
+  // Le select de la modale Contrôles ne propose que les controles periodique=NON,
+  // donc un code controle periodique=OUI ne peut être saisi que via la modale
+  // Opérations -> il atterrit dans OPS_STATE. Si on lit CTRL_STATE pour les
+  // controles, on rate ces saisies (bug observé : cartes restant à "Jamais"
+  // alors que des entrées existent dans l'historique des opérations).
   const enriched = baseItems.map(it => {
     const freqDays = _parseFrequenceDays(it.intervalle);
-    const sourceList = (it.categorie === 'controles') ? CTRL_STATE.list : OPS_STATE.list;
-    const last = _lastInterventionFor(it.nom, machine, sourceList);
+    const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
     let daysSince = null;
     if(last){
       try{
@@ -2762,8 +2851,8 @@ function renderMaintCards(){
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }catch(e){ return '—'; }
   };
-  // Construit le HTML : un en-tête de section + une grille de cartes par groupe.
-  let html = '';
+  // Construit le HTML : pièces d'usure d'abord, puis sections par intervalle.
+  let html = wearPartsHtml;
   sortedKeys.forEach(key => {
     const groupItems = groups.get(key);
     const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
@@ -2804,10 +2893,51 @@ function renderMaintCards(){
         badgeCls = 'unknown';
         badgeLbl = 'Aucune donnée';
       }
+      // Barre de progression : pourcentage écoulé depuis la dernière intervention
+      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur :
+      // dégradé linéaire continu du vert (0%) au rouge (200%+), clampé au-delà.
+      let progressHtml = '';
+      if(freqDays != null && freqDays > 0 && daysSince != null){
+        const ratio = daysSince / freqDays;
+        const pct = Math.max(0, Math.min(100, ratio * 100));
+        // Interpolation vert (#34d399) -> rouge (#dc2626) sur [0, 2]
+        const t = Math.max(0, Math.min(1, ratio / 2));
+        const green = [ 52, 211, 153];
+        const red   = [220,  38,  38];
+        const r = Math.round(green[0] + (red[0] - green[0]) * t);
+        const g = Math.round(green[1] + (red[1] - green[1]) * t);
+        const b = Math.round(green[2] + (red[2] - green[2]) * t);
+        const fillStyleExtra = ';background:rgb(' + r + ',' + g + ',' + b + ')';
+        const pctLbl = Math.round(ratio * 100) + '%';
+        progressHtml =
+          '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la dernière intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
+            '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:' + pct.toFixed(1) + '%' + fillStyleExtra + '"></div></div>' +
+            '<div class="maint-frame-progress-label">' +
+              '<span>' + daysSince + ' j sur ' + freqDays + ' j</span>' +
+              '<span class="pct">' + escHtml(pctLbl) + '</span>' +
+            '</div>' +
+          '</div>';
+      } else if(freqDays != null && freqDays > 0 && daysSince == null){
+        // Intervalle défini mais jamais saisi : barre vide grisée
+        progressHtml =
+          '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opération sur cette machine. Intervalle prévu : ' + freqDays + ' jour(s).') + '">' +
+            '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:0%"></div></div>' +
+            '<div class="maint-frame-progress-label">' +
+              '<span>—</span>' +
+              '<span class="pct">0 / ' + freqDays + ' j</span>' +
+            '</div>' +
+          '</div>';
+      }
+      // Si freqDays est null (intervalle non reconnu), pas de barre.
+      const catCls = (it.categorie === 'interventions') ? 'interventions' : 'controles';
+      const nivNum = parseInt(it.niveau, 10) || 1;
       return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
         '<div class="maint-frame-head">' +
           '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
-          '<span class="maint-frame-subtitle">' + escHtml(catLabel) + ' · N' + (parseInt(it.niveau, 10) || 1) + '</span>' +
+          '<div class="maint-frame-badges">' +
+            '<span class="maint-frame-cat-pill ' + catCls + '">' + escHtml(catLabel) + '</span>' +
+            '<span class="niv-badge" data-niv="' + nivNum + '">N' + nivNum + '</span>' +
+          '</div>' +
         '</div>' +
         '<div class="maint-frame-stats" style="grid-template-columns:1fr">' +
           '<div class="maint-frame-stat">' +
@@ -2815,6 +2945,7 @@ function renderMaintCards(){
             lastHtml +
           '</div>' +
         '</div>' +
+        progressHtml +
         '<div class="maint-frame-retard">' +
           '<span class="maint-frame-retard-badge ' + badgeCls + '">' + escHtml(badgeLbl) + '</span>' +
           (detailLbl ? '<span class="maint-frame-retard-detail">' + escHtml(detailLbl) + '</span>' : '') +
