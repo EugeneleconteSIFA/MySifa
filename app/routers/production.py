@@ -680,8 +680,39 @@ def dashboard_production(
     # ── Construire debut_entries et fin_data ─────────────────────────────────
     # all_list est trié par (operateur, date_operation), donc quand on traite
     # un code-89, tous les code-01 antérieurs pour cet opérateur sont déjà indexés.
+    #
+    # Fallback (cas poste de nuit) : si aucun code-01 n'est trouvé dans la
+    # fenêtre date filtrée, on requête le code-01 du même (operateur, dossier)
+    # en dehors de la fenêtre, sans quoi le métrage produit serait calculé
+    # comme `metrage_reel - 0`, ce qui prend tout le compteur cumulé machine.
     debut_entries = {}   # (op, dos) -> [(norm_dt_iso, compteur_debut_float), ...]
     fin_data      = {}   # (op, jour_iso, dos) -> {"metrage_m": float, "etiquettes": float}
+    fallback_debut_ctr_cache: dict = {}  # (op, dos) -> float
+
+    def _fallback_debut_ctr(op_key: str, dos_key: str, fin_dt_iso: str) -> float:
+        """Cherche le compteur début du dossier dans production_data, sans
+        filtre de date (sauf <= fin_dt). Utilisé seulement quand la fenêtre
+        date filtrée ne contient pas le code-01 (production de nuit, etc.)."""
+        cache_key = (op_key, dos_key)
+        if cache_key in fallback_debut_ctr_cache:
+            return fallback_debut_ctr_cache[cache_key]
+        try:
+            with get_db() as _conn:
+                row = _conn.execute(
+                    """SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr
+                       FROM production_data
+                       WHERE operateur=? AND trim(no_dossier)=trim(?)
+                         AND operation_code='01'
+                         AND date_operation <= ?
+                         AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
+                       ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                    (op_key, dos_key, fin_dt_iso),
+                ).fetchone()
+            ctr_val = float(row["ctr"]) if (row and row["ctr"] is not None) else 0.0
+        except Exception:
+            ctr_val = 0.0
+        fallback_debut_ctr_cache[cache_key] = ctr_val
+        return ctr_val
 
     for r in all_list:
         code  = str(r.get("operation_code") or "")
@@ -705,7 +736,12 @@ def dashboard_production(
             # Compteur début = dernier code-01 dont l'heure ≤ heure de cette fin
             debuts   = debut_entries.get((op, dos), [])
             before   = [(dt, m) for dt, m in debuts if dt <= fin_dt]
-            debut_ctr = sorted(before, reverse=True)[0][1] if before else 0.0
+            if before:
+                debut_ctr = sorted(before, reverse=True)[0][1]
+            else:
+                # Aucun 01 dans la fenêtre date : on va le chercher en DB
+                # sans filtre — typique du poste de nuit (01 la veille, 89 le matin).
+                debut_ctr = _fallback_debut_ctr(op, dos, fin_dt)
 
             produit = max(0.0, float(r["metrage_reel"]) - debut_ctr)
             entry["metrage_m"] += produit
