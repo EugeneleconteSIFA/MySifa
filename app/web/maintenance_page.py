@@ -400,7 +400,7 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
 .maint-frame-progress{padding:0 20px 12px}
-.maint-frame-progress-track{height:8px;background:var(--bg);border:1px solid var(--border);border-radius:5px;overflow:hidden;position:relative}
+.maint-frame-progress-track{height:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
 .maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
 .maint-frame-progress-fill.warn{background:var(--warn,#fbbf24)}
 .maint-frame-progress-fill.danger{background:var(--danger,#f87171)}
