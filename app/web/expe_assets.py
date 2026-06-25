@@ -1779,18 +1779,23 @@ function renderExpeDevisModal(){
         return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Contraintes',c);
       })(),
       (()=>{
-        // Pièce jointe : input file + indicateur du fichier sélectionné. Pas
-        // d'aperçu, juste le nom. Max 20 Mo côté serveur.
-        const fileInp=h('input',{type:'file',className:'expe-devis-inp',style:{padding:'6px'}});
-        const info=h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px'}},
+        // Pièce jointe : input file natif caché, déclenché par un bouton stylé
+        // cohérent avec le design system (btn btn-ghost). Max 20 Mo côté serveur.
+        const fileInp=h('input',{type:'file',style:{display:'none'}});
+        const btnLbl=h('span',null,m.form.piece_jointe_file?'Changer de fichier':'Sélectionner un fichier');
+        const btn=h('button',{type:'button',className:'btn btn-ghost',onClick:()=>fileInp.click()},btnLbl);
+        const info=h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'6px'}},
           m.form.piece_jointe_file?('Sélectionné : '+(m.form.piece_jointe_file.name||'')):'Optionnel — max 20 Mo'
         );
         fileInp.addEventListener('change',e=>{
           const ff=(e.target.files&&e.target.files[0])||null;
           m.form.piece_jointe_file=ff;
+          btnLbl.textContent=ff?'Changer de fichier':'Sélectionner un fichier';
           info.textContent=ff?('Sélectionné : '+(ff.name||'')):'Optionnel — max 20 Mo';
         });
-        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Pièce jointe',fileInp,info);
+        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Pièce jointe',
+          h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:'2px'}},btn,info,fileInp)
+        );
       })()
     ));
     box.appendChild(h('div',{className:'expe-devis-modal-foot'},
