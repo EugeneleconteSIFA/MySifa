@@ -2692,28 +2692,36 @@ function _renderWearPartRings(ratios){
       return trackBg + fg;
     }
     // >= 100% : tour complet de base (uni, sans extrémité visible à 12h car
-    // l'anneau fait le tour) + un "point" rond à la position d'avancement du
-    // tour supplémentaire (style Apple Watch). On ne dessine PAS un second arc
-    // partant de 12h pour ne pas montrer le début de la seconde révolution :
-    // seule l'extrémité qui reflète le pourcentage exact est visible.
-    // Overflow plafonné à 0.97 pour garder le tip distinct du début si on
-    // dépasse les 200%.
+    // l'anneau fait le tour) + un demi-cercle "tête" à la position d'avancement
+    // du tour supplémentaire (style Apple Watch). On ne dessine pas un second
+    // arc partant de 12h : seule l'extrémité qui reflète le pourcentage est
+    // visible, sous forme de demi-cercle bombé dans le sens de progression.
+    // Overflow plafonné à 0.97 pour garder le tip distinct du début si > 200%.
     const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
-    // Position du tip : sur le cercle, à un angle = overflow * 360° depuis 12h
-    // dans le sens horaire.
+    // Position du tip + demi-cercle bombé dans la direction tangente
+    // (= sens de progression de l'anneau, horaire).
+    //   - A = bord extérieur du tip (radial outward)
+    //   - B = bord intérieur du tip (radial inward)
+    //   - Arc de demi-cercle de A à B bombé vers +tangente (avant)
     const tipAngle = overflow * 2 * Math.PI;
-    const tipX = cx + r * Math.sin(tipAngle);
-    const tipY = cy - r * Math.cos(tipAngle);
-    // Triple drop-shadow : ombre dure très proche (la pastille "pose" sur l'anneau),
+    const halfSw = sw / 2;
+    const sinT = Math.sin(tipAngle), cosT = Math.cos(tipAngle);
+    const Ax = cx + (r + halfSw) * sinT;
+    const Ay = cy - (r + halfSw) * cosT;
+    const Bx = cx + (r - halfSw) * sinT;
+    const By = cy - (r - halfSw) * cosT;
+    // Triple drop-shadow : ombre dure très proche (la tête "pose" sur l'anneau),
     // ombre moyenne diffuse (volume), ombre douce large (profondeur).
     const shadowFilter = 'filter:'
       + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
       + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
       + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
-    const tip = '<circle cx="' + tipX.toFixed(2) + '" cy="' + tipY.toFixed(2) + '" r="' + (sw / 2).toFixed(2) +
-      '" fill="' + color + '" style="' + shadowFilter + ';transition:cx .35s ease,cy .35s ease,fill .15s"/>';
+    const tip = '<path d="M ' + Ax.toFixed(2) + ' ' + Ay.toFixed(2) +
+      ' A ' + halfSw.toFixed(2) + ' ' + halfSw.toFixed(2) + ' 0 0 1 ' +
+      Bx.toFixed(2) + ' ' + By.toFixed(2) + ' Z" ' +
+      'fill="' + color + '" style="' + shadowFilter + ';transition:d .35s ease,fill .15s"/>';
     return trackBg + baseLap + tip;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
