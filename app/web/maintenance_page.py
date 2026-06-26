@@ -2724,11 +2724,13 @@ function _renderWearPartRings(ratios){
   const uid = ++_wpRingSvgCounter;
   const idTempsBot  = 'wpr-tb-' + uid;
   const idMetresBot = 'wpr-mb-' + uid;
-  // Path = demi-cercle inférieur de gauche à droite (texte lisible).
-  // M (cx - r, cy)  A r,r 0 0 1 (cx + r, cy)
+  // Path = demi-cercle INFÉRIEUR de gauche à droite. En SVG (y-axe inversé),
+  // sweep-flag=0 correspond à la trajectoire qui passe par le BAS du cercle.
+  // À 6h, la tangente du path va dans le sens +x : les caractères du textPath
+  // s'élèvent alors vers le centre du cercle (lecture upright normale).
   const _bottomPath = (id, r) =>
     '<path id="' + id + '" d="M ' + (cx - r) + ' ' + cy +
-    ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy + '" fill="none"/>';
+    ' A ' + r + ' ' + r + ' 0 0 0 ' + (cx + r) + ' ' + cy + '" fill="none"/>';
   const _bottomLabel = (pathId, ratio) => {
     if(ratio == null || !isFinite(ratio)) return '';
     const pct = Math.round(ratio * 100) + '%';
