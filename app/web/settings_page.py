@@ -3167,7 +3167,9 @@ async function saveMaintForm() {
   const label = (document.getElementById('maint-label').value || '').trim();
   const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
   const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-  const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
+  const categorie = (rawCat === 'interventions') ? 'interventions'
+                  : (rawCat === 'suivi')         ? 'suivi'
+                  : 'controles';
   const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
   const periodique = (rawPer === 'oui');
   // Catégorie "Suivi" : périodique forcé à oui (l'UI le rend disabled).
