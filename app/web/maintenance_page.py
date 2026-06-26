@@ -2666,8 +2666,9 @@ function _ratioColor(ratio){
   const last = stops[stops.length - 1][1];
   return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
 }
-// Compteur module-level pour générer des IDs uniques de paths SVG par carte
-// (sinon les <textPath href="#..."> peuvent référencer un path d'une autre carte).
+// Compteur module-level pour générer des IDs uniques de paths SVG et filtres
+// par carte (sinon les <textPath href="#..."> peuvent référencer un path d'une
+// autre carte rendue avant, et les filtres se mélangent entre eux).
 let _wpRingSvgCounter = 0;
 // Génère le SVG de 2 anneaux concentriques (style Apple Watch).
 // ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
@@ -2691,13 +2692,11 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : on dessine le même second tour qu'avant (stroke-linecap=round
-    // + drop-shadow). MAIS pour ne montrer que l'extrémité du tip, on utilise
-    // un stroke-dasharray où seule une PETITE partie du tour est tracée, près
-    // de la position du tip. Les deux extrémités rondes de ce court segment
-    // fusionnent en une seule "tête" arrondie (style natif d'un round cap au
-    // bout d'un trait). Pas de cap visible à 12h car le tracé du dasharray
-    // ne s'y rend tout simplement pas.
+    // >= 100% : tour de base + court segment de stroke à la position
+    // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
+    // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
+    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
+    // cap visible au sommet.
     // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
     const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
@@ -2708,12 +2707,9 @@ function _renderWearPartRings(ratios){
       + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
       + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
       + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
-    // Tip = court segment de stroke (longueur ~ stroke-width) avec round caps,
-    // positionné juste avant la position d'avancement le long du chemin.
-    // Le départ à 12h n'est pas tracé (gap dans le dasharray).
-    const tipPos      = overflow * circ;            // position du tip depuis 12h (cw)
-    const tipDashLen  = sw * 0.6;                   // longueur visible du segment
-    const dashStart   = tipPos - tipDashLen;        // début du dash (en avant du tip)
+    const tipPos      = overflow * circ;
+    const tipDashLen  = sw * 0.6;
+    const dashStart   = tipPos - tipDashLen;
     const tip = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
       '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" stroke-linecap="round" stroke-dasharray="' + tipDashLen.toFixed(2) + ' ' + (circ - tipDashLen).toFixed(2) +
