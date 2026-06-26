@@ -2683,15 +2683,22 @@ function _renderWearPartRings(ratios){
     }
     // >= 100% : tour complet de base + tour supplémentaire posé par-dessus
     // (style Apple Watch). L'extrémité du second arc reste toujours visible,
-    // décalée de l'origine 12h, accompagnée d'une légère ombre pour le 3D.
+    // accentuée par 3 ombres portées superposées (dégradé du tip vers le
+    // corps de l'anneau du bas), pour un effet 3D marqué.
     // Overflow clampé à 1 (= 200% atteints → second tour complet posé).
     const overflow = Math.min(1, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" stroke-linecap="round" style="transition:stroke .15s"/>';
     const overlapOffset = circ * (1 - overflow);
+    // Triple drop-shadow : ombre dure très proche (l'extrémité "pose" sur l'anneau),
+    // ombre moyenne diffuse (l'épaisseur du second tour), ombre douce large (profondeur).
+    const shadowFilter = 'filter:'
+      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
+      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
+      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
     const overlap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + overlapOffset.toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter + ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + overlap;
   };
   return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
