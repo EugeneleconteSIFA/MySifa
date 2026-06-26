@@ -428,8 +428,8 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
-.maint-wearparts-stack{display:flex;flex-direction:column;gap:14px}
-.maint-wearpart{min-height:140px}
+.maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:14px}
+.maint-wearpart{min-height:260px}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
 .maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
@@ -446,6 +446,23 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-ref-input::placeholder{color:var(--muted)}
 .maint-wp-ref-value{font-size:14px;color:var(--text);font-weight:600;padding:4px 0;line-height:1.4;min-height:24px}
 .maint-wp-ref-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
+.maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,1fr);gap:18px;padding:18px 20px;align-items:center}
+.maint-wp-info{display:flex;flex-direction:column;gap:10px;min-width:0}
+.maint-wp-sec{display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:3px solid var(--border);min-width:0}
+.maint-wp-sec-head{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px;color:var(--text2)}
+.maint-wp-sec-tag{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--text2);color:var(--bg);font-size:10px;font-weight:800;letter-spacing:0;text-transform:none}
+.maint-wp-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;min-width:0}
+.maint-wp-row .lbl{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-row .val{font-size:13px;color:var(--text);font-weight:600;word-break:break-word;min-width:0}
+.maint-wp-row .val.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
+.maint-wp-row .sub{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px;margin-left:4px}
+.maint-wp-rings{display:flex;justify-content:center;align-items:center}
+.maint-wp-rings svg{display:block;max-width:100%;height:auto}
+@media (max-width:720px){
+  .maint-wp-body{grid-template-columns:1fr;justify-items:start}
+  .maint-wp-rings{justify-self:center}
+}
 .maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
 @media (max-width:700px){
   .maint-wp-sections{grid-template-columns:1fr}
@@ -2623,6 +2640,130 @@ async function loadOpsTypes(){
   }
 }
 
+// Couleur d'un anneau (ou d'une barre de progression) sur l'intervalle [0,200%].
+// Dégradé multi-stops : vert -> jaune -> orange -> rouge.
+// Au-delà de 200% : rouge plein (clamp).
+function _ratioColor(ratio){
+  // Stops fixés à t = 0 / 0.33 / 0.66 / 1, où t = ratio / 2 (clampé).
+  const stops = [
+    [0.00, [ 52, 211, 153]],   // vert    #34d399
+    [0.33, [250, 204,  21]],   // jaune   #facc15
+    [0.66, [251, 146,  60]],   // orange  #fb923c
+    [1.00, [220,  38,  38]],   // rouge   #dc2626
+  ];
+  const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
+  for(let i = 0; i < stops.length - 1; i++){
+    const [ta, ca] = stops[i];
+    const [tb, cb] = stops[i + 1];
+    if(t <= tb){
+      const lt = (tb === ta) ? 0 : (t - ta) / (tb - ta);
+      const r = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
+      const g = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
+      const b = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+  }
+  const last = stops[stops.length - 1][1];
+  return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
+}
+// Compteur module-level pour générer des IDs uniques de paths SVG par carte
+// (sinon les <textPath href="#..."> peuvent référencer un path d'une autre carte).
+let _wpRingSvgCounter = 0;
+// Génère le SVG de 2 anneaux concentriques (style Apple Watch).
+// ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
+// Étiquettes "TEMPS" / "MÉTRAGE" droites à 12h (point de départ de chaque arc)
+// et pourcentage actuel sur arc courbe à 6h. Longueur d'arc clampée à ~100%
+// (au-delà : tour supplémentaire posé par-dessus, extrémité toujours visible).
+function _renderWearPartRings(ratios){
+  const size = 200, cx = 100, cy = 100, sw = 18;
+  const rOuter = 86;                  // rayon anneau temps
+  const rInner = rOuter - sw - 6;     // rayon anneau métrage
+  const _arc = (r, ratio) => {
+    const circ = 2 * Math.PI * r;
+    const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
+    if(ratio == null || !isFinite(ratio)) return trackBg;
+    const color = _ratioColor(ratio);
+    // < 100% : un seul arc partiel (comportement standard).
+    if(ratio < 1){
+      const offset = circ * (1 - ratio);
+      const fg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+        '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) +
+        '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+      return trackBg + fg;
+    }
+    // >= 100% : on dessine le même second tour qu'avant (stroke-linecap=round
+    // + drop-shadow). MAIS pour ne montrer que l'extrémité du tip, on utilise
+    // un stroke-dasharray où seule une PETITE partie du tour est tracée, près
+    // de la position du tip. Les deux extrémités rondes de ce court segment
+    // fusionnent en une seule "tête" arrondie (style natif d'un round cap au
+    // bout d'un trait). Pas de cap visible à 12h car le tracé du dasharray
+    // ne s'y rend tout simplement pas.
+    // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
+    const overflow = Math.min(0.97, ratio - 1);
+    const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" style="transition:stroke .15s"/>';
+    // Triple drop-shadow pour l'effet 3D : ombre dure proche, moyenne diffuse,
+    // douce large.
+    const shadowFilter = 'filter:'
+      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
+      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
+      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
+    // Tip = court segment de stroke (longueur ~ stroke-width) avec round caps,
+    // positionné juste avant la position d'avancement le long du chemin.
+    // Le départ à 12h n'est pas tracé (gap dans le dasharray).
+    const tipPos      = overflow * circ;            // position du tip depuis 12h (cw)
+    const tipDashLen  = sw * 0.6;                   // longueur visible du segment
+    const dashStart   = tipPos - tipDashLen;        // début du dash (en avant du tip)
+    const tip = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+      '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-dasharray="' + tipDashLen.toFixed(2) + ' ' + (circ - tipDashLen).toFixed(2) +
+      '" stroke-dashoffset="' + (-dashStart).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter +
+      ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+    return trackBg + baseLap + tip;
+  };
+  // Étiquette titre à 12h (texte droit) sur chaque anneau.
+  // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
+  // soit le fond (track gris, dégradé vert, jaune, orange ou rouge).
+  const _textStyle = 'paint-order:stroke;stroke:rgba(15,23,42,.75);stroke-width:2.5px;pointer-events:none;text-transform:uppercase';
+  const _textCommonAttr = 'fill="#ffffff" font-size="9" font-weight="700" letter-spacing="0.8" font-family="system-ui,-apple-system,Segoe UI,sans-serif"';
+  const _topTag = (yPos, txt) =>
+    '<text x="' + cx + '" y="' + yPos + '" text-anchor="middle" dominant-baseline="central" ' +
+      _textCommonAttr + ' style="' + _textStyle + '">' + txt + '</text>';
+  // % courbé sur arc inférieur (6h) — suit la courbure de l'anneau.
+  const uid = ++_wpRingSvgCounter;
+  const idTempsBot  = 'wpr-tb-' + uid;
+  const idMetresBot = 'wpr-mb-' + uid;
+  // Path = demi-cercle INFÉRIEUR de gauche à droite. En SVG (y-axe inversé),
+  // sweep-flag=0 correspond à la trajectoire qui passe par le BAS du cercle.
+  // À 6h, la tangente du path va dans le sens +x : les caractères du textPath
+  // s'élèvent alors vers le centre du cercle (lecture upright normale).
+  const _bottomPath = (id, r) =>
+    '<path id="' + id + '" d="M ' + (cx - r) + ' ' + cy +
+    ' A ' + r + ' ' + r + ' 0 0 0 ' + (cx + r) + ' ' + cy + '" fill="none"/>';
+  const _bottomLabel = (pathId, ratio) => {
+    if(ratio == null || !isFinite(ratio)) return '';
+    const pct = Math.round(ratio * 100) + '%';
+    return '<text ' + _textCommonAttr + ' style="' + _textStyle + '">' +
+      '<textPath href="#' + pathId + '" startOffset="50%" text-anchor="middle">' +
+        pct +
+      '</textPath>' +
+    '</text>';
+  };
+  return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
+           '<defs>' +
+             _bottomPath(idTempsBot,  rOuter) +
+             _bottomPath(idMetresBot, rInner) +
+           '</defs>' +
+           _arc(rOuter, ratios.temps) +
+           _arc(rInner, ratios.metres) +
+           _topTag(cy - rOuter, 'Temps') +
+           _topTag(cy - rInner, 'Métrage') +
+           _bottomLabel(idTempsBot,  ratios.temps) +
+           _bottomLabel(idMetresBot, ratios.metres) +
+         '</svg>';
+}
+
 // Trouve le code "Suivi" correspondant à une pièce d'usure (par pattern label).
 // pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
 function _findSuiviCodeForWearPart(pieceId, pos){
@@ -2958,69 +3099,90 @@ function _renderWearPartsGroup(machine){
           _b('Rive', 'rive') +
         '</div>' +
       '</div>' +
-      '<div class="maint-wp-sections">' +
-        '<div class="maint-wp-section">' +
-          '<div class="maint-wp-section-title">Temps</div>' +
-          '<div class="maint-wp-ref-row">' +
-            '<div class="maint-wp-ref-label">Référence intervalle de temps</div>' +
-            (refTemps
-              ? '<div class="maint-wp-ref-value">' + escHtml(refTemps) + '</div>'
-              : (suiviCode
-                  ? '<div class="maint-wp-ref-value muted">— (à compléter dans Paramètres → Maintenance)</div>'
-                  : '<div class="maint-wp-ref-value muted">Aucun code « Suivi » correspondant — créer dans Paramètres → Maintenance</div>'
-                )
-            ) +
+      (function(){
+        // Layout :
+        //   - Gauche : 2 sections empilées TEMPS (cyan) et MÉTRAGE (ambre),
+        //     chacune avec barre verticale colorée à gauche pour identifier
+        //     l'anneau correspondant.
+        //   - Droite : 2 anneaux concentriques. Extérieur cyan = temps,
+        //     intérieur ambre = métrage. Couleurs assorties aux sections.
+        const _refVal = (v) => v
+          ? '<span class="val">' + escHtml(v) + '</span>'
+          : (suiviCode
+              ? '<span class="val muted">à compléter</span>'
+              : '<span class="val muted">aucun code Suivi</span>'
+            );
+        // Section TEMPS
+        let lastSub = '';
+        let lastVal;
+        if(WEARPART_LAST_DATES_STATE.machine !== machine){
+          lastVal = '<span class="val muted">Chargement…</span>';
+        } else if(daysSince == null){
+          lastVal = '<span class="val muted">jamais</span>';
+        } else {
+          const lbl = daysSince === 0 ? 'aujourd\'hui'
+                    : daysSince === 1 ? 'hier'
+                    : 'il y a ' + daysSince + ' j';
+          lastVal = '<span class="val">' + escHtml(_fmtDateOnly(lastDate)) + '</span>';
+          lastSub = '<span class="sub">' + escHtml(lbl) + '</span>';
+        }
+        let timeBadge = '';
+        if(timeOver){
+          const over = daysSince - refDays;
+          timeBadge = '<span class="maint-wp-badge">Retard ' + over + ' j</span>';
+        }
+        // Section MÉTRAGE
+        let mVal;
+        if(WEARPART_LAST_DATES_STATE.machine !== machine){
+          mVal = '<span class="val muted">Chargement…</span>';
+        } else if(!wpItem || wpItem.last_date == null){
+          mVal = '<span class="val muted">—</span>';
+        } else if(metrageSince == null){
+          mVal = '<span class="val muted">non disponible</span>';
+        } else {
+          mVal = '<span class="val">' + escHtml(_fmtMetres(metrageSince)) + '</span>';
+        }
+        let metresBadge = '';
+        if(metresOver){
+          const overM = metrageSince - refMetres;
+          metresBadge = '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
+        }
+        // Ratios pour les anneaux (null si pas de référence ou pas de donnée)
+        const ratios = {
+          temps:  (refDays   != null && refDays   > 0 && daysSince    != null) ? (daysSince    / refDays  ) : null,
+          metres: (refMetres != null && refMetres > 0 && metrageSince != null) ? (metrageSince / refMetres) : null,
+        };
+        return '<div class="maint-wp-body">' +
+          '<div class="maint-wp-info">' +
+            // Section TEMPS (anneau extérieur)
+            '<div class="maint-wp-sec temps">' +
+              '<div class="maint-wp-sec-head">Temps</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Référence</span>' + _refVal(refTemps) +
+              '</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Dernière intervention</span>' + lastVal + lastSub +
+                timeBadge +
+              '</div>' +
+            '</div>' +
+            // Section MÉTRAGE (anneau intérieur)
+            '<div class="maint-wp-sec metres">' +
+              '<div class="maint-wp-sec-head">Métrage</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Référence</span>' + _refVal(refMetrage) +
+              '</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Parcouru</span>' + mVal +
+                metresBadge +
+              '</div>' +
+            '</div>' +
           '</div>' +
-          '<div class="maint-wp-elapsed">' +
-            '<div class="maint-wp-ref-label">Depuis la dernière opération</div>' +
-            elapsedHtml +
+          '<div class="maint-wp-rings">' +
+            _renderWearPartRings(ratios) +
           '</div>' +
         '</div>' +
-        '<div class="maint-wp-section">' +
-          '<div class="maint-wp-section-title">Métrage</div>' +
-          '<div class="maint-wp-ref-row">' +
-            '<div class="maint-wp-ref-label">Référence métrage</div>' +
-            (refMetrage
-              ? '<div class="maint-wp-ref-value">' + escHtml(refMetrage) + '</div>'
-              : (suiviCode
-                  ? '<div class="maint-wp-ref-value muted">— (à compléter dans Paramètres → Maintenance)</div>'
-                  : '<div class="maint-wp-ref-value muted">Aucun code « Suivi » correspondant</div>'
-                )
-            ) +
-          '</div>' +
-          (function(){
-            // Métrage parcouru depuis la dernière opération correspondante.
-            // Source : compteur machine.dernier_metrage - métrage au moment du
-            // dernier changement (lu sur la ligne production_data).
-            let body;
-            if(WEARPART_LAST_DATES_STATE.machine !== machine){
-              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
-            } else if(!wpItem || wpItem.last_date == null){
-              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré</span>';
-            } else if(metrageSince == null){
-              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Métrage non disponible</span>';
-            } else {
-              // Badge "Retard" si on dépasse la référence métrage
-              let retardMetres = '';
-              if(metresOver){
-                const overM = metrageSince - refMetres;
-                retardMetres = ' <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
-              }
-              body =
-                '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
-                  '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(_fmtMetres(metrageSince)) + '</span>' +
-                  '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(wpItem.last_date)) + '</span>' +
-                  retardMetres +
-                '</div>';
-            }
-            return '<div class="maint-wp-elapsed">' +
-              '<div class="maint-wp-ref-label">Métrage depuis la dernière opération</div>' +
-              body +
-            '</div>';
-          })() +
-        '</div>' +
-      '</div>' +
-    '</section>';
+      '</section>';
+      })();
   }).join('');
   return '<div class="maint-group">' +
            '<div class="maint-group-head">' +
@@ -3180,20 +3342,14 @@ function renderMaintCards(){
         badgeLbl = 'Aucune donnée';
       }
       // Barre de progression : pourcentage écoulé depuis la dernière intervention
-      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur :
-      // dégradé linéaire continu du vert (0%) au rouge (200%+), clampé au-delà.
+      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur via
+      // _ratioColor (dégradé vert -> jaune -> orange -> rouge sur [0, 200%]),
+      // identique au code couleur des anneaux des pièces d'usure.
       let progressHtml = '';
       if(freqDays != null && freqDays > 0 && daysSince != null){
         const ratio = daysSince / freqDays;
         const pct = Math.max(0, Math.min(100, ratio * 100));
-        // Interpolation vert (#34d399) -> rouge (#dc2626) sur [0, 2]
-        const t = Math.max(0, Math.min(1, ratio / 2));
-        const green = [ 52, 211, 153];
-        const red   = [220,  38,  38];
-        const r = Math.round(green[0] + (red[0] - green[0]) * t);
-        const g = Math.round(green[1] + (red[1] - green[1]) * t);
-        const b = Math.round(green[2] + (red[2] - green[2]) * t);
-        const fillStyleExtra = ';background:rgb(' + r + ',' + g + ',' + b + ')';
+        const fillStyleExtra = ';background:' + _ratioColor(ratio);
         const pctLbl = Math.round(ratio * 100) + '%';
         progressHtml =
           '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la dernière intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
