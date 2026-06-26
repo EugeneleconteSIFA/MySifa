@@ -428,8 +428,8 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
-.maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:14px}
-.maint-wearpart{min-height:140px}
+.maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:14px}
+.maint-wearpart{min-height:260px}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
 .maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
@@ -446,7 +446,7 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-ref-input::placeholder{color:var(--muted)}
 .maint-wp-ref-value{font-size:14px;color:var(--text);font-weight:600;padding:4px 0;line-height:1.4;min-height:24px}
 .maint-wp-ref-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
-.maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:14px;padding:14px 18px 16px;align-items:center}
+.maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,1fr);gap:18px;padding:18px 20px;align-items:center}
 .maint-wp-info{display:flex;flex-direction:column;gap:10px;min-width:0}
 .maint-wp-sec{display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:3px solid var(--border);min-width:0}
 .maint-wp-sec.temps  {border-left-color:var(--wp-temps,#22d3ee)}
@@ -2665,9 +2665,9 @@ function _ratioColor(ratio, family){
 // Longueur d'arc clampée à 100% (arc plein si ratio >= 1) — c'est la couleur
 // qui indique le retard au-delà.
 function _renderWearPartRings(ratios){
-  const size = 140, cx = 70, cy = 70, sw = 14;
-  const rOuter = 58;                  // rayon anneau temps
-  const rInner = rOuter - sw - 4;     // rayon anneau métrage
+  const size = 200, cx = 100, cy = 100, sw = 18;
+  const rOuter = 86;                  // rayon anneau temps
+  const rInner = rOuter - sw - 6;     // rayon anneau métrage
   const _arc = (r, ratio, family) => {
     const circ = 2 * Math.PI * r;
     const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
@@ -2680,7 +2680,7 @@ function _renderWearPartRings(ratios){
       '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + fg;
   };
-  return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="140" height="140" aria-hidden="true">' +
+  return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
            _arc(rOuter, ratios.temps,  'temps') +
            _arc(rInner, ratios.metres, 'metres') +
          '</svg>';
