@@ -2666,11 +2666,14 @@ function _ratioColor(ratio){
   const last = stops[stops.length - 1][1];
   return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
 }
+// Compteur module-level pour générer des IDs uniques de paths SVG par carte
+// (sinon les <textPath href="#..."> peuvent référencer un path d'une autre carte).
+let _wpRingSvgCounter = 0;
 // Génère le SVG de 2 anneaux concentriques (style Apple Watch).
 // ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
-// Anneau extérieur = TEMPS (cyan), anneau intérieur = MÉTRAGE (ambre).
-// Longueur d'arc clampée à 100% (arc plein si ratio >= 1) — c'est la couleur
-// qui indique le retard au-delà.
+// Étiquettes "TEMPS" / "MÉTRAGE" droites à 12h (point de départ de chaque arc)
+// et pourcentage actuel sur arc courbe à 6h. Longueur d'arc clampée à ~100%
+// (au-delà : tour supplémentaire posé par-dessus, extrémité toujours visible).
 function _renderWearPartRings(ratios){
   const size = 200, cx = 100, cy = 100, sw = 18;
   const rOuter = 86;                  // rayon anneau temps
@@ -2689,11 +2692,12 @@ function _renderWearPartRings(ratios){
       return trackBg + fg;
     }
     // >= 100% : tour complet de base + tour supplémentaire posé par-dessus
-    // (style Apple Watch). L'extrémité du second arc reste toujours visible,
-    // accentuée par 3 ombres portées superposées (dégradé du tip vers le
-    // corps de l'anneau du bas), pour un effet 3D marqué.
-    // Overflow clampé à 1 (= 200% atteints → second tour complet posé).
-    const overflow = Math.min(1, ratio - 1);
+    // (style Apple Watch). L'extrémité du second arc reste TOUJOURS visible,
+    // même au-delà de 200% : on plafonne l'overflow à 0.97 (l'extrémité ronde
+    // reste légèrement avant le point de départ 12h), au lieu de 1 qui fait
+    // se recouvrir les deux extrémités. Le pourcentage exact reste lisible
+    // dans l'étiquette en bas de l'anneau.
+    const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" stroke-linecap="round" style="transition:stroke .15s"/>';
     const overlapOffset = circ * (1 - overflow);
@@ -2708,20 +2712,43 @@ function _renderWearPartRings(ratios){
       '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter + ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + overlap;
   };
-  // Étiquette posée à 12h sur chaque anneau pour identifier la métrique.
-  // Texte blanc, contour noir paint-order:stroke pour rester lisible quel que
+  // Étiquette titre à 12h (texte droit) sur chaque anneau.
+  // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
   // soit le fond (track gris, dégradé vert, jaune, orange ou rouge).
-  const _tag = (yPos, txt) =>
+  const _textStyle = 'paint-order:stroke;stroke:rgba(15,23,42,.75);stroke-width:2.5px;pointer-events:none;text-transform:uppercase';
+  const _textCommonAttr = 'fill="#ffffff" font-size="9" font-weight="700" letter-spacing="0.8" font-family="system-ui,-apple-system,Segoe UI,sans-serif"';
+  const _topTag = (yPos, txt) =>
     '<text x="' + cx + '" y="' + yPos + '" text-anchor="middle" dominant-baseline="central" ' +
-      'fill="#ffffff" font-size="9" font-weight="700" letter-spacing="0.8" ' +
-      'font-family="system-ui,-apple-system,Segoe UI,sans-serif" ' +
-      'style="paint-order:stroke;stroke:rgba(15,23,42,.75);stroke-width:2.5px;pointer-events:none;text-transform:uppercase">' +
-    txt + '</text>';
+      _textCommonAttr + ' style="' + _textStyle + '">' + txt + '</text>';
+  // % courbé sur arc inférieur (6h) — suit la courbure de l'anneau.
+  const uid = ++_wpRingSvgCounter;
+  const idTempsBot  = 'wpr-tb-' + uid;
+  const idMetresBot = 'wpr-mb-' + uid;
+  // Path = demi-cercle inférieur de gauche à droite (texte lisible).
+  // M (cx - r, cy)  A r,r 0 0 1 (cx + r, cy)
+  const _bottomPath = (id, r) =>
+    '<path id="' + id + '" d="M ' + (cx - r) + ' ' + cy +
+    ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + cy + '" fill="none"/>';
+  const _bottomLabel = (pathId, ratio) => {
+    if(ratio == null || !isFinite(ratio)) return '';
+    const pct = Math.round(ratio * 100) + '%';
+    return '<text ' + _textCommonAttr + ' style="' + _textStyle + '">' +
+      '<textPath href="#' + pathId + '" startOffset="50%" text-anchor="middle">' +
+        pct +
+      '</textPath>' +
+    '</text>';
+  };
   return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
+           '<defs>' +
+             _bottomPath(idTempsBot,  rOuter) +
+             _bottomPath(idMetresBot, rInner) +
+           '</defs>' +
            _arc(rOuter, ratios.temps) +
            _arc(rInner, ratios.metres) +
-           _tag(cy - rOuter, 'Temps') +
-           _tag(cy - rInner, 'Métrage') +
+           _topTag(cy - rOuter, 'Temps') +
+           _topTag(cy - rInner, 'Métrage') +
+           _bottomLabel(idTempsBot,  ratios.temps) +
+           _bottomLabel(idMetresBot, ratios.metres) +
          '</svg>';
 }
 
