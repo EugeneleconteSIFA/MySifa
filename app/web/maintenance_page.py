@@ -428,7 +428,7 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
-.maint-wearparts-stack{display:flex;flex-direction:column;gap:14px}
+.maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:14px}
 .maint-wearpart{min-height:140px}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
 .maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
@@ -446,24 +446,28 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-ref-input::placeholder{color:var(--muted)}
 .maint-wp-ref-value{font-size:14px;color:var(--text);font-weight:600;padding:4px 0;line-height:1.4;min-height:24px}
 .maint-wp-ref-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
-.maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:18px;padding:16px 22px 18px;align-items:center}
-.maint-wp-info{display:flex;flex-direction:column;gap:11px;min-width:0}
-.maint-wp-info-row{display:flex;flex-direction:column;gap:2px;min-width:0}
-.maint-wp-info-row.inline{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
-.maint-wp-info-row.inline > div{display:flex;flex-direction:column;gap:2px;min-width:0}
-.maint-wp-info-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.maint-wp-info-value{font-size:13px;color:var(--text);font-weight:600;line-height:1.35;word-break:break-word}
-.maint-wp-info-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
-.maint-wp-info-sub{font-size:11px;color:var(--muted);font-weight:500}
-.maint-wp-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-.maint-wp-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px}
+.maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:14px;padding:14px 18px 16px;align-items:center}
+.maint-wp-info{display:flex;flex-direction:column;gap:10px;min-width:0}
+.maint-wp-sec{display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:3px solid var(--border);min-width:0}
+.maint-wp-sec.temps  {border-left-color:var(--wp-temps,#22d3ee)}
+.maint-wp-sec.metres {border-left-color:var(--wp-metres,#fbbf24)}
+.maint-wp-sec-head{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px}
+.maint-wp-sec.temps  .maint-wp-sec-head{color:var(--wp-temps,#22d3ee)}
+.maint-wp-sec.metres .maint-wp-sec-head{color:var(--wp-metres,#fbbf24)}
+.maint-wp-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;min-width:0}
+.maint-wp-row .lbl{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-row .val{font-size:13px;color:var(--text);font-weight:600;word-break:break-word;min-width:0}
+.maint-wp-row .val.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
+.maint-wp-row .sub{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px;margin-left:4px}
 .maint-wp-rings{display:flex;justify-content:center;align-items:center}
 .maint-wp-rings svg{display:block;max-width:100%;height:auto}
-.maint-wp-rings .legend{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-@media (max-width:640px){
-  .maint-wp-body{grid-template-columns:1fr;justify-items:center}
-  .maint-wp-info{align-self:stretch}
+@media (max-width:720px){
+  .maint-wp-body{grid-template-columns:1fr;justify-items:start}
+  .maint-wp-rings{justify-self:center}
 }
+:root{--wp-temps:#22d3ee;--wp-metres:#fbbf24}
+body.light{--wp-temps:#0891b2;--wp-metres:#d97706}
 .maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
 @media (max-width:700px){
   .maint-wp-sections{grid-template-columns:1fr}
@@ -2641,41 +2645,44 @@ async function loadOpsTypes(){
   }
 }
 
-// Couleur d'un anneau / barre : dégradé vert -> rouge sur [0, 200%].
+// Couleur d'un anneau : dégradé d'une couleur famille -> rouge sur [0, 200%].
 // Au-delà de 200% la couleur reste rouge plein (clamp).
-function _ratioColor(ratio){
+//   family='temps'  : cyan -> rouge
+//   family='metres' : ambre -> rouge
+function _ratioColor(ratio, family){
+  const start = (family === 'metres') ? [251, 191,  36]    // ambre #fbbf24
+                                      : [ 34, 211, 238];   // cyan  #22d3ee
+  const end   = [220, 38, 38];                              // rouge #dc2626
   const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
-  const green = [ 52, 211, 153];
-  const red   = [220,  38,  38];
-  const r = Math.round(green[0] + (red[0] - green[0]) * t);
-  const g = Math.round(green[1] + (red[1] - green[1]) * t);
-  const b = Math.round(green[2] + (red[2] - green[2]) * t);
+  const r = Math.round(start[0] + (end[0] - start[0]) * t);
+  const g = Math.round(start[1] + (end[1] - start[1]) * t);
+  const b = Math.round(start[2] + (end[2] - start[2]) * t);
   return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
 // Génère le SVG de 2 anneaux concentriques (style Apple Watch).
 // ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
-// Anneau extérieur = TEMPS, anneau intérieur = MÉTRAGE.
-// La longueur d'arc est clampée à 100% (arc plein si ratio >= 1), c'est la
-// couleur qui indique le retard.
+// Anneau extérieur = TEMPS (cyan), anneau intérieur = MÉTRAGE (ambre).
+// Longueur d'arc clampée à 100% (arc plein si ratio >= 1) — c'est la couleur
+// qui indique le retard au-delà.
 function _renderWearPartRings(ratios){
-  const size = 180, cx = 90, cy = 90, sw = 18;
-  const rOuter = 78;                  // rayon anneau temps
-  const rInner = rOuter - sw - 4;     // rayon anneau métrage (espacé)
-  const _arc = (r, ratio) => {
+  const size = 140, cx = 70, cy = 70, sw = 14;
+  const rOuter = 58;                  // rayon anneau temps
+  const rInner = rOuter - sw - 4;     // rayon anneau métrage
+  const _arc = (r, ratio, family) => {
     const circ = 2 * Math.PI * r;
     const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
     if(ratio == null || !isFinite(ratio)) return trackBg;
     const fill = Math.max(0, Math.min(1, ratio));
     const offset = circ * (1 - fill);
-    const color = _ratioColor(ratio);
+    const color = _ratioColor(ratio, family);
     const fg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) +
       '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + fg;
   };
-  return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="180" height="180" aria-hidden="true">' +
-           _arc(rOuter, ratios.temps) +
-           _arc(rInner, ratios.metres) +
+  return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="140" height="140" aria-hidden="true">' +
+           _arc(rOuter, ratios.temps,  'temps') +
+           _arc(rInner, ratios.metres, 'metres') +
          '</svg>';
 }
 
@@ -3015,48 +3022,52 @@ function _renderWearPartsGroup(machine){
         '</div>' +
       '</div>' +
       (function(){
-        // Bloc info à gauche (références + dernière intervention + métrage parcouru + badges)
-        // et anneaux concentriques à droite (visuel type Apple Watch).
-        const _refValue = (v) => v
-          ? '<div class="maint-wp-info-value">' + escHtml(v) + '</div>'
+        // Layout :
+        //   - Gauche : 2 sections empilées TEMPS (cyan) et MÉTRAGE (ambre),
+        //     chacune avec barre verticale colorée à gauche pour identifier
+        //     l'anneau correspondant.
+        //   - Droite : 2 anneaux concentriques. Extérieur cyan = temps,
+        //     intérieur ambre = métrage. Couleurs assorties aux sections.
+        const _refVal = (v) => v
+          ? '<span class="val">' + escHtml(v) + '</span>'
           : (suiviCode
-              ? '<div class="maint-wp-info-value muted">À compléter</div>'
-              : '<div class="maint-wp-info-value muted">Aucun code Suivi</div>'
+              ? '<span class="val muted">à compléter</span>'
+              : '<span class="val muted">aucun code Suivi</span>'
             );
-        // Bloc Dernière intervention (date + nb de jours)
-        let lastBlock;
+        // Section TEMPS
+        let lastSub = '';
+        let lastVal;
         if(WEARPART_LAST_DATES_STATE.machine !== machine){
-          lastBlock = '<div class="maint-wp-info-value muted">Chargement…</div>';
+          lastVal = '<span class="val muted">Chargement…</span>';
         } else if(daysSince == null){
-          lastBlock = '<div class="maint-wp-info-value muted">Aucun changement enregistré</div>';
+          lastVal = '<span class="val muted">jamais</span>';
         } else {
-          const lbl = daysSince === 0 ? 'Aujourd\'hui'
-                    : daysSince === 1 ? 'Hier'
-                    : 'Il y a ' + daysSince + ' j';
-          lastBlock =
-            '<div class="maint-wp-info-value">' + escHtml(_fmtDateOnly(lastDate)) + '</div>' +
-            '<div class="maint-wp-info-sub">' + escHtml(lbl) + '</div>';
+          const lbl = daysSince === 0 ? 'aujourd\'hui'
+                    : daysSince === 1 ? 'hier'
+                    : 'il y a ' + daysSince + ' j';
+          lastVal = '<span class="val">' + escHtml(_fmtDateOnly(lastDate)) + '</span>';
+          lastSub = '<span class="sub">' + escHtml(lbl) + '</span>';
         }
-        // Bloc Métrage parcouru
-        let metrageBlock;
-        if(WEARPART_LAST_DATES_STATE.machine !== machine){
-          metrageBlock = '<div class="maint-wp-info-value muted">Chargement…</div>';
-        } else if(!wpItem || wpItem.last_date == null){
-          metrageBlock = '<div class="maint-wp-info-value muted">—</div>';
-        } else if(metrageSince == null){
-          metrageBlock = '<div class="maint-wp-info-value muted">Non disponible</div>';
-        } else {
-          metrageBlock = '<div class="maint-wp-info-value">' + escHtml(_fmtMetres(metrageSince)) + '</div>';
-        }
-        // Badges retard
-        let badges = '';
+        let timeBadge = '';
         if(timeOver){
           const over = daysSince - refDays;
-          badges += '<span class="maint-wp-badge">Retard ' + over + ' j</span>';
+          timeBadge = '<span class="maint-wp-badge">Retard ' + over + ' j</span>';
         }
+        // Section MÉTRAGE
+        let mVal;
+        if(WEARPART_LAST_DATES_STATE.machine !== machine){
+          mVal = '<span class="val muted">Chargement…</span>';
+        } else if(!wpItem || wpItem.last_date == null){
+          mVal = '<span class="val muted">—</span>';
+        } else if(metrageSince == null){
+          mVal = '<span class="val muted">non disponible</span>';
+        } else {
+          mVal = '<span class="val">' + escHtml(_fmtMetres(metrageSince)) + '</span>';
+        }
+        let metresBadge = '';
         if(metresOver){
           const overM = metrageSince - refMetres;
-          badges += '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
+          metresBadge = '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
         }
         // Ratios pour les anneaux (null si pas de référence ou pas de donnée)
         const ratios = {
@@ -3065,25 +3076,28 @@ function _renderWearPartsGroup(machine){
         };
         return '<div class="maint-wp-body">' +
           '<div class="maint-wp-info">' +
-            '<div class="maint-wp-info-row inline">' +
-              '<div>' +
-                '<span class="maint-wp-info-label">Réf. temps</span>' +
-                _refValue(refTemps) +
+            // Section TEMPS (anneau extérieur cyan)
+            '<div class="maint-wp-sec temps">' +
+              '<div class="maint-wp-sec-head">Temps</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Référence</span>' + _refVal(refTemps) +
               '</div>' +
-              '<div>' +
-                '<span class="maint-wp-info-label">Réf. métrage</span>' +
-                _refValue(refMetrage) +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Dernière intervention</span>' + lastVal + lastSub +
+                timeBadge +
               '</div>' +
             '</div>' +
-            '<div class="maint-wp-info-row">' +
-              '<span class="maint-wp-info-label">Dernière intervention</span>' +
-              lastBlock +
+            // Section MÉTRAGE (anneau intérieur ambre)
+            '<div class="maint-wp-sec metres">' +
+              '<div class="maint-wp-sec-head">Métrage</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Référence</span>' + _refVal(refMetrage) +
+              '</div>' +
+              '<div class="maint-wp-row">' +
+                '<span class="lbl">Parcouru</span>' + mVal +
+                metresBadge +
+              '</div>' +
             '</div>' +
-            '<div class="maint-wp-info-row">' +
-              '<span class="maint-wp-info-label">Métrage parcouru</span>' +
-              metrageBlock +
-            '</div>' +
-            (badges ? '<div class="maint-wp-badges">' + badges + '</div>' : '') +
           '</div>' +
           '<div class="maint-wp-rings">' +
             _renderWearPartRings(ratios) +
