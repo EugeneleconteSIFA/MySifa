@@ -4141,6 +4141,15 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 128, "maintenance_codes_table")
 
+    # v131 — Codes maintenance : référence métrage pour la catégorie "Suivi"
+    # (pièces d'usure). Texte libre comme intervalle (ex. "5000 m", "10 km").
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=131 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "metrage_ref" not in cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN metrage_ref TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 131, "maintenance_codes_metrage_ref")
+
     # v130 — Demandes de devis transporteur : champ client + pièce jointe.
     # Le client est renseigné par l'utilisateur à la création. La pièce jointe
     # est un fichier uploadé optionnellement, stocké sous data/uploads/devis/.

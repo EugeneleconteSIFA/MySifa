@@ -1431,13 +1431,25 @@ async def sync_db_v1(request: Request):
 # Endpoints super admin uniquement (cohérent avec les autres référentiels settings).
 
 
+def _require_maint_writer(request: Request) -> dict:
+    """Édition des codes maintenance : super admin, direction, administration."""
+    user = get_current_user(request)
+    if user.get("role") not in ROLES_ADMIN:
+        raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs.")
+    return user
+
+
 def _maint_row_to_dict(r) -> dict:
-    # PRAGMA table_info dynamique : intervalle peut etre absent sur les vieilles
-    # DB qui n'ont pas encore joue la migration v129 (defensif).
+    # PRAGMA table_info dynamique : intervalle / metrage_ref peuvent être absents
+    # sur les vieilles DB qui n'ont pas encore joué les migrations v129 / v131.
     try:
         intervalle = r["intervalle"]
     except (IndexError, KeyError):
         intervalle = None
+    try:
+        metrage_ref = r["metrage_ref"]
+    except (IndexError, KeyError):
+        metrage_ref = None
     return {
         "code": r["code"],
         "label": r["label"],
@@ -1445,6 +1457,7 @@ def _maint_row_to_dict(r) -> dict:
         "categorie": r["categorie"] or "controles",
         "periodique": bool(r["periodique"]),
         "intervalle": intervalle or "",
+        "metrage_ref": metrage_ref or "",
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
     }
@@ -1460,7 +1473,7 @@ def _normalize_maint_payload(body: dict) -> dict:
     if niveau < 1 or niveau > 3:
         raise HTTPException(422, "Niveau invalide (1-3).")
     categorie = (body.get("categorie") or "controles").strip()
-    if categorie not in ("controles", "interventions"):
+    if categorie not in ("controles", "interventions", "suivi"):
         categorie = "controles"
     periodique = 1 if body.get("periodique") else 0
     # Intervalle de temps : texte libre, ignore si non periodique
@@ -1469,6 +1482,12 @@ def _normalize_maint_payload(body: dict) -> dict:
         intervalle = ""
     if len(intervalle) > 80:
         intervalle = intervalle[:80]
+    # Référence métrage : texte libre (ex. "5000 m"), surtout utile pour la
+    # catégorie "Suivi" (pièces d'usure). On le garde sur les autres catégories
+    # si l'utilisateur le saisit, mais il sera ignoré par l'UI consommatrice.
+    metrage_ref = (body.get("metrage_ref") or "").strip()
+    if len(metrage_ref) > 80:
+        metrage_ref = metrage_ref[:80]
     if not code:
         raise HTTPException(422, "Code obligatoire.")
     if not label:
@@ -1480,16 +1499,19 @@ def _normalize_maint_payload(body: dict) -> dict:
         "categorie": categorie,
         "periodique": periodique,
         "intervalle": intervalle,
+        "metrage_ref": metrage_ref,
     }
 
 
 @router.get("/api/maintenance/codes")
 def maintenance_codes_list(request: Request):
-    require_superadmin(request)
+    # Lecture : tout utilisateur connecté (UI maintenance + UI Paramètres).
+    get_current_user(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT code,label,niveau,categorie,periodique,intervalle,created_at,updated_at
+            """SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
+                      created_at,updated_at
                FROM maintenance_codes
                ORDER BY categorie ASC, code ASC"""
         ).fetchall()
@@ -1498,8 +1520,7 @@ def maintenance_codes_list(request: Request):
 
 @router.post("/api/maintenance/codes")
 async def maintenance_codes_create(request: Request):
-    require_superadmin(request)
-    user = get_current_user(request)
+    user = _require_maint_writer(request)
     body = await request.json()
     data = _normalize_maint_payload(body)
     from database import get_db
@@ -1512,10 +1533,11 @@ async def maintenance_codes_create(request: Request):
             raise HTTPException(409, f"Le code {data['code']} existe deja.")
         conn.execute(
             """INSERT INTO maintenance_codes
-               (code,label,niveau,categorie,periodique,intervalle,created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               (code,label,niveau,categorie,periodique,intervalle,metrage_ref,
+                created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (data["code"], data["label"], data["niveau"], data["categorie"],
-             data["periodique"], data["intervalle"], now, now),
+             data["periodique"], data["intervalle"], data["metrage_ref"], now, now),
         )
         conn.commit()
     log_action(user=user, action="CREATE", module="maintenance_codes",
@@ -1525,8 +1547,7 @@ async def maintenance_codes_create(request: Request):
 
 @router.put("/api/maintenance/codes/{code}")
 async def maintenance_codes_update(code: str, request: Request):
-    require_superadmin(request)
-    user = get_current_user(request)
+    user = _require_maint_writer(request)
     body = await request.json()
     # On force le code de l'URL (immuable apres creation)
     body["code"] = code
@@ -1536,10 +1557,11 @@ async def maintenance_codes_update(code: str, request: Request):
     with get_db() as conn:
         cur = conn.execute(
             """UPDATE maintenance_codes
-               SET label=?, niveau=?, categorie=?, periodique=?, intervalle=?, updated_at=?
+               SET label=?, niveau=?, categorie=?, periodique=?, intervalle=?,
+                   metrage_ref=?, updated_at=?
                WHERE code=?""",
             (data["label"], data["niveau"], data["categorie"],
-             data["periodique"], data["intervalle"], now, data["code"]),
+             data["periodique"], data["intervalle"], data["metrage_ref"], now, data["code"]),
         )
         conn.commit()
         if cur.rowcount == 0:
@@ -1551,8 +1573,7 @@ async def maintenance_codes_update(code: str, request: Request):
 
 @router.delete("/api/maintenance/codes/{code}")
 def maintenance_codes_delete(code: str, request: Request):
-    require_superadmin(request)
-    user = get_current_user(request)
+    user = _require_maint_writer(request)
     from database import get_db
     with get_db() as conn:
         cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
@@ -1573,8 +1594,7 @@ async def maintenance_codes_bulk_import(request: Request):
     """Import en masse depuis le localStorage du navigateur (migration one-shot).
     N'ecrase pas les codes existants : INSERT OR IGNORE.
     """
-    require_superadmin(request)
-    user = get_current_user(request)
+    user = _require_maint_writer(request)
     body = await request.json()
     items = body.get("items") or []
     if not isinstance(items, list):
@@ -1592,10 +1612,12 @@ async def maintenance_codes_bulk_import(request: Request):
                 continue
             cur = conn.execute(
                 """INSERT OR IGNORE INTO maintenance_codes
-                   (code,label,niveau,categorie,periodique,intervalle,created_at,updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                   (code,label,niveau,categorie,periodique,intervalle,metrage_ref,
+                    created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
                 (data["code"], data["label"], data["niveau"], data["categorie"],
-                 data["periodique"], data["intervalle"], raw.get("created_at") or now, now),
+                 data["periodique"], data["intervalle"], data["metrage_ref"],
+                 raw.get("created_at") or now, now),
             )
             if cur.rowcount:
                 imported += 1
