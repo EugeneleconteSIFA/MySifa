@@ -2691,26 +2691,30 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour complet de base + tour supplémentaire posé par-dessus
-    // (style Apple Watch). L'extrémité du second arc reste TOUJOURS visible,
-    // même au-delà de 200% : on plafonne l'overflow à 0.97 (l'extrémité ronde
-    // reste légèrement avant le point de départ 12h), au lieu de 1 qui fait
-    // se recouvrir les deux extrémités. Le pourcentage exact reste lisible
-    // dans l'étiquette en bas de l'anneau.
+    // >= 100% : tour complet de base (uni, sans extrémité visible à 12h car
+    // l'anneau fait le tour) + un "point" rond à la position d'avancement du
+    // tour supplémentaire (style Apple Watch). On ne dessine PAS un second arc
+    // partant de 12h pour ne pas montrer le début de la seconde révolution :
+    // seule l'extrémité qui reflète le pourcentage exact est visible.
+    // Overflow plafonné à 0.97 pour garder le tip distinct du début si on
+    // dépasse les 200%.
     const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
-      '" stroke-linecap="round" style="transition:stroke .15s"/>';
-    const overlapOffset = circ * (1 - overflow);
-    // Triple drop-shadow : ombre dure très proche (l'extrémité "pose" sur l'anneau),
-    // ombre moyenne diffuse (l'épaisseur du second tour), ombre douce large (profondeur).
+      '" style="transition:stroke .15s"/>';
+    // Position du tip : sur le cercle, à un angle = overflow * 360° depuis 12h
+    // dans le sens horaire.
+    const tipAngle = overflow * 2 * Math.PI;
+    const tipX = cx + r * Math.sin(tipAngle);
+    const tipY = cy - r * Math.cos(tipAngle);
+    // Triple drop-shadow : ombre dure très proche (la pastille "pose" sur l'anneau),
+    // ombre moyenne diffuse (volume), ombre douce large (profondeur).
     const shadowFilter = 'filter:'
       + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
       + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
       + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
-    const overlap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
-      '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + overlapOffset.toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter + ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
-    return trackBg + baseLap + overlap;
+    const tip = '<circle cx="' + tipX.toFixed(2) + '" cy="' + tipY.toFixed(2) + '" r="' + (sw / 2).toFixed(2) +
+      '" fill="' + color + '" style="' + shadowFilter + ';transition:cx .35s ease,cy .35s ease,fill .15s"/>';
+    return trackBg + baseLap + tip;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
   // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
