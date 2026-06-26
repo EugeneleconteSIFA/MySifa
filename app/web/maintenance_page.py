@@ -2692,43 +2692,30 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour de base + une OMBRE seule à la position d'avancement.
-    // L'astuce : on dessine un court segment de stroke (~ largeur du stroke,
-    // round caps) à la position du tip, MAIS on applique un filtre SVG qui
-    // génère uniquement le drop-shadow et SUPPRIME le rendu de l'élément lui-
-    // même. Résultat visuel : aucune démarcation coloriquement visible entre
-    // la "tête" et le reste de l'anneau (puisque la tête n'est pas peinte) —
-    // seule l'ombre indique la présence et la position d'avancement.
-    // Overflow plafonné à 0.97 pour garder l'ombre distincte du sommet si > 200%.
+    // >= 100% : tour de base + court segment de stroke à la position
+    // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
+    // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
+    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
+    // cap visible au sommet.
+    // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
     const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
-    // Filtre shadow-only : feGaussianBlur sur SourceAlpha + feOffset + feFlood
-    // pour la couleur sombre + feComposite pour limiter à la silhouette floue
-    // et offset. Pas de feMerge avec SourceGraphic = la "tête" originale n'est
-    // jamais peinte.
-    const shadowFilterId = 'wpr-sh-' + uid + '-' + (r > 70 ? 'o' : 'i');
-    const shadowFilterDef = '<filter id="' + shadowFilterId + '" x="-50%" y="-50%" width="200%" height="200%">' +
-      '<feGaussianBlur in="SourceAlpha" stdDeviation="2.2"/>' +
-      '<feOffset dx="2" dy="3.5" result="off"/>' +
-      '<feFlood flood-color="#000" flood-opacity="0.55" result="flood"/>' +
-      '<feComposite in="flood" in2="off" operator="in"/>' +
-    '</filter>';
+    // Triple drop-shadow pour l'effet 3D : ombre dure proche, moyenne diffuse,
+    // douce large.
+    const shadowFilter = 'filter:'
+      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
+      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
+      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
     const tipPos      = overflow * circ;
-    const tipDashLen  = sw * 0.8;
+    const tipDashLen  = sw * 0.6;
     const dashStart   = tipPos - tipDashLen;
-    // L'élément lui-même est dessiné en noir (peu importe : il sera masqué par
-    // le filtre qui ne sort que l'ombre). Le filtre garantit qu'aucun pixel
-    // de cet élément n'apparaît à l'écran, seul son drop-shadow le fait.
-    // Filtre injecté directement (SVG accepte <filter> hors <defs>).
-    const tip = shadowFilterDef +
-      '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
-      '" fill="none" stroke="#000" stroke-width="' + sw +
+    const tip = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+      '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" stroke-linecap="round" stroke-dasharray="' + tipDashLen.toFixed(2) + ' ' + (circ - tipDashLen).toFixed(2) +
       '" stroke-dashoffset="' + (-dashStart).toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')"' +
-      ' filter="url(#' + shadowFilterId + ')"' +
-      ' style="transition:stroke-dashoffset .35s ease"/>';
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter +
+      ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + tip;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
