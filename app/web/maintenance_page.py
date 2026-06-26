@@ -449,11 +449,8 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,1fr);gap:18px;padding:18px 20px;align-items:center}
 .maint-wp-info{display:flex;flex-direction:column;gap:10px;min-width:0}
 .maint-wp-sec{display:flex;flex-direction:column;gap:4px;padding-left:10px;border-left:3px solid var(--border);min-width:0}
-.maint-wp-sec.temps  {border-left-color:var(--wp-temps,#22d3ee)}
-.maint-wp-sec.metres {border-left-color:var(--wp-metres,#fbbf24)}
-.maint-wp-sec-head{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px}
-.maint-wp-sec.temps  .maint-wp-sec-head{color:var(--wp-temps,#22d3ee)}
-.maint-wp-sec.metres .maint-wp-sec-head{color:var(--wp-metres,#fbbf24)}
+.maint-wp-sec-head{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;margin-bottom:2px;color:var(--text2)}
+.maint-wp-sec-tag{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--text2);color:var(--bg);font-size:10px;font-weight:800;letter-spacing:0;text-transform:none}
 .maint-wp-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;min-width:0}
 .maint-wp-row .lbl{font-size:11px;color:var(--muted);font-weight:500}
 .maint-wp-row .val{font-size:13px;color:var(--text);font-weight:600;word-break:break-word;min-width:0}
@@ -466,8 +463,6 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
   .maint-wp-body{grid-template-columns:1fr;justify-items:start}
   .maint-wp-rings{justify-self:center}
 }
-:root{--wp-temps:#22d3ee;--wp-metres:#fbbf24}
-body.light{--wp-temps:#0891b2;--wp-metres:#d97706}
 .maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
 @media (max-width:700px){
   .maint-wp-sections{grid-template-columns:1fr}
@@ -2645,14 +2640,13 @@ async function loadOpsTypes(){
   }
 }
 
-// Couleur d'un anneau : dégradé d'une couleur famille -> rouge sur [0, 200%].
-// Au-delà de 200% la couleur reste rouge plein (clamp).
-//   family='temps'  : cyan -> rouge
-//   family='metres' : ambre -> rouge
-function _ratioColor(ratio, family){
-  const start = (family === 'metres') ? [251, 191,  36]    // ambre #fbbf24
-                                      : [ 34, 211, 238];   // cyan  #22d3ee
-  const end   = [220, 38, 38];                              // rouge #dc2626
+// Couleur d'un anneau : même dégradé que les barres de progression, vert -> rouge
+// sur [0, 200%]. Au-delà de 200% reste rouge plein (clamp). Mêmes couleurs pour
+// les deux anneaux — la différenciation se fait par une lettre T/M au point de
+// départ de chaque arc.
+function _ratioColor(ratio){
+  const start = [ 52, 211, 153];   // vert  #34d399
+  const end   = [220,  38,  38];   // rouge #dc2626
   const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
   const r = Math.round(start[0] + (end[0] - start[0]) * t);
   const g = Math.round(start[1] + (end[1] - start[1]) * t);
@@ -2668,11 +2662,11 @@ function _renderWearPartRings(ratios){
   const size = 200, cx = 100, cy = 100, sw = 18;
   const rOuter = 86;                  // rayon anneau temps
   const rInner = rOuter - sw - 6;     // rayon anneau métrage
-  const _arc = (r, ratio, family) => {
+  const _arc = (r, ratio) => {
     const circ = 2 * Math.PI * r;
     const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
     if(ratio == null || !isFinite(ratio)) return trackBg;
-    const color = _ratioColor(ratio, family);
+    const color = _ratioColor(ratio);
     // < 100% : un seul arc partiel (comportement standard).
     if(ratio < 1){
       const offset = circ * (1 - ratio);
@@ -2701,9 +2695,20 @@ function _renderWearPartRings(ratios){
       '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter + ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + overlap;
   };
+  // Lettre repère au point de départ (12h) de chaque anneau, pour identifier
+  // visuellement le métrique : "T" pour Temps (anneau extérieur), "M" pour
+  // Métrage (anneau intérieur). Lisible sur fond clair ou sombre grâce au
+  // contour noir paint-order:stroke.
+  const _tag = (yPos, letter) =>
+    '<text x="' + cx + '" y="' + yPos + '" text-anchor="middle" dominant-baseline="central" ' +
+      'fill="#ffffff" font-size="11" font-weight="800" font-family="system-ui,sans-serif" ' +
+      'style="paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:2.5px;pointer-events:none">' +
+    letter + '</text>';
   return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
-           _arc(rOuter, ratios.temps,  'temps') +
-           _arc(rInner, ratios.metres, 'metres') +
+           _arc(rOuter, ratios.temps) +
+           _arc(rInner, ratios.metres) +
+           _tag(cy - rOuter, 'T') +
+           _tag(cy - rInner, 'M') +
          '</svg>';
 }
 
@@ -3097,9 +3102,9 @@ function _renderWearPartsGroup(machine){
         };
         return '<div class="maint-wp-body">' +
           '<div class="maint-wp-info">' +
-            // Section TEMPS (anneau extérieur cyan)
+            // Section TEMPS (anneau extérieur — badge "T")
             '<div class="maint-wp-sec temps">' +
-              '<div class="maint-wp-sec-head">Temps</div>' +
+              '<div class="maint-wp-sec-head"><span class="maint-wp-sec-tag">T</span>Temps</div>' +
               '<div class="maint-wp-row">' +
                 '<span class="lbl">Référence</span>' + _refVal(refTemps) +
               '</div>' +
@@ -3108,9 +3113,9 @@ function _renderWearPartsGroup(machine){
                 timeBadge +
               '</div>' +
             '</div>' +
-            // Section MÉTRAGE (anneau intérieur ambre)
+            // Section MÉTRAGE (anneau intérieur — badge "M")
             '<div class="maint-wp-sec metres">' +
-              '<div class="maint-wp-sec-head">Métrage</div>' +
+              '<div class="maint-wp-sec-head"><span class="maint-wp-sec-tag">M</span>Métrage</div>' +
               '<div class="maint-wp-row">' +
                 '<span class="lbl">Référence</span>' + _refVal(refMetrage) +
               '</div>' +
