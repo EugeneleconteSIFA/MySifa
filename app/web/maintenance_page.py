@@ -424,6 +424,15 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-frame.is-overdue .maint-frame-head{border-bottom-color:rgba(248,113,113,.25)}
 .maint-frame.is-overdue .maint-frame-title{color:var(--danger,#f87171)}
 .maint-frame.is-overdue-critical{border-color:var(--danger,#dc2626);box-shadow:0 0 0 2px var(--danger,#dc2626),0 6px 16px rgba(220,38,38,.30);transform:scale(1.01);transform-origin:top center}
+.ops-subtabs{display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--border)}
+.ops-subtab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;transition:all .15s;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
+.ops-subtab:hover{color:var(--text);background:var(--accent-bg)}
+.ops-subtab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.ops-readonly-notice{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;margin-bottom:14px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;color:var(--text);font-size:13px;line-height:1.5}
+.ops-readonly-notice svg{color:var(--accent);flex-shrink:0;margin-top:1px}
+.ops-readonly-notice strong{color:var(--accent);font-weight:700}
+.ops-row-warn-ico{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:6px;color:var(--danger,#f87171);vertical-align:middle;flex-shrink:0}
+.ops-row-warn-ico svg{width:18px;height:18px}
 .maint-machine-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
@@ -831,6 +840,21 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
+        <!-- Sous-onglets style MyProd : Historique / Liste -->
+        <div class="ops-subtabs" role="tablist">
+          <button type="button" class="ops-subtab active" data-ops-subtab="historique" onclick="setOpsSubtab('historique')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+            Historique des opérations
+          </button>
+          <button type="button" class="ops-subtab" data-ops-subtab="liste" onclick="setOpsSubtab('liste')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Liste des opérations
+          </button>
+        </div>
+
+        <!-- Sous-onglet : Historique -->
+        <div class="ops-subview" id="ops-subview-historique">
+
         <!-- Filtres Historique des opérations -->
         <div class="filters-panel">
           <div class="filters">
@@ -906,6 +930,25 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
+        </div><!-- /ops-subview-historique -->
+
+        <!-- Sous-onglet : Liste -->
+        <div class="ops-subview" id="ops-subview-liste" style="display:none">
+
+        <!-- Bandeau d'information : table en lecture seule -->
+        <div class="ops-readonly-notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <div>
+            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
+            Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
+            <strong>Paramètres → Maintenance</strong>.
+          </div>
+        </div>
+
         <!-- Liste d'opérations de maintenance (catalogue) -->
         <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
@@ -941,6 +984,8 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </table>
           </div>
         </div>
+
+        </div><!-- /ops-subview-liste -->
       </div>
     </div>
   </main>
@@ -1259,6 +1304,24 @@ const VIEW_META = {
   controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
 };
+// Sous-onglet actif dans la vue Opérations ('historique' | 'liste').
+// Mémorisé en localStorage pour retrouver l'onglet d'avant à la prochaine visite.
+const OPS_SUBTAB_KEY = 'mysifa_maint_ops_subtab_v1';
+function _getOpsSubtab(){
+  try{ return localStorage.getItem(OPS_SUBTAB_KEY) || 'historique'; }
+  catch(e){ return 'historique'; }
+}
+function setOpsSubtab(name){
+  if(name !== 'historique' && name !== 'liste') name = 'historique';
+  try{ localStorage.setItem(OPS_SUBTAB_KEY, name); }catch(e){}
+  document.querySelectorAll('.ops-subtab').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-ops-subtab') === name);
+  });
+  document.querySelectorAll('.ops-subview').forEach(div => { div.style.display = 'none'; });
+  const target = document.getElementById('ops-subview-' + name);
+  if(target) target.style.display = '';
+}
+
 function switchView(name){
   if(!VIEW_META[name]) return;
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
@@ -1271,6 +1334,10 @@ function switchView(name){
     // Toujours afficher la vue Semaine en arrivant dans Planning
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
+  }
+  // À l'arrivée sur la vue Opérations, restaure le dernier sous-onglet utilisé.
+  if(name === 'operations'){
+    setOpsSubtab(_getOpsSubtab());
   }
   // Recharge la liste des codes maintenance a chaque arrivee sur les vues qui
   // l'utilisent, pour refleter les changements faits dans Parametres -> Maintenance.
@@ -3591,8 +3658,19 @@ function renderOpsTypes(){
       } else if(!dt){
         statusHtml = '<span class="last-intervention-status unknown">Jamais enregistré</span>';
       }
+      // Icône SVG rouge (triangle "attention") affichée au début de la cellule
+      // Nom quand l'opération est en retard. Le tooltip détaille le nb de jours.
+      const overdueIcon = info.overdue
+        ? '<span class="ops-row-warn-ico" title="Intervention en retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue > 1 ? 's' : '') + '" aria-label="En retard">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'
+          + '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+          + '<line x1="12" y1="9" x2="12" y2="13"/>'
+          + '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+          + '</svg></span>'
+        : '';
+      // Badge texte "En retard" conservé en bout de ligne pour la lisibilité
       const overdueBadge = info.overdue
-        ? '<span class="row-overdue-badge" title="Intervention en retard">⚠ En retard</span>'
+        ? '<span class="row-overdue-badge" title="Intervention en retard">En retard ' + info.daysOverdue + ' j</span>'
         : '';
       const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
       const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
@@ -3616,7 +3694,7 @@ function renderOpsTypes(){
       // Ligne entière cliquable (double-clic) pour ouvrir la modale d'édition
       // des détails (notes libres, stockées en localStorage par code).
       return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les détails">' +
-        '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
+        '<td>' + overdueIcon + '<strong style="color:var(--text);vertical-align:middle">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
         '<td>' + intervalleCell + '</td>' +
