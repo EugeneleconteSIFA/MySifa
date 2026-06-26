@@ -2640,18 +2640,31 @@ async function loadOpsTypes(){
   }
 }
 
-// Couleur d'un anneau : même dégradé que les barres de progression, vert -> rouge
-// sur [0, 200%]. Au-delà de 200% reste rouge plein (clamp). Mêmes couleurs pour
-// les deux anneaux — la différenciation se fait par une lettre T/M au point de
-// départ de chaque arc.
+// Couleur d'un anneau (ou d'une barre de progression) sur l'intervalle [0,200%].
+// Dégradé multi-stops : vert -> jaune -> orange -> rouge.
+// Au-delà de 200% : rouge plein (clamp).
 function _ratioColor(ratio){
-  const start = [ 52, 211, 153];   // vert  #34d399
-  const end   = [220,  38,  38];   // rouge #dc2626
+  // Stops fixés à t = 0 / 0.33 / 0.66 / 1, où t = ratio / 2 (clampé).
+  const stops = [
+    [0.00, [ 52, 211, 153]],   // vert    #34d399
+    [0.33, [250, 204,  21]],   // jaune   #facc15
+    [0.66, [251, 146,  60]],   // orange  #fb923c
+    [1.00, [220,  38,  38]],   // rouge   #dc2626
+  ];
   const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
-  const r = Math.round(start[0] + (end[0] - start[0]) * t);
-  const g = Math.round(start[1] + (end[1] - start[1]) * t);
-  const b = Math.round(start[2] + (end[2] - start[2]) * t);
-  return 'rgb(' + r + ',' + g + ',' + b + ')';
+  for(let i = 0; i < stops.length - 1; i++){
+    const [ta, ca] = stops[i];
+    const [tb, cb] = stops[i + 1];
+    if(t <= tb){
+      const lt = (tb === ta) ? 0 : (t - ta) / (tb - ta);
+      const r = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
+      const g = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
+      const b = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
+      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+  }
+  const last = stops[stops.length - 1][1];
+  return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
 }
 // Génère le SVG de 2 anneaux concentriques (style Apple Watch).
 // ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
@@ -2695,20 +2708,20 @@ function _renderWearPartRings(ratios){
       '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter + ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + overlap;
   };
-  // Lettre repère au point de départ (12h) de chaque anneau, pour identifier
-  // visuellement le métrique : "T" pour Temps (anneau extérieur), "M" pour
-  // Métrage (anneau intérieur). Lisible sur fond clair ou sombre grâce au
-  // contour noir paint-order:stroke.
-  const _tag = (yPos, letter) =>
+  // Étiquette posée à 12h sur chaque anneau pour identifier la métrique.
+  // Texte blanc, contour noir paint-order:stroke pour rester lisible quel que
+  // soit le fond (track gris, dégradé vert, jaune, orange ou rouge).
+  const _tag = (yPos, txt) =>
     '<text x="' + cx + '" y="' + yPos + '" text-anchor="middle" dominant-baseline="central" ' +
-      'fill="#ffffff" font-size="11" font-weight="800" font-family="system-ui,sans-serif" ' +
-      'style="paint-order:stroke;stroke:rgba(0,0,0,.55);stroke-width:2.5px;pointer-events:none">' +
-    letter + '</text>';
+      'fill="#ffffff" font-size="9" font-weight="700" letter-spacing="0.8" ' +
+      'font-family="system-ui,-apple-system,Segoe UI,sans-serif" ' +
+      'style="paint-order:stroke;stroke:rgba(15,23,42,.75);stroke-width:2.5px;pointer-events:none;text-transform:uppercase">' +
+    txt + '</text>';
   return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
            _arc(rOuter, ratios.temps) +
            _arc(rInner, ratios.metres) +
-           _tag(cy - rOuter, 'T') +
-           _tag(cy - rInner, 'M') +
+           _tag(cy - rOuter, 'Temps') +
+           _tag(cy - rInner, 'Métrage') +
          '</svg>';
 }
 
@@ -3102,9 +3115,9 @@ function _renderWearPartsGroup(machine){
         };
         return '<div class="maint-wp-body">' +
           '<div class="maint-wp-info">' +
-            // Section TEMPS (anneau extérieur — badge "T")
+            // Section TEMPS (anneau extérieur)
             '<div class="maint-wp-sec temps">' +
-              '<div class="maint-wp-sec-head"><span class="maint-wp-sec-tag">T</span>Temps</div>' +
+              '<div class="maint-wp-sec-head">Temps</div>' +
               '<div class="maint-wp-row">' +
                 '<span class="lbl">Référence</span>' + _refVal(refTemps) +
               '</div>' +
@@ -3113,9 +3126,9 @@ function _renderWearPartsGroup(machine){
                 timeBadge +
               '</div>' +
             '</div>' +
-            // Section MÉTRAGE (anneau intérieur — badge "M")
+            // Section MÉTRAGE (anneau intérieur)
             '<div class="maint-wp-sec metres">' +
-              '<div class="maint-wp-sec-head"><span class="maint-wp-sec-tag">M</span>Métrage</div>' +
+              '<div class="maint-wp-sec-head">Métrage</div>' +
               '<div class="maint-wp-row">' +
                 '<span class="lbl">Référence</span>' + _refVal(refMetrage) +
               '</div>' +
@@ -3290,20 +3303,14 @@ function renderMaintCards(){
         badgeLbl = 'Aucune donnée';
       }
       // Barre de progression : pourcentage écoulé depuis la dernière intervention
-      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur :
-      // dégradé linéaire continu du vert (0%) au rouge (200%+), clampé au-delà.
+      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur via
+      // _ratioColor (dégradé vert -> jaune -> orange -> rouge sur [0, 200%]),
+      // identique au code couleur des anneaux des pièces d'usure.
       let progressHtml = '';
       if(freqDays != null && freqDays > 0 && daysSince != null){
         const ratio = daysSince / freqDays;
         const pct = Math.max(0, Math.min(100, ratio * 100));
-        // Interpolation vert (#34d399) -> rouge (#dc2626) sur [0, 2]
-        const t = Math.max(0, Math.min(1, ratio / 2));
-        const green = [ 52, 211, 153];
-        const red   = [220,  38,  38];
-        const r = Math.round(green[0] + (red[0] - green[0]) * t);
-        const g = Math.round(green[1] + (red[1] - green[1]) * t);
-        const b = Math.round(green[2] + (red[2] - green[2]) * t);
-        const fillStyleExtra = ';background:rgb(' + r + ',' + g + ',' + b + ')';
+        const fillStyleExtra = ';background:' + _ratioColor(ratio);
         const pctLbl = Math.round(ratio * 100) + '%';
         progressHtml =
           '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la dernière intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
