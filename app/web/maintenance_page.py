@@ -444,6 +444,8 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-ref-input{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-size:13px;font-family:inherit;width:100%;box-sizing:border-box;transition:border-color .15s,box-shadow .15s}
 .maint-wp-ref-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .maint-wp-ref-input::placeholder{color:var(--muted)}
+.maint-wp-ref-value{font-size:14px;color:var(--text);font-weight:600;padding:4px 0;line-height:1.4;min-height:24px}
+.maint-wp-ref-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
 .maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
 @media (max-width:700px){
   .maint-wp-sections{grid-template-columns:1fr}
@@ -2575,16 +2577,33 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
+// Codes de catégorie "Suivi" (pièces d'usure). Stockés à part car ils ne sont
+// PAS affichés dans la Liste d'opérations ni la Liste de contrôles : ils servent
+// uniquement de source aux cartes de pièces d'usure (intervalle + métrage de
+// référence) sur la vue Maintenance.
+const SUIVI_CODES_STATE = { list: [] };
+
 async function loadOpsTypes(){
   try{
     const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
     if(!res.ok){
       OPS_TYPES_STATE.list = [];
+      SUIVI_CODES_STATE.list = [];
       return;
     }
     const data = await res.json();
     const items = Array.isArray(data && data.items) ? data.items : [];
-    // Filtre demandé : Interventions (toutes) + Contrôles avec periodique=OUI.
+    // Suivi : pièces d'usure (références par code, partagées par toute l'équipe).
+    SUIVI_CODES_STATE.list = items
+      .filter(it => it.categorie === 'suivi')
+      .map(it => ({
+        code: it.code,
+        label: it.label || '',
+        niveau: parseInt(it.niveau, 10) || 1,
+        intervalle: (it.intervalle || '').toString(),
+        metrage_ref: (it.metrage_ref || '').toString(),
+      }));
+    // Liste d'opérations : Interventions (toutes) + Contrôles avec periodique=OUI.
     OPS_TYPES_STATE.list = items
       .filter(it => (it.categorie === 'interventions') || (it.categorie === 'controles' && !!it.periodique))
       .map(it => ({
@@ -2600,7 +2619,25 @@ async function loadOpsTypes(){
       }));
   }catch(e){
     OPS_TYPES_STATE.list = [];
+    SUIVI_CODES_STATE.list = [];
   }
+}
+
+// Trouve le code "Suivi" correspondant à une pièce d'usure (par pattern label).
+// pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
+function _findSuiviCodeForWearPart(pieceId, pos){
+  const list = SUIVI_CODES_STATE.list || [];
+  for(const c of list){
+    const lbl = (c.label || '').toLowerCase();
+    if(!lbl.includes(pos)) continue;
+    const hasContre = (lbl.indexOf('contre') !== -1);
+    if(pieceId === 'contre_couteaux'){
+      if(hasContre && lbl.indexOf('couteaux') !== -1) return c;
+    } else {
+      if(!hasContre && lbl.indexOf('couteaux') !== -1) return c;
+    }
+  }
+  return null;
 }
 // Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
@@ -2860,8 +2897,11 @@ function _renderWearPartsGroup(machine){
   }
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
-    const refTemps = getWearPartRef(p.id, machine, pos, 'temps');
-    const refMetrage = getWearPartRef(p.id, machine, pos, 'metrage');
+    // Source des références : code "Suivi" en base, match par label
+    // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
+    const suiviCode = _findSuiviCodeForWearPart(p.id, pos);
+    const refTemps   = suiviCode ? (suiviCode.intervalle  || '') : '';
+    const refMetrage = suiviCode ? (suiviCode.metrage_ref || '') : '';
     // Dernier changement correspondant dans production_data (MyProd) +
     // métrage parcouru depuis ce changement.
     const wpItem = (WEARPART_LAST_DATES_STATE.machine === machine)
@@ -2922,11 +2962,14 @@ function _renderWearPartsGroup(machine){
         '<div class="maint-wp-section">' +
           '<div class="maint-wp-section-title">Temps</div>' +
           '<div class="maint-wp-ref-row">' +
-            '<label class="maint-wp-ref-label" for="wp-' + escAttr(p.id) + '-temps">Référence intervalle de temps</label>' +
-            '<input type="text" id="wp-' + escAttr(p.id) + '-temps" class="maint-wp-ref-input" ' +
-              'value="' + escAttr(refTemps) + '" ' +
-              'placeholder="ex. 90 jours, 3 mois" ' +
-              'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'temps\', this.value)">' +
+            '<div class="maint-wp-ref-label">Référence intervalle de temps</div>' +
+            (refTemps
+              ? '<div class="maint-wp-ref-value">' + escHtml(refTemps) + '</div>'
+              : (suiviCode
+                  ? '<div class="maint-wp-ref-value muted">— (à compléter dans Paramètres → Maintenance)</div>'
+                  : '<div class="maint-wp-ref-value muted">Aucun code « Suivi » correspondant — créer dans Paramètres → Maintenance</div>'
+                )
+            ) +
           '</div>' +
           '<div class="maint-wp-elapsed">' +
             '<div class="maint-wp-ref-label">Depuis la dernière opération</div>' +
@@ -2936,11 +2979,14 @@ function _renderWearPartsGroup(machine){
         '<div class="maint-wp-section">' +
           '<div class="maint-wp-section-title">Métrage</div>' +
           '<div class="maint-wp-ref-row">' +
-            '<label class="maint-wp-ref-label" for="wp-' + escAttr(p.id) + '-metrage">Référence métrage</label>' +
-            '<input type="text" id="wp-' + escAttr(p.id) + '-metrage" class="maint-wp-ref-input" ' +
-              'value="' + escAttr(refMetrage) + '" ' +
-              'placeholder="ex. 5000 m, 10 km" ' +
-              'onchange="setWearPartRef(\'' + escAttr(p.id) + '\',\'metrage\', this.value)">' +
+            '<div class="maint-wp-ref-label">Référence métrage</div>' +
+            (refMetrage
+              ? '<div class="maint-wp-ref-value">' + escHtml(refMetrage) + '</div>'
+              : (suiviCode
+                  ? '<div class="maint-wp-ref-value muted">— (à compléter dans Paramètres → Maintenance)</div>'
+                  : '<div class="maint-wp-ref-value muted">Aucun code « Suivi » correspondant</div>'
+                )
+            ) +
           '</div>' +
           (function(){
             // Métrage parcouru depuis la dernière opération correspondante.
