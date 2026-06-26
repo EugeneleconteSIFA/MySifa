@@ -2672,13 +2672,27 @@ function _renderWearPartRings(ratios){
     const circ = 2 * Math.PI * r;
     const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
     if(ratio == null || !isFinite(ratio)) return trackBg;
-    const fill = Math.max(0, Math.min(1, ratio));
-    const offset = circ * (1 - fill);
     const color = _ratioColor(ratio, family);
-    const fg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
-      '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
-    return trackBg + fg;
+    // < 100% : un seul arc partiel (comportement standard).
+    if(ratio < 1){
+      const offset = circ * (1 - ratio);
+      const fg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+        '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) +
+        '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+      return trackBg + fg;
+    }
+    // >= 100% : tour complet de base + tour supplémentaire posé par-dessus
+    // (style Apple Watch). L'extrémité du second arc reste toujours visible,
+    // décalée de l'origine 12h, accompagnée d'une légère ombre pour le 3D.
+    // Overflow clampé à 1 (= 200% atteints → second tour complet posé).
+    const overflow = Math.min(1, ratio - 1);
+    const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" style="transition:stroke .15s"/>';
+    const overlapOffset = circ * (1 - overflow);
+    const overlap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + overlapOffset.toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+    return trackBg + baseLap + overlap;
   };
   return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="200" height="200" aria-hidden="true">' +
            _arc(rOuter, ratios.temps,  'temps') +
