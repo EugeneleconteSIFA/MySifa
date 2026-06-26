@@ -446,6 +446,24 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-wp-ref-input::placeholder{color:var(--muted)}
 .maint-wp-ref-value{font-size:14px;color:var(--text);font-weight:600;padding:4px 0;line-height:1.4;min-height:24px}
 .maint-wp-ref-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
+.maint-wp-body{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:18px;padding:16px 22px 18px;align-items:center}
+.maint-wp-info{display:flex;flex-direction:column;gap:11px;min-width:0}
+.maint-wp-info-row{display:flex;flex-direction:column;gap:2px;min-width:0}
+.maint-wp-info-row.inline{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
+.maint-wp-info-row.inline > div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.maint-wp-info-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-wp-info-value{font-size:13px;color:var(--text);font-weight:600;line-height:1.35;word-break:break-word}
+.maint-wp-info-value.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
+.maint-wp-info-sub{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.maint-wp-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px}
+.maint-wp-rings{display:flex;justify-content:center;align-items:center}
+.maint-wp-rings svg{display:block;max-width:100%;height:auto}
+.maint-wp-rings .legend{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+@media (max-width:640px){
+  .maint-wp-body{grid-template-columns:1fr;justify-items:center}
+  .maint-wp-info{align-self:stretch}
+}
 .maint-wp-elapsed{margin-top:6px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:3px}
 @media (max-width:700px){
   .maint-wp-sections{grid-template-columns:1fr}
@@ -2623,6 +2641,44 @@ async function loadOpsTypes(){
   }
 }
 
+// Couleur d'un anneau / barre : dégradé vert -> rouge sur [0, 200%].
+// Au-delà de 200% la couleur reste rouge plein (clamp).
+function _ratioColor(ratio){
+  const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
+  const green = [ 52, 211, 153];
+  const red   = [220,  38,  38];
+  const r = Math.round(green[0] + (red[0] - green[0]) * t);
+  const g = Math.round(green[1] + (red[1] - green[1]) * t);
+  const b = Math.round(green[2] + (red[2] - green[2]) * t);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+// Génère le SVG de 2 anneaux concentriques (style Apple Watch).
+// ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
+// Anneau extérieur = TEMPS, anneau intérieur = MÉTRAGE.
+// La longueur d'arc est clampée à 100% (arc plein si ratio >= 1), c'est la
+// couleur qui indique le retard.
+function _renderWearPartRings(ratios){
+  const size = 180, cx = 90, cy = 90, sw = 18;
+  const rOuter = 78;                  // rayon anneau temps
+  const rInner = rOuter - sw - 4;     // rayon anneau métrage (espacé)
+  const _arc = (r, ratio) => {
+    const circ = 2 * Math.PI * r;
+    const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
+    if(ratio == null || !isFinite(ratio)) return trackBg;
+    const fill = Math.max(0, Math.min(1, ratio));
+    const offset = circ * (1 - fill);
+    const color = _ratioColor(ratio);
+    const fg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-dasharray="' + circ.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+    return trackBg + fg;
+  };
+  return '<svg viewBox="0 0 ' + size + ' ' + size + '" width="180" height="180" aria-hidden="true">' +
+           _arc(rOuter, ratios.temps) +
+           _arc(rInner, ratios.metres) +
+         '</svg>';
+}
+
 // Trouve le code "Suivi" correspondant à une pièce d'usure (par pattern label).
 // pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
 function _findSuiviCodeForWearPart(pieceId, pos){
@@ -2958,69 +3014,83 @@ function _renderWearPartsGroup(machine){
           _b('Rive', 'rive') +
         '</div>' +
       '</div>' +
-      '<div class="maint-wp-sections">' +
-        '<div class="maint-wp-section">' +
-          '<div class="maint-wp-section-title">Temps</div>' +
-          '<div class="maint-wp-ref-row">' +
-            '<div class="maint-wp-ref-label">Référence intervalle de temps</div>' +
-            (refTemps
-              ? '<div class="maint-wp-ref-value">' + escHtml(refTemps) + '</div>'
-              : (suiviCode
-                  ? '<div class="maint-wp-ref-value muted">— (à compléter dans Paramètres → Maintenance)</div>'
-                  : '<div class="maint-wp-ref-value muted">Aucun code « Suivi » correspondant — créer dans Paramètres → Maintenance</div>'
-                )
-            ) +
+      (function(){
+        // Bloc info à gauche (références + dernière intervention + métrage parcouru + badges)
+        // et anneaux concentriques à droite (visuel type Apple Watch).
+        const _refValue = (v) => v
+          ? '<div class="maint-wp-info-value">' + escHtml(v) + '</div>'
+          : (suiviCode
+              ? '<div class="maint-wp-info-value muted">À compléter</div>'
+              : '<div class="maint-wp-info-value muted">Aucun code Suivi</div>'
+            );
+        // Bloc Dernière intervention (date + nb de jours)
+        let lastBlock;
+        if(WEARPART_LAST_DATES_STATE.machine !== machine){
+          lastBlock = '<div class="maint-wp-info-value muted">Chargement…</div>';
+        } else if(daysSince == null){
+          lastBlock = '<div class="maint-wp-info-value muted">Aucun changement enregistré</div>';
+        } else {
+          const lbl = daysSince === 0 ? 'Aujourd\'hui'
+                    : daysSince === 1 ? 'Hier'
+                    : 'Il y a ' + daysSince + ' j';
+          lastBlock =
+            '<div class="maint-wp-info-value">' + escHtml(_fmtDateOnly(lastDate)) + '</div>' +
+            '<div class="maint-wp-info-sub">' + escHtml(lbl) + '</div>';
+        }
+        // Bloc Métrage parcouru
+        let metrageBlock;
+        if(WEARPART_LAST_DATES_STATE.machine !== machine){
+          metrageBlock = '<div class="maint-wp-info-value muted">Chargement…</div>';
+        } else if(!wpItem || wpItem.last_date == null){
+          metrageBlock = '<div class="maint-wp-info-value muted">—</div>';
+        } else if(metrageSince == null){
+          metrageBlock = '<div class="maint-wp-info-value muted">Non disponible</div>';
+        } else {
+          metrageBlock = '<div class="maint-wp-info-value">' + escHtml(_fmtMetres(metrageSince)) + '</div>';
+        }
+        // Badges retard
+        let badges = '';
+        if(timeOver){
+          const over = daysSince - refDays;
+          badges += '<span class="maint-wp-badge">Retard ' + over + ' j</span>';
+        }
+        if(metresOver){
+          const overM = metrageSince - refMetres;
+          badges += '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
+        }
+        // Ratios pour les anneaux (null si pas de référence ou pas de donnée)
+        const ratios = {
+          temps:  (refDays   != null && refDays   > 0 && daysSince    != null) ? (daysSince    / refDays  ) : null,
+          metres: (refMetres != null && refMetres > 0 && metrageSince != null) ? (metrageSince / refMetres) : null,
+        };
+        return '<div class="maint-wp-body">' +
+          '<div class="maint-wp-info">' +
+            '<div class="maint-wp-info-row inline">' +
+              '<div>' +
+                '<span class="maint-wp-info-label">Réf. temps</span>' +
+                _refValue(refTemps) +
+              '</div>' +
+              '<div>' +
+                '<span class="maint-wp-info-label">Réf. métrage</span>' +
+                _refValue(refMetrage) +
+              '</div>' +
+            '</div>' +
+            '<div class="maint-wp-info-row">' +
+              '<span class="maint-wp-info-label">Dernière intervention</span>' +
+              lastBlock +
+            '</div>' +
+            '<div class="maint-wp-info-row">' +
+              '<span class="maint-wp-info-label">Métrage parcouru</span>' +
+              metrageBlock +
+            '</div>' +
+            (badges ? '<div class="maint-wp-badges">' + badges + '</div>' : '') +
           '</div>' +
-          '<div class="maint-wp-elapsed">' +
-            '<div class="maint-wp-ref-label">Depuis la dernière opération</div>' +
-            elapsedHtml +
+          '<div class="maint-wp-rings">' +
+            _renderWearPartRings(ratios) +
           '</div>' +
         '</div>' +
-        '<div class="maint-wp-section">' +
-          '<div class="maint-wp-section-title">Métrage</div>' +
-          '<div class="maint-wp-ref-row">' +
-            '<div class="maint-wp-ref-label">Référence métrage</div>' +
-            (refMetrage
-              ? '<div class="maint-wp-ref-value">' + escHtml(refMetrage) + '</div>'
-              : (suiviCode
-                  ? '<div class="maint-wp-ref-value muted">— (à compléter dans Paramètres → Maintenance)</div>'
-                  : '<div class="maint-wp-ref-value muted">Aucun code « Suivi » correspondant</div>'
-                )
-            ) +
-          '</div>' +
-          (function(){
-            // Métrage parcouru depuis la dernière opération correspondante.
-            // Source : compteur machine.dernier_metrage - métrage au moment du
-            // dernier changement (lu sur la ligne production_data).
-            let body;
-            if(WEARPART_LAST_DATES_STATE.machine !== machine){
-              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
-            } else if(!wpItem || wpItem.last_date == null){
-              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré</span>';
-            } else if(metrageSince == null){
-              body = '<span style="font-size:11px;color:var(--muted);font-style:italic">Métrage non disponible</span>';
-            } else {
-              // Badge "Retard" si on dépasse la référence métrage
-              let retardMetres = '';
-              if(metresOver){
-                const overM = metrageSince - refMetres;
-                retardMetres = ' <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
-              }
-              body =
-                '<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">' +
-                  '<span style="font-size:14px;color:var(--text);font-weight:600">' + escHtml(_fmtMetres(metrageSince)) + '</span>' +
-                  '<span style="font-size:11px;color:var(--muted)">depuis le ' + escHtml(_fmtDateOnly(wpItem.last_date)) + '</span>' +
-                  retardMetres +
-                '</div>';
-            }
-            return '<div class="maint-wp-elapsed">' +
-              '<div class="maint-wp-ref-label">Métrage depuis la dernière opération</div>' +
-              body +
-            '</div>';
-          })() +
-        '</div>' +
-      '</div>' +
-    '</section>';
+      '</section>';
+      })();
   }).join('');
   return '<div class="maint-group">' +
            '<div class="maint-group-head">' +
