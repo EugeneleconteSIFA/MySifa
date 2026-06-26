@@ -428,6 +428,11 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .ops-subtab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;transition:all .15s;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
 .ops-subtab:hover{color:var(--text);background:var(--accent-bg)}
 .ops-subtab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.ops-readonly-notice{display:flex;align-items:flex-start;gap:10px;padding:11px 14px;margin-bottom:14px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;color:var(--text);font-size:13px;line-height:1.5}
+.ops-readonly-notice svg{color:var(--accent);flex-shrink:0;margin-top:1px}
+.ops-readonly-notice strong{color:var(--accent);font-weight:700}
+.ops-row-warn-ico{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:6px;color:var(--danger,#f87171);vertical-align:middle;flex-shrink:0}
+.ops-row-warn-ico svg{width:18px;height:18px}
 .maint-machine-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
@@ -929,6 +934,20 @@ body.light .toast.info{background:#fff;color:var(--text)}
 
         <!-- Sous-onglet : Liste -->
         <div class="ops-subview" id="ops-subview-liste" style="display:none">
+
+        <!-- Bandeau d'information : table en lecture seule -->
+        <div class="ops-readonly-notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <div>
+            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
+            Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
+            <strong>Paramètres → Maintenance</strong>.
+          </div>
+        </div>
 
         <!-- Liste d'opérations de maintenance (catalogue) -->
         <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
@@ -3639,8 +3658,19 @@ function renderOpsTypes(){
       } else if(!dt){
         statusHtml = '<span class="last-intervention-status unknown">Jamais enregistré</span>';
       }
+      // Icône SVG rouge (triangle "attention") affichée au début de la cellule
+      // Nom quand l'opération est en retard. Le tooltip détaille le nb de jours.
+      const overdueIcon = info.overdue
+        ? '<span class="ops-row-warn-ico" title="Intervention en retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue > 1 ? 's' : '') + '" aria-label="En retard">'
+          + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'
+          + '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+          + '<line x1="12" y1="9" x2="12" y2="13"/>'
+          + '<line x1="12" y1="17" x2="12.01" y2="17"/>'
+          + '</svg></span>'
+        : '';
+      // Badge texte "En retard" conservé en bout de ligne pour la lisibilité
       const overdueBadge = info.overdue
-        ? '<span class="row-overdue-badge" title="Intervention en retard">⚠ En retard</span>'
+        ? '<span class="row-overdue-badge" title="Intervention en retard">En retard ' + info.daysOverdue + ' j</span>'
         : '';
       const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
       const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
@@ -3664,7 +3694,7 @@ function renderOpsTypes(){
       // Ligne entière cliquable (double-clic) pour ouvrir la modale d'édition
       // des détails (notes libres, stockées en localStorage par code).
       return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les détails">' +
-        '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
+        '<td>' + overdueIcon + '<strong style="color:var(--text);vertical-align:middle">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
         '<td>' + intervalleCell + '</td>' +
