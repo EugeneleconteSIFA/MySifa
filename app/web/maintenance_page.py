@@ -2691,20 +2691,33 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour complet de base (uni, sans extrémité visible à 12h car
-    // l'anneau fait le tour) + un demi-cercle "tête" à la position d'avancement
-    // du tour supplémentaire (style Apple Watch). On ne dessine pas un second
-    // arc partant de 12h : seule l'extrémité qui reflète le pourcentage est
-    // visible, sous forme de demi-cercle bombé dans le sens de progression.
+    // >= 100% : tour de base + second tour partant de 12h jusqu'au tip, MÊME
+    // couleur que la base (donc invisible coloriquement) MAIS avec drop-shadow
+    // → l'ombre crée un sillage continu de 12h jusqu'à la tête. Le départ à
+    // 12h utilise stroke-linecap="butt" (extrémité plate alignée sur la
+    // tangente, qui se fond avec la continuité de la base) — pas de "tête"
+    // visible au point de départ. À l'autre bout, on ajoute un demi-cercle
+    // dans la direction tangente : la tête naturelle au bout du second tour.
     // Overflow plafonné à 0.97 pour garder le tip distinct du début si > 200%.
     const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
-    // Position du tip + demi-cercle bombé dans la direction tangente
-    // (= sens de progression de l'anneau, horaire).
-    //   - A = bord extérieur du tip (radial outward)
-    //   - B = bord intérieur du tip (radial inward)
-    //   - Arc de demi-cercle de A à B bombé vers +tangente (avant)
+    // Ombre commune au corps du second tour et à la tête : trois ombres
+    // superposées (douce/moyenne/dure) pour l'effet de surélévation 3D.
+    const shadowFilter = 'filter:'
+      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
+      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
+      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
+    // Corps du second tour : invisible (même couleur que la base) mais projette
+    // l'ombre continue qui fond la tête dans le reste de l'anneau.
+    const offset = circ * (1 - overflow);
+    const overlayBody = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+      '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="butt" stroke-dasharray="' + circ.toFixed(2) +
+      '" stroke-dashoffset="' + offset.toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter +
+      ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
+    // Demi-cercle "tête" au bout du second tour, bombé vers la tangente.
     const tipAngle = overflow * 2 * Math.PI;
     const halfSw = sw / 2;
     const sinT = Math.sin(tipAngle), cosT = Math.cos(tipAngle);
@@ -2712,17 +2725,11 @@ function _renderWearPartRings(ratios){
     const Ay = cy - (r + halfSw) * cosT;
     const Bx = cx + (r - halfSw) * sinT;
     const By = cy - (r - halfSw) * cosT;
-    // Triple drop-shadow : ombre dure très proche (la tête "pose" sur l'anneau),
-    // ombre moyenne diffuse (volume), ombre douce large (profondeur).
-    const shadowFilter = 'filter:'
-      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
-      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
-      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
     const tip = '<path d="M ' + Ax.toFixed(2) + ' ' + Ay.toFixed(2) +
       ' A ' + halfSw.toFixed(2) + ' ' + halfSw.toFixed(2) + ' 0 0 1 ' +
       Bx.toFixed(2) + ' ' + By.toFixed(2) + ' Z" ' +
       'fill="' + color + '" style="' + shadowFilter + ';transition:d .35s ease,fill .15s"/>';
-    return trackBg + baseLap + tip;
+    return trackBg + baseLap + overlayBody + tip;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
   // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
