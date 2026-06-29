@@ -308,6 +308,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .alert-field-help{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5}
 @media(max-width:700px){.alert-field-row{grid-template-columns:1fr}}
 .alert-badge.auto{background:var(--accent-bg);color:var(--accent)}
+.alert-badge.todo{background:rgba(251,191,36,.18);color:var(--warn);margin-left:4px}
+.alert-row.is-todo{border-left:3px solid var(--warn)}
 .alerts-filter-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 @media(max-width:900px){
   .alert-row{flex-wrap:wrap}
@@ -3149,9 +3151,15 @@ function renderMaintList() {
       let lastInterventionDisplay;
       if (cat === 'controles' && !periodOn) {
         const ack = _lastAckByCode[String(o.code)];
-        lastInterventionDisplay = ack
-          ? esc(_fmtAlertDate(ack))
-          : '<span style="color:var(--muted);font-style:italic">Jamais</span>';
+        if (ack) {
+          lastInterventionDisplay = esc(_fmtAlertDate(ack));
+        } else {
+          const linked = (Array.isArray(_alertsData) ? _alertsData.find(x => x.linked_maint_code === String(o.code)) : null);
+          const notConfigured = !linked || !_alertIsConfigured(linked);
+          lastInterventionDisplay = notConfigured
+            ? '<span style="color:var(--warn);font-style:italic" title="L\'alerte associée n\'est pas encore configurée">À configurer</span>'
+            : '<span style="color:var(--muted);font-style:italic">Jamais</span>';
+        }
       } else {
         lastInterventionDisplay = '<span style="color:var(--muted)">—</span>';
       }
@@ -3333,6 +3341,14 @@ function _fmtAlertDate(s) {
 
 let _alertsFilterKind = 'all';
 
+function _alertIsConfigured(a) {
+  // Une alerte est "configurée" dès qu'elle a au moins une clé de paramètre
+  // (trigger / target / validation / checklist) renseignée par l'admin.
+  // Les alertes auto-créées par la migration v133 démarrent avec params={}.
+  if (!a || !a.params || typeof a.params !== 'object') return false;
+  return Object.keys(a.params).length > 0;
+}
+
 function renderAlertsList() {
   const box = document.getElementById('alerts-list');
   if (!box) return;
@@ -3356,14 +3372,20 @@ function renderAlertsList() {
     return;
   }
   const html = filtered.map(a => {
-    const cls = a.active ? 'is-active' : 'is-inactive';
+    let cls = a.active ? 'is-active' : 'is-inactive';
+    if (!configured) cls += ' is-todo';
     const statusCls = a.active ? 'on' : 'off';
     const statusLbl = a.active ? 'Active' : 'Inactive';
     const created = _fmtAlertDate(a.created_at);
     const isAuto = !!a.linked_maint_code;
-    const badge = isAuto
+    const configured = _alertIsConfigured(a);
+    const autoBadge = isAuto
       ? '<span class="alert-badge auto" title="Alerte auto-générée depuis le code ' + esc(a.linked_maint_code) + '">Auto · ' + esc(a.linked_maint_code) + '</span>'
       : '';
+    const todoBadge = (!configured)
+      ? '<span class="alert-badge todo" title="Cette alerte n\'a pas encore été configurée — cliquez sur Modifier pour renseigner ses paramètres.">À configurer</span>'
+      : '';
+    const badge = autoBadge + todoBadge;
     const lastAck = a.last_ack_at
       ? ' · Dernière intervention : ' + esc(_fmtAlertDate(a.last_ack_at))
       : (isAuto ? ' · Jamais effectuée' : '');
@@ -3413,7 +3435,7 @@ document.addEventListener('click', (ev) => {
 // Référentiels pour les formulaires d'alerte
 const _ALERT_TRIGGER_TYPES = [
   { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
-  { v: 'periodic', l: 'Périodique — toutes les X heures' },
+  { v: 'periodic', l: 'Périodique — toutes les X minutes' },
   { v: 'calendar', l: 'Calendaire — à heure fixe' },
   { v: 'event',    l: 'Événementiel — sur action métier' },
 ];
@@ -3432,10 +3454,19 @@ const _ALERT_DAYS = [
 
 function _alertDefaults(existing) {
   const p = existing || {};
+  const trig = Object.assign({}, p.trigger || {});
+  // Compat rétro : si seul interval_hours est présent, on convertit en minutes.
+  if (trig.interval_minutes == null && trig.interval_hours != null) {
+    trig.interval_minutes = Math.round(Number(trig.interval_hours) * 60);
+    delete trig.interval_hours;
+  }
+  const cl = Object.assign({ enabled: false, items: [], all_required: false }, p.checklist || {});
+  if (!Array.isArray(cl.items)) cl.items = [];
   return {
-    trigger: Object.assign({ type: 'manual', interval_hours: 2, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, p.trigger || {}),
+    trigger: Object.assign({ type: 'manual', interval_minutes: 120, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
     target: Object.assign({ machine: '*', role: '*' }, p.target || {}),
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
+    checklist: cl,
   };
 }
 
@@ -3470,8 +3501,9 @@ function _renderAlertFormFields(params, opts) {
     +   '<div id="af-trigger-sub" class="alert-field-sub">'
     +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
     +     '<div data-trigger-for="periodic">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle (heures)</label>'
-    +       '<input type="number" id="af-trigger-interval" class="alert-field-input" min="0.25" max="168" step="0.25" value="' + d.trigger.interval_hours + '">'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle (minutes)</label>'
+    +       '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +       '<div class="alert-field-help">Le compteur démarre après une saisie <strong>« production »</strong> ou <strong>« reprise de production »</strong> sur la machine cible. Si la machine n\'est plus en production, l\'alerte est différée jusqu\'à la reprise, avec un délai de 5 minutes après reprise avant déclenchement. Après validation, le compteur redémarre dans les mêmes conditions.</div>'
     +     '</div>'
     +     '<div data-trigger-for="calendar">'
     +       '<div class="alert-field-row">'
@@ -3499,9 +3531,60 @@ function _renderAlertFormFields(params, opts) {
     +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
     +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
     + '</div>'
-    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent)">'
+    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
+    +     '<div>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Questionnaire (points de contrôle)</label>'
+    +       '<span style="font-size:11px;color:var(--muted)">Ex. découpe nette, colle conforme, centrage OK… L\'opérateur cochera chaque point lors de la validation.</span>'
+    +     '</div>'
+    +     '<label class="toggle"><input type="checkbox" id="af-checklist-enabled" ' + (d.checklist.enabled ? 'checked' : '') + ' onchange="_afOnChecklistToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +   '</div>'
+    +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
+    +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
+    +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
+    +     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer">'
+    +       '<input type="checkbox" id="af-checklist-allreq" ' + (d.checklist.all_required ? 'checked' : '') + '>'
+    +       'Tous les points doivent être cochés pour valider'
+    +     '</label>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
     +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
     + '</div>';
+}
+
+function _afChecklistItemRow(value) {
+  const safeVal = (value || '').replace(/"/g, '&quot;');
+  return '<div class="af-cl-row" style="display:flex;gap:6px;align-items:center">'
+    +    '<input type="text" class="alert-field-input af-cl-input" maxlength="200" placeholder="Ex. Découpe nette" value="' + safeVal + '" style="flex:1">'
+    +    '<button type="button" class="btn-sm btn-ghost danger" onclick="this.closest(\'.af-cl-row\').remove()" title="Supprimer ce point">×</button>'
+    +    '</div>';
+}
+
+function _afRenderChecklistItems(items) {
+  const list = (items && items.length) ? items : [''];
+  return list.map(_afChecklistItemRow).join('');
+}
+
+function _afAddChecklistItem() {
+  const wrap = document.getElementById('af-checklist-items');
+  if (!wrap) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _afChecklistItemRow('');
+  const row = tmp.firstElementChild;
+  wrap.appendChild(row);
+  row.querySelector('.af-cl-input')?.focus();
+}
+
+function _afOnChecklistToggle() {
+  const enabled = document.getElementById('af-checklist-enabled')?.checked;
+  const wrap = document.getElementById('af-checklist-wrap');
+  if (wrap) wrap.style.display = enabled ? '' : 'none';
+  // Si on active mais qu'il n'y a aucun item, on en ajoute un vide.
+  if (enabled) {
+    const items = document.querySelectorAll('.af-cl-input');
+    if (!items.length) _afAddChecklistItem();
+  }
 }
 
 function _afOnTriggerChange() {
@@ -3515,9 +3598,10 @@ function _afReadParams() {
   const t = document.getElementById('af-trigger-type').value || 'manual';
   const trig = { type: t };
   if (t === 'periodic') {
-    const h = parseFloat(document.getElementById('af-trigger-interval').value);
-    if (!(h > 0 && h <= 168)) { toast('Intervalle invalide (0 < h ≤ 168)', true); return null; }
-    trig.interval_hours = h;
+    const mInp = document.getElementById('af-trigger-interval-minutes');
+    const m = parseInt(mInp.value, 10);
+    if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
+    trig.interval_minutes = m;
   } else if (t === 'calendar') {
     const tm = document.getElementById('af-trigger-time').value || '';
     if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
@@ -3528,6 +3612,15 @@ function _afReadParams() {
   } else if (t === 'event') {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
   }
+  // Lecture du questionnaire
+  const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
+  const items = [];
+  if (clEnabled) {
+    document.querySelectorAll('.af-cl-input').forEach(inp => {
+      const v = (inp.value || '').trim();
+      if (v) items.push(v);
+    });
+  }
   return {
     trigger: trig,
     target: {
@@ -3536,6 +3629,11 @@ function _afReadParams() {
     },
     validation: {
       button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
+    },
+    checklist: {
+      enabled: clEnabled && items.length > 0,
+      items: items,
+      all_required: !!document.getElementById('af-checklist-allreq')?.checked,
     },
   };
 }
@@ -3611,7 +3709,7 @@ async function disableAllAlerts() {
   await loadAlerts();
 }
 
-let _alertGlobalSettings = { placement: 'center', size: 'medium', block_production: true };
+let _alertGlobalSettings = { placement: 'center', size: 'medium', block_production: true, stack_mode: 'stack' };
 
 async function loadAlertSettings() {
   try {
@@ -3620,6 +3718,7 @@ async function loadAlertSettings() {
       placement: r.placement || 'center',
       size: r.size || 'medium',
       block_production: !!r.block_production,
+      stack_mode: r.stack_mode || 'stack',
     };
   } catch (e) {
     // En cas d'erreur, on garde les valeurs par défaut.
@@ -3642,6 +3741,14 @@ function openAlertSettingsModal() {
       { v: 'medium', l: 'Moyenne' },
       { v: 'large',  l: 'Grande' },
     ];
+    const stacks = [
+      { v: 'stack',   l: 'Empilement (toutes visibles)' },
+      { v: 'queue',   l: 'File d\'attente (une à la fois)' },
+      { v: 'replace', l: 'Remplacement (la dernière efface la précédente)' },
+    ];
+    const stackOpts = stacks.map(s =>
+      '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.stack_mode ? ' selected' : '') + '>' + esc(s.l) + '</option>'
+    ).join('');
     const placementOpts = placements.map(p =>
       '<option value="' + p.v + '"' + (p.v === _alertGlobalSettings.placement ? ' selected' : '') + '>' + esc(p.l) + '</option>'
     ).join('');
@@ -3659,6 +3766,11 @@ function openAlertSettingsModal() {
       +   '<div class="alert-field">'
       +     '<label class="alert-field-label">Taille</label>'
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
+      +   '</div>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Si une alerte est déjà affichée</label>'
+      +     '<select id="ags-stack" class="alert-field-input">' + stackOpts + '</select>'
+      +     '<div class="alert-field-help"><strong>Empilement</strong> : toutes les alertes s\'affichent les unes sous les autres. <strong>File d\'attente</strong> : une seule à la fois, les suivantes patientent. <strong>Remplacement</strong> : la nouvelle remplace la précédente.</div>'
       +   '</div>'
       +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
       +     '<div>'
@@ -3681,6 +3793,7 @@ function openAlertSettingsModal() {
         placement: document.getElementById('ags-placement').value,
         size: document.getElementById('ags-size').value,
         block_production: document.getElementById('ags-block').checked,
+        stack_mode: document.getElementById('ags-stack').value,
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
@@ -3695,7 +3808,11 @@ function openAlertSettingsModal() {
 function _alertTriggerLabel(t) {
   if (!t || !t.type) return 'Manuel';
   if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
-  if (t.type === 'periodic') return 'Périodique — toutes les ' + (t.interval_hours || '?') + ' h';
+  if (t.type === 'periodic') {
+    const m = (t.interval_minutes != null) ? t.interval_minutes
+              : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
+    return 'Périodique — toutes les ' + m + ' min';
+  }
   if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
   if (t.type === 'event') {
     const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
@@ -3720,11 +3837,18 @@ function previewAlert(id) {
     +     '<div style="color:var(--muted)">Déclencheur</div><div>' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
     +     '<div style="color:var(--muted)">Cible</div><div>' + machineLbl + ' · ' + roleLbl + '</div>'
     +     '<div style="color:var(--muted)">Bouton</div><div>' + esc(d.validation.button_label) + '</div>'
+    +     '<div style="color:var(--muted)">Questionnaire</div><div>' + (d.checklist.enabled && d.checklist.items.length ? esc(d.checklist.items.length + ' point(s)' + (d.checklist.all_required ? ' · tous requis' : '')) : '<span style="color:var(--muted)">—</span>') + '</div>'
     +   '</div>'
     +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px 0">Ce que verra l\'opérateur</p>'
     +   '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px">'
     +     '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(a.nom) + '</div>'
     +     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + machineLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    +     (d.checklist.enabled && d.checklist.items.length
+        ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
+          + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">'
+          +   d.checklist.items.map(it => '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)"><input type="checkbox" disabled>' + esc(it) + '</label>').join('')
+          + '</div>'
+        : '')
     +     '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Commentaire (optionnel)</label>'
     +     '<textarea disabled rows="2" placeholder="L\'opérateur peut ajouter un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;box-sizing:border-box;resize:none;font-family:inherit"></textarea>'
     +     '<button type="button" disabled style="margin-top:12px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:not-allowed;opacity:.9">' + esc(d.validation.button_label) + '</button>'

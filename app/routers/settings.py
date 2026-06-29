@@ -1504,6 +1504,12 @@ def _normalize_maint_payload(body: dict) -> dict:
 
 
 _ALERT_PLACEMENTS = {"center", "top", "bottom", "top-right", "bottom-right"}
+_ALERT_STACK_MODES = {"stack", "queue", "replace"}
+_ALERT_MIN_INTERVAL_MINUTES = 1
+_ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
+# Délai d'attente après une "reprise de production" avant qu'une alerte
+# périodique puisse se déclencher (constante, non paramétrable).
+ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
 _ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login"}
@@ -1527,13 +1533,33 @@ def _validate_alert_params(params: dict) -> dict:
         raise HTTPException(422, f"Déclencheur inconnu : {t_type!r}.")
     trig = {"type": t_type}
     if t_type == "periodic":
+        # On accepte interval_minutes (canonique) ou interval_hours (compat
+        # rétro). Le stockage est toujours en minutes.
+        minutes_raw = trig_in.get("interval_minutes")
+        if minutes_raw is None and trig_in.get("interval_hours") is not None:
+            try:
+                minutes_raw = float(trig_in.get("interval_hours")) * 60.0
+            except (TypeError, ValueError):
+                minutes_raw = None
         try:
-            hours = float(trig_in.get("interval_hours") or 0)
+            minutes = int(round(float(minutes_raw)))
         except (TypeError, ValueError):
-            raise HTTPException(422, "interval_hours invalide.")
-        if hours <= 0 or hours > 168:
-            raise HTTPException(422, "interval_hours hors plage (0 < h <= 168).")
-        trig["interval_hours"] = hours
+            raise HTTPException(422, "interval_minutes invalide.")
+        if minutes < _ALERT_MIN_INTERVAL_MINUTES or minutes > _ALERT_MAX_INTERVAL_MINUTES:
+            raise HTTPException(
+                422,
+                f"interval_minutes hors plage ({_ALERT_MIN_INTERVAL_MINUTES} <= n <= {_ALERT_MAX_INTERVAL_MINUTES}).",
+            )
+        trig["interval_minutes"] = minutes
+        # Sémantique du déclenchement (documentée pour le futur planificateur) :
+        #   - Le compteur de N minutes démarre après une saisie "production"
+        #     (ou "reprise de production") sur la machine cible.
+        #   - Si la machine n'est plus en production, l'alerte est différée
+        #     jusqu'à une "reprise de production", puis un délai de
+        #     ALERT_RESUME_GRACE_MINUTES minutes (5) est respecté avant
+        #     déclenchement.
+        #   - Après validation par l'opérateur, le compteur N redémarre dans
+        #     les mêmes conditions.
     elif t_type == "calendar":
         time = (trig_in.get("time") or "").strip()
         # HH:MM
@@ -1580,6 +1606,39 @@ def _validate_alert_params(params: dict) -> dict:
     if len(btn) > 40:
         btn = btn[:40]
     out["validation"] = {"button_label": btn}
+
+    # checklist (questionnaire) : liste de points de contrôle que l'opérateur
+    # cochera lors de la validation. Items = chaînes libres (ex. "Découpe nette",
+    # "Colle conforme"). all_required = on bloque la validation tant que tous
+    # les points ne sont pas cochés.
+    cl_in = params.get("checklist") or {}
+    if not isinstance(cl_in, dict):
+        raise HTTPException(422, "checklist doit être un objet.")
+    cl_enabled = bool(cl_in.get("enabled"))
+    items_in = cl_in.get("items") or []
+    if not isinstance(items_in, list):
+        raise HTTPException(422, "checklist.items doit être une liste.")
+    clean_items = []
+    for it in items_in:
+        if not isinstance(it, str):
+            continue
+        s = it.strip()
+        if not s:
+            continue
+        if len(s) > 200:
+            s = s[:200]
+        clean_items.append(s)
+    if len(clean_items) > 30:
+        raise HTTPException(422, "checklist.items : 30 points maximum.")
+    # Si l'admin a activé sans renseigner d'items, on désactive plutôt que de
+    # crasher : l'UI affichera juste pas de questionnaire.
+    if cl_enabled and not clean_items:
+        cl_enabled = False
+    out["checklist"] = {
+        "enabled": cl_enabled,
+        "items": clean_items,
+        "all_required": bool(cl_in.get("all_required")),
+    }
 
     # comment_enabled : toujours True en v1 (mais on stocke pour l'avenir)
     out["comment_enabled"] = True
@@ -2001,22 +2060,27 @@ def maintenance_alert_settings_get(request: Request):
     from database import get_db
     with get_db() as conn:
         r = conn.execute(
-            "SELECT placement, size, block_production, updated_at, updated_by "
-            "FROM maintenance_alert_settings WHERE id=1"
+            "SELECT placement, size, block_production, stack_mode, "
+            "updated_at, updated_by FROM maintenance_alert_settings WHERE id=1"
         ).fetchone()
     if not r:
-        # Fallback si la migration n'a pas tourné (ne devrait pas arriver).
         return {
             "placement": "center",
             "size": "medium",
             "block_production": True,
+            "stack_mode": "stack",
             "updated_at": None,
             "updated_by": "",
         }
+    try:
+        stack_mode = r["stack_mode"]
+    except (IndexError, KeyError):
+        stack_mode = "stack"
     return {
         "placement": r["placement"] or "center",
         "size": r["size"] or "medium",
         "block_production": bool(r["block_production"]),
+        "stack_mode": stack_mode or "stack",
         "updated_at": r["updated_at"],
         "updated_by": r["updated_by"] or "",
     }
@@ -2029,30 +2093,36 @@ async def maintenance_alert_settings_update(request: Request):
     placement = (body.get("placement") or "center").strip()
     size = (body.get("size") or "medium").strip()
     block_production = 1 if body.get("block_production") else 0
+    stack_mode = (body.get("stack_mode") or "stack").strip()
     if placement not in _ALERT_PLACEMENTS:
         raise HTTPException(422, f"placement invalide : {placement!r}.")
     if size not in _ALERT_SIZES:
         raise HTTPException(422, f"size invalide : {size!r}.")
+    if stack_mode not in _ALERT_STACK_MODES:
+        raise HTTPException(422, f"stack_mode invalide : {stack_mode!r}.")
     from database import get_db
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     who = user.get("email") or user.get("nom") or ""
     with get_db() as conn:
         conn.execute(
             """INSERT INTO maintenance_alert_settings
-               (id, placement, size, block_production, updated_at, updated_by)
-               VALUES (1, ?, ?, ?, ?, ?)
+               (id, placement, size, block_production, stack_mode,
+                updated_at, updated_by)
+               VALUES (1, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
                  placement=excluded.placement,
                  size=excluded.size,
                  block_production=excluded.block_production,
+                 stack_mode=excluded.stack_mode,
                  updated_at=excluded.updated_at,
                  updated_by=excluded.updated_by""",
-            (placement, size, block_production, now, who),
+            (placement, size, block_production, stack_mode, now, who),
         )
         conn.commit()
     log_action(user=user, action="UPDATE", module="maintenance_alerts",
                objet="settings",
-               detail=f"placement={placement} size={size} block={bool(block_production)}")
+               detail=f"placement={placement} size={size} "
+                      f"block={bool(block_production)} stack={stack_mode}")
     return {"ok": True}
 
 
