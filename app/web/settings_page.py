@@ -889,7 +889,6 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <select id="maint-categorie" onchange="_maintTogglePeriodiqueUI()">
               <option value="controles">Contrôles</option>
               <option value="interventions">Interventions</option>
-              <option value="suivi">Suivi</option>
             </select>
             <select id="maint-periodique" onchange="_maintTogglePeriodiqueUI()">
               <option value="oui">Périodique : OUI</option>
@@ -2997,8 +2996,9 @@ async function loadMaintCodes() {
   renderMaintList();
 }
 function _maintCatLabel(cat) {
-  if (cat === 'interventions') return 'Interventions';
-  if (cat === 'suivi') return 'Suivi';
+  // 'suivi' (catégorie supprimée) traité comme 'interventions' pour les codes
+  // qui ont survécu à la migration.
+  if (cat === 'interventions' || cat === 'suivi') return 'Interventions';
   return 'Contrôles';
 }
 function renderMaintList() {
@@ -3020,8 +3020,10 @@ function renderMaintList() {
         String(o.metrage_ref || '').toLowerCase().includes(q);
     });
   }
-  // Ordre des catégories : Contrôles → Interventions → Suivi
-  const _catOrder = (c) => (c === 'controles' ? 0 : c === 'interventions' ? 1 : c === 'suivi' ? 2 : 3);
+  // Ordre des catégories : Contrôles → Interventions (les codes 'suivi'
+  // legacy sont remappés en interventions à l'affichage).
+  const _normCat = (c) => (c === 'interventions' || c === 'suivi') ? 'interventions' : 'controles';
+  const _catOrder = (c) => (_normCat(c) === 'controles' ? 0 : 1);
   items.sort((a, b) => {
     const da = _catOrder(a.categorie);
     const db = _catOrder(b.categorie);
@@ -3034,15 +3036,10 @@ function renderMaintList() {
     el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
     return;
   }
-  const byCat = { controles: [], interventions: [], suivi: [] };
-  items.forEach(o => {
-    const c = (o.categorie === 'interventions') ? 'interventions'
-            : (o.categorie === 'suivi')         ? 'suivi'
-            : 'controles';
-    byCat[c].push(o);
-  });
+  const byCat = { controles: [], interventions: [] };
+  items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
   let body = '';
-  ['controles', 'interventions', 'suivi'].forEach(cat => {
+  ['controles', 'interventions'].forEach(cat => {
     if (!byCat[cat].length) return;
     body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
@@ -3055,8 +3052,8 @@ function renderMaintList() {
       const intervalleDisplay = periodOn
         ? (o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
         : '<span style="color:var(--muted)">—</span>';
-      // Réf. métrage : affichée seulement pour la catégorie Suivi
-      const metrageDisplay = (cat === 'suivi')
+      // Réf. métrage : pertinente pour toute opération périodique
+      const metrageDisplay = periodOn
         ? (o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
         : '<span style="color:var(--muted)">—</span>';
       body += '<tr>'
@@ -3103,9 +3100,9 @@ function openMaintForm(code) {
     document.getElementById('maint-label').value = o.label || '';
     document.getElementById('maint-niveau').value = String(o.niveau || 1);
     if (catSel) {
-      const c = (o.categorie === 'interventions') ? 'interventions'
-              : (o.categorie === 'suivi')         ? 'suivi'
-              : 'controles';
+      // Codes existants en 'suivi' (avant la suppression de la catégorie) sont
+      // remappés visuellement vers 'interventions' à l'édition.
+      const c = (o.categorie === 'interventions' || o.categorie === 'suivi') ? 'interventions' : 'controles';
       catSel.value = c;
     }
     if (perSel) perSel.value = o.periodique ? 'oui' : 'non';
@@ -3125,36 +3122,25 @@ function openMaintForm(code) {
   _maintTogglePeriodiqueUI();
   codeInp.focus();
 }
-// Active/désactive Intervalle et Réf métrage selon Catégorie + Périodique :
-//   - Catégorie "Suivi" : les deux champs sont toujours pertinents (intervalle ET
-//     métrage pour les pièces d'usure). Périodique forcé à OUI (info implicite).
-//   - Catégorie "Contrôles" / "Interventions" : Intervalle dépend de Périodique
-//     (vide + grisé si NON). Réf métrage est masquée (pas pertinente).
+// Active/désactive Intervalle et Réf. métrage selon Périodique :
+//   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
+//     remplir l'intervalle de temps et/ou la référence métrage).
+//   - Périodique = NON : les deux champs sont vidés et grisés.
 function _maintTogglePeriodiqueUI(){
-  const catSel = document.getElementById('maint-categorie');
   const perSel = document.getElementById('maint-periodique');
   const intInp = document.getElementById('maint-intervalle');
   const mInp   = document.getElementById('maint-metrage-ref');
   if (!perSel || !intInp || !mInp) return;
-  const cat = catSel ? catSel.value : 'controles';
-  if (cat === 'suivi') {
-    // Pour les pièces d'usure : périodique forcé OUI, deux champs actifs.
-    perSel.value = 'oui';
-    perSel.disabled = true;
-    intInp.disabled = false;
-    intInp.style.opacity = '1';
-    mInp.disabled = false;
-    mInp.style.display = '';
-    mInp.style.opacity = '1';
-  } else {
-    perSel.disabled = false;
-    const isPeriodic = (perSel.value === 'oui');
-    intInp.disabled = !isPeriodic;
-    intInp.style.opacity = isPeriodic ? '1' : '0.5';
-    if (!isPeriodic) intInp.value = '';
-    // Réf métrage pas pertinente hors Suivi : masquée
-    mInp.value = '';
-    mInp.style.display = 'none';
+  perSel.disabled = false;
+  const isPeriodic = (perSel.value === 'oui');
+  intInp.disabled = !isPeriodic;
+  intInp.style.opacity = isPeriodic ? '1' : '0.5';
+  mInp.disabled   = !isPeriodic;
+  mInp.style.opacity = isPeriodic ? '1' : '0.5';
+  mInp.style.display = '';
+  if (!isPeriodic) {
+    intInp.value = '';
+    mInp.value   = '';
   }
 }
 function closeMaintForm() {
@@ -3167,21 +3153,15 @@ async function saveMaintForm() {
   const label = (document.getElementById('maint-label').value || '').trim();
   const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
   const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-  const categorie = (rawCat === 'interventions') ? 'interventions'
-                  : (rawCat === 'suivi')         ? 'suivi'
-                  : 'controles';
+  const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
   const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
   const periodique = (rawPer === 'oui');
-  // Catégorie "Suivi" : périodique forcé à oui (l'UI le rend disabled).
-  const effPeriodique = (categorie === 'suivi') ? true : periodique;
-  const intervalle = effPeriodique ? (document.getElementById('maint-intervalle')?.value || '').trim() : '';
-  const metrage_ref = (categorie === 'suivi')
-    ? (document.getElementById('maint-metrage-ref')?.value || '').trim()
-    : '';
+  const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
+  const metrage_ref = periodique ? (document.getElementById('maint-metrage-ref')?.value || '').trim() : '';
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique: effPeriodique, intervalle, metrage_ref };
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {

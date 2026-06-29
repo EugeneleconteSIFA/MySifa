@@ -1709,3 +1709,69 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
         "dates": dates,
         "items": items,
     }
+
+
+@router.post("/api/maintenance/wearparts/info")
+async def maintenance_wearparts_info(request: Request):
+    """Métrage machine + métrage parcouru depuis une date donnée, par pièce.
+    Source des dates : OPS_STATE côté frontend (= saisies "Nouvelle saisie"
+    de l'app Maintenance, stockées en localStorage). Source du métrage :
+    machines.dernier_metrage + production_data (compteur historique).
+
+    Body : { machine: str, dates: { piece_pos: ISO_or_null, ... } }
+    Renvoie : { machine, current_metrage, items: { piece_pos: {
+        last_date, metrage_at_change, metrage_since
+    } } }
+    """
+    get_current_user(request)
+    body = await request.json()
+    machine = (body.get("machine") or "").strip()
+    if not machine:
+        raise HTTPException(422, "machine requis.")
+    raw_dates = body.get("dates") or {}
+    if not isinstance(raw_dates, dict):
+        raise HTTPException(422, "dates doit etre un objet.")
+    from database import get_db
+    items: dict[str, dict] = {}
+    with get_db() as conn:
+        m_row = conn.execute(
+            "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
+            (machine,),
+        ).fetchone()
+        current_metrage = m_row["dernier_metrage"] if m_row else None
+        for key, change_date in raw_dates.items():
+            if not change_date:
+                items[key] = {
+                    "last_date": None,
+                    "metrage_at_change": None,
+                    "metrage_since": None,
+                }
+                continue
+            change_date = str(change_date)
+            m_at_row = conn.execute(
+                """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
+                   FROM production_data
+                   WHERE machine=? AND operation_code IN ('01','89')
+                     AND date_operation <= ?
+                     AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL)
+                   ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                (machine, change_date),
+            ).fetchone()
+            m_at_change = m_at_row["m"] if m_at_row else None
+            metrage_since = None
+            if current_metrage is not None and m_at_change is not None:
+                try:
+                    diff = float(current_metrage) - float(m_at_change)
+                    metrage_since = max(0.0, diff)
+                except (TypeError, ValueError):
+                    metrage_since = None
+            items[key] = {
+                "last_date": change_date,
+                "metrage_at_change": m_at_change,
+                "metrage_since": metrage_since,
+            }
+    return {
+        "machine": machine,
+        "current_metrage": current_metrage,
+        "items": items,
+    }
