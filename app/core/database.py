@@ -4196,6 +4196,49 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 132, "maintenance_alerts_table")
 
+    # v133 — Alertes liées aux codes maintenance.
+    # Chaque code "contrôle non périodique" doit avoir son alerte automatique.
+    # La date de dernière intervention du contrôle = last_ack_at de l'alerte
+    # (mise à jour quand l'opérateur valide le formulaire).
+    # linked_maint_code est UNIQUE quand non NULL pour éviter d'avoir deux
+    # alertes pour le même code (sécurité contre les désyncs).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=133 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alerts)").fetchall()}
+        if "linked_maint_code" not in cols:
+            conn.execute("ALTER TABLE maintenance_alerts ADD COLUMN linked_maint_code TEXT")
+        if "last_ack_at" not in cols:
+            conn.execute("ALTER TABLE maintenance_alerts ADD COLUMN last_ack_at TEXT")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_maint_alerts_linked_code "
+            "ON maintenance_alerts(linked_maint_code) WHERE linked_maint_code IS NOT NULL"
+        )
+        # Backfill : pour chaque contrôle non périodique existant, créer
+        # l'alerte associée si elle n'existe pas déjà.
+        now = datetime.now().isoformat()
+        rows = conn.execute(
+            "SELECT code, label FROM maintenance_codes "
+            "WHERE categorie='controles' AND periodique=0"
+        ).fetchall()
+        for r in rows:
+            code = r["code"]
+            label = (r["label"] or "").strip()
+            existing = conn.execute(
+                "SELECT 1 FROM maintenance_alerts WHERE linked_maint_code=? LIMIT 1",
+                (code,)
+            ).fetchone()
+            if existing:
+                continue
+            nom = f"Contrôle : {code} – {label}" if label else f"Contrôle : {code}"
+            nom = nom[:120]
+            conn.execute(
+                """INSERT INTO maintenance_alerts
+                   (nom, active, params, created_by, created_at, updated_at, linked_maint_code)
+                   VALUES (?, 0, '{}', 'auto:migration', ?, ?, ?)""",
+                (nom, now, now, code)
+            )
+        conn.commit()
+        _record_schema_migration(conn, 133, "maintenance_alerts_link_to_codes")
+
 
 def create_default_admin():
     import bcrypt

@@ -1503,6 +1503,52 @@ def _normalize_maint_payload(body: dict) -> dict:
     }
 
 
+def _alert_nom_for_code(code: str, label: str) -> str:
+    """Convention de nommage des alertes auto-générées."""
+    label = (label or "").strip()
+    nom = f"Contrôle : {code} – {label}" if label else f"Contrôle : {code}"
+    return nom[:120]
+
+
+def _is_non_periodic_control(categorie: str, periodique) -> bool:
+    cat = (categorie or "").strip()
+    per = 1 if periodique else 0
+    return cat == "controles" and per == 0
+
+
+def _sync_alert_for_code(conn, code: str, label: str, categorie: str, periodique, now: str) -> None:
+    """Maintient l'alerte auto-liée à un code en cohérence avec ses propriétés.
+    - Si le code est un contrôle non périodique : l'alerte existe (création ou
+      rename selon le label).
+    - Sinon : l'alerte associée est supprimée (la config du formulaire est
+      perdue — c'est volontaire, le code ne déclenche plus d'alerte opérateur).
+    """
+    existing = conn.execute(
+        "SELECT id, nom FROM maintenance_alerts WHERE linked_maint_code=? LIMIT 1",
+        (code,)
+    ).fetchone()
+    if _is_non_periodic_control(categorie, periodique):
+        nom = _alert_nom_for_code(code, label)
+        if existing:
+            if existing["nom"] != nom:
+                conn.execute(
+                    "UPDATE maintenance_alerts SET nom=?, updated_at=? WHERE id=?",
+                    (nom, now, existing["id"]),
+                )
+        else:
+            conn.execute(
+                """INSERT INTO maintenance_alerts
+                   (nom, active, params, created_by, created_at, updated_at, linked_maint_code)
+                   VALUES (?, 0, '{}', ?, ?, ?, ?)""",
+                (nom, "auto:code-sync", now, now, code),
+            )
+    else:
+        if existing:
+            conn.execute(
+                "DELETE FROM maintenance_alerts WHERE id=?", (existing["id"],),
+            )
+
+
 @router.get("/api/maintenance/codes")
 def maintenance_codes_list(request: Request):
     # Lecture : tout utilisateur connecté (UI maintenance + UI Paramètres).
@@ -1539,6 +1585,8 @@ async def maintenance_codes_create(request: Request):
             (data["code"], data["label"], data["niveau"], data["categorie"],
              data["periodique"], data["intervalle"], data["metrage_ref"], now, now),
         )
+        _sync_alert_for_code(conn, data["code"], data["label"],
+                             data["categorie"], data["periodique"], now)
         conn.commit()
     log_action(user=user, action="CREATE", module="maintenance_codes",
                objet=data["code"], detail=data["label"])
@@ -1563,9 +1611,12 @@ async def maintenance_codes_update(code: str, request: Request):
             (data["label"], data["niveau"], data["categorie"],
              data["periodique"], data["intervalle"], data["metrage_ref"], now, data["code"]),
         )
-        conn.commit()
         if cur.rowcount == 0:
+            conn.rollback()
             raise HTTPException(404, f"Code {code} introuvable.")
+        _sync_alert_for_code(conn, data["code"], data["label"],
+                             data["categorie"], data["periodique"], now)
+        conn.commit()
     log_action(user=user, action="UPDATE", module="maintenance_codes",
                objet=data["code"], detail=data["label"])
     return {"ok": True, "code": data["code"]}
@@ -1577,9 +1628,12 @@ def maintenance_codes_delete(code: str, request: Request):
     from database import get_db
     with get_db() as conn:
         cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
-        conn.commit()
         if cur.rowcount == 0:
+            conn.rollback()
             raise HTTPException(404, f"Code {code} introuvable.")
+        # Suppression en cascade de l'alerte auto-liée (s'il y en a une).
+        conn.execute("DELETE FROM maintenance_alerts WHERE linked_maint_code=?", (code,))
+        conn.commit()
     log_action(user=user, action="DELETE", module="maintenance_codes",
                objet=code, detail="")
     return {"ok": True}
@@ -1621,6 +1675,8 @@ async def maintenance_codes_bulk_import(request: Request):
             )
             if cur.rowcount:
                 imported += 1
+                _sync_alert_for_code(conn, data["code"], data["label"],
+                                     data["categorie"], data["periodique"], now)
         conn.commit()
     log_action(user=user, action="IMPORT", module="maintenance_codes",
                objet="bulk", detail=f"{imported} codes")
@@ -1651,6 +1707,16 @@ def _alert_row_to_dict(r) -> dict:
         params = _json_alerts.loads(r["params"] or "{}")
     except (ValueError, TypeError):
         params = {}
+    # linked_maint_code / last_ack_at : peuvent être absents sur les vieilles DB
+    # (avant migration v133).
+    try:
+        linked = r["linked_maint_code"]
+    except (IndexError, KeyError):
+        linked = None
+    try:
+        last_ack = r["last_ack_at"]
+    except (IndexError, KeyError):
+        last_ack = None
     return {
         "id": int(r["id"]),
         "nom": r["nom"],
@@ -1659,6 +1725,8 @@ def _alert_row_to_dict(r) -> dict:
         "created_by": r["created_by"] or "",
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
+        "linked_maint_code": linked or "",
+        "last_ack_at": last_ack or "",
     }
 
 
@@ -1670,9 +1738,10 @@ def maintenance_alerts_list(request: Request):
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, active, params, created_by, created_at, updated_at
+            """SELECT id, nom, active, params, created_by, created_at, updated_at,
+                      linked_maint_code, last_ack_at
                FROM maintenance_alerts
-               ORDER BY created_at DESC, id DESC"""
+               ORDER BY (linked_maint_code IS NULL), linked_maint_code, created_at DESC, id DESC"""
         ).fetchall()
     return {"items": [_alert_row_to_dict(r) for r in rows]}
 
@@ -1724,6 +1793,26 @@ async def maintenance_alerts_update(alert_id: int, request: Request):
     vals = []
     action_detail_parts = []
     if "nom" in body:
+        # Bloquer le rename d'une alerte auto : le nom doit rester synchronisé
+        # avec le code source. La personnalisation passe par les params.
+        from database import get_db as _gd_check
+        with _gd_check() as _cn:
+            _row = _cn.execute(
+                "SELECT linked_maint_code FROM maintenance_alerts WHERE id=?",
+                (alert_id,),
+            ).fetchone()
+        _linked = None
+        if _row is not None:
+            try:
+                _linked = _row["linked_maint_code"]
+            except (IndexError, KeyError):
+                _linked = None
+        if _linked:
+            raise HTTPException(
+                409,
+                "Le nom d'une alerte auto-générée est synchronisé avec son code "
+                "maintenance — modifier le code (ou son libellé) à la place.",
+            )
         nom = (body.get("nom") or "").strip()
         if not nom:
             raise HTTPException(422, "Nom obligatoire.")
@@ -1771,6 +1860,24 @@ def maintenance_alerts_delete(alert_id: int, request: Request):
     user = _require_alerts_admin(request)
     from database import get_db
     with get_db() as conn:
+        row = conn.execute(
+            "SELECT linked_maint_code FROM maintenance_alerts WHERE id=?",
+            (alert_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Alerte introuvable.")
+        linked = None
+        try:
+            linked = row["linked_maint_code"]
+        except (IndexError, KeyError):
+            linked = None
+        if linked:
+            raise HTTPException(
+                409,
+                "Alerte auto-générée — la suppression passe par la suppression du "
+                "code maintenance associé (ou par son passage en périodique / "
+                "interventions).",
+            )
         cur = conn.execute("DELETE FROM maintenance_alerts WHERE id=?", (alert_id,))
         conn.commit()
         if cur.rowcount == 0:
