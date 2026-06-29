@@ -1516,6 +1516,40 @@ _ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "logi
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
+def operator_should_see_alert(
+    user_role: str,
+    user_machine: str,
+    target: dict,
+) -> bool:
+    """Filtre opérateur : doit-on afficher cette alerte à cet utilisateur ?
+
+    Règles :
+    - Le super administrateur voit toujours toutes les alertes (testing,
+      monitoring, et règle implicite "superadmin voit tout" validée avec
+      l'utilisateur).
+    - Sinon, le rôle de l'utilisateur doit correspondre à `target["role"]`,
+      ou ce dernier vaut "*" (tous les rôles).
+    - La machine sur laquelle l'utilisateur est connecté doit correspondre à
+      `target["machine"]`, ou ce dernier vaut "*" (toutes les machines). Si
+      l'utilisateur n'est pas associé à une machine, le filtre machine est
+      neutralisé (par exemple : direction qui consulte /prod en lecture).
+
+    Cette fonction n'est pas encore branchée — elle sera importée par le
+    futur endpoint qui retournera les alertes actives à afficher pour
+    l'opérateur connecté.
+    """
+    if user_role == ROLE_SUPERADMIN:
+        return True
+    target = target or {}
+    target_role = (target.get("role") or "*").strip() or "*"
+    target_machine = (target.get("machine") or "*").strip() or "*"
+    if target_role != "*" and user_role != target_role:
+        return False
+    if target_machine != "*" and user_machine and user_machine != target_machine:
+        return False
+    return True
+
+
 def _validate_alert_params(params: dict) -> dict:
     """Valide et normalise les paramètres d'une alerte (déclencheur, cible,
     validation). Retourne un dict propre prêt à être stocké en JSON. Accepte

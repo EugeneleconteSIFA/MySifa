@@ -3402,7 +3402,7 @@ function renderAlertsList() {
       +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by ? ' · ' + esc(a.created_by) : '') + ' · <span class="alert-status ' + statusCls + '">' + statusLbl + '</span>' + lastAck + '</span>'
       + '</div>'
       + '<div class="alert-actions">'
-      +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '">Aperçu</button>'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
       +   '<button type="button" class="btn-sm btn-ghost" data-alert-edit="' + a.id + '">Modifier</button>'
       +   delBtn
       + '</div>'
@@ -3829,29 +3829,41 @@ function previewAlert(id) {
   overlay.className = 'alert-modal-overlay';
   const machineLbl = (d.target.machine === '*') ? 'Toutes les machines' : esc(d.target.machine);
   const roleLbl = (d.target.role === '*') ? 'Tous les rôles' : esc(d.target.role);
+  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
+
+  const checklistHtml = clEnabled
+    ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
+      + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px" id="ta-checklist">'
+      +   d.checklist.items.map((it, idx) =>
+            '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">'
+            + '<input type="checkbox" class="ta-cl" data-idx="' + idx + '">'
+            + esc(it)
+            + '</label>'
+          ).join('')
+      + '</div>'
+    : '';
+
   overlay.innerHTML = '<div class="alert-modal">'
-    + '<div class="alert-modal-head"><h3>Aperçu — ' + esc(a.nom) + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-head"><h3>Tester — ' + esc(a.nom) + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
     + '<div class="alert-modal-body">'
     +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 12px 0">Récapitulatif</p>'
     +   '<div style="display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:13px;margin-bottom:16px">'
     +     '<div style="color:var(--muted)">Déclencheur</div><div>' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
     +     '<div style="color:var(--muted)">Cible</div><div>' + machineLbl + ' · ' + roleLbl + '</div>'
     +     '<div style="color:var(--muted)">Bouton</div><div>' + esc(d.validation.button_label) + '</div>'
-    +     '<div style="color:var(--muted)">Questionnaire</div><div>' + (d.checklist.enabled && d.checklist.items.length ? esc(d.checklist.items.length + ' point(s)' + (d.checklist.all_required ? ' · tous requis' : '')) : '<span style="color:var(--muted)">—</span>') + '</div>'
+    +     '<div style="color:var(--muted)">Questionnaire</div><div>' + (clEnabled ? esc(d.checklist.items.length + ' point(s)' + (d.checklist.all_required ? ' · tous requis' : '')) : '<span style="color:var(--muted)">—</span>') + '</div>'
+    +   '</div>'
+    +   '<div style="background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin-bottom:14px">'
+    +     '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Mode test</strong> — interactif comme pour l\'opérateur, mais rien n\'est enregistré en base.</p>'
     +   '</div>'
     +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px 0">Ce que verra l\'opérateur</p>'
     +   '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px">'
     +     '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(a.nom) + '</div>'
     +     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + machineLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
-    +     (d.checklist.enabled && d.checklist.items.length
-        ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
-          + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">'
-          +   d.checklist.items.map(it => '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text)"><input type="checkbox" disabled>' + esc(it) + '</label>').join('')
-          + '</div>'
-        : '')
+    +     checklistHtml
     +     '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Commentaire (optionnel)</label>'
-    +     '<textarea disabled rows="2" placeholder="L\'opérateur peut ajouter un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;box-sizing:border-box;resize:none;font-family:inherit"></textarea>'
-    +     '<button type="button" disabled style="margin-top:12px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:not-allowed;opacity:.9">' + esc(d.validation.button_label) + '</button>'
+    +     '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+    +     '<button type="button" id="ta-validate" style="margin-top:12px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:pointer">' + esc(d.validation.button_label) + '</button>'
     +   '</div>'
     + '</div>'
     + '<div class="alert-modal-foot">'
@@ -3861,6 +3873,19 @@ function previewAlert(id) {
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  document.getElementById('ta-validate').addEventListener('click', () => {
+    if (clEnabled && d.checklist.all_required) {
+      const total = d.checklist.items.length;
+      const checked = document.querySelectorAll('.ta-cl:checked').length;
+      if (checked < total) {
+        toast('Il reste ' + (total - checked) + ' point(s) à cocher pour valider.', true);
+        return;
+      }
+    }
+    toast('Test terminé — aucune donnée enregistrée.');
+    close();
+  });
 }
 
 function openEditAlertModal(id) {
