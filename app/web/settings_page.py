@@ -311,12 +311,21 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .alert-badge.todo{background:rgba(251,191,36,.18);color:var(--warn);margin-left:4px}
 .alert-row.is-todo{border-left:3px solid var(--warn)}
 .alerts-filter-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.af-md-trigger{font-family:inherit;width:100%}
-.af-md-panel{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px;z-index:10;max-height:260px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.af-md-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer}
-.af-md-opt:hover{background:var(--bg)}
-.af-md-opt input{flex-shrink:0;margin:0}
-.af-md-opt input:disabled + span{color:var(--muted);cursor:not-allowed}
+.af-md-wrap{position:relative;width:100%}
+.af-md-trigger{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;box-sizing:border-box}
+.af-md-trigger:hover{border-color:var(--accent)}
+.af-md-trigger-label{flex:1 1 auto;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-md-trigger-caret{flex:0 0 auto;color:var(--muted);font-size:10px}
+.af-md-panel{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px;z-index:100;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none}
+.af-md-panel.open{display:block}
+.af-md-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer;user-select:none}
+.af-md-row:hover{background:var(--bg)}
+.af-md-row input{flex:0 0 auto;width:16px;height:16px;margin:0;cursor:pointer}
+.af-md-row-text{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.af-md-row-hint{margin-left:6px;color:var(--muted);font-weight:400;font-size:11px}
+.af-md-row.is-disabled{cursor:not-allowed;opacity:.55}
+.af-md-row.is-disabled .af-md-row-text{color:var(--muted)}
+.af-md-sep{height:1px;background:var(--border);margin:4px 6px}
 @media(max-width:900px){
   .alert-row{flex-wrap:wrap}
   .alert-actions{width:100%;justify-content:flex-end}
@@ -3485,8 +3494,13 @@ function _renderAlertFormFields(params, opts) {
   const isAllMachines = selectedMachines.includes('*');
   const machineCheckboxes = machineList.map(m => {
     const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
-    const disabled = isAllMachines ? 'disabled' : '';
-    return '<label class="af-md-opt"><input type="checkbox" class="af-machine" value="' + escAttr(m) + '" ' + checked + ' ' + disabled + ' onchange="_afOnMachineChange()"><span>' + esc(m) + '</span></label>';
+    const disabled = isAllMachines ? ' disabled' : '';
+    const rowCls = isAllMachines ? 'af-md-row is-disabled' : 'af-md-row';
+    const safeM = escAttr(m);
+    return '<div class="' + rowCls + '" onclick="_afRowClickByValue(event, \'' + safeM + '\')">'
+      + '<input type="checkbox" class="af-machine" value="' + safeM + '"' + (checked ? ' ' + checked : '') + disabled + ' onchange="_afOnMachineChange()">'
+      + '<div class="af-md-row-text">' + esc(m) + '</div>'
+      + '</div>';
   }).join('');
   let machinesInitialLabel;
   if (isAllMachines) {
@@ -3542,14 +3556,17 @@ function _renderAlertFormFields(params, opts) {
     + '</div>'
     + '<div class="alert-field">'
     +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +   '<div class="af-md-wrap" style="position:relative">'
-    +     '<button type="button" class="alert-field-input af-md-trigger" onclick="_afToggleMachinesPanel(event)" style="text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px">'
-    +       '<span id="af-md-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(machinesInitialLabel) + '</span>'
-    +       '<span style="color:var(--muted);font-size:11px;flex-shrink:0">▼</span>'
+    +   '<div class="af-md-wrap">'
+    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
+    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
+    +       '<span class="af-md-trigger-caret">▼</span>'
     +     '</button>'
-    +     '<div id="af-md-panel" class="af-md-panel" style="display:none">'
-    +       '<label class="af-md-opt"><input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()"><span><strong>Toutes les machines</strong> <span style="color:var(--muted);font-weight:400;font-size:11px">(présentes et futures)</span></span></label>'
-    +       '<div style="height:1px;background:var(--border);margin:4px 0"></div>'
+    +     '<div id="af-md-panel" class="af-md-panel">'
+    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
+    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
+    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
+    +       '</div>'
+    +       '<div class="af-md-sep"></div>'
     +       machineCheckboxes
     +     '</div>'
     +   '</div>'
@@ -3662,12 +3679,33 @@ function _afOnChecklistToggle() {
   }
 }
 
+function _afRowClick(ev, inputId) {
+  // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
+  // sur l'input pour éviter le double toggle (l'input gère son propre click).
+  if (ev.target.tagName === 'INPUT') return;
+  const inp = document.getElementById(inputId);
+  if (!inp || inp.disabled) return;
+  inp.checked = !inp.checked;
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function _afRowClickByValue(ev, value) {
+  if (ev.target.tagName === 'INPUT') return;
+  const row = ev.currentTarget;
+  const inp = row.querySelector('input.af-machine');
+  if (!inp || inp.disabled) return;
+  inp.checked = !inp.checked;
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function _afOnAllMachinesToggle() {
   const allChk = document.getElementById('af-target-all');
   if (!allChk) return;
   document.querySelectorAll('.af-machine').forEach(el => {
     el.disabled = allChk.checked;
     if (allChk.checked) el.checked = false;
+    const row = el.closest('.af-md-row');
+    if (row) row.classList.toggle('is-disabled', allChk.checked);
   });
   _afUpdateMachinesLabel();
 }
@@ -3702,7 +3740,7 @@ function _afToggleMachinesPanel(ev) {
   if (ev) ev.stopPropagation();
   const panel = document.getElementById('af-md-panel');
   if (!panel) return;
-  panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+  panel.classList.toggle('open');
 }
 
 // Fermeture du dropdown sur clic à l'extérieur (un seul listener global, idempotent)
@@ -3710,9 +3748,9 @@ if (!window._afMachinesDropdownInit) {
   window._afMachinesDropdownInit = true;
   document.addEventListener('click', (ev) => {
     const panel = document.getElementById('af-md-panel');
-    if (!panel || panel.style.display === 'none') return;
+    if (!panel || !panel.classList.contains('open')) return;
     if (ev.target.closest('.af-md-wrap')) return;
-    panel.style.display = 'none';
+    panel.classList.remove('open');
   });
 }
 
