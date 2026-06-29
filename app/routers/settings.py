@@ -1503,6 +1503,95 @@ def _normalize_maint_payload(body: dict) -> dict:
     }
 
 
+_ALERT_PLACEMENTS = {"center", "top", "bottom", "top-right", "bottom-right"}
+_ALERT_SIZES = {"small", "medium", "large"}
+_ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
+_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login"}
+_ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+
+def _validate_alert_params(params: dict) -> dict:
+    """Valide et normalise les paramètres d'une alerte (déclencheur, cible,
+    validation). Retourne un dict propre prêt à être stocké en JSON. Accepte
+    un dict vide (valeurs par défaut)."""
+    if not isinstance(params, dict):
+        raise HTTPException(422, "params doit être un objet JSON.")
+    out = {}
+
+    # trigger
+    trig_in = params.get("trigger") or {}
+    if not isinstance(trig_in, dict):
+        raise HTTPException(422, "trigger doit être un objet.")
+    t_type = (trig_in.get("type") or "manual").strip()
+    if t_type not in _ALERT_TRIGGER_TYPES:
+        raise HTTPException(422, f"Déclencheur inconnu : {t_type!r}.")
+    trig = {"type": t_type}
+    if t_type == "periodic":
+        try:
+            hours = float(trig_in.get("interval_hours") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "interval_hours invalide.")
+        if hours <= 0 or hours > 168:
+            raise HTTPException(422, "interval_hours hors plage (0 < h <= 168).")
+        trig["interval_hours"] = hours
+    elif t_type == "calendar":
+        time = (trig_in.get("time") or "").strip()
+        # HH:MM
+        try:
+            hh, mm = time.split(":")
+            assert 0 <= int(hh) < 24 and 0 <= int(mm) < 60
+        except (ValueError, AssertionError):
+            raise HTTPException(422, "time doit être au format HH:MM.")
+        trig["time"] = f"{int(hh):02d}:{int(mm):02d}"
+        days = trig_in.get("days") or []
+        if not isinstance(days, list) or not days:
+            days = list(_ALERT_CALENDAR_DAYS)
+        bad = [d for d in days if d not in _ALERT_CALENDAR_DAYS]
+        if bad:
+            raise HTTPException(422, f"days invalides : {bad}.")
+        # Conserver l'ordre canonique de la semaine
+        order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        trig["days"] = [d for d in order if d in days]
+    elif t_type == "event":
+        ev = (trig_in.get("event") or "").strip()
+        if ev not in _ALERT_TRIGGER_EVENTS:
+            raise HTTPException(422, f"event inconnu : {ev!r}.")
+        trig["event"] = ev
+    # type=manual : pas de params supplémentaires
+    out["trigger"] = trig
+
+    # target
+    tgt_in = params.get("target") or {}
+    if not isinstance(tgt_in, dict):
+        raise HTTPException(422, "target doit être un objet.")
+    machine = (tgt_in.get("machine") or "*").strip() or "*"
+    role = (tgt_in.get("role") or "*").strip() or "*"
+    if len(machine) > 80:
+        raise HTTPException(422, "machine trop long.")
+    if len(role) > 40:
+        raise HTTPException(422, "role trop long.")
+    out["target"] = {"machine": machine, "role": role}
+
+    # validation
+    val_in = params.get("validation") or {}
+    if not isinstance(val_in, dict):
+        raise HTTPException(422, "validation doit être un objet.")
+    btn = (val_in.get("button_label") or "Valider").strip() or "Valider"
+    if len(btn) > 40:
+        btn = btn[:40]
+    out["validation"] = {"button_label": btn}
+
+    # comment_enabled : toujours True en v1 (mais on stocke pour l'avenir)
+    out["comment_enabled"] = True
+
+    return out
+
+
+def _require_alerts_admin_module(request: Request) -> dict:
+    # Alias local pour clarté dans les nouveaux endpoints
+    return _require_alerts_admin(request)
+
+
 def _alert_nom_for_code(code: str, label: str) -> str:
     """Convention de nommage des alertes auto-générées."""
     label = (label or "").strip()
@@ -1758,11 +1847,10 @@ async def maintenance_alerts_create(request: Request):
         raise HTTPException(422, "Nom obligatoire.")
     if len(nom) > 120:
         nom = nom[:120]
-    params = body.get("params") or {}
-    if not isinstance(params, dict):
-        raise HTTPException(422, "params doit être un objet JSON.")
+    params_raw = body.get("params") or {}
+    params_validated = _validate_alert_params(params_raw)
     try:
-        params_json = _json_alerts.dumps(params, ensure_ascii=False)
+        params_json = _json_alerts.dumps(params_validated, ensure_ascii=False)
     except (TypeError, ValueError):
         raise HTTPException(422, "params non sérialisable en JSON.")
     from database import get_db
@@ -1822,11 +1910,10 @@ async def maintenance_alerts_update(alert_id: int, request: Request):
         vals.append(nom)
         action_detail_parts.append(f"nom={nom!r}")
     if "params" in body:
-        params = body.get("params") or {}
-        if not isinstance(params, dict):
-            raise HTTPException(422, "params doit être un objet JSON.")
+        params_raw = body.get("params") or {}
+        params_validated = _validate_alert_params(params_raw)
         try:
-            params_json = _json_alerts.dumps(params, ensure_ascii=False)
+            params_json = _json_alerts.dumps(params_validated, ensure_ascii=False)
         except (TypeError, ValueError):
             raise HTTPException(422, "params non sérialisable en JSON.")
         sets.append("params=?")
@@ -1905,6 +1992,68 @@ def maintenance_alerts_disable_all(request: Request):
     log_action(user=user, action="UPDATE", module="maintenance_alerts",
                objet="ALL", detail=f"disable-all : {affected} désactivée(s)")
     return {"ok": True, "disabled": affected}
+
+
+@router.get("/api/maintenance/alert-settings")
+def maintenance_alert_settings_get(request: Request):
+    """Réglages globaux des alertes (singleton)."""
+    _require_alerts_admin(request)
+    from database import get_db
+    with get_db() as conn:
+        r = conn.execute(
+            "SELECT placement, size, block_production, updated_at, updated_by "
+            "FROM maintenance_alert_settings WHERE id=1"
+        ).fetchone()
+    if not r:
+        # Fallback si la migration n'a pas tourné (ne devrait pas arriver).
+        return {
+            "placement": "center",
+            "size": "medium",
+            "block_production": True,
+            "updated_at": None,
+            "updated_by": "",
+        }
+    return {
+        "placement": r["placement"] or "center",
+        "size": r["size"] or "medium",
+        "block_production": bool(r["block_production"]),
+        "updated_at": r["updated_at"],
+        "updated_by": r["updated_by"] or "",
+    }
+
+
+@router.put("/api/maintenance/alert-settings")
+async def maintenance_alert_settings_update(request: Request):
+    user = _require_alerts_admin(request)
+    body = await request.json()
+    placement = (body.get("placement") or "center").strip()
+    size = (body.get("size") or "medium").strip()
+    block_production = 1 if body.get("block_production") else 0
+    if placement not in _ALERT_PLACEMENTS:
+        raise HTTPException(422, f"placement invalide : {placement!r}.")
+    if size not in _ALERT_SIZES:
+        raise HTTPException(422, f"size invalide : {size!r}.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    who = user.get("email") or user.get("nom") or ""
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO maintenance_alert_settings
+               (id, placement, size, block_production, updated_at, updated_by)
+               VALUES (1, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 placement=excluded.placement,
+                 size=excluded.size,
+                 block_production=excluded.block_production,
+                 updated_at=excluded.updated_at,
+                 updated_by=excluded.updated_by""",
+            (placement, size, block_production, now, who),
+        )
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="maintenance_alerts",
+               objet="settings",
+               detail=f"placement={placement} size={size} block={bool(block_production)}")
+    return {"ok": True}
 
 
 @router.get("/api/maintenance/wearparts/last")

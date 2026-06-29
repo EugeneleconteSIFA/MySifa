@@ -4239,6 +4239,31 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 133, "maintenance_alerts_link_to_codes")
 
+    # v134 — Réglages globaux des alertes maintenance (singleton row).
+    # Placement, taille et bloque-production s'appliquent à TOUTES les alertes
+    # actives. Stockés à part de chaque alerte pour qu'un changement global
+    # prenne effet immédiatement sans toucher au paramétrage individuel.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=134 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_alert_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                placement TEXT NOT NULL DEFAULT 'center',
+                size TEXT NOT NULL DEFAULT 'medium',
+                block_production INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT,
+                updated_by TEXT
+            )"""
+        )
+        _now_134 = datetime.now().isoformat()
+        conn.execute(
+            """INSERT OR IGNORE INTO maintenance_alert_settings
+               (id, placement, size, block_production, updated_at, updated_by)
+               VALUES (1, 'center', 'medium', 1, ?, 'auto:migration')""",
+            (_now_134,),
+        )
+        conn.commit()
+        _record_schema_migration(conn, 134, "maintenance_alert_settings_singleton")
+
 
 def create_default_admin():
     import bcrypt

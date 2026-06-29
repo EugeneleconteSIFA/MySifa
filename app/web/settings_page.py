@@ -299,6 +299,14 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
 .alert-preview-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--bg);border-radius:10px;border:1px dashed var(--border)}
 .alert-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:1px}
+.alert-field{margin-bottom:14px}
+.alert-field-label{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.alert-field-input,.alert-field-select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box}
+.alert-field-input:disabled{color:var(--muted);cursor:not-allowed}
+.alert-field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.alert-field-sub{margin-top:8px;padding:10px 12px;background:var(--bg);border:1px dashed var(--border);border-radius:8px}
+.alert-field-help{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5}
+@media(max-width:700px){.alert-field-row{grid-template-columns:1fr}}
 .alert-badge.auto{background:var(--accent-bg);color:var(--accent)}
 .alerts-filter-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 @media(max-width:900px){
@@ -960,6 +968,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             <h2 style="margin:0">Alertes maintenance</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
               <button type="button" class="btn btn-danger" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
               <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
             </div>
@@ -3401,15 +3410,144 @@ document.addEventListener('click', (ev) => {
   renderAlertsList();
 });
 
+// Référentiels pour les formulaires d'alerte
+const _ALERT_TRIGGER_TYPES = [
+  { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
+  { v: 'periodic', l: 'Périodique — toutes les X heures' },
+  { v: 'calendar', l: 'Calendaire — à heure fixe' },
+  { v: 'event',    l: 'Événementiel — sur action métier' },
+];
+const _ALERT_TRIGGER_EVENTS = [
+  { v: 'dossier_start',  l: 'Début de dossier' },
+  { v: 'dossier_end',    l: 'Fin de dossier' },
+  { v: 'machine_change', l: 'Changement de machine' },
+  { v: 'login',          l: 'Connexion de l\'opérateur' },
+];
+const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
+const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'direction', 'superadmin'];
+const _ALERT_DAYS = [
+  { v: 'mon', l: 'Lun' }, { v: 'tue', l: 'Mar' }, { v: 'wed', l: 'Mer' },
+  { v: 'thu', l: 'Jeu' }, { v: 'fri', l: 'Ven' }, { v: 'sat', l: 'Sam' }, { v: 'sun', l: 'Dim' },
+];
+
+function _alertDefaults(existing) {
+  const p = existing || {};
+  return {
+    trigger: Object.assign({ type: 'manual', interval_hours: 2, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, p.trigger || {}),
+    target: Object.assign({ machine: '*', role: '*' }, p.target || {}),
+    validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
+  };
+}
+
+function _renderAlertFormFields(params, opts) {
+  opts = opts || {};
+  const d = _alertDefaults(params);
+  const machineOpts = _ALERT_MACHINES.map(m =>
+    '<option value="' + esc(m) + '"' + (m === d.target.machine ? ' selected' : '') + '>' + (m === '*' ? 'Toutes les machines' : esc(m)) + '</option>'
+  ).join('');
+  const roleOpts = _ALERT_ROLES.map(r =>
+    '<option value="' + esc(r) + '"' + (r === d.target.role ? ' selected' : '') + '>' + (r === '*' ? 'Tous les rôles' : esc(r)) + '</option>'
+  ).join('');
+  const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
+    '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
+  ).join('');
+  const eventOpts = _ALERT_TRIGGER_EVENTS.map(e =>
+    '<option value="' + e.v + '"' + (e.v === d.trigger.event ? ' selected' : '') + '>' + esc(e.l) + '</option>'
+  ).join('');
+  const daysHtml = _ALERT_DAYS.map(day => {
+    const checked = (d.trigger.days || []).indexOf(day.v) >= 0 ? 'checked' : '';
+    return '<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px"><input type="checkbox" class="af-day" value="' + day.v + '" ' + checked + ' style="margin:0">' + day.l + '</label>';
+  }).join(' ');
+
+  const nomBlock = opts.nomReadonly
+    ? '<div class="alert-field"><label class="alert-field-label">Titre <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code</span></label><input type="text" class="alert-field-input" value="' + escAttr(opts.nomValue || '') + '" disabled></div>'
+    : '<div class="alert-field"><label class="alert-field-label">Titre de l\'alerte <span style="color:var(--danger)">*</span></label><input type="text" id="af-nom" class="alert-field-input" maxlength="120" placeholder="Ex. Contrôle qualité Cohésio 1" value="' + escAttr(opts.nomValue || '') + '"></div>';
+
+  return nomBlock
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
+    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
+    +   '<div id="af-trigger-sub" class="alert-field-sub">'
+    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
+    +     '<div data-trigger-for="periodic">'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle (heures)</label>'
+    +       '<input type="number" id="af-trigger-interval" class="alert-field-input" min="0.25" max="168" step="0.25" value="' + d.trigger.interval_hours + '">'
+    +     '</div>'
+    +     '<div data-trigger-for="calendar">'
+    +       '<div class="alert-field-row">'
+    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
+    +         '<div></div>'
+    +       '</div>'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
+    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
+    +     '</div>'
+    +     '<div data-trigger-for="event">'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
+    +       '<select id="af-trigger-event" class="alert-field-input">' + eventOpts + '</select>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Cible <span style="color:var(--danger)">*</span></label>'
+    +   '<div class="alert-field-row">'
+    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Machine</label><select id="af-target-machine" class="alert-field-input">' + machineOpts + '</select></div>'
+    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Rôle</label><select id="af-target-role" class="alert-field-input">' + roleOpts + '</select></div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
+    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
+    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
+    + '</div>'
+    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent)">'
+    +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
+    + '</div>';
+}
+
+function _afOnTriggerChange() {
+  const t = document.getElementById('af-trigger-type')?.value || 'manual';
+  document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
+    el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
+  });
+}
+
+function _afReadParams() {
+  const t = document.getElementById('af-trigger-type').value || 'manual';
+  const trig = { type: t };
+  if (t === 'periodic') {
+    const h = parseFloat(document.getElementById('af-trigger-interval').value);
+    if (!(h > 0 && h <= 168)) { toast('Intervalle invalide (0 < h ≤ 168)', true); return null; }
+    trig.interval_hours = h;
+  } else if (t === 'calendar') {
+    const tm = document.getElementById('af-trigger-time').value || '';
+    if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
+    trig.time = tm;
+    const days = Array.from(document.querySelectorAll('.af-day:checked')).map(el => el.value);
+    if (!days.length) { toast('Au moins un jour requis', true); return null; }
+    trig.days = days;
+  } else if (t === 'event') {
+    trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
+  }
+  return {
+    trigger: trig,
+    target: {
+      machine: document.getElementById('af-target-machine').value || '*',
+      role:    document.getElementById('af-target-role').value || '*',
+    },
+    validation: {
+      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
+    },
+  };
+}
+
 function openNewAlertModal() {
   const overlay = document.createElement('div');
   overlay.className = 'alert-modal-overlay';
   overlay.innerHTML = '<div class="alert-modal">'
     + '<div class="alert-modal-head"><h3>Nouvelle alerte</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
     + '<div class="alert-modal-body">'
-    +   '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nom de l\'alerte</label>'
-    +   '<input type="text" id="new-alert-nom" placeholder="Ex. Contrôle qualité Cohésio 1" maxlength="120" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">'
-    +   '<p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">L\'alerte sera créée à l\'état <strong>inactif</strong>. Vous pourrez ensuite configurer ses paramètres (déclencheur, cible, formulaire) puis l\'activer via son interrupteur.</p>'
+    +   _renderAlertFormFields(null, { nomReadonly: false, nomValue: '' })
+    +   '<p style="font-size:11px;color:var(--muted);margin-top:10px">L\'alerte sera créée à l\'état <strong>inactif</strong>. Active-la via son interrupteur une fois prête.</p>'
     + '</div>'
     + '<div class="alert-modal-foot">'
     +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
@@ -3419,17 +3557,20 @@ function openNewAlertModal() {
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  _afOnTriggerChange();
   document.getElementById('new-alert-confirm').addEventListener('click', async () => {
-    const nom = (document.getElementById('new-alert-nom').value || '').trim();
-    if (!nom) { toast('Nom obligatoire', true); return; }
+    const nom = (document.getElementById('af-nom').value || '').trim();
+    if (!nom) { toast('Titre obligatoire', true); return; }
+    const params = _afReadParams();
+    if (!params) return;
     try {
-      await api('/api/maintenance/alerts', { method: 'POST', body: JSON.stringify({ nom, params: {} }) });
+      await api('/api/maintenance/alerts', { method: 'POST', body: JSON.stringify({ nom, params }) });
       toast('Alerte créée');
       close();
       await loadAlerts();
     } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
   });
-  setTimeout(() => document.getElementById('new-alert-nom')?.focus(), 30);
+  setTimeout(() => document.getElementById('af-nom')?.focus(), 30);
 }
 
 async function toggleAlert(id, active) {
@@ -3470,22 +3611,124 @@ async function disableAllAlerts() {
   await loadAlerts();
 }
 
+let _alertGlobalSettings = { placement: 'center', size: 'medium', block_production: true };
+
+async function loadAlertSettings() {
+  try {
+    const r = await api('/api/maintenance/alert-settings');
+    _alertGlobalSettings = {
+      placement: r.placement || 'center',
+      size: r.size || 'medium',
+      block_production: !!r.block_production,
+    };
+  } catch (e) {
+    // En cas d'erreur, on garde les valeurs par défaut.
+  }
+}
+
+function openAlertSettingsModal() {
+  loadAlertSettings().then(() => {
+    const overlay = document.createElement('div');
+    overlay.className = 'alert-modal-overlay';
+    const placements = [
+      { v: 'center',       l: 'Centre (modal)' },
+      { v: 'top',          l: 'Haut (bandeau)' },
+      { v: 'bottom',       l: 'Bas (toast)' },
+      { v: 'top-right',    l: 'Coin haut droit' },
+      { v: 'bottom-right', l: 'Coin bas droit' },
+    ];
+    const sizes = [
+      { v: 'small',  l: 'Petite' },
+      { v: 'medium', l: 'Moyenne' },
+      { v: 'large',  l: 'Grande' },
+    ];
+    const placementOpts = placements.map(p =>
+      '<option value="' + p.v + '"' + (p.v === _alertGlobalSettings.placement ? ' selected' : '') + '>' + esc(p.l) + '</option>'
+    ).join('');
+    const sizeOpts = sizes.map(s =>
+      '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
+    ).join('');
+    overlay.innerHTML = '<div class="alert-modal">'
+      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-body">'
+      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Placement à l\'écran</label>'
+      +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
+      +   '</div>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Taille</label>'
+      +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
+      +   '</div>'
+      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+      +     '<div>'
+      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
+      +     '</div>'
+      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="alert-modal-foot">'
+      +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+      +   '<button type="button" class="btn" id="ags-save">Enregistrer</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.getElementById('ags-save').addEventListener('click', async () => {
+      const payload = {
+        placement: document.getElementById('ags-placement').value,
+        size: document.getElementById('ags-size').value,
+        block_production: document.getElementById('ags-block').checked,
+      };
+      try {
+        await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
+        _alertGlobalSettings = payload;
+        toast('Réglages enregistrés');
+        close();
+      } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+    });
+  });
+}
+
+function _alertTriggerLabel(t) {
+  if (!t || !t.type) return 'Manuel';
+  if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
+  if (t.type === 'periodic') return 'Périodique — toutes les ' + (t.interval_hours || '?') + ' h';
+  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
+  if (t.type === 'event') {
+    const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
+    return 'Événementiel — ' + ev;
+  }
+  return t.type;
+}
+
 function previewAlert(id) {
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
+  const d = _alertDefaults(a.params);
   const overlay = document.createElement('div');
   overlay.className = 'alert-modal-overlay';
-  // Aperçu = vue opérateur. Pour l'instant les paramètres détaillés ne sont
-  // pas encore renseignés, donc on affiche un placeholder. La structure est
-  // prête à recevoir le rendu du formulaire dès que les params seront définis.
-  const hasParams = a.params && Object.keys(a.params).length > 0;
+  const machineLbl = (d.target.machine === '*') ? 'Toutes les machines' : esc(d.target.machine);
+  const roleLbl = (d.target.role === '*') ? 'Tous les rôles' : esc(d.target.role);
   overlay.innerHTML = '<div class="alert-modal">'
     + '<div class="alert-modal-head"><h3>Aperçu — ' + esc(a.nom) + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
     + '<div class="alert-modal-body">'
-    +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 12px 0">Ce que verra l\'opérateur</p>'
-    +   (hasParams
-        ? '<div class="alert-preview-empty">Rendu du formulaire à implémenter une fois les paramètres détaillés définis.</div>'
-        : '<div class="alert-preview-empty">Cette alerte n\'a pas encore de paramètres configurés. Cliquez sur « Modifier » pour les renseigner.</div>')
+    +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 12px 0">Récapitulatif</p>'
+    +   '<div style="display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:13px;margin-bottom:16px">'
+    +     '<div style="color:var(--muted)">Déclencheur</div><div>' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    +     '<div style="color:var(--muted)">Cible</div><div>' + machineLbl + ' · ' + roleLbl + '</div>'
+    +     '<div style="color:var(--muted)">Bouton</div><div>' + esc(d.validation.button_label) + '</div>'
+    +   '</div>'
+    +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px 0">Ce que verra l\'opérateur</p>'
+    +   '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px">'
+    +     '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(a.nom) + '</div>'
+    +     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + machineLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    +     '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Commentaire (optionnel)</label>'
+    +     '<textarea disabled rows="2" placeholder="L\'opérateur peut ajouter un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;box-sizing:border-box;resize:none;font-family:inherit"></textarea>'
+    +     '<button type="button" disabled style="margin-top:12px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:not-allowed;opacity:.9">' + esc(d.validation.button_label) + '</button>'
+    +   '</div>'
     + '</div>'
     + '<div class="alert-modal-foot">'
     +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
@@ -3502,43 +3745,38 @@ function openEditAlertModal(id) {
   const isAuto = !!a.linked_maint_code;
   const overlay = document.createElement('div');
   overlay.className = 'alert-modal-overlay';
-  // Nom : non éditable pour les alertes auto (sync avec le code).
-  // Les paramètres détaillés du formulaire seront ajoutés une fois définis.
-  const nomBlock = isAuto
-    ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nom <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code ' + esc(a.linked_maint_code) + '</span></label>'
-      + '<input type="text" value="' + escAttr(a.nom) + '" disabled style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--muted);font-size:14px;box-sizing:border-box;margin-bottom:14px;cursor:not-allowed">'
-    : '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nom</label>'
-      + '<input type="text" id="edit-alert-nom" value="' + escAttr(a.nom) + '" maxlength="120" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:14px">';
   overlay.innerHTML = '<div class="alert-modal">'
     + '<div class="alert-modal-head"><h3>Modifier l\'alerte' + (isAuto ? ' (auto)' : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
     + '<div class="alert-modal-body">'
-    +   nomBlock
-    +   '<div class="alert-preview-empty" style="text-align:left">'
-    +     '<p style="margin:0 0 6px 0;color:var(--text);font-weight:600">Paramètres détaillés</p>'
-    +     '<p style="margin:0;font-size:12px;color:var(--muted)">Le déclencheur, la cible et le formulaire de validation seront configurables ici une fois les paramètres définis.</p>'
-    +   '</div>'
+    +   _renderAlertFormFields(a.params, { nomReadonly: isAuto, nomValue: a.nom })
     + '</div>'
     + '<div class="alert-modal-foot">'
-    +   '<button type="button" class="btn btn-sec" data-close>' + (isAuto ? 'Fermer' : 'Annuler') + '</button>'
-    +   (isAuto ? '' : '<button type="button" class="btn" id="edit-alert-save">Enregistrer</button>')
+    +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+    +   '<button type="button" class="btn" id="edit-alert-save">Enregistrer</button>'
     + '</div></div>';
   document.body.appendChild(overlay);
   const close = () => overlay.remove();
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  if (!isAuto) {
-    document.getElementById('edit-alert-save').addEventListener('click', async () => {
-      const nom = (document.getElementById('edit-alert-nom').value || '').trim();
-      if (!nom) { toast('Nom obligatoire', true); return; }
-      try {
-        await api('/api/maintenance/alerts/' + id, { method: 'PATCH', body: JSON.stringify({ nom }) });
-        toast('Alerte mise à jour');
-        close();
-        await loadAlerts();
-      } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
-    });
-    setTimeout(() => document.getElementById('edit-alert-nom')?.focus(), 30);
-  }
+  _afOnTriggerChange();
+  document.getElementById('edit-alert-save').addEventListener('click', async () => {
+    const body = {};
+    if (!isAuto) {
+      const nom = (document.getElementById('af-nom').value || '').trim();
+      if (!nom) { toast('Titre obligatoire', true); return; }
+      body.nom = nom;
+    }
+    const params = _afReadParams();
+    if (!params) return;
+    body.params = params;
+    try {
+      await api('/api/maintenance/alerts/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+      toast('Alerte mise à jour');
+      close();
+      await loadAlerts();
+    } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+  });
+  setTimeout(() => (document.getElementById('af-nom') || document.getElementById('af-trigger-type'))?.focus(), 30);
 }
 
 async function deleteUpdate(id) {
