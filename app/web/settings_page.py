@@ -3372,13 +3372,13 @@ function renderAlertsList() {
     return;
   }
   const html = filtered.map(a => {
+    const isAuto = !!a.linked_maint_code;
+    const configured = _alertIsConfigured(a);
     let cls = a.active ? 'is-active' : 'is-inactive';
     if (!configured) cls += ' is-todo';
     const statusCls = a.active ? 'on' : 'off';
     const statusLbl = a.active ? 'Active' : 'Inactive';
     const created = _fmtAlertDate(a.created_at);
-    const isAuto = !!a.linked_maint_code;
-    const configured = _alertIsConfigured(a);
     const autoBadge = isAuto
       ? '<span class="alert-badge auto" title="Alerte auto-générée depuis le code ' + esc(a.linked_maint_code) + '">Auto · ' + esc(a.linked_maint_code) + '</span>'
       : '';
