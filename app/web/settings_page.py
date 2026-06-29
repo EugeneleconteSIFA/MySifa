@@ -311,6 +311,12 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .alert-badge.todo{background:rgba(251,191,36,.18);color:var(--warn);margin-left:4px}
 .alert-row.is-todo{border-left:3px solid var(--warn)}
 .alerts-filter-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.af-md-trigger{font-family:inherit;width:100%}
+.af-md-panel{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px;z-index:10;max-height:260px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.af-md-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer}
+.af-md-opt:hover{background:var(--bg)}
+.af-md-opt input{flex-shrink:0;margin:0}
+.af-md-opt input:disabled + span{color:var(--muted);cursor:not-allowed}
 @media(max-width:900px){
   .alert-row{flex-wrap:wrap}
   .alert-actions{width:100%;justify-content:flex-end}
@@ -3473,14 +3479,27 @@ function _alertDefaults(existing) {
 function _renderAlertFormFields(params, opts) {
   opts = opts || {};
   const d = _alertDefaults(params);
-  // Machines (multi-sélection)
+  // Machines (multi-sélection via dropdown)
   const machineList = _ALERT_MACHINES.filter(m => m !== '*');
   const selectedMachines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
   const isAllMachines = selectedMachines.includes('*');
   const machineCheckboxes = machineList.map(m => {
     const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
-    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;padding:4px 0"><input type="checkbox" class="af-machine" value="' + escAttr(m) + '" ' + checked + '>' + esc(m) + '</label>';
+    const disabled = isAllMachines ? 'disabled' : '';
+    return '<label class="af-md-opt"><input type="checkbox" class="af-machine" value="' + escAttr(m) + '" ' + checked + ' ' + disabled + ' onchange="_afOnMachineChange()"><span>' + esc(m) + '</span></label>';
   }).join('');
+  let machinesInitialLabel;
+  if (isAllMachines) {
+    machinesInitialLabel = 'Toutes les machines';
+  } else if (selectedMachines.length === 0) {
+    machinesInitialLabel = 'Aucune machine sélectionnée';
+  } else if (selectedMachines.length === 1) {
+    machinesInitialLabel = selectedMachines[0];
+  } else if (selectedMachines.length <= 3) {
+    machinesInitialLabel = selectedMachines.join(', ');
+  } else {
+    machinesInitialLabel = selectedMachines.length + ' machines';
+  }
   const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
     '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
   ).join('');
@@ -3523,8 +3542,17 @@ function _renderAlertFormFields(params, opts) {
     + '</div>'
     + '<div class="alert-field">'
     +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +   '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px"><input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()"><strong>Toutes les machines</strong> <span style="color:var(--muted);font-weight:400">(présentes et futures)</span></label>'
-    +   '<div id="af-target-machines-list" style="' + (isAllMachines ? 'display:none;' : '') + 'padding-left:8px;display:flex;flex-direction:column;gap:4px">' + machineCheckboxes + '</div>'
+    +   '<div class="af-md-wrap" style="position:relative">'
+    +     '<button type="button" class="alert-field-input af-md-trigger" onclick="_afToggleMachinesPanel(event)" style="text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px">'
+    +       '<span id="af-md-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(machinesInitialLabel) + '</span>'
+    +       '<span style="color:var(--muted);font-size:11px;flex-shrink:0">▼</span>'
+    +     '</button>'
+    +     '<div id="af-md-panel" class="af-md-panel" style="display:none">'
+    +       '<label class="af-md-opt"><input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()"><span><strong>Toutes les machines</strong> <span style="color:var(--muted);font-weight:400;font-size:11px">(présentes et futures)</span></span></label>'
+    +       '<div style="height:1px;background:var(--border);margin:4px 0"></div>'
+    +       machineCheckboxes
+    +     '</div>'
+    +   '</div>'
     +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
     + '</div>'
     + '<div class="alert-field">'
@@ -3632,6 +3660,60 @@ function _afOnChecklistToggle() {
     const cards = document.querySelectorAll('.af-cl-card');
     if (!cards.length) _afAddChecklistItem();
   }
+}
+
+function _afOnAllMachinesToggle() {
+  const allChk = document.getElementById('af-target-all');
+  if (!allChk) return;
+  document.querySelectorAll('.af-machine').forEach(el => {
+    el.disabled = allChk.checked;
+    if (allChk.checked) el.checked = false;
+  });
+  _afUpdateMachinesLabel();
+}
+
+function _afOnMachineChange() {
+  const allChk = document.getElementById('af-target-all');
+  if (allChk && allChk.checked) {
+    const anyIndividual = Array.from(document.querySelectorAll('.af-machine:checked')).length > 0;
+    if (anyIndividual) allChk.checked = false;
+  }
+  _afUpdateMachinesLabel();
+}
+
+function _afUpdateMachinesLabel() {
+  const lbl = document.getElementById('af-md-label');
+  if (!lbl) return;
+  const all = !!document.getElementById('af-target-all')?.checked;
+  lbl.style.color = '';
+  if (all) { lbl.textContent = 'Toutes les machines'; return; }
+  const selected = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
+  if (!selected.length) {
+    lbl.textContent = 'Aucune machine sélectionnée';
+    lbl.style.color = 'var(--danger)';
+    return;
+  }
+  if (selected.length === 1) lbl.textContent = selected[0];
+  else if (selected.length <= 3) lbl.textContent = selected.join(', ');
+  else lbl.textContent = selected.length + ' machines';
+}
+
+function _afToggleMachinesPanel(ev) {
+  if (ev) ev.stopPropagation();
+  const panel = document.getElementById('af-md-panel');
+  if (!panel) return;
+  panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
+}
+
+// Fermeture du dropdown sur clic à l'extérieur (un seul listener global, idempotent)
+if (!window._afMachinesDropdownInit) {
+  window._afMachinesDropdownInit = true;
+  document.addEventListener('click', (ev) => {
+    const panel = document.getElementById('af-md-panel');
+    if (!panel || panel.style.display === 'none') return;
+    if (ev.target.closest('.af-md-wrap')) return;
+    panel.style.display = 'none';
+  });
 }
 
 function _afOnTriggerChange() {
