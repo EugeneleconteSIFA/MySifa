@@ -2717,49 +2717,38 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
-// Codes de catégorie "Suivi" (pièces d'usure). Stockés à part car ils ne sont
-// PAS affichés dans la Liste d'opérations ni la Liste de contrôles : ils servent
-// uniquement de source aux cartes de pièces d'usure (intervalle + métrage de
-// référence) sur la vue Maintenance.
-const SUIVI_CODES_STATE = { list: [] };
-
 async function loadOpsTypes(){
   try{
     const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
     if(!res.ok){
       OPS_TYPES_STATE.list = [];
-      SUIVI_CODES_STATE.list = [];
       return;
     }
     const data = await res.json();
     const items = Array.isArray(data && data.items) ? data.items : [];
-    // Suivi : pièces d'usure (références par code, partagées par toute l'équipe).
-    SUIVI_CODES_STATE.list = items
-      .filter(it => it.categorie === 'suivi')
-      .map(it => ({
-        code: it.code,
-        label: it.label || '',
-        niveau: parseInt(it.niveau, 10) || 1,
-        intervalle: (it.intervalle || '').toString(),
-        metrage_ref: (it.metrage_ref || '').toString(),
-      }));
+    // 'suivi' (catégorie supprimée côté UI) est remappée en 'interventions'
+    // pour les codes legacy qui n'ont pas encore été corrigés en base.
+    const normCat = (c) => (c === 'interventions' || c === 'suivi') ? 'interventions' : 'controles';
     // Liste d'opérations : Interventions (toutes) + Contrôles avec periodique=OUI.
     OPS_TYPES_STATE.list = items
-      .filter(it => (it.categorie === 'interventions') || (it.categorie === 'controles' && !!it.periodique))
+      .filter(it => {
+        const cn = normCat(it.categorie);
+        return (cn === 'interventions') || (cn === 'controles' && !!it.periodique);
+      })
       .map(it => ({
         id: it.code,
         nom: it.label,
         niveau: parseInt(it.niveau, 10) || 1,
-        categorie: it.categorie || 'controles',
+        categorie: normCat(it.categorie),
         periodique: !!it.periodique,
         intervalle: (it.intervalle || '').toString(),
+        metrage_ref: (it.metrage_ref || '').toString(),
         frequence: (it.intervalle || '').toString(),  // alias compat _parseFrequenceDays
         detail: '',
         _readonly: true,
       }));
   }catch(e){
     OPS_TYPES_STATE.list = [];
-    SUIVI_CODES_STATE.list = [];
   }
 }
 
@@ -2883,18 +2872,28 @@ function _renderWearPartRings(ratios){
          '</svg>';
 }
 
-// Trouve le code "Suivi" correspondant à une pièce d'usure (par pattern label).
-// pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
-function _findSuiviCodeForWearPart(pieceId, pos){
-  const list = SUIVI_CODES_STATE.list || [];
-  for(const c of list){
-    const lbl = (c.label || '').toLowerCase();
+// Trouve le code Intervention correspondant à une pièce d'usure (par pattern
+// sur le libellé). pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
+// Cherche dans OPS_TYPES_STATE.list (qui contient toutes les Interventions).
+// Normalise vers { label, intervalle, metrage_ref } pour rester compatible
+// avec l'ancien retour de _findSuiviCodeForWearPart.
+function _findWearPartCode(pieceId, pos){
+  const list = OPS_TYPES_STATE.list || [];
+  for(const t of list){
+    if(t.categorie !== 'interventions') continue;
+    const lbl = (t.nom || '').toLowerCase();
     if(!lbl.includes(pos)) continue;
     const hasContre = (lbl.indexOf('contre') !== -1);
-    if(pieceId === 'contre_couteaux'){
-      if(hasContre && lbl.indexOf('couteaux') !== -1) return c;
-    } else {
-      if(!hasContre && lbl.indexOf('couteaux') !== -1) return c;
+    const isMatch = (pieceId === 'contre_couteaux')
+      ? (hasContre && lbl.indexOf('couteaux') !== -1)
+      : (!hasContre && lbl.indexOf('couteaux') !== -1);
+    if(isMatch){
+      return {
+        code: t.id,
+        label: t.nom,
+        intervalle: t.intervalle || '',
+        metrage_ref: t.metrage_ref || '',
+      };
     }
   }
   return null;
@@ -3003,7 +3002,8 @@ function setMaintMachine(m){
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
   // Invalide le cache des dates wearparts : nouvelle machine = nouveau fetch
   WEARPART_LAST_DATES_STATE.machine = null;
-  WEARPART_LAST_DATES_STATE.dates = {};
+  WEARPART_LAST_DATES_STATE.items = {};
+  WEARPART_LAST_DATES_STATE._cacheKey = null;
   renderMaintCards();
 }
 // --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
@@ -3020,15 +3020,37 @@ const WEARPART_LAST_DATES_STATE = {
 
 async function loadWearPartLastDates(machine){
   if(!machine) return;
-  if(WEARPART_LAST_DATES_STATE.machine === machine && !WEARPART_LAST_DATES_STATE.loading) return;
+  // Récupère les dates des dernières saisies maintenance dans OPS_STATE (source
+  // locale, navigateur) pour chaque combinaison pièce x position. Envoie ces
+  // dates au backend qui retourne le métrage machine à chaque date.
+  if(typeof loadOps === 'function') loadOps();
+  const pieceIds = ['couteaux','contre_couteaux'];
+  const positions = ['bande','rive'];
+  const dates = {};
+  pieceIds.forEach(pid => {
+    positions.forEach(pos => {
+      const k = pid + '_' + pos;
+      const c = _findWearPartCode(pid, pos);
+      dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
+    });
+  });
+  // Clé de cache : machine + dates concaténées. Si rien n'a changé → skip fetch.
+  const cacheKey = machine + ':' + JSON.stringify(dates);
+  if(WEARPART_LAST_DATES_STATE._cacheKey === cacheKey && !WEARPART_LAST_DATES_STATE.loading) return;
   WEARPART_LAST_DATES_STATE.loading = true;
   try{
-    const res = await fetch('/api/maintenance/wearparts/last?machine=' + encodeURIComponent(machine), { credentials: 'include' });
+    const res = await fetch('/api/maintenance/wearparts/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ machine, dates }),
+    });
     if(res.ok){
       const data = await res.json();
       WEARPART_LAST_DATES_STATE.machine = machine;
       WEARPART_LAST_DATES_STATE.items = (data && data.items) ? data.items : {};
       WEARPART_LAST_DATES_STATE.current_metrage = (data && data.current_metrage != null) ? data.current_metrage : null;
+      WEARPART_LAST_DATES_STATE._cacheKey = cacheKey;
     }
   }catch(e){
     // Conserve l'ancien cache en cas d'erreur
@@ -3157,19 +3179,25 @@ function _renderWearPartsGroup(machine){
   }
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
-    // Source des références : code "Suivi" en base, match par label
+    // Source des références : code Intervention en base, match par label
     // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
-    const suiviCode = _findSuiviCodeForWearPart(p.id, pos);
-    const refTemps   = suiviCode ? (suiviCode.intervalle  || '') : '';
-    const refMetrage = suiviCode ? (suiviCode.metrage_ref || '') : '';
-    // Dernier changement correspondant dans production_data (MyProd) +
-    // métrage parcouru depuis ce changement.
+    const wpCode = _findWearPartCode(p.id, pos);
+    const refTemps   = wpCode ? (wpCode.intervalle  || '') : '';
+    const refMetrage = wpCode ? (wpCode.metrage_ref || '') : '';
+    // Source du dernier changement : OPS_STATE (= les saisies "Nouvelle saisie"
+    // faites dans l'app Maintenance), filtrées par label de code + machine.
+    // Le métrage parcouru depuis cette date est calculé côté serveur via le
+    // cache WEARPART_LAST_DATES_STATE (clé piece_pos).
+    const lastDate = wpCode
+      ? _lastInterventionFor(wpCode.label, machine, OPS_STATE.list)
+      : null;
     const wpItem = (WEARPART_LAST_DATES_STATE.machine === machine)
       ? _getWearPartItem(p.id, pos)
       : null;
-    const lastDate = wpItem ? wpItem.last_date : null;
     const metrageSince = wpItem ? wpItem.metrage_since : null;
     const daysSince = _daysSinceFromIso(lastDate);
+    // Pour la compat avec le bloc d'affichage plus bas (qui utilise wpItem.last_date)
+    if(wpItem){ wpItem.last_date = lastDate; }
     // Mise en exergue : déclenchée par DÉPASSEMENT DE TEMPS ou DÉPASSEMENT DE
     // MÉTRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
     // le dépassement, is-overdue-critical quand on est à >200%.
@@ -3349,8 +3377,21 @@ function renderMaintCards(){
   // La section "Pièces d'usure" est toujours rendue, indépendamment des codes
   // périodiques configurés en DB.
   const wearPartsHtml = _renderWearPartsGroup(machine);
-  // Filtre les codes avec periodique=OUI (toutes catégories confondues).
-  const baseItems = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
+  // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
+  // exclure des sections par intervalle ci-dessous (sinon les changements
+  // couteaux/contre-couteaux apparaîtraient deux fois).
+  const wearPartCodeIds = new Set();
+  ['couteaux','contre_couteaux'].forEach(pid => {
+    ['bande','rive'].forEach(pos => {
+      const c = _findWearPartCode(pid, pos);
+      if(c && c.code) wearPartCodeIds.add(String(c.code));
+    });
+  });
+  // Filtre les codes avec periodique=OUI (toutes catégories confondues),
+  // en excluant ceux déjà affichés dans la section Pièces d'usure.
+  const baseItems = (OPS_TYPES_STATE.list || []).filter(it =>
+    !!it.periodique && !wearPartCodeIds.has(String(it.id))
+  );
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
       '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
