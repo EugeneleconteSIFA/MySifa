@@ -3473,12 +3473,14 @@ function _alertDefaults(existing) {
 function _renderAlertFormFields(params, opts) {
   opts = opts || {};
   const d = _alertDefaults(params);
-  const machineOpts = _ALERT_MACHINES.map(m =>
-    '<option value="' + esc(m) + '"' + (m === d.target.machine ? ' selected' : '') + '>' + (m === '*' ? 'Toutes les machines' : esc(m)) + '</option>'
-  ).join('');
-  const roleOpts = _ALERT_ROLES.map(r =>
-    '<option value="' + esc(r) + '"' + (r === d.target.role ? ' selected' : '') + '>' + (r === '*' ? 'Tous les rôles' : esc(r)) + '</option>'
-  ).join('');
+  // Machines (multi-sélection)
+  const machineList = _ALERT_MACHINES.filter(m => m !== '*');
+  const selectedMachines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
+  const isAllMachines = selectedMachines.includes('*');
+  const machineCheckboxes = machineList.map(m => {
+    const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;padding:4px 0"><input type="checkbox" class="af-machine" value="' + escAttr(m) + '" ' + checked + '>' + esc(m) + '</label>';
+  }).join('');
   const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
     '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
   ).join('');
@@ -3520,11 +3522,10 @@ function _renderAlertFormFields(params, opts) {
     +   '</div>'
     + '</div>'
     + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Cible <span style="color:var(--danger)">*</span></label>'
-    +   '<div class="alert-field-row">'
-    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Machine</label><select id="af-target-machine" class="alert-field-input">' + machineOpts + '</select></div>'
-    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Rôle</label><select id="af-target-role" class="alert-field-input">' + roleOpts + '</select></div>'
-    +   '</div>'
+    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
+    +   '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px"><input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()"><strong>Toutes les machines</strong> <span style="color:var(--muted);font-weight:400">(présentes et futures)</span></label>'
+    +   '<div id="af-target-machines-list" style="' + (isAllMachines ? 'display:none;' : '') + 'padding-left:8px;display:flex;flex-direction:column;gap:4px">' + machineCheckboxes + '</div>'
+    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
     + '</div>'
     + '<div class="alert-field">'
     +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
@@ -3553,37 +3554,83 @@ function _renderAlertFormFields(params, opts) {
     + '</div>';
 }
 
-function _afChecklistItemRow(value) {
+function _afResponseRow(value) {
   const safeVal = (value || '').replace(/"/g, '&quot;');
-  return '<div class="af-cl-row" style="display:flex;gap:6px;align-items:center">'
-    +    '<input type="text" class="alert-field-input af-cl-input" maxlength="200" placeholder="Ex. Découpe nette" value="' + safeVal + '" style="flex:1">'
-    +    '<button type="button" class="btn-sm btn-ghost danger" onclick="this.closest(\'.af-cl-row\').remove()" title="Supprimer ce point">×</button>'
-    +    '</div>';
+  return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
+    + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
+    + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
+    + '</div>';
+}
+
+function _afChecklistCard(item) {
+  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
+  const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
+  const responsesHtml = responses.map(_afResponseRow).join('');
+  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
+    + '<div style="display:flex;gap:6px;align-items:center">'
+    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;font-weight:500">'
+    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle">×</button>'
+    + '</div>'
+    + '<div>'
+    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Réponses possibles</div>'
+    +   '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
+    +   '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
+    + '</div>'
+    + '</div>';
 }
 
 function _afRenderChecklistItems(items) {
-  const list = (items && items.length) ? items : [''];
-  return list.map(_afChecklistItemRow).join('');
+  const list = (items && items.length) ? items : [{ label: '', responses: ['Conforme'] }];
+  return list.map(_afChecklistCard).join('');
 }
 
 function _afAddChecklistItem() {
   const wrap = document.getElementById('af-checklist-items');
   if (!wrap) return;
   const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistItemRow('');
+  tmp.innerHTML = _afChecklistCard({ label: '', responses: ['Conforme'] });
+  const card = tmp.firstElementChild;
+  wrap.appendChild(card);
+  card.querySelector('.af-cl-label')?.focus();
+}
+
+function _afAddResponse(btn) {
+  const card = btn.closest('.af-cl-card');
+  if (!card) return;
+  const list = card.querySelector('.af-cl-responses');
+  if (!list) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _afResponseRow('');
   const row = tmp.firstElementChild;
-  wrap.appendChild(row);
-  row.querySelector('.af-cl-input')?.focus();
+  list.appendChild(row);
+  row.querySelector('.af-cl-resp-input')?.focus();
+}
+
+function _afRemoveResponse(btn) {
+  const row = btn.closest('.af-cl-resp-row');
+  if (!row) return;
+  const list = row.parentElement;
+  if (!list) { row.remove(); return; }
+  // Garde au moins une réponse par point
+  if (list.querySelectorAll('.af-cl-resp-row').length <= 1) {
+    toast('Un point doit garder au moins une réponse', true);
+    return;
+  }
+  row.remove();
+}
+
+function _afRemoveItem(btn) {
+  const card = btn.closest('.af-cl-card');
+  if (card) card.remove();
 }
 
 function _afOnChecklistToggle() {
   const enabled = document.getElementById('af-checklist-enabled')?.checked;
   const wrap = document.getElementById('af-checklist-wrap');
   if (wrap) wrap.style.display = enabled ? '' : 'none';
-  // Si on active mais qu'il n'y a aucun item, on en ajoute un vide.
   if (enabled) {
-    const items = document.querySelectorAll('.af-cl-input');
-    if (!items.length) _afAddChecklistItem();
+    const cards = document.querySelectorAll('.af-cl-card');
+    if (!cards.length) _afAddChecklistItem();
   }
 }
 
@@ -3612,21 +3659,37 @@ function _afReadParams() {
   } else if (t === 'event') {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
   }
-  // Lecture du questionnaire
+  // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
   const items = [];
   if (clEnabled) {
-    document.querySelectorAll('.af-cl-input').forEach(inp => {
-      const v = (inp.value || '').trim();
-      if (v) items.push(v);
+    document.querySelectorAll('.af-cl-card').forEach(card => {
+      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
+      if (!label) return;
+      const responses = [];
+      card.querySelectorAll('.af-cl-resp-input').forEach(inp => {
+        const r = (inp.value || '').trim();
+        if (r) responses.push(r);
+      });
+      if (!responses.length) return;
+      items.push({ label: label, responses: responses });
     });
+  }
+  // Cible (lue en premier — interrompt si rien sélectionné)
+  let _tgt;
+  {
+    const all = !!document.getElementById('af-target-all')?.checked;
+    if (all) {
+      _tgt = { machines: ['*'] };
+    } else {
+      const ms = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
+      if (!ms.length) { toast('Sélectionne au moins une machine', true); return null; }
+      _tgt = { machines: ms };
+    }
   }
   return {
     trigger: trig,
-    target: {
-      machine: document.getElementById('af-target-machine').value || '*',
-      role:    document.getElementById('af-target-role').value || '*',
-    },
+    target: _tgt,
     validation: {
       button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
     },
@@ -3827,19 +3890,25 @@ function previewAlert(id) {
   const d = _alertDefaults(a.params);
   const overlay = document.createElement('div');
   overlay.className = 'alert-modal-overlay';
-  const machineLbl = (d.target.machine === '*') ? 'Toutes les machines' : esc(d.target.machine);
-  const roleLbl = (d.target.role === '*') ? 'Tous les rôles' : esc(d.target.role);
+  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
+  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
   const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
 
   const checklistHtml = clEnabled
     ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
-      + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px" id="ta-checklist">'
-      +   d.checklist.items.map((it, idx) =>
-            '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer">'
-            + '<input type="checkbox" class="ta-cl" data-idx="' + idx + '">'
-            + esc(it)
-            + '</label>'
-          ).join('')
+      + '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px" id="ta-checklist">'
+      +   d.checklist.items.map((it, idx) => {
+            const respHtml = it.responses.map((r, ridx) =>
+              '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer">'
+              + '<input type="checkbox" class="ta-cl-resp" data-point="' + idx + '">'
+              + esc(r)
+              + '</label>'
+            ).join('');
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '">'
+              + '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(it.label) + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:6px">' + respHtml + '</div>'
+              + '</div>';
+          }).join('')
       + '</div>'
     : '';
 
@@ -3849,7 +3918,7 @@ function previewAlert(id) {
     +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 12px 0">Récapitulatif</p>'
     +   '<div style="display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:13px;margin-bottom:16px">'
     +     '<div style="color:var(--muted)">Déclencheur</div><div>' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
-    +     '<div style="color:var(--muted)">Cible</div><div>' + machineLbl + ' · ' + roleLbl + '</div>'
+    +     '<div style="color:var(--muted)">Machines</div><div>' + machinesLbl + '</div>'
     +     '<div style="color:var(--muted)">Bouton</div><div>' + esc(d.validation.button_label) + '</div>'
     +     '<div style="color:var(--muted)">Questionnaire</div><div>' + (clEnabled ? esc(d.checklist.items.length + ' point(s)' + (d.checklist.all_required ? ' · tous requis' : '')) : '<span style="color:var(--muted)">—</span>') + '</div>'
     +   '</div>'
@@ -3859,11 +3928,14 @@ function previewAlert(id) {
     +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px 0">Ce que verra l\'opérateur</p>'
     +   '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px">'
     +     '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(a.nom) + '</div>'
-    +     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + machineLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    +     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
     +     checklistHtml
     +     '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Commentaire (optionnel)</label>'
     +     '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-    +     '<button type="button" id="ta-validate" style="margin-top:12px;width:100%;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:pointer">' + esc(d.validation.button_label) + '</button>'
+    +     '<div style="display:flex;gap:8px;margin-top:12px">'
+    +       '<button type="button" id="ta-ras" style="flex:1;padding:12px;border-radius:10px;background:var(--bg);color:var(--text);font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Rien à signaler — clôt l\'alerte sans détailler les points">RAS</button>'
+    +       '<button type="button" id="ta-validate" style="flex:2;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:pointer">' + esc(d.validation.button_label) + '</button>'
+    +     '</div>'
     +   '</div>'
     + '</div>'
     + '<div class="alert-modal-foot">'
@@ -3874,13 +3946,23 @@ function previewAlert(id) {
   overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
+  // RAS : valide instantanément (rien à signaler).
+  document.getElementById('ta-ras').addEventListener('click', () => {
+    toast('Test terminé — RAS (rien à signaler), aucune donnée enregistrée.');
+    close();
+  });
+
+  // Valider : si all_required, exiger qu'au moins une réponse soit cochée par point.
   document.getElementById('ta-validate').addEventListener('click', () => {
     if (clEnabled && d.checklist.all_required) {
-      const total = d.checklist.items.length;
-      const checked = document.querySelectorAll('.ta-cl:checked').length;
-      if (checked < total) {
-        toast('Il reste ' + (total - checked) + ' point(s) à cocher pour valider.', true);
-        return;
+      const items = document.querySelectorAll('.ta-cl-item');
+      for (const it of items) {
+        const idx = it.getAttribute('data-point-idx');
+        const checked = it.querySelectorAll('.ta-cl-resp:checked').length;
+        if (!checked) {
+          toast('Coche au moins une réponse pour chaque point (ou utilise RAS).', true);
+          return;
+        }
       }
     }
     toast('Test terminé — aucune donnée enregistrée.');

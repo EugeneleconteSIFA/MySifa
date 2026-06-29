@@ -1523,31 +1523,32 @@ def operator_should_see_alert(
 ) -> bool:
     """Filtre opérateur : doit-on afficher cette alerte à cet utilisateur ?
 
-    Règles :
-    - Le super administrateur voit toujours toutes les alertes (testing,
-      monitoring, et règle implicite "superadmin voit tout" validée avec
-      l'utilisateur).
-    - Sinon, le rôle de l'utilisateur doit correspondre à `target["role"]`,
-      ou ce dernier vaut "*" (tous les rôles).
-    - La machine sur laquelle l'utilisateur est connecté doit correspondre à
-      `target["machine"]`, ou ce dernier vaut "*" (toutes les machines). Si
-      l'utilisateur n'est pas associé à une machine, le filtre machine est
-      neutralisé (par exemple : direction qui consulte /prod en lecture).
+    Règles (figées) :
+    - Le super administrateur voit toujours toutes les alertes (test +
+      monitoring).
+    - Sinon, seuls les opérateurs `fabrication` voient les alertes. Tout
+      autre rôle est exclu (pas de configuration utilisateur de ce filtre).
+    - target["machines"] est une liste : si elle contient "*", l'alerte
+      vaut pour toutes les machines ; sinon, la machine actuellement
+      ouverte par l'opérateur doit y figurer.
 
-    Cette fonction n'est pas encore branchée — elle sera importée par le
-    futur endpoint qui retournera les alertes actives à afficher pour
-    l'opérateur connecté.
+    Cette fonction sera importée par le futur endpoint qui retourne les
+    alertes actives à pousser sur l'écran de l'opérateur.
     """
     if user_role == ROLE_SUPERADMIN:
         return True
-    target = target or {}
-    target_role = (target.get("role") or "*").strip() or "*"
-    target_machine = (target.get("machine") or "*").strip() or "*"
-    if target_role != "*" and user_role != target_role:
+    if user_role != ROLE_FABRICATION:
         return False
-    if target_machine != "*" and user_machine and user_machine != target_machine:
+    machines = (target or {}).get("machines")
+    if not isinstance(machines, list) or not machines:
+        # Compat : ancien format avec target["machine"] string
+        legacy = (target or {}).get("machine")
+        machines = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+    if "*" in machines:
+        return True
+    if not user_machine:
         return False
-    return True
+    return user_machine in machines
 
 
 def _validate_alert_params(params: dict) -> dict:
@@ -1620,17 +1621,36 @@ def _validate_alert_params(params: dict) -> dict:
     # type=manual : pas de params supplémentaires
     out["trigger"] = trig
 
-    # target
+    # target — multi-machines, sans rôle (les opérateurs fabrication + le
+    # super admin voient toujours, c'est figé côté code).
     tgt_in = params.get("target") or {}
     if not isinstance(tgt_in, dict):
         raise HTTPException(422, "target doit être un objet.")
-    machine = (tgt_in.get("machine") or "*").strip() or "*"
-    role = (tgt_in.get("role") or "*").strip() or "*"
-    if len(machine) > 80:
-        raise HTTPException(422, "machine trop long.")
-    if len(role) > 40:
-        raise HTTPException(422, "role trop long.")
-    out["target"] = {"machine": machine, "role": role}
+    machines_in = tgt_in.get("machines")
+    if machines_in is None:
+        # Compat : ancien champ "machine" (string)
+        legacy = tgt_in.get("machine")
+        if isinstance(legacy, str) and legacy.strip():
+            machines_in = [legacy.strip()]
+        else:
+            machines_in = ["*"]
+    if not isinstance(machines_in, list):
+        raise HTTPException(422, "target.machines doit être une liste.")
+    clean_machines = []
+    seen = set()
+    for m in machines_in:
+        if not isinstance(m, str):
+            continue
+        s = m.strip()[:80]
+        if s and s not in seen:
+            clean_machines.append(s)
+            seen.add(s)
+    if not clean_machines:
+        clean_machines = ["*"]
+    if "*" in clean_machines:
+        # Wildcard absorbe le reste pour éviter les listes redondantes.
+        clean_machines = ["*"]
+    out["target"] = {"machines": clean_machines}
 
     # validation
     val_in = params.get("validation") or {}
@@ -1654,18 +1674,37 @@ def _validate_alert_params(params: dict) -> dict:
         raise HTTPException(422, "checklist.items doit être une liste.")
     clean_items = []
     for it in items_in:
-        if not isinstance(it, str):
+        # Compat : ancienne forme = string
+        if isinstance(it, str):
+            label = it.strip()[:200]
+            if label:
+                clean_items.append({"label": label, "responses": ["Conforme"]})
             continue
-        s = it.strip()
-        if not s:
+        if not isinstance(it, dict):
             continue
-        if len(s) > 200:
-            s = s[:200]
-        clean_items.append(s)
+        label = (it.get("label") or "").strip()[:200]
+        if not label:
+            continue
+        responses_in = it.get("responses") or []
+        if not isinstance(responses_in, list):
+            continue
+        clean_responses = []
+        seen = set()
+        for r in responses_in:
+            if not isinstance(r, str):
+                continue
+            rs = r.strip()[:100]
+            if rs and rs not in seen:
+                clean_responses.append(rs)
+                seen.add(rs)
+        if len(clean_responses) > 20:
+            clean_responses = clean_responses[:20]
+        if not clean_responses:
+            # Un point sans aucune réponse n'a pas de sens : on en met une par défaut.
+            clean_responses = ["Conforme"]
+        clean_items.append({"label": label, "responses": clean_responses})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
-    # Si l'admin a activé sans renseigner d'items, on désactive plutôt que de
-    # crasher : l'UI affichera juste pas de questionnaire.
     if cl_enabled and not clean_items:
         cl_enabled = False
     out["checklist"] = {
