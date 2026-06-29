@@ -3377,8 +3377,21 @@ function renderMaintCards(){
   // La section "Pièces d'usure" est toujours rendue, indépendamment des codes
   // périodiques configurés en DB.
   const wearPartsHtml = _renderWearPartsGroup(machine);
-  // Filtre les codes avec periodique=OUI (toutes catégories confondues).
-  const baseItems = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
+  // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
+  // exclure des sections par intervalle ci-dessous (sinon les changements
+  // couteaux/contre-couteaux apparaîtraient deux fois).
+  const wearPartCodeIds = new Set();
+  ['couteaux','contre_couteaux'].forEach(pid => {
+    ['bande','rive'].forEach(pos => {
+      const c = _findWearPartCode(pid, pos);
+      if(c && c.code) wearPartCodeIds.add(String(c.code));
+    });
+  });
+  // Filtre les codes avec periodique=OUI (toutes catégories confondues),
+  // en excluant ceux déjà affichés dans la section Pièces d'usure.
+  const baseItems = (OPS_TYPES_STATE.list || []).filter(it =>
+    !!it.periodique && !wearPartCodeIds.has(String(it.id))
+  );
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
       '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
