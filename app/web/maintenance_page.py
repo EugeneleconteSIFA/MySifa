@@ -722,6 +722,21 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
+        <!-- Sous-onglets style MyProd : Historique / Liste -->
+        <div class="ops-subtabs" role="tablist">
+          <button type="button" class="ops-subtab active" data-ctrl-subtab="historique" onclick="setCtrlSubtab('historique')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+            Historique des contrôles
+          </button>
+          <button type="button" class="ops-subtab" data-ctrl-subtab="liste" onclick="setCtrlSubtab('liste')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Liste des contrôles
+          </button>
+        </div>
+
+        <!-- Sous-onglet : Historique -->
+        <div class="ctrl-subview" id="ctrl-subview-historique">
+
         <!-- Filtres Historique des contrôles -->
         <div class="filters-panel">
           <div class="filters">
@@ -797,6 +812,25 @@ body.light .toast.info{background:#fff;color:var(--text)}
           </div>
         </div>
 
+        </div><!-- /ctrl-subview-historique -->
+
+        <!-- Sous-onglet : Liste -->
+        <div class="ctrl-subview" id="ctrl-subview-liste" style="display:none">
+
+        <!-- Bandeau d'information : table en lecture seule -->
+        <div class="ops-readonly-notice">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <div>
+            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
+            Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
+            <strong>Paramètres → Maintenance</strong>.
+          </div>
+        </div>
+
         <!-- Liste de contrôles (catalogue) -->
         <div class="ops-list">
           <div class="ops-list-head">
@@ -829,6 +863,8 @@ body.light .toast.info{background:#fff;color:var(--text)}
             </table>
           </div>
         </div>
+
+        </div><!-- /ctrl-subview-liste -->
       </div>
 
       <!-- View : Opérations de maintenance -->
@@ -1314,11 +1350,27 @@ function _getOpsSubtab(){
 function setOpsSubtab(name){
   if(name !== 'historique' && name !== 'liste') name = 'historique';
   try{ localStorage.setItem(OPS_SUBTAB_KEY, name); }catch(e){}
-  document.querySelectorAll('.ops-subtab').forEach(btn => {
+  document.querySelectorAll('[data-ops-subtab]').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-ops-subtab') === name);
   });
   document.querySelectorAll('.ops-subview').forEach(div => { div.style.display = 'none'; });
   const target = document.getElementById('ops-subview-' + name);
+  if(target) target.style.display = '';
+}
+// Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
+const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
+function _getCtrlSubtab(){
+  try{ return localStorage.getItem(CTRL_SUBTAB_KEY) || 'historique'; }
+  catch(e){ return 'historique'; }
+}
+function setCtrlSubtab(name){
+  if(name !== 'historique' && name !== 'liste') name = 'historique';
+  try{ localStorage.setItem(CTRL_SUBTAB_KEY, name); }catch(e){}
+  document.querySelectorAll('[data-ctrl-subtab]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-ctrl-subtab') === name);
+  });
+  document.querySelectorAll('.ctrl-subview').forEach(div => { div.style.display = 'none'; });
+  const target = document.getElementById('ctrl-subview-' + name);
   if(target) target.style.display = '';
 }
 
@@ -1338,6 +1390,10 @@ function switchView(name){
   // À l'arrivée sur la vue Opérations, restaure le dernier sous-onglet utilisé.
   if(name === 'operations'){
     setOpsSubtab(_getOpsSubtab());
+  }
+  // Idem pour la vue Contrôles.
+  if(name === 'controles'){
+    setCtrlSubtab(_getCtrlSubtab());
   }
   // Recharge la liste des codes maintenance a chaque arrivee sur les vues qui
   // l'utilisent, pour refleter les changements faits dans Parametres -> Maintenance.
