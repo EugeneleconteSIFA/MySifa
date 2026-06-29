@@ -1627,6 +1627,179 @@ async def maintenance_codes_bulk_import(request: Request):
     return {"ok": True, "imported": imported, "received": len(items)}
 
 
+# ── Alertes de maintenance ─────────────────────────────────────────
+# Modèle data-driven : chaque alerte stocke ses paramètres (déclencheur, cible,
+# formulaire de validation, comportement bloquant, etc.) dans `params` au format
+# JSON. Le code n'a pas besoin de connaître la structure exacte — elle évolue
+# librement à mesure que les types de règles s'enrichissent. Seul le super
+# admin peut créer / modifier / supprimer / activer une alerte. Toute alerte
+# est inactive à la création (active=0) : l'admin doit l'activer explicitement.
+
+import json as _json_alerts
+
+
+def _require_alerts_admin(request: Request) -> dict:
+    """Super administrateur uniquement pour les alertes maintenance."""
+    user = get_current_user(request)
+    if user.get("role") != ROLE_SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Réservé au super administrateur.")
+    return user
+
+
+def _alert_row_to_dict(r) -> dict:
+    try:
+        params = _json_alerts.loads(r["params"] or "{}")
+    except (ValueError, TypeError):
+        params = {}
+    return {
+        "id": int(r["id"]),
+        "nom": r["nom"],
+        "active": bool(r["active"]),
+        "params": params,
+        "created_by": r["created_by"] or "",
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+    }
+
+
+@router.get("/api/maintenance/alerts")
+def maintenance_alerts_list(request: Request):
+    """Lecture des alertes : super admin uniquement (les opérateurs ne voient pas
+    cette liste — ils ne voient que les alertes actives au moment du déclenchement)."""
+    _require_alerts_admin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, active, params, created_by, created_at, updated_at
+               FROM maintenance_alerts
+               ORDER BY created_at DESC, id DESC"""
+        ).fetchall()
+    return {"items": [_alert_row_to_dict(r) for r in rows]}
+
+
+@router.post("/api/maintenance/alerts")
+async def maintenance_alerts_create(request: Request):
+    """Création d'une alerte. Toujours inactive à la naissance (active=0).
+    Les paramètres détaillés (déclencheur, cible, formulaire) sont stockés en
+    JSON dans `params` — l'UI les enrichit ensuite via PATCH."""
+    user = _require_alerts_admin(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(422, "Nom obligatoire.")
+    if len(nom) > 120:
+        nom = nom[:120]
+    params = body.get("params") or {}
+    if not isinstance(params, dict):
+        raise HTTPException(422, "params doit être un objet JSON.")
+    try:
+        params_json = _json_alerts.dumps(params, ensure_ascii=False)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "params non sérialisable en JSON.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO maintenance_alerts
+               (nom, active, params, created_by, created_at, updated_at)
+               VALUES (?, 0, ?, ?, ?, ?)""",
+            (nom, params_json, user.get("email") or user.get("nom") or "", now, now),
+        )
+        new_id = cur.lastrowid
+        conn.commit()
+    log_action(user=user, action="CREATE", module="maintenance_alerts",
+               objet=str(new_id), detail=nom)
+    return {"ok": True, "id": new_id}
+
+
+@router.patch("/api/maintenance/alerts/{alert_id}")
+async def maintenance_alerts_update(alert_id: int, request: Request):
+    """Mise à jour partielle : nom, params, active. Le toggle d'activation
+    passe par ici (body = {"active": true/false})."""
+    user = _require_alerts_admin(request)
+    body = await request.json()
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    sets = []
+    vals = []
+    action_detail_parts = []
+    if "nom" in body:
+        nom = (body.get("nom") or "").strip()
+        if not nom:
+            raise HTTPException(422, "Nom obligatoire.")
+        if len(nom) > 120:
+            nom = nom[:120]
+        sets.append("nom=?")
+        vals.append(nom)
+        action_detail_parts.append(f"nom={nom!r}")
+    if "params" in body:
+        params = body.get("params") or {}
+        if not isinstance(params, dict):
+            raise HTTPException(422, "params doit être un objet JSON.")
+        try:
+            params_json = _json_alerts.dumps(params, ensure_ascii=False)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "params non sérialisable en JSON.")
+        sets.append("params=?")
+        vals.append(params_json)
+        action_detail_parts.append("params updated")
+    if "active" in body:
+        active = 1 if body.get("active") else 0
+        sets.append("active=?")
+        vals.append(active)
+        action_detail_parts.append(f"active={bool(active)}")
+    if not sets:
+        raise HTTPException(422, "Aucun champ à mettre à jour.")
+    sets.append("updated_at=?")
+    vals.append(now)
+    vals.append(alert_id)
+    with get_db() as conn:
+        cur = conn.execute(
+            f"UPDATE maintenance_alerts SET {', '.join(sets)} WHERE id=?",
+            tuple(vals),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Alerte introuvable.")
+    log_action(user=user, action="UPDATE", module="maintenance_alerts",
+               objet=str(alert_id), detail=" ; ".join(action_detail_parts))
+    return {"ok": True, "id": alert_id}
+
+
+@router.delete("/api/maintenance/alerts/{alert_id}")
+def maintenance_alerts_delete(alert_id: int, request: Request):
+    user = _require_alerts_admin(request)
+    from database import get_db
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM maintenance_alerts WHERE id=?", (alert_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Alerte introuvable.")
+    log_action(user=user, action="DELETE", module="maintenance_alerts",
+               objet=str(alert_id), detail="")
+    return {"ok": True}
+
+
+@router.post("/api/maintenance/alerts/disable-all")
+def maintenance_alerts_disable_all(request: Request):
+    """Kill switch : désactive toutes les alertes en un appel. Sécurité au cas
+    où une alerte mal configurée bloque l'atelier — ne supprime rien, juste
+    bascule active=0 partout."""
+    user = _require_alerts_admin(request)
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE maintenance_alerts SET active=0, updated_at=? WHERE active=1",
+            (now,),
+        )
+        affected = cur.rowcount
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="maintenance_alerts",
+               objet="ALL", detail=f"disable-all : {affected} désactivée(s)")
+    return {"ok": True, "disabled": affected}
+
+
 @router.get("/api/maintenance/wearparts/last")
 def maintenance_wearparts_last(request: Request, machine: str = ""):
     """Dernières opérations 'changement couteaux/contre-couteaux bande/rive' pour

@@ -4175,6 +4175,27 @@ def _migrate(conn):
         _record_schema_migration(conn, 129, "maintenance_codes_intervalle")
 
 
+    # v132 — Alertes de maintenance : règles paramétrables qui déclenchent un
+    # message / formulaire pour les opérateurs sur leur écran. Une alerte stocke
+    # ses paramètres complets (déclencheur, cible, formulaire de validation) en
+    # JSON dans `params`, ce qui évite d'avoir à faire une migration de schéma à
+    # chaque évolution du modèle de règles. `active` est à 0 à la création :
+    # l'admin doit activer explicitement chaque alerte via le toggle.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=132 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 0,
+                params TEXT NOT NULL DEFAULT '{}',
+                created_by TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 132, "maintenance_alerts_table")
+
 
 def create_default_admin():
     import bcrypt

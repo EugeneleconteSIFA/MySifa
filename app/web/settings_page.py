@@ -269,6 +269,39 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   .legend{grid-template-columns:1fr}
   .four-sub-btn,.mac-sub-btn,.sub-tab-btn{flex-shrink:0}
 }
+/* ── Onglet Alertes maintenance ───────────────────────────────────── */
+.maint-subtab{display:block}
+.alert-row{display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;transition:border-color .15s}
+.alert-row:hover{border-color:var(--accent)}
+.alert-row.is-active{border-left:3px solid var(--success)}
+.alert-row.is-inactive{border-left:3px solid var(--border)}
+.alert-info{flex:1;min-width:0}
+.alert-nom{font-size:14px;font-weight:600;color:var(--text);margin:0 0 2px 0}
+.alert-meta{font-size:11px;color:var(--muted)}
+.alert-status{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.alert-status.on{color:var(--success)}
+.alert-status.off{color:var(--muted)}
+.alert-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+/* Toggle switch */
+.toggle{position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:22px;transition:background .18s}
+.toggle-thumb{position:absolute;top:2px;left:2px;width:18px;height:18px;background:var(--card);border-radius:50%;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.toggle input:checked + .toggle-track{background:var(--success)}
+.toggle input:checked + .toggle-track .toggle-thumb{transform:translateX(16px)}
+.toggle input:disabled + .toggle-track{opacity:.5;cursor:not-allowed}
+/* Modal d'aperçu / édition alerte */
+.alert-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.alert-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.alert-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.alert-modal-head h3{margin:0;font-size:15px;color:var(--text)}
+.alert-modal-body{padding:18px 20px}
+.alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
+.alert-preview-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--bg);border-radius:10px;border:1px dashed var(--border)}
+@media(max-width:900px){
+  .alert-row{flex-wrap:wrap}
+  .alert-actions{width:100%;justify-content:flex-end}
+}
 </style>
 </head>
 <body>
@@ -866,6 +899,17 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <section id="panel-maintenance" class="hidden">
+    <div class="tabs" style="margin-bottom:14px">
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-maintsub="maint-subtab-codes">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Codes
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-alertes">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        Alertes
+      </button>
+    </div>
+      <div id="maint-subtab-codes" class="maint-subtab">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <h2 style="margin:0">Codes maintenance</h2>
@@ -906,6 +950,20 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie, périodique…)" oninput="renderMaintList()">
         </div>
         <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+      </div>
+      <div id="maint-subtab-alertes" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Alertes maintenance</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-danger" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
+              <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
+            </div>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, etc.). Une alerte est inactive à la création — il faut l'activer manuellement via son interrupteur.</p>
+          <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
       </div>
     </section>
 
@@ -1278,8 +1336,8 @@ function syncSettingsPageHead(tabId) {
       subEl.style.display = 'none';
     } else {
       if (tabId === 'maintenance') {
-        if (titleEl) titleEl.textContent = 'Codes maintenance';
-        subEl.textContent = 'Référentiel des opérations de maintenance';
+        if (titleEl) titleEl.textContent = 'Maintenance';
+        subEl.textContent = 'Codes opérations et alertes opérateurs';
         subEl.style.display = '';
         return;
       }
@@ -1301,7 +1359,7 @@ function setTab(id) {
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
-  if (id === 'maintenance') loadMaintCodes();
+  if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
@@ -3193,6 +3251,216 @@ async function deleteMaintCode(code) {
     return;
   }
   await loadMaintCodes();
+}
+
+// ── Sous-onglets Maintenance (Codes / Alertes) ─────────────────────
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-maintsub]');
+  if (!btn) return;
+  const target = btn.dataset.maintsub;
+  document.querySelectorAll('[data-maintsub]').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.maint-subtab').forEach(p => {
+    p.style.display = (p.id === target) ? '' : 'none';
+  });
+});
+
+// ── Alertes maintenance (gestion super admin) ──────────────────────
+let _alertsData = [];
+
+async function loadAlerts() {
+  const box = document.getElementById('alerts-list');
+  if (!box) return;
+  try {
+    const r = await api('/api/maintenance/alerts');
+    _alertsData = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    box.innerHTML = '<p style="color:var(--danger);font-size:13px">Erreur de chargement : ' + esc(e && e.message ? e.message : String(e)) + '</p>';
+    return;
+  }
+  renderAlertsList();
+}
+
+function _fmtAlertDate(s) {
+  if (!s) return '';
+  const t = String(s).replace('T', ' ').slice(0, 16);
+  return t;
+}
+
+function renderAlertsList() {
+  const box = document.getElementById('alerts-list');
+  if (!box) return;
+  if (!_alertsData.length) {
+    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte créée pour l\'instant. Cliquez sur « + Nouvelle alerte » pour en créer une.</div>';
+    return;
+  }
+  const html = _alertsData.map(a => {
+    const cls = a.active ? 'is-active' : 'is-inactive';
+    const statusCls = a.active ? 'on' : 'off';
+    const statusLbl = a.active ? 'Active' : 'Inactive';
+    const created = _fmtAlertDate(a.created_at);
+    return '<div class="alert-row ' + cls + '" data-alert-id="' + a.id + '">'
+      + '<label class="toggle" title="' + (a.active ? 'Désactiver' : 'Activer') + '">'
+      +   '<input type="checkbox" ' + (a.active ? 'checked' : '') + ' data-alert-toggle="' + a.id + '">'
+      +   '<span class="toggle-track"><span class="toggle-thumb"></span></span>'
+      + '</label>'
+      + '<div class="alert-info">'
+      +   '<p class="alert-nom">' + esc(a.nom) + '</p>'
+      +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by ? ' · ' + esc(a.created_by) : '') + ' · <span class="alert-status ' + statusCls + '">' + statusLbl + '</span></span>'
+      + '</div>'
+      + '<div class="alert-actions">'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '">Aperçu</button>'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-edit="' + a.id + '">Modifier</button>'
+      +   '<button type="button" class="btn-sm btn-ghost danger" data-alert-del="' + a.id + '">Supprimer</button>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+  box.innerHTML = html;
+  box.querySelectorAll('[data-alert-toggle]').forEach(el => {
+    el.addEventListener('change', () => toggleAlert(parseInt(el.getAttribute('data-alert-toggle'), 10), el.checked));
+  });
+  box.querySelectorAll('[data-alert-preview]').forEach(btn => {
+    btn.addEventListener('click', () => previewAlert(parseInt(btn.getAttribute('data-alert-preview'), 10)));
+  });
+  box.querySelectorAll('[data-alert-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openEditAlertModal(parseInt(btn.getAttribute('data-alert-edit'), 10)));
+  });
+  box.querySelectorAll('[data-alert-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteAlert(parseInt(btn.getAttribute('data-alert-del'), 10)));
+  });
+}
+
+function openNewAlertModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.innerHTML = '<div class="alert-modal">'
+    + '<div class="alert-modal-head"><h3>Nouvelle alerte</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nom de l\'alerte</label>'
+    +   '<input type="text" id="new-alert-nom" placeholder="Ex. Contrôle qualité Cohésio 1" maxlength="120" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box">'
+    +   '<p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">L\'alerte sera créée à l\'état <strong>inactif</strong>. Vous pourrez ensuite configurer ses paramètres (déclencheur, cible, formulaire) puis l\'activer via son interrupteur.</p>'
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+    +   '<button type="button" class="btn" id="new-alert-confirm">Créer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.getElementById('new-alert-confirm').addEventListener('click', async () => {
+    const nom = (document.getElementById('new-alert-nom').value || '').trim();
+    if (!nom) { toast('Nom obligatoire', true); return; }
+    try {
+      await api('/api/maintenance/alerts', { method: 'POST', body: JSON.stringify({ nom, params: {} }) });
+      toast('Alerte créée');
+      close();
+      await loadAlerts();
+    } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+  });
+  setTimeout(() => document.getElementById('new-alert-nom')?.focus(), 30);
+}
+
+async function toggleAlert(id, active) {
+  try {
+    await api('/api/maintenance/alerts/' + id, { method: 'PATCH', body: JSON.stringify({ active: !!active }) });
+    toast(active ? 'Alerte activée' : 'Alerte désactivée');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+  await loadAlerts();
+}
+
+async function deleteAlert(id) {
+  const a = _alertsData.find(x => x.id === id);
+  if (!a) return;
+  if (!confirm('Supprimer définitivement l\'alerte « ' + a.nom + ' » ?')) return;
+  try {
+    await api('/api/maintenance/alerts/' + id, { method: 'DELETE' });
+    toast('Alerte supprimée');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+    return;
+  }
+  await loadAlerts();
+}
+
+async function disableAllAlerts() {
+  const nbActive = _alertsData.filter(a => a.active).length;
+  if (nbActive === 0) { toast('Aucune alerte active actuellement', true); return; }
+  if (!confirm('Désactiver les ' + nbActive + ' alerte(s) active(s) ? Aucune ne sera supprimée — c\'est un kill switch d\'urgence.')) return;
+  try {
+    const r = await api('/api/maintenance/alerts/disable-all', { method: 'POST' });
+    toast((r?.disabled || 0) + ' alerte(s) désactivée(s)');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+    return;
+  }
+  await loadAlerts();
+}
+
+function previewAlert(id) {
+  const a = _alertsData.find(x => x.id === id);
+  if (!a) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  // Aperçu = vue opérateur. Pour l'instant les paramètres détaillés ne sont
+  // pas encore renseignés, donc on affiche un placeholder. La structure est
+  // prête à recevoir le rendu du formulaire dès que les params seront définis.
+  const hasParams = a.params && Object.keys(a.params).length > 0;
+  overlay.innerHTML = '<div class="alert-modal">'
+    + '<div class="alert-modal-head"><h3>Aperçu — ' + esc(a.nom) + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 12px 0">Ce que verra l\'opérateur</p>'
+    +   (hasParams
+        ? '<div class="alert-preview-empty">Rendu du formulaire à implémenter une fois les paramètres détaillés définis.</div>'
+        : '<div class="alert-preview-empty">Cette alerte n\'a pas encore de paramètres configurés. Cliquez sur « Modifier » pour les renseigner.</div>')
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+}
+
+function openEditAlertModal(id) {
+  const a = _alertsData.find(x => x.id === id);
+  if (!a) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  // Pour l'instant on édite uniquement le nom. Les paramètres détaillés
+  // (déclencheur, cible, formulaire de validation) seront ajoutés ensuite —
+  // l'API accepte déjà tout JSON arbitraire dans `params`.
+  overlay.innerHTML = '<div class="alert-modal">'
+    + '<div class="alert-modal-head"><h3>Modifier l\'alerte</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Nom</label>'
+    +   '<input type="text" id="edit-alert-nom" value="' + escAttr(a.nom) + '" maxlength="120" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:14px">'
+    +   '<div class="alert-preview-empty" style="text-align:left">'
+    +     '<p style="margin:0 0 6px 0;color:var(--text);font-weight:600">Paramètres détaillés</p>'
+    +     '<p style="margin:0;font-size:12px;color:var(--muted)">Le déclencheur, la cible et le formulaire de validation seront configurables ici une fois les paramètres définis.</p>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+    +   '<button type="button" class="btn" id="edit-alert-save">Enregistrer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.getElementById('edit-alert-save').addEventListener('click', async () => {
+    const nom = (document.getElementById('edit-alert-nom').value || '').trim();
+    if (!nom) { toast('Nom obligatoire', true); return; }
+    try {
+      await api('/api/maintenance/alerts/' + id, { method: 'PATCH', body: JSON.stringify({ nom }) });
+      toast('Alerte mise à jour');
+      close();
+      await loadAlerts();
+    } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+  });
+  setTimeout(() => document.getElementById('edit-alert-nom')?.focus(), 30);
 }
 
 async function deleteUpdate(id) {
