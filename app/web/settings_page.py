@@ -3438,6 +3438,23 @@ function renderAlertsList() {
   });
 }
 
+function _taOnValueInput(inp) {
+  // Feedback visuel en mode test : bordure rouge si valeur hors tolérance.
+  // Aucun blocage — purement informatif.
+  const item = inp.closest('.ta-cl-item');
+  if (!item) return;
+  const minAttr = item.getAttribute('data-min');
+  const maxAttr = item.getAttribute('data-max');
+  const v = parseFloat(inp.value);
+  let outOfRange = false;
+  if (!isNaN(v)) {
+    if (minAttr !== null && minAttr !== '' && v < parseFloat(minAttr)) outOfRange = true;
+    if (maxAttr !== null && maxAttr !== '' && v > parseFloat(maxAttr)) outOfRange = true;
+  }
+  inp.style.borderColor = outOfRange ? 'var(--danger)' : 'var(--border)';
+  inp.style.color = outOfRange ? 'var(--danger)' : 'var(--text)';
+}
+
 // Bascule filtre Toutes / Auto / Manuelles
 document.addEventListener('click', (ev) => {
   const btn = ev.target.closest('[data-alerts-filter]');
@@ -3475,11 +3492,44 @@ function _alertDefaults(existing) {
     trig.interval_minutes = Math.round(Number(trig.interval_hours) * 60);
     delete trig.interval_hours;
   }
+  // Target : nouveau format = { machines: [...] }. Compat avec ancien { machine, role }.
+  const rawTarget = p.target || {};
+  let machines = rawTarget.machines;
+  if (!Array.isArray(machines)) {
+    if (typeof rawTarget.machine === 'string' && rawTarget.machine) {
+      machines = [rawTarget.machine];
+    } else {
+      machines = ['*'];
+    }
+  }
+  // Checklist : normalisation des items pour inclure le champ type (choice/value)
+  // et la conversion des anciens items "string" en objets.
   const cl = Object.assign({ enabled: false, items: [], all_required: false }, p.checklist || {});
   if (!Array.isArray(cl.items)) cl.items = [];
+  cl.items = cl.items.map(it => {
+    if (typeof it === 'string') {
+      return { type: 'choice', label: it, responses: ['Conforme'] };
+    }
+    const t = (it && it.type) || 'choice';
+    if (t === 'value') {
+      return {
+        type: 'value',
+        label: (it && it.label) || '',
+        unit: (it && it.unit) || '',
+        min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
+        max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+      };
+    }
+    const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
+    return {
+      type: 'choice',
+      label: (it && it.label) || '',
+      responses: responses.length ? responses : ['Conforme'],
+    };
+  });
   return {
     trigger: Object.assign({ type: 'manual', interval_minutes: 120, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
-    target: Object.assign({ machine: '*', role: '*' }, p.target || {}),
+    target: { machines: machines },
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     checklist: cl,
   };
@@ -3607,21 +3657,59 @@ function _afResponseRow(value) {
     + '</div>';
 }
 
-function _afChecklistCard(item) {
-  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
+function _afChecklistCardBody(item) {
+  const type = (item && item.type) || 'choice';
+  if (type === 'value') {
+    const safeUnit = ((item && item.unit) || '').replace(/"/g, '&quot;');
+    const safeMin = (item && item.min != null && item.min !== '') ? String(item.min) : '';
+    const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
+    return '<div class="af-cl-body" data-type="value">'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Unité</div><input type="text" class="alert-field-input af-cl-unit" maxlength="20" placeholder="bar, °C, mm…" value="' + safeUnit + '" style="padding:6px 10px;font-size:13px"></div>'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Min</div><input type="number" step="any" class="alert-field-input af-cl-min" placeholder="2.5" value="' + safeMin + '" style="padding:6px 10px;font-size:13px"></div>'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max</div><input type="number" step="any" class="alert-field-input af-cl-max" placeholder="3.2" value="' + safeMax + '" style="padding:6px 10px;font-size:13px"></div>'
+      + '</div>'
+      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… L\'opérateur saisira une valeur. Min/Max sont optionnels (vide = pas de borne).</div>'
+      + '</div>';
+  }
+  // type "choice"
   const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
   const responsesHtml = responses.map(_afResponseRow).join('');
-  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
-    + '<div style="display:flex;gap:6px;align-items:center">'
-    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;font-weight:500">'
-    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle">×</button>'
-    + '</div>'
-    + '<div>'
-    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Réponses possibles</div>'
-    +   '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
-    +   '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
-    + '</div>'
+  return '<div class="af-cl-body" data-type="choice">'
+    + '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Réponses possibles</div>'
+    + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
+    + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
     + '</div>';
+}
+
+function _afChecklistCard(item) {
+  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
+  const type = (item && item.type) || 'choice';
+  const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
+                 + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
+  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
+    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;min-width:140px;font-weight:500">'
+    +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
+    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
+    + '</div>'
+    + _afChecklistCardBody(item)
+    + '</div>';
+}
+
+function _afOnTypeChange(sel) {
+  const card = sel.closest('.af-cl-card');
+  if (!card) return;
+  const oldBody = card.querySelector('.af-cl-body');
+  if (!oldBody) return;
+  const newType = sel.value;
+  const defaultItem = (newType === 'value')
+    ? { type: 'value', label: '', unit: '', min: null, max: null }
+    : { type: 'choice', label: '', responses: ['Conforme'] };
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _afChecklistCardBody(defaultItem);
+  const newBody = tmp.firstElementChild;
+  if (newBody) oldBody.replaceWith(newBody);
 }
 
 function _afRenderChecklistItems(items) {
@@ -3633,7 +3721,7 @@ function _afAddChecklistItem() {
   const wrap = document.getElementById('af-checklist-items');
   if (!wrap) return;
   const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCard({ label: '', responses: ['Conforme'] });
+  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'] });
   const card = tmp.firstElementChild;
   wrap.appendChild(card);
   card.querySelector('.af-cl-label')?.focus();
@@ -3786,13 +3874,25 @@ function _afReadParams() {
     document.querySelectorAll('.af-cl-card').forEach(card => {
       const label = (card.querySelector('.af-cl-label')?.value || '').trim();
       if (!label) return;
+      const type = card.querySelector('.af-cl-type')?.value || 'choice';
+      if (type === 'value') {
+        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
+        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
+        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
+        const item = { type: 'value', label: label };
+        if (unit) item.unit = unit;
+        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
+        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        items.push(item);
+        return;
+      }
       const responses = [];
       card.querySelectorAll('.af-cl-resp-input').forEach(inp => {
         const r = (inp.value || '').trim();
         if (r) responses.push(r);
       });
       if (!responses.length) return;
-      items.push({ label: label, responses: responses });
+      items.push({ type: 'choice', label: label, responses: responses });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -4016,15 +4116,36 @@ function previewAlert(id) {
 
   const checklistHtml = clEnabled
     ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
-      + '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px" id="ta-checklist">'
+      + '<div style="display:flex;flex-direction:column;gap:14px;margin-bottom:14px" id="ta-checklist">'
       +   d.checklist.items.map((it, idx) => {
-            const respHtml = it.responses.map((r, ridx) =>
+            const itType = it.type || 'choice';
+            if (itType === 'value') {
+              const unit = it.unit ? '<span style="font-size:13px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
+              let toleranceHint = '';
+              if (it.min != null || it.max != null) {
+                const minStr = (it.min != null) ? String(it.min) : '−∞';
+                const maxStr = (it.max != null) ? String(it.max) : '+∞';
+                toleranceHint = '<div style="font-size:11px;color:var(--muted);margin-top:4px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
+              }
+              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
+                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
+                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
+                + '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(it.label) + '</div>'
+                + '<div style="display:flex;align-items:center;gap:8px">'
+                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
+                +   unit
+                + '</div>'
+                + toleranceHint
+                + '</div>';
+            }
+            // type "choice"
+            const respHtml = it.responses.map((r) =>
               '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer">'
               + '<input type="checkbox" class="ta-cl-resp" data-point="' + idx + '">'
               + esc(r)
               + '</label>'
             ).join('');
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '">'
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
               + '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(it.label) + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:6px">' + respHtml + '</div>'
               + '</div>';
@@ -4077,11 +4198,19 @@ function previewAlert(id) {
     if (clEnabled && d.checklist.all_required) {
       const items = document.querySelectorAll('.ta-cl-item');
       for (const it of items) {
-        const idx = it.getAttribute('data-point-idx');
-        const checked = it.querySelectorAll('.ta-cl-resp:checked').length;
-        if (!checked) {
-          toast('Coche au moins une réponse pour chaque point (ou utilise RAS).', true);
-          return;
+        const t = it.getAttribute('data-type') || 'choice';
+        if (t === 'value') {
+          const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
+          if (v === '') {
+            toast('Saisis une valeur pour chaque point (ou utilise RAS).', true);
+            return;
+          }
+        } else {
+          const checked = it.querySelectorAll('.ta-cl-resp:checked').length;
+          if (!checked) {
+            toast('Coche au moins une réponse pour chaque point (ou utilise RAS).', true);
+            return;
+          }
         }
       }
     }

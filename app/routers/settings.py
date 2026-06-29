@@ -1678,13 +1678,42 @@ def _validate_alert_params(params: dict) -> dict:
         if isinstance(it, str):
             label = it.strip()[:200]
             if label:
-                clean_items.append({"label": label, "responses": ["Conforme"]})
+                clean_items.append({"type": "choice", "label": label,
+                                    "responses": ["Conforme"]})
             continue
         if not isinstance(it, dict):
             continue
         label = (it.get("label") or "").strip()[:200]
         if not label:
             continue
+        item_type = (it.get("type") or "choice").strip()
+        if item_type not in ("choice", "value"):
+            item_type = "choice"
+        if item_type == "value":
+            # Saisie d'une valeur numérique (pression, température, dimension…)
+            unit = (it.get("unit") or "").strip()[:20]
+            def _f(x):
+                if x is None or x == "":
+                    return None
+                try:
+                    return float(x)
+                except (TypeError, ValueError):
+                    return None
+            vmin = _f(it.get("min"))
+            vmax = _f(it.get("max"))
+            # Robustesse : si min > max, on échange plutôt que de planter.
+            if vmin is not None and vmax is not None and vmin > vmax:
+                vmin, vmax = vmax, vmin
+            item_out = {"type": "value", "label": label}
+            if unit:
+                item_out["unit"] = unit
+            if vmin is not None:
+                item_out["min"] = vmin
+            if vmax is not None:
+                item_out["max"] = vmax
+            clean_items.append(item_out)
+            continue
+        # type "choice" (cases à cocher)
         responses_in = it.get("responses") or []
         if not isinstance(responses_in, list):
             continue
@@ -1700,9 +1729,9 @@ def _validate_alert_params(params: dict) -> dict:
         if len(clean_responses) > 20:
             clean_responses = clean_responses[:20]
         if not clean_responses:
-            # Un point sans aucune réponse n'a pas de sens : on en met une par défaut.
             clean_responses = ["Conforme"]
-        clean_items.append({"label": label, "responses": clean_responses})
+        clean_items.append({"type": "choice", "label": label,
+                            "responses": clean_responses})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:
