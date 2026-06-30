@@ -2474,6 +2474,64 @@ def maintenance_alerts_active(request: Request):
     return {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
 
 
+@router.get("/api/maintenance/alert-acks")
+def maintenance_alert_acks_list(request: Request):
+    """Historique des acquittements d'alertes maintenance pour l'app /maintenance.
+    Accessible aux administrateurs (superadmin, direction, administration) et
+    aux opérateurs autorisés à voir la page Maintenance."""
+    user = get_current_user(request)
+    # Mêmes droits d'accès que l'app /maintenance : tout utilisateur authentifié
+    # peut lire (filtrage UI côté maintenance_page selon ses propres règles).
+    date_from = request.query_params.get("from")
+    date_to = request.query_params.get("to")
+    machine_filter = request.query_params.get("machine") or ""
+    where = []
+    params_sql = []
+    if date_from:
+        where.append("a.ack_at >= ?")
+        params_sql.append(str(date_from) + "T00:00:00")
+    if date_to:
+        where.append("a.ack_at <= ?")
+        params_sql.append(str(date_to) + "T23:59:59")
+    if machine_filter:
+        where.append("a.machine = ?")
+        params_sql.append(machine_filter)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT a.id, a.alert_id, al.nom AS alert_nom,
+                       al.linked_maint_code, a.user_id, a.user_nom,
+                       a.machine, a.no_dossier, a.ack_at,
+                       a.responses, a.comment
+                FROM maintenance_alert_acks a
+                LEFT JOIN maintenance_alerts al ON al.id = a.alert_id
+                {where_sql}
+                ORDER BY a.ack_at DESC
+                LIMIT 1000""",
+            tuple(params_sql),
+        ).fetchall()
+    items = []
+    for r in rows:
+        try:
+            responses = _json_alerts.loads(r["responses"] or "{}")
+        except (ValueError, TypeError):
+            responses = {}
+        items.append({
+            "id": int(r["id"]),
+            "alert_id": int(r["alert_id"]) if r["alert_id"] is not None else None,
+            "alert_nom": r["alert_nom"] or "",
+            "linked_maint_code": r["linked_maint_code"] or "",
+            "operateur": r["user_nom"] or "",
+            "machine": r["machine"] or "",
+            "no_dossier": r["no_dossier"] or "",
+            "ack_at": r["ack_at"],
+            "responses": responses,
+            "comment": r["comment"] or "",
+        })
+    return {"items": items}
+
+
 @router.post("/api/maintenance/alerts/{alert_id}/ack")
 async def maintenance_alerts_ack(alert_id: int, request: Request):
     """Acquittement opérateur d'une alerte. Enregistre l'historique et met

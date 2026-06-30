@@ -543,6 +543,8 @@ body.light .niv-badge[data-niv="3"]{background:rgba(220,38,38,.14)}
 .toast.success{background:var(--success);color:var(--accent-fg);border:1px solid var(--success)}
 .toast.danger{background:var(--danger);color:var(--accent-fg);border:1px solid var(--danger)}
 body.light .toast.info{background:#fff;color:var(--text)}
+
+.ctrl-src-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);cursor:help}
 </style>
 </head>
 <body>
@@ -3822,7 +3824,7 @@ function renderOpsTypes(){
 // Historique des contrôles
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [] };
 
 function loadCtrl(){
   try{
@@ -3833,6 +3835,40 @@ function loadCtrl(){
 }
 function saveCtrl(){
   try{ localStorage.setItem(CTRL_STORAGE_KEY, JSON.stringify(CTRL_STATE.list)); }catch(e){}
+}
+
+function _formatAckComment(ack){
+  const parts = [];
+  if(ack.responses && typeof ack.responses === 'object'){
+    Object.entries(ack.responses).forEach(([k, v]) => {
+      if(Array.isArray(v)){
+        if(v.length) parts.push(v.join(', '));
+      } else if (v != null && String(v).trim() !== ''){
+        parts.push(String(v));
+      }
+    });
+  }
+  if(ack.comment){ parts.push((parts.length ? '« ' + ack.comment + ' »' : ack.comment)); }
+  return parts.join(' · ');
+}
+
+async function loadCtrlAcks(){
+  try{
+    const r = await fetch('/api/maintenance/alert-acks', { credentials: 'same-origin' });
+    if(!r.ok){ CTRL_STATE.acks = []; return; }
+    const data = await r.json();
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    CTRL_STATE.acks = items.map(a => ({
+      id: 'ack-' + a.id,
+      machine: a.machine || '',
+      operateur: a.operateur || '',
+      type: a.alert_nom || '',
+      commentaire: _formatAckComment(a),
+      date_saisie: a.ack_at,
+      _source: 'alert',
+    }));
+  } catch(e){ CTRL_STATE.acks = []; }
+  if(typeof renderCtrl === 'function') renderCtrl();
 }
 function addControle(e){
   e.preventDefault();
@@ -3942,7 +3978,8 @@ function renderCtrl(){
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
   // Filter
-  let filtered = CTRL_STATE.list.filter(c => {
+  const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
+  let filtered = merged.filter(c => {
     if(f.type && c.type !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
     if(f.machine && c.machine !== f.machine) return false;
@@ -3984,16 +4021,18 @@ function renderCtrl(){
         '<td>' + escHtml(c.type) + '</td>' +
         '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
-          '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
+          (c._source === 'alert'
+            ? '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur (audit, non supprimable)">Alerte</span>'
+            : '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+              '</button>') +
         '</td>' +
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
   }
   if(count){
-    const n = CTRL_STATE.list.length;
+    const n = CTRL_STATE.list.length + (CTRL_STATE.acks || []).length;
     const visible = filtered.length;
     if(visible !== n){
       count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
@@ -4240,6 +4279,7 @@ async function loadMe(){
     if(typeof renderMaintCards === 'function') renderMaintCards();
   });
   loadCtrl();
+  loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
   renderOps();
