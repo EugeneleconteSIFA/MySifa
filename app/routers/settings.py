@@ -1665,8 +1665,8 @@ def _validate_alert_params(params: dict) -> dict:
 
     # checklist (questionnaire) : liste de points de contrôle que l'opérateur
     # cochera lors de la validation. Items = chaînes libres (ex. "Découpe nette",
-    # "Colle conforme"). all_required = on bloque la validation tant que tous
-    # les points ne sont pas cochés.
+    # "Colle conforme"). L'opérateur peut valider même partiellement rempli
+    # (une confirmation lui est demandée dans ce cas, sans blocage).
     cl_in = params.get("checklist") or {}
     if not isinstance(cl_in, dict):
         raise HTTPException(422, "checklist doit être un objet.")
@@ -1742,10 +1742,11 @@ def _validate_alert_params(params: dict) -> dict:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:
         cl_enabled = False
+    # all_required retiré (UX) : le mode opérateur affiche une confirmation
+    # quand le formulaire n'est pas entièrement rempli, sans bloquer.
     out["checklist"] = {
         "enabled": cl_enabled,
         "items": clean_items,
-        "all_required": bool(cl_in.get("all_required")),
     }
 
     # comment_enabled : toujours True en v1 (mais on stocke pour l'avenir)

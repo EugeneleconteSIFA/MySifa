@@ -3535,7 +3535,7 @@ function _alertDefaults(existing) {
   }
   // Checklist : normalisation des items pour inclure le champ type (choice/value)
   // et la conversion des anciens items "string" en objets.
-  const cl = Object.assign({ enabled: false, items: [], all_required: false }, p.checklist || {});
+  const cl = Object.assign({ enabled: false, items: [] }, p.checklist || {});
   if (!Array.isArray(cl.items)) cl.items = [];
   cl.items = cl.items.map(it => {
     if (typeof it === 'string') {
@@ -3670,10 +3670,6 @@ function _renderAlertFormFields(params, opts) {
     +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
     +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
     +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
-    +     '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer">'
-    +       '<input type="checkbox" id="af-checklist-allreq" ' + (d.checklist.all_required ? 'checked' : '') + '>'
-    +       'Tous les points doivent être cochés pour valider'
-    +     '</label>'
     +   '</div>'
     + '</div>'
     + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
@@ -3957,7 +3953,6 @@ function _afReadParams() {
     checklist: {
       enabled: clEnabled && items.length > 0,
       items: items,
-      all_required: !!document.getElementById('af-checklist-allreq')?.checked,
     },
   };
 }
@@ -4159,7 +4154,7 @@ async function previewAlert(id) {
   const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
 
   const checklistHtml = clEnabled
-    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
+    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
       + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
       +   d.checklist.items.map((it, idx) => {
             const itType = it.type || 'choice';
@@ -4253,30 +4248,47 @@ async function previewAlert(id) {
   }
 
   // Valider
-  document.getElementById('ta-validate').addEventListener('click', () => {
-    if (clEnabled && d.checklist.all_required) {
-      const items = wrap.querySelectorAll('.ta-cl-item');
-      for (const it of items) {
-        const t = it.getAttribute('data-type') || 'choice';
-        if (t === 'value') {
-          const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
-          if (v === '') {
-            toast('Saisis une valeur pour chaque point.', true);
-            return;
-          }
-        } else {
-          const checked = it.querySelectorAll('.ta-cl-resp:checked').length;
-          if (!checked) {
-            toast('Coche au moins une réponse pour chaque point.', true);
-            return;
-          }
-        }
+  function _taIsComplete() {
+    if (!clEnabled) return true;
+    const items = wrap.querySelectorAll('.ta-cl-item');
+    for (const it of items) {
+      const t = it.getAttribute('data-type') || 'choice';
+      if (t === 'value') {
+        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
+        if (v === '') return false;
+      } else {
+        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
       }
     }
+    return true;
+  }
+  function _taFinalize() {
     toast('Test terminé — aucune donnée enregistrée.');
     close();
     document.removeEventListener('keydown', onKey);
-  });
+  }
+  function _taRenderValidate(actions) {
+    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
+    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  }
+  function _taRenderConfirm(actions) {
+    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
+      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
+      + '<div style="display:flex;gap:6px">'
+      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
+      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
+      + '</div>'
+      + '</div>';
+    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
+    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
+  }
+  function _taOnValidate() {
+    if (_taIsComplete()) { _taFinalize(); return; }
+    const actions = wrap.querySelector('.ta-sim-actions');
+    if (!actions) { _taFinalize(); return; }
+    _taRenderConfirm(actions);
+  }
+  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
 }
 
 function openEditAlertModal(id) {
