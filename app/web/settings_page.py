@@ -346,6 +346,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim-btn:hover{filter:brightness(1.05)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
+.ta-chip{display:inline-flex;align-items:center;padding:8px 16px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
+.ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.ta-chip:hover{border-color:var(--accent)}
+.ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}
+.ta-chip span{white-space:nowrap}
 @keyframes taSimFade{from{opacity:0}to{opacity:1}}
 @keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:600px){
@@ -4168,9 +4173,9 @@ async function previewAlert(id) {
                 + '</div>';
             }
             const respHtml = it.responses.map((r) =>
-              '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer">'
+              '<label class="ta-chip">'
               + '<input type="checkbox" class="ta-cl-resp" data-point="' + idx + '">'
-              + esc(r)
+              + '<span>' + esc(r) + '</span>'
               + '</label>'
             ).join('');
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
