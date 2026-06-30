@@ -3709,12 +3709,12 @@ function _afChecklistCardBody(item) {
   const responsesHtml = responses.map(_afResponseRow).join('');
   const multi = (item && item.multi === false) ? false : true;
   return '<div class="af-cl-body" data-type="choice">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
     +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Réponses possibles</div>'
-    +   '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none">'
-    +     '<input type="checkbox" class="af-cl-multi" ' + (multi ? 'checked' : '') + '>'
-    +     'Plusieurs réponses possibles'
-    +   '</label>'
+    +   '<select class="alert-field-input af-cl-multi-sel" style="flex:0 0 auto;width:auto;padding:5px 8px;font-size:12px">'
+    +     '<option value="multi"' + (multi ? ' selected' : '') + '>Plusieurs réponses (cases)</option>'
+    +     '<option value="single"' + (!multi ? ' selected' : '') + '>Une seule réponse (radio)</option>'
+    +   '</select>'
     + '</div>'
     + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
     + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
@@ -3931,7 +3931,8 @@ function _afReadParams() {
         if (r) responses.push(r);
       });
       if (!responses.length) return;
-      const multi = card.querySelector('.af-cl-multi')?.checked !== false;
+      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
+      const multi = (multiSel === 'single') ? false : true;
       items.push({ type: 'choice', label: label, responses: responses, multi: multi });
     });
   }
