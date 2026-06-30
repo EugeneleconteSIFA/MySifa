@@ -545,6 +545,7 @@ body.light .niv-badge[data-niv="3"]{background:rgba(220,38,38,.14)}
 body.light .toast.info{background:#fff;color:var(--text)}
 
 .ctrl-src-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);cursor:help}
+.ctrl-actions-stack{display:inline-flex;align-items:center;gap:6px}
 </style>
 </head>
 <body>
@@ -3902,6 +3903,30 @@ function deleteCtrl(id){
   saveCtrl();
   renderCtrl();
 }
+
+async function deleteAck(prefixedId){
+  if(!confirm('Supprimer cette ligne d\'historique ?\n\nElle restera comptée pour le dernier acquittement de l\'alerte associée si c\'est la plus récente.')) return;
+  // Format prefixedId : "ack-{numeric_id}"
+  const m = String(prefixedId).match(/^ack-(\d+)$/);
+  if(!m){ showToast('Identifiant invalide.', 'danger'); return; }
+  const ackId = m[1];
+  try{
+    const r = await fetch('/api/maintenance/alert-acks/' + ackId, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+    if(!r.ok){
+      let msg = 'Suppression refusée';
+      try { const j = await r.json(); msg = j.detail || msg; } catch(e){}
+      showToast(msg, 'danger');
+      return;
+    }
+    showToast('Ligne supprimée.', 'info');
+    await loadCtrlAcks();
+  } catch(e){
+    showToast('Erreur réseau — réessaie.', 'danger');
+  }
+}
 function sortCtrl(field){
   if(CTRL_STATE.sortBy === field){
     CTRL_STATE.sortDir = CTRL_STATE.sortDir === 'asc' ? 'desc' : 'asc';
@@ -4022,7 +4047,12 @@ function renderCtrl(){
         '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
           (c._source === 'alert'
-            ? '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur (audit, non supprimable)">Alerte</span>'
+            ? '<div class="ctrl-actions-stack">' +
+                '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
+                '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
+                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+                '</button>' +
+              '</div>'
             : '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
                 '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
               '</button>') +

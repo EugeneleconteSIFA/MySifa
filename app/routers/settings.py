@@ -2532,6 +2532,60 @@ def maintenance_alert_acks_list(request: Request):
     return {"items": items}
 
 
+_MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
+
+
+def _require_maintenance_access(request: Request) -> dict:
+    """Mêmes règles d'accès que la page /maintenance : superadmin ou identifiant
+    figurant dans la liste blanche. Utilisé pour autoriser la suppression
+    d'historique (correction d'erreurs de saisie)."""
+    user = get_current_user(request)
+    if user.get("role") == ROLE_SUPERADMIN:
+        return user
+    ident = str(user.get("identifiant") or "").strip().lower()
+    if ident in _MAINTENANCE_ALLOWED_IDENTS:
+        return user
+    raise HTTPException(status_code=403, detail="Accès maintenance réservé.")
+
+
+@router.delete("/api/maintenance/alert-acks/{ack_id}")
+def maintenance_alert_acks_delete(ack_id: int, request: Request):
+    """Suppression d'une ligne d'historique d'acquittement. Utilisé pour
+    corriger les erreurs de saisie côté opérateur. Le last_ack_at de l'alerte
+    n'est PAS recalculé automatiquement (il pointe sur la dernière entrée
+    présente, dont la valeur ne bouge pas en supprimant des entrées plus
+    anciennes ; pour la dernière, on le réajuste à la nouvelle MAX(ack_at)
+    restante par alerte/machine)."""
+    user = _require_maintenance_access(request)
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, alert_id, machine FROM maintenance_alert_acks WHERE id=?",
+            (ack_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Acquittement introuvable.")
+        alert_id_val = row["alert_id"]
+        machine_val = row["machine"]
+        conn.execute("DELETE FROM maintenance_alert_acks WHERE id=?", (ack_id,))
+        # Recalcule last_ack_at sur l'alerte à partir de ce qu'il reste
+        new_last = conn.execute(
+            "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks WHERE alert_id=?",
+            (alert_id_val,),
+        ).fetchone()
+        new_last_val = new_last["m"] if new_last else None
+        now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+        conn.execute(
+            "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
+            (new_last_val, now_paris, alert_id_val),
+        )
+        conn.commit()
+    log_action(user=user, action="DELETE", module="maintenance_alerts",
+               objet="ack:" + str(ack_id),
+               detail=f"alert_id={alert_id_val} machine={machine_val}")
+    return {"ok": True}
+
+
 @router.post("/api/maintenance/alerts/{alert_id}/ack")
 async def maintenance_alerts_ack(alert_id: int, request: Request):
     """Acquittement opérateur d'une alerte. Enregistre l'historique et met
