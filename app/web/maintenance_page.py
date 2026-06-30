@@ -2720,6 +2720,31 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
+// Variante pour le catalogue "Liste de contrôles" : un contrôle peut être
+// rempli soit manuellement (CTRL_STATE.list, matché par label === type), soit
+// via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
+function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
+  if(!machine) return null;
+  let latest = null;
+  if(Array.isArray(manualList)){
+    for(const it of manualList){
+      if(it && it.type === label && it.machine === machine){
+        const d = it.date_saisie;
+        if(d && (!latest || d > latest)) latest = d;
+      }
+    }
+  }
+  if(Array.isArray(ackList) && code){
+    for(const it of ackList){
+      if(it && it._maint_code === code && it.machine === machine){
+        const d = it.date_saisie;
+        if(d && (!latest || d > latest)) latest = d;
+      }
+    }
+  }
+  return latest;
+}
+
 async function loadOpsTypes(){
   try{
     const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
@@ -3867,9 +3892,11 @@ async function loadCtrlAcks(){
       commentaire: _formatAckComment(a),
       date_saisie: a.ack_at,
       _source: 'alert',
+      _maint_code: a.linked_maint_code || '',
     }));
   } catch(e){ CTRL_STATE.acks = []; }
   if(typeof renderCtrl === 'function') renderCtrl();
+  if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
 }
 function addControle(e){
   e.preventDefault();
@@ -4207,7 +4234,7 @@ function renderCtrlTypes(){
   });
   // Calcule la dernière intervention par code, filtrée par machine
   CTRL_TYPES_STATE.list.forEach(t => {
-    t.derniere_intervention = _lastInterventionFor(t.nom, machine, CTRL_STATE.list);
+    t.derniere_intervention = _lastInterventionForCtrl(t.id, t.nom, machine, CTRL_STATE.list, CTRL_STATE.acks || []);
   });
   const dir = CTRL_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
   const f = CTRL_TYPES_STATE.sortBy;
