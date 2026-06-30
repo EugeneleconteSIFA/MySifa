@@ -326,6 +326,37 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .af-md-row.is-disabled{cursor:not-allowed;opacity:.55}
 .af-md-row.is-disabled .af-md-row-text{color:var(--muted)}
 .af-md-sep{height:1px;background:var(--border);margin:4px 6px}
+/* ── Tester sur moi : simulation pure ────────────────────────────── */
+.ta-sim{position:fixed;z-index:2000;pointer-events:none}
+.ta-sim.ta-blocking{inset:0;background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}
+.ta-sim.ta-blocking.ta-pl-center{display:flex;align-items:center;justify-content:center;padding:20px}
+.ta-sim:not(.ta-blocking).ta-pl-center{inset:0;display:flex;align-items:center;justify-content:center;padding:20px;pointer-events:none}
+.ta-sim:not(.ta-blocking).ta-pl-center .ta-sim-alert{pointer-events:auto}
+.ta-sim.ta-pl-top{top:0;left:0;right:0;display:flex;justify-content:center;padding:16px}
+.ta-sim.ta-pl-bottom{bottom:0;left:0;right:0;display:flex;justify-content:center;padding:16px}
+.ta-sim.ta-pl-top-right{top:16px;right:16px}
+.ta-sim.ta-pl-bottom-right{bottom:16px;right:16px}
+.ta-sim:not(.ta-blocking) .ta-sim-alert{pointer-events:auto}
+.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.55);padding:18px 20px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out}
+.ta-sz-small .ta-sim-alert{max-width:320px;width:100%}
+.ta-sz-medium .ta-sim-alert{max-width:420px;width:100%}
+.ta-sz-large .ta-sim-alert{max-width:560px;width:100%}
+.ta-sim-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
+.ta-sim-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+.ta-sim-actions{display:flex;gap:8px;margin-top:12px}
+.ta-sim-btn{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer;font-family:inherit}
+.ta-sim-btn-sec{background:var(--bg);color:var(--text)}
+.ta-sim-btn-primary{flex:2;background:var(--accent);color:#fff;border:none}
+.ta-sim-btn-sec:hover{filter:brightness(1.05)}
+.ta-sim-btn-primary:hover{filter:brightness(1.05)}
+.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
+.ta-sim-exit:hover{background:rgba(0,0,0,.9)}
+@keyframes taSimFade{from{opacity:0}to{opacity:1}}
+@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:600px){
+  .ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}
+  .ta-sim.ta-pl-top-right,.ta-sim.ta-pl-bottom-right{left:12px;right:12px}
+}
 @media(max-width:900px){
   .alert-row{flex-wrap:wrap}
   .alert-actions{width:100%;justify-content:flex-end}
@@ -4104,12 +4135,13 @@ function _alertTriggerLabel(t) {
   return t.type;
 }
 
-function previewAlert(id) {
+async function previewAlert(id) {
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
+  // Charger les réglages globaux : placement, taille, bloque-production
+  await loadAlertSettings();
+  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
   const d = _alertDefaults(a.params);
-  const overlay = document.createElement('div');
-  overlay.className = 'alert-modal-overlay';
   const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
   const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
   const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
@@ -4132,15 +4164,14 @@ function previewAlert(id) {
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
                 + '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(it.label) + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
+                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
                 + '</div>'
                 + toleranceHint
                 + '</div>';
             }
-            // type "choice"
             const respHtml = it.responses.map((r) =>
-              '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer">'
+              '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer">'
               + '<input type="checkbox" class="ta-cl-resp" data-point="' + idx + '">'
               + esc(r)
               + '</label>'
@@ -4153,50 +4184,71 @@ function previewAlert(id) {
       + '</div>'
     : '';
 
-  overlay.innerHTML = '<div class="alert-modal">'
-    + '<div class="alert-modal-head"><h3>Tester — ' + esc(a.nom) + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
-    + '<div class="alert-modal-body">'
-    +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 12px 0">Récapitulatif</p>'
-    +   '<div style="display:grid;grid-template-columns:120px 1fr;gap:8px 14px;font-size:13px;margin-bottom:16px">'
-    +     '<div style="color:var(--muted)">Déclencheur</div><div>' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
-    +     '<div style="color:var(--muted)">Machines</div><div>' + machinesLbl + '</div>'
-    +     '<div style="color:var(--muted)">Bouton</div><div>' + esc(d.validation.button_label) + '</div>'
-    +     '<div style="color:var(--muted)">Questionnaire</div><div>' + (clEnabled ? esc(d.checklist.items.length + ' point(s)' + (d.checklist.all_required ? ' · tous requis' : '')) : '<span style="color:var(--muted)">—</span>') + '</div>'
-    +   '</div>'
-    +   '<div style="background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin-bottom:14px">'
-    +     '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Mode test</strong> — interactif comme pour l\'opérateur, mais rien n\'est enregistré en base.</p>'
-    +   '</div>'
-    +   '<p style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px 0">Ce que verra l\'opérateur</p>'
-    +   '<div style="background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px">'
-    +     '<div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(a.nom) + '</div>'
-    +     '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
-    +     checklistHtml
-    +     '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Commentaire (optionnel)</label>'
-    +     '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-    +     '<div style="display:flex;gap:8px;margin-top:12px">'
-    +       '<button type="button" id="ta-ras" style="flex:1;padding:12px;border-radius:10px;background:var(--bg);color:var(--text);font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Rien à signaler — clôt l\'alerte sans détailler les points">RAS</button>'
-    +       '<button type="button" id="ta-validate" style="flex:2;padding:12px;border-radius:10px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;border:none;cursor:pointer">' + esc(d.validation.button_label) + '</button>'
-    +     '</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-modal-foot">'
-    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
-    + '</div></div>';
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  // Construction du wrapper de simulation (positionnement, taille, backdrop)
+  const wrap = document.createElement('div');
+  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
+  if (settings.block_production) wrap.classList.add('ta-blocking');
 
-  // RAS : valide instantanément (rien à signaler).
+  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
+  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
+
+  // Contenu de l'alerte (sans aucune chrome admin)
+  const alertHtml = '<div class="ta-sim-alert">'
+    + '<div class="ta-sim-title">' + esc(a.nom) + '</div>'
+    + '<div class="ta-sim-sub">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    + checklistHtml
+    + '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 6px 0">Commentaire (optionnel)</label>'
+    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" id="ta-ras" class="ta-sim-btn ta-sim-btn-sec" title="Rien à signaler — clôt l\'alerte sans détailler">RAS</button>'
+    +   '<button type="button" id="ta-validate" class="ta-sim-btn ta-sim-btn-primary">' + esc(d.validation.button_label) + '</button>'
+    + '</div>'
+    + '</div>';
+
+  wrap.innerHTML = exitBtn + alertHtml;
+  document.body.appendChild(wrap);
+
+  const close = () => wrap.remove();
+
+  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
+  document.getElementById('ta-sim-exit').addEventListener('click', close);
+
+  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
+  const onKey = (ev) => {
+    if (ev.key === 'Escape' && !settings.block_production) {
+      close();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+
+  // Si non bloquant + placement coin : cliquer en dehors ferme
+  if (!settings.block_production) {
+    setTimeout(() => {
+      const outsideClick = (ev) => {
+        if (!wrap.contains(ev.target)) return;
+        if (ev.target.closest('.ta-sim-alert')) return;
+        if (ev.target.closest('.ta-sim-exit')) return;
+        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
+        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
+        close();
+        document.removeEventListener('keydown', onKey);
+      };
+      wrap.addEventListener('click', outsideClick);
+    }, 100);
+  }
+
+  // RAS
   document.getElementById('ta-ras').addEventListener('click', () => {
     toast('Test terminé — RAS (rien à signaler), aucune donnée enregistrée.');
     close();
+    document.removeEventListener('keydown', onKey);
   });
 
-  // Valider : si all_required, exiger qu'au moins une réponse soit cochée par point.
+  // Valider
   document.getElementById('ta-validate').addEventListener('click', () => {
     if (clEnabled && d.checklist.all_required) {
-      const items = document.querySelectorAll('.ta-cl-item');
+      const items = wrap.querySelectorAll('.ta-cl-item');
       for (const it of items) {
         const t = it.getAttribute('data-type') || 'choice';
         if (t === 'value') {
@@ -4216,6 +4268,7 @@ function previewAlert(id) {
     }
     toast('Test terminé — aucune donnée enregistrée.');
     close();
+    document.removeEventListener('keydown', onKey);
   });
 }
 
