@@ -46,7 +46,7 @@
   const POLL_INTERVAL_MS = 15000;
   const FETCH_OPTS = { credentials: 'same-origin' };
 
-  let _settings = { placement: 'center', size: 'medium', block_production: true, stack_mode: 'stack' };
+  let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
   let _displayed = new Set();
   let _pollTimer = null;
   let _started = false;

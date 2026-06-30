@@ -4258,7 +4258,7 @@ def _migrate(conn):
         conn.execute(
             """INSERT OR IGNORE INTO maintenance_alert_settings
                (id, placement, size, block_production, updated_at, updated_by)
-               VALUES (1, 'center', 'medium', 1, ?, 'auto:migration')""",
+               VALUES (1, 'top-right', 'medium', 0, ?, 'auto:migration')""",
             (_now_134,),
         )
         conn.commit()
@@ -4311,6 +4311,21 @@ def _migrate(conn):
         )
         conn.commit()
         _record_schema_migration(conn, 136, "maintenance_alert_acks_table")
+
+    # v137 — Nouveaux défauts des réglages d'alerte (UX) :
+    #   placement = top-right, size = medium, block_production = 0, stack_mode = queue
+    # On met à jour le singleton uniquement s'il n'a jamais été personnalisé
+    # par un super admin (updated_by = 'auto:migration'). Les utilisateurs qui
+    # ont déjà configuré leurs propres réglages ne sont pas écrasés.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=137 LIMIT 1").fetchone():
+        conn.execute(
+            """UPDATE maintenance_alert_settings
+               SET placement='top-right', size='medium',
+                   block_production=0, stack_mode='queue'
+               WHERE id=1 AND updated_by='auto:migration'"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 137, "maintenance_alert_settings_new_defaults")
 
 
 def create_default_admin():

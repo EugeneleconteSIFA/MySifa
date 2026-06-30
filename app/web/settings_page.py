@@ -4028,7 +4028,7 @@ async function disableAllAlerts() {
   await loadAlerts();
 }
 
-let _alertGlobalSettings = { placement: 'center', size: 'medium', block_production: true, stack_mode: 'stack' };
+let _alertGlobalSettings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
 
 async function loadAlertSettings() {
   try {

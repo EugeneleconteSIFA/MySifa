@@ -2174,10 +2174,10 @@ def maintenance_alert_settings_get(request: Request):
         ).fetchone()
     if not r:
         return {
-            "placement": "center",
+            "placement": "top-right",
             "size": "medium",
-            "block_production": True,
-            "stack_mode": "stack",
+            "block_production": False,
+            "stack_mode": "queue",
             "updated_at": None,
             "updated_by": "",
         }
@@ -2338,7 +2338,19 @@ def _is_machine_in_production(conn, machine: str) -> bool:
 
 
 def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
-    """Décide si une alerte périodique doit s'afficher maintenant pour cette machine."""
+    """Décide si une alerte périodique doit s'afficher maintenant pour cette machine.
+
+    Logique :
+      1. Trouver le dernier code d'arrêt pour cette machine (87, 89, ou 50-85)
+      2. Déterminer le DÉBUT de la session de production en cours :
+         - Si arrêt récent → premier événement 01/03/88 APRÈS cet arrêt (= reprise)
+         - Sinon → premier événement 01/03/88 jamais (= début initial)
+      3. Ancre = max(session_start, last_ack pour cette alerte+machine)
+      4. due = ancre + intervalle
+      5. Grâce : si on est dans une session démarrée par une reprise (donc
+         session_start > last_stop) ET aucun ack postérieur à session_start,
+         alors due = max(due, session_start + 5 min)
+    """
     trig = params.get("trigger") or {}
     if trig.get("type") != "periodic":
         return False
@@ -2350,40 +2362,60 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
         return False
     if not _is_machine_in_production(conn, machine):
         return False
-    # Ancre : dernière saisie code 01 ou 88 (début production / reprise)
-    anchor_row = conn.execute(
-        "SELECT MAX(date_operation) AS m FROM production_data "
-        "WHERE machine=? AND operation_code IN ('01', '88')",
-        (machine,)
+
+    # 1. Dernier arrêt : codes 87, 89, ou 50–85
+    last_stop_row = conn.execute(
+        """SELECT MAX(date_operation) AS m FROM production_data
+           WHERE machine=? AND (
+               operation_code IN ('87', '89')
+               OR (operation_code GLOB '[0-9][0-9]'
+                   AND CAST(operation_code AS INTEGER) BETWEEN 50 AND 85)
+           )""",
+        (machine,),
     ).fetchone()
-    anchor_dt = _parse_paris_dt(anchor_row["m"]) if anchor_row else None
-    if not anchor_dt:
+    last_stop_iso = last_stop_row["m"] if last_stop_row else None
+    last_stop_dt = _parse_paris_dt(last_stop_iso)
+
+    # 2. Début de la session courante : premier 01/03/88 après last_stop
+    if last_stop_iso:
+        session_row = conn.execute(
+            """SELECT MIN(date_operation) AS m FROM production_data
+               WHERE machine=? AND operation_code IN ('01', '03', '88')
+               AND date_operation > ?""",
+            (machine, last_stop_iso),
+        ).fetchone()
+    else:
+        session_row = conn.execute(
+            """SELECT MIN(date_operation) AS m FROM production_data
+               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
+            (machine,),
+        ).fetchone()
+    session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
+    if not session_start_dt:
         return False
-    # Dernier ack pour cette alerte sur cette machine
+
+    # 3. Dernier ack pour cette alerte sur cette machine
     ack_row = conn.execute(
         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
         "WHERE alert_id=? AND machine=?",
-        (alert_id, machine)
+        (alert_id, machine),
     ).fetchone()
     last_ack_dt = _parse_paris_dt(ack_row["m"]) if ack_row else None
-    # Dernière reprise (88)
-    rep_row = conn.execute(
-        "SELECT MAX(date_operation) AS m FROM production_data "
-        "WHERE machine=? AND operation_code='88'",
-        (machine,)
-    ).fetchone()
-    last_88_dt = _parse_paris_dt(rep_row["m"]) if rep_row else None
-    # Référence = max(ancre, last_ack)
-    ref_dt = anchor_dt
-    if last_ack_dt and last_ack_dt > ref_dt:
-        ref_dt = last_ack_dt
-    # Grâce après reprise : si le 88 est l'ancre courante et pas d'ack après
-    if last_88_dt and last_88_dt == anchor_dt:
-        if not last_ack_dt or last_ack_dt < last_88_dt:
-            grace = last_88_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
-            if grace > ref_dt:
-                ref_dt = grace
-    due_dt = ref_dt + timedelta(minutes=interval_min)
+
+    # Ancre = max(session_start, last_ack si dans la session courante)
+    anchor_dt = session_start_dt
+    if last_ack_dt and last_ack_dt >= session_start_dt and last_ack_dt > anchor_dt:
+        anchor_dt = last_ack_dt
+
+    due_dt = anchor_dt + timedelta(minutes=interval_min)
+
+    # 5. Grâce : session démarrée par une reprise, pas d'ack dans cette session
+    if last_stop_dt and session_start_dt > last_stop_dt:
+        if not last_ack_dt or last_ack_dt < session_start_dt:
+            grace = session_start_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
+            if grace > due_dt:
+                due_dt = grace
+
     return now_paris >= due_dt
 
 
