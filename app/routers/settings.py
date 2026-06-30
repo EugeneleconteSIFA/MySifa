@@ -2206,20 +2206,44 @@ async def maintenance_alert_settings_update(request: Request):
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     who = user.get("email") or user.get("nom") or ""
     with get_db() as conn:
-        conn.execute(
-            """INSERT INTO maintenance_alert_settings
-               (id, placement, size, block_production, stack_mode,
-                updated_at, updated_by)
-               VALUES (1, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                 placement=excluded.placement,
-                 size=excluded.size,
-                 block_production=excluded.block_production,
-                 stack_mode=excluded.stack_mode,
-                 updated_at=excluded.updated_at,
-                 updated_by=excluded.updated_by""",
-            (placement, size, block_production, stack_mode, now, who),
-        )
+        # Détection défensive des colonnes : si v135 n'a pas encore été appliquée
+        # sur cette DB (mise à jour partielle, pull sans restart, etc.), on tombe
+        # gracieusement sur le schéma v134 sans stack_mode plutôt que de planter
+        # avec un 500.
+        cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(maintenance_alert_settings)"
+        ).fetchall()}
+        has_stack_mode = "stack_mode" in cols
+        if has_stack_mode:
+            conn.execute(
+                """INSERT INTO maintenance_alert_settings
+                   (id, placement, size, block_production, stack_mode,
+                    updated_at, updated_by)
+                   VALUES (1, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                     placement=excluded.placement,
+                     size=excluded.size,
+                     block_production=excluded.block_production,
+                     stack_mode=excluded.stack_mode,
+                     updated_at=excluded.updated_at,
+                     updated_by=excluded.updated_by""",
+                (placement, size, block_production, stack_mode, now, who),
+            )
+        else:
+            # Fallback v134 — stack_mode silencieusement ignoré.
+            conn.execute(
+                """INSERT INTO maintenance_alert_settings
+                   (id, placement, size, block_production,
+                    updated_at, updated_by)
+                   VALUES (1, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                     placement=excluded.placement,
+                     size=excluded.size,
+                     block_production=excluded.block_production,
+                     updated_at=excluded.updated_at,
+                     updated_by=excluded.updated_by""",
+                (placement, size, block_production, now, who),
+            )
         conn.commit()
     log_action(user=user, action="UPDATE", module="maintenance_alerts",
                objet="settings",
