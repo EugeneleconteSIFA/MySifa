@@ -2291,15 +2291,37 @@ def _parse_paris_dt(s):
 
 
 def _machine_name_from_user(conn, user: dict) -> Optional[str]:
-    """Récupère le nom de la machine assignée à l'utilisateur (via machine_id)."""
+    """Récupère le nom de la machine sur laquelle l'opérateur travaille.
+
+    Stratégie :
+      1. machine_id explicitement assignée au compte (cas standard)
+      2. Fallback : machine de la dernière saisie du jour pour cet opérateur
+         — utile pour les comptes flexibles (admin qui teste, opérateur
+         non rattaché en permanence à une machine, etc.)
+    """
+    # 1. machine_id du compte
     mid = user.get("machine_id")
-    if not mid:
+    if mid:
+        try:
+            row = conn.execute("SELECT nom FROM machines WHERE id=? LIMIT 1", (int(mid),)).fetchone()
+        except (TypeError, ValueError):
+            row = None
+        if row and row["nom"]:
+            return row["nom"]
+    # 2. Fallback : dernière saisie du jour de cet opérateur
+    user_label = user.get("nom") or user.get("email") or ""
+    if not user_label:
         return None
-    try:
-        row = conn.execute("SELECT nom FROM machines WHERE id=? LIMIT 1", (int(mid),)).fetchone()
-    except (TypeError, ValueError):
-        return None
-    return row["nom"] if row else None
+    today_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+    row = conn.execute(
+        "SELECT machine FROM production_data "
+        "WHERE operateur=? AND date_operation LIKE ? "
+        "ORDER BY date_operation DESC, id DESC LIMIT 1",
+        (user_label, today_paris + "%"),
+    ).fetchone()
+    if row and row["machine"]:
+        return row["machine"]
+    return None
 
 
 def _is_machine_in_production(conn, machine: str) -> bool:
