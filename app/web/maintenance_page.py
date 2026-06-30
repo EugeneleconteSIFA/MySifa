@@ -543,6 +543,9 @@ body.light .niv-badge[data-niv="3"]{background:rgba(220,38,38,.14)}
 .toast.success{background:var(--success);color:var(--accent-fg);border:1px solid var(--success)}
 .toast.danger{background:var(--danger);color:var(--accent-fg);border:1px solid var(--danger)}
 body.light .toast.info{background:#fff;color:var(--text)}
+
+.ctrl-src-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);cursor:help}
+.ctrl-actions-stack{display:inline-flex;align-items:center;gap:6px}
 </style>
 </head>
 <body>
@@ -2717,6 +2720,31 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
+// Variante pour le catalogue "Liste de contrôles" : un contrôle peut être
+// rempli soit manuellement (CTRL_STATE.list, matché par label === type), soit
+// via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
+function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
+  if(!machine) return null;
+  let latest = null;
+  if(Array.isArray(manualList)){
+    for(const it of manualList){
+      if(it && it.type === label && it.machine === machine){
+        const d = it.date_saisie;
+        if(d && (!latest || d > latest)) latest = d;
+      }
+    }
+  }
+  if(Array.isArray(ackList) && code){
+    for(const it of ackList){
+      if(it && it._maint_code === code && it.machine === machine){
+        const d = it.date_saisie;
+        if(d && (!latest || d > latest)) latest = d;
+      }
+    }
+  }
+  return latest;
+}
+
 async function loadOpsTypes(){
   try{
     const res = await fetch('/api/maintenance/codes', { credentials: 'include' });
@@ -3822,7 +3850,7 @@ function renderOpsTypes(){
 // Historique des contrôles
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [] };
 
 function loadCtrl(){
   try{
@@ -3833,6 +3861,42 @@ function loadCtrl(){
 }
 function saveCtrl(){
   try{ localStorage.setItem(CTRL_STORAGE_KEY, JSON.stringify(CTRL_STATE.list)); }catch(e){}
+}
+
+function _formatAckComment(ack){
+  const parts = [];
+  if(ack.responses && typeof ack.responses === 'object'){
+    Object.entries(ack.responses).forEach(([k, v]) => {
+      if(Array.isArray(v)){
+        if(v.length) parts.push(v.join(', '));
+      } else if (v != null && String(v).trim() !== ''){
+        parts.push(String(v));
+      }
+    });
+  }
+  if(ack.comment){ parts.push((parts.length ? '« ' + ack.comment + ' »' : ack.comment)); }
+  return parts.join(' · ');
+}
+
+async function loadCtrlAcks(){
+  try{
+    const r = await fetch('/api/maintenance/alert-acks', { credentials: 'same-origin' });
+    if(!r.ok){ CTRL_STATE.acks = []; return; }
+    const data = await r.json();
+    const items = Array.isArray(data && data.items) ? data.items : [];
+    CTRL_STATE.acks = items.map(a => ({
+      id: 'ack-' + a.id,
+      machine: a.machine || '',
+      operateur: a.operateur || '',
+      type: a.alert_nom || '',
+      commentaire: _formatAckComment(a),
+      date_saisie: a.ack_at,
+      _source: 'alert',
+      _maint_code: a.linked_maint_code || '',
+    }));
+  } catch(e){ CTRL_STATE.acks = []; }
+  if(typeof renderCtrl === 'function') renderCtrl();
+  if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
 }
 function addControle(e){
   e.preventDefault();
@@ -3865,6 +3929,30 @@ function deleteCtrl(id){
   CTRL_STATE.list = CTRL_STATE.list.filter(c => c.id !== id);
   saveCtrl();
   renderCtrl();
+}
+
+async function deleteAck(prefixedId){
+  if(!confirm('Supprimer cette ligne d\'historique ?\n\nElle restera comptée pour le dernier acquittement de l\'alerte associée si c\'est la plus récente.')) return;
+  // Format prefixedId : "ack-{numeric_id}"
+  const m = String(prefixedId).match(/^ack-(\d+)$/);
+  if(!m){ showToast('Identifiant invalide.', 'danger'); return; }
+  const ackId = m[1];
+  try{
+    const r = await fetch('/api/maintenance/alert-acks/' + ackId, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
+    if(!r.ok){
+      let msg = 'Suppression refusée';
+      try { const j = await r.json(); msg = j.detail || msg; } catch(e){}
+      showToast(msg, 'danger');
+      return;
+    }
+    showToast('Ligne supprimée.', 'info');
+    await loadCtrlAcks();
+  } catch(e){
+    showToast('Erreur réseau — réessaie.', 'danger');
+  }
 }
 function sortCtrl(field){
   if(CTRL_STATE.sortBy === field){
@@ -3942,7 +4030,8 @@ function renderCtrl(){
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
   // Filter
-  let filtered = CTRL_STATE.list.filter(c => {
+  const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
+  let filtered = merged.filter(c => {
     if(f.type && c.type !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
     if(f.machine && c.machine !== f.machine) return false;
@@ -3984,16 +4073,23 @@ function renderCtrl(){
         '<td>' + escHtml(c.type) + '</td>' +
         '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
-          '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
+          (c._source === 'alert'
+            ? '<div class="ctrl-actions-stack">' +
+                '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
+                '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
+                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+                '</button>' +
+              '</div>'
+            : '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+              '</button>') +
         '</td>' +
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
   }
   if(count){
-    const n = CTRL_STATE.list.length;
+    const n = CTRL_STATE.list.length + (CTRL_STATE.acks || []).length;
     const visible = filtered.length;
     if(visible !== n){
       count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
@@ -4138,7 +4234,7 @@ function renderCtrlTypes(){
   });
   // Calcule la dernière intervention par code, filtrée par machine
   CTRL_TYPES_STATE.list.forEach(t => {
-    t.derniere_intervention = _lastInterventionFor(t.nom, machine, CTRL_STATE.list);
+    t.derniere_intervention = _lastInterventionForCtrl(t.id, t.nom, machine, CTRL_STATE.list, CTRL_STATE.acks || []);
   });
   const dir = CTRL_TYPES_STATE.sortDir === 'asc' ? 1 : -1;
   const f = CTRL_TYPES_STATE.sortBy;
@@ -4240,6 +4336,7 @@ async function loadMe(){
     if(typeof renderMaintCards === 'function') renderMaintCards();
   });
   loadCtrl();
+  loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
   renderOps();

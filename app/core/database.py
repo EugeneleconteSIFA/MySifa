@@ -4175,6 +4175,158 @@ def _migrate(conn):
         _record_schema_migration(conn, 129, "maintenance_codes_intervalle")
 
 
+    # v132 — Alertes de maintenance : règles paramétrables qui déclenchent un
+    # message / formulaire pour les opérateurs sur leur écran. Une alerte stocke
+    # ses paramètres complets (déclencheur, cible, formulaire de validation) en
+    # JSON dans `params`, ce qui évite d'avoir à faire une migration de schéma à
+    # chaque évolution du modèle de règles. `active` est à 0 à la création :
+    # l'admin doit activer explicitement chaque alerte via le toggle.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=132 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 0,
+                params TEXT NOT NULL DEFAULT '{}',
+                created_by TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT
+            )"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 132, "maintenance_alerts_table")
+
+    # v133 — Alertes liées aux codes maintenance.
+    # Chaque code "contrôle non périodique" doit avoir son alerte automatique.
+    # La date de dernière intervention du contrôle = last_ack_at de l'alerte
+    # (mise à jour quand l'opérateur valide le formulaire).
+    # linked_maint_code est UNIQUE quand non NULL pour éviter d'avoir deux
+    # alertes pour le même code (sécurité contre les désyncs).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=133 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alerts)").fetchall()}
+        if "linked_maint_code" not in cols:
+            conn.execute("ALTER TABLE maintenance_alerts ADD COLUMN linked_maint_code TEXT")
+        if "last_ack_at" not in cols:
+            conn.execute("ALTER TABLE maintenance_alerts ADD COLUMN last_ack_at TEXT")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_maint_alerts_linked_code "
+            "ON maintenance_alerts(linked_maint_code) WHERE linked_maint_code IS NOT NULL"
+        )
+        # Backfill : pour chaque contrôle non périodique existant, créer
+        # l'alerte associée si elle n'existe pas déjà.
+        now = datetime.now().isoformat()
+        rows = conn.execute(
+            "SELECT code, label FROM maintenance_codes "
+            "WHERE categorie='controles' AND periodique=0"
+        ).fetchall()
+        for r in rows:
+            code = r["code"]
+            label = (r["label"] or "").strip()
+            existing = conn.execute(
+                "SELECT 1 FROM maintenance_alerts WHERE linked_maint_code=? LIMIT 1",
+                (code,)
+            ).fetchone()
+            if existing:
+                continue
+            nom = f"Contrôle : {code} – {label}" if label else f"Contrôle : {code}"
+            nom = nom[:120]
+            conn.execute(
+                """INSERT INTO maintenance_alerts
+                   (nom, active, params, created_by, created_at, updated_at, linked_maint_code)
+                   VALUES (?, 0, '{}', 'auto:migration', ?, ?, ?)""",
+                (nom, now, now, code)
+            )
+        conn.commit()
+        _record_schema_migration(conn, 133, "maintenance_alerts_link_to_codes")
+
+    # v134 — Réglages globaux des alertes maintenance (singleton row).
+    # Placement, taille et bloque-production s'appliquent à TOUTES les alertes
+    # actives. Stockés à part de chaque alerte pour qu'un changement global
+    # prenne effet immédiatement sans toucher au paramétrage individuel.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=134 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_alert_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                placement TEXT NOT NULL DEFAULT 'center',
+                size TEXT NOT NULL DEFAULT 'medium',
+                block_production INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT,
+                updated_by TEXT
+            )"""
+        )
+        _now_134 = datetime.now().isoformat()
+        conn.execute(
+            """INSERT OR IGNORE INTO maintenance_alert_settings
+               (id, placement, size, block_production, updated_at, updated_by)
+               VALUES (1, 'top-right', 'medium', 0, ?, 'auto:migration')""",
+            (_now_134,),
+        )
+        conn.commit()
+        _record_schema_migration(conn, 134, "maintenance_alert_settings_singleton")
+
+    # v135 — Comportement d'empilement des alertes maintenance.
+    # 'stack'    : toutes les alertes actives sont affichées en pile
+    # 'queue'    : une seule à la fois, les autres attendent leur tour
+    # 'replace'  : la dernière alerte remplace celle déjà affichée
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=135 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_settings)").fetchall()}
+        if "stack_mode" not in cols:
+            conn.execute(
+                "ALTER TABLE maintenance_alert_settings ADD COLUMN stack_mode TEXT NOT NULL DEFAULT 'stack'"
+            )
+        conn.execute(
+            "UPDATE maintenance_alert_settings SET stack_mode='stack' "
+            "WHERE id=1 AND (stack_mode IS NULL OR stack_mode='')"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 135, "maintenance_alert_settings_stack_mode")
+
+    # v136 — Historique des acquittements d'alertes maintenance.
+    # Chaque entrée trace : qui (user_id, nom), quand (ack_at), sur quelle
+    # machine, quel dossier en cours, les réponses cochées/saisies par point
+    # (JSON), et le commentaire libre. Permet l'audit qualité et le calcul
+    # du compteur périodique par machine.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=136 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_alert_acks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id INTEGER NOT NULL,
+                user_id INTEGER,
+                user_nom TEXT,
+                machine TEXT,
+                no_dossier TEXT,
+                ack_at TEXT NOT NULL,
+                responses TEXT,
+                comment TEXT,
+                FOREIGN KEY (alert_id) REFERENCES maintenance_alerts(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_acks_alert_machine "
+            "ON maintenance_alert_acks(alert_id, machine, ack_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_acks_ack_at "
+            "ON maintenance_alert_acks(ack_at DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 136, "maintenance_alert_acks_table")
+
+    # v137 — Nouveaux défauts des réglages d'alerte (UX) :
+    #   placement = top-right, size = medium, block_production = 0, stack_mode = queue
+    # On met à jour le singleton uniquement s'il n'a jamais été personnalisé
+    # par un super admin (updated_by = 'auto:migration'). Les utilisateurs qui
+    # ont déjà configuré leurs propres réglages ne sont pas écrasés.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=137 LIMIT 1").fetchone():
+        conn.execute(
+            """UPDATE maintenance_alert_settings
+               SET placement='top-right', size='medium',
+                   block_production=0, stack_mode='queue'
+               WHERE id=1 AND updated_by='auto:migration'"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 137, "maintenance_alert_settings_new_defaults")
+
 
 def create_default_admin():
     import bcrypt

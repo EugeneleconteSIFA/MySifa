@@ -834,6 +834,21 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
+<script src="/static/mysifa_alert_runtime.js"></script>
+<script>
+  // Démarre le polleur d'alertes maintenance dès que la page est prête.
+  // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
+  // applique les réglages globaux (placement, taille, bloque-production),
+  // et affiche les alertes dues sur l'écran de l'opérateur. À la validation,
+  // POST sur /api/maintenance/alerts/{id}/ack — l'historique est tracé en DB.
+  if (window.MysifaAlerts) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => MysifaAlerts.start());
+    } else {
+      MysifaAlerts.start();
+    }
+  }
+</script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>

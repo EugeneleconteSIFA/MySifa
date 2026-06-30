@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -1503,6 +1503,309 @@ def _normalize_maint_payload(body: dict) -> dict:
     }
 
 
+_ALERT_PLACEMENTS = {"center", "top-right", "bottom-right"}
+# Anciennes valeurs acceptées en lecture (legacy) — normalisées vers "center"
+_ALERT_PLACEMENTS_LEGACY = {"top", "bottom"}
+_ALERT_STACK_MODES = {"stack", "queue", "replace"}
+_ALERT_MIN_INTERVAL_MINUTES = 1
+_ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
+# Délai d'attente après une "reprise de production" avant qu'une alerte
+# périodique puisse se déclencher (constante, non paramétrable).
+ALERT_RESUME_GRACE_MINUTES = 5
+_ALERT_SIZES = {"small", "medium", "large"}
+_ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
+_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login"}
+_ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+
+def operator_should_see_alert(
+    user_role: str,
+    user_machine: str,
+    target: dict,
+) -> bool:
+    """Filtre opérateur : doit-on afficher cette alerte à cet utilisateur ?
+
+    Règles (figées) :
+    - Le super administrateur voit toujours toutes les alertes (test +
+      monitoring).
+    - Sinon, seuls les opérateurs `fabrication` voient les alertes. Tout
+      autre rôle est exclu (pas de configuration utilisateur de ce filtre).
+    - target["machines"] est une liste : si elle contient "*", l'alerte
+      vaut pour toutes les machines ; sinon, la machine actuellement
+      ouverte par l'opérateur doit y figurer.
+
+    Cette fonction sera importée par le futur endpoint qui retourne les
+    alertes actives à pousser sur l'écran de l'opérateur.
+    """
+    if user_role == ROLE_SUPERADMIN:
+        return True
+    if user_role != ROLE_FABRICATION:
+        return False
+    machines = (target or {}).get("machines")
+    if not isinstance(machines, list) or not machines:
+        # Compat : ancien format avec target["machine"] string
+        legacy = (target or {}).get("machine")
+        machines = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+    if "*" in machines:
+        return True
+    if not user_machine:
+        return False
+    return user_machine in machines
+
+
+def _validate_alert_params(params: dict) -> dict:
+    """Valide et normalise les paramètres d'une alerte (déclencheur, cible,
+    validation). Retourne un dict propre prêt à être stocké en JSON. Accepte
+    un dict vide (valeurs par défaut)."""
+    if not isinstance(params, dict):
+        raise HTTPException(422, "params doit être un objet JSON.")
+    out = {}
+
+    # trigger
+    trig_in = params.get("trigger") or {}
+    if not isinstance(trig_in, dict):
+        raise HTTPException(422, "trigger doit être un objet.")
+    t_type = (trig_in.get("type") or "manual").strip()
+    if t_type not in _ALERT_TRIGGER_TYPES:
+        raise HTTPException(422, f"Déclencheur inconnu : {t_type!r}.")
+    trig = {"type": t_type}
+    if t_type == "periodic":
+        # On accepte interval_minutes (canonique) ou interval_hours (compat
+        # rétro). Le stockage est toujours en minutes.
+        minutes_raw = trig_in.get("interval_minutes")
+        if minutes_raw is None and trig_in.get("interval_hours") is not None:
+            try:
+                minutes_raw = float(trig_in.get("interval_hours")) * 60.0
+            except (TypeError, ValueError):
+                minutes_raw = None
+        try:
+            minutes = int(round(float(minutes_raw)))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "interval_minutes invalide.")
+        if minutes < _ALERT_MIN_INTERVAL_MINUTES or minutes > _ALERT_MAX_INTERVAL_MINUTES:
+            raise HTTPException(
+                422,
+                f"interval_minutes hors plage ({_ALERT_MIN_INTERVAL_MINUTES} <= n <= {_ALERT_MAX_INTERVAL_MINUTES}).",
+            )
+        trig["interval_minutes"] = minutes
+        # Sémantique du déclenchement (documentée pour le futur planificateur) :
+        #   - Le compteur de N minutes démarre après une saisie "production"
+        #     (ou "reprise de production") sur la machine cible.
+        #   - Si la machine n'est plus en production, l'alerte est différée
+        #     jusqu'à une "reprise de production", puis un délai de
+        #     ALERT_RESUME_GRACE_MINUTES minutes (5) est respecté avant
+        #     déclenchement.
+        #   - Après validation par l'opérateur, le compteur N redémarre dans
+        #     les mêmes conditions.
+    elif t_type == "calendar":
+        time = (trig_in.get("time") or "").strip()
+        # HH:MM
+        try:
+            hh, mm = time.split(":")
+            assert 0 <= int(hh) < 24 and 0 <= int(mm) < 60
+        except (ValueError, AssertionError):
+            raise HTTPException(422, "time doit être au format HH:MM.")
+        trig["time"] = f"{int(hh):02d}:{int(mm):02d}"
+        days = trig_in.get("days") or []
+        if not isinstance(days, list) or not days:
+            days = list(_ALERT_CALENDAR_DAYS)
+        bad = [d for d in days if d not in _ALERT_CALENDAR_DAYS]
+        if bad:
+            raise HTTPException(422, f"days invalides : {bad}.")
+        # Conserver l'ordre canonique de la semaine
+        order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        trig["days"] = [d for d in order if d in days]
+    elif t_type == "event":
+        ev = (trig_in.get("event") or "").strip()
+        if ev not in _ALERT_TRIGGER_EVENTS:
+            raise HTTPException(422, f"event inconnu : {ev!r}.")
+        trig["event"] = ev
+    # type=manual : pas de params supplémentaires
+    out["trigger"] = trig
+
+    # target — multi-machines, sans rôle (les opérateurs fabrication + le
+    # super admin voient toujours, c'est figé côté code).
+    tgt_in = params.get("target") or {}
+    if not isinstance(tgt_in, dict):
+        raise HTTPException(422, "target doit être un objet.")
+    machines_in = tgt_in.get("machines")
+    if machines_in is None:
+        # Compat : ancien champ "machine" (string)
+        legacy = tgt_in.get("machine")
+        if isinstance(legacy, str) and legacy.strip():
+            machines_in = [legacy.strip()]
+        else:
+            machines_in = ["*"]
+    if not isinstance(machines_in, list):
+        raise HTTPException(422, "target.machines doit être une liste.")
+    clean_machines = []
+    seen = set()
+    for m in machines_in:
+        if not isinstance(m, str):
+            continue
+        s = m.strip()[:80]
+        if s and s not in seen:
+            clean_machines.append(s)
+            seen.add(s)
+    if not clean_machines:
+        clean_machines = ["*"]
+    if "*" in clean_machines:
+        # Wildcard absorbe le reste pour éviter les listes redondantes.
+        clean_machines = ["*"]
+    out["target"] = {"machines": clean_machines}
+
+    # validation
+    val_in = params.get("validation") or {}
+    if not isinstance(val_in, dict):
+        raise HTTPException(422, "validation doit être un objet.")
+    btn = (val_in.get("button_label") or "Valider").strip() or "Valider"
+    if len(btn) > 40:
+        btn = btn[:40]
+    out["validation"] = {"button_label": btn}
+
+    # checklist (questionnaire) : liste de points de contrôle que l'opérateur
+    # cochera lors de la validation. Items = chaînes libres (ex. "Découpe nette",
+    # "Colle conforme"). L'opérateur peut valider même partiellement rempli
+    # (une confirmation lui est demandée dans ce cas, sans blocage).
+    cl_in = params.get("checklist") or {}
+    if not isinstance(cl_in, dict):
+        raise HTTPException(422, "checklist doit être un objet.")
+    cl_enabled = bool(cl_in.get("enabled"))
+    items_in = cl_in.get("items") or []
+    if not isinstance(items_in, list):
+        raise HTTPException(422, "checklist.items doit être une liste.")
+    clean_items = []
+    for it in items_in:
+        # Compat : ancienne forme = string
+        if isinstance(it, str):
+            label = it.strip()[:200]
+            if label:
+                clean_items.append({"type": "choice", "label": label,
+                                    "responses": ["Conforme"]})
+            continue
+        if not isinstance(it, dict):
+            continue
+        label = (it.get("label") or "").strip()[:200]
+        if not label:
+            continue
+        item_type = (it.get("type") or "choice").strip()
+        if item_type not in ("choice", "value"):
+            item_type = "choice"
+        if item_type == "value":
+            # Saisie d'une valeur numérique (pression, température, dimension…)
+            unit = (it.get("unit") or "").strip()[:20]
+            def _f(x):
+                if x is None or x == "":
+                    return None
+                try:
+                    return float(x)
+                except (TypeError, ValueError):
+                    return None
+            vmin = _f(it.get("min"))
+            vmax = _f(it.get("max"))
+            # Robustesse : si min > max, on échange plutôt que de planter.
+            if vmin is not None and vmax is not None and vmin > vmax:
+                vmin, vmax = vmax, vmin
+            item_out = {"type": "value", "label": label}
+            if unit:
+                item_out["unit"] = unit
+            if vmin is not None:
+                item_out["min"] = vmin
+            if vmax is not None:
+                item_out["max"] = vmax
+            clean_items.append(item_out)
+            continue
+        # type "choice" (cases à cocher)
+        responses_in = it.get("responses") or []
+        if not isinstance(responses_in, list):
+            continue
+        clean_responses = []
+        seen = set()
+        for r in responses_in:
+            if not isinstance(r, str):
+                continue
+            rs = r.strip()[:100]
+            if rs and rs not in seen:
+                clean_responses.append(rs)
+                seen.add(rs)
+        if len(clean_responses) > 20:
+            clean_responses = clean_responses[:20]
+        if not clean_responses:
+            clean_responses = ["Conforme"]
+        # multi : si true, l'opérateur peut cocher plusieurs réponses
+        # (checkboxes). Si false, une seule réponse possible (radio).
+        # Défaut true pour préserver le comportement des alertes existantes.
+        multi = bool(it.get("multi", True))
+        clean_items.append({"type": "choice", "label": label,
+                            "responses": clean_responses, "multi": multi})
+    if len(clean_items) > 30:
+        raise HTTPException(422, "checklist.items : 30 points maximum.")
+    if cl_enabled and not clean_items:
+        cl_enabled = False
+    # all_required retiré (UX) : le mode opérateur affiche une confirmation
+    # quand le formulaire n'est pas entièrement rempli, sans bloquer.
+    out["checklist"] = {
+        "enabled": cl_enabled,
+        "items": clean_items,
+    }
+
+    # comment_enabled : toujours True en v1 (mais on stocke pour l'avenir)
+    out["comment_enabled"] = True
+
+    return out
+
+
+def _require_alerts_admin_module(request: Request) -> dict:
+    # Alias local pour clarté dans les nouveaux endpoints
+    return _require_alerts_admin(request)
+
+
+def _alert_nom_for_code(code: str, label: str) -> str:
+    """Convention de nommage des alertes auto-générées."""
+    label = (label or "").strip()
+    nom = f"Contrôle : {code} – {label}" if label else f"Contrôle : {code}"
+    return nom[:120]
+
+
+def _is_non_periodic_control(categorie: str, periodique) -> bool:
+    cat = (categorie or "").strip()
+    per = 1 if periodique else 0
+    return cat == "controles" and per == 0
+
+
+def _sync_alert_for_code(conn, code: str, label: str, categorie: str, periodique, now: str) -> None:
+    """Maintient l'alerte auto-liée à un code en cohérence avec ses propriétés.
+    - Si le code est un contrôle non périodique : l'alerte existe (création ou
+      rename selon le label).
+    - Sinon : l'alerte associée est supprimée (la config du formulaire est
+      perdue — c'est volontaire, le code ne déclenche plus d'alerte opérateur).
+    """
+    existing = conn.execute(
+        "SELECT id, nom FROM maintenance_alerts WHERE linked_maint_code=? LIMIT 1",
+        (code,)
+    ).fetchone()
+    if _is_non_periodic_control(categorie, periodique):
+        nom = _alert_nom_for_code(code, label)
+        if existing:
+            if existing["nom"] != nom:
+                conn.execute(
+                    "UPDATE maintenance_alerts SET nom=?, updated_at=? WHERE id=?",
+                    (nom, now, existing["id"]),
+                )
+        else:
+            conn.execute(
+                """INSERT INTO maintenance_alerts
+                   (nom, active, params, created_by, created_at, updated_at, linked_maint_code)
+                   VALUES (?, 0, '{}', ?, ?, ?, ?)""",
+                (nom, "auto:code-sync", now, now, code),
+            )
+    else:
+        if existing:
+            conn.execute(
+                "DELETE FROM maintenance_alerts WHERE id=?", (existing["id"],),
+            )
+
+
 @router.get("/api/maintenance/codes")
 def maintenance_codes_list(request: Request):
     # Lecture : tout utilisateur connecté (UI maintenance + UI Paramètres).
@@ -1539,6 +1842,8 @@ async def maintenance_codes_create(request: Request):
             (data["code"], data["label"], data["niveau"], data["categorie"],
              data["periodique"], data["intervalle"], data["metrage_ref"], now, now),
         )
+        _sync_alert_for_code(conn, data["code"], data["label"],
+                             data["categorie"], data["periodique"], now)
         conn.commit()
     log_action(user=user, action="CREATE", module="maintenance_codes",
                objet=data["code"], detail=data["label"])
@@ -1563,9 +1868,12 @@ async def maintenance_codes_update(code: str, request: Request):
             (data["label"], data["niveau"], data["categorie"],
              data["periodique"], data["intervalle"], data["metrage_ref"], now, data["code"]),
         )
-        conn.commit()
         if cur.rowcount == 0:
+            conn.rollback()
             raise HTTPException(404, f"Code {code} introuvable.")
+        _sync_alert_for_code(conn, data["code"], data["label"],
+                             data["categorie"], data["periodique"], now)
+        conn.commit()
     log_action(user=user, action="UPDATE", module="maintenance_codes",
                objet=data["code"], detail=data["label"])
     return {"ok": True, "code": data["code"]}
@@ -1577,9 +1885,12 @@ def maintenance_codes_delete(code: str, request: Request):
     from database import get_db
     with get_db() as conn:
         cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
-        conn.commit()
         if cur.rowcount == 0:
+            conn.rollback()
             raise HTTPException(404, f"Code {code} introuvable.")
+        # Suppression en cascade de l'alerte auto-liée (s'il y en a une).
+        conn.execute("DELETE FROM maintenance_alerts WHERE linked_maint_code=?", (code,))
+        conn.commit()
     log_action(user=user, action="DELETE", module="maintenance_codes",
                objet=code, detail="")
     return {"ok": True}
@@ -1621,10 +1932,706 @@ async def maintenance_codes_bulk_import(request: Request):
             )
             if cur.rowcount:
                 imported += 1
+                _sync_alert_for_code(conn, data["code"], data["label"],
+                                     data["categorie"], data["periodique"], now)
         conn.commit()
     log_action(user=user, action="IMPORT", module="maintenance_codes",
                objet="bulk", detail=f"{imported} codes")
     return {"ok": True, "imported": imported, "received": len(items)}
+
+
+# ── Alertes de maintenance ─────────────────────────────────────────
+# Modèle data-driven : chaque alerte stocke ses paramètres (déclencheur, cible,
+# formulaire de validation, comportement bloquant, etc.) dans `params` au format
+# JSON. Le code n'a pas besoin de connaître la structure exacte — elle évolue
+# librement à mesure que les types de règles s'enrichissent. Seul le super
+# admin peut créer / modifier / supprimer / activer une alerte. Toute alerte
+# est inactive à la création (active=0) : l'admin doit l'activer explicitement.
+
+import json as _json_alerts
+
+
+def _require_alerts_admin(request: Request) -> dict:
+    """Super administrateur uniquement pour les alertes maintenance."""
+    user = get_current_user(request)
+    if user.get("role") != ROLE_SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Réservé au super administrateur.")
+    return user
+
+
+def _alert_row_to_dict(r) -> dict:
+    try:
+        params = _json_alerts.loads(r["params"] or "{}")
+    except (ValueError, TypeError):
+        params = {}
+    # linked_maint_code / last_ack_at : peuvent être absents sur les vieilles DB
+    # (avant migration v133).
+    try:
+        linked = r["linked_maint_code"]
+    except (IndexError, KeyError):
+        linked = None
+    try:
+        last_ack = r["last_ack_at"]
+    except (IndexError, KeyError):
+        last_ack = None
+    return {
+        "id": int(r["id"]),
+        "nom": r["nom"],
+        "active": bool(r["active"]),
+        "params": params,
+        "created_by": r["created_by"] or "",
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "linked_maint_code": linked or "",
+        "last_ack_at": last_ack or "",
+    }
+
+
+@router.get("/api/maintenance/alerts")
+def maintenance_alerts_list(request: Request):
+    """Lecture des alertes : super admin uniquement (les opérateurs ne voient pas
+    cette liste — ils ne voient que les alertes actives au moment du déclenchement)."""
+    _require_alerts_admin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, active, params, created_by, created_at, updated_at,
+                      linked_maint_code, last_ack_at
+               FROM maintenance_alerts
+               ORDER BY (linked_maint_code IS NULL), linked_maint_code, created_at DESC, id DESC"""
+        ).fetchall()
+    return {"items": [_alert_row_to_dict(r) for r in rows]}
+
+
+@router.post("/api/maintenance/alerts")
+async def maintenance_alerts_create(request: Request):
+    """Création d'une alerte. Toujours inactive à la naissance (active=0).
+    Les paramètres détaillés (déclencheur, cible, formulaire) sont stockés en
+    JSON dans `params` — l'UI les enrichit ensuite via PATCH."""
+    user = _require_alerts_admin(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(422, "Nom obligatoire.")
+    if len(nom) > 120:
+        nom = nom[:120]
+    params_raw = body.get("params") or {}
+    params_validated = _validate_alert_params(params_raw)
+    try:
+        params_json = _json_alerts.dumps(params_validated, ensure_ascii=False)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "params non sérialisable en JSON.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            """INSERT INTO maintenance_alerts
+               (nom, active, params, created_by, created_at, updated_at)
+               VALUES (?, 0, ?, ?, ?, ?)""",
+            (nom, params_json, user.get("email") or user.get("nom") or "", now, now),
+        )
+        new_id = cur.lastrowid
+        conn.commit()
+    log_action(user=user, action="CREATE", module="maintenance_alerts",
+               objet=str(new_id), detail=nom)
+    return {"ok": True, "id": new_id}
+
+
+@router.patch("/api/maintenance/alerts/{alert_id}")
+async def maintenance_alerts_update(alert_id: int, request: Request):
+    """Mise à jour partielle : nom, params, active. Le toggle d'activation
+    passe par ici (body = {"active": true/false})."""
+    user = _require_alerts_admin(request)
+    body = await request.json()
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    sets = []
+    vals = []
+    action_detail_parts = []
+    if "nom" in body:
+        # Bloquer le rename d'une alerte auto : le nom doit rester synchronisé
+        # avec le code source. La personnalisation passe par les params.
+        from database import get_db as _gd_check
+        with _gd_check() as _cn:
+            _row = _cn.execute(
+                "SELECT linked_maint_code FROM maintenance_alerts WHERE id=?",
+                (alert_id,),
+            ).fetchone()
+        _linked = None
+        if _row is not None:
+            try:
+                _linked = _row["linked_maint_code"]
+            except (IndexError, KeyError):
+                _linked = None
+        if _linked:
+            raise HTTPException(
+                409,
+                "Le nom d'une alerte auto-générée est synchronisé avec son code "
+                "maintenance — modifier le code (ou son libellé) à la place.",
+            )
+        nom = (body.get("nom") or "").strip()
+        if not nom:
+            raise HTTPException(422, "Nom obligatoire.")
+        if len(nom) > 120:
+            nom = nom[:120]
+        sets.append("nom=?")
+        vals.append(nom)
+        action_detail_parts.append(f"nom={nom!r}")
+    if "params" in body:
+        params_raw = body.get("params") or {}
+        params_validated = _validate_alert_params(params_raw)
+        try:
+            params_json = _json_alerts.dumps(params_validated, ensure_ascii=False)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "params non sérialisable en JSON.")
+        sets.append("params=?")
+        vals.append(params_json)
+        action_detail_parts.append("params updated")
+    if "active" in body:
+        active = 1 if body.get("active") else 0
+        sets.append("active=?")
+        vals.append(active)
+        action_detail_parts.append(f"active={bool(active)}")
+    if not sets:
+        raise HTTPException(422, "Aucun champ à mettre à jour.")
+    sets.append("updated_at=?")
+    vals.append(now)
+    vals.append(alert_id)
+    with get_db() as conn:
+        cur = conn.execute(
+            f"UPDATE maintenance_alerts SET {', '.join(sets)} WHERE id=?",
+            tuple(vals),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Alerte introuvable.")
+    log_action(user=user, action="UPDATE", module="maintenance_alerts",
+               objet=str(alert_id), detail=" ; ".join(action_detail_parts))
+    return {"ok": True, "id": alert_id}
+
+
+@router.delete("/api/maintenance/alerts/{alert_id}")
+def maintenance_alerts_delete(alert_id: int, request: Request):
+    user = _require_alerts_admin(request)
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT linked_maint_code FROM maintenance_alerts WHERE id=?",
+            (alert_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Alerte introuvable.")
+        linked = None
+        try:
+            linked = row["linked_maint_code"]
+        except (IndexError, KeyError):
+            linked = None
+        if linked:
+            raise HTTPException(
+                409,
+                "Alerte auto-générée — la suppression passe par la suppression du "
+                "code maintenance associé (ou par son passage en périodique / "
+                "interventions).",
+            )
+        cur = conn.execute("DELETE FROM maintenance_alerts WHERE id=?", (alert_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Alerte introuvable.")
+    log_action(user=user, action="DELETE", module="maintenance_alerts",
+               objet=str(alert_id), detail="")
+    return {"ok": True}
+
+
+@router.post("/api/maintenance/alerts/disable-all")
+def maintenance_alerts_disable_all(request: Request):
+    """Kill switch : désactive toutes les alertes en un appel. Sécurité au cas
+    où une alerte mal configurée bloque l'atelier — ne supprime rien, juste
+    bascule active=0 partout."""
+    user = _require_alerts_admin(request)
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE maintenance_alerts SET active=0, updated_at=? WHERE active=1",
+            (now,),
+        )
+        affected = cur.rowcount
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="maintenance_alerts",
+               objet="ALL", detail=f"disable-all : {affected} désactivée(s)")
+    return {"ok": True, "disabled": affected}
+
+
+@router.get("/api/maintenance/alert-settings")
+def maintenance_alert_settings_get(request: Request):
+    """Réglages globaux des alertes (singleton)."""
+    _require_alerts_admin(request)
+    from database import get_db
+    with get_db() as conn:
+        r = conn.execute(
+            "SELECT placement, size, block_production, stack_mode, "
+            "updated_at, updated_by FROM maintenance_alert_settings WHERE id=1"
+        ).fetchone()
+    if not r:
+        return {
+            "placement": "top-right",
+            "size": "medium",
+            "block_production": False,
+            "stack_mode": "queue",
+            "updated_at": None,
+            "updated_by": "",
+        }
+    try:
+        stack_mode = r["stack_mode"]
+    except (IndexError, KeyError):
+        stack_mode = "stack"
+    placement = r["placement"] or "center"
+    if placement not in _ALERT_PLACEMENTS:
+        # Valeur legacy ou inconnue → on retombe sur "center"
+        placement = "center"
+    return {
+        "placement": placement,
+        "size": r["size"] or "medium",
+        "block_production": bool(r["block_production"]),
+        "stack_mode": stack_mode or "stack",
+        "updated_at": r["updated_at"],
+        "updated_by": r["updated_by"] or "",
+    }
+
+
+@router.put("/api/maintenance/alert-settings")
+async def maintenance_alert_settings_update(request: Request):
+    user = _require_alerts_admin(request)
+    body = await request.json()
+    placement = (body.get("placement") or "center").strip()
+    size = (body.get("size") or "medium").strip()
+    block_production = 1 if body.get("block_production") else 0
+    stack_mode = (body.get("stack_mode") or "stack").strip()
+    if placement not in _ALERT_PLACEMENTS:
+        raise HTTPException(422, f"placement invalide : {placement!r}.")
+    if size not in _ALERT_SIZES:
+        raise HTTPException(422, f"size invalide : {size!r}.")
+    if stack_mode not in _ALERT_STACK_MODES:
+        raise HTTPException(422, f"stack_mode invalide : {stack_mode!r}.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    who = user.get("email") or user.get("nom") or ""
+    with get_db() as conn:
+        # Détection défensive des colonnes : si v135 n'a pas encore été appliquée
+        # sur cette DB (mise à jour partielle, pull sans restart, etc.), on tombe
+        # gracieusement sur le schéma v134 sans stack_mode plutôt que de planter
+        # avec un 500.
+        cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(maintenance_alert_settings)"
+        ).fetchall()}
+        has_stack_mode = "stack_mode" in cols
+        if has_stack_mode:
+            conn.execute(
+                """INSERT INTO maintenance_alert_settings
+                   (id, placement, size, block_production, stack_mode,
+                    updated_at, updated_by)
+                   VALUES (1, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                     placement=excluded.placement,
+                     size=excluded.size,
+                     block_production=excluded.block_production,
+                     stack_mode=excluded.stack_mode,
+                     updated_at=excluded.updated_at,
+                     updated_by=excluded.updated_by""",
+                (placement, size, block_production, stack_mode, now, who),
+            )
+        else:
+            # Fallback v134 — stack_mode silencieusement ignoré.
+            conn.execute(
+                """INSERT INTO maintenance_alert_settings
+                   (id, placement, size, block_production,
+                    updated_at, updated_by)
+                   VALUES (1, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                     placement=excluded.placement,
+                     size=excluded.size,
+                     block_production=excluded.block_production,
+                     updated_at=excluded.updated_at,
+                     updated_by=excluded.updated_by""",
+                (placement, size, block_production, now, who),
+            )
+        conn.commit()
+    log_action(user=user, action="UPDATE", module="maintenance_alerts",
+               objet="settings",
+               detail=f"placement={placement} size={size} "
+                      f"block={bool(block_production)} stack={stack_mode}")
+    return {"ok": True}
+
+
+# ── Affichage opérateur : alertes actives et acquittements ─────────
+# L'endpoint /active est polled par /prod toutes les ~15 secondes. Il calcule
+# pour chaque alerte active si elle doit s'afficher MAINTENANT pour cet
+# opérateur, sur sa machine, selon la sémantique de déclenchement.
+#
+# Pour le périodique :
+#   - Référence = MAX(dernier_ack, dernière_saisie_01_ou_88 sur la machine)
+#   - Si la machine n'est plus en production (dernière saisie = 89 ou arrêt
+#     50-85), on n'affiche pas
+#   - Si la dernière "remise en marche" est un code 88, un délai de grâce de
+#     ALERT_RESUME_GRACE_MINUTES (5 min) est appliqué après ce 88 — l'alerte
+#     ne se déclenche pas avant reprise + 5 min
+#
+# Pour les autres types (manual / calendar / event) : non implémentés en v1,
+# silencieusement ignorés.
+
+
+def _parse_paris_dt(s):
+    """Parse une date stockée au format MySifa (Paris local, sans tz)."""
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(str(s)[:19])
+    except (ValueError, TypeError):
+        return None
+
+
+def _machine_name_from_user(conn, user: dict) -> Optional[str]:
+    """Récupère le nom de la machine sur laquelle l'opérateur travaille.
+
+    Stratégie :
+      1. machine_id explicitement assignée au compte (cas standard)
+      2. Fallback : machine de la dernière saisie du jour pour cet opérateur
+         — utile pour les comptes flexibles (admin qui teste, opérateur
+         non rattaché en permanence à une machine, etc.)
+    """
+    # 1. machine_id du compte
+    mid = user.get("machine_id")
+    if mid:
+        try:
+            row = conn.execute("SELECT nom FROM machines WHERE id=? LIMIT 1", (int(mid),)).fetchone()
+        except (TypeError, ValueError):
+            row = None
+        if row and row["nom"]:
+            return row["nom"]
+    # 2. Fallback : dernière saisie du jour de cet opérateur
+    user_label = user.get("nom") or user.get("email") or ""
+    if not user_label:
+        return None
+    today_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
+    row = conn.execute(
+        "SELECT machine FROM production_data "
+        "WHERE operateur=? AND date_operation LIKE ? "
+        "ORDER BY date_operation DESC, id DESC LIMIT 1",
+        (user_label, today_paris + "%"),
+    ).fetchone()
+    if row and row["machine"]:
+        return row["machine"]
+    return None
+
+
+def _is_machine_in_production(conn, machine: str) -> bool:
+    """True si la dernière saisie pour cette machine est code 01, 03 ou 88."""
+    row = conn.execute(
+        "SELECT operation_code FROM production_data "
+        "WHERE machine=? ORDER BY date_operation DESC, id DESC LIMIT 1",
+        (machine,)
+    ).fetchone()
+    if not row:
+        return False
+    code = str(row["operation_code"] or "").strip()
+    return code in ("01", "03", "88")
+
+
+def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
+    """Décide si une alerte périodique doit s'afficher maintenant pour cette machine.
+
+    Logique :
+      1. Trouver le dernier code d'arrêt pour cette machine (87, 89, ou 50-85)
+      2. Déterminer le DÉBUT de la session de production en cours :
+         - Si arrêt récent → premier événement 01/03/88 APRÈS cet arrêt (= reprise)
+         - Sinon → premier événement 01/03/88 jamais (= début initial)
+      3. Ancre = max(session_start, last_ack pour cette alerte+machine)
+      4. due = ancre + intervalle
+      5. Grâce : si on est dans une session démarrée par une reprise (donc
+         session_start > last_stop) ET aucun ack postérieur à session_start,
+         alors due = max(due, session_start + 5 min)
+    """
+    trig = params.get("trigger") or {}
+    if trig.get("type") != "periodic":
+        return False
+    try:
+        interval_min = int(trig.get("interval_minutes") or 0)
+    except (TypeError, ValueError):
+        interval_min = 0
+    if interval_min <= 0:
+        return False
+    if not _is_machine_in_production(conn, machine):
+        return False
+
+    # 1. Dernier arrêt : codes 87, 89, ou 50–85
+    last_stop_row = conn.execute(
+        """SELECT MAX(date_operation) AS m FROM production_data
+           WHERE machine=? AND (
+               operation_code IN ('87', '89')
+               OR (operation_code GLOB '[0-9][0-9]'
+                   AND CAST(operation_code AS INTEGER) BETWEEN 50 AND 85)
+           )""",
+        (machine,),
+    ).fetchone()
+    last_stop_iso = last_stop_row["m"] if last_stop_row else None
+    last_stop_dt = _parse_paris_dt(last_stop_iso)
+
+    # 2. Début de la session courante : premier 01/03/88 après last_stop
+    if last_stop_iso:
+        session_row = conn.execute(
+            """SELECT MIN(date_operation) AS m FROM production_data
+               WHERE machine=? AND operation_code IN ('01', '03', '88')
+               AND date_operation > ?""",
+            (machine, last_stop_iso),
+        ).fetchone()
+    else:
+        session_row = conn.execute(
+            """SELECT MIN(date_operation) AS m FROM production_data
+               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
+            (machine,),
+        ).fetchone()
+    session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
+    if not session_start_dt:
+        return False
+
+    # 3. Dernier ack pour cette alerte sur cette machine
+    ack_row = conn.execute(
+        "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+        "WHERE alert_id=? AND machine=?",
+        (alert_id, machine),
+    ).fetchone()
+    last_ack_dt = _parse_paris_dt(ack_row["m"]) if ack_row else None
+
+    # Ancre = max(session_start, last_ack si dans la session courante)
+    anchor_dt = session_start_dt
+    if last_ack_dt and last_ack_dt >= session_start_dt and last_ack_dt > anchor_dt:
+        anchor_dt = last_ack_dt
+
+    due_dt = anchor_dt + timedelta(minutes=interval_min)
+
+    # 5. Grâce : session démarrée par une reprise, pas d'ack dans cette session
+    if last_stop_dt and session_start_dt > last_stop_dt:
+        if not last_ack_dt or last_ack_dt < session_start_dt:
+            grace = session_start_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
+            if grace > due_dt:
+                due_dt = grace
+
+    return now_paris >= due_dt
+
+
+@router.get("/api/maintenance/alerts/active")
+def maintenance_alerts_active(request: Request):
+    """Liste des alertes actives à pousser sur l'écran de l'opérateur connecté.
+    Filtre par rôle (superadmin voit tout, fabrication voit les siennes), par
+    machine ciblée, et applique la sémantique de déclenchement (périodique).
+    """
+    from database import get_db
+    user = get_current_user(request)
+    user_role = user.get("role") or ""
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+    items = []
+    with get_db() as conn:
+        user_machine = _machine_name_from_user(conn, user)
+        rows = conn.execute(
+            """SELECT id, nom, params, linked_maint_code
+               FROM maintenance_alerts
+               WHERE active=1"""
+        ).fetchall()
+        for r in rows:
+            try:
+                params = _json_alerts.loads(r["params"] or "{}")
+            except (ValueError, TypeError):
+                params = {}
+            target = params.get("target") or {}
+            # Filtrage cible : superadmin voit tout ; sinon fabrication uniquement
+            if not operator_should_see_alert(user_role, user_machine or "", target):
+                continue
+            trig = params.get("trigger") or {}
+            ttype = trig.get("type")
+            should_show = False
+            if ttype == "periodic":
+                machine_for_check = user_machine
+                # Si superadmin sans machine assignée et la cible est une seule
+                # machine spécifique, on utilise cette machine pour le calcul.
+                if not machine_for_check and user_role == ROLE_SUPERADMIN:
+                    machines_list = target.get("machines") or []
+                    if isinstance(machines_list, list):
+                        specific = [m for m in machines_list if m and m != "*"]
+                        if len(specific) == 1:
+                            machine_for_check = specific[0]
+                if machine_for_check:
+                    should_show = _is_periodic_alert_due(
+                        conn, int(r["id"]), params, machine_for_check, now_paris
+                    )
+            # type manual / calendar / event : non implémenté en v1
+            if should_show:
+                items.append({
+                    "id": int(r["id"]),
+                    "nom": r["nom"],
+                    "params": params,
+                    "linked_maint_code": r["linked_maint_code"] or "",
+                })
+    return {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
+
+
+@router.get("/api/maintenance/alert-acks")
+def maintenance_alert_acks_list(request: Request):
+    """Historique des acquittements d'alertes maintenance pour l'app /maintenance.
+    Accessible aux administrateurs (superadmin, direction, administration) et
+    aux opérateurs autorisés à voir la page Maintenance."""
+    user = get_current_user(request)
+    # Mêmes droits d'accès que l'app /maintenance : tout utilisateur authentifié
+    # peut lire (filtrage UI côté maintenance_page selon ses propres règles).
+    date_from = request.query_params.get("from")
+    date_to = request.query_params.get("to")
+    machine_filter = request.query_params.get("machine") or ""
+    where = []
+    params_sql = []
+    if date_from:
+        where.append("a.ack_at >= ?")
+        params_sql.append(str(date_from) + "T00:00:00")
+    if date_to:
+        where.append("a.ack_at <= ?")
+        params_sql.append(str(date_to) + "T23:59:59")
+    if machine_filter:
+        where.append("a.machine = ?")
+        params_sql.append(machine_filter)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT a.id, a.alert_id, al.nom AS alert_nom,
+                       al.linked_maint_code, a.user_id, a.user_nom,
+                       a.machine, a.no_dossier, a.ack_at,
+                       a.responses, a.comment
+                FROM maintenance_alert_acks a
+                LEFT JOIN maintenance_alerts al ON al.id = a.alert_id
+                {where_sql}
+                ORDER BY a.ack_at DESC
+                LIMIT 1000""",
+            tuple(params_sql),
+        ).fetchall()
+    items = []
+    for r in rows:
+        try:
+            responses = _json_alerts.loads(r["responses"] or "{}")
+        except (ValueError, TypeError):
+            responses = {}
+        items.append({
+            "id": int(r["id"]),
+            "alert_id": int(r["alert_id"]) if r["alert_id"] is not None else None,
+            "alert_nom": r["alert_nom"] or "",
+            "linked_maint_code": r["linked_maint_code"] or "",
+            "operateur": r["user_nom"] or "",
+            "machine": r["machine"] or "",
+            "no_dossier": r["no_dossier"] or "",
+            "ack_at": r["ack_at"],
+            "responses": responses,
+            "comment": r["comment"] or "",
+        })
+    return {"items": items}
+
+
+_MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
+
+
+def _require_maintenance_access(request: Request) -> dict:
+    """Mêmes règles d'accès que la page /maintenance : superadmin ou identifiant
+    figurant dans la liste blanche. Utilisé pour autoriser la suppression
+    d'historique (correction d'erreurs de saisie)."""
+    user = get_current_user(request)
+    if user.get("role") == ROLE_SUPERADMIN:
+        return user
+    ident = str(user.get("identifiant") or "").strip().lower()
+    if ident in _MAINTENANCE_ALLOWED_IDENTS:
+        return user
+    raise HTTPException(status_code=403, detail="Accès maintenance réservé.")
+
+
+@router.delete("/api/maintenance/alert-acks/{ack_id}")
+def maintenance_alert_acks_delete(ack_id: int, request: Request):
+    """Suppression d'une ligne d'historique d'acquittement. Utilisé pour
+    corriger les erreurs de saisie côté opérateur. Le last_ack_at de l'alerte
+    n'est PAS recalculé automatiquement (il pointe sur la dernière entrée
+    présente, dont la valeur ne bouge pas en supprimant des entrées plus
+    anciennes ; pour la dernière, on le réajuste à la nouvelle MAX(ack_at)
+    restante par alerte/machine)."""
+    user = _require_maintenance_access(request)
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, alert_id, machine FROM maintenance_alert_acks WHERE id=?",
+            (ack_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Acquittement introuvable.")
+        alert_id_val = row["alert_id"]
+        machine_val = row["machine"]
+        conn.execute("DELETE FROM maintenance_alert_acks WHERE id=?", (ack_id,))
+        # Recalcule last_ack_at sur l'alerte à partir de ce qu'il reste
+        new_last = conn.execute(
+            "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks WHERE alert_id=?",
+            (alert_id_val,),
+        ).fetchone()
+        new_last_val = new_last["m"] if new_last else None
+        now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+        conn.execute(
+            "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
+            (new_last_val, now_paris, alert_id_val),
+        )
+        conn.commit()
+    log_action(user=user, action="DELETE", module="maintenance_alerts",
+               objet="ack:" + str(ack_id),
+               detail=f"alert_id={alert_id_val} machine={machine_val}")
+    return {"ok": True}
+
+
+@router.post("/api/maintenance/alerts/{alert_id}/ack")
+async def maintenance_alerts_ack(alert_id: int, request: Request):
+    """Acquittement opérateur d'une alerte. Enregistre l'historique et met
+    à jour last_ack_at sur l'alerte pour réinitialiser le compteur périodique."""
+    user = get_current_user(request)
+    body = await request.json()
+    responses = body.get("responses") or {}
+    if not isinstance(responses, dict):
+        responses = {}
+    comment = (body.get("comment") or "").strip()
+    if len(comment) > 2000:
+        comment = comment[:2000]
+    no_dossier = (body.get("no_dossier") or "").strip()
+    from database import get_db
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        # Vérifier que l'alerte existe et est active
+        row = conn.execute(
+            "SELECT id, active FROM maintenance_alerts WHERE id=?", (alert_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Alerte introuvable.")
+        # Machine de l'opérateur (ou vide pour superadmin sans machine)
+        machine = _machine_name_from_user(conn, user) or ""
+        try:
+            responses_json = _json_alerts.dumps(responses, ensure_ascii=False)
+        except (TypeError, ValueError):
+            responses_json = "{}"
+        conn.execute(
+            """INSERT INTO maintenance_alert_acks
+               (alert_id, user_id, user_nom, machine, no_dossier,
+                ack_at, responses, comment)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (alert_id, user.get("id"), user.get("nom") or user.get("email") or "",
+             machine, no_dossier, now_paris, responses_json, comment),
+        )
+        # Met à jour le last_ack_at sur l'alerte (cache utilisé en /settings)
+        conn.execute(
+            "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
+            (now_paris, now_paris, alert_id),
+        )
+        conn.commit()
+    log_action(user=user, action="VALIDATE", module="maintenance_alerts",
+               objet=str(alert_id),
+               detail=f"machine={machine} dossier={no_dossier} comment_len={len(comment)}")
+    return {"ok": True, "ack_at": now_paris}
 
 
 @router.get("/api/maintenance/wearparts/last")

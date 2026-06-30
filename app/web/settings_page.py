@@ -269,6 +269,98 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
   .legend{grid-template-columns:1fr}
   .four-sub-btn,.mac-sub-btn,.sub-tab-btn{flex-shrink:0}
 }
+/* ── Onglet Alertes maintenance ───────────────────────────────────── */
+.maint-subtab{display:block}
+.alert-row{display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;transition:border-color .15s}
+.alert-row:hover{border-color:var(--accent)}
+.alert-row.is-active{border-left:3px solid var(--success)}
+.alert-row.is-inactive{border-left:3px solid var(--border)}
+.alert-info{flex:1;min-width:0}
+.alert-nom{font-size:14px;font-weight:600;color:var(--text);margin:0 0 2px 0}
+.alert-meta{font-size:11px;color:var(--muted)}
+.alert-status{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.alert-status.on{color:var(--success)}
+.alert-status.off{color:var(--muted)}
+.alert-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+/* Toggle switch */
+.toggle{position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:22px;transition:background .18s}
+.toggle-thumb{position:absolute;top:2px;left:2px;width:18px;height:18px;background:var(--card);border-radius:50%;transition:transform .18s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.toggle input:checked + .toggle-track{background:var(--success)}
+.toggle input:checked + .toggle-track .toggle-thumb{transform:translateX(16px)}
+.toggle input:disabled + .toggle-track{opacity:.5;cursor:not-allowed}
+/* Modal d'aperçu / édition alerte */
+.alert-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.alert-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.alert-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.alert-modal-head h3{margin:0;font-size:15px;color:var(--text)}
+.alert-modal-body{padding:18px 20px}
+.alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
+.alert-preview-empty{padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--bg);border-radius:10px;border:1px dashed var(--border)}
+.alert-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:1px}
+.alert-field{margin-bottom:14px}
+.alert-field-label{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.alert-field-input,.alert-field-select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box}
+.alert-field-input:disabled{color:var(--muted);cursor:not-allowed}
+.alert-field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.alert-field-sub{margin-top:8px;padding:10px 12px;background:var(--bg);border:1px dashed var(--border);border-radius:8px}
+.alert-field-help{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5}
+@media(max-width:700px){.alert-field-row{grid-template-columns:1fr}}
+.alert-badge.auto{background:var(--accent-bg);color:var(--accent)}
+.alert-badge.todo{background:rgba(251,191,36,.18);color:var(--warn);margin-left:4px}
+.alert-row.is-todo{border-left:3px solid var(--warn)}
+.alerts-filter-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.af-md-wrap{position:relative;width:100%}
+.af-md-trigger{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;box-sizing:border-box}
+.af-md-trigger:hover{border-color:var(--accent)}
+.af-md-trigger-label{flex:1 1 auto;min-width:0;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.af-md-trigger-caret{flex:0 0 auto;color:var(--muted);font-size:10px}
+.af-md-panel{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px;z-index:100;max-height:280px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none}
+.af-md-panel.open{display:block}
+.af-md-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;font-size:13px;color:var(--text);cursor:pointer;user-select:none}
+.af-md-row:hover{background:var(--bg)}
+.af-md-row input{flex:0 0 auto;width:16px;height:16px;margin:0;cursor:pointer}
+.af-md-row-text{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.af-md-row-hint{margin-left:6px;color:var(--muted);font-weight:400;font-size:11px}
+.af-md-row.is-disabled{cursor:not-allowed;opacity:.55}
+.af-md-row.is-disabled .af-md-row-text{color:var(--muted)}
+.af-md-sep{height:1px;background:var(--border);margin:4px 6px}
+/* ── Tester sur moi : simulation pure ────────────────────────────── */
+/* Pattern always-flex : un seul wrapper full-screen ; le placement est piloté
+   par align-items / justify-content. Évite les conflits entre inset:0 (backdrop)
+   et top/right/bottom/left (positions de coin). */
+.ta-sim{position:fixed;inset:0;display:flex;z-index:2000;pointer-events:none;padding:20px;box-sizing:border-box}
+.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}
+.ta-sim.ta-pl-center{align-items:center;justify-content:center}
+.ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}
+.ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}
+.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:14px 16px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
+.ta-sz-small .ta-sim-alert{max-width:240px;width:100%}
+.ta-sz-medium .ta-sim-alert{max-width:320px;width:100%}
+.ta-sz-large .ta-sim-alert{max-width:420px;width:100%}
+.ta-sim-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.ta-sim-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+.ta-sim-actions{display:flex;gap:6px;margin-top:10px}
+.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}
+.ta-sim-btn:hover{filter:brightness(1.05)}
+.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
+.ta-sim-exit:hover{background:rgba(0,0,0,.9)}
+.ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
+.ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.ta-chip:hover{border-color:var(--accent)}
+.ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}
+.ta-chip span{white-space:nowrap}
+@keyframes taSimFade{from{opacity:0}to{opacity:1}}
+@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:600px){
+  .ta-sim{padding:12px}
+  .ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}
+}
+@media(max-width:900px){
+  .alert-row{flex-wrap:wrap}
+  .alert-actions{width:100%;justify-content:flex-end}
+}
 </style>
 </head>
 <body>
@@ -866,6 +958,17 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
     </section>
 
     <section id="panel-maintenance" class="hidden">
+    <div class="tabs" style="margin-bottom:14px">
+      <button type="button" class="btn btn-sec sub-tab-btn active" data-maintsub="maint-subtab-codes">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Codes
+      </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-alertes">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        Alertes
+      </button>
+    </div>
+      <div id="maint-subtab-codes" class="maint-subtab">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <h2 style="margin:0">Codes maintenance</h2>
@@ -906,6 +1009,29 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie, périodique…)" oninput="renderMaintList()">
         </div>
         <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+      </div>
+      <div id="maint-subtab-alertes" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Alertes maintenance</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
+              <button type="button" class="btn btn-danger" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
+              <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
+            </div>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, etc.). Les alertes <span style="color:var(--accent);font-weight:600">Auto</span> sont créées et synchronisées depuis l'onglet Codes (un contrôle non périodique = une alerte). Les alertes manuelles couvrent les rappels et contrôles événementiels.</p>
+          <div class="op-toolbar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <div style="display:flex;gap:4px">
+              <button type="button" class="btn-sm btn-ghost alerts-filter-btn active" data-alerts-filter="all">Toutes</button>
+              <button type="button" class="btn-sm btn-ghost alerts-filter-btn" data-alerts-filter="auto">Auto</button>
+              <button type="button" class="btn-sm btn-ghost alerts-filter-btn" data-alerts-filter="manual">Manuelles</button>
+            </div>
+            <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer (nom, code source…)" oninput="renderAlertsList()">
+          </div>
+          <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
       </div>
     </section>
 
@@ -1278,8 +1404,8 @@ function syncSettingsPageHead(tabId) {
       subEl.style.display = 'none';
     } else {
       if (tabId === 'maintenance') {
-        if (titleEl) titleEl.textContent = 'Codes maintenance';
-        subEl.textContent = 'Référentiel des opérations de maintenance';
+        if (titleEl) titleEl.textContent = 'Maintenance';
+        subEl.textContent = 'Codes opérations et alertes opérateurs';
         subEl.style.display = '';
         return;
       }
@@ -1301,7 +1427,7 @@ function setTab(id) {
   if (id === 'fournisseurs') loadFournisseurs();
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
-  if (id === 'maintenance') loadMaintCodes();
+  if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
@@ -3001,9 +3127,19 @@ function _maintCatLabel(cat) {
   if (cat === 'interventions' || cat === 'suivi') return 'Interventions';
   return 'Contrôles';
 }
+let _lastAckByCode = {};
 function renderMaintList() {
   const el = document.getElementById('maint-list');
   if (!el) return;
+  // Reconstruire la map code -> dernière intervention depuis les alertes auto.
+  _lastAckByCode = {};
+  if (Array.isArray(_alertsData)) {
+    _alertsData.forEach(a => {
+      if (a && a.linked_maint_code) {
+        _lastAckByCode[String(a.linked_maint_code)] = a.last_ack_at || '';
+      }
+    });
+  }
   const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
   let items = _maintItems.slice();
   // Normaliser la catégorie sur les anciens enregistrements
@@ -3041,7 +3177,7 @@ function renderMaintList() {
   let body = '';
   ['controles', 'interventions'].forEach(cat => {
     if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="9">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(String(o.code));
       const niv = parseInt(o.niveau, 10) || 1;
@@ -3056,6 +3192,23 @@ function renderMaintList() {
       const metrageDisplay = periodOn
         ? (o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
         : '<span style="color:var(--muted)">—</span>';
+      // Dernière intervention : uniquement pour les contrôles non périodiques,
+      // alimentée par le last_ack_at de l'alerte auto-liée.
+      let lastInterventionDisplay;
+      if (cat === 'controles' && !periodOn) {
+        const ack = _lastAckByCode[String(o.code)];
+        if (ack) {
+          lastInterventionDisplay = esc(_fmtAlertDate(ack));
+        } else {
+          const linked = (Array.isArray(_alertsData) ? _alertsData.find(x => x.linked_maint_code === String(o.code)) : null);
+          const notConfigured = !linked || !_alertIsConfigured(linked);
+          lastInterventionDisplay = notConfigured
+            ? '<span style="color:var(--warn);font-style:italic" title="L\'alerte associée n\'est pas encore configurée">À configurer</span>'
+            : '<span style="color:var(--muted);font-style:italic">Jamais</span>';
+        }
+      } else {
+        lastInterventionDisplay = '<span style="color:var(--muted)">—</span>';
+      }
       body += '<tr>'
         + '<td class="op-code-cell">' + c + '</td>'
         + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
@@ -3064,6 +3217,7 @@ function renderMaintList() {
         + '<td><span class="' + periodCls + '">' + periodLbl + '</span></td>'
         + '<td>' + intervalleDisplay + '</td>'
         + '<td>' + metrageDisplay + '</td>'
+        + '<td>' + lastInterventionDisplay + '</td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
@@ -3071,7 +3225,7 @@ function renderMaintList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Dernière intervention</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-maint-edit]').forEach(btn => {
     btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
@@ -3193,6 +3347,988 @@ async function deleteMaintCode(code) {
     return;
   }
   await loadMaintCodes();
+}
+
+// ── Sous-onglets Maintenance (Codes / Alertes) ─────────────────────
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-maintsub]');
+  if (!btn) return;
+  const target = btn.dataset.maintsub;
+  document.querySelectorAll('[data-maintsub]').forEach(b => b.classList.toggle('active', b === btn));
+  document.querySelectorAll('.maint-subtab').forEach(p => {
+    p.style.display = (p.id === target) ? '' : 'none';
+  });
+});
+
+// ── Alertes maintenance (gestion super admin) ──────────────────────
+let _alertsData = [];
+
+async function loadAlerts() {
+  const box = document.getElementById('alerts-list');
+  if (!box) return;
+  try {
+    const r = await api('/api/maintenance/alerts');
+    _alertsData = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    box.innerHTML = '<p style="color:var(--danger);font-size:13px">Erreur de chargement : ' + esc(e && e.message ? e.message : String(e)) + '</p>';
+    return;
+  }
+  renderAlertsList();
+  // Re-render aussi la table des codes pour rafraîchir la colonne
+  // "Dernière intervention" qui dépend des alertes liées.
+  if (typeof renderMaintList === 'function') renderMaintList();
+}
+
+function _fmtAlertDate(s) {
+  if (!s) return '';
+  const t = String(s).replace('T', ' ').slice(0, 16);
+  return t;
+}
+
+let _alertsFilterKind = 'all';
+
+function _alertIsConfigured(a) {
+  // Une alerte est "configurée" dès qu'elle a au moins une clé de paramètre
+  // (trigger / target / validation / checklist) renseignée par l'admin.
+  // Les alertes auto-créées par la migration v133 démarrent avec params={}.
+  if (!a || !a.params || typeof a.params !== 'object') return false;
+  return Object.keys(a.params).length > 0;
+}
+
+function renderAlertsList() {
+  const box = document.getElementById('alerts-list');
+  if (!box) return;
+  if (!_alertsData.length) {
+    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte pour l\'instant. Les contrôles non périodiques de l\'onglet Codes apparaîtront ici automatiquement, et tu peux aussi en créer manuellement avec « + Nouvelle alerte ».</div>';
+    return;
+  }
+  const q = (document.getElementById('alerts-filter-q')?.value || '').trim().toLowerCase();
+  const filtered = _alertsData.filter(a => {
+    const isAuto = !!a.linked_maint_code;
+    if (_alertsFilterKind === 'auto' && !isAuto) return false;
+    if (_alertsFilterKind === 'manual' && isAuto) return false;
+    if (q) {
+      const hay = (a.nom + ' ' + (a.linked_maint_code || '')).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  if (!filtered.length) {
+    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte pour ce filtre.</div>';
+    return;
+  }
+  const html = filtered.map(a => {
+    const isAuto = !!a.linked_maint_code;
+    const configured = _alertIsConfigured(a);
+    let cls = a.active ? 'is-active' : 'is-inactive';
+    if (!configured) cls += ' is-todo';
+    const statusCls = a.active ? 'on' : 'off';
+    const statusLbl = a.active ? 'Active' : 'Inactive';
+    const created = _fmtAlertDate(a.created_at);
+    const autoBadge = isAuto
+      ? '<span class="alert-badge auto" title="Alerte auto-générée depuis le code ' + esc(a.linked_maint_code) + '">Auto · ' + esc(a.linked_maint_code) + '</span>'
+      : '';
+    const todoBadge = (!configured)
+      ? '<span class="alert-badge todo" title="Cette alerte n\'a pas encore été configurée — cliquez sur Modifier pour renseigner ses paramètres.">À configurer</span>'
+      : '';
+    const badge = autoBadge + todoBadge;
+    const lastAck = a.last_ack_at
+      ? ' · Dernière intervention : ' + esc(_fmtAlertDate(a.last_ack_at))
+      : (isAuto ? ' · Jamais effectuée' : '');
+    const delBtn = isAuto
+      ? '<button type="button" class="btn-sm btn-ghost" disabled title="Suppression via l\'onglet Codes (ou changement de catégorie / périodicité du code)">Supprimer</button>'
+      : '<button type="button" class="btn-sm btn-ghost danger" data-alert-del="' + a.id + '">Supprimer</button>';
+    return '<div class="alert-row ' + cls + '" data-alert-id="' + a.id + '">'
+      + '<label class="toggle" title="' + (a.active ? 'Désactiver' : 'Activer') + '">'
+      +   '<input type="checkbox" ' + (a.active ? 'checked' : '') + ' data-alert-toggle="' + a.id + '">'
+      +   '<span class="toggle-track"><span class="toggle-thumb"></span></span>'
+      + '</label>'
+      + '<div class="alert-info">'
+      +   '<p class="alert-nom">' + esc(a.nom) + ' ' + badge + '</p>'
+      +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by ? ' · ' + esc(a.created_by) : '') + ' · <span class="alert-status ' + statusCls + '">' + statusLbl + '</span>' + lastAck + '</span>'
+      + '</div>'
+      + '<div class="alert-actions">'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-edit="' + a.id + '">Modifier</button>'
+      +   delBtn
+      + '</div>'
+      + '</div>';
+  }).join('');
+  box.innerHTML = html;
+  box.querySelectorAll('[data-alert-toggle]').forEach(el => {
+    el.addEventListener('change', () => toggleAlert(parseInt(el.getAttribute('data-alert-toggle'), 10), el.checked));
+  });
+  box.querySelectorAll('[data-alert-preview]').forEach(btn => {
+    btn.addEventListener('click', () => previewAlert(parseInt(btn.getAttribute('data-alert-preview'), 10)));
+  });
+  box.querySelectorAll('[data-alert-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openEditAlertModal(parseInt(btn.getAttribute('data-alert-edit'), 10)));
+  });
+  box.querySelectorAll('[data-alert-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteAlert(parseInt(btn.getAttribute('data-alert-del'), 10)));
+  });
+}
+
+function _taOnValueInput(inp) {
+  // Feedback visuel en mode test : bordure rouge si valeur hors tolérance.
+  // Aucun blocage — purement informatif.
+  const item = inp.closest('.ta-cl-item');
+  if (!item) return;
+  const minAttr = item.getAttribute('data-min');
+  const maxAttr = item.getAttribute('data-max');
+  const v = parseFloat(inp.value);
+  let outOfRange = false;
+  if (!isNaN(v)) {
+    if (minAttr !== null && minAttr !== '' && v < parseFloat(minAttr)) outOfRange = true;
+    if (maxAttr !== null && maxAttr !== '' && v > parseFloat(maxAttr)) outOfRange = true;
+  }
+  inp.style.borderColor = outOfRange ? 'var(--danger)' : 'var(--border)';
+  inp.style.color = outOfRange ? 'var(--danger)' : 'var(--text)';
+}
+
+// Bascule filtre Toutes / Auto / Manuelles
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-alerts-filter]');
+  if (!btn) return;
+  _alertsFilterKind = btn.getAttribute('data-alerts-filter');
+  document.querySelectorAll('[data-alerts-filter]').forEach(b => b.classList.toggle('active', b === btn));
+  renderAlertsList();
+});
+
+// Référentiels pour les formulaires d'alerte
+const _ALERT_TRIGGER_TYPES = [
+  { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
+  { v: 'periodic', l: 'Périodique — toutes les X minutes' },
+  { v: 'calendar', l: 'Calendaire — à heure fixe' },
+  { v: 'event',    l: 'Événementiel — sur action métier' },
+];
+const _ALERT_TRIGGER_EVENTS = [
+  { v: 'dossier_start',  l: 'Début de dossier' },
+  { v: 'dossier_end',    l: 'Fin de dossier' },
+  { v: 'machine_change', l: 'Changement de machine' },
+  { v: 'login',          l: 'Connexion de l\'opérateur' },
+];
+const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
+const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'direction', 'superadmin'];
+const _ALERT_DAYS = [
+  { v: 'mon', l: 'Lun' }, { v: 'tue', l: 'Mar' }, { v: 'wed', l: 'Mer' },
+  { v: 'thu', l: 'Jeu' }, { v: 'fri', l: 'Ven' }, { v: 'sat', l: 'Sam' }, { v: 'sun', l: 'Dim' },
+];
+
+function _alertDefaults(existing) {
+  const p = existing || {};
+  const trig = Object.assign({}, p.trigger || {});
+  // Compat rétro : si seul interval_hours est présent, on convertit en minutes.
+  if (trig.interval_minutes == null && trig.interval_hours != null) {
+    trig.interval_minutes = Math.round(Number(trig.interval_hours) * 60);
+    delete trig.interval_hours;
+  }
+  // Target : nouveau format = { machines: [...] }. Compat avec ancien { machine, role }.
+  const rawTarget = p.target || {};
+  let machines = rawTarget.machines;
+  if (!Array.isArray(machines)) {
+    if (typeof rawTarget.machine === 'string' && rawTarget.machine) {
+      machines = [rawTarget.machine];
+    } else {
+      machines = ['*'];
+    }
+  }
+  // Checklist : normalisation des items pour inclure le champ type (choice/value)
+  // et la conversion des anciens items "string" en objets.
+  const cl = Object.assign({ enabled: false, items: [] }, p.checklist || {});
+  if (!Array.isArray(cl.items)) cl.items = [];
+  cl.items = cl.items.map(it => {
+    if (typeof it === 'string') {
+      return { type: 'choice', label: it, responses: ['Conforme'] };
+    }
+    const t = (it && it.type) || 'choice';
+    if (t === 'value') {
+      return {
+        type: 'value',
+        label: (it && it.label) || '',
+        unit: (it && it.unit) || '',
+        min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
+        max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+      };
+    }
+    const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
+    return {
+      type: 'choice',
+      label: (it && it.label) || '',
+      responses: responses.length ? responses : ['Conforme'],
+      multi: (it && it.multi === false) ? false : true,
+    };
+  });
+  return {
+    trigger: Object.assign({ type: 'manual', interval_minutes: 120, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
+    target: { machines: machines },
+    validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
+    checklist: cl,
+  };
+}
+
+function _renderAlertFormFields(params, opts) {
+  opts = opts || {};
+  const d = _alertDefaults(params);
+  // Machines (multi-sélection via dropdown)
+  const machineList = _ALERT_MACHINES.filter(m => m !== '*');
+  const selectedMachines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
+  const isAllMachines = selectedMachines.includes('*');
+  const machineCheckboxes = machineList.map(m => {
+    const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
+    const disabled = isAllMachines ? ' disabled' : '';
+    const rowCls = isAllMachines ? 'af-md-row is-disabled' : 'af-md-row';
+    const safeM = escAttr(m);
+    return '<div class="' + rowCls + '" onclick="_afRowClickByValue(event, \'' + safeM + '\')">'
+      + '<input type="checkbox" class="af-machine" value="' + safeM + '"' + (checked ? ' ' + checked : '') + disabled + ' onchange="_afOnMachineChange()">'
+      + '<div class="af-md-row-text">' + esc(m) + '</div>'
+      + '</div>';
+  }).join('');
+  let machinesInitialLabel;
+  if (isAllMachines) {
+    machinesInitialLabel = 'Toutes les machines';
+  } else if (selectedMachines.length === 0) {
+    machinesInitialLabel = 'Aucune machine sélectionnée';
+  } else if (selectedMachines.length === 1) {
+    machinesInitialLabel = selectedMachines[0];
+  } else if (selectedMachines.length <= 3) {
+    machinesInitialLabel = selectedMachines.join(', ');
+  } else {
+    machinesInitialLabel = selectedMachines.length + ' machines';
+  }
+  const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
+    '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
+  ).join('');
+  const eventOpts = _ALERT_TRIGGER_EVENTS.map(e =>
+    '<option value="' + e.v + '"' + (e.v === d.trigger.event ? ' selected' : '') + '>' + esc(e.l) + '</option>'
+  ).join('');
+  const daysHtml = _ALERT_DAYS.map(day => {
+    const checked = (d.trigger.days || []).indexOf(day.v) >= 0 ? 'checked' : '';
+    return '<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px"><input type="checkbox" class="af-day" value="' + day.v + '" ' + checked + ' style="margin:0">' + day.l + '</label>';
+  }).join(' ');
+
+  const nomBlock = opts.nomReadonly
+    ? '<div class="alert-field"><label class="alert-field-label">Titre <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code</span></label><input type="text" class="alert-field-input" value="' + escAttr(opts.nomValue || '') + '" disabled></div>'
+    : '<div class="alert-field"><label class="alert-field-label">Titre de l\'alerte <span style="color:var(--danger)">*</span></label><input type="text" id="af-nom" class="alert-field-input" maxlength="120" placeholder="Ex. Contrôle qualité Cohésio 1" value="' + escAttr(opts.nomValue || '') + '"></div>';
+
+  return nomBlock
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
+    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
+    +   '<div id="af-trigger-sub" class="alert-field-sub">'
+    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
+    +     '<div data-trigger-for="periodic">'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle (minutes)</label>'
+    +       '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +       '<div class="alert-field-help">Le compteur démarre après une saisie <strong>« production »</strong> ou <strong>« reprise de production »</strong> sur la machine cible. Si la machine n\'est plus en production, l\'alerte est différée jusqu\'à la reprise, avec un délai de 5 minutes après reprise avant déclenchement. Après validation, le compteur redémarre dans les mêmes conditions.</div>'
+    +     '</div>'
+    +     '<div data-trigger-for="calendar">'
+    +       '<div class="alert-field-row">'
+    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
+    +         '<div></div>'
+    +       '</div>'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
+    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
+    +     '</div>'
+    +     '<div data-trigger-for="event">'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
+    +       '<select id="af-trigger-event" class="alert-field-input">' + eventOpts + '</select>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
+    +   '<div class="af-md-wrap">'
+    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
+    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
+    +       '<span class="af-md-trigger-caret">▼</span>'
+    +     '</button>'
+    +     '<div id="af-md-panel" class="af-md-panel">'
+    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
+    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
+    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
+    +       '</div>'
+    +       '<div class="af-md-sep"></div>'
+    +       machineCheckboxes
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
+    + '</div>'
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
+    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
+    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
+    + '</div>'
+    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
+    +     '<div>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Questionnaire (points de contrôle)</label>'
+    +       '<span style="font-size:11px;color:var(--muted)">Ex. découpe nette, colle conforme, centrage OK… L\'opérateur cochera chaque point lors de la validation.</span>'
+    +     '</div>'
+    +     '<label class="toggle"><input type="checkbox" id="af-checklist-enabled" ' + (d.checklist.enabled ? 'checked' : '') + ' onchange="_afOnChecklistToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +   '</div>'
+    +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
+    +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
+    +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
+    +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
+    + '</div>';
+}
+
+function _afResponseRow(value) {
+  const safeVal = (value || '').replace(/"/g, '&quot;');
+  return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
+    + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
+    + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
+    + '</div>';
+}
+
+function _afChecklistCardBody(item) {
+  const type = (item && item.type) || 'choice';
+  if (type === 'value') {
+    const safeUnit = ((item && item.unit) || '').replace(/"/g, '&quot;');
+    const safeMin = (item && item.min != null && item.min !== '') ? String(item.min) : '';
+    const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
+    return '<div class="af-cl-body" data-type="value">'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Unité</div><input type="text" class="alert-field-input af-cl-unit" maxlength="20" placeholder="bar, °C, mm…" value="' + safeUnit + '" style="padding:6px 10px;font-size:13px"></div>'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Min</div><input type="number" step="any" class="alert-field-input af-cl-min" placeholder="2.5" value="' + safeMin + '" style="padding:6px 10px;font-size:13px"></div>'
+      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max</div><input type="number" step="any" class="alert-field-input af-cl-max" placeholder="3.2" value="' + safeMax + '" style="padding:6px 10px;font-size:13px"></div>'
+      + '</div>'
+      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… L\'opérateur saisira une valeur. Min/Max sont optionnels (vide = pas de borne).</div>'
+      + '</div>';
+  }
+  // type "choice"
+  const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
+  const responsesHtml = responses.map(_afResponseRow).join('');
+  const multi = (item && item.multi === false) ? false : true;
+  return '<div class="af-cl-body" data-type="choice">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
+    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Réponses possibles</div>'
+    +   '<select class="alert-field-input af-cl-multi-sel" style="flex:0 0 auto;width:auto;padding:5px 8px;font-size:12px">'
+    +     '<option value="multi"' + (multi ? ' selected' : '') + '>Plusieurs réponses (cases)</option>'
+    +     '<option value="single"' + (!multi ? ' selected' : '') + '>Une seule réponse (radio)</option>'
+    +   '</select>'
+    + '</div>'
+    + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
+    + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
+    + '</div>';
+}
+
+function _afChecklistCard(item) {
+  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
+  const type = (item && item.type) || 'choice';
+  const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
+                 + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
+  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
+    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;min-width:140px;font-weight:500">'
+    +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
+    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
+    + '</div>'
+    + _afChecklistCardBody(item)
+    + '</div>';
+}
+
+function _afOnTypeChange(sel) {
+  const card = sel.closest('.af-cl-card');
+  if (!card) return;
+  const oldBody = card.querySelector('.af-cl-body');
+  if (!oldBody) return;
+  const newType = sel.value;
+  const defaultItem = (newType === 'value')
+    ? { type: 'value', label: '', unit: '', min: null, max: null }
+    : { type: 'choice', label: '', responses: ['Conforme'], multi: true };
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _afChecklistCardBody(defaultItem);
+  const newBody = tmp.firstElementChild;
+  if (newBody) oldBody.replaceWith(newBody);
+}
+
+function _afRenderChecklistItems(items) {
+  const list = (items && items.length) ? items : [{ label: '', responses: ['Conforme'] }];
+  return list.map(_afChecklistCard).join('');
+}
+
+function _afAddChecklistItem() {
+  const wrap = document.getElementById('af-checklist-items');
+  if (!wrap) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true });
+  const card = tmp.firstElementChild;
+  wrap.appendChild(card);
+  card.querySelector('.af-cl-label')?.focus();
+}
+
+function _afAddResponse(btn) {
+  const card = btn.closest('.af-cl-card');
+  if (!card) return;
+  const list = card.querySelector('.af-cl-responses');
+  if (!list) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _afResponseRow('');
+  const row = tmp.firstElementChild;
+  list.appendChild(row);
+  row.querySelector('.af-cl-resp-input')?.focus();
+}
+
+function _afRemoveResponse(btn) {
+  const row = btn.closest('.af-cl-resp-row');
+  if (!row) return;
+  const list = row.parentElement;
+  if (!list) { row.remove(); return; }
+  // Garde au moins une réponse par point
+  if (list.querySelectorAll('.af-cl-resp-row').length <= 1) {
+    toast('Un point doit garder au moins une réponse', true);
+    return;
+  }
+  row.remove();
+}
+
+function _afRemoveItem(btn) {
+  const card = btn.closest('.af-cl-card');
+  if (card) card.remove();
+}
+
+function _afOnChecklistToggle() {
+  const enabled = document.getElementById('af-checklist-enabled')?.checked;
+  const wrap = document.getElementById('af-checklist-wrap');
+  if (wrap) wrap.style.display = enabled ? '' : 'none';
+  if (enabled) {
+    const cards = document.querySelectorAll('.af-cl-card');
+    if (!cards.length) _afAddChecklistItem();
+  }
+}
+
+function _afRowClick(ev, inputId) {
+  // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
+  // sur l'input pour éviter le double toggle (l'input gère son propre click).
+  if (ev.target.tagName === 'INPUT') return;
+  const inp = document.getElementById(inputId);
+  if (!inp || inp.disabled) return;
+  inp.checked = !inp.checked;
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function _afRowClickByValue(ev, value) {
+  if (ev.target.tagName === 'INPUT') return;
+  const row = ev.currentTarget;
+  const inp = row.querySelector('input.af-machine');
+  if (!inp || inp.disabled) return;
+  inp.checked = !inp.checked;
+  inp.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function _afOnAllMachinesToggle() {
+  const allChk = document.getElementById('af-target-all');
+  if (!allChk) return;
+  document.querySelectorAll('.af-machine').forEach(el => {
+    el.disabled = allChk.checked;
+    if (allChk.checked) el.checked = false;
+    const row = el.closest('.af-md-row');
+    if (row) row.classList.toggle('is-disabled', allChk.checked);
+  });
+  _afUpdateMachinesLabel();
+}
+
+function _afOnMachineChange() {
+  const allChk = document.getElementById('af-target-all');
+  if (allChk && allChk.checked) {
+    const anyIndividual = Array.from(document.querySelectorAll('.af-machine:checked')).length > 0;
+    if (anyIndividual) allChk.checked = false;
+  }
+  _afUpdateMachinesLabel();
+}
+
+function _afUpdateMachinesLabel() {
+  const lbl = document.getElementById('af-md-label');
+  if (!lbl) return;
+  const all = !!document.getElementById('af-target-all')?.checked;
+  lbl.style.color = '';
+  if (all) { lbl.textContent = 'Toutes les machines'; return; }
+  const selected = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
+  if (!selected.length) {
+    lbl.textContent = 'Aucune machine sélectionnée';
+    lbl.style.color = 'var(--danger)';
+    return;
+  }
+  if (selected.length === 1) lbl.textContent = selected[0];
+  else if (selected.length <= 3) lbl.textContent = selected.join(', ');
+  else lbl.textContent = selected.length + ' machines';
+}
+
+function _afToggleMachinesPanel(ev) {
+  if (ev) ev.stopPropagation();
+  const panel = document.getElementById('af-md-panel');
+  if (!panel) return;
+  panel.classList.toggle('open');
+}
+
+// Fermeture du dropdown sur clic à l'extérieur (un seul listener global, idempotent)
+if (!window._afMachinesDropdownInit) {
+  window._afMachinesDropdownInit = true;
+  document.addEventListener('click', (ev) => {
+    const panel = document.getElementById('af-md-panel');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (ev.target.closest('.af-md-wrap')) return;
+    panel.classList.remove('open');
+  });
+}
+
+function _afOnTriggerChange() {
+  const t = document.getElementById('af-trigger-type')?.value || 'manual';
+  document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
+    el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
+  });
+}
+
+function _afReadParams() {
+  const t = document.getElementById('af-trigger-type').value || 'manual';
+  const trig = { type: t };
+  if (t === 'periodic') {
+    const mInp = document.getElementById('af-trigger-interval-minutes');
+    const m = parseInt(mInp.value, 10);
+    if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
+    trig.interval_minutes = m;
+  } else if (t === 'calendar') {
+    const tm = document.getElementById('af-trigger-time').value || '';
+    if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
+    trig.time = tm;
+    const days = Array.from(document.querySelectorAll('.af-day:checked')).map(el => el.value);
+    if (!days.length) { toast('Au moins un jour requis', true); return null; }
+    trig.days = days;
+  } else if (t === 'event') {
+    trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
+  }
+  // Lecture du questionnaire (cartes : label + réponses possibles)
+  const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
+  const items = [];
+  if (clEnabled) {
+    document.querySelectorAll('.af-cl-card').forEach(card => {
+      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
+      if (!label) return;
+      const type = card.querySelector('.af-cl-type')?.value || 'choice';
+      if (type === 'value') {
+        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
+        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
+        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
+        const item = { type: 'value', label: label };
+        if (unit) item.unit = unit;
+        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
+        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        items.push(item);
+        return;
+      }
+      const responses = [];
+      card.querySelectorAll('.af-cl-resp-input').forEach(inp => {
+        const r = (inp.value || '').trim();
+        if (r) responses.push(r);
+      });
+      if (!responses.length) return;
+      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
+      const multi = (multiSel === 'single') ? false : true;
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi });
+    });
+  }
+  // Cible (lue en premier — interrompt si rien sélectionné)
+  let _tgt;
+  {
+    const all = !!document.getElementById('af-target-all')?.checked;
+    if (all) {
+      _tgt = { machines: ['*'] };
+    } else {
+      const ms = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
+      if (!ms.length) { toast('Sélectionne au moins une machine', true); return null; }
+      _tgt = { machines: ms };
+    }
+  }
+  return {
+    trigger: trig,
+    target: _tgt,
+    validation: {
+      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
+    },
+    checklist: {
+      enabled: clEnabled && items.length > 0,
+      items: items,
+    },
+  };
+}
+
+function openNewAlertModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.innerHTML = '<div class="alert-modal">'
+    + '<div class="alert-modal-head"><h3>Nouvelle alerte</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   _renderAlertFormFields(null, { nomReadonly: false, nomValue: '' })
+    +   '<p style="font-size:11px;color:var(--muted);margin-top:10px">L\'alerte sera créée à l\'état <strong>inactif</strong>. Active-la via son interrupteur une fois prête.</p>'
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+    +   '<button type="button" class="btn" id="new-alert-confirm">Créer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  _afOnTriggerChange();
+  document.getElementById('new-alert-confirm').addEventListener('click', async () => {
+    const nom = (document.getElementById('af-nom').value || '').trim();
+    if (!nom) { toast('Titre obligatoire', true); return; }
+    const params = _afReadParams();
+    if (!params) return;
+    try {
+      await api('/api/maintenance/alerts', { method: 'POST', body: JSON.stringify({ nom, params }) });
+      toast('Alerte créée');
+      close();
+      await loadAlerts();
+    } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+  });
+  setTimeout(() => document.getElementById('af-nom')?.focus(), 30);
+}
+
+async function toggleAlert(id, active) {
+  try {
+    await api('/api/maintenance/alerts/' + id, { method: 'PATCH', body: JSON.stringify({ active: !!active }) });
+    toast(active ? 'Alerte activée' : 'Alerte désactivée');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+  await loadAlerts();
+}
+
+async function deleteAlert(id) {
+  const a = _alertsData.find(x => x.id === id);
+  if (!a) return;
+  if (!confirm('Supprimer définitivement l\'alerte « ' + a.nom + ' » ?')) return;
+  try {
+    await api('/api/maintenance/alerts/' + id, { method: 'DELETE' });
+    toast('Alerte supprimée');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+    return;
+  }
+  await loadAlerts();
+}
+
+async function disableAllAlerts() {
+  const nbActive = _alertsData.filter(a => a.active).length;
+  if (nbActive === 0) { toast('Aucune alerte active actuellement', true); return; }
+  if (!confirm('Désactiver les ' + nbActive + ' alerte(s) active(s) ? Aucune ne sera supprimée — c\'est un kill switch d\'urgence.')) return;
+  try {
+    const r = await api('/api/maintenance/alerts/disable-all', { method: 'POST' });
+    toast((r?.disabled || 0) + ' alerte(s) désactivée(s)');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+    return;
+  }
+  await loadAlerts();
+}
+
+let _alertGlobalSettings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
+
+async function loadAlertSettings() {
+  try {
+    const r = await api('/api/maintenance/alert-settings');
+    let placement = r.placement || 'center';
+    if (placement !== 'center' && placement !== 'top-right' && placement !== 'bottom-right') {
+      placement = 'center';
+    }
+    _alertGlobalSettings = {
+      placement: placement,
+      size: r.size || 'medium',
+      block_production: !!r.block_production,
+      stack_mode: r.stack_mode || 'stack',
+    };
+  } catch (e) {
+    // En cas d'erreur, on garde les valeurs par défaut.
+  }
+}
+
+function openAlertSettingsModal() {
+  loadAlertSettings().then(() => {
+    const overlay = document.createElement('div');
+    overlay.className = 'alert-modal-overlay';
+    const placements = [
+      { v: 'center',       l: 'Centre (modal)' },
+      { v: 'top-right',    l: 'Coin haut droit' },
+      { v: 'bottom-right', l: 'Coin bas droit' },
+    ];
+    const sizes = [
+      { v: 'small',  l: 'Petite' },
+      { v: 'medium', l: 'Moyenne' },
+      { v: 'large',  l: 'Grande' },
+    ];
+    const stacks = [
+      { v: 'stack',   l: 'Empilement (toutes visibles)' },
+      { v: 'queue',   l: 'File d\'attente (une à la fois)' },
+      { v: 'replace', l: 'Remplacement (la dernière efface la précédente)' },
+    ];
+    const stackOpts = stacks.map(s =>
+      '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.stack_mode ? ' selected' : '') + '>' + esc(s.l) + '</option>'
+    ).join('');
+    const placementOpts = placements.map(p =>
+      '<option value="' + p.v + '"' + (p.v === _alertGlobalSettings.placement ? ' selected' : '') + '>' + esc(p.l) + '</option>'
+    ).join('');
+    const sizeOpts = sizes.map(s =>
+      '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
+    ).join('');
+    overlay.innerHTML = '<div class="alert-modal">'
+      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-body">'
+      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Placement à l\'écran</label>'
+      +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
+      +   '</div>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Taille</label>'
+      +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
+      +   '</div>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Si une alerte est déjà affichée</label>'
+      +     '<select id="ags-stack" class="alert-field-input">' + stackOpts + '</select>'
+      +     '<div class="alert-field-help"><strong>Empilement</strong> : toutes les alertes s\'affichent les unes sous les autres. <strong>File d\'attente</strong> : une seule à la fois, les suivantes patientent. <strong>Remplacement</strong> : la nouvelle remplace la précédente.</div>'
+      +   '</div>'
+      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+      +     '<div>'
+      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
+      +     '</div>'
+      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="alert-modal-foot">'
+      +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+      +   '<button type="button" class="btn" id="ags-save">Enregistrer</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    document.getElementById('ags-save').addEventListener('click', async () => {
+      const payload = {
+        placement: document.getElementById('ags-placement').value,
+        size: document.getElementById('ags-size').value,
+        block_production: document.getElementById('ags-block').checked,
+        stack_mode: document.getElementById('ags-stack').value,
+      };
+      try {
+        await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
+        _alertGlobalSettings = payload;
+        toast('Réglages enregistrés');
+        close();
+      } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+    });
+  });
+}
+
+function _alertTriggerLabel(t) {
+  if (!t || !t.type) return 'Manuel';
+  if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
+  if (t.type === 'periodic') {
+    const m = (t.interval_minutes != null) ? t.interval_minutes
+              : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
+    return 'Périodique — toutes les ' + m + ' min';
+  }
+  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
+  if (t.type === 'event') {
+    const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
+    return 'Événementiel — ' + ev;
+  }
+  return t.type;
+}
+
+async function previewAlert(id) {
+  const a = _alertsData.find(x => x.id === id);
+  if (!a) return;
+  // Charger les réglages globaux : placement, taille, bloque-production
+  await loadAlertSettings();
+  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
+  const d = _alertDefaults(a.params);
+  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
+  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
+  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
+
+  const checklistHtml = clEnabled
+    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
+      +   d.checklist.items.map((it, idx) => {
+            const itType = it.type || 'choice';
+            if (itType === 'value') {
+              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
+              let toleranceHint = '';
+              if (it.min != null || it.max != null) {
+                const minStr = (it.min != null) ? String(it.min) : '−∞';
+                const maxStr = (it.max != null) ? String(it.max) : '+∞';
+                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
+              }
+              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
+                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
+                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
+                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+                + '<div style="display:flex;align-items:center;gap:8px">'
+                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
+                +   unit
+                + '</div>'
+                + toleranceHint
+                + '</div>';
+            }
+            const isMulti = it.multi !== false;
+            const inputType = isMulti ? 'checkbox' : 'radio';
+            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
+            const respHtml = it.responses.map((r) =>
+              '<label class="ta-chip">'
+              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
+              + '<span>' + esc(r) + '</span>'
+              + '</label>'
+            ).join('');
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
+              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
+              + '</div>';
+          }).join('')
+      + '</div>'
+    : '';
+
+  // Construction du wrapper de simulation (positionnement, taille, backdrop)
+  const wrap = document.createElement('div');
+  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
+  if (settings.block_production) wrap.classList.add('ta-blocking');
+
+  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
+  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
+
+  // Contenu de l'alerte (sans aucune chrome admin)
+  const alertHtml = '<div class="ta-sim-alert">'
+    + '<div class="ta-sim-title">' + esc(a.nom) + '</div>'
+    + '<div class="ta-sim-sub">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    + checklistHtml
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
+    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
+    + '</div>'
+    + '</div>';
+
+  wrap.innerHTML = exitBtn + alertHtml;
+  document.body.appendChild(wrap);
+
+  const close = () => wrap.remove();
+
+  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
+  document.getElementById('ta-sim-exit').addEventListener('click', close);
+
+  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
+  const onKey = (ev) => {
+    if (ev.key === 'Escape' && !settings.block_production) {
+      close();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+
+  // Si non bloquant + placement coin : cliquer en dehors ferme
+  if (!settings.block_production) {
+    setTimeout(() => {
+      const outsideClick = (ev) => {
+        if (!wrap.contains(ev.target)) return;
+        if (ev.target.closest('.ta-sim-alert')) return;
+        if (ev.target.closest('.ta-sim-exit')) return;
+        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
+        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
+        close();
+        document.removeEventListener('keydown', onKey);
+      };
+      wrap.addEventListener('click', outsideClick);
+    }, 100);
+  }
+
+  // Valider
+  function _taIsComplete() {
+    if (!clEnabled) return true;
+    const items = wrap.querySelectorAll('.ta-cl-item');
+    for (const it of items) {
+      const t = it.getAttribute('data-type') || 'choice';
+      if (t === 'value') {
+        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
+        if (v === '') return false;
+      } else {
+        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
+      }
+    }
+    return true;
+  }
+  function _taFinalize() {
+    toast('Test terminé — aucune donnée enregistrée.');
+    close();
+    document.removeEventListener('keydown', onKey);
+  }
+  function _taRenderValidate(actions) {
+    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
+    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  }
+  function _taRenderConfirm(actions) {
+    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
+      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
+      + '<div style="display:flex;gap:6px">'
+      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
+      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
+      + '</div>'
+      + '</div>';
+    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
+    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
+  }
+  function _taOnValidate() {
+    if (_taIsComplete()) { _taFinalize(); return; }
+    const actions = wrap.querySelector('.ta-sim-actions');
+    if (!actions) { _taFinalize(); return; }
+    _taRenderConfirm(actions);
+  }
+  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+}
+
+function openEditAlertModal(id) {
+  const a = _alertsData.find(x => x.id === id);
+  if (!a) return;
+  const isAuto = !!a.linked_maint_code;
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.innerHTML = '<div class="alert-modal">'
+    + '<div class="alert-modal-head"><h3>Modifier l\'alerte' + (isAuto ? ' (auto)' : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   _renderAlertFormFields(a.params, { nomReadonly: isAuto, nomValue: a.nom })
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+    +   '<button type="button" class="btn" id="edit-alert-save">Enregistrer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  _afOnTriggerChange();
+  document.getElementById('edit-alert-save').addEventListener('click', async () => {
+    const body = {};
+    if (!isAuto) {
+      const nom = (document.getElementById('af-nom').value || '').trim();
+      if (!nom) { toast('Titre obligatoire', true); return; }
+      body.nom = nom;
+    }
+    const params = _afReadParams();
+    if (!params) return;
+    body.params = params;
+    try {
+      await api('/api/maintenance/alerts/' + id, { method: 'PATCH', body: JSON.stringify(body) });
+      toast('Alerte mise à jour');
+      close();
+      await loadAlerts();
+    } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
+  });
+  setTimeout(() => (document.getElementById('af-nom') || document.getElementById('af-trigger-type'))?.focus(), 30);
 }
 
 async function deleteUpdate(id) {
