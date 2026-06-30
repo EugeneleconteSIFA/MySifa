@@ -4264,6 +4264,54 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 134, "maintenance_alert_settings_singleton")
 
+    # v135 — Comportement d'empilement des alertes maintenance.
+    # 'stack'    : toutes les alertes actives sont affichées en pile
+    # 'queue'    : une seule à la fois, les autres attendent leur tour
+    # 'replace'  : la dernière alerte remplace celle déjà affichée
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=135 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_settings)").fetchall()}
+        if "stack_mode" not in cols:
+            conn.execute(
+                "ALTER TABLE maintenance_alert_settings ADD COLUMN stack_mode TEXT NOT NULL DEFAULT 'stack'"
+            )
+        conn.execute(
+            "UPDATE maintenance_alert_settings SET stack_mode='stack' "
+            "WHERE id=1 AND (stack_mode IS NULL OR stack_mode='')"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 135, "maintenance_alert_settings_stack_mode")
+
+    # v136 — Historique des acquittements d'alertes maintenance.
+    # Chaque entrée trace : qui (user_id, nom), quand (ack_at), sur quelle
+    # machine, quel dossier en cours, les réponses cochées/saisies par point
+    # (JSON), et le commentaire libre. Permet l'audit qualité et le calcul
+    # du compteur périodique par machine.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=136 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_alert_acks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id INTEGER NOT NULL,
+                user_id INTEGER,
+                user_nom TEXT,
+                machine TEXT,
+                no_dossier TEXT,
+                ack_at TEXT NOT NULL,
+                responses TEXT,
+                comment TEXT,
+                FOREIGN KEY (alert_id) REFERENCES maintenance_alerts(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_acks_alert_machine "
+            "ON maintenance_alert_acks(alert_id, machine, ack_at DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_acks_ack_at "
+            "ON maintenance_alert_acks(ack_at DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 136, "maintenance_alert_acks_table")
+
 
 def create_default_admin():
     import bcrypt

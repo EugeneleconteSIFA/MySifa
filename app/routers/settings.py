@@ -3,7 +3,7 @@
 import hashlib
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -2261,6 +2261,211 @@ async def maintenance_alert_settings_update(request: Request):
                detail=f"placement={placement} size={size} "
                       f"block={bool(block_production)} stack={stack_mode}")
     return {"ok": True}
+
+
+# ── Affichage opérateur : alertes actives et acquittements ─────────
+# L'endpoint /active est polled par /prod toutes les ~15 secondes. Il calcule
+# pour chaque alerte active si elle doit s'afficher MAINTENANT pour cet
+# opérateur, sur sa machine, selon la sémantique de déclenchement.
+#
+# Pour le périodique :
+#   - Référence = MAX(dernier_ack, dernière_saisie_01_ou_88 sur la machine)
+#   - Si la machine n'est plus en production (dernière saisie = 89 ou arrêt
+#     50-85), on n'affiche pas
+#   - Si la dernière "remise en marche" est un code 88, un délai de grâce de
+#     ALERT_RESUME_GRACE_MINUTES (5 min) est appliqué après ce 88 — l'alerte
+#     ne se déclenche pas avant reprise + 5 min
+#
+# Pour les autres types (manual / calendar / event) : non implémentés en v1,
+# silencieusement ignorés.
+
+
+def _parse_paris_dt(s):
+    """Parse une date stockée au format MySifa (Paris local, sans tz)."""
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(str(s)[:19])
+    except (ValueError, TypeError):
+        return None
+
+
+def _machine_name_from_user(conn, user: dict) -> Optional[str]:
+    """Récupère le nom de la machine assignée à l'utilisateur (via machine_id)."""
+    mid = user.get("machine_id")
+    if not mid:
+        return None
+    try:
+        row = conn.execute("SELECT nom FROM machines WHERE id=? LIMIT 1", (int(mid),)).fetchone()
+    except (TypeError, ValueError):
+        return None
+    return row["nom"] if row else None
+
+
+def _is_machine_in_production(conn, machine: str) -> bool:
+    """True si la dernière saisie pour cette machine est code 01, 03 ou 88."""
+    row = conn.execute(
+        "SELECT operation_code FROM production_data "
+        "WHERE machine=? ORDER BY date_operation DESC, id DESC LIMIT 1",
+        (machine,)
+    ).fetchone()
+    if not row:
+        return False
+    code = str(row["operation_code"] or "").strip()
+    return code in ("01", "03", "88")
+
+
+def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
+    """Décide si une alerte périodique doit s'afficher maintenant pour cette machine."""
+    trig = params.get("trigger") or {}
+    if trig.get("type") != "periodic":
+        return False
+    try:
+        interval_min = int(trig.get("interval_minutes") or 0)
+    except (TypeError, ValueError):
+        interval_min = 0
+    if interval_min <= 0:
+        return False
+    if not _is_machine_in_production(conn, machine):
+        return False
+    # Ancre : dernière saisie code 01 ou 88 (début production / reprise)
+    anchor_row = conn.execute(
+        "SELECT MAX(date_operation) AS m FROM production_data "
+        "WHERE machine=? AND operation_code IN ('01', '88')",
+        (machine,)
+    ).fetchone()
+    anchor_dt = _parse_paris_dt(anchor_row["m"]) if anchor_row else None
+    if not anchor_dt:
+        return False
+    # Dernier ack pour cette alerte sur cette machine
+    ack_row = conn.execute(
+        "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+        "WHERE alert_id=? AND machine=?",
+        (alert_id, machine)
+    ).fetchone()
+    last_ack_dt = _parse_paris_dt(ack_row["m"]) if ack_row else None
+    # Dernière reprise (88)
+    rep_row = conn.execute(
+        "SELECT MAX(date_operation) AS m FROM production_data "
+        "WHERE machine=? AND operation_code='88'",
+        (machine,)
+    ).fetchone()
+    last_88_dt = _parse_paris_dt(rep_row["m"]) if rep_row else None
+    # Référence = max(ancre, last_ack)
+    ref_dt = anchor_dt
+    if last_ack_dt and last_ack_dt > ref_dt:
+        ref_dt = last_ack_dt
+    # Grâce après reprise : si le 88 est l'ancre courante et pas d'ack après
+    if last_88_dt and last_88_dt == anchor_dt:
+        if not last_ack_dt or last_ack_dt < last_88_dt:
+            grace = last_88_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
+            if grace > ref_dt:
+                ref_dt = grace
+    due_dt = ref_dt + timedelta(minutes=interval_min)
+    return now_paris >= due_dt
+
+
+@router.get("/api/maintenance/alerts/active")
+def maintenance_alerts_active(request: Request):
+    """Liste des alertes actives à pousser sur l'écran de l'opérateur connecté.
+    Filtre par rôle (superadmin voit tout, fabrication voit les siennes), par
+    machine ciblée, et applique la sémantique de déclenchement (périodique).
+    """
+    from database import get_db
+    user = get_current_user(request)
+    user_role = user.get("role") or ""
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+    items = []
+    with get_db() as conn:
+        user_machine = _machine_name_from_user(conn, user)
+        rows = conn.execute(
+            """SELECT id, nom, params, linked_maint_code
+               FROM maintenance_alerts
+               WHERE active=1"""
+        ).fetchall()
+        for r in rows:
+            try:
+                params = _json_alerts.loads(r["params"] or "{}")
+            except (ValueError, TypeError):
+                params = {}
+            target = params.get("target") or {}
+            # Filtrage cible : superadmin voit tout ; sinon fabrication uniquement
+            if not operator_should_see_alert(user_role, user_machine or "", target):
+                continue
+            trig = params.get("trigger") or {}
+            ttype = trig.get("type")
+            should_show = False
+            if ttype == "periodic":
+                machine_for_check = user_machine
+                # Si superadmin sans machine assignée et la cible est une seule
+                # machine spécifique, on utilise cette machine pour le calcul.
+                if not machine_for_check and user_role == ROLE_SUPERADMIN:
+                    machines_list = target.get("machines") or []
+                    if isinstance(machines_list, list):
+                        specific = [m for m in machines_list if m and m != "*"]
+                        if len(specific) == 1:
+                            machine_for_check = specific[0]
+                if machine_for_check:
+                    should_show = _is_periodic_alert_due(
+                        conn, int(r["id"]), params, machine_for_check, now_paris
+                    )
+            # type manual / calendar / event : non implémenté en v1
+            if should_show:
+                items.append({
+                    "id": int(r["id"]),
+                    "nom": r["nom"],
+                    "params": params,
+                    "linked_maint_code": r["linked_maint_code"] or "",
+                })
+    return {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
+
+
+@router.post("/api/maintenance/alerts/{alert_id}/ack")
+async def maintenance_alerts_ack(alert_id: int, request: Request):
+    """Acquittement opérateur d'une alerte. Enregistre l'historique et met
+    à jour last_ack_at sur l'alerte pour réinitialiser le compteur périodique."""
+    user = get_current_user(request)
+    body = await request.json()
+    responses = body.get("responses") or {}
+    if not isinstance(responses, dict):
+        responses = {}
+    comment = (body.get("comment") or "").strip()
+    if len(comment) > 2000:
+        comment = comment[:2000]
+    no_dossier = (body.get("no_dossier") or "").strip()
+    from database import get_db
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        # Vérifier que l'alerte existe et est active
+        row = conn.execute(
+            "SELECT id, active FROM maintenance_alerts WHERE id=?", (alert_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Alerte introuvable.")
+        # Machine de l'opérateur (ou vide pour superadmin sans machine)
+        machine = _machine_name_from_user(conn, user) or ""
+        try:
+            responses_json = _json_alerts.dumps(responses, ensure_ascii=False)
+        except (TypeError, ValueError):
+            responses_json = "{}"
+        conn.execute(
+            """INSERT INTO maintenance_alert_acks
+               (alert_id, user_id, user_nom, machine, no_dossier,
+                ack_at, responses, comment)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (alert_id, user.get("id"), user.get("nom") or user.get("email") or "",
+             machine, no_dossier, now_paris, responses_json, comment),
+        )
+        # Met à jour le last_ack_at sur l'alerte (cache utilisé en /settings)
+        conn.execute(
+            "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
+            (now_paris, now_paris, alert_id),
+        )
+        conn.commit()
+    log_action(user=user, action="VALIDATE", module="maintenance_alerts",
+               objet=str(alert_id),
+               detail=f"machine={machine} dossier={no_dossier} comment_len={len(comment)}")
+    return {"ok": True, "ack_at": now_paris}
 
 
 @router.get("/api/maintenance/wearparts/last")
