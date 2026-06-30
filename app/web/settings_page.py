@@ -3556,6 +3556,7 @@ function _alertDefaults(existing) {
       type: 'choice',
       label: (it && it.label) || '',
       responses: responses.length ? responses : ['Conforme'],
+      multi: (it && it.multi === false) ? false : true,
     };
   });
   return {
@@ -3706,8 +3707,15 @@ function _afChecklistCardBody(item) {
   // type "choice"
   const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
   const responsesHtml = responses.map(_afResponseRow).join('');
+  const multi = (item && item.multi === false) ? false : true;
   return '<div class="af-cl-body" data-type="choice">'
-    + '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Réponses possibles</div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">'
+    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Réponses possibles</div>'
+    +   '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none">'
+    +     '<input type="checkbox" class="af-cl-multi" ' + (multi ? 'checked' : '') + '>'
+    +     'Plusieurs réponses possibles'
+    +   '</label>'
+    + '</div>'
     + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
     + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
     + '</div>';
@@ -3736,7 +3744,7 @@ function _afOnTypeChange(sel) {
   const newType = sel.value;
   const defaultItem = (newType === 'value')
     ? { type: 'value', label: '', unit: '', min: null, max: null }
-    : { type: 'choice', label: '', responses: ['Conforme'] };
+    : { type: 'choice', label: '', responses: ['Conforme'], multi: true };
   const tmp = document.createElement('div');
   tmp.innerHTML = _afChecklistCardBody(defaultItem);
   const newBody = tmp.firstElementChild;
@@ -3752,7 +3760,7 @@ function _afAddChecklistItem() {
   const wrap = document.getElementById('af-checklist-items');
   if (!wrap) return;
   const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'] });
+  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true });
   const card = tmp.firstElementChild;
   wrap.appendChild(card);
   card.querySelector('.af-cl-label')?.focus();
@@ -3923,7 +3931,8 @@ function _afReadParams() {
         if (r) responses.push(r);
       });
       if (!responses.length) return;
-      items.push({ type: 'choice', label: label, responses: responses });
+      const multi = card.querySelector('.af-cl-multi')?.checked !== false;
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -4172,9 +4181,12 @@ async function previewAlert(id) {
                 + toleranceHint
                 + '</div>';
             }
+            const isMulti = it.multi !== false;
+            const inputType = isMulti ? 'checkbox' : 'radio';
+            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
             const respHtml = it.responses.map((r) =>
               '<label class="ta-chip">'
-              + '<input type="checkbox" class="ta-cl-resp" data-point="' + idx + '">'
+              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
               + '<span>' + esc(r) + '</span>'
               + '</label>'
             ).join('');

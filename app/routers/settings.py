@@ -1732,8 +1732,12 @@ def _validate_alert_params(params: dict) -> dict:
             clean_responses = clean_responses[:20]
         if not clean_responses:
             clean_responses = ["Conforme"]
+        # multi : si true, l'opérateur peut cocher plusieurs réponses
+        # (checkboxes). Si false, une seule réponse possible (radio).
+        # Défaut true pour préserver le comportement des alertes existantes.
+        multi = bool(it.get("multi", True))
         clean_items.append({"type": "choice", "label": label,
-                            "responses": clean_responses})
+                            "responses": clean_responses, "multi": multi})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:
