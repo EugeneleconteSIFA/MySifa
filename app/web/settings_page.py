@@ -335,18 +335,18 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim.ta-pl-center{align-items:center;justify-content:center}
 .ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}
 .ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}
-.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.55);padding:18px 20px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
-.ta-sz-small .ta-sim-alert{max-width:320px;width:100%}
-.ta-sz-medium .ta-sim-alert{max-width:420px;width:100%}
-.ta-sz-large .ta-sim-alert{max-width:560px;width:100%}
-.ta-sim-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
-.ta-sim-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
-.ta-sim-actions{display:flex;gap:8px;margin-top:12px}
-.ta-sim-btn{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}
+.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:14px 16px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
+.ta-sz-small .ta-sim-alert{max-width:240px;width:100%}
+.ta-sz-medium .ta-sim-alert{max-width:320px;width:100%}
+.ta-sz-large .ta-sim-alert{max-width:420px;width:100%}
+.ta-sim-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.ta-sim-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+.ta-sim-actions{display:flex;gap:6px;margin-top:10px}
+.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}
 .ta-sim-btn:hover{filter:brightness(1.05)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
-.ta-chip{display:inline-flex;align-items:center;padding:8px 16px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
+.ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
 .ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -4158,24 +4158,24 @@ async function previewAlert(id) {
   const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
 
   const checklistHtml = clEnabled
-    ? '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
-      + '<div style="display:flex;flex-direction:column;gap:14px;margin-bottom:14px" id="ta-checklist">'
+    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle' + (d.checklist.all_required ? ' (tous requis)' : '') + '</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
       +   d.checklist.items.map((it, idx) => {
             const itType = it.type || 'choice';
             if (itType === 'value') {
-              const unit = it.unit ? '<span style="font-size:13px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
+              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
               let toleranceHint = '';
               if (it.min != null || it.max != null) {
                 const minStr = (it.min != null) ? String(it.min) : '−∞';
                 const maxStr = (it.max != null) ? String(it.max) : '+∞';
-                toleranceHint = '<div style="font-size:11px;color:var(--muted);margin-top:4px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
+                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
               }
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(it.label) + '</div>'
+                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
+                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
                 + '</div>'
                 + toleranceHint
@@ -4191,8 +4191,8 @@ async function previewAlert(id) {
               + '</label>'
             ).join('');
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
-              + '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px">' + esc(it.label) + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:6px">' + respHtml + '</div>'
+              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + '</div>';
           }).join('')
       + '</div>'
@@ -4211,8 +4211,8 @@ async function previewAlert(id) {
     + '<div class="ta-sim-title">' + esc(a.nom) + '</div>'
     + '<div class="ta-sim-sub">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
     + checklistHtml
-    + '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 6px 0">Commentaire (optionnel)</label>'
-    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
+    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
     + '<div class="ta-sim-actions">'
     +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
     + '</div>'
