@@ -327,35 +327,30 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .af-md-row.is-disabled .af-md-row-text{color:var(--muted)}
 .af-md-sep{height:1px;background:var(--border);margin:4px 6px}
 /* ── Tester sur moi : simulation pure ────────────────────────────── */
-.ta-sim{position:fixed;z-index:2000;pointer-events:none}
-.ta-sim.ta-blocking{inset:0;background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}
-.ta-sim.ta-blocking.ta-pl-center{display:flex;align-items:center;justify-content:center;padding:20px}
-.ta-sim:not(.ta-blocking).ta-pl-center{inset:0;display:flex;align-items:center;justify-content:center;padding:20px;pointer-events:none}
-.ta-sim:not(.ta-blocking).ta-pl-center .ta-sim-alert{pointer-events:auto}
-.ta-sim.ta-pl-top{top:0;left:0;right:0;display:flex;justify-content:center;padding:16px}
-.ta-sim.ta-pl-bottom{bottom:0;left:0;right:0;display:flex;justify-content:center;padding:16px}
-.ta-sim.ta-pl-top-right{top:16px;right:16px}
-.ta-sim.ta-pl-bottom-right{bottom:16px;right:16px}
-.ta-sim:not(.ta-blocking) .ta-sim-alert{pointer-events:auto}
-.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.55);padding:18px 20px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out}
+/* Pattern always-flex : un seul wrapper full-screen ; le placement est piloté
+   par align-items / justify-content. Évite les conflits entre inset:0 (backdrop)
+   et top/right/bottom/left (positions de coin). */
+.ta-sim{position:fixed;inset:0;display:flex;z-index:2000;pointer-events:none;padding:20px;box-sizing:border-box}
+.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}
+.ta-sim.ta-pl-center{align-items:center;justify-content:center}
+.ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}
+.ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}
+.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.55);padding:18px 20px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
 .ta-sz-small .ta-sim-alert{max-width:320px;width:100%}
 .ta-sz-medium .ta-sim-alert{max-width:420px;width:100%}
 .ta-sz-large .ta-sim-alert{max-width:560px;width:100%}
 .ta-sim-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px}
 .ta-sim-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
 .ta-sim-actions{display:flex;gap:8px;margin-top:12px}
-.ta-sim-btn{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--border);cursor:pointer;font-family:inherit}
-.ta-sim-btn-sec{background:var(--bg);color:var(--text)}
-.ta-sim-btn-primary{flex:2;background:var(--accent);color:#fff;border:none}
-.ta-sim-btn-sec:hover{filter:brightness(1.05)}
-.ta-sim-btn-primary:hover{filter:brightness(1.05)}
+.ta-sim-btn{flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}
+.ta-sim-btn:hover{filter:brightness(1.05)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
 @keyframes taSimFade{from{opacity:0}to{opacity:1}}
 @keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:600px){
+  .ta-sim{padding:12px}
   .ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}
-  .ta-sim.ta-pl-top-right,.ta-sim.ta-pl-bottom-right{left:12px;right:12px}
 }
 @media(max-width:900px){
   .alert-row{flex-wrap:wrap}
@@ -4028,8 +4023,12 @@ let _alertGlobalSettings = { placement: 'center', size: 'medium', block_producti
 async function loadAlertSettings() {
   try {
     const r = await api('/api/maintenance/alert-settings');
+    let placement = r.placement || 'center';
+    if (placement !== 'center' && placement !== 'top-right' && placement !== 'bottom-right') {
+      placement = 'center';
+    }
     _alertGlobalSettings = {
-      placement: r.placement || 'center',
+      placement: placement,
       size: r.size || 'medium',
       block_production: !!r.block_production,
       stack_mode: r.stack_mode || 'stack',
@@ -4045,8 +4044,6 @@ function openAlertSettingsModal() {
     overlay.className = 'alert-modal-overlay';
     const placements = [
       { v: 'center',       l: 'Centre (modal)' },
-      { v: 'top',          l: 'Haut (bandeau)' },
-      { v: 'bottom',       l: 'Bas (toast)' },
       { v: 'top-right',    l: 'Coin haut droit' },
       { v: 'bottom-right', l: 'Coin bas droit' },
     ];
@@ -4200,8 +4197,7 @@ async function previewAlert(id) {
     + '<label style="display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 6px 0">Commentaire (optionnel)</label>'
     + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
     + '<div class="ta-sim-actions">'
-    +   '<button type="button" id="ta-ras" class="ta-sim-btn ta-sim-btn-sec" title="Rien à signaler — clôt l\'alerte sans détailler">RAS</button>'
-    +   '<button type="button" id="ta-validate" class="ta-sim-btn ta-sim-btn-primary">' + esc(d.validation.button_label) + '</button>'
+    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
     + '</div>'
     + '</div>';
 
@@ -4238,13 +4234,6 @@ async function previewAlert(id) {
     }, 100);
   }
 
-  // RAS
-  document.getElementById('ta-ras').addEventListener('click', () => {
-    toast('Test terminé — RAS (rien à signaler), aucune donnée enregistrée.');
-    close();
-    document.removeEventListener('keydown', onKey);
-  });
-
   // Valider
   document.getElementById('ta-validate').addEventListener('click', () => {
     if (clEnabled && d.checklist.all_required) {
@@ -4254,13 +4243,13 @@ async function previewAlert(id) {
         if (t === 'value') {
           const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
           if (v === '') {
-            toast('Saisis une valeur pour chaque point (ou utilise RAS).', true);
+            toast('Saisis une valeur pour chaque point.', true);
             return;
           }
         } else {
           const checked = it.querySelectorAll('.ta-cl-resp:checked').length;
           if (!checked) {
-            toast('Coche au moins une réponse pour chaque point (ou utilise RAS).', true);
+            toast('Coche au moins une réponse pour chaque point.', true);
             return;
           }
         }

@@ -1503,7 +1503,9 @@ def _normalize_maint_payload(body: dict) -> dict:
     }
 
 
-_ALERT_PLACEMENTS = {"center", "top", "bottom", "top-right", "bottom-right"}
+_ALERT_PLACEMENTS = {"center", "top-right", "bottom-right"}
+# Anciennes valeurs acceptées en lecture (legacy) — normalisées vers "center"
+_ALERT_PLACEMENTS_LEGACY = {"top", "bottom"}
 _ALERT_STACK_MODES = {"stack", "queue", "replace"}
 _ALERT_MIN_INTERVAL_MINUTES = 1
 _ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
@@ -2178,8 +2180,12 @@ def maintenance_alert_settings_get(request: Request):
         stack_mode = r["stack_mode"]
     except (IndexError, KeyError):
         stack_mode = "stack"
+    placement = r["placement"] or "center"
+    if placement not in _ALERT_PLACEMENTS:
+        # Valeur legacy ou inconnue → on retombe sur "center"
+        placement = "center"
     return {
-        "placement": r["placement"] or "center",
+        "placement": placement,
         "size": r["size"] or "medium",
         "block_production": bool(r["block_production"]),
         "stack_mode": stack_mode or "stack",
