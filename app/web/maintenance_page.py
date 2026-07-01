@@ -546,6 +546,13 @@ body.light .toast.info{background:#fff;color:var(--text)}
 
 .ctrl-src-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);cursor:help}
 .ctrl-actions-stack{display:inline-flex;align-items:center;gap:6px}
+
+.ctrl-point-filters-row{display:flex;align-items:center;gap:10px;padding-top:10px;margin-top:10px;border-top:1px solid var(--border);flex-wrap:wrap}
+.ctrl-point-filters-inputs{display:flex;flex-wrap:wrap;gap:8px;flex:1}
+.ctrl-point-filters-inputs .pf-item{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:4px 8px}
+.ctrl-point-filters-inputs .pf-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.ctrl-point-filters-inputs .pf-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;min-width:80px}
+.ctrl-point-filters-inputs .pf-num{width:60px}
 </style>
 </head>
 <body>
@@ -745,7 +752,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div class="filters">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="filter-input">
+              <select id="filt-controles-type" class="filter-input" onchange="resetPointFilters(); renderCtrl()">
                 <option value="">Tous les types</option>
               </select>
             </div>
@@ -783,6 +790,11 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
             <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
             <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+          </div>
+          <div id="ctrl-point-filters-row" class="ctrl-point-filters-row" style="display:none">
+            <span class="filters-date-presets-label">Réponses :</span>
+            <div id="ctrl-point-filters-inputs" class="ctrl-point-filters-inputs"></div>
+            <button type="button" class="date-preset-chip" onclick="resetPointFilters()">Réinitialiser</button>
           </div>
         </div>
 
@@ -3850,7 +3862,7 @@ function renderOpsTypes(){
 // Historique des contrôles
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [] };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {} };
 
 function loadCtrl(){
   try{
@@ -3893,7 +3905,11 @@ async function loadCtrlAcks(){
       date_saisie: a.ack_at,
       _source: 'alert',
       _maint_code: a.linked_maint_code || '',
+      _alert_id: a.alert_id,
+      _responses: a.responses || {},
+      _raw_comment: a.comment || '',
     }));
+    CTRL_STATE.alerts_meta = data.alerts_meta || {};
   } catch(e){ CTRL_STATE.acks = []; }
   if(typeof renderCtrl === 'function') renderCtrl();
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
@@ -3999,12 +4015,31 @@ function updateCtrlDatePresetChips(){
     chip.classList.toggle('active', !!(p && p.from === from && p.to === to));
   });
 }
+function _displayType(entry){
+  // Nom canonique d'un contrôle pour l'UI : on préfère le label du code
+  // maintenance (stable, lisible) plutôt que le nom prefixé de l'alerte auto
+  // ("Contrôle : XX – label"). Fallback sur entry.type pour les alertes
+  // manuelles sans code lié et pour les contrôles saisis manuellement.
+  if(!entry) return '';
+  if(entry._source === 'alert' && entry._maint_code){
+    const codeItem = CTRL_TYPES_STATE.list.find(t => String(t.id) === String(entry._maint_code));
+    if(codeItem && codeItem.nom) return codeItem.nom;
+  }
+  return entry.type || '';
+}
+
 function refreshCtrlFiltersOptions(){
   const typeSel = document.getElementById('filt-controles-type');
   const opeSel  = document.getElementById('filt-controles-operateur');
   if(typeSel){
     const cur = typeSel.value;
-    const types = CTRL_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
+    const setTypes = new Set();
+    // Base : labels du catalogue de codes (même sans saisie encore)
+    CTRL_TYPES_STATE.list.forEach(t => { if(t.nom) setTypes.add(t.nom); });
+    // Ajoute : chaque entrée (manuelle ou ack) via son nom d'affichage canonique
+    CTRL_STATE.list.forEach(c => { const n = _displayType(c); if(n) setTypes.add(n); });
+    (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
+    const types = Array.from(setTypes).sort((a,b) => a.localeCompare(b, 'fr'));
     typeSel.innerHTML = '<option value="">Tous les types</option>' +
       types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
     if(cur && types.includes(cur)) typeSel.value = cur;
@@ -4017,6 +4052,180 @@ function refreshCtrlFiltersOptions(){
     if(cur && opes.includes(cur)) opeSel.value = cur;
   }
 }
+function _getCurrentTypeChecklistItems(){
+  const sel = document.getElementById('filt-controles-type');
+  const t = (sel && sel.value || '').trim();
+  if(!t) return null;
+  // Trouve le premier ack dont le nom canonique matche
+  const ackMatch = (CTRL_STATE.acks || []).find(a => _displayType(a) === t);
+  if(!ackMatch || ackMatch._alert_id == null) return null;
+  const meta = (CTRL_STATE.alerts_meta || {})[String(ackMatch._alert_id)];
+  if(!meta || !Array.isArray(meta.checklist_items)) return null;
+  return meta.checklist_items;
+}
+
+function renderPointFilters(){
+  const row = document.getElementById('ctrl-point-filters-row');
+  const box = document.getElementById('ctrl-point-filters-inputs');
+  if(!row || !box) return;
+  const items = _getCurrentTypeChecklistItems();
+  if(!items || !items.length){
+    row.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  row.style.display = '';
+  const html = items.map((it, idx) => {
+    const label = escHtml(it.label || ('Point ' + (idx+1)));
+    if(it.type === 'value'){
+      const cur = CTRL_STATE.pointFilters[idx] || {};
+      const minV = (cur.min != null) ? cur.min : '';
+      const maxV = (cur.max != null) ? cur.max : '';
+      const unit = it.unit ? ' ' + escHtml(it.unit) : '';
+      return '<div class="pf-item">'
+        + '<span class="pf-label">' + label + unit + '</span>'
+        + '<input type="number" step="any" class="pf-input pf-num" placeholder="min" value="' + escAttr(String(minV)) + '" onchange="_onPointFilterChange(' + idx + ', \'min\', this.value)">'
+        + '<input type="number" step="any" class="pf-input pf-num" placeholder="max" value="' + escAttr(String(maxV)) + '" onchange="_onPointFilterChange(' + idx + ', \'max\', this.value)">'
+        + '</div>';
+    }
+    // choice
+    const cur = CTRL_STATE.pointFilters[idx] || {};
+    const curVal = cur.value || '';
+    const responses = Array.isArray(it.responses) ? it.responses : [];
+    const opts = '<option value="">Toutes</option>' +
+      responses.map(r => '<option value="' + escAttr(r) + '"' + (r === curVal ? ' selected' : '') + '>' + escHtml(r) + '</option>').join('');
+    return '<div class="pf-item">'
+      + '<span class="pf-label">' + label + '</span>'
+      + '<select class="pf-input" onchange="_onPointFilterChange(' + idx + ', \'value\', this.value)">' + opts + '</select>'
+      + '</div>';
+  }).join('');
+  box.innerHTML = html;
+}
+
+function _onPointFilterChange(idx, key, value){
+  if(!CTRL_STATE.pointFilters[idx]) CTRL_STATE.pointFilters[idx] = {};
+  if(value === '' || value == null){
+    delete CTRL_STATE.pointFilters[idx][key];
+    if(Object.keys(CTRL_STATE.pointFilters[idx]).length === 0){
+      delete CTRL_STATE.pointFilters[idx];
+    }
+  } else {
+    CTRL_STATE.pointFilters[idx][key] = value;
+  }
+  renderCtrl();
+}
+
+function resetPointFilters(){
+  CTRL_STATE.pointFilters = {};
+  renderCtrl();
+}
+
+function _matchPointFilters(ackRow){
+  // ackRow n'est filtré que si _source === 'alert' avec des _responses.
+  // Les entrées manuelles passent toujours à travers (pas de réponses structurées).
+  if(!ackRow || ackRow._source !== 'alert') return true;
+  const items = _getCurrentTypeChecklistItems();
+  if(!items) return true;
+  const filters = CTRL_STATE.pointFilters || {};
+  const responses = ackRow._responses || {};
+  for(const k of Object.keys(filters)){
+    const idx = parseInt(k, 10);
+    const filt = filters[k] || {};
+    const it = items[idx];
+    if(!it) continue;
+    const r = responses[String(idx)];
+    if(it.type === 'value'){
+      const num = (r != null && r !== '') ? parseFloat(r) : NaN;
+      if(filt.min != null && filt.min !== ''){
+        const mn = parseFloat(filt.min);
+        if(!isNaN(mn) && (isNaN(num) || num < mn)) return false;
+      }
+      if(filt.max != null && filt.max !== ''){
+        const mx = parseFloat(filt.max);
+        if(!isNaN(mx) && (isNaN(num) || num > mx)) return false;
+      }
+    } else {
+      // choice : la réponse cochée doit inclure la valeur filtrée
+      if(filt.value != null && filt.value !== ''){
+        const arr = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
+        if(!arr.includes(filt.value)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+function openAckDetail(prefixedId){
+  const ack = (CTRL_STATE.acks || []).find(a => a.id === prefixedId);
+  if(!ack) return;
+  const meta = (CTRL_STATE.alerts_meta || {})[String(ack._alert_id)] || {};
+  const items = Array.isArray(meta.checklist_items) ? meta.checklist_items : [];
+  const responses = ack._responses || {};
+
+  // Rendu de la checklist en mode lecture seule (cases pré-cochées / valeur saisie)
+  let checklistHtml = '';
+  if(items.length){
+    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
+      +   items.map((it, idx) => {
+            const r = responses[String(idx)];
+            if(it.type === 'value'){
+              const val = (r != null && r !== '') ? String(r) : '';
+              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + escHtml(it.unit) + '</span>' : '';
+              return '<div class="ta-cl-item" data-type="value">'
+                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
+                + '<div style="display:flex;align-items:center;gap:8px">'
+                +   '<input type="text" disabled value="' + escAttr(val) + '" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;opacity:.85">'
+                +   unit
+                + '</div>'
+                + '</div>';
+            }
+            // choice : cases à cocher pré-remplies selon les réponses stockées
+            const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
+            const chips = ['Nette'];  // placeholder, écrasé ci-dessous
+            // On n'a pas la liste complète des réponses possibles dans l'ack ;
+            // on n'affiche donc que les réponses réellement cochées (comme des
+            // pills sélectionnées). C'est fidèle à la donnée enregistrée.
+            const respHtml = selected.length
+              ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>' + escHtml(s) + '</span></label>').join('')
+              : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
+            return '<div class="ta-cl-item" data-type="choice">'
+              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
+              + '</div>';
+          }).join('')
+      + '</div>';
+  }
+
+  // Contexte : date, machine, opérateur
+  const dt = fmtDate(ack.date_saisie);
+  const contextLine = escHtml(ack.machine || '—') + ' · ' + escHtml(dt) + ' · ' + escHtml(ack.operateur || '—');
+  const commentText = ack._raw_comment || '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ta-sim ta-pl-center ta-blocking';
+  overlay.id = 'ack-detail-overlay';
+  overlay.innerHTML = '<div class="ta-sim-alert">'
+    + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
+    + '<div class="ta-sim-sub">' + contextLine + '</div>'
+    + checklistHtml
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire</label>'
+    + '<textarea disabled rows="2" placeholder="(aucun commentaire)" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;opacity:.85">' + escHtml(commentText) + '</textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" class="ta-sim-btn" onclick="closeAckDetail()">Fermer</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => {
+    if(e.target === overlay) closeAckDetail();
+  });
+}
+
+function closeAckDetail(){
+  const el = document.getElementById('ack-detail-overlay');
+  if(el) el.remove();
+}
+
 function renderCtrl(){
   refreshCtrlFiltersOptions();
   updateCtrlDatePresetChips();
@@ -4030,9 +4239,11 @@ function renderCtrl(){
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
   // Filter
+  // Sync les filtres par point avec le type sélectionné
+  renderPointFilters();
   const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
   let filtered = merged.filter(c => {
-    if(f.type && c.type !== f.type) return false;
+    if(f.type && _displayType(c) !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
     if(f.machine && c.machine !== f.machine) return false;
     if(f.dateFrom || f.dateTo){
@@ -4040,6 +4251,7 @@ function renderCtrl(){
       if(f.dateFrom && d < f.dateFrom) return false;
       if(f.dateTo && d > f.dateTo) return false;
     }
+    if(!_matchPointFilters(c)) return false;
     return true;
   });
   // Sort
@@ -4052,40 +4264,96 @@ function renderCtrl(){
     if(av > bv) return  1 * dir;
     return 0;
   });
-  document.querySelectorAll('.ops-table th[data-sort-ctrl]').forEach(th => {
-    const isActive = th.getAttribute('data-sort-ctrl') === sf;
-    th.classList.toggle('active', isActive);
-    const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
-  });
+  // Colonnes adaptatives : si un seul type est sélectionné et qu'il correspond
+  // à une alerte ayant une checklist, on affiche une colonne par point.
+  let extraCols = [];
+  const singleType = f.type || '';
+  if(singleType){
+    const ackMatch = merged.find(c => c._source === 'alert' && _displayType(c) === singleType);
+    if(ackMatch && ackMatch._alert_id != null && CTRL_STATE.alerts_meta){
+      const meta = CTRL_STATE.alerts_meta[String(ackMatch._alert_id)];
+      if(meta && Array.isArray(meta.checklist_items)){
+        extraCols = meta.checklist_items;
+      }
+    }
+  }
+
+  // Reconstruire le thead
+  const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
+  if(thead){
+    const sortIco = (col) => {
+      if(sf !== col) return '<span class="sort-ico">↕</span>';
+      return '<span class="sort-ico">' + (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') + '</span>';
+    };
+    const activeAttr = (col) => sf === col ? ' class="active"' : '';
+    let h = '';
+    h += '<th data-sort-ctrl="date_saisie"' + activeAttr('date_saisie') + ' onclick="sortCtrl(\'date_saisie\')">Date saisie' + sortIco('date_saisie') + '</th>';
+    h += '<th data-sort-ctrl="machine"' + activeAttr('machine') + ' onclick="sortCtrl(\'machine\')">Machine' + sortIco('machine') + '</th>';
+    h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">Opérateur' + sortIco('operateur') + '</th>';
+    if(!singleType){
+      h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
+    }
+    for(const col of extraCols){
+      const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
+      h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
+    }
+    h += '<th>Commentaires</th>';
+    h += '<th aria-label="Actions"></th>';
+    thead.innerHTML = h;
+  }
+
+  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur (+type?) + extra + commentaires + actions
+
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
       ? 'Aucun contrôle ne correspond aux filtres.'
       : 'Aucun contrôle enregistré. Cliquez sur « Nouveau contrôle » pour commencer.';
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + totalCols + '" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = filtered.map(c =>
-      '<tr>' +
-        '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>' +
-        '<td>' + escHtml(c.machine) + '</td>' +
-        '<td>' + escHtml(c.operateur) + '</td>' +
-        '<td>' + escHtml(c.type) + '</td>' +
-        '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
-        '<td class="col-actions">' +
-          (c._source === 'alert'
-            ? '<div class="ctrl-actions-stack">' +
-                '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
-                '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
-                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-                '</button>' +
-              '</div>'
-            : '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-              '</button>') +
-        '</td>' +
-      '</tr>'
-    );
+    const rows = filtered.map(c => {
+      let cells = '';
+      cells += '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>';
+      cells += '<td>' + escHtml(c.machine) + '</td>';
+      cells += '<td>' + escHtml(c.operateur) + '</td>';
+      if(!singleType){
+        cells += '<td>' + escHtml(_displayType(c)) + '</td>';
+      }
+      for(let i = 0; i < extraCols.length; i++){
+        let val = '';
+        if(c._source === 'alert' && c._responses){
+          const r = c._responses[String(i)];
+          if(Array.isArray(r)){ val = r.join(', '); }
+          else if(r != null && r !== ''){ val = String(r); }
+        }
+        cells += '<td>' + escHtml(val) + '</td>';
+      }
+      // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
+      // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
+      const commentText = singleType
+        ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
+        : (c.commentaire || '');
+      cells += '<td class="col-comment">' + escHtml(commentText) + '</td>';
+      // Actions
+      let actionHtml = '';
+      if(c._source === 'alert'){
+        actionHtml = '<div class="ctrl-actions-stack">' +
+          '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</div>';
+      } else {
+        actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        '</button>';
+      }
+      cells += '<td class="col-actions">' + actionHtml + '</td>';
+      const dblAttr = (c._source === 'alert')
+        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer" title="Double-clic pour voir le détail"'
+        : '';
+      return '<tr' + dblAttr + '>' + cells + '</tr>';
+    });
     tbody.innerHTML = rows.join('');
   }
   if(count){
@@ -4359,6 +4627,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
+<script src="/static/mysifa_alert_runtime.js"></script>
 <script src="/static/support_widget.js"></script>
 </body>
 </html>"""

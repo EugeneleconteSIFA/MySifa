@@ -2363,14 +2363,16 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if not _is_machine_in_production(conn, machine):
         return False
 
-    # 1. Dernier arrêt : codes 87, 89, ou 50–85
+    # 1. Dernier événement "non-production" pour cette machine.
+    # Définition symétrique de _is_machine_in_production : tout code qui n'est
+    # PAS dans {01, 03, 88} interrompt la session. Ça couvre les arrêts
+    # explicites (89, 87, 50-85) mais AUSSI le Calage (02), les événements
+    # personnel (86), les annulations (90), etc. Toute interruption remet le
+    # compteur à zéro et déclenche la grâce de 5 min à la reprise.
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-           WHERE machine=? AND (
-               operation_code IN ('87', '89')
-               OR (operation_code GLOB '[0-9][0-9]'
-                   AND CAST(operation_code AS INTEGER) BETWEEN 50 AND 85)
-           )""",
+           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
+           AND operation_code IS NOT NULL AND operation_code != ''""",
         (machine,),
     ).fetchone()
     last_stop_iso = last_stop_row["m"] if last_stop_row else None
@@ -2512,14 +2514,18 @@ def maintenance_alert_acks_list(request: Request):
             tuple(params_sql),
         ).fetchall()
     items = []
+    alert_ids_seen = set()
     for r in rows:
         try:
             responses = _json_alerts.loads(r["responses"] or "{}")
         except (ValueError, TypeError):
             responses = {}
+        aid = int(r["alert_id"]) if r["alert_id"] is not None else None
+        if aid is not None:
+            alert_ids_seen.add(aid)
         items.append({
             "id": int(r["id"]),
-            "alert_id": int(r["alert_id"]) if r["alert_id"] is not None else None,
+            "alert_id": aid,
             "alert_nom": r["alert_nom"] or "",
             "linked_maint_code": r["linked_maint_code"] or "",
             "operateur": r["user_nom"] or "",
@@ -2529,7 +2535,50 @@ def maintenance_alert_acks_list(request: Request):
             "responses": responses,
             "comment": r["comment"] or "",
         })
-    return {"items": items}
+    # Charger la structure des questionnaires (points de contrôle) pour les
+    # alertes rencontrées, afin que le frontend puisse construire des colonnes
+    # dynamiques dans l'historique.
+    alerts_meta = {}
+    if alert_ids_seen:
+        placeholders = ",".join(["?"] * len(alert_ids_seen))
+        with get_db() as conn2:
+            meta_rows = conn2.execute(
+                f"SELECT id, params FROM maintenance_alerts WHERE id IN ({placeholders})",
+                tuple(alert_ids_seen),
+            ).fetchall()
+        for mr in meta_rows:
+            try:
+                p_json = _json_alerts.loads(mr["params"] or "{}")
+            except (ValueError, TypeError):
+                p_json = {}
+            cl = p_json.get("checklist") or {}
+            cl_items = cl.get("items") or []
+            clean = []
+            if isinstance(cl_items, list):
+                for it in cl_items:
+                    if isinstance(it, str):
+                        clean.append({
+                            "label": it, "type": "choice",
+                            "responses": ["Conforme"], "multi": True,
+                        })
+                    elif isinstance(it, dict):
+                        entry = {
+                            "label": (it.get("label") or "").strip(),
+                            "type": (it.get("type") or "choice"),
+                        }
+                        if entry["type"] == "value":
+                            if it.get("unit"):
+                                entry["unit"] = it["unit"]
+                            if it.get("min") is not None:
+                                entry["min"] = it["min"]
+                            if it.get("max") is not None:
+                                entry["max"] = it["max"]
+                        else:
+                            entry["responses"] = it.get("responses") or []
+                            entry["multi"] = bool(it.get("multi", True))
+                        clean.append(entry)
+            alerts_meta[str(mr["id"])] = {"checklist_items": clean}
+    return {"items": items, "alerts_meta": alerts_meta}
 
 
 _MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
