@@ -2404,19 +2404,18 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     ).fetchone()
     last_ack_dt = _parse_paris_dt(ack_row["m"]) if ack_row else None
 
-    # Ancre = max(session_start, last_ack si dans la session courante)
-    anchor_dt = session_start_dt
-    if last_ack_dt and last_ack_dt >= session_start_dt and last_ack_dt > anchor_dt:
-        anchor_dt = last_ack_dt
-
-    due_dt = anchor_dt + timedelta(minutes=interval_min)
-
-    # 5. Grâce : session démarrée par une reprise, pas d'ack dans cette session
-    if last_stop_dt and session_start_dt > last_stop_dt:
-        if not last_ack_dt or last_ack_dt < session_start_dt:
-            grace = session_start_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
-            if grace > due_dt:
-                due_dt = grace
+    # Deux cas :
+    #  - AUCUN ack dans la session courante → première alerte de session,
+    #    due = session_start + délai de grâce (5 min). Uniforme quel que soit
+    #    l'intervalle configuré : la grâce sert de "ramp-up" à la reprise.
+    #  - Ack déjà validé dans la session → rythme normal, due = ack + intervalle.
+    has_ack_in_session = (
+        last_ack_dt is not None and last_ack_dt >= session_start_dt
+    )
+    if has_ack_in_session:
+        due_dt = last_ack_dt + timedelta(minutes=interval_min)
+    else:
+        due_dt = session_start_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
 
     return now_paris >= due_dt
 
