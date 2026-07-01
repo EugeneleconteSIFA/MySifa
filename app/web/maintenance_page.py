@@ -4015,15 +4015,30 @@ function updateCtrlDatePresetChips(){
     chip.classList.toggle('active', !!(p && p.from === from && p.to === to));
   });
 }
+function _displayType(entry){
+  // Nom canonique d'un contrôle pour l'UI : on préfère le label du code
+  // maintenance (stable, lisible) plutôt que le nom prefixé de l'alerte auto
+  // ("Contrôle : XX – label"). Fallback sur entry.type pour les alertes
+  // manuelles sans code lié et pour les contrôles saisis manuellement.
+  if(!entry) return '';
+  if(entry._source === 'alert' && entry._maint_code){
+    const codeItem = CTRL_TYPES_STATE.list.find(t => String(t.id) === String(entry._maint_code));
+    if(codeItem && codeItem.nom) return codeItem.nom;
+  }
+  return entry.type || '';
+}
+
 function refreshCtrlFiltersOptions(){
   const typeSel = document.getElementById('filt-controles-type');
   const opeSel  = document.getElementById('filt-controles-operateur');
   if(typeSel){
     const cur = typeSel.value;
-    const setTypes = new Set(
-      CTRL_TYPES_STATE.list.map(t => t.nom).filter(Boolean)
-    );
-    (CTRL_STATE.acks || []).forEach(a => { if(a.type) setTypes.add(a.type); });
+    const setTypes = new Set();
+    // Base : labels du catalogue de codes (même sans saisie encore)
+    CTRL_TYPES_STATE.list.forEach(t => { if(t.nom) setTypes.add(t.nom); });
+    // Ajoute : chaque entrée (manuelle ou ack) via son nom d'affichage canonique
+    CTRL_STATE.list.forEach(c => { const n = _displayType(c); if(n) setTypes.add(n); });
+    (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
     const types = Array.from(setTypes).sort((a,b) => a.localeCompare(b, 'fr'));
     typeSel.innerHTML = '<option value="">Tous les types</option>' +
       types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
@@ -4041,8 +4056,8 @@ function _getCurrentTypeChecklistItems(){
   const sel = document.getElementById('filt-controles-type');
   const t = (sel && sel.value || '').trim();
   if(!t) return null;
-  // Trouve le premier ack qui matche ce type
-  const ackMatch = (CTRL_STATE.acks || []).find(a => a.type === t);
+  // Trouve le premier ack dont le nom canonique matche
+  const ackMatch = (CTRL_STATE.acks || []).find(a => _displayType(a) === t);
   if(!ackMatch || ackMatch._alert_id == null) return null;
   const meta = (CTRL_STATE.alerts_meta || {})[String(ackMatch._alert_id)];
   if(!meta || !Array.isArray(meta.checklist_items)) return null;
@@ -4228,7 +4243,7 @@ function renderCtrl(){
   renderPointFilters();
   const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
   let filtered = merged.filter(c => {
-    if(f.type && c.type !== f.type) return false;
+    if(f.type && _displayType(c) !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
     if(f.machine && c.machine !== f.machine) return false;
     if(f.dateFrom || f.dateTo){
@@ -4254,7 +4269,7 @@ function renderCtrl(){
   let extraCols = [];
   const singleType = f.type || '';
   if(singleType){
-    const ackMatch = merged.find(c => c._source === 'alert' && c.type === singleType);
+    const ackMatch = merged.find(c => c._source === 'alert' && _displayType(c) === singleType);
     if(ackMatch && ackMatch._alert_id != null && CTRL_STATE.alerts_meta){
       const meta = CTRL_STATE.alerts_meta[String(ackMatch._alert_id)];
       if(meta && Array.isArray(meta.checklist_items)){
@@ -4302,7 +4317,7 @@ function renderCtrl(){
       cells += '<td>' + escHtml(c.machine) + '</td>';
       cells += '<td>' + escHtml(c.operateur) + '</td>';
       if(!singleType){
-        cells += '<td>' + escHtml(c.type) + '</td>';
+        cells += '<td>' + escHtml(_displayType(c)) + '</td>';
       }
       for(let i = 0; i < extraCols.length; i++){
         let val = '';
