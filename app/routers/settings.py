@@ -2555,13 +2555,26 @@ def maintenance_alert_acks_list(request: Request):
             if isinstance(cl_items, list):
                 for it in cl_items:
                     if isinstance(it, str):
-                        clean.append({"label": it, "type": "choice"})
-                    elif isinstance(it, dict):
                         clean.append({
+                            "label": it, "type": "choice",
+                            "responses": ["Conforme"], "multi": True,
+                        })
+                    elif isinstance(it, dict):
+                        entry = {
                             "label": (it.get("label") or "").strip(),
                             "type": (it.get("type") or "choice"),
-                            "unit": (it.get("unit") or ""),
-                        })
+                        }
+                        if entry["type"] == "value":
+                            if it.get("unit"):
+                                entry["unit"] = it["unit"]
+                            if it.get("min") is not None:
+                                entry["min"] = it["min"]
+                            if it.get("max") is not None:
+                                entry["max"] = it["max"]
+                        else:
+                            entry["responses"] = it.get("responses") or []
+                            entry["multi"] = bool(it.get("multi", True))
+                        clean.append(entry)
             alerts_meta[str(mr["id"])] = {"checklist_items": clean}
     return {"items": items, "alerts_meta": alerts_meta}
 

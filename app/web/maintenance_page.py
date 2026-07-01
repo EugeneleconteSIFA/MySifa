@@ -546,6 +546,13 @@ body.light .toast.info{background:#fff;color:var(--text)}
 
 .ctrl-src-badge{display:inline-block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);cursor:help}
 .ctrl-actions-stack{display:inline-flex;align-items:center;gap:6px}
+
+.ctrl-point-filters-row{display:flex;align-items:center;gap:10px;padding-top:10px;margin-top:10px;border-top:1px solid var(--border);flex-wrap:wrap}
+.ctrl-point-filters-inputs{display:flex;flex-wrap:wrap;gap:8px;flex:1}
+.ctrl-point-filters-inputs .pf-item{display:flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:4px 8px}
+.ctrl-point-filters-inputs .pf-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.ctrl-point-filters-inputs .pf-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;min-width:80px}
+.ctrl-point-filters-inputs .pf-num{width:60px}
 </style>
 </head>
 <body>
@@ -745,7 +752,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div class="filters">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="filter-input">
+              <select id="filt-controles-type" class="filter-input" onchange="resetPointFilters(); renderCtrl()">
                 <option value="">Tous les types</option>
               </select>
             </div>
@@ -783,6 +790,11 @@ body.light .toast.info{background:#fff;color:var(--text)}
             <button type="button" class="date-preset-chip" data-preset="last30" onclick="applyCtrlDatePreset('last30')">30 derniers jours</button>
             <button type="button" class="date-preset-chip" data-preset="thisMonth" onclick="applyCtrlDatePreset('thisMonth')">Mois en cours</button>
             <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
+          </div>
+          <div id="ctrl-point-filters-row" class="ctrl-point-filters-row" style="display:none">
+            <span class="filters-date-presets-label">Réponses :</span>
+            <div id="ctrl-point-filters-inputs" class="ctrl-point-filters-inputs"></div>
+            <button type="button" class="date-preset-chip" onclick="resetPointFilters()">Réinitialiser</button>
           </div>
         </div>
 
@@ -3850,7 +3862,7 @@ function renderOpsTypes(){
 // Historique des contrôles
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {} };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {} };
 
 function loadCtrl(){
   try{
@@ -4025,6 +4037,109 @@ function refreshCtrlFiltersOptions(){
     if(cur && opes.includes(cur)) opeSel.value = cur;
   }
 }
+function _getCurrentTypeChecklistItems(){
+  const sel = document.getElementById('filt-controles-type');
+  const t = (sel && sel.value || '').trim();
+  if(!t) return null;
+  // Trouve le premier ack qui matche ce type
+  const ackMatch = (CTRL_STATE.acks || []).find(a => a.type === t);
+  if(!ackMatch || ackMatch._alert_id == null) return null;
+  const meta = (CTRL_STATE.alerts_meta || {})[String(ackMatch._alert_id)];
+  if(!meta || !Array.isArray(meta.checklist_items)) return null;
+  return meta.checklist_items;
+}
+
+function renderPointFilters(){
+  const row = document.getElementById('ctrl-point-filters-row');
+  const box = document.getElementById('ctrl-point-filters-inputs');
+  if(!row || !box) return;
+  const items = _getCurrentTypeChecklistItems();
+  if(!items || !items.length){
+    row.style.display = 'none';
+    box.innerHTML = '';
+    return;
+  }
+  row.style.display = '';
+  const html = items.map((it, idx) => {
+    const label = escHtml(it.label || ('Point ' + (idx+1)));
+    if(it.type === 'value'){
+      const cur = CTRL_STATE.pointFilters[idx] || {};
+      const minV = (cur.min != null) ? cur.min : '';
+      const maxV = (cur.max != null) ? cur.max : '';
+      const unit = it.unit ? ' ' + escHtml(it.unit) : '';
+      return '<div class="pf-item">'
+        + '<span class="pf-label">' + label + unit + '</span>'
+        + '<input type="number" step="any" class="pf-input pf-num" placeholder="min" value="' + escAttr(String(minV)) + '" onchange="_onPointFilterChange(' + idx + ', \'min\', this.value)">'
+        + '<input type="number" step="any" class="pf-input pf-num" placeholder="max" value="' + escAttr(String(maxV)) + '" onchange="_onPointFilterChange(' + idx + ', \'max\', this.value)">'
+        + '</div>';
+    }
+    // choice
+    const cur = CTRL_STATE.pointFilters[idx] || {};
+    const curVal = cur.value || '';
+    const responses = Array.isArray(it.responses) ? it.responses : [];
+    const opts = '<option value="">Toutes</option>' +
+      responses.map(r => '<option value="' + escAttr(r) + '"' + (r === curVal ? ' selected' : '') + '>' + escHtml(r) + '</option>').join('');
+    return '<div class="pf-item">'
+      + '<span class="pf-label">' + label + '</span>'
+      + '<select class="pf-input" onchange="_onPointFilterChange(' + idx + ', \'value\', this.value)">' + opts + '</select>'
+      + '</div>';
+  }).join('');
+  box.innerHTML = html;
+}
+
+function _onPointFilterChange(idx, key, value){
+  if(!CTRL_STATE.pointFilters[idx]) CTRL_STATE.pointFilters[idx] = {};
+  if(value === '' || value == null){
+    delete CTRL_STATE.pointFilters[idx][key];
+    if(Object.keys(CTRL_STATE.pointFilters[idx]).length === 0){
+      delete CTRL_STATE.pointFilters[idx];
+    }
+  } else {
+    CTRL_STATE.pointFilters[idx][key] = value;
+  }
+  renderCtrl();
+}
+
+function resetPointFilters(){
+  CTRL_STATE.pointFilters = {};
+  renderCtrl();
+}
+
+function _matchPointFilters(ackRow){
+  // ackRow n'est filtré que si _source === 'alert' avec des _responses.
+  // Les entrées manuelles passent toujours à travers (pas de réponses structurées).
+  if(!ackRow || ackRow._source !== 'alert') return true;
+  const items = _getCurrentTypeChecklistItems();
+  if(!items) return true;
+  const filters = CTRL_STATE.pointFilters || {};
+  const responses = ackRow._responses || {};
+  for(const k of Object.keys(filters)){
+    const idx = parseInt(k, 10);
+    const filt = filters[k] || {};
+    const it = items[idx];
+    if(!it) continue;
+    const r = responses[String(idx)];
+    if(it.type === 'value'){
+      const num = (r != null && r !== '') ? parseFloat(r) : NaN;
+      if(filt.min != null && filt.min !== ''){
+        const mn = parseFloat(filt.min);
+        if(!isNaN(mn) && (isNaN(num) || num < mn)) return false;
+      }
+      if(filt.max != null && filt.max !== ''){
+        const mx = parseFloat(filt.max);
+        if(!isNaN(mx) && (isNaN(num) || num > mx)) return false;
+      }
+    } else {
+      // choice : la réponse cochée doit inclure la valeur filtrée
+      if(filt.value != null && filt.value !== ''){
+        const arr = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
+        if(!arr.includes(filt.value)) return false;
+      }
+    }
+  }
+  return true;
+}
+
 function openAckDetail(prefixedId){
   const ack = (CTRL_STATE.acks || []).find(a => a.id === prefixedId);
   if(!ack) return;
@@ -4109,6 +4224,8 @@ function renderCtrl(){
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
   // Filter
+  // Sync les filtres par point avec le type sélectionné
+  renderPointFilters();
   const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
   let filtered = merged.filter(c => {
     if(f.type && c.type !== f.type) return false;
@@ -4119,6 +4236,7 @@ function renderCtrl(){
       if(f.dateFrom && d < f.dateFrom) return false;
       if(f.dateTo && d > f.dateTo) return false;
     }
+    if(!_matchPointFilters(c)) return false;
     return true;
   });
   // Sort
