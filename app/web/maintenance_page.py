@@ -4025,6 +4025,77 @@ function refreshCtrlFiltersOptions(){
     if(cur && opes.includes(cur)) opeSel.value = cur;
   }
 }
+function openAckDetail(prefixedId){
+  const ack = (CTRL_STATE.acks || []).find(a => a.id === prefixedId);
+  if(!ack) return;
+  const meta = (CTRL_STATE.alerts_meta || {})[String(ack._alert_id)] || {};
+  const items = Array.isArray(meta.checklist_items) ? meta.checklist_items : [];
+  const responses = ack._responses || {};
+
+  // Rendu de la checklist en mode lecture seule (cases pré-cochées / valeur saisie)
+  let checklistHtml = '';
+  if(items.length){
+    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
+      +   items.map((it, idx) => {
+            const r = responses[String(idx)];
+            if(it.type === 'value'){
+              const val = (r != null && r !== '') ? String(r) : '';
+              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + escHtml(it.unit) + '</span>' : '';
+              return '<div class="ta-cl-item" data-type="value">'
+                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
+                + '<div style="display:flex;align-items:center;gap:8px">'
+                +   '<input type="text" disabled value="' + escAttr(val) + '" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;opacity:.85">'
+                +   unit
+                + '</div>'
+                + '</div>';
+            }
+            // choice : cases à cocher pré-remplies selon les réponses stockées
+            const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
+            const chips = ['Nette'];  // placeholder, écrasé ci-dessous
+            // On n'a pas la liste complète des réponses possibles dans l'ack ;
+            // on n'affiche donc que les réponses réellement cochées (comme des
+            // pills sélectionnées). C'est fidèle à la donnée enregistrée.
+            const respHtml = selected.length
+              ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>' + escHtml(s) + '</span></label>').join('')
+              : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
+            return '<div class="ta-cl-item" data-type="choice">'
+              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
+              + '</div>';
+          }).join('')
+      + '</div>';
+  }
+
+  // Contexte : date, machine, opérateur
+  const dt = fmtDate(ack.date_saisie);
+  const contextLine = escHtml(ack.machine || '—') + ' · ' + escHtml(dt) + ' · ' + escHtml(ack.operateur || '—');
+  const commentText = ack._raw_comment || '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ta-sim ta-pl-center ta-blocking';
+  overlay.id = 'ack-detail-overlay';
+  overlay.innerHTML = '<div class="ta-sim-alert">'
+    + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
+    + '<div class="ta-sim-sub">' + contextLine + '</div>'
+    + checklistHtml
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire</label>'
+    + '<textarea disabled rows="2" placeholder="(aucun commentaire)" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;opacity:.85">' + escHtml(commentText) + '</textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" class="ta-sim-btn" onclick="closeAckDetail()">Fermer</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => {
+    if(e.target === overlay) closeAckDetail();
+  });
+}
+
+function closeAckDetail(){
+  const el = document.getElementById('ack-detail-overlay');
+  if(el) el.remove();
+}
+
 function renderCtrl(){
   refreshCtrlFiltersOptions();
   updateCtrlDatePresetChips();
@@ -4145,7 +4216,10 @@ function renderCtrl(){
         '</button>';
       }
       cells += '<td class="col-actions">' + actionHtml + '</td>';
-      return '<tr>' + cells + '</tr>';
+      const dblAttr = (c._source === 'alert')
+        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer" title="Double-clic pour voir le détail"'
+        : '';
+      return '<tr' + dblAttr + '>' + cells + '</tr>';
     });
     tbody.innerHTML = rows.join('');
   }
@@ -4420,6 +4494,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=5"></script>
 <script src="/static/chat_widget_v2.js"></script>
+<script src="/static/mysifa_alert_runtime.js"></script>
 <script src="/static/support_widget.js"></script>
 </body>
 </html>"""
