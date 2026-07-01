@@ -3850,7 +3850,7 @@ function renderOpsTypes(){
 // Historique des contrôles
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [] };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {} };
 
 function loadCtrl(){
   try{
@@ -3893,7 +3893,11 @@ async function loadCtrlAcks(){
       date_saisie: a.ack_at,
       _source: 'alert',
       _maint_code: a.linked_maint_code || '',
+      _alert_id: a.alert_id,
+      _responses: a.responses || {},
+      _raw_comment: a.comment || '',
     }));
+    CTRL_STATE.alerts_meta = data.alerts_meta || {};
   } catch(e){ CTRL_STATE.acks = []; }
   if(typeof renderCtrl === 'function') renderCtrl();
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
@@ -4004,7 +4008,11 @@ function refreshCtrlFiltersOptions(){
   const opeSel  = document.getElementById('filt-controles-operateur');
   if(typeSel){
     const cur = typeSel.value;
-    const types = CTRL_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
+    const setTypes = new Set(
+      CTRL_TYPES_STATE.list.map(t => t.nom).filter(Boolean)
+    );
+    (CTRL_STATE.acks || []).forEach(a => { if(a.type) setTypes.add(a.type); });
+    const types = Array.from(setTypes).sort((a,b) => a.localeCompare(b, 'fr'));
     typeSel.innerHTML = '<option value="">Tous les types</option>' +
       types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
     if(cur && types.includes(cur)) typeSel.value = cur;
@@ -4052,40 +4060,93 @@ function renderCtrl(){
     if(av > bv) return  1 * dir;
     return 0;
   });
-  document.querySelectorAll('.ops-table th[data-sort-ctrl]').forEach(th => {
-    const isActive = th.getAttribute('data-sort-ctrl') === sf;
-    th.classList.toggle('active', isActive);
-    const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
-  });
+  // Colonnes adaptatives : si un seul type est sélectionné et qu'il correspond
+  // à une alerte ayant une checklist, on affiche une colonne par point.
+  let extraCols = [];
+  const singleType = f.type || '';
+  if(singleType){
+    const ackMatch = merged.find(c => c._source === 'alert' && c.type === singleType);
+    if(ackMatch && ackMatch._alert_id != null && CTRL_STATE.alerts_meta){
+      const meta = CTRL_STATE.alerts_meta[String(ackMatch._alert_id)];
+      if(meta && Array.isArray(meta.checklist_items)){
+        extraCols = meta.checklist_items;
+      }
+    }
+  }
+
+  // Reconstruire le thead
+  const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
+  if(thead){
+    const sortIco = (col) => {
+      if(sf !== col) return '<span class="sort-ico">↕</span>';
+      return '<span class="sort-ico">' + (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') + '</span>';
+    };
+    const activeAttr = (col) => sf === col ? ' class="active"' : '';
+    let h = '';
+    h += '<th data-sort-ctrl="date_saisie"' + activeAttr('date_saisie') + ' onclick="sortCtrl(\'date_saisie\')">Date saisie' + sortIco('date_saisie') + '</th>';
+    h += '<th data-sort-ctrl="machine"' + activeAttr('machine') + ' onclick="sortCtrl(\'machine\')">Machine' + sortIco('machine') + '</th>';
+    h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">Opérateur' + sortIco('operateur') + '</th>';
+    if(!singleType){
+      h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
+    }
+    for(const col of extraCols){
+      const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
+      h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
+    }
+    h += '<th>Commentaires</th>';
+    h += '<th aria-label="Actions"></th>';
+    thead.innerHTML = h;
+  }
+
+  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur (+type?) + extra + commentaires + actions
+
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
       ? 'Aucun contrôle ne correspond aux filtres.'
       : 'Aucun contrôle enregistré. Cliquez sur « Nouveau contrôle » pour commencer.';
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + totalCols + '" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = filtered.map(c =>
-      '<tr>' +
-        '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>' +
-        '<td>' + escHtml(c.machine) + '</td>' +
-        '<td>' + escHtml(c.operateur) + '</td>' +
-        '<td>' + escHtml(c.type) + '</td>' +
-        '<td class="col-comment">' + escHtml(c.commentaire || '') + '</td>' +
-        '<td class="col-actions">' +
-          (c._source === 'alert'
-            ? '<div class="ctrl-actions-stack">' +
-                '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
-                '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
-                  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-                '</button>' +
-              '</div>'
-            : '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-              '</button>') +
-        '</td>' +
-      '</tr>'
-    );
+    const rows = filtered.map(c => {
+      let cells = '';
+      cells += '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>';
+      cells += '<td>' + escHtml(c.machine) + '</td>';
+      cells += '<td>' + escHtml(c.operateur) + '</td>';
+      if(!singleType){
+        cells += '<td>' + escHtml(c.type) + '</td>';
+      }
+      for(let i = 0; i < extraCols.length; i++){
+        let val = '';
+        if(c._source === 'alert' && c._responses){
+          const r = c._responses[String(i)];
+          if(Array.isArray(r)){ val = r.join(', '); }
+          else if(r != null && r !== ''){ val = String(r); }
+        }
+        cells += '<td>' + escHtml(val) + '</td>';
+      }
+      // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
+      // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
+      const commentText = singleType
+        ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
+        : (c.commentaire || '');
+      cells += '<td class="col-comment">' + escHtml(commentText) + '</td>';
+      // Actions
+      let actionHtml = '';
+      if(c._source === 'alert'){
+        actionHtml = '<div class="ctrl-actions-stack">' +
+          '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
+          '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+          '</button>' +
+        '</div>';
+      } else {
+        actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        '</button>';
+      }
+      cells += '<td class="col-actions">' + actionHtml + '</td>';
+      return '<tr>' + cells + '</tr>';
+    });
     tbody.innerHTML = rows.join('');
   }
   if(count){

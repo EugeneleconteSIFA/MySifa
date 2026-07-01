@@ -2512,14 +2512,18 @@ def maintenance_alert_acks_list(request: Request):
             tuple(params_sql),
         ).fetchall()
     items = []
+    alert_ids_seen = set()
     for r in rows:
         try:
             responses = _json_alerts.loads(r["responses"] or "{}")
         except (ValueError, TypeError):
             responses = {}
+        aid = int(r["alert_id"]) if r["alert_id"] is not None else None
+        if aid is not None:
+            alert_ids_seen.add(aid)
         items.append({
             "id": int(r["id"]),
-            "alert_id": int(r["alert_id"]) if r["alert_id"] is not None else None,
+            "alert_id": aid,
             "alert_nom": r["alert_nom"] or "",
             "linked_maint_code": r["linked_maint_code"] or "",
             "operateur": r["user_nom"] or "",
@@ -2529,7 +2533,37 @@ def maintenance_alert_acks_list(request: Request):
             "responses": responses,
             "comment": r["comment"] or "",
         })
-    return {"items": items}
+    # Charger la structure des questionnaires (points de contrôle) pour les
+    # alertes rencontrées, afin que le frontend puisse construire des colonnes
+    # dynamiques dans l'historique.
+    alerts_meta = {}
+    if alert_ids_seen:
+        placeholders = ",".join(["?"] * len(alert_ids_seen))
+        with get_db() as conn2:
+            meta_rows = conn2.execute(
+                f"SELECT id, params FROM maintenance_alerts WHERE id IN ({placeholders})",
+                tuple(alert_ids_seen),
+            ).fetchall()
+        for mr in meta_rows:
+            try:
+                p_json = _json_alerts.loads(mr["params"] or "{}")
+            except (ValueError, TypeError):
+                p_json = {}
+            cl = p_json.get("checklist") or {}
+            cl_items = cl.get("items") or []
+            clean = []
+            if isinstance(cl_items, list):
+                for it in cl_items:
+                    if isinstance(it, str):
+                        clean.append({"label": it, "type": "choice"})
+                    elif isinstance(it, dict):
+                        clean.append({
+                            "label": (it.get("label") or "").strip(),
+                            "type": (it.get("type") or "choice"),
+                            "unit": (it.get("unit") or ""),
+                        })
+            alerts_meta[str(mr["id"])] = {"checklist_items": clean}
+    return {"items": items, "alerts_meta": alerts_meta}
 
 
 _MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
