@@ -2363,14 +2363,16 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if not _is_machine_in_production(conn, machine):
         return False
 
-    # 1. Dernier arrêt : codes 87, 89, ou 50–85
+    # 1. Dernier événement "non-production" pour cette machine.
+    # Définition symétrique de _is_machine_in_production : tout code qui n'est
+    # PAS dans {01, 03, 88} interrompt la session. Ça couvre les arrêts
+    # explicites (89, 87, 50-85) mais AUSSI le Calage (02), les événements
+    # personnel (86), les annulations (90), etc. Toute interruption remet le
+    # compteur à zéro et déclenche la grâce de 5 min à la reprise.
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-           WHERE machine=? AND (
-               operation_code IN ('87', '89')
-               OR (operation_code GLOB '[0-9][0-9]'
-                   AND CAST(operation_code AS INTEGER) BETWEEN 50 AND 85)
-           )""",
+           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
+           AND operation_code IS NOT NULL AND operation_code != ''""",
         (machine,),
     ).fetchone()
     last_stop_iso = last_stop_row["m"] if last_stop_row else None
