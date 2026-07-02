@@ -2239,6 +2239,97 @@ body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
 }
 .msf-sheet-sep{height:1px;background:var(--border);margin:6px 12px}
 
+
+/* ══════════════════════════════════════════════════════════════════
+   Google search — modal centré avec backdrop flou
+   ══════════════════════════════════════════════════════════════════ */
+.gsm-backdrop{
+  position:fixed;inset:0;z-index:600;
+  background:rgba(8,12,22,0.55);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  opacity:0;transition:opacity .16s ease;pointer-events:none;
+}
+body.light .gsm-backdrop{background:rgba(15,23,42,0.30)}
+.gsm-backdrop.open{opacity:1;pointer-events:auto}
+.gsm-modal{
+  position:fixed;left:50%;top:50%;z-index:601;
+  transform:translate(-50%,-50%) scale(.82);
+  transform-origin:center center;
+  width:min(92vw,520px);
+  background:var(--card);border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:0 24px 80px rgba(0,0,0,.45),0 0 0 1px rgba(34,211,238,.06);
+  opacity:0;pointer-events:none;
+  transition:transform .22s cubic-bezier(.22,.61,.36,1),opacity .18s ease;
+  padding:22px 20px 18px;
+}
+body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
+.gsm-modal.open{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+.gsm-modal-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.gsm-modal-logo{display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.gsm-modal-logo svg{width:28px;height:28px}
+.gsm-modal-title{
+  font-size:15px;font-weight:700;color:var(--text);flex:1;letter-spacing:-.01em;
+}
+.gsm-modal-close{
+  border:0;background:transparent;color:var(--muted);cursor:pointer;
+  width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  transition:background .12s,color .12s;flex-shrink:0;
+}
+.gsm-modal-close:hover{background:var(--accent-bg);color:var(--accent)}
+.gsm-input-wrap{
+  position:relative;background:var(--bg);border:1.5px solid var(--border);
+  border-radius:12px;padding:12px 14px 12px 42px;
+  transition:border-color .12s,box-shadow .12s;
+}
+.gsm-input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.gsm-input-search-ico{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  width:18px;height:18px;color:var(--muted);pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.gsm-input{
+  width:100%;background:transparent;border:0;outline:0;
+  color:var(--text);font-family:inherit;font-size:15px;
+  padding:0;line-height:1.4;
+}
+.gsm-input::placeholder{color:var(--muted)}
+.gsm-hint{
+  font-size:11px;color:var(--muted);margin-top:10px;
+  display:flex;gap:10px;flex-wrap:wrap;
+}
+.gsm-hint kbd{
+  font-family:ui-monospace,'Cascadia Code',monospace;font-size:10px;font-weight:700;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:5px;padding:2px 6px;color:var(--text2);
+}
+.gsm-recents{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.gsm-recents-label{
+  font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;
+  text-transform:uppercase;margin-bottom:8px;
+}
+.gsm-recents-chips{display:flex;flex-wrap:wrap;gap:6px}
+.gsm-recent-chip{
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;
+  cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s,color .12s;
+  display:inline-flex;align-items:center;gap:6px;max-width:100%;
+}
+.gsm-recent-chip:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.gsm-recent-chip-text{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;
+}
+.gsm-recent-chip svg{width:11px;height:11px;flex-shrink:0;color:var(--muted)}
+.gsm-recent-chip:hover svg{color:var(--accent)}
+@media (max-width:480px){
+  .gsm-modal{padding:18px 16px 14px;width:min(94vw,520px)}
+  .gsm-modal-logo svg{width:24px;height:24px}
+  .gsm-modal-title{font-size:14px}
+  .gsm-input{font-size:14px}
+  .gsm-recent-chip-text{max-width:120px}
+}
+
 /* ══════════════════════════════════════════════════════════════════
    Portail mobile — header refondu (logo + Google + badge profil)
    Masque l'ancienne corner-stack + barre de recherche Google + footer texte
@@ -2314,6 +2405,8 @@ __STAGING_BANDEAU_HTML__
 <div id="mobile-navbar-root" aria-label="Navigation" role="navigation"></div>
 <div id="msf-sheet-backdrop" class="msf-sheet-backdrop" aria-hidden="true"></div>
 <div id="msf-sheet-root" class="msf-sheet" role="dialog" aria-modal="true" aria-label="Menu profil"></div>
+<div id="gsm-backdrop" class="gsm-backdrop" aria-hidden="true"></div>
+<div id="gsm-modal" class="gsm-modal" role="dialog" aria-modal="true" aria-label="Recherche Google" aria-hidden="true"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
@@ -4533,13 +4626,7 @@ function renderPortal(){
     className:'portal-mobile-google-btn',
     'aria-label':'Recherche Google',
     title:'Recherche Google',
-    onClick:()=>{
-      const q=window.prompt('Rechercher sur Google');
-      if(q&&q.trim()){
-        try{fetch('/api/portal/google-search',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:q.trim()})}).catch(()=>{});}catch(e){}
-        window.open('https://www.google.com/search?q='+encodeURIComponent(q.trim()),'_blank','noopener');
-      }
-    }
+    onClick:(e)=>{openGoogleSearch(e&&e.currentTarget?e.currentTarget:null);}
   }, _googleLogoSvg);
   // Avatar : photo si dispo, sinon initiales ; badge humeur si active + aujourd'hui
   const _mobTodayIso=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
@@ -13772,6 +13859,112 @@ function renderSuivi(){
   return h('div',null,...parts);
 }
 
+
+
+// ══════════════════════════════════════════════════════════════════
+// Google search — modal centré avec animation depuis le bouton
+// ══════════════════════════════════════════════════════════════════
+const _gsmRecentsKey='mysifa_google_recents_v1';
+function _gsmLoadRecents(){
+  try{const r=JSON.parse(localStorage.getItem(_gsmRecentsKey)||'[]');return Array.isArray(r)?r.slice(0,5):[];}catch(_){return [];}
+}
+function _gsmSaveRecent(q){
+  try{
+    const list=_gsmLoadRecents().filter(x=>x!==q);
+    list.unshift(q);
+    localStorage.setItem(_gsmRecentsKey,JSON.stringify(list.slice(0,5)));
+  }catch(_){}
+}
+function _gsmEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function _gsmRun(q){
+  const query=String(q||'').trim();
+  if(!query)return;
+  _gsmSaveRecent(query);
+  try{fetch('/api/portal/google-search',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})}).catch(()=>{});}catch(e){}
+  window.open('https://www.google.com/search?q='+encodeURIComponent(query),'_blank','noopener');
+  closeGoogleSearch();
+}
+function openGoogleSearch(originEl){
+  const modal=document.getElementById('gsm-modal');
+  const bd=document.getElementById('gsm-backdrop');
+  if(!modal||!bd)return;
+  const recents=_gsmLoadRecents();
+  const recentsHtml=recents.length?(
+    '<div class="gsm-recents">'+
+      '<div class="gsm-recents-label">Recherches récentes</div>'+
+      '<div class="gsm-recents-chips">'+recents.map(q=>(
+        '<button type="button" class="gsm-recent-chip" data-gsm-recent="'+_gsmEsc(q)+'">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 15 15"/></svg>'+
+          '<span class="gsm-recent-chip-text">'+_gsmEsc(q)+'</span>'+
+        '</button>'
+      )).join('')+'</div>'+
+    '</div>'
+  ):'';
+  modal.innerHTML=
+    '<div class="gsm-modal-head">'+
+      '<span class="gsm-modal-logo">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>'+
+      '</span>'+
+      '<div class="gsm-modal-title">Rechercher sur Google</div>'+
+      '<button type="button" class="gsm-modal-close" aria-label="Fermer">'+
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'+
+      '</button>'+
+    '</div>'+
+    '<form class="gsm-form" autocomplete="off">'+
+      '<div class="gsm-input-wrap">'+
+        '<span class="gsm-input-search-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>'+
+        '<input class="gsm-input" type="search" autocomplete="off" spellcheck="false" placeholder="Tapez votre recherche…">'+
+      '</div>'+
+      '<div class="gsm-hint"><span><kbd>Entrée</kbd> Rechercher</span><span><kbd>Esc</kbd> Fermer</span></div>'+
+    '</form>'+
+    recentsHtml;
+
+  // Animation d'origine : partir de la position du bouton pour le premier frame
+  if(originEl){
+    const r=originEl.getBoundingClientRect();
+    const cx=r.left+r.width/2,cy=r.top+r.height/2;
+    const vx=window.innerWidth/2,vy=window.innerHeight/2;
+    const dx=cx-vx,dy=cy-vy;
+    modal.style.transformOrigin=(vx+dx)+'px '+(vy+dy)+'px';
+    // On force scale plus petit + translation depuis le bouton
+    modal.style.transform='translate(-50%,-50%) translate('+dx+'px,'+dy+'px) scale(.35)';
+  }
+  bd.classList.add('open');
+  bd.setAttribute('aria-hidden','false');
+  // Reset transform pour laisser la transition CSS jouer vers le centre
+  requestAnimationFrame(()=>{
+    modal.style.transform='';
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden','false');
+    const inp=modal.querySelector('.gsm-input');
+    if(inp)setTimeout(()=>inp.focus(),20);
+  });
+
+  // Handlers
+  bd.onclick=closeGoogleSearch;
+  const closeBtn=modal.querySelector('.gsm-modal-close');
+  if(closeBtn)closeBtn.onclick=(e)=>{e.preventDefault();closeGoogleSearch();};
+  const form=modal.querySelector('.gsm-form');
+  if(form)form.onsubmit=(e)=>{e.preventDefault();const inp=modal.querySelector('.gsm-input');_gsmRun(inp?inp.value:'');};
+  modal.querySelectorAll('[data-gsm-recent]').forEach(chip=>{
+    chip.addEventListener('click',(e)=>{e.preventDefault();_gsmRun(chip.getAttribute('data-gsm-recent'));});
+  });
+  // Esc global
+  const _escHandler=(e)=>{if(e.key==='Escape'){e.preventDefault();closeGoogleSearch();document.removeEventListener('keydown',_escHandler,true);}};
+  document.addEventListener('keydown',_escHandler,true);
+  modal._gsmEscHandler=_escHandler;
+}
+function closeGoogleSearch(){
+  const modal=document.getElementById('gsm-modal');
+  const bd=document.getElementById('gsm-backdrop');
+  if(!modal||!bd)return;
+  modal.classList.remove('open');
+  bd.classList.remove('open');
+  modal.setAttribute('aria-hidden','true');
+  bd.setAttribute('aria-hidden','true');
+  if(modal._gsmEscHandler){try{document.removeEventListener('keydown',modal._gsmEscHandler,true);}catch(_){}modal._gsmEscHandler=null;}
+  setTimeout(()=>{modal.innerHTML='';modal.style.transform='';modal.style.transformOrigin='';},220);
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Mobile bottom nav bar — Accueil / Changer d'app / Messagerie / Agent IA
