@@ -5,11 +5,12 @@ Accès  : tout utilisateur authentifié.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 import unicodedata
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import List, Optional
@@ -50,6 +51,13 @@ _ALLOWED_ATTACHMENT_MIMES = {
     "text/plain", "text/csv",
     "application/zip", "application/x-zip-compressed",
 }
+
+_POLL_MAX_OPTIONS = 10
+_POLL_MIN_OPTIONS = 2
+_POLL_MAX_QUESTION_LEN = 200
+_POLL_MAX_OPTION_LEN = 80
+_POLL_CLOSE_PRESETS = {"never", "1h", "24h", "3d", "7d"}
+_POLL_ADMIN_ROLES = {"superadmin", "direction"}
 
 _typing_lock = Lock()
 _typing_state: dict[int, dict[int, dict]] = {}
@@ -230,7 +238,11 @@ def _require(request: Request) -> dict:
 
 
 def _message_dict(
-    row, uid: int, reactions: Optional[list] = None, reply_to: Optional[dict] = None
+    row,
+    uid: int,
+    reactions: Optional[list] = None,
+    reply_to: Optional[dict] = None,
+    poll: Optional[dict] = None,
 ) -> dict:
     is_deleted = bool(row["deleted_at"])
     return {
@@ -254,6 +266,7 @@ def _message_dict(
         "forwarded_from_nom": row["forwarded_from_nom"] or "",
         "is_mine": row["user_id"] == uid,
         "reactions": [] if is_deleted else (reactions if reactions is not None else []),
+        "poll": None if is_deleted else poll,
     }
 
 
@@ -801,6 +814,8 @@ def get_messages(
                     "is_soft_deleted": bool(rr["deleted_at"]),
                 }
 
+        polls_map = _fetch_polls_map(conn, msg_ids, uid)
+
         conn.execute(
             "UPDATE chat_members SET last_read_at=? WHERE channel_id=? AND user_id=?",
             (_now_iso(), channel_id, user["id"]),
@@ -808,8 +823,11 @@ def get_messages(
         conn.commit()
 
     messages = [
-        _message_dict(r, uid, reactions_map.get(r["id"], []),
-                      reply_map.get(r["reply_to_id"]) if r["reply_to_id"] else None)
+        _message_dict(
+            r, uid, reactions_map.get(r["id"], []),
+            reply_map.get(r["reply_to_id"]) if r["reply_to_id"] else None,
+            polls_map.get(r["id"]),
+        )
         for r in ordered
     ]
     has_more = len(rows) == _PAGE_SIZE if before else False
@@ -1404,3 +1422,421 @@ def _assert_member(conn, channel_id: int, user_id: int) -> None:
     ).fetchone()
     if not row:
         raise HTTPException(status_code=403, detail="Accès refusé à ce canal")
+
+
+# ─── Sondages (polls) ────────────────────────────────────────────────────────
+#
+# Un sondage est rattaché à un chat_messages (body=""). Il porte question,
+# options ordonnées, votes.
+#
+# Modes de vote :
+#   • Nominatif  : chat_poll_votes stocke user_id + user_nom
+#   • Anonyme    : chat_poll_votes stocke user_id=NULL, user_nom=NULL,
+#                   voter_hash = SHA256(SECRET_KEY || poll_id || user_id)
+#     → l'API ne renvoie JAMAIS la liste des votants pour un sondage anonyme.
+#     → le hash reste déterministe pour permettre :
+#         - déduplication (1 vote par option par utilisateur)
+#         - affichage persistant du "vous avez voté ici" pour l'utilisateur
+#     → un opérateur ayant accès simultanément à la DB et au SECRET_KEY pourrait
+#       théoriquement reconstruire les votes ; c'est un trade-off documenté.
+
+def _voter_hash(poll_id: int, user_id: int) -> str:
+    from config import SECRET_KEY
+    raw = f"{SECRET_KEY}::poll::{poll_id}::{user_id}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _compute_closes_at(preset: str) -> Optional[str]:
+    """Convertit 'never|1h|24h|3d|7d' en ISO Paris ou None."""
+    if not preset or preset == "never":
+        return None
+    now = datetime.now(_PARIS).replace(tzinfo=None)
+    delta = {
+        "1h": timedelta(hours=1),
+        "24h": timedelta(days=1),
+        "3d": timedelta(days=3),
+        "7d": timedelta(days=7),
+    }.get(preset)
+    if not delta:
+        return None
+    return (now + delta).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _poll_is_closed(row) -> bool:
+    if row["closed_at"]:
+        return True
+    if row["closes_at"]:
+        try:
+            return datetime.strptime(row["closes_at"], "%Y-%m-%dT%H:%M:%S") <= \
+                   datetime.now(_PARIS).replace(tzinfo=None)
+        except Exception:
+            return False
+    return False
+
+
+def _can_manage_poll(user: dict, poll_row) -> bool:
+    """Créateur, direction, superadmin peuvent clôturer un sondage."""
+    if int(poll_row["created_by"]) == int(user["id"]):
+        return True
+    role = (user.get("role") or "").lower()
+    return role in _POLL_ADMIN_ROLES
+
+
+def _poll_dict(conn, poll_row, uid: int) -> dict:
+    """Sérialise un sondage complet pour l'API (options + counts + voté_par_moi)."""
+    pid = poll_row["id"]
+    anonymous = bool(poll_row["anonymous"])
+    options = conn.execute(
+        "SELECT id, position, label FROM chat_poll_options "
+        "WHERE poll_id=? ORDER BY position ASC, id ASC",
+        (pid,),
+    ).fetchall()
+    counts_rows = conn.execute(
+        "SELECT option_id, COUNT(*) AS c FROM chat_poll_votes "
+        "WHERE poll_id=? GROUP BY option_id",
+        (pid,),
+    ).fetchall()
+    counts_map = {r["option_id"]: r["c"] for r in counts_rows}
+
+    if anonymous:
+        vhash = _voter_hash(pid, uid)
+        mine_rows = conn.execute(
+            "SELECT option_id FROM chat_poll_votes WHERE poll_id=? AND voter_hash=?",
+            (pid, vhash),
+        ).fetchall()
+    else:
+        mine_rows = conn.execute(
+            "SELECT option_id FROM chat_poll_votes WHERE poll_id=? AND user_id=?",
+            (pid, uid),
+        ).fetchall()
+    mine_set = {r["option_id"] for r in mine_rows}
+
+    total_votes = sum(counts_map.values())
+    total_voters_row = conn.execute(
+        "SELECT COUNT(DISTINCT COALESCE(user_id, voter_hash)) AS c "
+        "FROM chat_poll_votes WHERE poll_id=?",
+        (pid,),
+    ).fetchone()
+    total_voters = int(total_voters_row["c"]) if total_voters_row else 0
+
+    is_closed = _poll_is_closed(poll_row)
+
+    return {
+        "id": pid,
+        "message_id": poll_row["message_id"],
+        "channel_id": poll_row["channel_id"],
+        "question": poll_row["question"] or "",
+        "multi_choice": bool(poll_row["multi_choice"]),
+        "anonymous": anonymous,
+        "closes_at": poll_row["closes_at"] or "",
+        "closed_at": poll_row["closed_at"] or "",
+        "is_closed": is_closed,
+        "created_by": poll_row["created_by"],
+        "created_at": poll_row["created_at"],
+        "total_votes": total_votes,
+        "total_voters": total_voters,
+        "options": [
+            {
+                "id": o["id"],
+                "position": o["position"],
+                "label": o["label"] or "",
+                "count": int(counts_map.get(o["id"], 0)),
+                "voted_by_me": o["id"] in mine_set,
+            }
+            for o in options
+        ],
+    }
+
+
+def _fetch_polls_map(conn, msg_ids: List[int], uid: int) -> dict[int, dict]:
+    """Charge en batch les sondages liés à un lot de messages."""
+    if not msg_ids:
+        return {}
+    ph = ",".join("?" * len(msg_ids))
+    rows = conn.execute(
+        f"""SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                   closes_at, closed_at, created_by, created_at
+            FROM chat_polls WHERE message_id IN ({ph})""",
+        msg_ids,
+    ).fetchall()
+    return {r["message_id"]: _poll_dict(conn, r, uid) for r in rows}
+
+
+@router.post("/channels/{channel_id}/polls")
+async def create_poll(channel_id: int, request: Request):
+    """Créer un sondage dans un canal. Crée le chat_messages porteur + le poll."""
+    user = _require(request)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON invalide")
+
+    question = (data.get("question") or "").strip()
+    raw_options = data.get("options") or []
+    multi_choice = 1 if bool(data.get("multi_choice")) else 0
+    anonymous = 1 if bool(data.get("anonymous")) else 0
+    close_preset = str(data.get("close_preset") or "never").strip().lower()
+
+    if not question:
+        raise HTTPException(status_code=400, detail="Question requise")
+    if len(question) > _POLL_MAX_QUESTION_LEN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Question trop longue (max {_POLL_MAX_QUESTION_LEN} car).",
+        )
+    if not isinstance(raw_options, list):
+        raise HTTPException(status_code=400, detail="Options invalides")
+
+    seen: set[str] = set()
+    options: list[str] = []
+    for raw in raw_options:
+        if not isinstance(raw, str):
+            continue
+        lab = raw.strip()
+        if not lab:
+            continue
+        if len(lab) > _POLL_MAX_OPTION_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Option trop longue (max {_POLL_MAX_OPTION_LEN} car).",
+            )
+        key = lab.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        options.append(lab)
+        if len(options) >= _POLL_MAX_OPTIONS:
+            break
+    if len(options) < _POLL_MIN_OPTIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Au moins {_POLL_MIN_OPTIONS} options distinctes requises.",
+        )
+
+    if close_preset not in _POLL_CLOSE_PRESETS:
+        close_preset = "never"
+    closes_at = _compute_closes_at(close_preset)
+
+    now = _now_iso()
+    with get_db() as conn:
+        _assert_member(conn, channel_id, user["id"])
+        cur = conn.execute(
+            """INSERT INTO chat_messages
+               (channel_id, user_id, user_nom, body, created_at)
+               VALUES (?,?,?,?,?)""",
+            (
+                channel_id,
+                user["id"],
+                user.get("nom") or user.get("email", ""),
+                "",
+                now,
+            ),
+        )
+        msg_id = cur.lastrowid
+        pcur = conn.execute(
+            """INSERT INTO chat_polls
+               (message_id, channel_id, question, multi_choice, anonymous,
+                closes_at, closed_at, created_by, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                msg_id,
+                channel_id,
+                question,
+                multi_choice,
+                anonymous,
+                closes_at,
+                None,
+                user["id"],
+                now,
+            ),
+        )
+        poll_id = pcur.lastrowid
+        for i, lab in enumerate(options):
+            conn.execute(
+                "INSERT INTO chat_poll_options (poll_id, position, label) VALUES (?,?,?)",
+                (poll_id, i, lab),
+            )
+        conn.execute(
+            "UPDATE chat_members SET last_read_at=? WHERE channel_id=? AND user_id=?",
+            (now, channel_id, user["id"]),
+        )
+        conn.commit()
+
+        msg_row = conn.execute(
+            f"""SELECT {_MSG_SELECT}
+                FROM chat_messages m
+                LEFT JOIN users u ON u.id = m.user_id
+                WHERE m.id=? LIMIT 1""",
+            (msg_id,),
+        ).fetchone()
+        poll_row = conn.execute(
+            """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                      closes_at, closed_at, created_by, created_at
+               FROM chat_polls WHERE id=?""",
+            (poll_id,),
+        ).fetchone()
+        poll = _poll_dict(conn, poll_row, user["id"])
+
+    try:
+        _push_notify_chat_message(
+            channel_id=channel_id,
+            author_id=int(user["id"]),
+            author_nom=(user.get("nom") or user.get("email") or "MySifa"),
+            body=f"Sondage : {question}",
+            mentioned_ids=set(),
+            is_attachment=False,
+        )
+    except Exception:
+        pass
+
+    return _message_dict(msg_row, user["id"], [], None, poll)
+
+
+@router.post("/polls/{poll_id}/vote")
+async def vote_poll(poll_id: int, request: Request):
+    """Voter sur un sondage. Remplace le(s) vote(s) précédents de l'utilisateur."""
+    user = _require(request)
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="JSON invalide")
+
+    raw_ids = data.get("option_ids") or []
+    if not isinstance(raw_ids, list):
+        raise HTTPException(status_code=400, detail="option_ids invalide")
+    try:
+        option_ids = [int(x) for x in raw_ids]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="option_ids invalide")
+    option_ids = list(dict.fromkeys(option_ids))
+
+    with get_db() as conn:
+        poll_row = conn.execute(
+            """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                      closes_at, closed_at, created_by, created_at
+               FROM chat_polls WHERE id=? LIMIT 1""",
+            (poll_id,),
+        ).fetchone()
+        if not poll_row:
+            raise HTTPException(status_code=404, detail="Sondage introuvable")
+        _assert_member(conn, poll_row["channel_id"], user["id"])
+        if _poll_is_closed(poll_row):
+            raise HTTPException(status_code=409, detail="Sondage clôturé")
+
+        if not poll_row["multi_choice"] and len(option_ids) > 1:
+            raise HTTPException(
+                status_code=400, detail="Un seul choix autorisé sur ce sondage."
+            )
+
+        if option_ids:
+            ph = ",".join("?" * len(option_ids))
+            valid = conn.execute(
+                f"SELECT id FROM chat_poll_options WHERE poll_id=? AND id IN ({ph})",
+                [poll_id, *option_ids],
+            ).fetchall()
+            if len(valid) != len(option_ids):
+                raise HTTPException(status_code=400, detail="Option invalide")
+
+        anonymous = bool(poll_row["anonymous"])
+        now = _now_iso()
+
+        if anonymous:
+            vhash = _voter_hash(poll_id, user["id"])
+            conn.execute(
+                "DELETE FROM chat_poll_votes WHERE poll_id=? AND voter_hash=?",
+                (poll_id, vhash),
+            )
+            for oid in option_ids:
+                conn.execute(
+                    """INSERT INTO chat_poll_votes
+                       (poll_id, option_id, user_id, user_nom, voter_hash, voted_at)
+                       VALUES (?,?,?,?,?,?)""",
+                    (poll_id, oid, None, None, vhash, now),
+                )
+        else:
+            conn.execute(
+                "DELETE FROM chat_poll_votes WHERE poll_id=? AND user_id=?",
+                (poll_id, user["id"]),
+            )
+            uname = user.get("nom") or user.get("email", "")
+            for oid in option_ids:
+                conn.execute(
+                    """INSERT INTO chat_poll_votes
+                       (poll_id, option_id, user_id, user_nom, voter_hash, voted_at)
+                       VALUES (?,?,?,?,?,?)""",
+                    (poll_id, oid, user["id"], uname, None, now),
+                )
+        conn.commit()
+        poll = _poll_dict(conn, poll_row, user["id"])
+
+    return {"poll": poll}
+
+
+@router.post("/polls/{poll_id}/close")
+async def close_poll(poll_id: int, request: Request):
+    """Clôturer manuellement un sondage. Créateur, direction, superadmin."""
+    user = _require(request)
+    with get_db() as conn:
+        poll_row = conn.execute(
+            """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                      closes_at, closed_at, created_by, created_at
+               FROM chat_polls WHERE id=? LIMIT 1""",
+            (poll_id,),
+        ).fetchone()
+        if not poll_row:
+            raise HTTPException(status_code=404, detail="Sondage introuvable")
+        _assert_member(conn, poll_row["channel_id"], user["id"])
+        if not _can_manage_poll(user, poll_row):
+            raise HTTPException(
+                status_code=403,
+                detail="Seul le créateur ou la direction peut clôturer.",
+            )
+        if poll_row["closed_at"]:
+            return {"poll": _poll_dict(conn, poll_row, user["id"])}
+        now = _now_iso()
+        conn.execute(
+            "UPDATE chat_polls SET closed_at=? WHERE id=?", (now, poll_id)
+        )
+        conn.commit()
+        poll_row = conn.execute(
+            """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                      closes_at, closed_at, created_by, created_at
+               FROM chat_polls WHERE id=? LIMIT 1""",
+            (poll_id,),
+        ).fetchone()
+        return {"poll": _poll_dict(conn, poll_row, user["id"])}
+
+
+@router.get("/polls/{poll_id}/voters")
+def poll_voters(poll_id: int, request: Request):
+    """Liste des votants par option. Refusé si le sondage est anonyme."""
+    user = _require(request)
+    with get_db() as conn:
+        poll_row = conn.execute(
+            "SELECT id, channel_id, anonymous FROM chat_polls WHERE id=? LIMIT 1",
+            (poll_id,),
+        ).fetchone()
+        if not poll_row:
+            raise HTTPException(status_code=404, detail="Sondage introuvable")
+        _assert_member(conn, poll_row["channel_id"], user["id"])
+        if poll_row["anonymous"]:
+            raise HTTPException(
+                status_code=403, detail="Sondage anonyme — votants non révélés."
+            )
+        rows = conn.execute(
+            """SELECT option_id, user_id, user_nom, voted_at
+               FROM chat_poll_votes WHERE poll_id=?
+               ORDER BY option_id, voted_at ASC""",
+            (poll_id,),
+        ).fetchall()
+        return {
+            "voters": [
+                {
+                    "option_id": r["option_id"],
+                    "user_id": r["user_id"],
+                    "user_nom": r["user_nom"] or "",
+                    "voted_at": r["voted_at"],
+                }
+                for r in rows
+            ]
+        }
