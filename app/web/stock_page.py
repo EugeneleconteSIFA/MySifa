@@ -13208,7 +13208,8 @@ function buildValorisationKpis() {
 
   const pfChargePct = pfLoaded ? Number(pfS.charge_production_pct || 0) : 0;
   const pfStoragePct = pfLoaded ? Number(pfS.storage_fees_pct || 0) : 0;
-  const pfHasCharges = pfLoaded && (pfChargePct > 0 || pfStoragePct > 0);
+  // Charges de prod. / stockage : réservé à Direction + superadmin (comme la colonne « réel » MP).
+  const pfHasCharges = canSeeUSD && pfLoaded && (pfChargePct > 0 || pfStoragePct > 0);
   const pfTotalAvecCharges = pfLoaded ? Number(pfS.total_pf_avec_charges || 0) : 0;
 
   const kpiPFChildren = [
@@ -13226,10 +13227,10 @@ function buildValorisationKpis() {
   const pfSubPieces = [];
   if (pfLoaded) {
     pfSubPieces.push(`${pfS.nb_refs_valorisees || 0} / ${pfS.nb_refs || 0} références valorisées`);
-    if (pfChargePct > 0) {
+    if (canSeeUSD && pfChargePct > 0) {
       pfSubPieces.push('Charge prod. ' + pfChargePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
     }
-    if (pfStoragePct > 0) {
+    if (canSeeUSD && pfStoragePct > 0) {
       pfSubPieces.push('Stockage ' + pfStoragePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
     }
   } else {
@@ -14630,11 +14631,15 @@ function buildValorisationPFTableRow(item) {
   );
 
   // Dont charges de prod. (charge production + frais de stockage appliqués)
+  // Réservé Direction + superadmin, comme la colonne « réel » côté MP.
+  const canSeeCharges = valCanSeeUSD();
   const chargesProd = Number(item.charges_prod || 0);
   const hasCharges = item.has_price && chargesProd > 0.001;
-  const tdCharges = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + (hasCharges ? '#16a34a' : 'var(--muted)') },
-    hasCharges ? valFormatEuro(chargesProd) : '—',
-  );
+  const tdCharges = canSeeCharges
+    ? el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + (hasCharges ? '#16a34a' : 'var(--muted)') },
+        hasCharges ? valFormatEuro(chargesProd) : '—',
+      )
+    : null;
 
   // Historique
   const histBtn = el('button', {
@@ -14645,7 +14650,9 @@ function buildValorisationPFTableRow(item) {
   histBtn.appendChild(iconEl('clock', 14));
   const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
 
-  tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal, tdCharges, tdHist);
+  tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal);
+  if (tdCharges) tr.append(tdCharges);
+  tr.append(tdHist);
   return tr;
 }
 
@@ -14666,23 +14673,29 @@ function buildValorisationPFTable() {
   const thStyleR = thStyle + ';text-align:right';
   const thStyleC = thStyle + ';text-align:center;cursor:default';
 
-  const thead = el('thead', null,
-    el('tr', null,
-      el('th', { style: thStyle, on: { click: () => valTogglePFSort('type') } }, 'Type' + arrow('type')),
-      el('th', { style: thStyle, on: { click: () => valTogglePFSort('reference') } }, 'Référence' + arrow('reference')),
-      el('th', { style: thStyle, on: { click: () => valTogglePFSort('designation') } }, 'Désignation' + arrow('designation')),
-      el('th', { style: thStyleR, on: { click: () => valTogglePFSort('quantite') } }, 'Quantité' + arrow('quantite')),
-      el('th', { style: thStyleR, on: { click: () => valTogglePFSort('prix_unitaire_ht') } }, 'Prix HT' + arrow('prix_unitaire_ht')),
-      el('th', { style: thStyleR, on: { click: () => valTogglePFSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+  // Colonne « Dont charges de prod. » — Direction + superadmin uniquement.
+  const canSeeChargesCol = valCanSeeUSD();
+  const headerCells = [
+    el('th', { style: thStyle, on: { click: () => valTogglePFSort('type') } }, 'Type' + arrow('type')),
+    el('th', { style: thStyle, on: { click: () => valTogglePFSort('reference') } }, 'Référence' + arrow('reference')),
+    el('th', { style: thStyle, on: { click: () => valTogglePFSort('designation') } }, 'Désignation' + arrow('designation')),
+    el('th', { style: thStyleR, on: { click: () => valTogglePFSort('quantite') } }, 'Quantité' + arrow('quantite')),
+    el('th', { style: thStyleR, on: { click: () => valTogglePFSort('prix_unitaire_ht') } }, 'Prix HT' + arrow('prix_unitaire_ht')),
+    el('th', { style: thStyleR, on: { click: () => valTogglePFSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+  ];
+  if (canSeeChargesCol) {
+    headerCells.push(
       el('th', { style: thStyleR + ';color:#16a34a', on: { click: () => valTogglePFSort('charges_prod') }, title: 'Charge de production + frais de stockage appliqués à la valorisation' }, 'Dont charges de prod.' + arrow('charges_prod')),
-      el('th', { style: thStyleC }, 'Historique'),
-    ),
-  );
+    );
+  }
+  headerCells.push(el('th', { style: thStyleC }, 'Historique'));
+  const thead = el('thead', null, el('tr', null, ...headerCells));
+  const emptyColspan = canSeeChargesCol ? '8' : '7';
 
   const tbody = el('tbody');
   if (pf.loading && !rows.length) {
     tbody.appendChild(el('tr', null,
-      el('td', { colspan: '8', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'),
+      el('td', { colspan: emptyColspan, style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'),
     ));
   } else if (!rows.length) {
     let msg;
@@ -14695,7 +14708,7 @@ function buildValorisationPFTable() {
     else if (pf.filterNegoce) msg = 'Aucun produit de négoce enregistré.';
     else msg = 'Aucune référence à valoriser. Importez un fichier Excel pour commencer.';
     tbody.appendChild(el('tr', null,
-      el('td', { colspan: '8', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg),
+      el('td', { colspan: emptyColspan, style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg),
     ));
   } else {
     rows.forEach(item => tbody.appendChild(buildValorisationPFTableRow(item)));
