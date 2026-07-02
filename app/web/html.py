@@ -2129,12 +2129,22 @@ __EXPE_CARTE_FRANCE_CSS__
 }
 body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
 .mobile-navbar-tab{
-  flex:1 1 0;min-width:0;
+  flex:1 1 0;min-width:0;max-width:180px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  padding:6px 4px 4px;border:0;background:transparent;color:var(--muted);
-  font-family:inherit;font-size:10px;font-weight:600;letter-spacing:.02em;
+  padding:6px 2px 4px;border:0;background:transparent;color:var(--muted);
+  font-family:inherit;font-size:10px;font-weight:600;letter-spacing:.01em;
   cursor:pointer;position:relative;
   border-radius:10px;transition:color .12s,background .12s;
+  overflow:hidden;
+}
+.mobile-navbar-tab-label{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  line-height:1;font-size:10px;font-weight:600;padding:0 2px;
+}
+@media (max-width:360px){
+  .mobile-navbar-tab-label{font-size:9px}
+  .mobile-navbar-tab{padding:6px 0 4px}
+  .mobile-navbar-tab-ico{width:36px;height:26px}
 }
 .mobile-navbar-tab:hover{color:var(--text2)}
 .mobile-navbar-tab.active{color:var(--accent)}
@@ -2148,7 +2158,6 @@ body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
   position:relative;color:var(--text2);
 }
 .mobile-navbar-tab.active .mobile-navbar-tab-ico svg{color:var(--accent)}
-.mobile-navbar-tab-label{line-height:1;font-size:10px;font-weight:600}
 .mobile-navbar-tab-badge{
   position:absolute;top:-2px;right:6px;min-width:16px;height:16px;
   padding:0 4px;border-radius:9px;background:var(--danger);color:#fff;
@@ -2163,9 +2172,8 @@ body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
 @media (max-width:900px) and (orientation:portrait){
   .mobile-navbar{display:flex}
   body.has-mobile-navbar{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
-  /* Sidebar overlay et FAB Agent IA : décalés au-dessus de la nav bar */
-  #ai-chat-root #ai-chat-btn{display:none!important}
-  #ai-chat-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important}
+  /* Widget IA : retiré entièrement sur mobile portrait (l'IA reste accessible sur desktop) */
+  #ai-chat-root{display:none!important}
 }
 /* Cacher la nav bar sur login */
 body.mysifa-hide-navbar .mobile-navbar{display:none!important}
@@ -2238,8 +2246,12 @@ body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
 .portal-mobile-header{
   display:none;
   align-items:center;justify-content:space-between;
-  width:100%;padding:0;margin:0 0 8px;
+  width:100%;max-width:min(100%, 320px);
+  padding:0;margin:0 auto 8px;
   gap:12px;
+}
+@media (min-width:520px) and (max-width:900px){
+  .portal-mobile-header{max-width:min(100%, 400px)}
 }
 .portal-mobile-header-brand{
   font-size:26px;font-weight:800;letter-spacing:-1.1px;color:var(--text);line-height:1;
@@ -2263,9 +2275,21 @@ body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
 }
 .portal-mobile-profile-btn:hover{border-color:var(--accent)}
 .portal-mobile-profile-avatar{
+  position:relative;
   width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
   display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:800;letter-spacing:.02em;
+  font-size:11px;font-weight:800;letter-spacing:.02em;overflow:visible;
+  flex-shrink:0;
+}
+.portal-mobile-profile-avatar img{
+  width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;
+}
+.portal-mobile-profile-humeur{
+  position:absolute;bottom:-3px;right:-3px;
+  min-width:16px;height:16px;padding:0 2px;border-radius:8px;
+  background:var(--card);border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.15);
 }
 .portal-mobile-profile-name{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (max-width:900px) and (orientation:portrait){
@@ -4517,13 +4541,25 @@ function renderPortal(){
       }
     }
   }, _googleLogoSvg);
+  // Avatar : photo si dispo, sinon initiales ; badge humeur si active + aujourd'hui
+  const _mobTodayIso=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  const _mobAvatarUrl=(S.user&&S.user.avatar_url)?String(S.user.avatar_url).trim():'';
+  const _mobHumeur=(S.user&&S.user.humeur_active&&S.user.humeur_valeur&&S.user.humeur_date===_mobTodayIso)?String(S.user.humeur_valeur):'';
+  const _mobAvatarInner=_mobAvatarUrl?h('img',{src:_mobAvatarUrl,alt:'',draggable:'false'}):document.createTextNode(_mobInitials);
+  const _mobAvatarEl=h('span',{className:'portal-mobile-profile-avatar'},_mobAvatarInner);
+  if(_mobHumeur){
+    const hb=document.createElement('span');
+    hb.className='portal-mobile-profile-humeur';
+    hb.textContent=_mobHumeur;
+    _mobAvatarEl.appendChild(hb);
+  }
   const _mobProfileBtn=h('button',{
     type:'button',
     className:'portal-mobile-profile-btn',
     'aria-label':'Menu profil',
     onClick:()=>{openProfileSheet();}
   },
-    h('span',{className:'portal-mobile-profile-avatar'},_mobInitials),
+    _mobAvatarEl,
     h('span',{className:'portal-mobile-profile-name'},_mobFirstName)
   );
   const _mobileHeader=h('div',{className:'portal-mobile-header'},
@@ -13781,8 +13817,6 @@ function renderMobileNavbar(){
   document.body.classList.add('has-mobile-navbar');
   const isPortal=S.app==='portal';
   const isMessages=S.app==='messages';
-  const isAiOn=!!(document.getElementById('ai-chat-panel')&&document.getElementById('ai-chat-panel').classList.contains('open'));
-  const aiEnabled=_mnbAiEnabled();
   const msgUnread=Number(S.msgUnread||0);
   const ICO={
     home:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>',
@@ -13802,9 +13836,7 @@ function renderMobileNavbar(){
     tab('switch', ICO.grid, "Changer d'app", false,   0),
     tab('msg',    ICO.mail, 'Messagerie',   isMessages, msgUnread),
   ];
-  if(aiEnabled){
-    tabs.push(tab('ai', ICO.ai, 'Agent IA', isAiOn, 0));
-  }
+  // Agent IA retiré de la nav bar (l'IA reste accessible sur desktop)
   root.innerHTML='<nav class="mobile-navbar">'+tabs.join('')+'</nav>';
   root.querySelectorAll('.mobile-navbar-tab').forEach(btn=>{
     btn.addEventListener('click',(e)=>{
@@ -13816,12 +13848,14 @@ function renderMobileNavbar(){
       } else if(id==='switch'){
         _mnbOpenCmdK();
       } else if(id==='msg'){
+        // Ouvre l'outil de chat (chat_widget), pas le module emails
+        const trigger=document.getElementById('cw-bubble')||document.getElementById('cw-bar');
+        if(trigger){trigger.click();return;}
+        // Fallback si le chat n'est pas monté (utilisateur sans droit)
         if(S.app==='messages'){window.scrollTo({top:0,behavior:'smooth'});return;}
         set({app:'messages'});
         loadMessagesUnread().catch(()=>{});
         loadMessages().catch(()=>{});
-      } else if(id==='ai'){
-        _mnbToggleAi();
       }
     });
   });
