@@ -193,8 +193,8 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js"></script>
-<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/chat_widget.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=3"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {

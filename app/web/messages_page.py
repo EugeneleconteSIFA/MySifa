@@ -718,8 +718,8 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=5"></script>
-<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/chat_widget.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=3"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;

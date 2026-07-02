@@ -832,7 +832,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=5"></script>
+<script src="/static/chat_widget.js?v=7"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/mysifa_alert_runtime.js"></script>
 <script>

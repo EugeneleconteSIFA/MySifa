@@ -127,6 +127,8 @@
       '<div id="cw-action-btns">' +
       '<button type="button" id="cw-attach" aria-label="Pièce jointe" title="Pièce jointe">' +
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>' +
+      '<button type="button" id="cw-poll-btn" aria-label="Sondage" title="Sondage">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>' +
       '<button type="button" id="cw-gif-btn" aria-label="GIF">GIF</button></div>' +
       '<div id="cw-input-wrap"><div id="cw-mention-dd"></div><textarea id="cw-input" rows="1" placeholder="Message…"></textarea></div>' +
       '<button type="button" id="cw-send" aria-label="Envoyer">' +
@@ -163,6 +165,11 @@
     document.getElementById('cw-gif-btn')?.addEventListener('click', () => {
       closeActions();
       openGifPicker(CW);
+    });
+    document.getElementById('cw-poll-btn')?.addEventListener('click', () => {
+      closeActions();
+      if (typeof CW.openPollModal === 'function') CW.openPollModal();
+      else if (window._CW && typeof window._CW.openPollModal === 'function') window._CW.openPollModal();
     });
     document.getElementById('cw-send')?.addEventListener('click', () => CW.sendMessage());
     const inp = document.getElementById('cw-input');
