@@ -1,14 +1,7 @@
 /**
  * MySifa — Command Palette (⌘K / Ctrl+K).
- * Modal global accessible depuis n'importe quelle page :
- *   - changement d'application (filtré par rôle)
- *   - actions rapides (thème, profil, paramètres, déconnexion, retour portail)
- *   - recherche dossier de production (n° dossier)
- *   - recherche référence produit (stock, fiche technique, dossier de fabrication)
- *   - recherche emplacement de stock
- *   - recherche client (raison sociale, code, ville…)
- *   - filtre machine et date au planning
- * Auto-init au DOMContentLoaded ; injection paresseuse du DOM à la première ouverture.
+ * Modal global accessible depuis n'importe quelle page.
+ * v2 : prefetch idle, rendu instantané, event delegation, rAF-batched.
  */
 (function () {
   'use strict';
@@ -20,6 +13,7 @@
   var KBD_LABEL = MAC ? '⌘ K' : 'Ctrl K';
   var KBD_SHORT = MAC ? '⌘K' : 'Ctrl K';
   var DEBOUNCE_MS = 180;
+  var LOCAL_RENDER_DEBOUNCE_MS = 20;
 
   var state = {
     user: null,
@@ -27,20 +21,24 @@
     overlay: null,
     list: null,
     input: null,
-    items: [],
-    asyncItems: [],
+    items: [],           // built base items (apps + actions + machines)
+    asyncItems: [],      // async items (products, emplacements, clients)
     filtered: [],
     activeIdx: 0,
     open: false,
     fetchingUser: null,
     fetchingDossiers: null,
     searchTimer: null,
+    localRenderTimer: null,
     searchToken: 0,
     clientsAllowed: true,
+    prefetched: false,
+    lastRenderedHtml: '',
+    inFlightAsync: null, // AbortController
   };
 
-  // ───── Icônes (subset Lucide) ─────────────────────────────────────
-  var ICONS = {
+  // ───── Icônes (subset Lucide) - cache compilé ────────────────────
+  var ICON_PATHS = {
     'edit': '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
     'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
@@ -69,12 +67,23 @@
     'box': '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
   };
-  function svgIcon(name, size) {
-    size = size || 16;
-    var inner = ICONS[name] || ICONS.search;
+  // Cache pré-compilé des SVG (évite la reconstruction par render)
+  var ICON_SVG_16 = {};
+  var ICON_SVG_18 = {};
+  Object.keys(ICON_PATHS).forEach(function (k) {
+    ICON_SVG_16[k] = _buildSvg(k, 16);
+    ICON_SVG_18[k] = _buildSvg(k, 18);
+  });
+  function _buildSvg(name, size) {
+    var inner = ICON_PATHS[name] || ICON_PATHS.search;
     return '<svg width="' + size + '" height="' + size +
       '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       inner + '</svg>';
+  }
+  function svgIcon(name, size) {
+    if (size === 16) return ICON_SVG_16[name] || ICON_SVG_16.folder;
+    if (size === 18) return ICON_SVG_18[name] || ICON_SVG_18.folder;
+    return _buildSvg(name, size || 16);
   }
 
   // ───── Rôles ─────────────────────────────────────────────────────
@@ -92,7 +101,12 @@
     if (state.fetchingUser) return state.fetchingUser;
     state.fetchingUser = fetch('/api/auth/me', { credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (u) { state.user = u || { role: '' }; return state.user; })
+      .then(function (u) {
+        state.user = u || { role: '' };
+        // reset items pour reflet le user au prochain open
+        state.items = [];
+        return state.user;
+      })
       .catch(function () { state.user = { role: '' }; return state.user; });
     return state.fetchingUser;
   }
@@ -110,12 +124,24 @@
     return state.fetchingDossiers;
   }
 
+  // Prefetch idle : warm cache dès que la page est disponible
+  function prefetchIdle() {
+    if (state.prefetched) return;
+    state.prefetched = true;
+    var run = function () {
+      fetchUser().catch(function () {});
+      fetchDossiers().catch(function () {});
+    };
+    if (window.requestIdleCallback) {
+      window.requestIdleCallback(run, { timeout: 2000 });
+    } else {
+      setTimeout(run, 800);
+    }
+  }
+
   // ───── Items statiques (apps + actions + machines) ───────────────
   function buildBaseItems(user) {
     var role = (user && user.role) || '';
-    var isSuper = role === 'superadmin';
-    var isDirection = role === 'direction';
-
     var apps = [
       { type: 'app', title: 'Saisie Prod',     sub: 'Saisie opérateur — machine',     keywords: 'prod saisie operateur machine',       url: '/prod',        icon: 'edit',         roles: '*' },
       { type: 'app', title: 'MyProd',          sub: 'Suivi de production & planning',           keywords: 'production suivi planning',           url: '/planning',    icon: 'wrench',       roles: '*' },
@@ -130,7 +156,6 @@
       { type: 'app', title: 'MyQualité',   sub: 'Non-conformités & audits',           keywords: 'qualite nc non conformite audit',     url: '/qualite',     icon: 'shield-check', roles: '*' },
       { type: 'app', title: 'Maintenance',     sub: 'Suivi et planification',                   keywords: 'maintenance interventions',           url: '/maintenance', icon: 'tool',         roles: '*' },
     ];
-
     var actions = [
       { type: 'action', title: 'Retour au portail',                  sub: 'Page d’accueil',              keywords: 'portail accueil home',       url: '/',          icon: 'home',     roles: '*' },
       { type: 'action', title: 'Mon profil',                         sub: 'Préférences, mot de passe', keywords: 'profil compte preferences',  url: '/profil',    icon: 'user',     roles: '*' },
@@ -141,14 +166,12 @@
       { type: 'action', title: 'Basculer le thème clair/sombre', sub: 'Inverser le mode visuel',     keywords: 'theme dark light sombre clair mode', action: 'toggle-theme', icon: 'moon', roles: '*' },
       { type: 'action', title: 'Déconnexion',                   sub: 'Fermer la session en cours',       keywords: 'logout deconnexion',         action: 'logout',  icon: 'log-out',  roles: '*' },
     ];
-
     var machines = [
       { type: 'machine', title: 'Cohésio 1', sub: 'Planning machine — Cohésio 1', keywords: 'cohesio 1 machine planning', url: '/planning?machine=1', icon: 'layers', roles: '*' },
       { type: 'machine', title: 'Cohésio 2', sub: 'Planning machine — Cohésio 2', keywords: 'cohesio 2 machine planning', url: '/planning?machine=2', icon: 'layers', roles: '*' },
       { type: 'machine', title: 'DSI',           sub: 'Planning machine — DSI',           keywords: 'dsi machine planning',           url: '/planning?machine=3', icon: 'layers', roles: '*' },
       { type: 'machine', title: 'Repiquage',     sub: 'Planning machine — Repiquage',     keywords: 'repiquage machine planning',     url: '/planning?machine=4', icon: 'layers', roles: '*' },
     ];
-
     var out = [];
     apps.forEach(function (a) { if (hasRole(user, a.roles)) out.push(a); });
     actions.forEach(function (a) { if (hasRole(user, a.roles)) out.push(a); });
@@ -182,15 +205,22 @@
   function searchAsync(qRaw) {
     var token = ++state.searchToken;
     var q = (qRaw || '').trim();
+    if (state.inFlightAsync && typeof state.inFlightAsync.abort === 'function') {
+      try { state.inFlightAsync.abort(); } catch (e) {}
+    }
     state.asyncItems = [];
     if (q.length < 2) { renderIfActive(token); return; }
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    state.inFlightAsync = ctrl;
+    var opts = { credentials: 'include' };
+    if (ctrl) opts.signal = ctrl.signal;
     var encQ = encodeURIComponent(q);
 
-    var pStock = fetch('/api/stock/search?q=' + encQ + '&limit=6', { credentials: 'include' })
+    var pStock = fetch('/api/stock/search?q=' + encQ + '&limit=6', opts)
       .then(function (r) { return r.ok ? r.json() : null; })
       .catch(function () { return null; });
     var pClients = state.clientsAllowed
-      ? fetch('/api/clients?search=' + encQ + '&limit=6', { credentials: 'include' })
+      ? fetch('/api/clients?search=' + encQ + '&limit=6', opts)
         .then(function (r) {
           if (r.status === 403 || r.status === 401) { state.clientsAllowed = false; return null; }
           return r.ok ? r.json() : null;
@@ -211,33 +241,17 @@
         var desig = (p.designation || '').trim();
         var stockTxt = (p.stock_total != null && p.stock_total !== '') ? (p.stock_total + ' ' + (p.unite || 'u')) : '';
         var subBase = desig || '—';
-        // 1) Article sur MyStock
-        items.push({
-          type: 'ref-stock',
-          title: 'Stock — ' + ref,
+        items.push({ type: 'ref-stock', title: 'Stock — ' + ref,
           sub: subBase + (stockTxt ? ' · ' + stockTxt + ' en stock' : ''),
           keywords: ref + ' ' + desig + ' stock',
           url: '/stock?tab=produits-finis' + (p.id ? '&produit=' + p.id : '&ref=' + encodeURIComponent(ref)),
-          icon: 'package',
-        });
-        // 2) Fiche technique
-        items.push({
-          type: 'ref-fiche',
-          title: 'Fiche technique — ' + ref,
-          sub: subBase,
+          icon: 'package' });
+        items.push({ type: 'ref-fiche', title: 'Fiche technique — ' + ref, sub: subBase,
           keywords: ref + ' ' + desig + ' fiche technique',
-          url: '/planning?q=' + encodeURIComponent(ref) + '&fiche=1',
-          icon: 'file-text',
-        });
-        // 3) Dossier de fabrication
-        items.push({
-          type: 'ref-dossier',
-          title: 'Dossier de fabrication — ' + ref,
-          sub: subBase + ' · Planning de production',
+          url: '/planning?q=' + encodeURIComponent(ref) + '&fiche=1', icon: 'file-text' });
+        items.push({ type: 'ref-dossier', title: 'Dossier de fabrication — ' + ref, sub: subBase + ' · Planning de production',
           keywords: ref + ' ' + desig + ' dossier fabrication',
-          url: '/planning?q=' + encodeURIComponent(ref),
-          icon: 'wrench',
-        });
+          url: '/planning?q=' + encodeURIComponent(ref), icon: 'wrench' });
       });
 
       var empls = Array.isArray(stock.emplacements) ? stock.emplacements : [];
@@ -247,14 +261,9 @@
         var sub = (e.nb_refs != null && e.nb_refs !== '')
           ? (e.nb_refs + ' réf · ' + (e.total_unites || 0) + ' u')
           : 'Plan d’entrepôt';
-        items.push({
-          type: 'emplacement',
-          title: 'Emplacement ' + code,
-          sub: sub,
+        items.push({ type: 'emplacement', title: 'Emplacement ' + code, sub: sub,
           keywords: code + ' emplacement zone',
-          url: '/stock?tab=plan-entrepot&emplacement=' + encodeURIComponent(code),
-          icon: 'map-pin',
-        });
+          url: '/stock?tab=plan-entrepot&emplacement=' + encodeURIComponent(code), icon: 'map-pin' });
       });
 
       var clientItems = Array.isArray(clients.items) ? clients.items : [];
@@ -264,23 +273,17 @@
         var sub = [];
         if (c.code) sub.push(c.code);
         if (c.ville) sub.push(c.ville);
-        items.push({
-          type: 'client',
-          title: name,
-          sub: 'Client · ' + (sub.length ? sub.join(' — ') : 'Dossiers de production'),
+        items.push({ type: 'client', title: name, sub: 'Client · ' + (sub.length ? sub.join(' — ') : 'Dossiers de production'),
           keywords: name + ' ' + (c.code || '') + ' ' + (c.ville || '') + ' client',
-          url: '/planning?q=' + encodeURIComponent(name),
-          icon: 'building',
-        });
+          url: '/planning?q=' + encodeURIComponent(name), icon: 'building' });
       });
 
-      // Date parsing : JJ/MM, JJ/MM/AAAA, ou aujourd'hui/demain/hier
       var dateItem = parseDateQuery(q);
       if (dateItem) items.unshift(dateItem);
 
       state.asyncItems = items;
       renderIfActive(token);
-    });
+    }).catch(function () {});
   }
 
   function parseDateQuery(q) {
@@ -296,7 +299,6 @@
     } else if (qn === 'hier' || qn === 'yesterday') {
       d = new Date(today.getTime()-86400000); label = 'Hier';
     } else {
-      // JJ/MM ou JJ/MM/AAAA, JJ-MM, JJ.MM
       var m = qn.match(/^(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?$/);
       if (m) {
         var day = parseInt(m[1],10), mon = parseInt(m[2],10), yr = m[3]?parseInt(m[3],10):today.getFullYear();
@@ -308,14 +310,9 @@
       }
     }
     if (!d) return null;
-    return {
-      type: 'date',
-      title: 'Planning du ' + label,
-      sub: 'Sauter à cette date dans MyProd',
+    return { type: 'date', title: 'Planning du ' + label, sub: 'Sauter à cette date dans MyProd',
       keywords: 'date jour planning ' + label,
-      url: '/planning?date=' + fmtIso(d),
-      icon: 'calendar',
-    };
+      url: '/planning?date=' + fmtIso(d), icon: 'calendar' };
   }
 
   // ───── Normalisation + score ─────────────────────────────────────
@@ -329,7 +326,6 @@
     if (titleNorm.indexOf(qNorm) === 0) return 100;
     if (titleNorm.indexOf(qNorm) !== -1) return 80;
     if (hay.indexOf(qNorm) !== -1) return 40;
-    // subsequence
     var i = 0;
     for (var k = 0; k < qNorm.length; k++) {
       var p = hay.indexOf(qNorm[k], i);
@@ -343,12 +339,8 @@
     var qNorm = normalize(q).trim();
     var base = state.items.slice();
     var prepend = [];
-
-    // dossiers numeric match
     if (/\d/.test(qNorm)) prepend = prepend.concat(dossierItems(q));
-    // async (refs/emplacements/clients) already computed
     if (state.asyncItems && state.asyncItems.length) prepend = prepend.concat(state.asyncItems);
-
     if (!qNorm) return base;
     var scored = [];
     var combined = prepend.concat(base);
@@ -374,6 +366,9 @@
       '    <span class="cmdk-search-ico">' + svgIcon('search', 18) + '</span>' +
       '    <input type="text" autocomplete="off" spellcheck="false" placeholder="Référence, emplacement, client, dossier, date…">' +
       '    <span class="cmdk-search-kbd">Esc</span>' +
+      '    <button type="button" class="cmdk-close-btn" aria-label="Fermer">' +
+      '      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '    </button>' +
       '  </div>' +
       '  <div class="cmdk-list" role="listbox"></div>' +
       '  <div class="cmdk-footer">' +
@@ -390,11 +385,36 @@
     state.input = ov.querySelector('.cmdk-search input');
 
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var closeBtn = ov.querySelector('.cmdk-close-btn');
+    if (closeBtn) closeBtn.addEventListener('click', function (e) { e.preventDefault(); close(); });
+
+    // Event delegation pour clic/hover sur les lignes (une seule fois)
+    state.list.addEventListener('click', function (e) {
+      var row = e.target.closest && e.target.closest('.cmdk-row');
+      if (!row) return;
+      state.activeIdx = parseInt(row.getAttribute('data-idx'), 10) || 0;
+      executeActive();
+    });
+    state.list.addEventListener('mousemove', function (e) {
+      var row = e.target.closest && e.target.closest('.cmdk-row');
+      if (!row) return;
+      var idx = parseInt(row.getAttribute('data-idx'), 10);
+      if (idx !== state.activeIdx) {
+        state.activeIdx = idx;
+        updateActiveClasses();
+      }
+    });
+
     state.input.addEventListener('input', function () {
       var q = state.input.value;
-      state.filtered = filterItems(q);
-      state.activeIdx = 0;
-      render();
+      // Rendu local rAF-batched
+      if (state.localRenderTimer) cancelAnimationFrame(state.localRenderTimer);
+      state.localRenderTimer = requestAnimationFrame(function () {
+        state.filtered = filterItems(q);
+        state.activeIdx = 0;
+        render();
+      });
+      // Recherche async debounced
       if (state.searchTimer) clearTimeout(state.searchTimer);
       state.searchTimer = setTimeout(function () { searchAsync(q); }, DEBOUNCE_MS);
     });
@@ -416,14 +436,18 @@
   function render() {
     if (!state.list) return;
     if (!state.filtered.length) {
-      state.list.innerHTML =
-        '<div class="cmdk-empty">Aucun résultat pour <b>' +
+      var empty = '<div class="cmdk-empty">Aucun résultat pour <b>' +
         escapeHtml(state.input.value) + '</b>.</div>';
+      if (empty === state.lastRenderedHtml) return;
+      state.list.innerHTML = empty;
+      state.lastRenderedHtml = empty;
       return;
     }
     var html = '';
     var lastSection = null;
-    state.filtered.forEach(function (item, idx) {
+    var items = state.filtered;
+    for (var idx = 0; idx < items.length; idx++) {
+      var item = items[idx];
       var section = sectionFor(item);
       if (section !== lastSection) {
         html += '<div class="cmdk-section">' + section + '</div>';
@@ -439,33 +463,26 @@
         (item.sub ? '<span class="cmdk-row-sub">' + escapeHtml(item.sub) + '</span>' : '') +
         '</span>' +
         '</button>';
-    });
+    }
+    if (html === state.lastRenderedHtml) return;
     state.list.innerHTML = html;
-    state.list.querySelectorAll('.cmdk-row').forEach(function (row) {
-      row.addEventListener('click', function () {
-        state.activeIdx = parseInt(row.getAttribute('data-idx'), 10) || 0;
-        executeActive();
-      });
-      row.addEventListener('mousemove', function () {
-        var idx = parseInt(row.getAttribute('data-idx'), 10);
-        if (idx !== state.activeIdx) {
-          state.activeIdx = idx;
-          updateActiveClasses();
-        }
-      });
-    });
+    state.lastRenderedHtml = html;
     scrollActiveIntoView();
   }
 
   function updateActiveClasses() {
-    state.list.querySelectorAll('.cmdk-row').forEach(function (row) {
-      var idx = parseInt(row.getAttribute('data-idx'), 10);
-      row.classList.toggle('cmdk-active', idx === state.activeIdx);
-      row.setAttribute('aria-selected', idx === state.activeIdx ? 'true' : 'false');
-    });
+    if (!state.list) return;
+    var rows = state.list.querySelectorAll('.cmdk-row');
+    for (var i = 0; i < rows.length; i++) {
+      var idx = parseInt(rows[i].getAttribute('data-idx'), 10);
+      var isActive = (idx === state.activeIdx);
+      rows[i].classList.toggle('cmdk-active', isActive);
+      rows[i].setAttribute('aria-selected', isActive ? 'true' : 'false');
+    }
     scrollActiveIntoView();
   }
   function scrollActiveIntoView() {
+    if (!state.list) return;
     var row = state.list.querySelector('.cmdk-row.cmdk-active');
     if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest' });
   }
@@ -522,14 +539,33 @@
     state.open = true;
     state.overlay.classList.add('cmdk-open');
     document.body.classList.add('cmdk-locked');
-    Promise.all([fetchUser(), fetchDossiers()]).then(function () {
+
+    // 1. Rendu instantané avec cache si dispo (aucune attente réseau)
+    state.input.value = prefill || '';
+    state.asyncItems = [];
+    state.lastRenderedHtml = '';
+    if (!state.items.length && state.user) {
       state.items = buildBaseItems(state.user);
-      state.input.value = prefill || '';
-      state.asyncItems = [];
+    }
+    if (state.items.length) {
       state.filtered = filterItems(state.input.value);
       state.activeIdx = 0;
       render();
-      setTimeout(function () { state.input && state.input.focus(); }, 0);
+    } else {
+      // Skeleton minimal en attendant fetchUser
+      state.list.innerHTML = '<div class="cmdk-empty">Chargement…</div>';
+      state.lastRenderedHtml = state.list.innerHTML;
+    }
+    // Focus immédiat (pas dans un setTimeout)
+    state.input.focus();
+
+    // 2. Hydratation asynchrone : quand user/dossiers sont prêts, on re-render
+    Promise.all([fetchUser(), fetchDossiers()]).then(function () {
+      if (!state.open) return;
+      state.items = buildBaseItems(state.user);
+      state.filtered = filterItems(state.input.value);
+      if (state.activeIdx >= state.filtered.length) state.activeIdx = 0;
+      render();
       if (state.input.value) searchAsync(state.input.value);
     });
   }
@@ -538,6 +574,9 @@
     state.open = false;
     state.overlay.classList.remove('cmdk-open');
     document.body.classList.remove('cmdk-locked');
+    if (state.inFlightAsync && typeof state.inFlightAsync.abort === 'function') {
+      try { state.inFlightAsync.abort(); } catch (e) {}
+    }
   }
 
   // ───── Hooks globaux ─────────────────────────────────────────────
@@ -561,22 +600,23 @@
   }
   document.addEventListener('keydown', onKeydown, true);
 
-  window.MysifaCmdK = { open: open, close: close, label: KBD_LABEL, shortLabel: KBD_SHORT };
+  window.MysifaCmdK = { open: open, close: close, toggle: function(prefill){ if(state.open) close(); else open(prefill||''); }, isOpen: function(){ return !!state.open; }, label: KBD_LABEL, shortLabel: KBD_SHORT };
 
-  function wireBadges() {
-    document.querySelectorAll('[data-cmdk-open]').forEach(function (el) {
-      if (el.__cmdkBound) return;
-      el.__cmdkBound = true;
-      el.addEventListener('click', function (e) { e.preventDefault(); open(''); });
-    });
-    document.querySelectorAll('[data-cmdk-label]').forEach(function (el) {
-      if (!el.textContent.trim()) el.textContent = KBD_LABEL;
-    });
+  // Event delegation globale pour [data-cmdk-open] et [data-cmdk-label]
+  // Plus économe qu'un MutationObserver sur documentElement.
+  function onDelegatedClick(e) {
+    var el = e.target && e.target.closest && e.target.closest('[data-cmdk-open]');
+    if (!el) return;
+    e.preventDefault();
+    open('');
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireBadges);
-  else wireBadges();
-  if (window.MutationObserver) {
-    var mo = new MutationObserver(function () { wireBadges(); });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-  }
+  document.addEventListener('click', onDelegatedClick, true);
+
+  // Prefetch idle : warm user + dossiers dès que la page est disponible.
+  // Le MutationObserver global a été supprimé (grosse charge sur pages riches) :
+  //  - [data-cmdk-open]  → event delegation ci-dessus, aucune liaison par élément.
+  //  - [data-cmdk-label] → aucun usage dans l'app (les badges sont écrits par html.py directement).
+  function onReady() { prefetchIdle(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady);
+  else onReady();
 })();

@@ -20,6 +20,8 @@ class PricingSettingsOut(BaseModel):
     default_margin_eur_m2: Decimal
     import_tax_pct: Decimal = Decimal("0")
     transport_cost_fixed_eur: Decimal = Decimal("0")
+    charge_production_pct: Decimal = Decimal("0")
+    storage_fees_pct: Decimal = Decimal("0")
     eur_usd_rate_updated_at: Optional[str] = None
     eur_usd_rate_source: Optional[str] = None
 
@@ -31,6 +33,8 @@ class PricingSettingsPatch(BaseModel):
     default_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     import_tax_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     transport_cost_fixed_eur: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    charge_production_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    storage_fees_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 
 
 class PricingFxRefreshOut(BaseModel):

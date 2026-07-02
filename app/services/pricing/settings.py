@@ -18,6 +18,8 @@ _REQUIRED_KEYS = (
 _OPTIONAL_KEYS = (
     "import_tax_pct",
     "transport_cost_fixed_eur",
+    "charge_production_pct",
+    "storage_fees_pct",
 )
 
 
@@ -56,6 +58,8 @@ def validate_pricing_settings(
             )
         tax_raw = settings.get("import_tax_pct")
         transp_raw = settings.get("transport_cost_fixed_eur")
+        charge_raw = settings.get("charge_production_pct")
+        storage_raw = settings.get("storage_fees_pct")
         s = PricingSettings(
             eur_usd_rate=_to_decimal(settings["eur_usd_rate"], "eur_usd_rate"),
             default_container_cost_usd=_to_decimal(
@@ -67,6 +71,8 @@ def validate_pricing_settings(
             ),
             import_tax_pct=_to_decimal(tax_raw, "import_tax_pct") if tax_raw is not None else Decimal("0"),
             transport_cost_fixed_eur=_to_decimal(transp_raw, "transport_cost_fixed_eur") if transp_raw is not None else Decimal("0"),
+            charge_production_pct=_to_decimal(charge_raw, "charge_production_pct") if charge_raw is not None else Decimal("0"),
+            storage_fees_pct=_to_decimal(storage_raw, "storage_fees_pct") if storage_raw is not None else Decimal("0"),
         )
     else:
         raise PricingError("Paramètres de calcul : type non supporté.")
@@ -85,5 +91,13 @@ def validate_pricing_settings(
         raise PricingError("import_tax_pct doit être inférieur à 1000 %.")
     if s.transport_cost_fixed_eur < 0:
         raise PricingError("transport_cost_fixed_eur ne peut pas être négatif.")
+    if s.charge_production_pct < 0:
+        raise PricingError("charge_production_pct ne peut pas être négatif.")
+    if s.charge_production_pct >= 100:
+        raise PricingError("charge_production_pct doit être strictement inférieur à 100 %.")
+    if s.storage_fees_pct < 0:
+        raise PricingError("storage_fees_pct ne peut pas être négatif.")
+    if s.storage_fees_pct > 1000:
+        raise PricingError("storage_fees_pct doit être inférieur à 1000 %.")
 
     return s

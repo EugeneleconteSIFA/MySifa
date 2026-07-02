@@ -44,8 +44,13 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         keys,
     ).fetchall()
     data = {r["key"]: _dec(r["value_decimal"]) for r in rows}
-    # import_tax_pct et transport_cost_fixed_eur sont optionnels (default 0 si absents)
-    optional = {"import_tax_pct", "transport_cost_fixed_eur"}
+    # Clés optionnelles (default 0 si absentes) — pas bloquantes pour le calcul pricing.
+    optional = {
+        "import_tax_pct",
+        "transport_cost_fixed_eur",
+        "charge_production_pct",
+        "storage_fees_pct",
+    }
     required = {k for k in MC_SETTING_KEYS if k not in optional}
     missing = [k for k in required if k not in data]
     if missing:
@@ -57,6 +62,8 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         default_margin_eur_m2=data["default_margin_eur_m2"],
         import_tax_pct=data.get("import_tax_pct", Decimal("0")),
         transport_cost_fixed_eur=data.get("transport_cost_fixed_eur", Decimal("0")),
+        charge_production_pct=data.get("charge_production_pct", Decimal("0")),
+        storage_fees_pct=data.get("storage_fees_pct", Decimal("0")),
     )
 
 

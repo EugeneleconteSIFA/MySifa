@@ -2114,6 +2114,298 @@ __EXPE_CARTE_FRANCE_CSS__
 .db-add-item-name{font-size:13px;font-weight:700;color:var(--text)}
 .db-add-item-desc{font-size:11px;color:var(--muted);margin-top:2px}
 .db-add-empty{text-align:center;color:var(--muted);font-size:13px;padding:16px 0}
+
+/* ══════════════════════════════════════════════════════════════════
+   Mobile bottom nav bar — portrait only, présente sur toutes les pages
+   ══════════════════════════════════════════════════════════════════ */
+.mobile-navbar{
+  position:fixed;left:0;right:0;bottom:0;z-index:400;
+  display:none;
+  background:var(--card);
+  border-top:1px solid var(--border);
+  box-shadow:0 -4px 20px rgba(0,0,0,.18);
+  padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));
+  justify-content:space-around;align-items:stretch;
+}
+body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
+.mobile-navbar-tab{
+  flex:1 1 0;min-width:0;max-width:180px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:6px 2px 4px;border:0;background:transparent;color:var(--muted);
+  font-family:inherit;font-size:10px;font-weight:600;letter-spacing:.01em;
+  cursor:pointer;position:relative;
+  border-radius:10px;transition:color .12s,background .12s;
+  overflow:hidden;
+}
+.mobile-navbar-tab-label{
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  line-height:1;font-size:10px;font-weight:600;padding:0 2px;
+}
+@media (max-width:360px){
+  .mobile-navbar-tab-label{font-size:9px}
+  .mobile-navbar-tab{padding:6px 0 4px}
+  .mobile-navbar-tab-ico{width:36px;height:26px}
+}
+.mobile-navbar-tab:hover{color:var(--text2)}
+.mobile-navbar-tab.active{color:var(--accent)}
+.mobile-navbar-tab.active .mobile-navbar-tab-ico{
+  background:var(--accent-bg);color:var(--accent);
+}
+.mobile-navbar-tab-ico{
+  width:44px;height:28px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;
+  position:relative;color:var(--text2);
+}
+.mobile-navbar-tab.active .mobile-navbar-tab-ico svg{color:var(--accent)}
+.mobile-navbar-tab-badge{
+  position:absolute;top:-2px;right:6px;min-width:16px;height:16px;
+  padding:0 4px;border-radius:9px;background:var(--danger);color:#fff;
+  font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 2px var(--card);line-height:1;
+}
+.mobile-navbar-tab.active::before{
+  content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:22px;height:3px;border-radius:0 0 3px 3px;background:var(--accent);
+}
+/* Visible uniquement en portrait mobile */
+@media (max-width:900px) and (orientation:portrait){
+  .mobile-navbar{display:flex}
+  body.has-mobile-navbar{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
+  /* FAB Agent IA caché : accès via l'onglet Agent IA de la nav bar. Le panel reste actif.
+     Spécificité boostée pour battre mysifa_ai_chat.css (loaded APRES ce style block). */
+  html body #ai-chat-root #ai-chat-btn,
+  html body[class] #ai-chat-btn{display:none!important}
+  #ai-chat-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;right:8px!important;left:8px!important;width:auto!important;max-width:none!important}
+  /* Widget chat_widget : bulle et barre flottantes cachées.
+     Spécificité boostée pour battre body.cw-use-bubble #cw-bubble injecté par chat_widget.js. */
+  html body #cw-bubble,html body #cw-bar,
+  html body[class] #cw-bubble,html body[class] #cw-bar{display:none!important}
+  #cw-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important}
+  /* Palette CmdK : overlay ne couvre pas la nav bar (redondance pour être sûr) */
+  html body #cmdk-overlay{bottom:calc(66px + env(safe-area-inset-bottom,0px))!important}
+  html body #cmdk-overlay .cmdk-modal{max-height:calc(100vh - 66px - env(safe-area-inset-bottom,0px) - 40px)!important}
+}
+/* Cacher la nav bar sur login */
+body.mysifa-hide-navbar .mobile-navbar{display:none!important}
+
+/* ══════════════════════════════════════════════════════════════════
+   Bottom sheet profil (menu badge EL)
+   ══════════════════════════════════════════════════════════════════ */
+.msf-sheet-backdrop{
+  position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.45);
+  opacity:0;transition:opacity .18s;pointer-events:none;
+}
+.msf-sheet-backdrop.open{opacity:1;pointer-events:auto}
+.msf-sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:501;
+  background:var(--card);border-top:1px solid var(--border);
+  border-top-left-radius:20px;border-top-right-radius:20px;
+  box-shadow:0 -8px 40px rgba(0,0,0,.25);
+  padding:8px 0 calc(16px + env(safe-area-inset-bottom,0px));
+  transform:translateY(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);
+  max-height:88vh;overflow-y:auto;
+}
+body.light .msf-sheet{box-shadow:0 -8px 40px rgba(15,23,42,.15)}
+.msf-sheet.open{transform:translateY(0)}
+.msf-sheet-handle{
+  width:38px;height:4px;border-radius:2px;background:var(--border);
+  margin:6px auto 10px;
+}
+.msf-sheet-user{
+  display:flex;align-items:center;gap:12px;padding:8px 20px 14px;
+  border-bottom:1px solid var(--border);margin-bottom:8px;
+}
+.msf-sheet-user-avatar{
+  width:44px;height:44px;border-radius:50%;
+  background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:800;letter-spacing:.02em;flex-shrink:0;
+}
+.msf-sheet-user-info{flex:1;min-width:0}
+.msf-sheet-user-name{font-size:15px;font-weight:700;color:var(--text);line-height:1.2}
+.msf-sheet-user-role{font-size:12px;color:var(--muted);margin-top:2px;text-transform:capitalize}
+.msf-sheet-list{display:flex;flex-direction:column;padding:0 8px}
+.msf-sheet-item{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 14px;border-radius:12px;
+  color:var(--text);font-size:15px;font-weight:500;
+  background:transparent;border:0;cursor:pointer;text-align:left;
+  transition:background .12s;font-family:inherit;
+  position:relative;
+}
+.msf-sheet-item:hover{background:var(--accent-bg)}
+.msf-sheet-item-ico{
+  width:32px;height:32px;border-radius:10px;
+  background:var(--bg);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;color:var(--text2);flex-shrink:0;
+}
+.msf-sheet-item.danger{color:var(--danger)}
+.msf-sheet-item.danger .msf-sheet-item-ico{color:var(--danger);border-color:rgba(248,113,113,.3)}
+.msf-sheet-item-label{flex:1;min-width:0}
+.msf-sheet-item-badge{
+  min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+  background:var(--danger);color:#fff;font-size:11px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+.msf-sheet-sep{height:1px;background:var(--border);margin:6px 12px}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   Google search — modal centré avec backdrop flou
+   ══════════════════════════════════════════════════════════════════ */
+.gsm-backdrop{
+  position:fixed;inset:0;z-index:600;
+  background:rgba(8,12,22,0.55);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  opacity:0;transition:opacity .16s ease;pointer-events:none;
+}
+body.light .gsm-backdrop{background:rgba(15,23,42,0.30)}
+.gsm-backdrop.open{opacity:1;pointer-events:auto}
+.gsm-modal{
+  position:fixed;left:50%;top:50%;z-index:601;
+  transform:translate(-50%,-50%) scale(.82);
+  transform-origin:center center;
+  width:min(92vw,520px);
+  background:var(--card);border:1px solid var(--border);
+  border-radius:18px;
+  box-shadow:0 24px 80px rgba(0,0,0,.45),0 0 0 1px rgba(34,211,238,.06);
+  opacity:0;pointer-events:none;
+  transition:transform .22s cubic-bezier(.22,.61,.36,1),opacity .18s ease;
+  padding:22px 20px 18px;
+}
+body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
+.gsm-modal.open{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+.gsm-modal-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.gsm-modal-logo{display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.gsm-modal-logo svg{width:28px;height:28px}
+.gsm-modal-title{
+  font-size:15px;font-weight:700;color:var(--text);flex:1;letter-spacing:-.01em;
+}
+.gsm-modal-close{
+  border:0;background:transparent;color:var(--muted);cursor:pointer;
+  width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  transition:background .12s,color .12s;flex-shrink:0;
+}
+.gsm-modal-close:hover{background:var(--accent-bg);color:var(--accent)}
+.gsm-input-wrap{
+  position:relative;background:var(--bg);border:1.5px solid var(--border);
+  border-radius:12px;padding:12px 14px 12px 42px;
+  transition:border-color .12s,box-shadow .12s;
+}
+.gsm-input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.gsm-input-search-ico{
+  position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  width:18px;height:18px;color:var(--muted);pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.gsm-input{
+  width:100%;background:transparent;border:0;outline:0;
+  color:var(--text);font-family:inherit;font-size:15px;
+  padding:0;line-height:1.4;
+}
+.gsm-input::placeholder{color:var(--muted)}
+.gsm-hint{
+  font-size:11px;color:var(--muted);margin-top:10px;
+  display:flex;gap:10px;flex-wrap:wrap;
+}
+.gsm-hint kbd{
+  font-family:ui-monospace,'Cascadia Code',monospace;font-size:10px;font-weight:700;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:5px;padding:2px 6px;color:var(--text2);
+}
+.gsm-recents{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.gsm-recents-label{
+  font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.05em;
+  text-transform:uppercase;margin-bottom:8px;
+}
+.gsm-recents-chips{display:flex;flex-wrap:wrap;gap:6px}
+.gsm-recent-chip{
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  border-radius:999px;padding:6px 12px;font-size:12px;font-weight:500;
+  cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s,color .12s;
+  display:inline-flex;align-items:center;gap:6px;max-width:100%;
+}
+.gsm-recent-chip:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.gsm-recent-chip-text{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;
+}
+.gsm-recent-chip svg{width:11px;height:11px;flex-shrink:0;color:var(--muted)}
+.gsm-recent-chip:hover svg{color:var(--accent)}
+@media (max-width:480px){
+  .gsm-modal{padding:18px 16px 14px;width:min(94vw,520px)}
+  .gsm-modal-logo svg{width:24px;height:24px}
+  .gsm-modal-title{font-size:14px}
+  .gsm-input{font-size:14px}
+  .gsm-recent-chip-text{max-width:120px}
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Portail mobile — header refondu (logo + Google + badge profil)
+   Masque l'ancienne corner-stack + barre de recherche Google + footer texte
+   ══════════════════════════════════════════════════════════════════ */
+.portal-mobile-header{
+  display:none;
+  align-items:center;justify-content:space-between;
+  width:100%;max-width:min(100%, 320px);
+  padding:0;margin:0 auto 8px;
+  gap:12px;
+}
+@media (min-width:520px) and (max-width:900px){
+  .portal-mobile-header{max-width:min(100%, 400px)}
+}
+.portal-mobile-header-brand{
+  font-size:26px;font-weight:800;letter-spacing:-1.1px;color:var(--text);line-height:1;
+}
+.portal-mobile-header-brand span{color:var(--accent)}
+.portal-mobile-header-actions{display:flex;align-items:center;gap:10px}
+.portal-mobile-google-btn,.portal-mobile-profile-btn{
+  border:1px solid var(--border);background:var(--card);
+  border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,border-color .12s;font-family:inherit;color:var(--text);
+}
+.portal-mobile-google-btn{
+  width:38px;height:38px;padding:0;
+}
+.portal-mobile-google-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
+.portal-mobile-google-btn svg{width:20px;height:20px}
+.portal-mobile-profile-btn{
+  height:38px;padding:0 12px 0 4px;gap:8px;
+  font-size:13px;font-weight:600;
+}
+.portal-mobile-profile-btn:hover{border-color:var(--accent)}
+.portal-mobile-profile-avatar{
+  position:relative;
+  width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:800;letter-spacing:.02em;overflow:visible;
+  flex-shrink:0;
+}
+.portal-mobile-profile-avatar img{
+  width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;
+}
+.portal-mobile-profile-humeur{
+  position:absolute;bottom:-3px;right:-3px;
+  min-width:16px;height:16px;padding:0 2px;border-radius:8px;
+  background:var(--card);border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+.portal-mobile-profile-name{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:900px) and (orientation:portrait){
+  .portal-mobile-header{display:flex}
+  /* Masquer les anciens éléments remplacés sur portrait mobile uniquement */
+  .portal-page > .portal-corner-stack{display:none!important}
+  .portal-page > .portal-search{display:none!important}
+  .portal-page > .portal-user{display:none!important}
+  .portal-page > .portal-logo{display:none!important}
+  /* Le portail-page prend juste ce qu'il faut, plus de gaps parasites */
+  .portal-page{padding-top:14px;padding-bottom:20px;gap:14px}
+  .portal-apps-block{margin-top:4px}
+}
+
 </style>
 </head>
 <body class="__STAGING_BODY_CLASS__">
@@ -2121,6 +2413,11 @@ __STAGING_BANDEAU_HTML__
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
+<div id="mobile-navbar-root" aria-label="Navigation" role="navigation"></div>
+<div id="msf-sheet-backdrop" class="msf-sheet-backdrop" aria-hidden="true"></div>
+<div id="msf-sheet-root" class="msf-sheet" role="dialog" aria-modal="true" aria-label="Menu profil"></div>
+<div id="gsm-backdrop" class="gsm-backdrop" aria-hidden="true"></div>
+<div id="gsm-modal" class="gsm-modal" role="dialog" aria-modal="true" aria-label="Recherche Google" aria-hidden="true"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
@@ -4322,7 +4619,54 @@ function renderPortal(){
   const _humeurVal=(S.user&&S.user.humeur_active&&S.user.humeur_valeur&&S.user.humeur_date===_todayIso)?S.user.humeur_valeur:null;
   const profHumeurBadge=_humeurVal?(()=>{const sp=document.createElement('span');sp.className='portal-humeur-badge';sp.textContent=_humeurVal;return sp;})():null;
 
+  // ── Header mobile (portrait) : logo + Google icone + badge profil ──
+  const _mobInitials=(function(){
+    const nom=(S.user&&S.user.nom)||'';
+    const parts=String(nom).trim().split(/\s+/).filter(Boolean);
+    if(!parts.length) return 'EL';
+    if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
+    return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
+  })();
+  const _mobFirstName=(function(){
+    const nom=String((S.user&&S.user.nom)||'').trim();
+    return nom.split(/\s+/)[0]||'';
+  })();
+  const _googleLogoSvg=(()=>{const w=document.createElement('span');w.className='mob-google-svg';w.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>';return w;})();
+  const _mobGoogleBtn=h('button',{
+    type:'button',
+    className:'portal-mobile-google-btn',
+    'aria-label':'Recherche Google',
+    title:'Recherche Google',
+    onClick:(e)=>{openGoogleSearch(e&&e.currentTarget?e.currentTarget:null);}
+  }, _googleLogoSvg);
+  // Avatar : photo si dispo, sinon initiales ; badge humeur si active + aujourd'hui
+  const _mobTodayIso=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  const _mobAvatarUrl=(S.user&&S.user.avatar_url)?String(S.user.avatar_url).trim():'';
+  const _mobHumeur=(S.user&&S.user.humeur_active&&S.user.humeur_valeur&&S.user.humeur_date===_mobTodayIso)?String(S.user.humeur_valeur):'';
+  const _mobAvatarInner=_mobAvatarUrl?h('img',{src:_mobAvatarUrl,alt:'',draggable:'false'}):document.createTextNode(_mobInitials);
+  const _mobAvatarEl=h('span',{className:'portal-mobile-profile-avatar'},_mobAvatarInner);
+  if(_mobHumeur){
+    const hb=document.createElement('span');
+    hb.className='portal-mobile-profile-humeur';
+    hb.textContent=_mobHumeur;
+    _mobAvatarEl.appendChild(hb);
+  }
+  const _mobProfileBtn=h('button',{
+    type:'button',
+    className:'portal-mobile-profile-btn',
+    'aria-label':'Menu profil',
+    onClick:()=>{openProfileSheet();}
+  },
+    _mobAvatarEl,
+    h('span',{className:'portal-mobile-profile-name'},_mobFirstName)
+  );
+  const _mobileHeader=h('div',{className:'portal-mobile-header'},
+    h('div',{className:'portal-mobile-header-brand'},'My',h('span',null,'Sifa')),
+    h('div',{className:'portal-mobile-header-actions'},_mobGoogleBtn,_mobProfileBtn)
+  );
+
   const portalEl=h('div',{className:'portal-page'},
+    _mobileHeader,
     h('div',{className:'portal-corner-stack'},
       h('button',{
         type:'button',
@@ -13526,6 +13870,327 @@ function renderSuivi(){
   return h('div',null,...parts);
 }
 
+
+
+// ══════════════════════════════════════════════════════════════════
+// Google search — modal centré avec animation depuis le bouton
+// ══════════════════════════════════════════════════════════════════
+const _gsmRecentsKey='mysifa_google_recents_v1';
+function _gsmLoadRecents(){
+  try{const r=JSON.parse(localStorage.getItem(_gsmRecentsKey)||'[]');return Array.isArray(r)?r.slice(0,5):[];}catch(_){return [];}
+}
+function _gsmSaveRecent(q){
+  try{
+    const list=_gsmLoadRecents().filter(x=>x!==q);
+    list.unshift(q);
+    localStorage.setItem(_gsmRecentsKey,JSON.stringify(list.slice(0,5)));
+  }catch(_){}
+}
+function _gsmEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function _gsmRun(q){
+  const query=String(q||'').trim();
+  if(!query)return;
+  _gsmSaveRecent(query);
+  try{fetch('/api/portal/google-search',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({q:query})}).catch(()=>{});}catch(e){}
+  window.open('https://www.google.com/search?q='+encodeURIComponent(query),'_blank','noopener');
+  closeGoogleSearch();
+}
+function openGoogleSearch(originEl){
+  const modal=document.getElementById('gsm-modal');
+  const bd=document.getElementById('gsm-backdrop');
+  if(!modal||!bd)return;
+  const recents=_gsmLoadRecents();
+  const recentsHtml=recents.length?(
+    '<div class="gsm-recents">'+
+      '<div class="gsm-recents-label">Recherches récentes</div>'+
+      '<div class="gsm-recents-chips">'+recents.map(q=>(
+        '<button type="button" class="gsm-recent-chip" data-gsm-recent="'+_gsmEsc(q)+'">'+
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 15 15"/></svg>'+
+          '<span class="gsm-recent-chip-text">'+_gsmEsc(q)+'</span>'+
+        '</button>'
+      )).join('')+'</div>'+
+    '</div>'
+  ):'';
+  modal.innerHTML=
+    '<div class="gsm-modal-head">'+
+      '<span class="gsm-modal-logo">'+
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="28" height="28"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>'+
+      '</span>'+
+      '<div class="gsm-modal-title">Rechercher sur Google</div>'+
+      '<button type="button" class="gsm-modal-close" aria-label="Fermer">'+
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'+
+      '</button>'+
+    '</div>'+
+    '<form class="gsm-form" autocomplete="off">'+
+      '<div class="gsm-input-wrap">'+
+        '<span class="gsm-input-search-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>'+
+        '<input class="gsm-input" type="search" autocomplete="off" spellcheck="false" placeholder="Tapez votre recherche…">'+
+      '</div>'+
+      '<div class="gsm-hint"><span><kbd>Entrée</kbd> Rechercher</span><span><kbd>Esc</kbd> Fermer</span></div>'+
+    '</form>'+
+    recentsHtml;
+
+  // Animation d'origine : partir de la position du bouton pour le premier frame
+  if(originEl){
+    const r=originEl.getBoundingClientRect();
+    const cx=r.left+r.width/2,cy=r.top+r.height/2;
+    const vx=window.innerWidth/2,vy=window.innerHeight/2;
+    const dx=cx-vx,dy=cy-vy;
+    modal.style.transformOrigin=(vx+dx)+'px '+(vy+dy)+'px';
+    // On force scale plus petit + translation depuis le bouton
+    modal.style.transform='translate(-50%,-50%) translate('+dx+'px,'+dy+'px) scale(.35)';
+  }
+  bd.classList.add('open');
+  bd.setAttribute('aria-hidden','false');
+  // Reset transform pour laisser la transition CSS jouer vers le centre
+  requestAnimationFrame(()=>{
+    modal.style.transform='';
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden','false');
+    const inp=modal.querySelector('.gsm-input');
+    if(inp)setTimeout(()=>inp.focus(),20);
+  });
+
+  // Handlers
+  bd.onclick=closeGoogleSearch;
+  const closeBtn=modal.querySelector('.gsm-modal-close');
+  if(closeBtn)closeBtn.onclick=(e)=>{e.preventDefault();closeGoogleSearch();};
+  const form=modal.querySelector('.gsm-form');
+  if(form)form.onsubmit=(e)=>{e.preventDefault();const inp=modal.querySelector('.gsm-input');_gsmRun(inp?inp.value:'');};
+  modal.querySelectorAll('[data-gsm-recent]').forEach(chip=>{
+    chip.addEventListener('click',(e)=>{e.preventDefault();_gsmRun(chip.getAttribute('data-gsm-recent'));});
+  });
+  // Esc global
+  const _escHandler=(e)=>{if(e.key==='Escape'){e.preventDefault();closeGoogleSearch();document.removeEventListener('keydown',_escHandler,true);}};
+  document.addEventListener('keydown',_escHandler,true);
+  modal._gsmEscHandler=_escHandler;
+}
+function closeGoogleSearch(){
+  const modal=document.getElementById('gsm-modal');
+  const bd=document.getElementById('gsm-backdrop');
+  if(!modal||!bd)return;
+  modal.classList.remove('open');
+  bd.classList.remove('open');
+  modal.setAttribute('aria-hidden','true');
+  bd.setAttribute('aria-hidden','true');
+  if(modal._gsmEscHandler){try{document.removeEventListener('keydown',modal._gsmEscHandler,true);}catch(_){}modal._gsmEscHandler=null;}
+  setTimeout(()=>{modal.innerHTML='';modal.style.transform='';modal.style.transformOrigin='';},220);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Mobile bottom nav bar — Accueil / Changer d'app / Messagerie / Agent IA
+// Rendue à chaque render() sur mobile portrait uniquement.
+// ══════════════════════════════════════════════════════════════════
+function _mnbInitials(nom){
+  if(!nom) return 'EL';
+  const parts=String(nom).trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return 'EL';
+  if(parts.length===1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
+}
+function _mnbAiEnabled(){
+  const AI_ROLES=['superadmin','direction','administration','expedition'];
+  const role=(S.user&&S.user.role)||'';
+  return AI_ROLES.indexOf(role)>=0;
+}
+function _mnbToggleAi(){
+  const btn=document.getElementById('ai-chat-btn');
+  if(btn){btn.click();return;}
+  // Fallback: force init si widget pas encore monté
+  if(typeof initAiChatWidget==='function'){
+    initAiChatWidget();
+    setTimeout(()=>{document.getElementById('ai-chat-btn')?.click();},50);
+  }
+}
+function _mnbOpenCmdK(){
+  if(window.MysifaCmdK&&typeof window.MysifaCmdK.open==='function'){
+    window.MysifaCmdK.open('');
+  }
+}
+function renderMobileNavbar(){
+  const root=document.getElementById('mobile-navbar-root');
+  if(!root) return;
+  // Login = pas de nav bar
+  if(!S.user||S.app==='login'){
+    root.innerHTML='';
+    document.body.classList.remove('has-mobile-navbar');
+    document.body.classList.add('mysifa-hide-navbar');
+    return;
+  }
+  document.body.classList.remove('mysifa-hide-navbar');
+  document.body.classList.add('has-mobile-navbar');
+  // Force-hide widgets flottants sur portrait mobile (bypass CSS specificity)
+  const _isPortraitMobile=window.matchMedia&&window.matchMedia('(max-width:900px) and (orientation:portrait)').matches;
+  if(_isPortraitMobile){
+    ['cw-bubble','cw-bar','ai-chat-btn'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.style.setProperty('display','none','important');}
+    });
+    // Observer les futures apparitions (chat_widget s'auto-mount plus tard)
+    if(!window.__MYSIFA_HIDE_WIDGETS_OBS__){
+      window.__MYSIFA_HIDE_WIDGETS_OBS__=true;
+      const hide=()=>{['cw-bubble','cw-bar','ai-chat-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.setProperty('display','none','important');});};
+      const mo=new MutationObserver(()=>{if(window.matchMedia&&window.matchMedia('(max-width:900px) and (orientation:portrait)').matches)hide();});
+      mo.observe(document.body,{childList:true,subtree:false});
+    }
+  }
+  const isPortal=S.app==='portal';
+  const isMessages=S.app==='messages';
+  const isAiOn=!!(document.getElementById('ai-chat-panel')&&document.getElementById('ai-chat-panel').classList.contains('open'));
+  const isCmdKOpen=!!(window.MysifaCmdK&&window.MysifaCmdK.isOpen&&window.MysifaCmdK.isOpen());
+  const aiEnabled=_mnbAiEnabled();
+  const msgUnread=Number(S.msgUnread||0);
+  const ICO={
+    home:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>',
+    grid:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
+    chat:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    ai:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+  };
+  function tab(id,ico,label,active,badge){
+    const bdg=badge>0?('<span class="mobile-navbar-tab-badge">'+(badge>9?'9+':badge)+'</span>'):'';
+    return '<button type="button" class="mobile-navbar-tab'+(active?' active':'')+'" data-nav="'+id+'" aria-label="'+label+'">'+
+      '<span class="mobile-navbar-tab-ico">'+ico+bdg+'</span>'+
+      '<span class="mobile-navbar-tab-label">'+label+'</span>'+
+    '</button>';
+  }
+  const tabs=[
+    tab('home',   ICO.home, 'Accueil',      isPortal, 0),
+    tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
+    tab('msg',    ICO.chat, 'Messagerie',   isMessages, msgUnread),
+  ];
+  if(aiEnabled){
+    tabs.push(tab('ai', ICO.ai, 'Agent IA', isAiOn, 0));
+  }
+  root.innerHTML='<nav class="mobile-navbar">'+tabs.join('')+'</nav>';
+  root.querySelectorAll('.mobile-navbar-tab').forEach(btn=>{
+    btn.addEventListener('click',(e)=>{
+      e.preventDefault();
+      const id=btn.getAttribute('data-nav');
+      if(id==='home'){
+        if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
+        window.location.href='/';
+      } else if(id==='switch'){
+        if(window.MysifaCmdK&&typeof window.MysifaCmdK.toggle==='function'){
+          window.MysifaCmdK.toggle('');
+        } else {
+          _mnbOpenCmdK();
+        }
+        // Refresh l'état actif du tab après ouverture/fermeture
+        setTimeout(()=>{try{renderMobileNavbar();}catch(_){}},60);
+      } else if(id==='msg'){
+        // Ouvre l'outil de chat (chat_widget), pas le module emails
+        const trigger=document.getElementById('cw-bubble')||document.getElementById('cw-bar');
+        if(trigger){trigger.click();return;}
+        // Fallback si le chat n'est pas monté (utilisateur sans droit)
+        if(S.app==='messages'){window.scrollTo({top:0,behavior:'smooth'});return;}
+        set({app:'messages'});
+        loadMessagesUnread().catch(()=>{});
+        loadMessages().catch(()=>{});
+      } else if(id==='ai'){
+        _mnbToggleAi();
+      }
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Bottom sheet profil (menu badge EL Eugène)
+// ══════════════════════════════════════════════════════════════════
+function _sheetRoles(){
+  const role=(S.user&&S.user.role)||'';
+  return {
+    isSuper: role==='superadmin',
+    isDir: role==='direction',
+    isAdmin: role==='administration',
+    role,
+  };
+}
+function openProfileSheet(){
+  const sheet=document.getElementById('msf-sheet-root');
+  const bd=document.getElementById('msf-sheet-backdrop');
+  if(!sheet||!bd) return;
+  const {isSuper,isDir,isAdmin,role}=_sheetRoles();
+  const nom=(S.user&&S.user.nom)||'';
+  const initials=_mnbInitials(nom);
+  const msgUnread=Number(S.msgUnread||0);
+  const ICO={
+    user:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+    sliders:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+    mail:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg>',
+    calendar:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    database:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>',
+    logout:'<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+  };
+  function item(id,ico,label,extra,klass){
+    const badge=extra?('<span class="msf-sheet-item-badge">'+extra+'</span>'):'';
+    return '<button type="button" class="msf-sheet-item'+(klass?' '+klass:'')+'" data-sheet="'+id+'">'+
+      '<span class="msf-sheet-item-ico">'+ico+'</span>'+
+      '<span class="msf-sheet-item-label">'+label+'</span>'+badge+
+    '</button>';
+  }
+  const items=[];
+  items.push(item('profil', ICO.user, 'Mon profil', ''));
+  if(isSuper||isDir){
+    items.push(item('settings', ICO.sliders, 'Paramètres', ''));
+  }
+  items.push(item('messagerie', ICO.mail, 'Messagerie', msgUnread>0?(msgUnread>9?'9+':String(msgUnread)):''));
+  if(isSuper||isDir||isAdmin){
+    items.push(item('calendrier', ICO.calendar, 'Calendrier', ''));
+  }
+  if(isSuper||isDir){
+    items.push(item('db', ICO.database, 'Base de données', ''));
+  }
+  items.push('<div class="msf-sheet-sep"></div>');
+  items.push(item('logout', ICO.logout, 'Déconnexion', '', 'danger'));
+
+  sheet.innerHTML=
+    '<div class="msf-sheet-handle"></div>'+
+    '<div class="msf-sheet-user">'+
+      '<div class="msf-sheet-user-avatar">'+initials+'</div>'+
+      '<div class="msf-sheet-user-info">'+
+        '<div class="msf-sheet-user-name">'+String(nom||'').replace(/</g,'&lt;')+'</div>'+
+        '<div class="msf-sheet-user-role">'+String(role||'').replace(/</g,'&lt;')+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="msf-sheet-list">'+items.join('')+'</div>';
+
+  // Actions
+  sheet.querySelectorAll('.msf-sheet-item').forEach(btn=>{
+    btn.addEventListener('click',(e)=>{
+      const id=btn.getAttribute('data-sheet');
+      closeProfileSheet();
+      if(id==='profil')      window.location.href='/profil';
+      else if(id==='settings')window.location.href='/settings';
+      else if(id==='messagerie'){set({app:'messages'});loadMessagesUnread().catch(()=>{});loadMessages().catch(()=>{});}
+      else if(id==='calendrier')window.location.href='/calendrier';
+      else if(id==='db')      window.location.href='/db';
+      else if(id==='logout')  doLogout();
+    });
+  });
+  // Ouverture animée
+  bd.classList.add('open');
+  bd.setAttribute('aria-hidden','false');
+  requestAnimationFrame(()=>{sheet.classList.add('open');});
+  bd.onclick=closeProfileSheet;
+  // Fermeture au swipe-down basique
+  let startY=null;
+  sheet.ontouchstart=(e)=>{startY=e.touches[0].clientY;};
+  sheet.ontouchmove=(e)=>{
+    if(startY==null) return;
+    const dy=e.touches[0].clientY-startY;
+    if(dy>60){closeProfileSheet();startY=null;}
+  };
+}
+function closeProfileSheet(){
+  const sheet=document.getElementById('msf-sheet-root');
+  const bd=document.getElementById('msf-sheet-backdrop');
+  if(!sheet||!bd) return;
+  sheet.classList.remove('open');
+  bd.classList.remove('open');
+  bd.setAttribute('aria-hidden','true');
+  setTimeout(()=>{sheet.innerHTML='';},250);
+}
+
 // ── Render ──────────────────────────────────────────────────────
 function render(){
   const _dfAe = document.activeElement;
@@ -13709,6 +14374,20 @@ function render(){
       }catch(e){}
       syncDossierFilterSuggest();
     });
+  }
+  // Mobile nav bar : sync sur toutes les pages (portrait mobile only)
+  try{ renderMobileNavbar(); }catch(_){}
+  // Sync visuel de l'onglet "Changer d'app" quand la palette se ferme (Escape, backdrop, close)
+  if(!window.__MYSIFA_CMDK_NAV_SYNC__){
+    window.__MYSIFA_CMDK_NAV_SYNC__=true;
+    const _syncNav=()=>{try{renderMobileNavbar();}catch(_){}};
+    const _installObs=()=>{
+      const ov=document.getElementById('cmdk-overlay');
+      if(!ov){setTimeout(_installObs,300);return;}
+      if(!window.MutationObserver)return;
+      new MutationObserver(_syncNav).observe(ov,{attributes:true,attributeFilter:['class']});
+    };
+    setTimeout(_installObs,200);
   }
   // Motion : (re)scan apres chaque render — pose --i pour les cascades,
   // arme les IntersectionObserver pour mo-reveal et data-count-to, et place

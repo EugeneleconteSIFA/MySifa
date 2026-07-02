@@ -231,3 +231,25 @@ body.light .cmdk-modal{box-shadow:0 24px 80px rgba(15,23,42,0.18),0 0 0 1px rgba
   .cmdk-footer-hint:first-of-type,
   .cmdk-footer-brand{display:inline-flex}
 }
+
+
+/* ───── Close button (X) ───── */
+.cmdk-close-btn{
+  border:0;background:transparent;color:var(--muted);cursor:pointer;
+  width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;flex-shrink:0;padding:0;
+}
+.cmdk-close-btn:hover{background:var(--accent-bg);color:var(--accent)}
+.cmdk-close-btn:active{transform:scale(.95)}
+
+/* ───── Portrait mobile : palette au-dessus de la nav bar, pas dessus ─────
+   La nav bar mobile fait ~66px + safe-area. On raccourcit l'overlay pour la
+   laisser interactive. */
+@media (max-width:900px) and (orientation:portrait){
+  body.has-mobile-navbar #cmdk-overlay{
+    bottom:calc(66px + env(safe-area-inset-bottom,0px));
+    padding:6vh 10px 10px;
+  }
+  body.has-mobile-navbar .cmdk-modal{max-height:calc(100vh - 66px - env(safe-area-inset-bottom,0px) - 20px)}
+}
