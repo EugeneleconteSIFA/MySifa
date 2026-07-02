@@ -91,6 +91,10 @@ def update_settings(
     updated_by: Optional[int] = None,
     source: Optional[str] = None,
 ) -> dict[str, Any]:
+    # Garantit que toutes les lignes existent (les nouvelles clés ajoutées après
+    # coup — ex. charge_production_pct — ne sont sinon jamais créées et l'UPDATE
+    # ci-dessous n'affecterait aucune ligne, avec valeur perdue au retour.
+    ensure_settings_rows(conn)
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     for key, val in patch.items():
         if key not in MC_SETTING_KEYS:
