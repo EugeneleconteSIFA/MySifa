@@ -366,6 +366,9 @@
       '    <span class="cmdk-search-ico">' + svgIcon('search', 18) + '</span>' +
       '    <input type="text" autocomplete="off" spellcheck="false" placeholder="Référence, emplacement, client, dossier, date…">' +
       '    <span class="cmdk-search-kbd">Esc</span>' +
+      '    <button type="button" class="cmdk-close-btn" aria-label="Fermer">' +
+      '      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '    </button>' +
       '  </div>' +
       '  <div class="cmdk-list" role="listbox"></div>' +
       '  <div class="cmdk-footer">' +
@@ -382,6 +385,8 @@
     state.input = ov.querySelector('.cmdk-search input');
 
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    var closeBtn = ov.querySelector('.cmdk-close-btn');
+    if (closeBtn) closeBtn.addEventListener('click', function (e) { e.preventDefault(); close(); });
 
     // Event delegation pour clic/hover sur les lignes (une seule fois)
     state.list.addEventListener('click', function (e) {
@@ -595,7 +600,7 @@
   }
   document.addEventListener('keydown', onKeydown, true);
 
-  window.MysifaCmdK = { open: open, close: close, label: KBD_LABEL, shortLabel: KBD_SHORT };
+  window.MysifaCmdK = { open: open, close: close, toggle: function(prefill){ if(state.open) close(); else open(prefill||''); }, isOpen: function(){ return !!state.open; }, label: KBD_LABEL, shortLabel: KBD_SHORT };
 
   // Event delegation globale pour [data-cmdk-open] et [data-cmdk-label]
   // Plus économe qu'un MutationObserver sur documentElement.

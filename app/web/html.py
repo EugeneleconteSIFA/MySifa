@@ -13822,6 +13822,7 @@ function renderMobileNavbar(){
   const isPortal=S.app==='portal';
   const isMessages=S.app==='messages';
   const isAiOn=!!(document.getElementById('ai-chat-panel')&&document.getElementById('ai-chat-panel').classList.contains('open'));
+  const isCmdKOpen=!!(window.MysifaCmdK&&window.MysifaCmdK.isOpen&&window.MysifaCmdK.isOpen());
   const aiEnabled=_mnbAiEnabled();
   const msgUnread=Number(S.msgUnread||0);
   const ICO={
@@ -13839,7 +13840,7 @@ function renderMobileNavbar(){
   }
   const tabs=[
     tab('home',   ICO.home, 'Accueil',      isPortal, 0),
-    tab('switch', ICO.grid, "Changer d'app", false,   0),
+    tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
     tab('msg',    ICO.chat, 'Messagerie',   isMessages, msgUnread),
   ];
   if(aiEnabled){
@@ -13854,7 +13855,13 @@ function renderMobileNavbar(){
         if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
         window.location.href='/';
       } else if(id==='switch'){
-        _mnbOpenCmdK();
+        if(window.MysifaCmdK&&typeof window.MysifaCmdK.toggle==='function'){
+          window.MysifaCmdK.toggle('');
+        } else {
+          _mnbOpenCmdK();
+        }
+        // Refresh l'état actif du tab après ouverture/fermeture
+        setTimeout(()=>{try{renderMobileNavbar();}catch(_){}},60);
       } else if(id==='msg'){
         // Ouvre l'outil de chat (chat_widget), pas le module emails
         const trigger=document.getElementById('cw-bubble')||document.getElementById('cw-bar');
@@ -14155,6 +14162,18 @@ function render(){
   }
   // Mobile nav bar : sync sur toutes les pages (portrait mobile only)
   try{ renderMobileNavbar(); }catch(_){}
+  // Sync visuel de l'onglet "Changer d'app" quand la palette se ferme (Escape, backdrop, close)
+  if(!window.__MYSIFA_CMDK_NAV_SYNC__){
+    window.__MYSIFA_CMDK_NAV_SYNC__=true;
+    const _syncNav=()=>{try{renderMobileNavbar();}catch(_){}};
+    const _installObs=()=>{
+      const ov=document.getElementById('cmdk-overlay');
+      if(!ov){setTimeout(_installObs,300);return;}
+      if(!window.MutationObserver)return;
+      new MutationObserver(_syncNav).observe(ov,{attributes:true,attributeFilter:['class']});
+    };
+    setTimeout(_installObs,200);
+  }
   // Motion : (re)scan apres chaque render — pose --i pour les cascades,
   // arme les IntersectionObserver pour mo-reveal et data-count-to, et place
   // l'indicateur de navigation glissant. No-op si window.Motion absent.
