@@ -335,12 +335,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim.ta-pl-center{align-items:center;justify-content:center}
 .ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}
 .ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}
-.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:14px 16px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
-.ta-sz-small .ta-sim-alert{max-width:240px;width:100%}
-.ta-sz-medium .ta-sim-alert{max-width:320px;width:100%}
-.ta-sz-large .ta-sim-alert{max-width:420px;width:100%}
-.ta-sim-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
-.ta-sim-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
+.ta-sz-small .ta-sim-alert{max-width:260px;width:100%}
+.ta-sz-medium .ta-sim-alert{max-width:340px;width:100%}
+.ta-sz-large .ta-sim-alert{max-width:440px;width:100%}
+.ta-sim-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);line-height:1.3}
 .ta-sim-actions{display:flex;gap:6px;margin-top:10px}
 .ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}
 .ta-sim-btn:hover{filter:brightness(1.05)}
@@ -4140,6 +4139,11 @@ const placementOpts = placements.map(p =>
   });
 }
 
+function _stripAutoPrefix(nom) {
+  if (!nom) return '';
+  return String(nom).replace(/^Contr[oôö]le\s*:\s*\d+\s*[–\-]\s*/i, '');
+}
+
 function _alertTriggerLabel(t) {
   if (!t || !t.type) return 'Manuel';
   if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
@@ -4183,7 +4187,7 @@ async function previewAlert(id) {
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
@@ -4201,7 +4205,7 @@ async function previewAlert(id) {
               + '</label>'
             ).join('');
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
-              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + '</div>';
           }).join('')
@@ -4218,8 +4222,7 @@ async function previewAlert(id) {
 
   // Contenu de l'alerte (sans aucune chrome admin)
   const alertHtml = '<div class="ta-sim-alert">'
-    + '<div class="ta-sim-title">' + esc(a.nom) + '</div>'
-    + '<div class="ta-sim-sub">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
     + checklistHtml
     + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
     + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
