@@ -361,7 +361,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-read-receipt{text-align:right;font-size:10px;padding:0 2px 4px;display:flex;align-items:center;justify-content:flex-end;gap:4px}
 .cw-read-receipt.cw-read-vu{color:var(--accent)}
 .cw-read-receipt.cw-read-count{color:var(--muted)}
-#cw-input-row{padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+#cw-input-row{position:relative;padding:10px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
 #cw-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;
   font-size:13px;line-height:1.3;color:var(--text);resize:none;font-family:inherit;
   height:38px;min-height:38px;max-height:96px;box-sizing:border-box;overflow-y:auto;outline:none}
@@ -550,6 +550,106 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   .cw-msg-wrap{max-width:72%}
 }
 .cw-icon-wrap{position:relative;display:inline-block;flex-shrink:0}
+/* ── Plus-menu (composer) ─────────────────────────────────────────── */
+#cw-plus-menu{position:absolute;bottom:56px;left:12px;z-index:9200;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);padding:6px;display:none;min-width:180px}
+#cw-plus-menu.cw-open{display:block}
+.cw-plus-item{display:flex;align-items:center;gap:10px;width:100%;
+  padding:10px 12px;background:transparent;border:none;border-radius:8px;
+  color:var(--text);font-family:inherit;font-size:13px;font-weight:600;
+  text-align:left;cursor:pointer;transition:background .12s}
+.cw-plus-item:hover{background:var(--accent-bg);color:var(--accent)}
+.cw-plus-item svg{flex-shrink:0}
+.cw-plus-item-sep{height:1px;background:var(--border);margin:4px 6px}
+/* ── Poll modal ───────────────────────────────────────────────────── */
+#cw-poll-modal{position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.55);
+  display:none;align-items:center;justify-content:center;padding:16px}
+#cw-poll-modal.cw-open{display:flex}
+.cw-poll-modal-card{background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:20px 22px;width:100%;max-width:460px;
+  max-height:calc(100vh - 32px);overflow-y:auto;font-family:inherit;
+  box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.cw-poll-modal-title{font-size:16px;font-weight:700;color:var(--text);margin:0 0 16px}
+.cw-poll-field{margin-bottom:14px}
+.cw-poll-label{display:block;font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
+.cw-poll-input,.cw-poll-select{width:100%;box-sizing:border-box;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;
+  transition:border-color .15s}
+.cw-poll-input:focus,.cw-poll-select:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.cw-poll-option-row{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+.cw-poll-option-row .cw-poll-input{flex:1}
+.cw-poll-option-del{background:transparent;border:1px solid var(--border);
+  border-radius:8px;width:34px;height:34px;color:var(--muted);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.cw-poll-option-del:hover{color:var(--danger);border-color:var(--danger)}
+.cw-poll-add-option{display:inline-flex;align-items:center;gap:6px;
+  background:transparent;border:1px dashed var(--border);border-radius:8px;
+  padding:8px 12px;color:var(--muted);font-size:12px;font-weight:600;
+  cursor:pointer;transition:color .12s,border-color .12s;font-family:inherit}
+.cw-poll-add-option:hover{color:var(--accent);border-color:var(--accent)}
+.cw-poll-toggles{display:flex;flex-direction:column;gap:10px}
+.cw-poll-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;
+  font-size:13px;color:var(--text2)}
+.cw-poll-toggle input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.cw-poll-hint{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}
+.cw-poll-modal-actions{display:flex;gap:8px;justify-content:flex-end;
+  margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.cw-poll-btn{border-radius:10px;padding:9px 16px;font-weight:700;font-size:13px;
+  font-family:inherit;cursor:pointer;border:1px solid transparent;transition:filter .15s}
+.cw-poll-btn:hover{filter:brightness(1.08)}
+.cw-poll-btn-ghost{background:transparent;color:var(--text2);border-color:var(--border)}
+.cw-poll-btn-primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.cw-poll-btn-primary:disabled{opacity:.5;cursor:not-allowed;filter:none}
+/* ── Poll card (message) ──────────────────────────────────────────── */
+.cw-msg-poll{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:12px 14px;margin-top:4px;max-width:360px;font-family:inherit}
+.cw-msg-mine .cw-msg-poll{background:rgba(0,0,0,.15);border-color:rgba(255,255,255,.2);color:var(--bg)}
+.cw-poll-head{display:flex;align-items:center;gap:6px;font-size:11px;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+  font-weight:600;margin-bottom:6px}
+.cw-msg-mine .cw-poll-head{color:rgba(10,14,23,.7)}
+.cw-poll-badge{display:inline-flex;align-items:center;gap:4px}
+.cw-poll-question{font-size:14px;font-weight:700;color:var(--text);margin:0 0 12px;
+  line-height:1.35;word-wrap:break-word}
+.cw-msg-mine .cw-poll-question{color:var(--bg)}
+.cw-poll-opt{display:block;width:100%;text-align:left;background:var(--bg);
+  border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  margin-bottom:6px;cursor:pointer;color:var(--text);font-family:inherit;
+  font-size:13px;position:relative;overflow:hidden;transition:border-color .15s}
+.cw-msg-mine .cw-poll-opt{background:rgba(255,255,255,.9);color:var(--text);border-color:transparent}
+.cw-poll-opt:hover:not(:disabled){border-color:var(--accent)}
+.cw-poll-opt:disabled{cursor:default}
+.cw-poll-opt-bar{position:absolute;inset:0;background:var(--accent-bg);
+  width:0%;transition:width .35s ease;z-index:0;pointer-events:none}
+.cw-poll-opt.cw-voted .cw-poll-opt-bar{background:rgba(34,211,238,.22)}
+.cw-poll-opt-row{position:relative;z-index:1;display:flex;
+  align-items:center;justify-content:space-between;gap:10px}
+.cw-poll-opt-lbl{display:flex;align-items:center;gap:8px;font-weight:600;
+  word-break:break-word;flex:1;min-width:0}
+.cw-poll-opt-check{width:16px;height:16px;border-radius:50%;
+  border:1.5px solid var(--muted);flex-shrink:0;display:inline-flex;
+  align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+.cw-poll-opt.cw-voted .cw-poll-opt-check{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.cw-poll-opt-meta{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:600}
+.cw-poll-opt-pct{font-size:12px;font-weight:700;color:var(--text2)}
+.cw-msg-mine .cw-poll-opt-meta,.cw-msg-mine .cw-poll-opt-pct{color:var(--muted)}
+.cw-poll-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  padding-top:10px;margin-top:6px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--muted)}
+.cw-msg-mine .cw-poll-foot{border-top-color:rgba(0,0,0,.15);color:rgba(10,14,23,.6)}
+.cw-poll-foot-link{background:transparent;border:none;padding:0;color:var(--accent);
+  font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline}
+.cw-poll-foot-link:hover{filter:brightness(1.15)}
+.cw-poll-close-btn{margin-left:auto;background:transparent;border:1px solid var(--border);
+  border-radius:8px;padding:5px 10px;color:var(--muted);font-size:11px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:color .12s,border-color .12s}
+.cw-poll-close-btn:hover{color:var(--danger);border-color:var(--danger)}
+.cw-poll-closed-tag{color:var(--warn);font-weight:700}
+
 .cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
 `;
 
@@ -851,9 +951,17 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       '<div id="cw-pending-row"></div>' +
       '<div id="cw-input-row">' +
       '<input type="file" id="cw-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">' +
-      '<button type="button" id="cw-attach" aria-label="Pièce jointe" title="Pièce jointe">' +
-      ICO_ATTACH +
+      '<button type="button" id="cw-attach" aria-label="Ajouter" title="Ajouter">' +
+      ICO_PLUS +
       '</button>' +
+      '<div id="cw-plus-menu" role="menu">' +
+      '<button type="button" class="cw-plus-item" data-plus-action="file" role="menuitem">' +
+      ICO_ATTACH + '<span>Pièce jointe</span></button>' +
+      '<div class="cw-plus-item-sep"></div>' +
+      '<button type="button" class="cw-plus-item" data-plus-action="poll" role="menuitem">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' +
+      '<span>Sondage</span></button>' +
+      '</div>' +
       '<textarea id="cw-input" rows="1" placeholder="Message…"></textarea>' +
       '<button type="button" id="cw-send" aria-label="Envoyer">' +
       ICO_SEND +
@@ -873,8 +981,29 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && CW.open) closePanel();
     });
-    document.getElementById('cw-attach').addEventListener('click', () => {
-      document.getElementById('cw-file-input')?.click();
+    document.getElementById('cw-attach').addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePlusMenu();
+    });
+    document.querySelectorAll('.cw-plus-item').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closePlusMenu();
+        const action = btn.dataset.plusAction;
+        if (action === 'file') {
+          document.getElementById('cw-file-input')?.click();
+        } else if (action === 'poll') {
+          openPollModal();
+        }
+      });
+    });
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('cw-plus-menu');
+      const btn = document.getElementById('cw-attach');
+      if (menu && menu.classList.contains('cw-open') &&
+          !menu.contains(e.target) && !btn.contains(e.target)) {
+        closePlusMenu();
+      }
     });
     const fileInp = document.getElementById('cw-file-input');
     if (fileInp) {
@@ -1717,11 +1846,20 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       } catch(e) {}
     }
 
-    const bubbleFull = '<div class="'+(mine?'cw-msg-mine':'cw-msg-theirs')+fwdCls+'">' + bodyHtml + attachmentHtml(msg) + '</div>';
+    const pollFragment = pollHtml(msg);
+    const hasOnlyPoll = !!pollFragment && !bodyHtml && !msg.attachment_url;
+    let bubbleFull;
+    if (hasOnlyPoll) {
+      // Sondage seul : pas de bulle englobante (évite la carte dans une bulle)
+      bubbleFull = '<div class="cw-msg-poll-wrap' + (mine ? ' cw-msg-poll-mine' : '') + '">' + pollFragment + '</div>';
+    } else {
+      bubbleFull = '<div class="'+(mine?'cw-msg-mine':'cw-msg-theirs')+fwdCls+'">' + bodyHtml + attachmentHtml(msg) + pollFragment + '</div>';
+    }
 
     wrap.innerHTML =
       '<div class="cw-msg-bubble-wrap">' + replyHtml + fwdHtml + bubbleFull + '</div>' + rxHtml;
     bindReactionHandlers(wrap, msg.id);
+    bindPollHandlers(wrap, msg);
 
     // ── Scroll to reply on click ───────────────────────────
     const rctx = wrap.querySelector('.cw-msg-reply-ctx');
@@ -2896,6 +3034,312 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       dockLayout();
     }, 80);
   });
+
+
+  // ─── Sondages (polls) ─────────────────────────────────────────────
+  function togglePlusMenu() {
+    const menu = document.getElementById('cw-plus-menu');
+    if (!menu) return;
+    menu.classList.toggle('cw-open');
+  }
+  function closePlusMenu() {
+    document.getElementById('cw-plus-menu')?.classList.remove('cw-open');
+  }
+
+  function cwToast(msg, type) {
+    try {
+      if (typeof window.showToast === 'function') { window.showToast(msg, type); return; }
+    } catch(e) {}
+    let el = document.getElementById('cw-mini-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'cw-mini-toast';
+      el.style.cssText = 'position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 16px;box-shadow:0 6px 20px rgba(0,0,0,.25);color:var(--text);font-family:inherit;font-size:13px;font-weight:600';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.borderColor = (type === 'danger') ? 'var(--danger)' : (type === 'success' ? 'var(--success)' : 'var(--border)');
+    el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '0'; el.style.transition='opacity .3s'; }, 2600);
+  }
+
+  function pollHtml(msg) {
+    const p = msg && msg.poll;
+    if (!p) return '';
+    const total = Math.max(1, Number(p.total_votes || 0));
+    const displayTotal = Number(p.total_votes || 0);
+    const displayVoters = Number(p.total_voters || 0);
+    const anon = !!p.anonymous;
+    const closed = !!p.is_closed;
+    const mineIsAuthor = Number(p.created_by) === Number(CW.uid);
+    const isAdmin = ['superadmin','direction'].includes(CW.role);
+    const canClose = !closed && (mineIsAuthor || isAdmin);
+    const optsHtml = (p.options || []).map((o) => {
+      const pct = Math.round((Number(o.count || 0) / total) * 100);
+      const voted = !!o.voted_by_me;
+      const disabled = closed ? 'disabled' : '';
+      const votedCls = voted ? ' cw-voted' : '';
+      const check = voted
+        ? '<span class="cw-poll-opt-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
+        : '<span class="cw-poll-opt-check"></span>';
+      return (
+        '<button type="button" class="cw-poll-opt' + votedCls + '" data-opt-id="' + o.id + '" ' + disabled + '>' +
+        '<span class="cw-poll-opt-bar" style="width:' + pct + '%"></span>' +
+        '<span class="cw-poll-opt-row">' +
+        '<span class="cw-poll-opt-lbl">' + check + '<span>' + escCW(o.label || '') + '</span></span>' +
+        '<span class="cw-poll-opt-meta">' +
+        '<span class="cw-poll-opt-pct">' + pct + '%</span>' +
+        ' · ' + Number(o.count || 0) + '</span>' +
+        '</span>' +
+        '</button>'
+      );
+    }).join('');
+    let footParts = [];
+    footParts.push('<span>' + displayTotal + ' vote' + (displayTotal > 1 ? 's' : '') +
+      ' · ' + displayVoters + ' votant' + (displayVoters > 1 ? 's' : '') + '</span>');
+    if (anon) footParts.push('<span>Anonyme</span>');
+    if (p.multi_choice) footParts.push('<span>Choix multiples</span>');
+    if (closed) footParts.push('<span class="cw-poll-closed-tag">Sondage clôturé</span>');
+    else if (p.closes_at) footParts.push('<span>Clôture ' + fmtCloseAt(p.closes_at) + '</span>');
+    if (!anon && displayTotal > 0) {
+      footParts.push('<button type="button" class="cw-poll-foot-link" data-poll-voters="' + p.id + '">Voir les votants</button>');
+    }
+    if (canClose) {
+      footParts.push('<button type="button" class="cw-poll-close-btn" data-poll-close="' + p.id + '">Clôturer</button>');
+    }
+    const foot = '<div class="cw-poll-foot">' + footParts.join('') + '</div>';
+    const head = '<div class="cw-poll-head"><span class="cw-poll-badge">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' +
+      'Sondage' + (anon ? ' anonyme' : '') + '</span></div>';
+    const q = '<div class="cw-poll-question">' + escCW(p.question || '') + '</div>';
+    return '<div class="cw-msg-poll" data-poll-id="' + p.id + '">' + head + q + optsHtml + foot + '</div>';
+  }
+
+  function fmtCloseAt(iso) {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso.replace(' ', 'T'));
+      const now = new Date();
+      const diff = d.getTime() - now.getTime();
+      if (diff < 0) return 'échue';
+      const h = Math.floor(diff / 3600000);
+      if (h < 1) return 'dans ' + Math.max(1, Math.floor(diff / 60000)) + ' min';
+      if (h < 24) return 'dans ' + h + ' h';
+      const j = Math.floor(h / 24);
+      return 'dans ' + j + ' j';
+    } catch (e) { return ''; }
+  }
+
+  function bindPollHandlers(wrap, msg) {
+    const p = msg && msg.poll;
+    if (!p) return;
+    const pollEl = wrap.querySelector('.cw-msg-poll');
+    if (!pollEl) return;
+    pollEl.querySelectorAll('.cw-poll-opt').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (btn.disabled) return;
+        const optId = Number(btn.dataset.optId);
+        if (!optId) return;
+        const current = (msg.poll.options || []).filter(o => o.voted_by_me).map(o => o.id);
+        let nextIds;
+        if (msg.poll.multi_choice) {
+          const set = new Set(current);
+          if (set.has(optId)) set.delete(optId); else set.add(optId);
+          nextIds = [...set];
+        } else {
+          nextIds = (current.length === 1 && current[0] === optId) ? [] : [optId];
+        }
+        try {
+          const resp = await api('/api/chat/polls/' + p.id + '/vote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ option_ids: nextIds }),
+          });
+          if (resp && resp.poll) {
+            msg.poll = resp.poll;
+            const parent = wrap.parentElement;
+            const newWrap = renderMsg(msg);
+            if (parent && newWrap) parent.replaceChild(newWrap, wrap);
+          }
+        } catch (err) {
+          cwToast(err && err.message ? err.message : 'Vote impossible', 'danger');
+        }
+      });
+    });
+    const votersBtn = pollEl.querySelector('[data-poll-voters]');
+    if (votersBtn) {
+      votersBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const data = await api('/api/chat/polls/' + p.id + '/voters');
+          openVotersModal(msg.poll, data && data.voters ? data.voters : []);
+        } catch (err) {
+          cwToast(err && err.message ? err.message : 'Impossible de récupérer les votants', 'danger');
+        }
+      });
+    }
+    const closeBtn = pollEl.querySelector('[data-poll-close]');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Clôturer ce sondage ? Cette action est définitive.')) return;
+        try {
+          const resp = await api('/api/chat/polls/' + p.id + '/close', { method: 'POST' });
+          if (resp && resp.poll) {
+            msg.poll = resp.poll;
+            const parent = wrap.parentElement;
+            const newWrap = renderMsg(msg);
+            if (parent && newWrap) parent.replaceChild(newWrap, wrap);
+            cwToast('Sondage clôturé.', 'success');
+          }
+        } catch (err) {
+          cwToast(err && err.message ? err.message : 'Clôture impossible', 'danger');
+        }
+      });
+    }
+  }
+
+  function openVotersModal(poll, voters) {
+    const byOpt = {};
+    (poll.options || []).forEach((o) => { byOpt[o.id] = { label: o.label, names: [] }; });
+    voters.forEach((v) => {
+      if (byOpt[v.option_id]) byOpt[v.option_id].names.push(v.user_nom || '?');
+    });
+    let modal = document.getElementById('cw-voters-modal');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'cw-voters-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:9300;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit';
+    const parts = (poll.options || []).map((o) => {
+      const names = (byOpt[o.id] && byOpt[o.id].names) || [];
+      return '<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">' +
+        escCW(o.label) + ' <span style="color:var(--muted);font-weight:600;font-size:11px">(' + names.length + ')</span></div>' +
+        (names.length
+          ? '<div style="font-size:12px;color:var(--text2);line-height:1.6">' + names.map(escCW).join(', ') + '</div>'
+          : '<div style="font-size:11px;color:var(--muted);font-style:italic">Aucun vote</div>') +
+        '</div>';
+    }).join('');
+    modal.innerHTML =
+      '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;max-width:420px;width:100%;max-height:calc(100vh - 32px);overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,.35)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">' +
+      '<div style="font-size:15px;font-weight:700;color:var(--text)">Votants</div>' +
+      '<button type="button" id="cw-voters-close" style="background:transparent;border:none;font-size:20px;color:var(--muted);cursor:pointer;line-height:1">×</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + escCW(poll.question || '') + '</div>' +
+      parts +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    modal.querySelector('#cw-voters-close').addEventListener('click', () => modal.remove());
+  }
+
+  function openPollModal() {
+    if (!CW.activeId) { cwToast('Sélectionnez un canal', 'danger'); return; }
+    let modal = document.getElementById('cw-poll-modal');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'cw-poll-modal';
+    modal.className = 'cw-open';
+    modal.innerHTML =
+      '<div class="cw-poll-modal-card">' +
+      '<h3 class="cw-poll-modal-title">Créer un sondage</h3>' +
+      '<div class="cw-poll-field">' +
+      '<label class="cw-poll-label" for="cw-poll-q">Question</label>' +
+      '<input type="text" id="cw-poll-q" class="cw-poll-input" maxlength="200" placeholder="Ex. Quand fait-on le repas d\'équipe ?">' +
+      '</div>' +
+      '<div class="cw-poll-field">' +
+      '<label class="cw-poll-label">Options (2 minimum, 10 max)</label>' +
+      '<div id="cw-poll-options"></div>' +
+      '<button type="button" class="cw-poll-add-option" id="cw-poll-add-opt">' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+      'Ajouter une option</button>' +
+      '</div>' +
+      '<div class="cw-poll-field">' +
+      '<label class="cw-poll-label">Options</label>' +
+      '<div class="cw-poll-toggles">' +
+      '<label class="cw-poll-toggle"><input type="checkbox" id="cw-poll-multi"> Autoriser plusieurs réponses</label>' +
+      '<label class="cw-poll-toggle"><input type="checkbox" id="cw-poll-anon"> Rendre anonyme (100 %)</label>' +
+      '<div class="cw-poll-hint">Anonyme : personne ne pourra voir qui a voté quoi. Seuls les compteurs sont visibles.</div>' +
+      '</div>' +
+      '</div>' +
+      '<div class="cw-poll-field">' +
+      '<label class="cw-poll-label" for="cw-poll-close">Clôture automatique</label>' +
+      '<select id="cw-poll-close" class="cw-poll-select">' +
+      '<option value="never">Jamais</option>' +
+      '<option value="1h">Dans 1 heure</option>' +
+      '<option value="24h">Dans 24 heures</option>' +
+      '<option value="3d">Dans 3 jours</option>' +
+      '<option value="7d">Dans 7 jours</option>' +
+      '</select>' +
+      '</div>' +
+      '<div class="cw-poll-modal-actions">' +
+      '<button type="button" class="cw-poll-btn cw-poll-btn-ghost" id="cw-poll-cancel">Annuler</button>' +
+      '<button type="button" class="cw-poll-btn cw-poll-btn-primary" id="cw-poll-submit">Publier</button>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    const optsWrap = modal.querySelector('#cw-poll-options');
+    function addOptionRow(val) {
+      if (optsWrap.children.length >= 10) return;
+      const row = document.createElement('div');
+      row.className = 'cw-poll-option-row';
+      row.innerHTML =
+        '<input type="text" class="cw-poll-input cw-poll-opt-input" maxlength="80" placeholder="Option ' +
+        (optsWrap.children.length + 1) + '" value="' + escAttr(val || '') + '">' +
+        '<button type="button" class="cw-poll-option-del" aria-label="Supprimer">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button>';
+      row.querySelector('.cw-poll-option-del').addEventListener('click', () => {
+        if (optsWrap.children.length > 2) row.remove();
+      });
+      optsWrap.appendChild(row);
+    }
+    addOptionRow(); addOptionRow();
+    modal.querySelector('#cw-poll-add-opt').addEventListener('click', () => addOptionRow());
+    modal.querySelector('#cw-poll-cancel').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+    document.addEventListener('keydown', function onEsc(e) {
+      if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', onEsc); }
+    });
+    setTimeout(() => modal.querySelector('#cw-poll-q')?.focus(), 30);
+    modal.querySelector('#cw-poll-submit').addEventListener('click', async () => {
+      const q = (modal.querySelector('#cw-poll-q').value || '').trim();
+      const opts = [...modal.querySelectorAll('.cw-poll-opt-input')]
+        .map(i => (i.value || '').trim()).filter(Boolean);
+      const distinct = [...new Set(opts.map(s => s.toLowerCase()))];
+      if (!q) { cwToast('Question requise', 'danger'); return; }
+      if (opts.length < 2 || distinct.length < 2) {
+        cwToast('Au moins 2 options distinctes', 'danger'); return;
+      }
+      const payload = {
+        question: q,
+        options: opts,
+        multi_choice: modal.querySelector('#cw-poll-multi').checked,
+        anonymous: modal.querySelector('#cw-poll-anon').checked,
+        close_preset: modal.querySelector('#cw-poll-close').value,
+      };
+      const btn = modal.querySelector('#cw-poll-submit');
+      btn.disabled = true;
+      try {
+        await api('/api/chat/channels/' + CW.activeId + '/polls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        modal.remove();
+        cwToast('Sondage publié.', 'success');
+        if (typeof CW.checkChatUpdates === 'function') CW.checkChatUpdates();
+        else if (CW.activeId && typeof CW.selectChannel === 'function') CW.selectChannel(CW.activeId);
+      } catch (err) {
+        cwToast(err && err.message ? err.message : 'Publication impossible', 'danger');
+        btn.disabled = false;
+      }
+    });
+  }
+
+  CW.openPollModal = openPollModal;
 
   CW.renderMsg = renderMsg;
   CW.selectChannel = selectChannel;
