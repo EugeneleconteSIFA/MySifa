@@ -3560,7 +3560,7 @@ function _alertDefaults(existing) {
     };
   });
   return {
-    trigger: Object.assign({ type: 'manual', interval_minutes: 120, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
+    trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
     target: { machines: machines },
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     checklist: cl,
@@ -3618,9 +3618,17 @@ function _renderAlertFormFields(params, opts) {
     +   '<div id="af-trigger-sub" class="alert-field-sub">'
     +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
     +     '<div data-trigger-for="periodic">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle (minutes)</label>'
-    +       '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +       '<div class="alert-field-help">Le compteur démarre après une saisie <strong>« production »</strong> ou <strong>« reprise de production »</strong> sur la machine cible. Si la machine n\'est plus en production, l\'alerte est différée jusqu\'à la reprise, avec un délai de 5 minutes après reprise avant déclenchement. Après validation, le compteur redémarre dans les mêmes conditions.</div>'
+    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +         '<div>'
+    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
+    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +         '</div>'
+    +         '<div>'
+    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
+    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
+    +         '</div>'
+    +       '</div>'
+    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
     +     '</div>'
     +     '<div data-trigger-for="calendar">'
     +       '<div class="alert-field-row">'
@@ -3892,6 +3900,12 @@ function _afReadParams() {
     const m = parseInt(mInp.value, 10);
     if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
     trig.interval_minutes = m;
+    const gInp = document.getElementById('af-trigger-grace-minutes');
+    if (gInp) {
+      const g = parseInt(gInp.value, 10);
+      if (isNaN(g) || g < 0 || g > 120) { toast('Délai avant 1ère alerte invalide (0 à 120 min)', true); return null; }
+      trig.grace_minutes = g;
+    }
   } else if (t === 'calendar') {
     const tm = document.getElementById('af-trigger-time').value || '';
     if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }

@@ -1588,6 +1588,23 @@ def _validate_alert_params(params: dict) -> dict:
                 f"interval_minutes hors plage ({_ALERT_MIN_INTERVAL_MINUTES} <= n <= {_ALERT_MAX_INTERVAL_MINUTES}).",
             )
         trig["interval_minutes"] = minutes
+        # grace_minutes : délai avant la première alerte de chaque session
+        # (par défaut = ALERT_RESUME_GRACE_MINUTES = 5). Personnalisable par
+        # alerte pour espacer naturellement les premières alertes des
+        # différents contrôles au démarrage d'une session.
+        grace_raw = trig_in.get("grace_minutes")
+        if grace_raw is None:
+            grace_val = ALERT_RESUME_GRACE_MINUTES
+        else:
+            try:
+                grace_val = int(round(float(grace_raw)))
+            except (TypeError, ValueError):
+                grace_val = ALERT_RESUME_GRACE_MINUTES
+        if grace_val < 0:
+            grace_val = 0
+        if grace_val > 120:
+            grace_val = 120
+        trig["grace_minutes"] = grace_val
         # Sémantique du déclenchement (documentée pour le futur planificateur) :
         #   - Le compteur de N minutes démarre après une saisie "production"
         #     (ou "reprise de production") sur la machine cible.
@@ -2454,7 +2471,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if has_ack_in_session:
         due_dt = last_ack_dt + timedelta(minutes=interval_min)
     else:
-        due_dt = session_start_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
+        # Grâce personnalisable par alerte, fallback sur la constante globale
+        try:
+            grace_min = int(trig.get("grace_minutes", ALERT_RESUME_GRACE_MINUTES))
+        except (TypeError, ValueError):
+            grace_min = ALERT_RESUME_GRACE_MINUTES
+        if grace_min < 0:
+            grace_min = 0
+        due_dt = session_start_dt + timedelta(minutes=grace_min)
 
     return now_paris >= due_dt
 
