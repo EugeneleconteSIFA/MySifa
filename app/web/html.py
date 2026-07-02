@@ -13994,13 +13994,18 @@ function _mnbAiEnabled(){
   return AI_ROLES.indexOf(role)>=0;
 }
 function _mnbToggleAi(){
-  const btn=document.getElementById('ai-chat-btn');
-  if(btn){btn.click();return;}
-  // Fallback: force init si widget pas encore monté
-  if(typeof initAiChatWidget==='function'){
-    initAiChatWidget();
-    setTimeout(()=>{document.getElementById('ai-chat-btn')?.click();},50);
-  }
+  // Le widget IA écoute document.click pour se fermer. Si on déclenche le clic du
+  // FAB dans la même pile d'événements, l'event remonte au document et onDocClick
+  // referme le panel aussitôt ouvert. On défère donc le clic dans setTimeout(0).
+  const runClick=()=>{
+    const btn=document.getElementById('ai-chat-btn');
+    if(btn){btn.click();return;}
+    if(typeof initAiChatWidget==='function'){
+      initAiChatWidget();
+      setTimeout(()=>{document.getElementById('ai-chat-btn')?.click();},50);
+    }
+  };
+  setTimeout(runClick,0);
 }
 function _mnbOpenCmdK(){
   if(window.MysifaCmdK&&typeof window.MysifaCmdK.open==='function'){
@@ -14065,6 +14070,7 @@ function renderMobileNavbar(){
   root.querySelectorAll('.mobile-navbar-tab').forEach(btn=>{
     btn.addEventListener('click',(e)=>{
       e.preventDefault();
+      e.stopPropagation();
       const id=btn.getAttribute('data-nav');
       if(id==='home'){
         if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
