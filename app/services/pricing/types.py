@@ -24,6 +24,11 @@ class PricingSettings:
     # Forfait transport (€) ajouté UNE SEULE FOIS à la valorisation d'une référence
     # quand le flag cout_transport_inclus est coché, APRÈS les multiplicateurs USD/taxe.
     transport_cost_fixed_eur: Decimal = Decimal("0")
+    # Charge de production (%) — appliquée à la valorisation PF en mode
+    # « avec charges » : valo_pf_avec = valo_pf * (1 + storage) / (1 - charge/100).
+    charge_production_pct: Decimal = Decimal("0")
+    # Frais de stockage (%) — appliqués à la valorisation PF en mode « avec charges ».
+    storage_fees_pct: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)

@@ -289,6 +289,41 @@ def _get_transport_cost_fixed_eur(conn) -> float:
         return 0.0
 
 
+def _get_charge_production_pct(conn) -> float:
+    """Lit le paramètre Charge de production (mc_setting.charge_production_pct), en %.
+    Retourne 0.0 si non configuré. Bornée à [0, 99.9999[ (100 % impossible car diviseur).
+    """
+    try:
+        row = conn.execute(
+            "SELECT value_decimal FROM mc_setting WHERE key='charge_production_pct' LIMIT 1"
+        ).fetchone()
+        if not row:
+            return 0.0
+        val = float(row["value_decimal"] or 0)
+        if val < 0:
+            return 0.0
+        if val >= 100:
+            return 99.9999
+        return val
+    except Exception:
+        return 0.0
+
+
+def _get_storage_fees_pct(conn) -> float:
+    """Lit le paramètre Frais de stockage (mc_setting.storage_fees_pct), en %.
+    Retourne 0.0 si non configuré."""
+    try:
+        row = conn.execute(
+            "SELECT value_decimal FROM mc_setting WHERE key='storage_fees_pct' LIMIT 1"
+        ).fetchone()
+        if not row:
+            return 0.0
+        val = float(row["value_decimal"] or 0)
+        return val if val >= 0 else 0.0
+    except Exception:
+        return 0.0
+
+
 _HISTORIQUE_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "inventaire", "transfert"})
 _HISTORIQUE_TYPE_STOCK = frozenset({"tout", "mp", "produits"})
 
@@ -4676,7 +4711,12 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
-def _pf_valo_summary(items: list[dict]) -> dict:
+def _pf_valo_summary(
+    items: list[dict],
+    *,
+    charge_prod_pct: float = 0.0,
+    storage_fees_pct: float = 0.0,
+) -> dict:
     total_fab = 0.0
     total_neg = 0.0
     nb_fab = 0
@@ -4699,8 +4739,14 @@ def _pf_valo_summary(items: list[dict]) -> dict:
                 nb_fab_valued += 1
             else:
                 nb_sans_prix += 1
+    total_pf = total_fab + total_neg
+    # Valo PF avec charges = valo_pf * (1 + storage/100) / (1 - charge/100)
+    denom = 1.0 - (charge_prod_pct / 100.0)
+    if denom <= 0:
+        denom = 1.0  # garde-fou : ne devrait jamais arriver (borné à 99.9999)
+    total_pf_avec_charges = total_pf * (1.0 + storage_fees_pct / 100.0) / denom
     return {
-        "total_pf": round(total_fab + total_neg, 2),
+        "total_pf": round(total_pf, 2),
         "total_fabrique": round(total_fab, 2),
         "total_negoce": round(total_neg, 2),
         "nb_refs": nb_fab + nb_neg,
@@ -4708,7 +4754,32 @@ def _pf_valo_summary(items: list[dict]) -> dict:
         "nb_refs_negoce": nb_neg,
         "nb_refs_valorisees": nb_fab_valued + nb_neg_valued,
         "nb_refs_sans_prix": nb_sans_prix,
+        "charge_production_pct": round(charge_prod_pct, 4),
+        "storage_fees_pct": round(storage_fees_pct, 4),
+        "total_pf_avec_charges": round(total_pf_avec_charges, 2),
+        "total_charges_prod": round(total_pf_avec_charges - total_pf, 2),
     }
+
+
+def _pf_enrich_charges(
+    items: list[dict],
+    *,
+    charge_prod_pct: float,
+    storage_fees_pct: float,
+) -> None:
+    """Ajoute sur chaque item :
+    - valorisation_avec_charges : (valo * (1 + storage/100)) / (1 - charge/100)
+    - charges_prod : valorisation_avec_charges - valorisation
+    """
+    denom = 1.0 - (charge_prod_pct / 100.0)
+    if denom <= 0:
+        denom = 1.0
+    mult = (1.0 + storage_fees_pct / 100.0) / denom
+    for it in items:
+        v = float(it.get("valorisation") or 0)
+        v_charged = v * mult
+        it["valorisation_avec_charges"] = round(v_charged, 2)
+        it["charges_prod"] = round(v_charged - v, 2)
 
 
 @router.get("/api/stock/valorisation/pf")
@@ -4717,9 +4788,14 @@ def list_valorisation_pf(request: Request):
     require_stock_matieres_admin(request)
     with get_db() as conn:
         items = _pf_valo_query(conn)
+        charge = _get_charge_production_pct(conn)
+        storage = _get_storage_fees_pct(conn)
+    _pf_enrich_charges(items, charge_prod_pct=charge, storage_fees_pct=storage)
     return {
         "items": items,
-        "summary": _pf_valo_summary(items),
+        "summary": _pf_valo_summary(
+            items, charge_prod_pct=charge, storage_fees_pct=storage
+        ),
     }
 
 
@@ -4778,10 +4854,15 @@ async def update_valorisation_pf(produit_id: int, request: Request):
             )
             conn.commit()
         items = _pf_valo_query(conn)
+        charge = _get_charge_production_pct(conn)
+        storage = _get_storage_fees_pct(conn)
+    _pf_enrich_charges(items, charge_prod_pct=charge, storage_fees_pct=storage)
     item = next((x for x in items if x["id"] == produit_id), None)
     return {
         "item": item,
-        "summary": _pf_valo_summary(items),
+        "summary": _pf_valo_summary(
+            items, charge_prod_pct=charge, storage_fees_pct=storage
+        ),
     }
 
 
@@ -4998,6 +5079,9 @@ async def import_valorisation_pf(request: Request, file: UploadFile = File(...))
                 )
         conn.commit()
         items = _pf_valo_query(conn)
+        charge = _get_charge_production_pct(conn)
+        storage = _get_storage_fees_pct(conn)
+    _pf_enrich_charges(items, charge_prod_pct=charge, storage_fees_pct=storage)
     return {
         "success": True,
         "stats": {
@@ -5007,7 +5091,9 @@ async def import_valorisation_pf(request: Request, file: UploadFile = File(...))
             "refs_inchangees": unchanged,
             "avertissements": warnings[:50],
         },
-        "summary": _pf_valo_summary(items),
+        "summary": _pf_valo_summary(
+            items, charge_prod_pct=charge, storage_fees_pct=storage
+        ),
     }
 
 

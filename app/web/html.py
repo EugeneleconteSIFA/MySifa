@@ -2172,12 +2172,19 @@ body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
 @media (max-width:900px) and (orientation:portrait){
   .mobile-navbar{display:flex}
   body.has-mobile-navbar{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
-  /* FAB Agent IA caché : accès via l'onglet Agent IA de la nav bar. Le panel reste actif. */
-  #ai-chat-root #ai-chat-btn{display:none!important}
+  /* FAB Agent IA caché : accès via l'onglet Agent IA de la nav bar. Le panel reste actif.
+     Spécificité boostée pour battre mysifa_ai_chat.css (loaded APRES ce style block). */
+  html body #ai-chat-root #ai-chat-btn,
+  html body[class] #ai-chat-btn{display:none!important}
   #ai-chat-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;right:8px!important;left:8px!important;width:auto!important;max-width:none!important}
-  /* Widget messagerie chat_widget : bulle et barre flottantes cachées, accès via l'onglet Messagerie */
-  #cw-bubble,#cw-bar{display:none!important}
+  /* Widget chat_widget : bulle et barre flottantes cachées.
+     Spécificité boostée pour battre body.cw-use-bubble #cw-bubble injecté par chat_widget.js. */
+  html body #cw-bubble,html body #cw-bar,
+  html body[class] #cw-bubble,html body[class] #cw-bar{display:none!important}
   #cw-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important}
+  /* Palette CmdK : overlay ne couvre pas la nav bar (redondance pour être sûr) */
+  html body #cmdk-overlay{bottom:calc(66px + env(safe-area-inset-bottom,0px))!important}
+  html body #cmdk-overlay .cmdk-modal{max-height:calc(100vh - 66px - env(safe-area-inset-bottom,0px) - 40px)!important}
 }
 /* Cacher la nav bar sur login */
 body.mysifa-hide-navbar .mobile-navbar{display:none!important}
@@ -14012,6 +14019,21 @@ function renderMobileNavbar(){
   }
   document.body.classList.remove('mysifa-hide-navbar');
   document.body.classList.add('has-mobile-navbar');
+  // Force-hide widgets flottants sur portrait mobile (bypass CSS specificity)
+  const _isPortraitMobile=window.matchMedia&&window.matchMedia('(max-width:900px) and (orientation:portrait)').matches;
+  if(_isPortraitMobile){
+    ['cw-bubble','cw-bar','ai-chat-btn'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.style.setProperty('display','none','important');}
+    });
+    // Observer les futures apparitions (chat_widget s'auto-mount plus tard)
+    if(!window.__MYSIFA_HIDE_WIDGETS_OBS__){
+      window.__MYSIFA_HIDE_WIDGETS_OBS__=true;
+      const hide=()=>{['cw-bubble','cw-bar','ai-chat-btn'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.setProperty('display','none','important');});};
+      const mo=new MutationObserver(()=>{if(window.matchMedia&&window.matchMedia('(max-width:900px) and (orientation:portrait)').matches)hide();});
+      mo.observe(document.body,{childList:true,subtree:false});
+    }
+  }
   const isPortal=S.app==='portal';
   const isMessages=S.app==='messages';
   const isAiOn=!!(document.getElementById('ai-chat-panel')&&document.getElementById('ai-chat-panel').classList.contains('open'));

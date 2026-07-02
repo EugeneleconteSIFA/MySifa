@@ -32,6 +32,8 @@ MC_SETTING_KEYS = frozenset(
         "default_margin_eur_m2",
         "import_tax_pct",
         "transport_cost_fixed_eur",
+        "charge_production_pct",
+        "storage_fees_pct",
     }
 )
 
@@ -42,6 +44,8 @@ MC_SETTING_DEFAULTS: dict[str, Decimal] = {
     "default_margin_eur_m2": Decimal("0.06"),
     "import_tax_pct": Decimal("0"),
     "transport_cost_fixed_eur": Decimal("0"),
+    "charge_production_pct": Decimal("0"),
+    "storage_fees_pct": Decimal("0"),
 }
 
 

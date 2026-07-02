@@ -13206,14 +13206,43 @@ function buildValorisationKpis() {
     ...kpiMPChildren
   );
 
-  const kpiPF = el('div', { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' + (pfLoaded ? '' : 'opacity:.55') },
+  const pfChargePct = pfLoaded ? Number(pfS.charge_production_pct || 0) : 0;
+  const pfStoragePct = pfLoaded ? Number(pfS.storage_fees_pct || 0) : 0;
+  const pfHasCharges = pfLoaded && (pfChargePct > 0 || pfStoragePct > 0);
+  const pfTotalAvecCharges = pfLoaded ? Number(pfS.total_pf_avec_charges || 0) : 0;
+
+  const kpiPFChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Produits finis'),
     el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—'),
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-      pfLoaded
-        ? `${pfS.nb_refs_valorisees || 0} / ${pfS.nb_refs || 0} références valorisées`
-        : 'Chargement…')
+  ];
+  if (pfHasCharges) {
+    kpiPFChildren.push(
+      el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px;display:flex;align-items:baseline;gap:6px' },
+        el('span', null, valFormatEuro(pfTotalAvecCharges)),
+        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'avec charges')
+      )
+    );
+  }
+  const pfSubPieces = [];
+  if (pfLoaded) {
+    pfSubPieces.push(`${pfS.nb_refs_valorisees || 0} / ${pfS.nb_refs || 0} références valorisées`);
+    if (pfChargePct > 0) {
+      pfSubPieces.push('Charge prod. ' + pfChargePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
+    }
+    if (pfStoragePct > 0) {
+      pfSubPieces.push('Stockage ' + pfStoragePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
+    }
+  } else {
+    pfSubPieces.push('Chargement…');
+  }
+  kpiPFChildren.push(
+    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
+      pfSubPieces.join(' · '))
+  );
+
+  const kpiPF = el('div', { style:
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' + (pfLoaded ? '' : 'opacity:.55') },
+    ...kpiPFChildren
   );
 
   wrap.append(kpiTotal, kpiMP, kpiPF);
@@ -14198,6 +14227,7 @@ function pfFilteredItems() {
         case 'quantite': va = Number(a.quantite || 0); vb = Number(b.quantite || 0); break;
         case 'prix_unitaire_ht': va = Number(a.prix_unitaire_ht || 0); vb = Number(b.prix_unitaire_ht || 0); break;
         case 'valorisation': va = Number(a.valorisation || 0); vb = Number(b.valorisation || 0); break;
+        case 'charges_prod': va = Number(a.charges_prod || 0); vb = Number(b.charges_prod || 0); break;
         default: va = 0; vb = 0;
       }
       if (va < vb) return pf.sortDirection === 'asc' ? -1 : 1;
@@ -14599,6 +14629,13 @@ function buildValorisationPFTableRow(item) {
     item.has_price ? valFormatEuro(item.valorisation) : '—',
   );
 
+  // Dont charges de prod. (charge production + frais de stockage appliqués)
+  const chargesProd = Number(item.charges_prod || 0);
+  const hasCharges = item.has_price && chargesProd > 0.001;
+  const tdCharges = el('td', { style: 'padding:10px 12px;font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;color:' + (hasCharges ? '#16a34a' : 'var(--muted)') },
+    hasCharges ? valFormatEuro(chargesProd) : '—',
+  );
+
   // Historique
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix',
@@ -14608,7 +14645,7 @@ function buildValorisationPFTableRow(item) {
   histBtn.appendChild(iconEl('clock', 14));
   const tdHist = el('td', { style: 'padding:10px 12px;text-align:center' }, histBtn);
 
-  tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal, tdHist);
+  tr.append(tdType, tdRef, tdDes, tdQte, tdPrix, tdVal, tdCharges, tdHist);
   return tr;
 }
 
@@ -14637,6 +14674,7 @@ function buildValorisationPFTable() {
       el('th', { style: thStyleR, on: { click: () => valTogglePFSort('quantite') } }, 'Quantité' + arrow('quantite')),
       el('th', { style: thStyleR, on: { click: () => valTogglePFSort('prix_unitaire_ht') } }, 'Prix HT' + arrow('prix_unitaire_ht')),
       el('th', { style: thStyleR, on: { click: () => valTogglePFSort('valorisation') } }, 'Valorisation' + arrow('valorisation')),
+      el('th', { style: thStyleR + ';color:#16a34a', on: { click: () => valTogglePFSort('charges_prod') }, title: 'Charge de production + frais de stockage appliqués à la valorisation' }, 'Dont charges de prod.' + arrow('charges_prod')),
       el('th', { style: thStyleC }, 'Historique'),
     ),
   );
@@ -14644,7 +14682,7 @@ function buildValorisationPFTable() {
   const tbody = el('tbody');
   if (pf.loading && !rows.length) {
     tbody.appendChild(el('tr', null,
-      el('td', { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'),
+      el('td', { colspan: '8', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'),
     ));
   } else if (!rows.length) {
     let msg;
@@ -14657,7 +14695,7 @@ function buildValorisationPFTable() {
     else if (pf.filterNegoce) msg = 'Aucun produit de négoce enregistré.';
     else msg = 'Aucune référence à valoriser. Importez un fichier Excel pour commencer.';
     tbody.appendChild(el('tr', null,
-      el('td', { colspan: '7', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg),
+      el('td', { colspan: '8', style: 'padding:30px 20px;text-align:center;color:var(--muted);font-size:13px' }, msg),
     ));
   } else {
     rows.forEach(item => tbody.appendChild(buildValorisationPFTableRow(item)));
@@ -14853,6 +14891,8 @@ async function openValorisationSettingsModal() {
   const rateInp = mkInput('vsm-rate', settings.eur_usd_rate, '0.0001');
   const taxInp = mkInput('vsm-tax', settings.import_tax_pct || 0, '0.01');
   const transportInp = mkInput('vsm-transport', settings.transport_cost_fixed_eur || 0, '0.01');
+  const chargeProdInp = mkInput('vsm-charge-prod', settings.charge_production_pct || 0, '0.01');
+  const storageInp = mkInput('vsm-storage', settings.storage_fees_pct || 0, '0.01');
   const contCostInp = mkInput('vsm-cont-cost', settings.default_container_cost_usd, '1');
   const contKgInp = mkInput('vsm-cont-kg', settings.default_container_kg, '1');
   const marginInp = mkInput('vsm-margin', settings.default_margin_eur_m2, '0.0001');
@@ -14899,6 +14939,16 @@ async function openValorisationSettingsModal() {
   box.appendChild(transportInp);
   box.appendChild(el('div', { style: 'height:14px' }));
 
+  // -- Charge de production --
+  box.appendChild(mkLabel('Charge de production (%)', 'Diviseur appliqué à la valo PF'));
+  box.appendChild(chargeProdInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+
+  // -- Frais de stockage --
+  box.appendChild(mkLabel('Frais de stockage (%)', 'Multiplicateur appliqué à la valo PF'));
+  box.appendChild(storageInp);
+  box.appendChild(el('div', { style: 'height:14px' }));
+
   // -- Default container cost --
   box.appendChild(mkLabel('Container — coût par défaut (USD)'));
   box.appendChild(contCostInp);
@@ -14931,6 +14981,8 @@ async function openValorisationSettingsModal() {
         eur_usd_rate: parseFloat(rateInp.value),
         import_tax_pct: parseFloat(taxInp.value || '0'),
         transport_cost_fixed_eur: parseFloat(transportInp.value || '0'),
+        charge_production_pct: parseFloat(chargeProdInp.value || '0'),
+        storage_fees_pct: parseFloat(storageInp.value || '0'),
         default_container_cost_usd: parseFloat(contCostInp.value),
         default_container_kg: parseFloat(contKgInp.value),
         default_margin_eur_m2: parseFloat(marginInp.value),
@@ -14947,7 +14999,8 @@ async function openValorisationSettingsModal() {
       });
       root.innerHTML = '';
       showToast('Paramètres enregistrés.', 'success');
-      await loadValorisation();  // Recharge avec les nouveaux taux/taxe
+      await loadValorisation();  // Recharge MP avec les nouveaux taux/taxe
+      await loadValorisationPF();  // Recharge PF pour appliquer charge prod / stockage
     } catch (e) {
       showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
       saveBtn.disabled = false;
