@@ -313,10 +313,16 @@
     const items = (r && Array.isArray(r.items)) ? r.items : [];
     for (const raw of items) {
       if (_displayed.has(raw.id)) continue;
+      // Queue mode : au plus UNE alerte visible à la fois sur l'écran de
+      // l'opérateur. Tant qu'une alerte est en cours (non validée), on ne
+      // pousse rien de nouveau, quelle que soit la file d'attente.
+      if (_settings.stack_mode !== 'stack' && _displayed.size > 0) {
+        break;
+      }
       _displayed.add(raw.id);
       const alert = _normalizeAlert(raw);
       _renderAlert(alert);
-      if (_settings.stack_mode === 'queue' || _settings.stack_mode === 'replace') {
+      if (_settings.stack_mode !== 'stack') {
         break;
       }
     }
