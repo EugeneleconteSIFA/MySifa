@@ -2172,8 +2172,12 @@ body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
 @media (max-width:900px) and (orientation:portrait){
   .mobile-navbar{display:flex}
   body.has-mobile-navbar{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
-  /* Widget IA : retiré entièrement sur mobile portrait (l'IA reste accessible sur desktop) */
-  #ai-chat-root{display:none!important}
+  /* FAB Agent IA caché : accès via l'onglet Agent IA de la nav bar. Le panel reste actif. */
+  #ai-chat-root #ai-chat-btn{display:none!important}
+  #ai-chat-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;right:8px!important;left:8px!important;width:auto!important;max-width:none!important}
+  /* Widget messagerie chat_widget : bulle et barre flottantes cachées, accès via l'onglet Messagerie */
+  #cw-bubble,#cw-bar{display:none!important}
+  #cw-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important}
 }
 /* Cacher la nav bar sur login */
 body.mysifa-hide-navbar .mobile-navbar{display:none!important}
@@ -14010,11 +14014,14 @@ function renderMobileNavbar(){
   document.body.classList.add('has-mobile-navbar');
   const isPortal=S.app==='portal';
   const isMessages=S.app==='messages';
+  const isAiOn=!!(document.getElementById('ai-chat-panel')&&document.getElementById('ai-chat-panel').classList.contains('open'));
+  const isCmdKOpen=!!(window.MysifaCmdK&&window.MysifaCmdK.isOpen&&window.MysifaCmdK.isOpen());
+  const aiEnabled=_mnbAiEnabled();
   const msgUnread=Number(S.msgUnread||0);
   const ICO={
     home:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/><path d="M10 21v-6h4v6"/></svg>',
     grid:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>',
-    mail:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M4 7l8 6 8-6"/></svg>',
+    chat:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
     ai:'<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
   };
   function tab(id,ico,label,active,badge){
@@ -14026,10 +14033,12 @@ function renderMobileNavbar(){
   }
   const tabs=[
     tab('home',   ICO.home, 'Accueil',      isPortal, 0),
-    tab('switch', ICO.grid, "Changer d'app", false,   0),
-    tab('msg',    ICO.mail, 'Messagerie',   isMessages, msgUnread),
+    tab('switch', ICO.grid, "Changer d'app", isCmdKOpen, 0),
+    tab('msg',    ICO.chat, 'Messagerie',   isMessages, msgUnread),
   ];
-  // Agent IA retiré de la nav bar (l'IA reste accessible sur desktop)
+  if(aiEnabled){
+    tabs.push(tab('ai', ICO.ai, 'Agent IA', isAiOn, 0));
+  }
   root.innerHTML='<nav class="mobile-navbar">'+tabs.join('')+'</nav>';
   root.querySelectorAll('.mobile-navbar-tab').forEach(btn=>{
     btn.addEventListener('click',(e)=>{
@@ -14039,7 +14048,13 @@ function renderMobileNavbar(){
         if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}
         window.location.href='/';
       } else if(id==='switch'){
-        _mnbOpenCmdK();
+        if(window.MysifaCmdK&&typeof window.MysifaCmdK.toggle==='function'){
+          window.MysifaCmdK.toggle('');
+        } else {
+          _mnbOpenCmdK();
+        }
+        // Refresh l'état actif du tab après ouverture/fermeture
+        setTimeout(()=>{try{renderMobileNavbar();}catch(_){}},60);
       } else if(id==='msg'){
         // Ouvre l'outil de chat (chat_widget), pas le module emails
         const trigger=document.getElementById('cw-bubble')||document.getElementById('cw-bar');
@@ -14049,6 +14064,8 @@ function renderMobileNavbar(){
         set({app:'messages'});
         loadMessagesUnread().catch(()=>{});
         loadMessages().catch(()=>{});
+      } else if(id==='ai'){
+        _mnbToggleAi();
       }
     });
   });
@@ -14338,6 +14355,18 @@ function render(){
   }
   // Mobile nav bar : sync sur toutes les pages (portrait mobile only)
   try{ renderMobileNavbar(); }catch(_){}
+  // Sync visuel de l'onglet "Changer d'app" quand la palette se ferme (Escape, backdrop, close)
+  if(!window.__MYSIFA_CMDK_NAV_SYNC__){
+    window.__MYSIFA_CMDK_NAV_SYNC__=true;
+    const _syncNav=()=>{try{renderMobileNavbar();}catch(_){}};
+    const _installObs=()=>{
+      const ov=document.getElementById('cmdk-overlay');
+      if(!ov){setTimeout(_installObs,300);return;}
+      if(!window.MutationObserver)return;
+      new MutationObserver(_syncNav).observe(ov,{attributes:true,attributeFilter:['class']});
+    };
+    setTimeout(_installObs,200);
+  }
   // Motion : (re)scan apres chaque render — pose --i pour les cascades,
   // arme les IntersectionObserver pour mo-reveal et data-count-to, et place
   // l'indicateur de navigation glissant. No-op si window.Motion absent.
