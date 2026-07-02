@@ -21,12 +21,11 @@
       '.ta-sim.ta-pl-center{align-items:center;justify-content:center}',
       '.ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}',
       '.ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}',
-      '.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:14px 16px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}',
-      '.ta-sz-small .ta-sim-alert{max-width:240px;width:100%}',
-      '.ta-sz-medium .ta-sim-alert{max-width:320px;width:100%}',
-      '.ta-sz-large .ta-sim-alert{max-width:420px;width:100%}',
-      '.ta-sim-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}',
-      '.ta-sim-sub{font-size:11px;color:var(--muted);margin-bottom:10px}',
+      '.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}',
+      '.ta-sz-small .ta-sim-alert{max-width:260px;width:100%}',
+      '.ta-sz-medium .ta-sim-alert{max-width:340px;width:100%}',
+      '.ta-sz-large .ta-sim-alert{max-width:440px;width:100%}',
+      '.ta-sim-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);line-height:1.3}',
       '.ta-sim-actions{display:flex;gap:6px;margin-top:10px}',
       '.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}',
       '.ta-sim-btn:hover{filter:brightness(1.05)}',
@@ -46,7 +45,7 @@
   const POLL_INTERVAL_MS = 15000;
   const FETCH_OPTS = { credentials: 'same-origin' };
 
-  let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
+  let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
   let _displayed = new Set();
   let _pollTimer = null;
   let _started = false;
@@ -62,6 +61,14 @@
   function _toast(msg, isErr) {
     if (typeof window.toast === 'function') return window.toast(msg, !!isErr);
     if (window.console) window.console.log('[alerts]', msg);
+  }
+
+  function _stripAutoPrefix(nom) {
+    // Retire le préfixe "Contrôle : XX – " des alertes auto-générées pour
+    // l'affichage opérateur — on garde le nom canonique en base mais on
+    // n'expose que le libellé du code à l'opérateur.
+    if (!nom) return '';
+    return String(nom).replace(/^Contr[oôö]le\s*:\s*\d+\s*[–\-]\s*/i, '');
   }
 
   function _triggerLabel(t) {
@@ -84,11 +91,17 @@
       const s = await r.json();
       let placement = s.placement || 'center';
       if (placement !== 'center' && placement !== 'top-right' && placement !== 'bottom-right') placement = 'center';
+      let minGap = 5;
+      if(s.min_gap_minutes != null){
+        const parsed = parseInt(s.min_gap_minutes, 10);
+        if(!isNaN(parsed) && parsed >= 0) minGap = parsed;
+      }
       _settings = {
         placement: placement,
         size: s.size || 'medium',
         block_production: !!s.block_production,
-        stack_mode: s.stack_mode || 'stack',
+        stack_mode: 'queue',
+        min_gap_minutes: minGap,
       };
     } catch (e) { /* défaut conservé */ }
   }
@@ -166,7 +179,7 @@
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.min != null ? ' data-min="' + _esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + _esc(it.label) + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">'
                 +   unit
@@ -184,7 +197,7 @@
               + '</label>'
             ).join('');
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
-              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + _esc(it.label) + '</div>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + '</div>';
           }).join('')
@@ -258,8 +271,7 @@
     const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(_esc).join(', ');
 
     const html = '<div class="ta-sim-alert">'
-      + '<div class="ta-sim-title">' + _esc(alert.nom) + '</div>'
-      + '<div class="ta-sim-sub">' + machinesLbl + ' · ' + _esc(_triggerLabel(alert.trigger)) + '</div>'
+      + '<div class="ta-sim-title">' + _esc(_stripAutoPrefix(alert.nom)) + '</div>'
       + _renderChecklist(alert.checklist)
       + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
       + '<textarea class="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
@@ -307,10 +319,16 @@
     const items = (r && Array.isArray(r.items)) ? r.items : [];
     for (const raw of items) {
       if (_displayed.has(raw.id)) continue;
+      // Queue mode : au plus UNE alerte visible à la fois sur l'écran de
+      // l'opérateur. Tant qu'une alerte est en cours (non validée), on ne
+      // pousse rien de nouveau, quelle que soit la file d'attente.
+      if (_settings.stack_mode !== 'stack' && _displayed.size > 0) {
+        break;
+      }
       _displayed.add(raw.id);
       const alert = _normalizeAlert(raw);
       _renderAlert(alert);
-      if (_settings.stack_mode === 'queue' || _settings.stack_mode === 'replace') {
+      if (_settings.stack_mode !== 'stack') {
         break;
       }
     }

@@ -4327,6 +4327,31 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 137, "maintenance_alert_settings_new_defaults")
 
+    # v138 — Espacement minimum entre alertes affichées à l'opérateur.
+    # min_gap_minutes = délai de silence après chaque acquittement pendant
+    # lequel aucune autre alerte ne peut s'afficher sur cette machine. Évite
+    # que l'opérateur soit inondé quand plusieurs alertes deviennent dues
+    # simultanément (typiquement à la reprise de production).
+    # On force aussi stack_mode='queue' partout : c'est le seul mode qui a
+    # du sens avec la nouvelle logique.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=138 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_settings)").fetchall()}
+        if "min_gap_minutes" not in cols:
+            conn.execute(
+                "ALTER TABLE maintenance_alert_settings "
+                "ADD COLUMN min_gap_minutes INTEGER NOT NULL DEFAULT 5"
+            )
+        conn.execute(
+            "UPDATE maintenance_alert_settings SET min_gap_minutes=5 "
+            "WHERE id=1 AND (min_gap_minutes IS NULL OR min_gap_minutes < 0)"
+        )
+        # Force stack_mode='queue' (seul mode UI désormais)
+        conn.execute(
+            "UPDATE maintenance_alert_settings SET stack_mode='queue' WHERE id=1"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 138, "maintenance_alert_settings_min_gap")
+
 
 def create_default_admin():
     import bcrypt

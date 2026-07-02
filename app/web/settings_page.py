@@ -335,12 +335,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim.ta-pl-center{align-items:center;justify-content:center}
 .ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}
 .ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}
-.ta-sim-alert{background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:14px 16px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
-.ta-sz-small .ta-sim-alert{max-width:240px;width:100%}
-.ta-sz-medium .ta-sim-alert{max-width:320px;width:100%}
-.ta-sz-large .ta-sim-alert{max-width:420px;width:100%}
-.ta-sim-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
-.ta-sim-sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}
+.ta-sz-small .ta-sim-alert{max-width:260px;width:100%}
+.ta-sz-medium .ta-sim-alert{max-width:340px;width:100%}
+.ta-sz-large .ta-sim-alert{max-width:440px;width:100%}
+.ta-sim-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);line-height:1.3}
 .ta-sim-actions{display:flex;gap:6px;margin-top:10px}
 .ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}
 .ta-sim-btn:hover{filter:brightness(1.05)}
@@ -3560,7 +3559,7 @@ function _alertDefaults(existing) {
     };
   });
   return {
-    trigger: Object.assign({ type: 'manual', interval_minutes: 120, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
+    trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
     target: { machines: machines },
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     checklist: cl,
@@ -3618,9 +3617,17 @@ function _renderAlertFormFields(params, opts) {
     +   '<div id="af-trigger-sub" class="alert-field-sub">'
     +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
     +     '<div data-trigger-for="periodic">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle (minutes)</label>'
-    +       '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +       '<div class="alert-field-help">Le compteur démarre après une saisie <strong>« production »</strong> ou <strong>« reprise de production »</strong> sur la machine cible. Si la machine n\'est plus en production, l\'alerte est différée jusqu\'à la reprise, avec un délai de 5 minutes après reprise avant déclenchement. Après validation, le compteur redémarre dans les mêmes conditions.</div>'
+    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +         '<div>'
+    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
+    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +         '</div>'
+    +         '<div>'
+    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
+    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
+    +         '</div>'
+    +       '</div>'
+    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
     +     '</div>'
     +     '<div data-trigger-for="calendar">'
     +       '<div class="alert-field-row">'
@@ -3892,6 +3899,12 @@ function _afReadParams() {
     const m = parseInt(mInp.value, 10);
     if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
     trig.interval_minutes = m;
+    const gInp = document.getElementById('af-trigger-grace-minutes');
+    if (gInp) {
+      const g = parseInt(gInp.value, 10);
+      if (isNaN(g) || g < 0 || g > 120) { toast('Délai avant 1ère alerte invalide (0 à 120 min)', true); return null; }
+      trig.grace_minutes = g;
+    }
   } else if (t === 'calendar') {
     const tm = document.getElementById('af-trigger-time').value || '';
     if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
@@ -4028,7 +4041,7 @@ async function disableAllAlerts() {
   await loadAlerts();
 }
 
-let _alertGlobalSettings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
+let _alertGlobalSettings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
 
 async function loadAlertSettings() {
   try {
@@ -4037,11 +4050,17 @@ async function loadAlertSettings() {
     if (placement !== 'center' && placement !== 'top-right' && placement !== 'bottom-right') {
       placement = 'center';
     }
+    let minGap = 5;
+    if(r.min_gap_minutes != null){
+      const parsed = parseInt(r.min_gap_minutes, 10);
+      if(!isNaN(parsed) && parsed >= 0) minGap = parsed;
+    }
     _alertGlobalSettings = {
       placement: placement,
       size: r.size || 'medium',
       block_production: !!r.block_production,
-      stack_mode: r.stack_mode || 'stack',
+      stack_mode: 'queue',
+      min_gap_minutes: minGap,
     };
   } catch (e) {
     // En cas d'erreur, on garde les valeurs par défaut.
@@ -4062,15 +4081,7 @@ function openAlertSettingsModal() {
       { v: 'medium', l: 'Moyenne' },
       { v: 'large',  l: 'Grande' },
     ];
-    const stacks = [
-      { v: 'stack',   l: 'Empilement (toutes visibles)' },
-      { v: 'queue',   l: 'File d\'attente (une à la fois)' },
-      { v: 'replace', l: 'Remplacement (la dernière efface la précédente)' },
-    ];
-    const stackOpts = stacks.map(s =>
-      '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.stack_mode ? ' selected' : '') + '>' + esc(s.l) + '</option>'
-    ).join('');
-    const placementOpts = placements.map(p =>
+const placementOpts = placements.map(p =>
       '<option value="' + p.v + '"' + (p.v === _alertGlobalSettings.placement ? ' selected' : '') + '>' + esc(p.l) + '</option>'
     ).join('');
     const sizeOpts = sizes.map(s =>
@@ -4089,9 +4100,9 @@ function openAlertSettingsModal() {
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
       +   '</div>'
       +   '<div class="alert-field">'
-      +     '<label class="alert-field-label">Si une alerte est déjà affichée</label>'
-      +     '<select id="ags-stack" class="alert-field-input">' + stackOpts + '</select>'
-      +     '<div class="alert-field-help"><strong>Empilement</strong> : toutes les alertes s\'affichent les unes sous les autres. <strong>File d\'attente</strong> : une seule à la fois, les suivantes patientent. <strong>Remplacement</strong> : la nouvelle remplace la précédente.</div>'
+      +     '<label class="alert-field-label">Délai minimum entre deux alertes (minutes)</label>'
+      +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
+      +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
       +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
       +     '<div>'
@@ -4110,11 +4121,13 @@ function openAlertSettingsModal() {
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      const gapInput = document.getElementById('ags-gap');
+      const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
         placement: document.getElementById('ags-placement').value,
         size: document.getElementById('ags-size').value,
         block_production: document.getElementById('ags-block').checked,
-        stack_mode: document.getElementById('ags-stack').value,
+        min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
@@ -4124,6 +4137,11 @@ function openAlertSettingsModal() {
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
   });
+}
+
+function _stripAutoPrefix(nom) {
+  if (!nom) return '';
+  return String(nom).replace(/^Contr[oôö]le\s*:\s*\d+\s*[–\-]\s*/i, '');
 }
 
 function _alertTriggerLabel(t) {
@@ -4169,7 +4187,7 @@ async function previewAlert(id) {
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
                 + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
@@ -4187,7 +4205,7 @@ async function previewAlert(id) {
               + '</label>'
             ).join('');
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
-              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + esc(it.label) + '</div>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + '</div>';
           }).join('')
@@ -4204,8 +4222,7 @@ async function previewAlert(id) {
 
   // Contenu de l'alerte (sans aucune chrome admin)
   const alertHtml = '<div class="ta-sim-alert">'
-    + '<div class="ta-sim-title">' + esc(a.nom) + '</div>'
-    + '<div class="ta-sim-sub">' + machinesLbl + ' · ' + esc(_alertTriggerLabel(d.trigger)) + '</div>'
+    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
     + checklistHtml
     + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
     + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'

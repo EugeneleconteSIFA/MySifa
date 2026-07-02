@@ -1588,6 +1588,23 @@ def _validate_alert_params(params: dict) -> dict:
                 f"interval_minutes hors plage ({_ALERT_MIN_INTERVAL_MINUTES} <= n <= {_ALERT_MAX_INTERVAL_MINUTES}).",
             )
         trig["interval_minutes"] = minutes
+        # grace_minutes : délai avant la première alerte de chaque session
+        # (par défaut = ALERT_RESUME_GRACE_MINUTES = 5). Personnalisable par
+        # alerte pour espacer naturellement les premières alertes des
+        # différents contrôles au démarrage d'une session.
+        grace_raw = trig_in.get("grace_minutes")
+        if grace_raw is None:
+            grace_val = ALERT_RESUME_GRACE_MINUTES
+        else:
+            try:
+                grace_val = int(round(float(grace_raw)))
+            except (TypeError, ValueError):
+                grace_val = ALERT_RESUME_GRACE_MINUTES
+        if grace_val < 0:
+            grace_val = 0
+        if grace_val > 120:
+            grace_val = 120
+        trig["grace_minutes"] = grace_val
         # Sémantique du déclenchement (documentée pour le futur planificateur) :
         #   - Le compteur de N minutes démarre après une saisie "production"
         #     (ou "reprise de production") sur la machine cible.
@@ -2178,22 +2195,33 @@ def maintenance_alert_settings_get(request: Request):
             "size": "medium",
             "block_production": False,
             "stack_mode": "queue",
+            "min_gap_minutes": 5,
             "updated_at": None,
             "updated_by": "",
         }
     try:
         stack_mode = r["stack_mode"]
     except (IndexError, KeyError):
-        stack_mode = "stack"
+        stack_mode = "queue"
+    try:
+        min_gap = r["min_gap_minutes"]
+    except (IndexError, KeyError):
+        min_gap = 5
     placement = r["placement"] or "center"
     if placement not in _ALERT_PLACEMENTS:
-        # Valeur legacy ou inconnue → on retombe sur "center"
         placement = "center"
+    try:
+        min_gap_val = int(min_gap) if min_gap is not None else 5
+    except (TypeError, ValueError):
+        min_gap_val = 5
+    if min_gap_val < 0:
+        min_gap_val = 0
     return {
         "placement": placement,
         "size": r["size"] or "medium",
         "block_production": bool(r["block_production"]),
-        "stack_mode": stack_mode or "stack",
+        "stack_mode": stack_mode or "queue",
+        "min_gap_minutes": min_gap_val,
         "updated_at": r["updated_at"],
         "updated_by": r["updated_by"] or "",
     }
@@ -2206,13 +2234,22 @@ async def maintenance_alert_settings_update(request: Request):
     placement = (body.get("placement") or "center").strip()
     size = (body.get("size") or "medium").strip()
     block_production = 1 if body.get("block_production") else 0
-    stack_mode = (body.get("stack_mode") or "stack").strip()
+    # stack_mode : forcé à 'queue' (le seul mode UI désormais). On ignore la
+    # valeur reçue plutôt que de renvoyer 422 pour rester tolérant.
+    stack_mode = "queue"
+    # min_gap_minutes : délai de silence après chaque ack. 0 = pas de gap.
+    try:
+        min_gap_val = int(body.get("min_gap_minutes")) if body.get("min_gap_minutes") is not None else 5
+    except (TypeError, ValueError):
+        min_gap_val = 5
+    if min_gap_val < 0:
+        min_gap_val = 0
+    if min_gap_val > 120:
+        min_gap_val = 120
     if placement not in _ALERT_PLACEMENTS:
         raise HTTPException(422, f"placement invalide : {placement!r}.")
     if size not in _ALERT_SIZES:
         raise HTTPException(422, f"size invalide : {size!r}.")
-    if stack_mode not in _ALERT_STACK_MODES:
-        raise HTTPException(422, f"stack_mode invalide : {stack_mode!r}.")
     from database import get_db
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     who = user.get("email") or user.get("nom") or ""
@@ -2225,7 +2262,25 @@ async def maintenance_alert_settings_update(request: Request):
             "PRAGMA table_info(maintenance_alert_settings)"
         ).fetchall()}
         has_stack_mode = "stack_mode" in cols
-        if has_stack_mode:
+        # Détecte aussi la présence de min_gap_minutes (v138)
+        has_min_gap = "min_gap_minutes" in cols
+        if has_stack_mode and has_min_gap:
+            conn.execute(
+                """INSERT INTO maintenance_alert_settings
+                   (id, placement, size, block_production, stack_mode,
+                    min_gap_minutes, updated_at, updated_by)
+                   VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(id) DO UPDATE SET
+                     placement=excluded.placement,
+                     size=excluded.size,
+                     block_production=excluded.block_production,
+                     stack_mode=excluded.stack_mode,
+                     min_gap_minutes=excluded.min_gap_minutes,
+                     updated_at=excluded.updated_at,
+                     updated_by=excluded.updated_by""",
+                (placement, size, block_production, stack_mode, min_gap_val, now, who),
+            )
+        elif has_stack_mode:
             conn.execute(
                 """INSERT INTO maintenance_alert_settings
                    (id, placement, size, block_production, stack_mode,
@@ -2259,7 +2314,8 @@ async def maintenance_alert_settings_update(request: Request):
     log_action(user=user, action="UPDATE", module="maintenance_alerts",
                objet="settings",
                detail=f"placement={placement} size={size} "
-                      f"block={bool(block_production)} stack={stack_mode}")
+                      f"block={bool(block_production)} stack={stack_mode} "
+                      f"gap={min_gap_val}min")
     return {"ok": True}
 
 
@@ -2415,7 +2471,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if has_ack_in_session:
         due_dt = last_ack_dt + timedelta(minutes=interval_min)
     else:
-        due_dt = session_start_dt + timedelta(minutes=ALERT_RESUME_GRACE_MINUTES)
+        # Grâce personnalisable par alerte, fallback sur la constante globale
+        try:
+            grace_min = int(trig.get("grace_minutes", ALERT_RESUME_GRACE_MINUTES))
+        except (TypeError, ValueError):
+            grace_min = ALERT_RESUME_GRACE_MINUTES
+        if grace_min < 0:
+            grace_min = 0
+        due_dt = session_start_dt + timedelta(minutes=grace_min)
 
     return now_paris >= due_dt
 
@@ -2433,6 +2496,33 @@ def maintenance_alerts_active(request: Request):
     items = []
     with get_db() as conn:
         user_machine = _machine_name_from_user(conn, user)
+        # Gap global : si un ack a été validé récemment sur cette machine,
+        # aucune alerte n'est poussée pendant le délai de silence. Le gap
+        # démarre à partir de la validation, pas de l'affichage — ainsi
+        # l'opérateur a toujours une pause réelle entre deux contrôles.
+        if user_machine:
+            settings_row = conn.execute(
+                "SELECT min_gap_minutes FROM maintenance_alert_settings WHERE id=1"
+            ).fetchone()
+            try:
+                min_gap_min = int(settings_row["min_gap_minutes"]) if settings_row else 5
+            except (TypeError, ValueError, KeyError, IndexError):
+                min_gap_min = 5
+            if min_gap_min > 0:
+                gap_row = conn.execute(
+                    "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+                    "WHERE machine=?",
+                    (user_machine,),
+                ).fetchone()
+                last_any_ack_dt = _parse_paris_dt(gap_row["m"]) if gap_row else None
+                if last_any_ack_dt is not None:
+                    gap_end = last_any_ack_dt + timedelta(minutes=min_gap_min)
+                    if now_paris < gap_end:
+                        return {
+                            "items": [],
+                            "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S"),
+                            "gap_until": gap_end.strftime("%Y-%m-%dT%H:%M:%S"),
+                        }
         rows = conn.execute(
             """SELECT id, nom, params, linked_maint_code
                FROM maintenance_alerts
