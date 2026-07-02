@@ -3335,6 +3335,9 @@ async function saveMaintForm() {
   }
   closeMaintForm();
   await loadMaintCodes();
+  // Sync côté Alertes : une création/modif de code peut créer, renommer
+  // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
+  if(typeof loadAlerts === 'function') await loadAlerts();
 }
 async function deleteMaintCode(code) {
   if (!confirm('Supprimer le code ' + code + ' ?')) return;
@@ -3346,6 +3349,9 @@ async function deleteMaintCode(code) {
     return;
   }
   await loadMaintCodes();
+  // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
+  // côté backend — on force le rechargement pour que la liste se mette à jour.
+  if(typeof loadAlerts === 'function') await loadAlerts();
 }
 
 // ── Sous-onglets Maintenance (Codes / Alertes) ─────────────────────
@@ -3435,7 +3441,7 @@ function renderAlertsList() {
       ? ' · Dernière intervention : ' + esc(_fmtAlertDate(a.last_ack_at))
       : (isAuto ? ' · Jamais effectuée' : '');
     const delBtn = isAuto
-      ? '<button type="button" class="btn-sm btn-ghost" disabled title="Suppression via l\'onglet Codes (ou changement de catégorie / périodicité du code)">Supprimer</button>'
+      ? ''
       : '<button type="button" class="btn-sm btn-ghost danger" data-alert-del="' + a.id + '">Supprimer</button>';
     return '<div class="alert-row ' + cls + '" data-alert-id="' + a.id + '">'
       + '<label class="toggle" title="' + (a.active ? 'Désactiver' : 'Activer') + '">'
