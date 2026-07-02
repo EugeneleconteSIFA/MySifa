@@ -46,7 +46,7 @@
   const POLL_INTERVAL_MS = 15000;
   const FETCH_OPTS = { credentials: 'same-origin' };
 
-  let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
+  let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
   let _displayed = new Set();
   let _pollTimer = null;
   let _started = false;
@@ -84,11 +84,17 @@
       const s = await r.json();
       let placement = s.placement || 'center';
       if (placement !== 'center' && placement !== 'top-right' && placement !== 'bottom-right') placement = 'center';
+      let minGap = 5;
+      if(s.min_gap_minutes != null){
+        const parsed = parseInt(s.min_gap_minutes, 10);
+        if(!isNaN(parsed) && parsed >= 0) minGap = parsed;
+      }
       _settings = {
         placement: placement,
         size: s.size || 'medium',
         block_production: !!s.block_production,
-        stack_mode: s.stack_mode || 'stack',
+        stack_mode: 'queue',
+        min_gap_minutes: minGap,
       };
     } catch (e) { /* défaut conservé */ }
   }

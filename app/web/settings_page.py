@@ -4028,7 +4028,7 @@ async function disableAllAlerts() {
   await loadAlerts();
 }
 
-let _alertGlobalSettings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue' };
+let _alertGlobalSettings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
 
 async function loadAlertSettings() {
   try {
@@ -4037,11 +4037,17 @@ async function loadAlertSettings() {
     if (placement !== 'center' && placement !== 'top-right' && placement !== 'bottom-right') {
       placement = 'center';
     }
+    let minGap = 5;
+    if(r.min_gap_minutes != null){
+      const parsed = parseInt(r.min_gap_minutes, 10);
+      if(!isNaN(parsed) && parsed >= 0) minGap = parsed;
+    }
     _alertGlobalSettings = {
       placement: placement,
       size: r.size || 'medium',
       block_production: !!r.block_production,
-      stack_mode: r.stack_mode || 'stack',
+      stack_mode: 'queue',
+      min_gap_minutes: minGap,
     };
   } catch (e) {
     // En cas d'erreur, on garde les valeurs par défaut.
@@ -4062,15 +4068,7 @@ function openAlertSettingsModal() {
       { v: 'medium', l: 'Moyenne' },
       { v: 'large',  l: 'Grande' },
     ];
-    const stacks = [
-      { v: 'stack',   l: 'Empilement (toutes visibles)' },
-      { v: 'queue',   l: 'File d\'attente (une à la fois)' },
-      { v: 'replace', l: 'Remplacement (la dernière efface la précédente)' },
-    ];
-    const stackOpts = stacks.map(s =>
-      '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.stack_mode ? ' selected' : '') + '>' + esc(s.l) + '</option>'
-    ).join('');
-    const placementOpts = placements.map(p =>
+const placementOpts = placements.map(p =>
       '<option value="' + p.v + '"' + (p.v === _alertGlobalSettings.placement ? ' selected' : '') + '>' + esc(p.l) + '</option>'
     ).join('');
     const sizeOpts = sizes.map(s =>
@@ -4089,9 +4087,9 @@ function openAlertSettingsModal() {
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
       +   '</div>'
       +   '<div class="alert-field">'
-      +     '<label class="alert-field-label">Si une alerte est déjà affichée</label>'
-      +     '<select id="ags-stack" class="alert-field-input">' + stackOpts + '</select>'
-      +     '<div class="alert-field-help"><strong>Empilement</strong> : toutes les alertes s\'affichent les unes sous les autres. <strong>File d\'attente</strong> : une seule à la fois, les suivantes patientent. <strong>Remplacement</strong> : la nouvelle remplace la précédente.</div>'
+      +     '<label class="alert-field-label">Délai minimum entre deux alertes (minutes)</label>'
+      +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
+      +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
       +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
       +     '<div>'
@@ -4110,11 +4108,13 @@ function openAlertSettingsModal() {
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      const gapInput = document.getElementById('ags-gap');
+      const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
         placement: document.getElementById('ags-placement').value,
         size: document.getElementById('ags-size').value,
         block_production: document.getElementById('ags-block').checked,
-        stack_mode: document.getElementById('ags-stack').value,
+        min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
