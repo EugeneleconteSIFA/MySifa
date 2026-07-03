@@ -4985,6 +4985,299 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 144, "qualite_ref_details_v1")
 
+    # v145 - Qualite Referentiel : questions clients type + reponses
+    # Ajoute 2 a 4 paires Q/R par fiche seedee :
+    #   - append d une section 'Questions type et reponses' au champ details
+    #     (uniquement si le bloc n est pas deja present)
+    #   - insertion des questions courtes dans qualite_ref_questions
+    #     (pour alimenter la recherche et l auto-completion)
+    # Idempotente via schema_migrations version=145 + verifs anti-doublons.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=145 LIMIT 1").fetchone():
+        _now_iso_145 = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        _seed_qa = [
+            ("reach", [
+                ("Vos produits sont-ils conformes au reglement REACH ?",
+                 "Oui. SIFA verifie annuellement chaque substance chimique utilisee (colles, encres, solvants) contre la Candidate List SVHC de l ECHA et exige une declaration REACH de nos fournisseurs."),
+                ("Vos produits contiennent-ils des SVHC au-dessus de 0,1 % ?",
+                 "Selon nos declarations fournisseurs et FDS a jour, aucun SVHC n est present au-dessus du seuil de 0,1 % dans nos produits standard. Confirmation ecrite disponible sur demande."),
+                ("Pouvez-vous fournir une declaration de conformite REACH ?",
+                 "Oui, sur simple demande. Delai indicatif : 48h ouvres."),
+                ("Comment gerez-vous les mises a jour de la Candidate List ?",
+                 "Nous verifions la Candidate List a chaque mise a jour semestrielle de l ECHA et actualisons notre registre substances / fournisseurs en consequence."),
+            ]),
+            ("rohs", [
+                ("Vos produits sont-ils conformes RoHS ?",
+                 "SIFA ne fabrique pas d equipements electriques ou electroniques (EEE), la directive RoHS ne nous concerne pas directement. Nos matieres premieres ne contiennent pas les 10 substances restreintes RoHS."),
+                ("Fournissez-vous une declaration RoHS ?",
+                 "Sur demande, nous emettons une lettre de conformite basee sur les declarations de nos fournisseurs et l usage de nos produits."),
+                ("Utilisez-vous du plomb, mercure, cadmium ou chrome hexavalent ?",
+                 "Non, aucune de ces substances n est presente dans nos formulations ou emballages standard."),
+            ]),
+            ("pop", [
+                ("Vos produits contiennent-ils des polluants organiques persistants ?",
+                 "Non. Nous verifions que nos matieres premieres ne contiennent aucun POP liste dans les annexes A/B/C de la Convention de Stockholm et le Reglement UE 2019/1021."),
+                ("Pouvez-vous fournir une declaration ecrite POP ?",
+                 "Oui, sur demande. Delai indicatif : 48h ouvres."),
+                ("Comment verifiez-vous l absence de POP dans vos matieres ?",
+                 "Cross-check des FDS et declarations fournisseurs avec la liste officielle des POP + recouvrement avec la Candidate List SVHC."),
+            ]),
+            ("cov-voc", [
+                ("Quelle est la teneur en COV de vos produits ?",
+                 "La teneur en COV varie selon la formulation. Les valeurs precises figurent en section 9 des FDS de chaque produit. Nos formulations base eau presentent une teneur COV inferieure a 5 %."),
+                ("Publiez-vous un bilan annuel des emissions COV ?",
+                 "Oui, nous mesurons annuellement nos emissions COV globales pour le suivi reglementaire. Synthese partageable sur demande."),
+                ("Proposez-vous des alternatives faible COV ?",
+                 "Oui, une part croissante de notre offre utilise des base eau ou des formulations a faible COV. Nous consulter pour le detail par gamme."),
+            ]),
+            ("iso-14001", [
+                ("Etes-vous certifies ISO 14001 ?",
+                 "[A completer selon statut SIFA : preciser oui/non, organisme certificateur et annee d obtention.]"),
+                ("Avez-vous une politique environnementale ecrite ?",
+                 "Oui, notre politique environnementale est signee par la direction et disponible sur demande. Elle couvre nos engagements sur consommations, dechets et rejets."),
+                ("Quels indicateurs environnementaux suivez-vous ?",
+                 "Suivi annuel des consommations energie / eau, des tonnages de dechets par filiere et des rejets atmospheriques significatifs."),
+            ]),
+            ("iso-50001", [
+                ("Etes-vous certifies ISO 50001 ?",
+                 "[A completer selon statut SIFA. Reponse par defaut : non certifies mais suivi actif de la consommation energetique avec plan d amelioration continue.]"),
+                ("Avez-vous un plan de reduction energetique ?",
+                 "Oui, plan pluriannuel : eclairage LED, variateurs de vitesse, isolation, recuperation de chaleur, arret sequentiel des equipements."),
+                ("Suivez-vous un indicateur kWh par unite produite ?",
+                 "Oui, indicateur mensuel par ligne de production. Historique disponible sur demande."),
+            ]),
+            ("emas", [
+                ("Etes-vous enregistres EMAS ?",
+                 "Non. EMAS exige une declaration environnementale publique et un enregistrement DREAL. Nous privilegions actuellement le referentiel ISO 14001."),
+                ("Publiez-vous une declaration environnementale ?",
+                 "Nous ne publions pas de declaration EMAS formelle. Notre reporting environnemental interne est partageable sur demande sous accord de confidentialite."),
+            ]),
+            ("pefc", [
+                ("Vos produits sont-ils certifies PEFC ?",
+                 "[A completer selon statut : si applicable, N° certificat PEFC chaine de controle + annee d obtention. Sinon : non applicable a notre activite.]"),
+                ("Pouvez-vous fournir un certificat PEFC par lot ?",
+                 "Oui, sur demande nous fournissons la tracabilite PEFC lot par lot avec le certificat CoC correspondant."),
+                ("Utilisez-vous du bois issu de forets certifiees ?",
+                 "Nos matieres cellulosiques proviennent de fournisseurs certifies PEFC (ou FSC selon disponibilite et demande client)."),
+            ]),
+            ("fsc", [
+                ("Vos produits sont-ils certifies FSC ?",
+                 "[A completer selon statut : si applicable, N° certificat FSC chaine de controle + variantes disponibles (100 %, Mix, Recycled).]"),
+                ("Quelle difference entre FSC 100 %, FSC Mix et FSC Recycled ?",
+                 "FSC 100 % : matiere integralement issue de forets certifiees FSC. FSC Mix : melange forets FSC + matiere recyclee + matiere controlee. FSC Recycled : 100 % recycle. La variante est precisee sur chaque commande."),
+                ("Pouvez-vous fournir un certificat FSC par livraison ?",
+                 "Oui, mention FSC + numero de certificat portee sur le bon de livraison et la facture."),
+            ]),
+            ("ademe-acv", [
+                ("Realisez-vous un Bilan Carbone annuel ?",
+                 "Oui, Bilan Carbone Scope 1 + 2 annuel selon methodologie ADEME. Estimation Scope 3 en cours de deploiement."),
+                ("Quel est votre plan de reduction des emissions ?",
+                 "Plan pluriannuel : optimisation energetique, decarbonation transport, achat d electricite verte, choix fournisseurs. Objectif chiffre communicable sur demande."),
+                ("Pouvez-vous fournir votre bilan Scope 3 ?",
+                 "Estimation Scope 3 en construction (achats, transport aval, dechets, fin de vie). Precision croissante annee apres annee."),
+            ]),
+            ("ghg-protocol", [
+                ("Votre reporting carbone est-il compatible GHG Protocol ?",
+                 "Oui, notre Bilan Carbone suit une methodologie compatible avec le standard GHG Protocol (Scope 1, 2, 3)."),
+                ("Vos donnees Scope 3 sont-elles verifiees par un tiers ?",
+                 "Verification tiers non systematique. Nous pouvons l organiser sur demande client si assurance limited ou reasonable requise (CDP, SBTi)."),
+                ("Avez-vous des objectifs valides SBTi ?",
+                 "Pas de validation SBTi a ce stade. Objectifs internes de reduction disponibles sur demande."),
+            ]),
+            ("ppwr", [
+                ("Vos emballages sont-ils recyclables ?",
+                 "Oui, emballages concus pour la recyclabilite : privilege du mono-materiau, absence de couches non-separables, encres non-migrantes."),
+                ("Quel pourcentage de contenu recycle dans vos emballages plastiques ?",
+                 "Taux variable selon la gamme. Integration progressive des objectifs PPWR (25-65 % selon type de plastique en 2030) dans notre roadmap R&D."),
+                ("Anticipez-vous les nouvelles obligations PPWR 2025-2030 ?",
+                 "Oui, veille reglementaire active. Chaque article est evalue pour identifier les evolutions produit necessaires avant les echeances applicables."),
+            ]),
+            ("loi-agec", [
+                ("Etes-vous adherents a un eco-organisme REP ?",
+                 "Oui, adhesion Citeo (emballages menagers) et paiement de la contribution REP annuelle. Autres filieres REP selon activite."),
+                ("Affichez-vous le Triman sur vos emballages consommateur ?",
+                 "Oui, sur les produits destines au grand public le logo Triman + Info-Tri est affiche conformement a la loi AGEC."),
+                ("Comment gerez-vous l interdiction plastique a usage unique ?",
+                 "Substitution active vers des alternatives compatibles quand la performance produit le permet."),
+            ]),
+            ("triman", [
+                ("Vos emballages portent-ils le logo Triman ?",
+                 "Oui, sur tous nos produits destines au grand public, avec l Info-Tri correspondant a la couleur du bac."),
+                ("Le format du Triman est-il conforme aux exigences AGEC ?",
+                 "Oui : image visible, taille minimum 6 mm, texte 'Cet emballage se recycle' avec les consignes de tri par materiau."),
+                ("Fournissez-vous les visuels Triman aux clients ?",
+                 "Oui, sur demande nous partageons les visuels haute definition et les specifications techniques."),
+            ]),
+            ("csrd", [
+                ("Etes-vous concernes par la CSRD ?",
+                 "SIFA n est pas assujettie directement (seuils non atteints). Nous preparons un jeu de donnees ESG pour repondre aux demandes de nos clients grands comptes assujettis."),
+                ("Pouvez-vous nous fournir des datapoints ESRS ?",
+                 "Oui, pour les principaux datapoints pertinents (E1 climat, E5 economie circulaire, S1 personnel, G1 gouvernance). Fiche synthese sur demande."),
+                ("Serez-vous prets pour repondre a nos exigences CSRD 2025 ?",
+                 "Oui, notre demarche est structuree pour repondre progressivement aux demandes clients au fil de l entree en vigueur de la CSRD."),
+            ]),
+            ("iso-26000", [
+                ("Appliquez-vous les principes ISO 26000 ?",
+                 "Oui, ISO 26000 sert de cadre a notre demarche RSE. Nous couvrons les 7 questions centrales : gouvernance, droits humains, relations de travail, environnement, loyaute, consommateurs, communautes."),
+                ("Avez-vous un code de conduite RSE ?",
+                 "Oui, code de conduite interne structure autour des 7 questions centrales ISO 26000. Disponible sur demande."),
+                ("ISO 26000 est-elle certifiable ?",
+                 "Non, ISO 26000 est une norme d orientation non certifiable. Nous nous appuyons dessus pour structurer notre demarche et repondre a Ecovadis / SMETA."),
+            ]),
+            ("ecovadis", [
+                ("Etes-vous evalues Ecovadis ?",
+                 "[A completer selon score reel : oui, medaille bronze / argent / or / platine avec score X/100 en annee. Ou : evaluation en cours, resultat attendu date.]"),
+                ("Pouvez-vous partager votre scorecard Ecovadis ?",
+                 "Oui, scorecard disponible via la plateforme Ecovadis a votre demande (autorisation de partage a activer cote SIFA)."),
+                ("Renouvelez-vous votre evaluation annuellement ?",
+                 "Oui, evaluation Ecovadis renouvelee chaque annee pour maintenir la certification a jour."),
+            ]),
+            ("sedex-smeta", [
+                ("Etes-vous inscrits sur la plateforme Sedex ?",
+                 "[A completer selon statut : oui, membre Sedex depuis annee, SAQ a jour, rapport SMETA disponible. Ou : non, nous privilegions Ecovadis.]"),
+                ("Avez-vous passe un audit SMETA sur site ?",
+                 "[Si applicable : oui, dernier audit SMETA 4-piliers realise en date par auditeur. Rapport accessible via Sedex.]"),
+                ("Les resultats SMETA sont-ils partageables ?",
+                 "Oui, via activation de partage sur la plateforme Sedex avec votre societe."),
+            ]),
+            ("sapin-ii", [
+                ("Etes-vous assujettis a la loi Sapin II ?",
+                 "Non, SIFA n atteint pas les seuils Sapin II (500 salaries + 100 M€ CA). Nous appliquons neanmoins les bonnes pratiques anti-corruption."),
+                ("Avez-vous un code de conduite anti-corruption ?",
+                 "Oui, code de conduite anti-corruption + charte cadeaux formalises. Signature par les collaborateurs concernes."),
+                ("Avez-vous un dispositif d alerte interne ?",
+                 "Oui, canal d alerte confidentiel accessible aux collaborateurs et parties prenantes. Contact disponible sur demande."),
+            ]),
+            ("devoir-vigilance", [
+                ("Etes-vous soumis au devoir de vigilance ?",
+                 "Non, SIFA n atteint pas le seuil legal (5 000 salaries en France ou 10 000 monde). Nous partageons neanmoins les valeurs de cette loi."),
+                ("Avez-vous un plan de vigilance ?",
+                 "Oui, plan de vigilance simplifie : cartographie des risques MP, code de conduite fournisseur, dispositif d alerte interne. Disponible sur demande."),
+                ("Comment surveillez-vous votre chaine d approvisionnement ?",
+                 "Evaluation annuelle de nos fournisseurs strategiques (top 20) sur criteres RSE + signature du code de conduite fournisseur SIFA."),
+            ]),
+            ("code-conduite-fournisseur", [
+                ("Avez-vous un code de conduite fournisseur ?",
+                 "Oui, code de conduite fournisseur SIFA (2-3 pages) signe par nos fournisseurs strategiques. Reference ISO 20400."),
+                ("Quels sont les engagements exiges de vos fournisseurs ?",
+                 "Droits humains, absence de travail des enfants, anti-corruption, respect environnemental, sante-securite au travail, respect des lois locales."),
+                ("Pouvons-nous consulter votre code ?",
+                 "Oui, transmission sur demande. Le code est revise annuellement."),
+            ]),
+            ("modern-slavery-act", [
+                ("Etes-vous concernes par le Modern Slavery Act ?",
+                 "Applicable si vente au Royaume-Uni via une entite UK. Sinon, non applicable direct. La clause anti-esclavage moderne est integree a notre code de conduite fournisseur."),
+                ("Pouvez-vous emettre une declaration Modern Slavery ?",
+                 "Oui, declaration ecrite (1 page) confirmant l absence d esclavage moderne connu dans notre chaine d approvisionnement. Delai : 5 jours ouvres."),
+                ("Comment auditez-vous vos fournisseurs sur ce point ?",
+                 "Evaluation annuelle top 20 fournisseurs + signature obligatoire du code de conduite SIFA (clauses anti-esclavage explicitement incluses)."),
+            ]),
+            ("conflict-minerals", [
+                ("Utilisez-vous des mineraux de conflit (3TG) ?",
+                 "SIFA n utilise pas directement d etain, tantale, tungstene ou or dans ses formulations standard. Verification realisee via FDS et declarations fournisseurs."),
+                ("Fournissez-vous un CMRT ?",
+                 "Oui, sur demande nous emettons un Conflict Minerals Reporting Template (CMRT) selon le format RMI."),
+                ("Vos fournisseurs sont-ils certifies pour les 3TG ?",
+                 "Pour les rares cas concernes, les fournisseurs doivent attester d un sourcing responsable via smelter validation ou certification equivalente."),
+            ]),
+            ("iso-9001", [
+                ("Etes-vous certifies ISO 9001 ?",
+                 "[A completer selon statut SIFA : oui, certifies par organisme depuis annee, N° certificat. Ou : non certifies mais SMQ equivalent applique.]"),
+                ("Puis-je consulter votre certificat ?",
+                 "Oui, copie du certificat en cours de validite fournie sur simple demande."),
+                ("Quelle est votre date d audit annuel ?",
+                 "Audit externe annuel realise en [mois]. Prochain audit prevu en [date] — dates precises communicables sur demande."),
+            ]),
+            ("tracabilite-lot", [
+                ("Etes-vous capable de tracer un lot fini vers ses matieres premieres ?",
+                 "Oui, chaque OF est lie a ses lots MP consommes dans notre systeme (MyProd). Tracabilite lot par lot conservee 5 ans minimum."),
+                ("En cas de rappel, en combien de temps identifiez-vous les lots concernes ?",
+                 "Moins d une heure. Recherche via reference lot ou OF, extraction complete des livraisons impactees."),
+                ("Combien de temps conservez-vous les enregistrements de tracabilite ?",
+                 "Minimum 5 ans en base active (10 ans pour agroalimentaire et medical). Archivage securise au-dela."),
+                ("Realisez-vous des exercices de mock-recall ?",
+                 "Oui, exercice annuel de mock-recall pour valider la chaine de tracabilite de bout en bout."),
+            ]),
+            ("oeko-tex", [
+                ("Vos produits sont-ils certifies OEKO-TEX Standard 100 ?",
+                 "SIFA ne fabrique pas de produits textiles en standard, cette certification ne s applique pas a notre offre courante. Pour toute demande specifique, nous consulter."),
+                ("Utilisez-vous des matieres OEKO-TEX certifiees ?",
+                 "Selon la gamme et la demande client, matieres OEKO-TEX approvisionnables sur commande specifique."),
+            ]),
+            ("gots", [
+                ("Vos produits sont-ils certifies GOTS ?",
+                 "SIFA ne fabrique pas de produits textiles bio en standard. Sur demande specifique, sourcing GOTS possible pour projets dedies."),
+                ("Utilisez-vous du coton bio certifie ?",
+                 "Non en standard. Sourcing possible pour projets specifiques via fournisseurs certifies GOTS."),
+            ]),
+            ("iso-45001", [
+                ("Etes-vous certifies ISO 45001 ?",
+                 "[A completer selon statut : oui, certifies depuis annee. Ou : non certifies mais SMS equivalent applique.]"),
+                ("Avez-vous un DUER a jour ?",
+                 "Oui, Document Unique d Evaluation des Risques mis a jour annuellement. Consultation sur demande sous confidentialite."),
+                ("Quel est votre taux de frequence des accidents (TF) ?",
+                 "Indicateur suivi mensuellement. Donnee agregee annuelle disponible sur demande."),
+                ("Avez-vous un CSE et un referent securite ?",
+                 "Oui, CSE actif et referent securite designe. Reunions mensuelles avec compte-rendu."),
+            ]),
+            ("fds-sds", [
+                ("Fournissez-vous les FDS de vos produits ?",
+                 "Oui, FDS au format REACH/CLP (16 sections) en francais, transmises sur demande. Delai : 24-48h ouvres."),
+                ("Vos FDS sont-elles a jour ?",
+                 "Oui, revision tous les 2 ans ou immediatement en cas de changement de formulation fournisseur."),
+                ("Vos operateurs ont-ils acces aux FDS ?",
+                 "Oui, classeur atelier plastifie + version numerique centralisee accessible en permanence."),
+                ("Pouvons-nous recevoir les FDS de tous vos produits en une fois ?",
+                 "Oui, envoi groupe possible sous format PDF ou lien de partage."),
+            ]),
+            ("prop-65", [
+                ("Vos produits sont-ils conformes California Prop 65 ?",
+                 "Nos produits standard ne contiennent pas de substances de la Prop 65 List au-dessus des seuils Safe Harbor. Verification lot par lot pour les commandes destinees a la Californie."),
+                ("Vos produits necessitent-ils un etiquetage Prop 65 ?",
+                 "Non en standard. Si presence identifiee, etiquette d avertissement 'WARNING' appliquee conformement a la reglementation."),
+                ("Pouvez-vous fournir une declaration de non-usage des substances Prop 65 ?",
+                 "Oui, sur demande pour les livraisons destinees a la Californie."),
+            ]),
+            ("pbt-vpvb", [
+                ("Vos produits contiennent-ils des substances PBT ou vPvB ?",
+                 "Non, aucune substance PBT ou vPvB identifiee dans nos matieres premieres selon les FDS et declarations fournisseurs."),
+                ("Comment verifiez-vous l absence de PBT/vPvB ?",
+                 "Verification via FDS section 12 (ecotoxicologie) et declarations fournisseurs. Cross-check avec la Candidate List SVHC de l ECHA."),
+                ("Pouvez-vous fournir une declaration ecrite ?",
+                 "Oui, sur demande. Delai : 48h ouvres."),
+            ]),
+        ]
+        _qa_marker = "Questions type et reponses :"
+        for slug, qa_list in _seed_qa:
+            row = conn.execute("SELECT id, details FROM qualite_ref_fiches WHERE slug=?", (slug,)).fetchone()
+            if not row:
+                continue
+            fid = row["id"]
+            cur_details = row["details"] or ""
+            if _qa_marker not in cur_details:
+                block_lines = [_qa_marker, ""]
+                for q, r in qa_list:
+                    block_lines.append("Q : " + q)
+                    block_lines.append("R : " + r)
+                    block_lines.append("")
+                separator = "\n\n---\n\n" if cur_details.strip() else ""
+                new_details = cur_details + separator + "\n".join(block_lines).rstrip()
+                conn.execute(
+                    "UPDATE qualite_ref_fiches SET details=?, updated_at=? WHERE id=?",
+                    (new_details, _now_iso_145, fid),
+                )
+            for q, _r in qa_list:
+                exist = conn.execute(
+                    "SELECT 1 FROM qualite_ref_questions WHERE fiche_id=? AND texte=?",
+                    (fid, q),
+                ).fetchone()
+                if not exist:
+                    conn.execute(
+                        "INSERT INTO qualite_ref_questions (fiche_id, texte, created_at) VALUES (?, ?, ?)",
+                        (fid, q, _now_iso_145),
+                    )
+        conn.commit()
+        _record_schema_migration(conn, 145, "qualite_ref_qa_v1")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
