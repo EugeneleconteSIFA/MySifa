@@ -4871,11 +4871,12 @@ def _pf_valo_summary(
             else:
                 nb_sans_prix += 1
     total_pf = total_fab + total_neg
-    # Valo PF avec charges = valo_pf * (1 + storage/100) / (1 - charge/100)
-    denom = 1.0 - (charge_prod_pct / 100.0)
-    if denom <= 0:
-        denom = 1.0  # garde-fou : ne devrait jamais arriver (borné à 99.9999)
-    total_pf_avec_charges = total_pf * (1.0 + storage_fees_pct / 100.0) / denom
+    # Valo PF avec charges = valo_pf * (1 + storage/100) * (1 - charge/100)
+    # (charge_production_pct est un multiplicateur (1 - x/100), pas un diviseur)
+    charge_mult = 1.0 - (charge_prod_pct / 100.0)
+    if charge_mult < 0:
+        charge_mult = 0.0  # garde-fou : borné à 100 % max côté validator
+    total_pf_avec_charges = total_pf * (1.0 + storage_fees_pct / 100.0) * charge_mult
     return {
         "total_pf": round(total_pf, 2),
         "total_fabrique": round(total_fab, 2),
@@ -4899,13 +4900,13 @@ def _pf_enrich_charges(
     storage_fees_pct: float,
 ) -> None:
     """Ajoute sur chaque item :
-    - valorisation_avec_charges : (valo * (1 + storage/100)) / (1 - charge/100)
+    - valorisation_avec_charges : valo * (1 + storage/100) * (1 - charge/100)
     - charges_prod : valorisation_avec_charges - valorisation
     """
-    denom = 1.0 - (charge_prod_pct / 100.0)
-    if denom <= 0:
-        denom = 1.0
-    mult = (1.0 + storage_fees_pct / 100.0) / denom
+    charge_mult = 1.0 - (charge_prod_pct / 100.0)
+    if charge_mult < 0:
+        charge_mult = 0.0
+    mult = (1.0 + storage_fees_pct / 100.0) * charge_mult
     for it in items:
         v = float(it.get("valorisation") or 0)
         v_charged = v * mult
