@@ -138,13 +138,33 @@ body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 1
 .login-error{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:16px;display:none}
 .login-error.show{display:block}
 .login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--muted)}
-/* Bandeau staging v1 — fine bande rouge permanente, n'apparaît que si ENV_NAME=v1 */
+/* Bandeau staging v1 — fine bande rouge permanente, n'apparaît que si ENV_NAME=v1.
+   Sert aussi de hôte au sélecteur d'impersonation (superadmin only, v1 & prod). */
 .staging-bandeau{position:fixed;top:0;left:0;right:0;height:24px;background:#dc2626;color:#fff;
   font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
   display:flex;align-items:center;justify-content:center;gap:10px;
   z-index:9999;font-family:'Segoe UI',system-ui,sans-serif;
-  box-shadow:0 1px 6px rgba(220,38,38,.4)}
+  box-shadow:0 1px 6px rgba(220,38,38,.4);padding:0 12px}
 .staging-bandeau::before{content:"●";color:#fef2f2;font-size:9px;line-height:1}
+.staging-bandeau[hidden]{display:none}
+/* Version prod : bandeau indigo (moins alarmant) — affiché uniquement pour superadmin */
+.staging-bandeau.env-prod{background:#4f46e5;box-shadow:0 1px 6px rgba(79,70,229,.4)}
+/* État impersonation active : ambre pour bien signaler qu'on joue un rôle */
+.staging-bandeau.impersonating{background:#d97706;box-shadow:0 1px 6px rgba(217,119,6,.4)}
+.staging-bandeau .msf-imp-msg{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.staging-bandeau .msf-imp-slot{margin-left:auto;display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:600}
+.staging-bandeau .msf-imp-slot select{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);
+  border-radius:6px;padding:2px 6px;font-size:11px;font-family:inherit;font-weight:600;line-height:16px;height:20px;cursor:pointer}
+.staging-bandeau .msf-imp-slot select option{color:#111827;background:#fff}
+.staging-bandeau .msf-imp-slot button{background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.45);
+  border-radius:6px;padding:2px 10px;font-size:11px;font-family:inherit;font-weight:700;line-height:16px;height:20px;cursor:pointer;text-transform:uppercase;letter-spacing:.5px}
+.staging-bandeau .msf-imp-slot button:hover{background:rgba(255,255,255,.32)}
+.staging-bandeau .msf-imp-slot .msf-imp-stop{background:#fff;color:#b45309}
+.staging-bandeau .msf-imp-slot .msf-imp-stop:hover{background:#fef3c7}
+@media (max-width:640px){
+  .staging-bandeau{font-size:10px;gap:6px;padding:0 6px}
+  .staging-bandeau .msf-imp-slot select{max-width:110px}
+}
 body.has-staging-bandeau{padding-top:24px}
 body.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}
 body.has-staging-bandeau .mobile-topbar{top:24px}
@@ -2409,7 +2429,11 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 </style>
 </head>
 <body class="__STAGING_BODY_CLASS__">
-__STAGING_BANDEAU_HTML__
+<div class="staging-bandeau __STAGING_INITIAL_CLASS__" id="msf-staging-bandeau" __STAGING_INITIAL_HIDDEN__>
+  <span class="msf-imp-msg" id="msf-staging-msg">__STAGING_INITIAL_MSG__</span>
+  <span class="msf-imp-slot" id="msf-impersonate-slot" hidden></span>
+</div>
+<script>window.__MYSIFA_ENV__="__ENV_NAME_VALUE__";</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
@@ -2419,6 +2443,7 @@ __STAGING_BANDEAU_HTML__
 <div id="gsm-backdrop" class="gsm-backdrop" aria-hidden="true"></div>
 <div id="gsm-modal" class="gsm-modal" role="dialog" aria-modal="true" aria-label="Recherche Google" aria-hidden="true"></div>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_impersonate.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_resize.js"></script>
@@ -14503,23 +14528,27 @@ _DEFAULT_CONFIG = {
 
 def render_frontend_html(initial_app: str = "portal") -> str:
     cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
-    # Bandeau staging : injecté seulement si ENV_NAME=v1. v2 prod = chaîne vide.
+    # Bandeau : toujours dans le DOM. Visibilité initiale = IS_STAGING (rouge).
+    # En prod : caché par défaut ; le JS d'impersonation le révèle pour le superadmin.
     if IS_STAGING:
-        staging_html = (
-            '<div class="staging-bandeau">'
-            'v1 — Environnement de test — DB partagée avec la prod'
-            '</div>'
-        )
-        staging_class = "has-staging-bandeau"
+        staging_body_class = "has-staging-bandeau"
+        staging_initial_class = ""  # rouge par défaut (staging)
+        staging_initial_hidden = ""
+        staging_initial_msg = "v1 — Environnement de test — DB partagée avec la prod"
     else:
-        staging_html = ""
-        staging_class = ""
+        staging_body_class = ""
+        staging_initial_class = "env-prod"
+        staging_initial_hidden = "hidden"
+        staging_initial_msg = ""
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
         .replace("__V_LABEL__", f"v{APP_VERSION}")
-        .replace("__STAGING_BANDEAU_HTML__", staging_html)
-        .replace("__STAGING_BODY_CLASS__", staging_class)
+        .replace("__STAGING_BODY_CLASS__", staging_body_class)
+        .replace("__STAGING_INITIAL_CLASS__", staging_initial_class)
+        .replace("__STAGING_INITIAL_HIDDEN__", staging_initial_hidden)
+        .replace("__STAGING_INITIAL_MSG__", staging_initial_msg)
+        .replace("__ENV_NAME_VALUE__", ENV_NAME)
         .replace("__INITIAL_APP_VALUE__", initial_app)
         .replace("__TOUCH_ICON__", cfg["touch_icon"])
         .replace("__APP_TITLE__", cfg["app_title"])

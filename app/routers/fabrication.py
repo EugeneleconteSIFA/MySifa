@@ -13,7 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
 from config import classify_operation
-from app.services.auth_service import get_current_user, is_fabrication, is_admin
+from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
 
 router = APIRouter()
@@ -226,9 +226,12 @@ def _resolve_machine(user: dict, body: dict, conn) -> dict:
     Retourne le dict machine pour la saisie.
     - Opérateur normal : machine liée au compte (machine_id).
     - Admin sans machine liée : utilise machine_id passé dans le body.
+    - Superadmin en simulation : utilise la machine simulée (effective_machine_id).
     Lève 400 si aucune machine identifiable.
     """
-    machine_id = user.get("machine_id")
+    # effective_machine_id renvoie la machine simulée si superadmin impersonne,
+    # sinon la machine réelle du compte.
+    machine_id = effective_machine_id(user) or user.get("machine_id")
 
     # Admin peut surcharger avec le machine_id du body
     if is_admin(user) and body.get("machine_id"):
@@ -326,7 +329,7 @@ def list_dossiers(request: Request, machine_id: int = None):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = user.get("machine_id") or machine_id
+    mid = effective_machine_id(user) or machine_id
     q = (request.query_params.get("q") or "").strip()
 
     statut_sql = "pe.statut IN ('attente','en_cours')"
@@ -394,7 +397,7 @@ def get_session(request: Request, machine_id: int = None):
     _check_fab_access(user)
 
     # machine_id : préférence compte utilisateur, sinon query param (admin)
-    mid = user.get("machine_id") or machine_id
+    mid = effective_machine_id(user) or machine_id
     
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
@@ -560,8 +563,9 @@ def get_dossier_en_cours(request: Request):
             or _machine_id_for_ref(conn, fallback_ref)
         if mid is None:
             try:
-                if user.get("machine_id") is not None:
-                    mid = int(user.get("machine_id"))
+                emid = effective_machine_id(user)
+                if emid is not None:
+                    mid = int(emid)
             except (TypeError, ValueError):
                 mid = None
 
@@ -822,8 +826,8 @@ async def create_saisie(request: Request):
     cl = classify_operation(op_str)
 
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
-    # machine_id : préférence compte utilisateur
-    mid = user.get("machine_id")
+    # machine_id : préférence compte utilisateur (impersonation-aware)
+    mid = effective_machine_id(user)
     
     operateur = user.get("operateur_lie") or ""
     if is_admin(user) and body.get("operateur"):
@@ -1241,7 +1245,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = user.get("machine_id") or machine_id
+    mid = effective_machine_id(user) or machine_id
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
     if not operateur:
@@ -1735,7 +1739,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
-            mid = user.get("machine_id") or machine_id
+            mid = effective_machine_id(user) or machine_id
             where = "1=1"
             params: list = []
             if mid and not is_admin(user):
@@ -2851,7 +2855,7 @@ def list_dossiers_repiquage(request: Request):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = user.get("machine_id") or request.query_params.get("machine_id")
+    mid = effective_machine_id(user) or request.query_params.get("machine_id")
     if mid:
         try:
             mid = int(mid)

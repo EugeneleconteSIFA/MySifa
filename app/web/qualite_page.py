@@ -22,9 +22,17 @@ def qualite_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/qualite", status_code=302)
         raise
-    if user["role"] not in ROLES_QUALITE:
-        return access_denied_response("Qualité")
-    html = QUALITE_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
+    # Acces module Qualite :
+    # - Roles ROLES_QUALITE (superadmin/direction/administration) : acces complet
+    #   (NC, Canaux NC, Audits client, Referentiel RSE).
+    # - Autres roles connectes : acces limite au Referentiel en lecture/proposition.
+    #   Les tabs NC / Canaux / Audits sont masques via le flag IS_QUALITE_ADMIN cote JS.
+    is_admin = user["role"] in ROLES_QUALITE
+    html = (
+        QUALITE_HTML
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__IS_QUALITE_ADMIN__", "true" if is_admin else "false")
+    )
     return HTMLResponse(
         content=html,
         headers={
@@ -317,12 +325,12 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <div class="logo-brand">My<span>Qualité</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <button type="button" class="nav-btn active" onclick="setView('list')">
+    <button type="button" class="nav-btn active" id="nav-nc" onclick="setView('list')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
       Non-conformités
       <span class="nav-badge" id="sb-unread" style="display:none">0</span>
     </button>
-    <button type="button" class="nav-btn" onclick="toggleCanaux()">
+    <button type="button" class="nav-btn" id="nav-canaux" onclick="toggleCanaux()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
       Canaux NC
       <span class="nav-badge" id="sb-unread2" style="display:none">0</span>
@@ -331,6 +339,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
       Audits client
       <span class="nav-badge" id="sb-audits" style="display:none">0</span>
+    </button>
+    <button type="button" class="nav-btn" id="nav-ref" onclick="setView('ref-list')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Référentiel RSE
     </button>
 
     <div class="sidebar-bottom">
@@ -541,6 +553,21 @@ const S = {
   auditeursCandidats: [],
   clientsResults: [],
   audUnread: 0,
+  // ── Référentiel RSE ───────────────────────────────────────────
+  refMeta: null,             // {categories, statuts_sifa, statuts_validation}
+  refFiches: [],
+  currentRef: null,
+  refSearch: '',
+  refFilterCat: 'all',       // 'all' | 'environnement' | 'social' | 'tracabilite' | 'securite'
+  refFilterStatV: 'all',     // 'all' | 'brouillon' | 'en_revue' | 'valide'
+  refFilterStatS: 'all',     // 'all' | 'conforme' | 'partiel' | 'en_cours' | 'non_applicable' | 'a_evaluer'
+  refValideOnly: false,      // filtre "valides uniquement"
+  refEdit: false,            // mode édition dans la vue détail
+  refEditBuf: null,          // buffer d'édition
+  refSuggests: null,         // {questions:[], fiches:[]}
+  refSuggestIx: -1,          // index sélectionné dans le dropdown
+  refAuditsPicker: [],       // audits pour le picker de lien
+  isQualiteAdmin: __IS_QUALITE_ADMIN__,
 };
 
 const STATUTS = [
@@ -718,6 +745,15 @@ function setView(v){
     const navAud=document.getElementById('nav-audits'); if(navAud) navAud.classList.add('active');
     document.getElementById('mobile-sub').textContent=S.currentAudit?S.currentAudit.numero:'Audit';
     renderAuditDetail();
+  } else if(v==='ref-list'){
+    const nav=document.getElementById('nav-ref'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent='Référentiel RSE';
+    if(typeof loadRefFiches==='function') loadRefFiches();
+    else renderRefList();
+  } else if(v==='ref-detail'){
+    const nav=document.getElementById('nav-ref'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent=S.currentRef?S.currentRef.nom:'Fiche';
+    renderRefDetail();
   }
   closeSidebar();
 }
@@ -2201,12 +2237,686 @@ async function addAuditeurNow(uid){
 // ── Init ───────────────────────────────────────────────────────────
 async function init(){
   updateThemeBtn();
-  await Promise.all([loadMe(),loadUsers()]);
-  await Promise.all([loadNCs(),loadCanaux(),loadUnread()]);
+  await loadMe();
+  // Masquer les tabs reservees aux roles Qualite si l utilisateur n a pas les droits
+  if(!S.isQualiteAdmin){
+    ['nav-nc','nav-canaux','nav-audits'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.style.display='none';
+    });
+    // Basculer directement sur le referentiel
+    setView('ref-list');
+    // Charger meta + fiches
+    await loadRefMeta();
+    await loadRefFiches();
+    return;
+  }
+  await loadUsers();
+  await Promise.all([loadNCs(),loadCanaux(),loadUnread(),loadRefMeta()]);
   // Précharger les candidats auditeurs (utile dès l'ouverture de la modal création audit)
   if(typeof loadAuditeursCandidats==='function') loadAuditeursCandidats();
   setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE RÉFÉRENTIEL RSE / NORMES & CERTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+(function injectRefCss(){
+  if(document.getElementById('ref-css')) return;
+  const st=document.createElement('style'); st.id='ref-css';
+  st.textContent = `
+.ref-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:16px}
+.ref-search-wrap{position:relative;flex:1 1 320px;min-width:240px}
+.ref-search-wrap input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 14px 11px 40px;color:var(--text);font-family:inherit;font-size:13px;transition:border-color .15s}
+.ref-search-wrap input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.ref-search-wrap .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.ref-search-wrap .kbd{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 6px;background:var(--card)}
+.ref-sugg{position:absolute;left:0;right:0;top:calc(100% + 4px);background:var(--card);border:1px solid var(--border);border-radius:10px;z-index:40;max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.ref-sugg-group{padding:6px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-top:1px solid var(--border)}
+.ref-sugg-group:first-child{border-top:none}
+.ref-sugg-item{padding:9px 12px;cursor:pointer;font-size:13px;color:var(--text2);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ref-sugg-item:hover,.ref-sugg-item.hl{background:var(--accent-bg);color:var(--text)}
+.ref-sugg-item .tag{font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+
+.ref-filters{display:flex;flex-wrap:wrap;gap:6px}
+.ref-filter{border:1px solid var(--border);background:var(--card);color:var(--text2);border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;transition:all .15s;font-family:inherit}
+.ref-filter:hover{border-color:var(--accent);color:var(--text)}
+.ref-filter.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);font-weight:600}
+.ref-filter .cnt{margin-left:6px;font-size:10px;opacity:.7}
+
+.ref-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.ref-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s;display:flex;flex-direction:column;gap:10px}
+.ref-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.ref-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.ref-card-title{font-weight:700;color:var(--text);font-size:15px;line-height:1.3}
+.ref-card-acr{font-size:11px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:2px}
+.ref-card-def{font-size:12.5px;color:var(--text2);line-height:1.5;flex:1;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ref-card-foot{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:11px;color:var(--muted)}
+.ref-cat{border-radius:6px;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.ref-cat--environnement{background:rgba(52,211,153,.12);color:var(--ok);border:1px solid rgba(52,211,153,.3)}
+.ref-cat--social{background:rgba(34,211,238,.12);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
+.ref-cat--tracabilite{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.3)}
+.ref-cat--securite{background:rgba(248,113,113,.12);color:var(--danger);border:1px solid rgba(248,113,113,.3)}
+
+.ref-dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:4px;vertical-align:middle}
+.ref-dot--conforme{background:var(--ok)}
+.ref-dot--partiel{background:var(--warn)}
+.ref-dot--en_cours{background:var(--accent)}
+.ref-dot--non_applicable{background:var(--muted)}
+.ref-dot--a_evaluer{background:var(--muted);opacity:.5}
+
+.ref-badge{border-radius:6px;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.ref-badge--brouillon{background:rgba(148,163,184,.15);color:var(--muted);border:1px solid var(--border)}
+.ref-badge--en_revue{background:rgba(251,191,36,.15);color:var(--warn);border:1px solid rgba(251,191,36,.3)}
+.ref-badge--valide{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid rgba(52,211,153,.3)}
+
+.ref-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:20px 24px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:16px;flex-wrap:wrap}
+.ref-detail-title{font-size:22px;font-weight:700;color:var(--text);margin:0;line-height:1.2}
+.ref-detail-sub{font-size:12px;color:var(--muted);margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ref-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 22px;margin-bottom:14px}
+.ref-block h3{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px 0}
+.ref-block p{color:var(--text2);font-size:13.5px;line-height:1.6;margin:0;white-space:pre-wrap}
+.ref-block textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:13px;resize:vertical;min-height:80px;transition:border-color .15s}
+.ref-block textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.ref-block input[type=text],.ref-block input[type=url],.ref-block select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;transition:border-color .15s}
+.ref-block input:focus,.ref-block select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.ref-field{margin-bottom:12px}
+.ref-field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
+
+.ref-questions-list{display:flex;flex-direction:column;gap:6px}
+.ref-question-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)}
+.ref-question-item:hover{border-color:var(--accent)}
+.ref-question-item .x{cursor:pointer;color:var(--muted);opacity:.6;font-size:16px}
+.ref-question-item .x:hover{color:var(--danger);opacity:1}
+
+.ref-audits-list{display:flex;flex-direction:column;gap:8px}
+.ref-audit-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .15s}
+.ref-audit-item:hover{border-color:var(--accent)}
+.ref-audit-item .num{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}
+.ref-audit-item .client{color:var(--text);font-weight:600;font-size:13px}
+.ref-audit-item .date{font-size:11px;color:var(--muted)}
+
+.ref-files-list{display:flex;flex-direction:column;gap:6px}
+.ref-file-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+.ref-file-item a{color:var(--accent);text-decoration:none;font-size:13px;flex:1;display:flex;align-items:center;gap:8px}
+.ref-file-item a:hover{text-decoration:underline}
+.ref-file-item .sz{font-size:11px;color:var(--muted)}
+.ref-file-item .x{cursor:pointer;color:var(--muted);opacity:.6;font-size:14px}
+.ref-file-item .x:hover{color:var(--danger);opacity:1}
+
+.ref-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.ref-tag{background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:10.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+.ref-empty{padding:60px 20px;text-align:center;color:var(--muted)}
+.ref-empty .emp-title{font-size:15px;color:var(--text);font-weight:600;margin-bottom:6px}
+.ref-empty .emp-sub{font-size:12px;line-height:1.5}
+`;
+  document.head.appendChild(st);
+})();
+
+// ─── Chargement méta et fiches ────────────────────────────────────────────
+async function loadRefMeta(){
+  try{
+    const r = await api('/api/qualite/ref/meta');
+    if(r.ok) S.refMeta = await r.json();
+  }catch(e){}
+}
+
+async function loadRefFiches(){
+  try{
+    const qs = [];
+    if(S.refSearch.trim()) qs.push('q='+encodeURIComponent(S.refSearch.trim()));
+    if(S.refFilterCat!=='all') qs.push('categorie='+S.refFilterCat);
+    if(S.refFilterStatV!=='all') qs.push('statut_validation='+S.refFilterStatV);
+    if(S.refFilterStatS!=='all') qs.push('statut_sifa='+S.refFilterStatS);
+    if(S.refValideOnly) qs.push('valide_only=1');
+    const url = '/api/qualite/ref/fiches' + (qs.length?'?'+qs.join('&'):'');
+    const r = await api(url);
+    if(!r.ok){ showToast('Erreur chargement fiches','danger'); return; }
+    S.refFiches = await r.json();
+    if(S.view==='ref-list') renderRefList();
+  }catch(e){}
+}
+
+// ─── Rendu liste ──────────────────────────────────────────────────────────
+function _refCatLabel(k){
+  if(!S.refMeta) return k;
+  const c = S.refMeta.categories.find(x=>x.key===k); return c?c.label:k;
+}
+function _refStatSLabel(k){
+  if(!S.refMeta) return k;
+  const s = S.refMeta.statuts_sifa.find(x=>x.key===k); return s?s.label:k;
+}
+function _refStatVLabel(k){
+  if(!S.refMeta) return k;
+  const s = S.refMeta.statuts_validation.find(x=>x.key===k); return s?s.label:k;
+}
+
+function renderRefList(){
+  const root = document.getElementById('content');
+  // Sauvegarder focus et curseur (searchbar)
+  const ae = document.activeElement;
+  const focusId = ae ? ae.id : null;
+  const caretS = ae ? ae.selectionStart : null;
+  const caretE = ae ? ae.selectionEnd : null;
+
+  const cats = (S.refMeta && S.refMeta.categories) || [];
+  // Compteurs par catégorie (basé sur la liste actuellement filtrée par statut/search)
+  const countBy = {all: S.refFiches.length};
+  cats.forEach(c=>{ countBy[c.key] = S.refFiches.filter(f=>f.categorie===c.key).length; });
+
+  const filtersHtml = `
+    <button type="button" class="ref-filter${S.refFilterCat==='all'?' active':''}" onclick="setRefCat('all')">Toutes<span class="cnt">${countBy.all}</span></button>
+    ${cats.map(c=>`<button type="button" class="ref-filter${S.refFilterCat===c.key?' active':''}" onclick="setRefCat('${c.key}')">${escHtml(c.label)}<span class="cnt">${countBy[c.key]||0}</span></button>`).join('')}
+  `;
+
+  const shown = S.refFilterCat==='all' ? S.refFiches : S.refFiches.filter(f=>f.categorie===S.refFilterCat);
+
+  let body;
+  if(!shown.length){
+    body = `<div class="ref-empty">
+      <div class="emp-title">${S.refSearch?'Aucun résultat pour « '+escHtml(S.refSearch)+' »':'Aucune fiche'}</div>
+      <div class="emp-sub">${S.refSearch?'Essayez un autre terme ou effacez le filtre.':'Créez la première fiche avec le bouton ci-dessus.'}</div>
+    </div>`;
+  } else {
+    body = `<div class="ref-grid">${shown.map(f=>{
+      const acr = f.acronyme ? `<div class="ref-card-acr">${escHtml(f.acronyme)}</div>` : '';
+      const dot = `<span class="ref-dot ref-dot--${escAttr(f.statut_sifa)}" title="${escAttr(_refStatSLabel(f.statut_sifa))}"></span>`;
+      const badgeV = `<span class="ref-badge ref-badge--${escAttr(f.statut_validation)}">${escHtml(_refStatVLabel(f.statut_validation))}</span>`;
+      const cat = `<span class="ref-cat ref-cat--${escAttr(f.categorie)}">${escHtml(_refCatLabel(f.categorie))}</span>`;
+      const meta = [];
+      if(f.audits_count) meta.push(f.audits_count+' audit'+(f.audits_count>1?'s':''));
+      if(f.files_count) meta.push(f.files_count+' PJ');
+      if(f.questions_count) meta.push(f.questions_count+' Q');
+      return `<div class="ref-card" onclick="openRef(${f.id})">
+        <div class="ref-card-head">
+          <div>
+            <div class="ref-card-title">${escHtml(f.nom)}</div>
+            ${acr}
+          </div>
+          ${badgeV}
+        </div>
+        <div class="ref-card-def">${escHtml(f.definition||'')}</div>
+        <div class="ref-card-foot">
+          ${cat}
+          <span title="Statut SIFA">${dot}${escHtml(_refStatSLabel(f.statut_sifa))}</span>
+          ${meta.length?'<span style="margin-left:auto">'+meta.join(' · ')+'</span>':''}
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  root.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0;font-size:20px;color:var(--text)">Référentiel RSE</h2>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Normes, certifications et questions clients type</div>
+      </div>
+      <button type="button" class="btn btn-accent" onclick="openCreateRefModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nouvelle fiche
+      </button>
+    </div>
+    <div class="ref-toolbar">
+      <div class="ref-search-wrap">
+        <span class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+        <input type="search" id="ref-search" autocomplete="off" placeholder="Rechercher une norme, une question client, un mot-clé…" value="${escAttr(S.refSearch)}"
+          oninput="onRefSearch(this.value)" onfocus="loadRefSuggests()"
+          onkeydown="onRefSearchKey(event)" onblur="setTimeout(closeRefSuggests,150)">
+        <span class="kbd">/</span>
+        <div id="ref-sugg" class="ref-sugg" style="display:none"></div>
+      </div>
+      <div class="ref-filters">${filtersHtml}</div>
+    </div>
+    <div class="ref-toolbar" style="margin-top:-8px;margin-bottom:16px">
+      <div class="ref-filters">
+        <button type="button" class="ref-filter${S.refFilterStatV==='all'?' active':''}" onclick="setRefStatV('all')">Tous statuts</button>
+        <button type="button" class="ref-filter${S.refFilterStatV==='brouillon'?' active':''}" onclick="setRefStatV('brouillon')">Brouillons</button>
+        <button type="button" class="ref-filter${S.refFilterStatV==='en_revue'?' active':''}" onclick="setRefStatV('en_revue')">En revue</button>
+        <button type="button" class="ref-filter${S.refFilterStatV==='valide'?' active':''}" onclick="setRefStatV('valide')">Validées</button>
+      </div>
+    </div>
+    ${body}
+  `;
+
+  // Restaurer focus/curseur
+  if(focusId){
+    const el = document.getElementById(focusId);
+    if(el){ el.focus(); if(caretS!=null){ try{ el.setSelectionRange(caretS, caretE); }catch(e){} } }
+  }
+}
+
+// ─── Filtres ──────────────────────────────────────────────────────────────
+function setRefCat(k){ S.refFilterCat = k; renderRefList(); }
+function setRefStatV(k){ S.refFilterStatV = k; loadRefFiches(); }
+
+let _refSearchTm = null;
+function onRefSearch(v){
+  S.refSearch = v;
+  clearTimeout(_refSearchTm);
+  _refSearchTm = setTimeout(()=>{ loadRefFiches(); loadRefSuggests(); }, 220);
+}
+function onRefSearchKey(ev){
+  const box = document.getElementById('ref-sugg');
+  if(!box || box.style.display==='none'){
+    if(ev.key==='Escape'){ ev.target.value=''; onRefSearch(''); }
+    return;
+  }
+  const items = box.querySelectorAll('.ref-sugg-item');
+  if(ev.key==='ArrowDown'){ ev.preventDefault(); S.refSuggestIx = Math.min(items.length-1, S.refSuggestIx+1); _hlSugg(items); }
+  else if(ev.key==='ArrowUp'){ ev.preventDefault(); S.refSuggestIx = Math.max(-1, S.refSuggestIx-1); _hlSugg(items); }
+  else if(ev.key==='Enter' && S.refSuggestIx>=0){ ev.preventDefault(); items[S.refSuggestIx].click(); }
+  else if(ev.key==='Escape'){ closeRefSuggests(); }
+}
+function _hlSugg(items){ items.forEach((it,i)=>it.classList.toggle('hl', i===S.refSuggestIx)); }
+
+async function loadRefSuggests(){
+  const q = S.refSearch.trim();
+  if(q.length<2){ closeRefSuggests(); return; }
+  try{
+    const r = await api('/api/qualite/ref/suggestions?q='+encodeURIComponent(q));
+    if(!r.ok) return;
+    S.refSuggests = await r.json();
+    S.refSuggestIx = -1;
+    renderRefSuggests();
+  }catch(e){}
+}
+function renderRefSuggests(){
+  const box = document.getElementById('ref-sugg'); if(!box) return;
+  const s = S.refSuggests; if(!s){ box.style.display='none'; return; }
+  const hasQ = s.questions && s.questions.length;
+  const hasF = s.fiches && s.fiches.length;
+  if(!hasQ && !hasF){ box.style.display='none'; return; }
+  let html = '';
+  if(hasQ){
+    html += '<div class="ref-sugg-group">Questions clients</div>';
+    html += s.questions.map(q=>`<div class="ref-sugg-item" onclick="openRef(${q.fiche_id})"><span>${escHtml(q.texte)}</span><span class="tag">${escHtml(q.acronyme||q.fiche_nom)}</span></div>`).join('');
+  }
+  if(hasF){
+    html += '<div class="ref-sugg-group">Fiches</div>';
+    html += s.fiches.map(f=>`<div class="ref-sugg-item" onclick="openRef(${f.fiche_id})"><span>${escHtml(f.fiche_nom)}</span><span class="tag">${escHtml(f.acronyme||'')}</span></div>`).join('');
+  }
+  box.innerHTML = html;
+  box.style.display = 'block';
+}
+function closeRefSuggests(){ const b=document.getElementById('ref-sugg'); if(b){ b.style.display='none'; } S.refSuggestIx=-1; }
+
+// ─── Ouverture / rendu détail ─────────────────────────────────────────────
+async function openRef(id){
+  try{
+    const r = await api('/api/qualite/ref/fiches/'+id);
+    if(!r.ok){ showToast('Fiche introuvable','danger'); return; }
+    S.currentRef = await r.json();
+    S.refEdit = false;
+    S.refEditBuf = null;
+    closeRefSuggests();
+    setView('ref-detail');
+  }catch(e){}
+}
+
+function renderRefDetail(){
+  const root = document.getElementById('content');
+  const f = S.currentRef;
+  if(!f){ root.innerHTML='<div class="ref-empty"><div class="emp-title">Fiche introuvable</div></div>'; return; }
+
+  const cats = (S.refMeta && S.refMeta.categories) || [];
+  const statsS = (S.refMeta && S.refMeta.statuts_sifa) || [];
+  const badge = `<span class="ref-badge ref-badge--${escAttr(f.statut_validation)}">${escHtml(_refStatVLabel(f.statut_validation))}</span>`;
+  const cat = `<span class="ref-cat ref-cat--${escAttr(f.categorie)}">${escHtml(_refCatLabel(f.categorie))}</span>`;
+  const dot = `<span class="ref-dot ref-dot--${escAttr(f.statut_sifa)}"></span>`;
+
+  const isAdmin = S.isQualiteAdmin;
+  const canValidate = isAdmin && f.statut_validation==='en_revue';
+  const canReject = isAdmin && f.statut_validation==='en_revue';
+  const canSubmit = f.statut_validation==='brouillon';
+  const canDelete = isAdmin;
+
+  // Actions en tête
+  const actions = [];
+  if(!S.refEdit){
+    actions.push(`<button class="btn btn-ghost" onclick="startRefEdit()">Modifier</button>`);
+    if(canSubmit) actions.push(`<button class="btn btn-accent" onclick="submitRef(${f.id})">Soumettre en revue</button>`);
+    if(canValidate) actions.push(`<button class="btn btn-accent" onclick="validateRef(${f.id})">Valider</button>`);
+    if(canReject) actions.push(`<button class="btn btn-ghost" onclick="rejectRef(${f.id})">Rejeter</button>`);
+    if(canDelete) actions.push(`<button class="btn btn-ghost" style="color:var(--danger)" onclick="deleteRef(${f.id})">Supprimer</button>`);
+  } else {
+    actions.push(`<button class="btn btn-ghost" onclick="cancelRefEdit()">Annuler</button>`);
+    actions.push(`<button class="btn btn-accent" onclick="saveRefEdit()">Enregistrer</button>`);
+  }
+
+  // Bloc "Position SIFA"
+  const positionHtml = S.refEdit
+    ? `<textarea id="ref-position">${escHtml(S.refEditBuf.position_sifa||'')}</textarea>`
+    : (f.position_sifa
+        ? `<p>${escHtml(f.position_sifa)}</p>`
+        : `<p style="color:var(--muted);font-style:italic">Notre position n'a pas encore été renseignée.</p>`);
+
+  // Bloc "Détails"
+  const detailsHtml = S.refEdit
+    ? `<textarea id="ref-details" style="min-height:120px">${escHtml(S.refEditBuf.details||'')}</textarea>`
+    : (f.details
+        ? `<p>${escHtml(f.details)}</p>`
+        : `<p style="color:var(--muted);font-style:italic">Pas de détails complémentaires.</p>`);
+
+  // Bloc "Définition" éditable
+  const defHtml = S.refEdit
+    ? `<textarea id="ref-def">${escHtml(S.refEditBuf.definition||'')}</textarea>`
+    : `<p>${escHtml(f.definition||'')}</p>`;
+
+  // Bandeau haut
+  const headHtml = S.refEdit
+    ? `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;width:100%">
+        <input type="text" id="ref-nom" value="${escAttr(S.refEditBuf.nom||'')}" placeholder="Nom" style="flex:1 1 220px;font-size:16px;font-weight:700">
+        <input type="text" id="ref-acr" value="${escAttr(S.refEditBuf.acronyme||'')}" placeholder="Acronyme" style="flex:0 1 120px">
+        <select id="ref-cat">${cats.map(c=>`<option value="${c.key}"${c.key===S.refEditBuf.categorie?' selected':''}>${escHtml(c.label)}</option>`).join('')}</select>
+        <select id="ref-stat-sifa">${statsS.map(s=>`<option value="${s.key}"${s.key===S.refEditBuf.statut_sifa?' selected':''}>${escHtml(s.label)}</option>`).join('')}</select>
+      </div>`
+    : `<div>
+        <h2 class="ref-detail-title">${escHtml(f.nom)}${f.acronyme?` <span style="font-size:14px;color:var(--muted);font-family:ui-monospace,monospace;font-weight:400">${escHtml(f.acronyme)}</span>`:''}</h2>
+        <div class="ref-detail-sub">
+          ${cat} ${badge}
+          <span title="Statut SIFA">${dot}${escHtml(_refStatSLabel(f.statut_sifa))}</span>
+          ${f.source_url?`<a href="${escAttr(f.source_url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:11px">Source officielle ↗</a>`:''}
+        </div>
+      </div>`;
+
+  // Tags
+  const tagsList = (f.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
+  const tagsHtml = S.refEdit
+    ? `<div class="ref-field"><label>Mots-clés (séparés par virgule)</label><input type="text" id="ref-tags" style="width:100%" value="${escAttr(S.refEditBuf.tags||'')}"></div>`
+    : (tagsList.length?`<div class="ref-tags">${tagsList.map(t=>`<span class="ref-tag">${escHtml(t)}</span>`).join('')}</div>`:'');
+
+  const sourceHtml = S.refEdit
+    ? `<div class="ref-field"><label>Source officielle (URL)</label><input type="url" id="ref-src" style="width:100%" value="${escAttr(S.refEditBuf.source_url||'')}" placeholder="https://..."></div>`
+    : '';
+
+  // Questions type
+  const questionsHtml = `
+    <div class="ref-block">
+      <h3>Questions clients type <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${(f.questions||[]).length}) — alimentent la recherche</span></h3>
+      <div class="ref-questions-list">
+        ${(f.questions||[]).map(q=>`<div class="ref-question-item"><span>${escHtml(q.texte)}</span><span class="x" onclick="deleteRefQuestion(${f.id},${q.id})" title="Retirer">×</span></div>`).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucune question enregistrée.</div>'}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input type="text" id="ref-newq" placeholder="Ex : vos produits sont-ils conformes REACH ?" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px">
+        <button class="btn btn-accent" onclick="addRefQuestion(${f.id})">Ajouter</button>
+      </div>
+    </div>`;
+
+  // Audits liés
+  const auditsHtml = `
+    <div class="ref-block">
+      <h3>Audits client liés <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${(f.audits||[]).length})</span></h3>
+      <div class="ref-audits-list">
+        ${(f.audits||[]).map(a=>`<div class="ref-audit-item" onclick="location.href='/qualite?audit=${a.id}'">
+            <div>
+              <div class="num">${escHtml(a.numero)}</div>
+              <div class="client">${escHtml(a.client_nom)}</div>
+              ${a.note?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${escHtml(a.note)}</div>`:''}
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="date">${escHtml(a.date_audit||'')}</div>
+              <span class="x" onclick="event.stopPropagation();unlinkRefAudit(${f.id},${a.id})" title="Délier">×</span>
+            </div>
+          </div>`).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun audit client lié.</div>'}
+      </div>
+      <button class="btn btn-ghost" style="margin-top:10px" onclick="openLinkAuditModal(${f.id})">+ Lier un audit</button>
+    </div>`;
+
+  // Fichiers
+  const filesHtml = `
+    <div class="ref-block">
+      <h3>Pièces jointes <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${(f.fichiers||[]).length})</span></h3>
+      <div class="ref-files-list">
+        ${(f.fichiers||[]).map(fi=>`<div class="ref-file-item">
+            <a href="/api/qualite/ref/fichiers/${fi.id}/download" target="_blank">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              ${escHtml(fi.original_name)}
+            </a>
+            <span class="sz">${Math.round((fi.size_bytes||0)/1024)} Ko</span>
+            <span class="x" onclick="deleteRefFile(${fi.id})" title="Supprimer">×</span>
+          </div>`).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucune pièce jointe.</div>'}
+      </div>
+      <label class="btn btn-ghost" style="margin-top:10px;display:inline-flex;align-items:center;gap:6px">
+        <input type="file" style="display:none" onchange="uploadRefFile(${f.id}, this)">
+        + Ajouter une pièce jointe
+      </label>
+    </div>`;
+
+  // Métadonnées bas
+  const metaFoot = `<div style="font-size:11px;color:var(--muted);margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+    Créé le ${escHtml(f.created_at||'')} ${f.created_by_nom?'par '+escHtml(f.created_by_nom):''}
+    · Mis à jour le ${escHtml(f.updated_at||'')} ${f.updated_by_nom?'par '+escHtml(f.updated_by_nom):''}
+    ${f.validated_at?' · Validé le '+escHtml(f.validated_at)+(f.validated_by_nom?' par '+escHtml(f.validated_by_nom):''):''}
+  </div>`;
+
+  root.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <button class="btn btn-ghost" onclick="setView('ref-list')" style="padding:6px 12px;font-size:12px">← Retour</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${actions.join('')}</div>
+    </div>
+    <div class="ref-detail-head">${headHtml}</div>
+    <div class="ref-block"><h3>Définition</h3>${defHtml}${tagsHtml}${sourceHtml}</div>
+    <div class="ref-block"><h3>Notre position (SIFA)</h3>${positionHtml}</div>
+    <div class="ref-block"><h3>Détails</h3>${detailsHtml}</div>
+    ${questionsHtml}
+    ${auditsHtml}
+    ${filesHtml}
+    ${metaFoot}
+  `;
+}
+
+// ─── Edition ──────────────────────────────────────────────────────────────
+function startRefEdit(){
+  const f = S.currentRef;
+  S.refEditBuf = {
+    nom: f.nom, acronyme: f.acronyme||'', categorie: f.categorie,
+    definition: f.definition||'', position_sifa: f.position_sifa||'',
+    details: f.details||'', statut_sifa: f.statut_sifa,
+    source_url: f.source_url||'', tags: f.tags||'',
+  };
+  S.refEdit = true;
+  renderRefDetail();
+}
+function cancelRefEdit(){ S.refEdit=false; S.refEditBuf=null; renderRefDetail(); }
+async function saveRefEdit(){
+  const g = (id) => document.getElementById(id);
+  const body = {
+    nom: g('ref-nom').value.trim(),
+    acronyme: g('ref-acr').value.trim(),
+    categorie: g('ref-cat').value,
+    definition: g('ref-def').value.trim(),
+    position_sifa: g('ref-position').value,
+    details: g('ref-details').value,
+    statut_sifa: g('ref-stat-sifa').value,
+    source_url: g('ref-src').value.trim(),
+    tags: g('ref-tags').value,
+  };
+  if(!body.nom){ showToast('Nom obligatoire','danger'); return; }
+  if(!body.definition){ showToast('Définition obligatoire','danger'); return; }
+  const r = await api('/api/qualite/ref/fiches/'+S.currentRef.id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+  showToast('Fiche enregistrée.','success');
+  S.refEdit = false; S.refEditBuf = null;
+  await openRef(S.currentRef.id);
+}
+
+// ─── Workflow validation ──────────────────────────────────────────────────
+async function submitRef(id){
+  const r = await api('/api/qualite/ref/fiches/'+id+'/submit', {method:'POST'});
+  if(!r.ok){ showToast('Erreur soumission','danger'); return; }
+  showToast('Fiche soumise en revue.','success');
+  await openRef(id);
+}
+async function validateRef(id){
+  const r = await api('/api/qualite/ref/fiches/'+id+'/validate', {method:'POST'});
+  if(!r.ok){ showToast('Erreur validation','danger'); return; }
+  showToast('Fiche validée.','success');
+  await openRef(id);
+}
+async function rejectRef(id){
+  const r = await api('/api/qualite/ref/fiches/'+id+'/reject', {method:'POST'});
+  if(!r.ok){ showToast('Erreur rejet','danger'); return; }
+  showToast('Fiche repassée en brouillon.','info');
+  await openRef(id);
+}
+async function deleteRef(id){
+  if(!confirm('Supprimer définitivement cette fiche et ses pièces jointes ?')) return;
+  const r = await api('/api/qualite/ref/fiches/'+id, {method:'DELETE'});
+  if(!r.ok){ showToast('Erreur suppression','danger'); return; }
+  showToast('Fiche supprimée.','success');
+  S.currentRef = null;
+  await loadRefFiches();
+  setView('ref-list');
+}
+
+// ─── Questions type ───────────────────────────────────────────────────────
+async function addRefQuestion(fid){
+  const inp = document.getElementById('ref-newq');
+  const t = (inp.value||'').trim();
+  if(!t){ inp.focus(); return; }
+  const r = await api('/api/qualite/ref/fiches/'+fid+'/questions', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte:t})});
+  if(!r.ok){ showToast('Erreur ajout','danger'); return; }
+  inp.value = '';
+  await openRef(fid);
+}
+async function deleteRefQuestion(fid, qid){
+  const r = await api('/api/qualite/ref/fiches/'+fid+'/questions/'+qid, {method:'DELETE'});
+  if(!r.ok){ showToast('Erreur','danger'); return; }
+  await openRef(fid);
+}
+
+// ─── Fichiers ─────────────────────────────────────────────────────────────
+async function uploadRefFile(fid, inputEl){
+  const file = inputEl.files[0]; if(!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  const r = await fetch('/api/qualite/ref/fiches/'+fid+'/fichiers', {method:'POST', credentials:'include', body: fd});
+  if(!r.ok){ showToast('Erreur upload','danger'); return; }
+  showToast('Fichier ajouté.','success');
+  inputEl.value = '';
+  await openRef(fid);
+}
+async function deleteRefFile(id){
+  if(!confirm('Supprimer ce fichier ?')) return;
+  const r = await api('/api/qualite/ref/fichiers/'+id, {method:'DELETE'});
+  if(!r.ok){ showToast('Erreur','danger'); return; }
+  await openRef(S.currentRef.id);
+}
+
+// ─── Audits liés ──────────────────────────────────────────────────────────
+async function openLinkAuditModal(fid){
+  const wrap = _refMroot();
+  wrap.innerHTML = `
+    <div class="modal-ov" onclick="if(event.target===this)closeMroot()">
+      <div class="modal" onclick="event.stopPropagation()">
+        <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+        <h3 style="margin:0 0 14px;font-size:16px;color:var(--text)">Lier un audit client</h3>
+        <input type="search" id="ref-aud-search" placeholder="Rechercher (client, N° audit…)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px" oninput="loadRefAuditsPicker(this.value)">
+        <div id="ref-aud-picker" style="margin-top:12px;max-height:340px;overflow-y:auto"></div>
+      </div>
+    </div>`;
+  requestAnimationFrame(()=>{ const el=document.getElementById('ref-aud-search'); if(el) el.focus(); });
+  await loadRefAuditsPicker('');
+  window._refLinkFid = fid;
+}
+async function loadRefAuditsPicker(q){
+  const url = '/api/qualite/ref/audits-picker' + (q?'?q='+encodeURIComponent(q):'');
+  const r = await api(url);
+  if(!r.ok) return;
+  const list = await r.json();
+  S.refAuditsPicker = list;
+  const cont = document.getElementById('ref-aud-picker'); if(!cont) return;
+  cont.innerHTML = list.length ? list.map(a=>`<div class="ref-audit-item" onclick="confirmLinkAudit(${a.id})">
+    <div>
+      <div class="num">${escHtml(a.numero)}</div>
+      <div class="client">${escHtml(a.client_nom)}</div>
+    </div>
+    <div class="date">${escHtml(a.date_audit||'')}</div>
+  </div>`).join('') : '<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Aucun audit trouvé.</div>';
+}
+async function confirmLinkAudit(aid){
+  const fid = window._refLinkFid;
+  const note = prompt("Note optionnelle sur ce lien (contexte, question posée…) :", "");
+  const r = await api('/api/qualite/ref/fiches/'+fid+'/audits', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({audit_id: aid, note: note||null})});
+  if(!r.ok){ showToast('Erreur','danger'); return; }
+  showToast('Audit lié.','success');
+  closeMroot();
+  await openRef(fid);
+}
+async function unlinkRefAudit(fid, aid){
+  if(!confirm('Retirer ce lien avec l\'audit ?')) return;
+  const r = await api('/api/qualite/ref/fiches/'+fid+'/audits/'+aid, {method:'DELETE'});
+  if(!r.ok){ showToast('Erreur','danger'); return; }
+  await openRef(fid);
+}
+function _refMroot(){
+  return document.getElementById('mroot') || (function(){
+    const d=document.createElement('div'); d.id='mroot'; document.body.appendChild(d); return d;
+  })();
+}
+function closeMroot(){
+  const m=document.getElementById('mroot'); if(m) m.innerHTML='';
+}
+
+// ─── Création d'une fiche (modal) ─────────────────────────────────────────
+function openCreateRefModal(){
+  const cats = (S.refMeta && S.refMeta.categories) || [];
+  const statsS = (S.refMeta && S.refMeta.statuts_sifa) || [];
+  const wrap = _refMroot();
+  wrap.innerHTML = `
+    <div class="modal-ov" onclick="if(event.target===this)closeMroot()">
+      <div class="modal lg" onclick="event.stopPropagation()">
+        <button type="button" class="modal-close" onclick="closeMroot()">×</button>
+        <h3 style="margin:0 0 14px;font-size:16px;color:var(--text)">Nouvelle fiche référentiel</h3>
+        <div class="ref-field"><label>Nom</label><input type="text" id="new-nom" style="width:100%" placeholder="Ex : ISO 14001"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div class="ref-field" style="flex:0 1 160px"><label>Acronyme</label><input type="text" id="new-acr" style="width:100%" placeholder="Ex : REACH"></div>
+          <div class="ref-field" style="flex:1 1 200px"><label>Catégorie</label><select id="new-cat" style="width:100%">${cats.map(c=>`<option value="${c.key}">${escHtml(c.label)}</option>`).join('')}</select></div>
+          <div class="ref-field" style="flex:1 1 200px"><label>Statut SIFA</label><select id="new-stat" style="width:100%">${statsS.map(s=>`<option value="${s.key}">${escHtml(s.label)}</option>`).join('')}</select></div>
+        </div>
+        <div class="ref-field"><label>Définition (1-2 lignes)</label><textarea id="new-def" style="min-height:70px" placeholder="Définition courte et concrète"></textarea></div>
+        <div class="ref-field"><label>Notre position (SIFA) — optionnel</label><textarea id="new-pos" style="min-height:70px" placeholder="Ce que nous avons mis en place, procédures internes…"></textarea></div>
+        <div class="ref-field"><label>Mots-clés (séparés par virgule)</label><input type="text" id="new-tags" style="width:100%" placeholder="ex : chimie,ue,substances"></div>
+        <div class="ref-field"><label>Source officielle (URL) — optionnel</label><input type="url" id="new-src" style="width:100%" placeholder="https://..."></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+          <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+          <button class="btn btn-accent" onclick="submitCreateRef()">Créer en brouillon</button>
+        </div>
+      </div>
+    </div>`;
+  requestAnimationFrame(()=>{ const el=document.getElementById('new-nom'); if(el) el.focus(); });
+}
+async function submitCreateRef(){
+  const g = (id)=>document.getElementById(id);
+  const body = {
+    nom: g('new-nom').value.trim(),
+    acronyme: g('new-acr').value.trim(),
+    categorie: g('new-cat').value,
+    definition: g('new-def').value.trim(),
+    position_sifa: g('new-pos').value,
+    statut_sifa: g('new-stat').value,
+    source_url: g('new-src').value.trim(),
+    tags: g('new-tags').value,
+  };
+  if(!body.nom){ showToast('Nom obligatoire','danger'); return; }
+  if(!body.definition){ showToast('Définition obligatoire','danger'); return; }
+  const r = await api('/api/qualite/ref/fiches', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  if(!r.ok){ showToast('Erreur création','danger'); return; }
+  const j = await r.json();
+  closeMroot();
+  showToast('Fiche créée en brouillon.','success');
+  await loadRefFiches();
+  openRef(j.id);
+}
+
+// ─── Raccourci clavier "/" pour focus recherche ───────────────────────────
+document.addEventListener('keydown', function(ev){
+  if(ev.key !== '/') return;
+  const t = ev.target;
+  if(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)) return;
+  const el = document.getElementById('ref-search');
+  if(el && S.view==='ref-list'){ ev.preventDefault(); el.focus(); el.select(); }
+});
+
 init();
 </script>
 </body>

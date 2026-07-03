@@ -1729,3 +1729,565 @@ def qualite_badges(request: Request):
         "audits_assigned_open": audits_assigned_open,
         "total": total,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODULE REFERENTIEL RSE / NORMES & CERTIFICATIONS
+# ═══════════════════════════════════════════════════════════════════════════
+# Endpoints /api/qualite/ref/* : catalogue des normes/certifs (REACH, ISO 14001,
+# Ecovadis, etc.) pour repondre aux audits clients environnement / social.
+# Lecture : tous les collaborateurs connectes.
+# Ecriture (creation/modification/proposition) : tous les collaborateurs.
+# Validation / suppression : ROLES_QUALITE (superadmin, direction, administration).
+
+REF_CATEGORIES = ("environnement", "social", "tracabilite", "securite")
+REF_STATUTS_SIFA = ("conforme", "partiel", "en_cours", "non_applicable", "a_evaluer")
+REF_STATUTS_VALIDATION = ("brouillon", "en_revue", "valide")
+
+
+def _ref_slugify(text: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", (text or "").strip().lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s[:80] or "fiche"
+
+
+def _ref_uniq_slug(conn, base: str, exclude_id: Optional[int] = None) -> str:
+    slug = base or "fiche"
+    i = 2
+    while True:
+        row = conn.execute(
+            "SELECT id FROM qualite_ref_fiches WHERE slug=?", (slug,),
+        ).fetchone()
+        if not row or (exclude_id and row["id"] == exclude_id):
+            return slug
+        slug = f"{base}-{i}"
+        i += 1
+
+
+def _ref_fiche_row_to_dict(row) -> dict:
+    d = dict(row)
+    return d
+
+
+def _ref_enrich_light(conn, fiches: List[dict]) -> List[dict]:
+    """Ajoute compteurs (nb fichiers, nb questions, nb audits lies) pour la liste."""
+    if not fiches:
+        return fiches
+    ids = [f["id"] for f in fiches]
+    ph = ",".join("?" * len(ids))
+    files = conn.execute(
+        f"SELECT fiche_id, COUNT(*) AS n FROM qualite_ref_fichiers WHERE fiche_id IN ({ph}) GROUP BY fiche_id",
+        ids,
+    ).fetchall()
+    fmap = {r["fiche_id"]: r["n"] for r in files}
+    quests = conn.execute(
+        f"SELECT fiche_id, COUNT(*) AS n FROM qualite_ref_questions WHERE fiche_id IN ({ph}) GROUP BY fiche_id",
+        ids,
+    ).fetchall()
+    qmap = {r["fiche_id"]: r["n"] for r in quests}
+    liens = conn.execute(
+        f"SELECT fiche_id, COUNT(*) AS n FROM qualite_ref_audit_liens WHERE fiche_id IN ({ph}) GROUP BY fiche_id",
+        ids,
+    ).fetchall()
+    lmap = {r["fiche_id"]: r["n"] for r in liens}
+    for f in fiches:
+        f["files_count"] = fmap.get(f["id"], 0)
+        f["questions_count"] = qmap.get(f["id"], 0)
+        f["audits_count"] = lmap.get(f["id"], 0)
+    return fiches
+
+
+# ─── Meta (categories, statuts) ───────────────────────────────────────────
+@router.get("/api/qualite/ref/meta")
+def ref_meta(request: Request):
+    get_current_user(request)
+    return {
+        "categories": [
+            {"key": "environnement", "label": "Environnement"},
+            {"key": "social", "label": "Social & ethique"},
+            {"key": "tracabilite", "label": "Tracabilite & qualite"},
+            {"key": "securite", "label": "Securite & sante"},
+        ],
+        "statuts_sifa": [
+            {"key": "conforme", "label": "Conforme", "color": "ok"},
+            {"key": "partiel", "label": "Partiel", "color": "warn"},
+            {"key": "en_cours", "label": "En cours", "color": "accent"},
+            {"key": "non_applicable", "label": "Non applicable", "color": "muted"},
+            {"key": "a_evaluer", "label": "A evaluer", "color": "muted"},
+        ],
+        "statuts_validation": [
+            {"key": "brouillon", "label": "Brouillon", "color": "muted"},
+            {"key": "en_revue", "label": "En revue", "color": "warn"},
+            {"key": "valide", "label": "Valide", "color": "ok"},
+        ],
+    }
+
+
+# ─── Liste des fiches (avec filtres et recherche) ─────────────────────────
+@router.get("/api/qualite/ref/fiches")
+def ref_list_fiches(
+    request: Request,
+    q: Optional[str] = None,
+    categorie: Optional[str] = None,
+    statut_validation: Optional[str] = None,
+    statut_sifa: Optional[str] = None,
+    valide_only: int = 0,
+):
+    get_current_user(request)
+    where = ["1=1"]
+    params: List = []
+    if categorie and categorie in REF_CATEGORIES:
+        where.append("categorie=?")
+        params.append(categorie)
+    if statut_validation and statut_validation in REF_STATUTS_VALIDATION:
+        where.append("statut_validation=?")
+        params.append(statut_validation)
+    if statut_sifa and statut_sifa in REF_STATUTS_SIFA:
+        where.append("statut_sifa=?")
+        params.append(statut_sifa)
+    if valide_only:
+        where.append("statut_validation='valide'")
+    if q and q.strip():
+        # Recherche sur nom, acronyme, definition, position_sifa, tags,
+        # + questions type (via sous-requete EXISTS)
+        term = f"%{q.strip()}%"
+        where.append(
+            "(nom LIKE ? OR acronyme LIKE ? OR definition LIKE ? OR position_sifa LIKE ? OR tags LIKE ? "
+            "OR EXISTS (SELECT 1 FROM qualite_ref_questions qq WHERE qq.fiche_id=qualite_ref_fiches.id AND qq.texte LIKE ?))"
+        )
+        params.extend([term, term, term, term, term, term])
+    sql = "SELECT * FROM qualite_ref_fiches WHERE " + " AND ".join(where) + " ORDER BY categorie, nom"
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+        fiches = [_ref_fiche_row_to_dict(r) for r in rows]
+        fiches = _ref_enrich_light(conn, fiches)
+    return fiches
+
+
+# ─── Detail d une fiche ───────────────────────────────────────────────────
+@router.get("/api/qualite/ref/fiches/{fiche_id}")
+def ref_get_fiche(fiche_id: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM qualite_ref_fiches WHERE id=?", (fiche_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+        f = _ref_fiche_row_to_dict(row)
+
+        # Fichiers
+        f["fichiers"] = [
+            dict(r) for r in conn.execute(
+                "SELECT id, original_name, mime_type, size_bytes, uploaded_at, uploaded_by "
+                "FROM qualite_ref_fichiers WHERE fiche_id=? ORDER BY uploaded_at DESC",
+                (fiche_id,),
+            ).fetchall()
+        ]
+        # Questions type
+        f["questions"] = [
+            dict(r) for r in conn.execute(
+                "SELECT id, texte, created_at, created_by FROM qualite_ref_questions "
+                "WHERE fiche_id=? ORDER BY id",
+                (fiche_id,),
+            ).fetchall()
+        ]
+        # Audits lies
+        f["audits"] = [
+            dict(r) for r in conn.execute(
+                """SELECT a.id, a.numero, a.client_nom, a.date_audit, a.statut,
+                          l.note, l.created_at AS linked_at
+                   FROM qualite_ref_audit_liens l
+                   JOIN audit_dossiers a ON a.id = l.audit_id
+                   WHERE l.fiche_id=?
+                   ORDER BY a.date_audit DESC""",
+                (fiche_id,),
+            ).fetchall()
+        ]
+        # Nom du createur / validateur (pour affichage)
+        for uid_field in ("created_by", "updated_by", "validated_by"):
+            uid = f.get(uid_field)
+            if uid:
+                u = conn.execute("SELECT nom FROM users WHERE id=?", (uid,)).fetchone()
+                f[uid_field + "_nom"] = (u and u["nom"]) or None
+    return f
+
+
+# ─── Creation ─────────────────────────────────────────────────────────────
+class RefFicheCreate(BaseModel):
+    nom: str
+    acronyme: Optional[str] = None
+    categorie: str
+    definition: str
+    position_sifa: Optional[str] = ""
+    details: Optional[str] = ""
+    statut_sifa: Optional[str] = "a_evaluer"
+    source_url: Optional[str] = None
+    tags: Optional[str] = ""
+
+
+@router.post("/api/qualite/ref/fiches")
+def ref_create_fiche(body: RefFicheCreate, request: Request):
+    user = get_current_user(request)
+    nom = (body.nom or "").strip()
+    definition = (body.definition or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom obligatoire")
+    if not definition:
+        raise HTTPException(status_code=400, detail="Definition obligatoire")
+    if body.categorie not in REF_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Categorie invalide")
+    statut_sifa = body.statut_sifa or "a_evaluer"
+    if statut_sifa not in REF_STATUTS_SIFA:
+        statut_sifa = "a_evaluer"
+    now = _now()
+    with get_db() as conn:
+        slug = _ref_uniq_slug(conn, _ref_slugify(nom))
+        cur = conn.execute(
+            """INSERT INTO qualite_ref_fiches
+                   (slug, nom, acronyme, categorie, definition, position_sifa, details,
+                    statut_sifa, statut_validation, source_url, tags,
+                    created_at, created_by, updated_at, updated_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?,
+                       ?, 'brouillon', ?, ?,
+                       ?, ?, ?, ?)""",
+            (slug, nom, (body.acronyme or None), body.categorie, definition,
+             (body.position_sifa or ""), (body.details or ""),
+             statut_sifa, (body.source_url or None), (body.tags or ""),
+             now, user["id"], now, user["id"]),
+        )
+        fid = cur.lastrowid
+        conn.commit()
+    return {"id": fid, "slug": slug, "statut_validation": "brouillon"}
+
+
+# ─── Modification ─────────────────────────────────────────────────────────
+class RefFicheUpdate(BaseModel):
+    nom: Optional[str] = None
+    acronyme: Optional[str] = None
+    categorie: Optional[str] = None
+    definition: Optional[str] = None
+    position_sifa: Optional[str] = None
+    details: Optional[str] = None
+    statut_sifa: Optional[str] = None
+    source_url: Optional[str] = None
+    tags: Optional[str] = None
+
+
+@router.put("/api/qualite/ref/fiches/{fiche_id}")
+def ref_update_fiche(fiche_id: int, body: RefFicheUpdate, request: Request):
+    user = get_current_user(request)
+    fields = []
+    params: List = []
+    if body.nom is not None:
+        nom = body.nom.strip()
+        if not nom:
+            raise HTTPException(status_code=400, detail="Nom vide")
+        fields.append("nom=?"); params.append(nom)
+    if body.acronyme is not None:
+        fields.append("acronyme=?"); params.append(body.acronyme.strip() or None)
+    if body.categorie is not None:
+        if body.categorie not in REF_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Categorie invalide")
+        fields.append("categorie=?"); params.append(body.categorie)
+    if body.definition is not None:
+        definition = body.definition.strip()
+        if not definition:
+            raise HTTPException(status_code=400, detail="Definition vide")
+        fields.append("definition=?"); params.append(definition)
+    if body.position_sifa is not None:
+        fields.append("position_sifa=?"); params.append(body.position_sifa or "")
+    if body.details is not None:
+        fields.append("details=?"); params.append(body.details or "")
+    if body.statut_sifa is not None:
+        s = body.statut_sifa
+        if s not in REF_STATUTS_SIFA:
+            raise HTTPException(status_code=400, detail="Statut SIFA invalide")
+        fields.append("statut_sifa=?"); params.append(s)
+    if body.source_url is not None:
+        fields.append("source_url=?"); params.append((body.source_url or "").strip() or None)
+    if body.tags is not None:
+        fields.append("tags=?"); params.append(body.tags or "")
+
+    if not fields:
+        raise HTTPException(status_code=400, detail="Aucun champ a modifier")
+
+    now = _now()
+    with get_db() as conn:
+        row = conn.execute("SELECT id, statut_validation FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+
+        # Si la fiche etait validee, elle repasse en revue (regle metier)
+        if row["statut_validation"] == "valide":
+            fields.append("statut_validation='en_revue'")
+            fields.append("validated_by=NULL")
+            fields.append("validated_at=NULL")
+
+        fields.append("updated_at=?"); params.append(now)
+        fields.append("updated_by=?"); params.append(user["id"])
+        params.append(fiche_id)
+        conn.execute(f"UPDATE qualite_ref_fiches SET {', '.join(fields)} WHERE id=?", params)
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Workflow validation ──────────────────────────────────────────────────
+@router.post("/api/qualite/ref/fiches/{fiche_id}/submit")
+def ref_submit_fiche(fiche_id: int, request: Request):
+    """Passe une fiche brouillon en 'en_revue'. Tous les users peuvent soumettre."""
+    user = get_current_user(request)
+    now = _now()
+    with get_db() as conn:
+        row = conn.execute("SELECT statut_validation FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+        if row["statut_validation"] == "valide":
+            raise HTTPException(status_code=400, detail="Fiche deja validee")
+        conn.execute(
+            "UPDATE qualite_ref_fiches SET statut_validation='en_revue', updated_at=?, updated_by=? WHERE id=?",
+            (now, user["id"], fiche_id),
+        )
+        conn.commit()
+    return {"ok": True, "statut_validation": "en_revue"}
+
+
+@router.post("/api/qualite/ref/fiches/{fiche_id}/validate")
+def ref_validate_fiche(fiche_id: int, request: Request):
+    """Valide une fiche (reserve aux roles Qualite)."""
+    user = _require_qualite_access(request)
+    now = _now()
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+        conn.execute(
+            """UPDATE qualite_ref_fiches
+               SET statut_validation='valide', validated_at=?, validated_by=?,
+                   updated_at=?, updated_by=?
+               WHERE id=?""",
+            (now, user["id"], now, user["id"], fiche_id),
+        )
+        conn.commit()
+    return {"ok": True, "statut_validation": "valide"}
+
+
+@router.post("/api/qualite/ref/fiches/{fiche_id}/reject")
+def ref_reject_fiche(fiche_id: int, request: Request):
+    """Rejette une fiche en revue (reserve aux roles Qualite)."""
+    user = _require_qualite_access(request)
+    now = _now()
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+        conn.execute(
+            "UPDATE qualite_ref_fiches SET statut_validation='brouillon', updated_at=?, updated_by=? WHERE id=?",
+            (now, user["id"], fiche_id),
+        )
+        conn.commit()
+    return {"ok": True, "statut_validation": "brouillon"}
+
+
+@router.delete("/api/qualite/ref/fiches/{fiche_id}")
+def ref_delete_fiche(fiche_id: int, request: Request):
+    """Supprime une fiche (reserve aux roles Qualite). Cascade sur fichiers/questions/liens."""
+    _require_qualite_access(request)
+    with get_db() as conn:
+        # Purge fichiers physiques d abord
+        files = conn.execute(
+            "SELECT filename FROM qualite_ref_fichiers WHERE fiche_id=?", (fiche_id,),
+        ).fetchall()
+        for f in files:
+            path = os.path.join(QUALITE_UPLOAD_DIR, f["filename"])
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+        conn.execute("DELETE FROM qualite_ref_fiches WHERE id=?", (fiche_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Questions type ───────────────────────────────────────────────────────
+class RefQuestionCreate(BaseModel):
+    texte: str
+
+
+@router.post("/api/qualite/ref/fiches/{fiche_id}/questions")
+def ref_add_question(fiche_id: int, body: RefQuestionCreate, request: Request):
+    user = get_current_user(request)
+    texte = (body.texte or "").strip()
+    if not texte or len(texte) > 400:
+        raise HTTPException(status_code=400, detail="Question invalide (1 a 400 caracteres)")
+    now = _now()
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+        cur = conn.execute(
+            "INSERT INTO qualite_ref_questions (fiche_id, texte, created_at, created_by) VALUES (?, ?, ?, ?)",
+            (fiche_id, texte, now, user["id"]),
+        )
+        conn.commit()
+    return {"id": cur.lastrowid, "texte": texte}
+
+
+@router.delete("/api/qualite/ref/fiches/{fiche_id}/questions/{qid}")
+def ref_delete_question(fiche_id: int, qid: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        conn.execute("DELETE FROM qualite_ref_questions WHERE id=? AND fiche_id=?", (qid, fiche_id))
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Suggestions d autocompletion (questions + noms) ──────────────────────
+@router.get("/api/qualite/ref/suggestions")
+def ref_suggestions(request: Request, q: Optional[str] = None, limit: int = 8):
+    get_current_user(request)
+    term = (q or "").strip()
+    if not term or len(term) < 2:
+        return []
+    like = f"%{term}%"
+    limit = max(1, min(int(limit or 8), 30))
+    with get_db() as conn:
+        questions = conn.execute(
+            """SELECT DISTINCT qq.texte, f.id AS fiche_id, f.nom AS fiche_nom, f.acronyme
+               FROM qualite_ref_questions qq
+               JOIN qualite_ref_fiches f ON f.id = qq.fiche_id
+               WHERE qq.texte LIKE ?
+               ORDER BY LENGTH(qq.texte) LIMIT ?""",
+            (like, limit),
+        ).fetchall()
+        # Complete avec quelques noms de fiches matchants
+        noms = conn.execute(
+            """SELECT id AS fiche_id, nom AS fiche_nom, acronyme
+               FROM qualite_ref_fiches
+               WHERE nom LIKE ? OR acronyme LIKE ?
+               ORDER BY nom LIMIT ?""",
+            (like, like, limit),
+        ).fetchall()
+    return {
+        "questions": [dict(r) for r in questions],
+        "fiches": [dict(r) for r in noms],
+    }
+
+
+# ─── Liens vers audits ────────────────────────────────────────────────────
+class RefAuditLink(BaseModel):
+    audit_id: int
+    note: Optional[str] = None
+
+
+@router.post("/api/qualite/ref/fiches/{fiche_id}/audits")
+def ref_link_audit(fiche_id: int, body: RefAuditLink, request: Request):
+    user = get_current_user(request)
+    now = _now()
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (body.audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        conn.execute(
+            """INSERT OR REPLACE INTO qualite_ref_audit_liens
+                   (fiche_id, audit_id, note, created_at, created_by)
+               VALUES (?, ?, ?, ?, ?)""",
+            (fiche_id, body.audit_id, (body.note or None), now, user["id"]),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+@router.delete("/api/qualite/ref/fiches/{fiche_id}/audits/{aid}")
+def ref_unlink_audit(fiche_id: int, aid: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM qualite_ref_audit_liens WHERE fiche_id=? AND audit_id=?",
+            (fiche_id, aid),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+@router.get("/api/qualite/ref/audits-picker")
+def ref_audits_picker(request: Request, q: Optional[str] = None):
+    """Liste courte d audits pour le picker de lien (dernier annee, plus recherche)."""
+    get_current_user(request)
+    where = ["1=1"]
+    params: List = []
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        where.append("(numero LIKE ? OR client_nom LIKE ? OR description LIKE ?)")
+        params.extend([term, term, term])
+    sql = ("SELECT id, numero, client_nom, date_audit, statut FROM audit_dossiers "
+           "WHERE " + " AND ".join(where) + " ORDER BY date_audit DESC LIMIT 40")
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ─── Fichiers (upload / download / delete) ────────────────────────────────
+@router.post("/api/qualite/ref/fiches/{fiche_id}/fichiers")
+async def ref_upload_fichier(fiche_id: int, request: Request, file: UploadFile = File(...)):
+    user = get_current_user(request)
+    now = _now()
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+
+        safe = _sanitize_filename(file.filename or "fichier")
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"ref_{fiche_id}_{ts}_{safe}"
+        dest = os.path.join(QUALITE_UPLOAD_DIR, filename)
+        content = await file.read()
+        with open(dest, "wb") as out:
+            out.write(content)
+        size = len(content)
+        cur = conn.execute(
+            """INSERT INTO qualite_ref_fichiers
+                   (fiche_id, filename, original_name, mime_type, size_bytes, uploaded_at, uploaded_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (fiche_id, filename, file.filename or safe, file.content_type or None, size, now, user["id"]),
+        )
+        conn.commit()
+    return {"id": cur.lastrowid, "original_name": file.filename, "size_bytes": size}
+
+
+@router.get("/api/qualite/ref/fichiers/{fid}/download")
+def ref_download_fichier(fid: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT filename, original_name, mime_type FROM qualite_ref_fichiers WHERE id=?", (fid,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+    path = os.path.join(QUALITE_UPLOAD_DIR, row["filename"])
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Fichier absent du disque")
+    return FileResponse(path, media_type=row["mime_type"] or "application/octet-stream",
+                        filename=row["original_name"])
+
+
+@router.delete("/api/qualite/ref/fichiers/{fid}")
+def ref_delete_fichier(fid: int, request: Request):
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT filename FROM qualite_ref_fichiers WHERE id=?", (fid,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fichier introuvable")
+        path = os.path.join(QUALITE_UPLOAD_DIR, row["filename"])
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+        conn.execute("DELETE FROM qualite_ref_fichiers WHERE id=?", (fid,))
+        conn.commit()
+    return {"ok": True}
