@@ -14975,7 +14975,7 @@ async function openValorisationSettingsModal() {
   box.appendChild(el('div', { style: 'height:14px' }));
 
   // -- Charge de production --
-  box.appendChild(mkLabel('Charge de production (%)', 'Diviseur appliqué à la valo PF'));
+  box.appendChild(mkLabel('Charge de production (%)', 'Multiplicateur (1 − charge/100) appliqué à la valo PF'));
   box.appendChild(chargeProdInp);
   box.appendChild(el('div', { style: 'height:14px' }));
 
