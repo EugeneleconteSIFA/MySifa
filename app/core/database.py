@@ -4670,6 +4670,321 @@ def _migrate(conn):
         _record_schema_migration(conn, 143, "qualite_referentiel_rse")
 
 
+    # v144 - Qualite Referentiel : enrichissement des fiches seedees
+    # Remplit le champ details (3-4 actions concretes par fiche) + met a jour source_url.
+    # UPDATE idempotent : ne touche PAS aux fiches deja editees manuellement (details != '').
+    # Rejoue-able sans effet secondaire.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=144 LIMIT 1").fetchone():
+        _now_iso_144 = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        _seed_details = [
+            ("reach", "https://echa.europa.eu/candidate-list-table", """Actions concretes a mettre en place chez SIFA :
+1. Recenser toutes les substances chimiques utilisees en production (colles, encres, solvants, additifs) et leur reference CAS.
+2. Cross-checker chaque substance sur la Candidate List SVHC de l ECHA (mise a jour semestrielle).
+3. Exiger de chaque fournisseur chimique une declaration REACH annuelle + notification si changement de formulation.
+4. Tenir a jour un registre substances / fournisseurs / date de derniere verification, accessible en cas d audit client.
+
+Ressources :
+- Liste des substances candidates SVHC : https://echa.europa.eu/candidate-list-table
+- Comprendre REACH : https://echa.europa.eu/regulations/reach/understanding-reach"""),
+            ("rohs", "https://environment.ec.europa.eu/topics/waste-and-recycling/rohs-directive_en", """Actions concretes a mettre en place chez SIFA :
+1. Verifier si nos produits ou emballages contiennent des composants electriques/electroniques (EEE) : peu probable pour l activite standard.
+2. Si applicable : collecter les declarations RoHS des fournisseurs concernes (10 substances restreintes).
+3. Documenter le niveau de conformite par famille de produit.
+4. Reponse type client si non applicable : "SIFA n est pas fabricant d equipements electriques ou electroniques. Nos matieres ne contiennent pas les substances restreintes RoHS."
+
+Ressources :
+- Directive officielle : https://environment.ec.europa.eu/topics/waste-and-recycling/rohs-directive_en"""),
+            ("pop", "https://www.pops.int/TheConvention/ThePOPs/ListingofPOPs/tabid/2509/Default.aspx", """Actions concretes a mettre en place chez SIFA :
+1. Verifier que nos matieres premieres ne contiennent aucun POP liste (annexes A/B/C de la Convention de Stockholm).
+2. Recoupement partiel avec REACH SVHC : si une substance est SVHC + POP, double alerte.
+3. Reponse standard client : declaration ecrite sur demande, basee sur les FDS et declarations fournisseurs.
+
+Ressources :
+- Liste officielle des POP : https://www.pops.int/TheConvention/ThePOPs/ListingofPOPs/tabid/2509/Default.aspx
+- Reglement UE 2019/1021 : https://eur-lex.europa.eu/eli/reg/2019/1021"""),
+            ("cov-voc", "https://www.ademe.fr/", """Actions concretes a mettre en place chez SIFA :
+1. Recenser toutes les colles, encres et solvants utilises et leur teneur en COV (via FDS section 9 et section 3).
+2. Etablir un bilan annuel des emissions COV (kg / an) pour l ensemble du site.
+3. Substituer progressivement vers des alternatives base eau ou faible COV quand la performance produit le permet.
+4. Verifier le respect des VLEP (valeurs limites d exposition professionnelle) pour les operateurs exposes.
+
+Ressources :
+- Guide ADEME COV : https://librairie.ademe.fr/
+- Fiches INRS solvants : https://www.inrs.fr/risques/cmr-agents-chimiques/ce-qu-il-faut-retenir.html"""),
+            ("iso-14001", "https://www.iso.org/fr/iso-14001-environmental-management.html", """Actions concretes a mettre en place chez SIFA :
+1. Rediger et faire signer la politique environnementale par la direction.
+2. Identifier les aspects environnementaux significatifs : consommations (elec, eau, gaz), dechets (tonnages par filiere), rejets atmospheriques et aqueux.
+3. Definir un plan de progres annuel avec 3-5 objectifs mesurables (ex : -10 % dechets non tries, -5 % kWh/unite).
+4. Realiser une revue de direction annuelle formalisee (compte-rendu ecrit).
+5. Certifier si demande client recurrente. Cout indicatif PME : 3 a 8 k€ / an (Bureau Veritas, AFNOR, SGS).
+
+Ressources :
+- Norme officielle : https://www.iso.org/fr/iso-14001-environmental-management.html"""),
+            ("iso-50001", "https://www.iso.org/fr/iso-50001-energy-management.html", """Actions concretes a mettre en place chez SIFA :
+1. Mesurer la consommation energetique par ligne / atelier / poste (sous-comptage electrique).
+2. Identifier les Usages Energetiques Significatifs (UES) : machines de production, compresseur, chauffage.
+3. Definir un plan d amelioration : eclairage LED, variateurs de vitesse, isolation, recuperation de chaleur, arret sequentiel.
+4. Suivre l indicateur kWh consommes / unite produite pour piloter la performance.
+5. Certification pertinente si consommation > 1 GWh/an ou demande client explicite.
+
+Ressources :
+- Norme officielle : https://www.iso.org/fr/iso-50001-energy-management.html
+- Aides ADEME : https://agirpourlatransition.ademe.fr/entreprises/"""),
+            ("emas", "https://green-business.ec.europa.eu/eco-management-and-audit-scheme-emas_en", """Actions concretes a mettre en place chez SIFA :
+1. Prerequis : demarche ISO 14001 deja en place, EMAS est une surcouche publique.
+2. Rediger et publier une declaration environnementale accessible au public (site web, doc telechargeable).
+3. Faire enregistrer le site aupres de la DREAL (autorite competente en France).
+4. Verification externe annuelle par un verificateur accredite.
+5. Marketing : logo EMAS utilisable sur communications, differenciant vs ISO 14001.
+
+Ressources :
+- Portail EMAS UE : https://green-business.ec.europa.eu/eco-management-and-audit-scheme-emas_en"""),
+            ("pefc", "https://www.pefc.fr/", """Actions concretes a mettre en place chez SIFA :
+1. Applicable uniquement si nous transformons du bois, papier, carton ou fibre cellulosique.
+2. Certification Chaine de Controle (CoC) pour tracer la matiere PEFC de l entree au produit fini.
+3. Documenter chaque lot MP avec sa certification amont (facture + declaration fournisseur PEFC).
+4. Former les operateurs a la separation stricte des flux PEFC / non-PEFC pendant la production.
+5. Audit externe annuel par un organisme accredite (Bureau Veritas, SGS, FCBA).
+
+Ressources :
+- PEFC France : https://www.pefc.fr/
+- Recherche fournisseurs certifies : https://www.pefc.fr/rechercher-certifie-pefc"""),
+            ("fsc", "https://fr.fsc.org/", """Actions concretes a mettre en place chez SIFA :
+1. Meme logique que PEFC (norme concurrente) : certification Chaine de Controle FSC.
+2. Determiner la variante requise par les clients : FSC 100 %, FSC Mix, FSC Recycled.
+3. Certains secteurs (edition, luxe, cosmetique) exigent FSC specifiquement.
+4. Documentation lot par lot + comptabilite matiere annuelle.
+5. Auditeur externe annuel (SGS, Bureau Veritas, FCBA, ECOCERT).
+
+Ressources :
+- FSC France : https://fr.fsc.org/
+- Recherche certifies : https://fr.fsc.org/fr-fr/annuaire"""),
+            ("ademe-acv", "https://bilans-ges.ademe.fr/", """Actions concretes a mettre en place chez SIFA :
+1. Realiser un Bilan Carbone Scope 1 + 2 chaque annee (obligatoire au-dela de 500 salaries, tres recommande en dessous).
+2. Estimer le Scope 3 (achats, transport aval, dechets, deplacements domicile-travail) — souvent 70 % du total pour une PME industrielle.
+3. Utiliser la Base Empreinte ADEME pour les facteurs d emission fiables et opposables.
+4. Publier un plan de reduction sur 3 a 5 ans avec objectifs chiffres.
+5. Reponse type client : partager le Bilan Carbone consolide et les initiatives de reduction.
+
+Ressources :
+- Base Empreinte : https://base-empreinte.ademe.fr/
+- Bilan GES ADEME : https://bilans-ges.ademe.fr/"""),
+            ("ghg-protocol", "https://ghgprotocol.org/", """Actions concretes a mettre en place chez SIFA :
+1. Etendre le Bilan Carbone au format GHG Protocol si client international (US, UK, Asie) le demande.
+2. Scope 1 : emissions directes (chaudiere gaz, camions internes, gaz refrigerants HFC).
+3. Scope 2 : electricite achetee (facteur emission fournisseur ou grid moyen).
+4. Scope 3 : upstream (achats de MP) + downstream (transport client, fin de vie). Le plus complexe mais souvent le plus lourd.
+5. Verification par un tiers (assurance limited/reasonable) si le client l exige (SBTi, CDP).
+
+Ressources :
+- Standard officiel : https://ghgprotocol.org/
+- SBTi (objectifs bases sur la science) : https://sciencebasedtargets.org/"""),
+            ("ppwr", "https://environment.ec.europa.eu/topics/waste-and-recycling/packaging-waste_en", """Actions concretes a mettre en place chez SIFA :
+1. Recenser tous les emballages livres au client (primaires, secondaires, tertiaires).
+2. Objectif PPWR : reduire le poids et le volume, augmenter la part recyclee, favoriser le mono-materiau.
+3. Verifier la recyclabilite (design for recycling) : eviter multi-couches non separables, encres migrantes, colles insolubles.
+4. Suivre l entree en application : la plupart des articles s appliquent entre 2025 et 2030.
+5. Anticiper les futures obligations sur le contenu recycle minimum (25-65 % selon type de plastique en 2030).
+
+Ressources :
+- Texte officiel UE : https://environment.ec.europa.eu/topics/waste-and-recycling/packaging-waste_en"""),
+            ("loi-agec", "https://www.ecologie.gouv.fr/loi-anti-gaspillage-economie-circulaire", """Actions concretes a mettre en place chez SIFA :
+1. Verifier notre adhesion aux eco-organismes REP applicables (Citeo pour emballages menagers, autres selon activite).
+2. Payer la contribution REP annuelle (declaration en ligne + reglement).
+3. Afficher le logo Triman + l Info-tri sur nos produits destines au consommateur final.
+4. Interdire l usage de plastique a usage unique quand une alternative existe (obligation legale depuis 2021).
+5. Documenter la fin de vie de nos produits pour les commerciaux (dossier RSE type).
+
+Ressources :
+- Loi AGEC : https://www.ecologie.gouv.fr/loi-anti-gaspillage-economie-circulaire
+- Citeo (REP emballages) : https://www.citeo.com/"""),
+            ("triman", "https://www.ecologie.gouv.fr/logo-triman-et-info-tri-signaletique-commune", """Actions concretes a mettre en place chez SIFA :
+1. Verifier si nos produits sont destines au grand public (BtoC ou passage BtoB2C).
+2. Ajouter le logo Triman + l Info-tri (couleur du bac) sur chaque emballage concerne.
+3. Format : image visible, taille minimum 6 mm de hauteur, texte "Cet emballage se recycle".
+4. Ne pas confondre avec le point vert (obsolete depuis 2017) — ne plus l apposer.
+5. Sanction en cas d absence : jusqu a 15 000 € par produit non conforme.
+
+Ressources :
+- Signaletique officielle : https://www.ecologie.gouv.fr/logo-triman-et-info-tri-signaletique-commune
+- Info-Tri Citeo : https://www.citeo.com/info-tri"""),
+            ("csrd", "https://finance.ec.europa.eu/capital-markets-union-and-financial-markets/company-reporting-and-auditing/company-reporting/corporate-sustainability-reporting_en", """Actions concretes a mettre en place chez SIFA :
+1. Verifier l assujettissement : seuils 250 salaries / 50 M€ CA / 25 M€ bilan (2 sur 3). SIFA probablement non assujetti direct.
+2. MAIS nos clients grands comptes assujettis vont demander nos donnees ESG pour leur propre reporting.
+3. Preparer un jeu minimal de datapoints ESRS pertinents : E1 (climat), E5 (economie circulaire), S1 (personnel), G1 (gouvernance).
+4. Anticiper une augmentation forte des demandes clients CSRD des 2025.
+5. Format standard : cle en main via Ecovadis ou reporting simplifie type "fiche RSE".
+
+Ressources :
+- CSRD officiel UE : https://finance.ec.europa.eu/capital-markets-union-and-financial-markets/company-reporting-and-auditing/company-reporting/corporate-sustainability-reporting_en
+- Guide CSRD PME : https://www.efrag.org/"""),
+            ("iso-26000", "https://www.iso.org/fr/iso-26000-social-responsibility.html", """Actions concretes a mettre en place chez SIFA :
+1. Norme d orientation, NON certifiable — pas d audit ni de logo utilisable.
+2. Utile comme cadre pour structurer la demarche RSE globale de SIFA.
+3. 7 questions centrales a couvrir : gouvernance, droits humains, relations et conditions de travail, environnement, loyaute des pratiques, questions relatives aux consommateurs, communautes et developpement local.
+4. Referencer ISO 26000 dans notre code de conduite interne et notre reporting RSE.
+5. Peut servir de base pour preparer Ecovadis ou une certification ISO 14001/45001.
+
+Ressources :
+- Norme ISO 26000 : https://www.iso.org/fr/iso-26000-social-responsibility.html
+- Guide AFNOR : https://normalisation.afnor.org/thematiques/iso-26000/"""),
+            ("ecovadis", "https://ecovadis.com/fr/", """Actions concretes a mettre en place chez SIFA :
+1. Preparer un dossier d evaluation Ecovadis (demandes recurrentes des grands comptes).
+2. 4 piliers evalues : environnement, social et droits humains, ethique, achats responsables.
+3. Objectif realiste PME : atteindre le medaille bronze (25-49) puis argent (50-64) en 2 ans.
+4. Cout indicatif : ~500 a 2 000 € / an selon taille (evaluation annuelle payante par la PME evaluee).
+5. De plus en plus de clients (LVMH, L Oreal, Michelin, etc.) exigent un score Ecovadis minimum comme condition d achat.
+
+Ressources :
+- Portail Ecovadis : https://ecovadis.com/fr/
+- Guide auto-evaluation : https://support.ecovadis.com/"""),
+            ("sedex-smeta", "https://www.sedex.com/", """Actions concretes a mettre en place chez SIFA :
+1. Alternative ou complement a Ecovadis, plus orientee audit sur site.
+2. Inscription sur la plateforme Sedex + remplissage du SAQ (Self-Assessment Questionnaire).
+3. Audit SMETA 4-piliers realise par un tiers accredite (Bureau Veritas, Intertek, SGS).
+4. Duree : 1 a 2 jours sur site, cout indicatif : 2 a 5 k€.
+5. Rapport publie sur la plateforme, accessible aux clients membres qui le demandent.
+
+Ressources :
+- Sedex : https://www.sedex.com/
+- Methodologie SMETA : https://www.sedex.com/our-services/smeta-audit/"""),
+            ("sapin-ii", "https://www.agence-francaise-anticorruption.gouv.fr/", """Actions concretes a mettre en place chez SIFA :
+1. Assujettissement direct si > 500 salaries et > 100 M€ CA — SIFA probablement en dessous.
+2. Bonnes pratiques a adopter meme si non assujetti (attendu par les clients) :
+3. Rediger un code de conduite anti-corruption + charte cadeaux et invitations.
+4. Mettre en place un dispositif d alerte interne (canal confidentiel type Whispli ou boite email dediee).
+5. Cartographier les risques de corruption par processus (achats, ventes, sous-traitance).
+6. Formation annuelle des collaborateurs exposes (achats, commerciaux, direction).
+
+Ressources :
+- AFA : https://www.agence-francaise-anticorruption.gouv.fr/
+- Referentiel AFA PME : https://www.agence-francaise-anticorruption.gouv.fr/fr/publications-outils"""),
+            ("devoir-vigilance", "https://www.economie.gouv.fr/dgccrf/devoir-de-vigilance", """Actions concretes a mettre en place chez SIFA :
+1. Non applicable direct a SIFA (seuil : 5 000 salaries en France ou 10 000 dans le monde).
+2. MAIS repercussion via nos clients grands comptes assujettis (qui vont interroger la chaine d appro).
+3. Preparer un plan de vigilance simplifie : cartographie des risques MP, code de conduite fournisseur, dispositif d alerte.
+4. Reponse type client : "Nous n avons pas d obligation legale mais partageons ces valeurs, voici notre demarche."
+
+Ressources :
+- DGCCRF Devoir de vigilance : https://www.economie.gouv.fr/dgccrf/devoir-de-vigilance
+- Loi n° 2017-399 : https://www.legifrance.gouv.fr/loda/id/JORFTEXT000034290626/"""),
+            ("code-conduite-fournisseur", "https://www.iso.org/fr/standard/63026.html", """Actions concretes a mettre en place chez SIFA :
+1. Rediger un code de conduite fournisseur (2 a 3 pages maximum).
+2. Points essentiels a couvrir : droits humains, travail des enfants, corruption, environnement, sante-securite au travail, respect des lois locales.
+3. Faire signer le code aux fournisseurs strategiques (top 20 en CA) — condition d entree en relation commerciale.
+4. Reviser le code annuellement, maintenir a jour la liste des signataires.
+5. S appuyer sur le referentiel ISO 20400 (achats responsables) pour la structure.
+
+Ressources :
+- ISO 20400 (achats responsables) : https://www.iso.org/fr/standard/63026.html
+- Modele code fournisseur : voir templates ObsAR ou Global Compact France"""),
+            ("modern-slavery-act", "https://www.legislation.gov.uk/ukpga/2015/30/contents", """Actions concretes a mettre en place chez SIFA :
+1. Loi britannique — concerne SIFA seulement si nous vendons au Royaume-Uni via une entite legale UK ou fournissons un client UK assujetti.
+2. Sinon, non applicable directement mais une clause anti-esclavage moderne dans le code fournisseur est une bonne pratique.
+3. Certains clients UK (retail, mode, distribution) exigent une declaration meme des fournisseurs non-UK.
+4. Reponse type : declaration ecrite (1 page) confirmant l absence d esclavage moderne dans notre chaine d appro connue.
+
+Ressources :
+- Loi officielle : https://www.legislation.gov.uk/ukpga/2015/30/contents
+- Guide UK gouvernement : https://www.gov.uk/government/publications/transparency-in-supply-chains-a-practical-guide"""),
+            ("conflict-minerals", "https://policy.trade.ec.europa.eu/development-and-sustainability/conflict-minerals-regulation_en", """Actions concretes a mettre en place chez SIFA :
+1. Concerne SIFA seulement si nous utilisons directement ou indirectement de l etain, du tantale, du tungstene ou de l or (composants electroniques, alliages, encres metalliques).
+2. Verifier les FDS et declarations fournisseur pour identifier la presence eventuelle de ces 4 metaux.
+3. Utiliser le template CMRT (Conflict Minerals Reporting Template) de la Responsible Minerals Initiative pour repondre aux clients.
+4. Reponse type client si non applicable : declaration ecrite du non-usage des 3TG dans nos produits.
+
+Ressources :
+- Reglement UE : https://policy.trade.ec.europa.eu/development-and-sustainability/conflict-minerals-regulation_en
+- Template CMRT : https://www.responsiblemineralsinitiative.org/"""),
+            ("iso-9001", "https://www.iso.org/fr/iso-9001-quality-management.html", """Actions concretes a mettre en place chez SIFA :
+1. Standard tres largement demande par les clients grands comptes — souvent bloquant pour rentrer en relation.
+2. Systeme de management qualite documente : politique qualite, processus cartographies, procedures ecrites, indicateurs mesurables.
+3. Revue de direction annuelle formalisee, audits internes semestriels, audit externe annuel.
+4. Cout indicatif PME : 3 a 6 k€ / an (Bureau Veritas, AFNOR, SGS, LRQA).
+5. ROI evident : reduction des non-conformites, argument commercial fort, souvent en pack integre avec ISO 14001 / ISO 45001.
+
+Ressources :
+- Norme ISO 9001 : https://www.iso.org/fr/iso-9001-quality-management.html"""),
+            ("tracabilite-lot", "", """Actions concretes a mettre en place chez SIFA :
+1. Attribuer un N° de lot unique a chaque matiere premiere entree en stock (deja fait via MyStock).
+2. Lier chaque OF a ses lots MP consommes (fait via MyProd — saisie de production).
+3. Conserver la trace en base pendant minimum 5 ans (10 ans pour l agroalimentaire et le medical).
+4. En cas de rappel client : capacite a retrouver tous les OF impactes en moins d une heure via requete SQL sur mouvements_stock.no_dossier.
+5. Realiser annuellement un exercice de mock-recall pour valider la chaine de tracabilite.
+
+Ressources :
+- ISO 22005 (tracabilite chaine agroalimentaire, applicable a d autres secteurs)"""),
+            ("oeko-tex", "https://www.oeko-tex.com/fr/", """Actions concretes a mettre en place chez SIFA :
+1. Concerne uniquement produits textiles, fibres, cuir ou accessoires textiles.
+2. Si applicable : envoi d echantillons a un laboratoire OEKO-TEX (Testex, Hohenstein, Centexbel).
+3. Certification valable 1 an, renouvelable — analyse chimique complete (colorants azoiques, phtalates, metaux lourds, etc.).
+4. Cout indicatif : ~1 a 3 k€ par article certifie.
+5. Reponse standard client si non applicable : "SIFA ne fabrique pas de produits textiles, cette certification ne s applique pas a notre offre."
+
+Ressources :
+- Portail OEKO-TEX : https://www.oeko-tex.com/fr/
+- Laboratoires accredites : https://www.oeko-tex.com/fr/institutes"""),
+            ("gots", "https://global-standard.org/", """Actions concretes a mettre en place chez SIFA :
+1. Certification textile bio (Global Organic Textile Standard) — pertinent uniquement si nous transformons coton bio, laine bio ou autres fibres bio certifiees.
+2. Auditeur externe agree GOTS : ECOCERT, IMO-Control, Control Union.
+3. Chaine de controle complete de la matiere premiere au produit fini (traceabilite lot par lot).
+4. Interdit certains procedes chimiques : chlore, formaldehyde, colorants toxiques, OGM.
+5. Volet social integre : conditions de travail equivalentes aux conventions OIT.
+
+Ressources :
+- GOTS officiel : https://global-standard.org/"""),
+            ("iso-45001", "https://www.iso.org/fr/iso-45001-occupational-health-and-safety.html", """Actions concretes a mettre en place chez SIFA :
+1. Systeme de management sante et securite au travail (norme qui remplace OHSAS 18001 depuis 2018).
+2. Document Unique d Evaluation des Risques (DUER) obligatoire quel que soit l effectif — a mettre a jour annuellement.
+3. Analyse systematique des accidents et presqu-accidents (arbre des causes).
+4. Referent securite designe + CSE (Comite Social et Economique) actif.
+5. Certification pertinente si demande client — souvent en pack systeme integre avec ISO 9001 et ISO 14001.
+
+Ressources :
+- Norme ISO 45001 : https://www.iso.org/fr/iso-45001-occupational-health-and-safety.html
+- DUER (INRS) : https://www.inrs.fr/demarche/evaluation-risques-professionnels/document-unique.html"""),
+            ("fds-sds", "https://echa.europa.eu/fr/safety-data-sheets", """Actions concretes a mettre en place chez SIFA :
+1. Collecter la FDS de chaque produit chimique utilise (colles, encres, solvants, nettoyants, adjuvants).
+2. Verifier la version : FDS obligatoirement au format REACH/CLP a 16 sections, en francais, datee de moins de 3 ans.
+3. Rendre les FDS accessibles aux operateurs : classeur atelier plastifie + version numerique centralisee.
+4. Reviser tous les 2 ans ou immediatement en cas de changement de formulation fournisseur.
+5. Fournir les FDS au client final sur demande, en moins de 48h (obligation legale REACH article 31).
+
+Ressources :
+- Guide FDS ECHA : https://echa.europa.eu/fr/safety-data-sheets
+- Format francais INRS : https://www.inrs.fr/publications/juridique/focus-juridiques/focus-fds.html"""),
+            ("prop-65", "https://oehha.ca.gov/proposition-65", """Actions concretes a mettre en place chez SIFA :
+1. Concerne SIFA seulement si nous vendons en Californie (direct ou via distributeur/marketplace US).
+2. Verifier la presence eventuelle de substances de la Prop 65 List (~900 substances : plomb, phtalates, formaldehyde, BPA, etc.) dans nos produits.
+3. Si presente : etiquette d avertissement obligatoire "WARNING: This product can expose you to chemicals including [nom substance] which is known to the State of California to cause cancer / birth defects."
+4. Reponse type client US si absent : declaration ecrite de conformite ou d absence des substances listees.
+
+Ressources :
+- Liste officielle Prop 65 : https://oehha.ca.gov/proposition-65/proposition-65-list"""),
+            ("pbt-vpvb", "https://echa.europa.eu/documents/10162/13628/pbt_evaluation_annex_xiii_reach_en.pdf", """Actions concretes a mettre en place chez SIFA :
+1. Sous-critere REACH (annexe XIII) pour identifier les substances les plus preoccupantes : Persistantes, Bioaccumulables, Toxiques (PBT) ou tres Persistantes tres Bioaccumulables (vPvB).
+2. Verifier via les FDS section 12 et les declarations fournisseur.
+3. Peu de substances industrielles standards sont PBT/vPvB, mais certaines encres, colles et adjuvants specifiques peuvent l etre.
+4. Reponse type client : "Nos matieres ne contiennent pas de substances PBT/vPvB identifiees dans nos FDS et declarations fournisseurs."
+
+Ressources :
+- Guide ECHA PBT/vPvB : https://echa.europa.eu/documents/10162/13628/pbt_evaluation_annex_xiii_reach_en.pdf"""),
+        ]
+        for slug, source_url, details in _seed_details:
+            # Ne mettre a jour details que s il est vide (fiche non editee)
+            conn.execute(
+                "UPDATE qualite_ref_fiches SET details=?, updated_at=? WHERE slug=? AND (details IS NULL OR details='')",
+                (details, _now_iso_144, slug),
+            )
+            # Mettre a jour source_url seulement si vide ET si on a une source
+            if source_url:
+                conn.execute(
+                    "UPDATE qualite_ref_fiches SET source_url=?, updated_at=? WHERE slug=? AND (source_url IS NULL OR source_url='')",
+                    (source_url, _now_iso_144, slug),
+                )
+        conn.commit()
+        _record_schema_migration(conn, 144, "qualite_ref_details_v1")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
