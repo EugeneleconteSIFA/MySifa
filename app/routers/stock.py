@@ -309,6 +309,33 @@ def _get_charge_production_pct(conn) -> float:
         return 0.0
 
 
+def _get_container_params(conn) -> tuple[float, float, float, float]:
+    """Retourne (container_cost_full_eur, container_cost_half_eur, qte_m2_full, qte_m2_half)
+    pour le calcul du supplément transport container.
+
+    Le libellé de default_container_cost_usd reste "usd" en base pour compat schéma,
+    mais côté UI et calcul il est désormais interprété comme EUR (rename cosmétique
+    demandé par Eugène le 2026-07-03).
+    """
+    def _read(key: str) -> float:
+        try:
+            row = conn.execute(
+                "SELECT value_decimal FROM mc_setting WHERE key=? LIMIT 1", (key,)
+            ).fetchone()
+            if not row:
+                return 0.0
+            v = float(row["value_decimal"] or 0)
+            return v if v >= 0 else 0.0
+        except Exception:
+            return 0.0
+    return (
+        _read("default_container_cost_usd"),           # coût container complet (EUR)
+        _read("default_half_container_cost_eur"),      # coût demi-container (EUR)
+        _read("logistique_qte_m2_container_complet"),  # qté m² container complet
+        _read("logistique_qte_m2_demi_container"),     # qté m² demi-container
+    )
+
+
 def _get_storage_fees_pct(conn) -> float:
     """Lit le paramètre Frais de stockage (mc_setting.storage_fees_pct), en %.
     Retourne 0.0 si non configuré."""
@@ -3867,6 +3894,10 @@ def _valorisation_query(conn) -> list[dict]:
             prix_palette = prix
             valorisation = round(qte * prix, 2)
             incomplete = False
+        try:
+            transport_state = int(r["cout_transport_inclus"] or 0)
+        except (TypeError, ValueError):
+            transport_state = 0
         out.append({
             "id": r["id"],
             "row_key": f"m{r['id']}",
@@ -3885,6 +3916,8 @@ def _valorisation_query(conn) -> list[dict]:
             "laizee": False,
             "incomplete": incomplete,
             "metres_lineaires_par_bobine": None,
+            "laize_mm": None,
+            "surface_bobine_m2": None,
             "prix_eur_m2": None,
             "valorisation_bobine": None,
             "avec_conditionnement": avec_cond,
@@ -3895,7 +3928,7 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_updated_by_name": r["prix_updated_by_name"],
             "prix_en_usd": bool(r["prix_en_usd"] or 0),
             "taxe_importation": bool(r["taxe_importation"] or 0),
-            "cout_transport_inclus": bool(r["cout_transport_inclus"] or 0),
+            "cout_transport_inclus": transport_state,  # 0/1/2 (int)
         })
     for r in rows_laizees:
         cat = r["categorie"]
@@ -3903,7 +3936,12 @@ def _valorisation_query(conn) -> list[dict]:
         metres = float(r["metres"] or 0)
         prix_m2 = float(r["prix_eur_m2"] or 0)
         laize_mm = float(r["valeur_mm"] or 0)
-        valo_bobine = (laize_mm / 1000.0) * metres * prix_m2
+        surface_bobine = (laize_mm / 1000.0) * metres
+        valo_bobine = surface_bobine * prix_m2
+        try:
+            transport_state = int(r["cout_transport_inclus"] or 0)
+        except (TypeError, ValueError):
+            transport_state = 0
         out.append({
             "id": r["matiere_id"],
             "row_key": f"m{r['matiere_id']}_l{r['laize_id']}",
@@ -3922,6 +3960,8 @@ def _valorisation_query(conn) -> list[dict]:
             "laizee": True,
             "incomplete": False,
             "metres_lineaires_par_bobine": metres,
+            "laize_mm": laize_mm,
+            "surface_bobine_m2": round(surface_bobine, 4),
             "prix_eur_m2": prix_m2,
             "valorisation_bobine": round(valo_bobine, 4),
             "avec_conditionnement": False,
@@ -3932,11 +3972,15 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_updated_by_name": None,
             "prix_en_usd": bool(r["prix_en_usd"] or 0),
             "taxe_importation": bool(r["taxe_importation"] or 0),
-            "cout_transport_inclus": bool(r["cout_transport_inclus"] or 0),
+            "cout_transport_inclus": transport_state,  # 0/1/2 (int, 3 états)
         })
     # Matières laizées sans laizes : affichées avec un placeholder "À configurer"
     for r in rows_laizees_vides:
         cat = r["categorie"]
+        try:
+            transport_state = int(r["cout_transport_inclus"] or 0)
+        except (TypeError, ValueError):
+            transport_state = 0
         out.append({
             "id": r["matiere_id"],
             "row_key": f"m{r['matiere_id']}_empty",
@@ -3955,6 +3999,8 @@ def _valorisation_query(conn) -> list[dict]:
             "laizee": True,
             "incomplete": True,
             "metres_lineaires_par_bobine": float(r["metres"] or 0),
+            "laize_mm": None,
+            "surface_bobine_m2": None,
             "prix_eur_m2": float(r["prix_eur_m2"] or 0),
             "valorisation_bobine": 0.0,
             "avec_conditionnement": False,
@@ -3965,13 +4011,23 @@ def _valorisation_query(conn) -> list[dict]:
             "prix_updated_by_name": None,
             "prix_en_usd": bool(r["prix_en_usd"] or 0),
             "taxe_importation": bool(r["taxe_importation"] or 0),
-            "cout_transport_inclus": bool(r["cout_transport_inclus"] or 0),
+            "cout_transport_inclus": transport_state,  # 0/1/2 (int)
         })
     return out
 
 
+# Catégories bobines éligibles au supplément transport container (Q3 : frontal + glassine + complexe).
+_TRANSPORT_BOBINE_CATEGORIES = frozenset({"frontal", "glassine", "complexe"})
+
+
 def _row_tax_multiplier(item: dict, import_tax_pct: float) -> float:
-    """Multiplicateur Taxe d'importation seul (1 + taxe%/100). Neutre si le flag est off."""
+    """Multiplicateur Taxe d'importation seul (1 + taxe%/100).
+
+    Restreint aux adhésifs (Q2) : ignoré pour toute autre catégorie même si le flag
+    taxe_importation est actif en base (rétrocompat sans breakage des données)."""
+    cat = str(item.get("categorie") or "").lower()
+    if cat != "adhesif":
+        return 1.0
     if item.get("taxe_importation") and import_tax_pct > 0:
         return 1.0 + (import_tax_pct / 100.0)
     return 1.0
@@ -3986,40 +4042,76 @@ def _row_usd_multiplier(item: dict, taux_eur_usd: float) -> float:
 
 def _row_multiplier(item: dict, taux_eur_usd: float, import_tax_pct: float) -> float:
     """Multiplicateur composé hors transport : taxe puis USD.
-    Formule : ((prix × (1+taxe%)) × taux_USD). Le transport étant un forfait additif,
-    il n'est pas inclus ici (voir _enrich_items_with_usd pour le détail de la formule)."""
+    Formule : ((prix × (1+taxe%)) × taux_USD). Le supplément transport est additif
+    en €/m², appliqué séparément — voir _row_transport_supplement_eur_per_m2."""
     return _row_tax_multiplier(item, import_tax_pct) * _row_usd_multiplier(item, taux_eur_usd)
 
 
-def _row_transport_addon(item: dict, transport_fixed_eur: float) -> float:
-    """Forfait transport (€) à ajouter à la valorisation de la matière si le flag
-    cout_transport_inclus est actif et que le paramètre transport_cost_fixed_eur > 0.
-    Pour les matières laizées (plusieurs lignes par matiere_id), on n'ajoute le forfait
-    qu'une seule fois — c'est géré au niveau du summary via un set."""
-    if item.get("cout_transport_inclus") and transport_fixed_eur > 0:
-        return float(transport_fixed_eur)
+def _row_transport_supplement_eur_per_m2(
+    item: dict,
+    container_cost_full_eur: float,
+    container_cost_half_eur: float,
+    qte_m2_full: float,
+    qte_m2_half: float,
+) -> float:
+    """Supplément transport en €/m² selon l'état du flag cout_transport_inclus.
+
+    - État 0 : off → 0
+    - État 1 : container complet → container_cost_full_eur / qte_m2_full
+    - État 2 : demi-container    → container_cost_half_eur / qte_m2_half
+
+    Restreint aux catégories bobines (frontal, glassine, complexe). Retourne 0
+    pour toute autre catégorie même si le flag est actif en base."""
+    cat = str(item.get("categorie") or "").lower()
+    if cat not in _TRANSPORT_BOBINE_CATEGORIES:
+        return 0.0
+    try:
+        state = int(item.get("cout_transport_inclus") or 0)
+    except (TypeError, ValueError):
+        state = 0
+    if state == 1 and qte_m2_full > 0 and container_cost_full_eur > 0:
+        return float(container_cost_full_eur) / float(qte_m2_full)
+    if state == 2 and qte_m2_half > 0 and container_cost_half_eur > 0:
+        return float(container_cost_half_eur) / float(qte_m2_half)
     return 0.0
+
+
+def _row_surface_bobine_m2(item: dict) -> float:
+    """Surface m² d'une bobine — dérivée de laize_mm × metres_lineaires_par_bobine.
+    Retourne 0 si la matière n'est pas laizée ou si laize/métrage non renseigné."""
+    if not item.get("laizee"):
+        return 0.0
+    metres = float(item.get("metres_lineaires_par_bobine") or 0)
+    laize_mm = float(item.get("laize_mm") or 0)
+    if metres <= 0 or laize_mm <= 0:
+        return 0.0
+    return (laize_mm / 1000.0) * metres
 
 
 def _valorisation_summary(
     items: list[dict],
     taux_eur_usd: float = 0.0,
     import_tax_pct: float = 0.0,
-    transport_fixed_eur: float = 0.0,
+    container_cost_full_eur: float = 0.0,
+    container_cost_half_eur: float = 0.0,
+    qte_m2_full: float = 0.0,
+    qte_m2_half: float = 0.0,
 ) -> dict:
-    """Calcule les totaux. Formule par ligne :
-        val_reel = ((valorisation × (1 + taxe%/100)) + transport_forfait) × taux_USD
-    avec chaque facteur neutralisé si son flag n'est pas actif. Le forfait transport est
-    appliqué une seule fois par matière (jamais par ligne laizée multi-bobines)."""
+    """Calcule les totaux. Formule par ligne bobine :
+        prix_m2_reel = prix_m2 × (1 + taxe%/100) × taux_USD + supplement_transport_m²
+        val_reel     = quantite × prix_m2_reel × surface_bobine_m²
+
+    - Taxe : uniquement adhésifs (Q2).
+    - Transport container/demi-container : uniquement bobines (Q3).
+    - Le forfait transport historique n'existe plus (Q1).
+    """
     totals_by_cat: dict[str, dict] = {}
     total = 0.0
     total_reel = 0.0
-    # Dédoublonner par matière (les lignes laizées sont multiples par matiere_id).
     seen_usd: set[int] = set()
     seen_tax: set[int] = set()
     seen_both: set[int] = set()
     seen_transport: set[int] = set()
-    transport_applied: set[int] = set()
     for it in items:
         cat = it["categorie"]
         if cat not in totals_by_cat:
@@ -4039,21 +4131,24 @@ def _valorisation_summary(
         if is_valued:
             bucket["nb_refs_valorisees"] += 1
         total += it["valorisation"]
-        # ── Nouvelle formule : taxe d'abord, puis transport, puis USD ────
+
         tax_mult = _row_tax_multiplier(it, import_tax_pct)
         usd_mult = _row_usd_multiplier(it, taux_eur_usd)
+        supp_per_m2 = _row_transport_supplement_eur_per_m2(
+            it, container_cost_full_eur, container_cost_half_eur, qte_m2_full, qte_m2_half
+        )
         mid = it.get("matiere_id")
         is_usd = bool(it.get("prix_en_usd")) and taux_eur_usd > 0
-        is_tax = bool(it.get("taxe_importation")) and import_tax_pct > 0
-        is_transport = bool(it.get("cout_transport_inclus")) and transport_fixed_eur > 0
-        # Transport : ajouté une seule fois par matière, AVANT la conversion USD
-        transport_for_this_row = 0.0
-        if isinstance(mid, int) and is_transport and mid not in transport_applied:
-            transport_applied.add(mid)
-            transport_for_this_row = transport_fixed_eur
-        # val_reel = ((val × tax_mult) + transport_pour_cette_ligne) × usd_mult
-        val_reel = (it["valorisation"] * tax_mult + transport_for_this_row) * usd_mult
+        is_tax = bool(it.get("taxe_importation")) and import_tax_pct > 0 and str(it.get("categorie") or "").lower() == "adhesif"
+        is_transport = supp_per_m2 > 0
+
+        # val_reel : (val × tax × usd) + supp_per_m² × surface_bobine × qte
+        val_reel_base = it["valorisation"] * tax_mult * usd_mult
+        qte = float(it.get("quantite") or 0)
+        surface = _row_surface_bobine_m2(it)
+        val_reel = val_reel_base + supp_per_m2 * surface * qte
         total_reel += val_reel
+
         if isinstance(mid, int):
             if is_transport and mid not in seen_transport:
                 seen_transport.add(mid)
@@ -4070,6 +4165,9 @@ def _valorisation_summary(
     nb_tax_only = len(seen_tax)
     nb_both = len(seen_both)
     nb_transport = len(seen_transport)
+    # €/m² supp pour indication UI (fonction du paramétrage)
+    supp_per_m2_full = (container_cost_full_eur / qte_m2_full) if (qte_m2_full > 0 and container_cost_full_eur > 0) else 0.0
+    supp_per_m2_half = (container_cost_half_eur / qte_m2_half) if (qte_m2_half > 0 and container_cost_half_eur > 0) else 0.0
     return {
         "total_mp": round(total, 2),
         "total_mp_reel": round(total_reel, 2),
@@ -4086,7 +4184,13 @@ def _valorisation_summary(
         "nb_refs_transport": nb_transport,
         "taux_eur_usd": round(taux_eur_usd, 6) if taux_eur_usd > 0 else 0,
         "import_tax_pct": round(import_tax_pct, 4) if import_tax_pct > 0 else 0,
-        "transport_cost_fixed_eur": round(transport_fixed_eur, 4) if transport_fixed_eur > 0 else 0,
+        # Nouveau : supplément container en €/m² (plein et demi) pour affichage
+        "container_supplement_eur_per_m2_full": round(supp_per_m2_full, 4) if supp_per_m2_full > 0 else 0,
+        "container_supplement_eur_per_m2_half": round(supp_per_m2_half, 4) if supp_per_m2_half > 0 else 0,
+        "container_cost_full_eur": round(container_cost_full_eur, 2) if container_cost_full_eur > 0 else 0,
+        "container_cost_half_eur": round(container_cost_half_eur, 2) if container_cost_half_eur > 0 else 0,
+        "qte_m2_container_complet": round(qte_m2_full, 2) if qte_m2_full > 0 else 0,
+        "qte_m2_demi_container": round(qte_m2_half, 2) if qte_m2_half > 0 else 0,
     }
 
 
@@ -4094,49 +4198,59 @@ def _enrich_items_with_usd(
     items: list[dict],
     taux_eur_usd: float,
     import_tax_pct: float = 0.0,
-    transport_fixed_eur: float = 0.0,
+    container_cost_full_eur: float = 0.0,
+    container_cost_half_eur: float = 0.0,
+    qte_m2_full: float = 0.0,
+    qte_m2_half: float = 0.0,
 ) -> None:
     """Ajoute prix_unitaire_reel / valorisation_reelle / prix_eur_m2_reel /
     transport_addon_eur in-place pour chaque item.
 
-    Formule par ligne :
-        prix_reel = prix × (1 + taxe%/100) × taux_USD
-        val_reel  = ((val × (1 + taxe%/100)) + transport_pour_cette_ligne) × taux_USD
-    Le forfait transport n'est appliqué qu'une seule fois par matière (jamais par
-    ligne laizée multi-bobines)."""
-    transport_applied: set[int] = set()
+    Formule par ligne bobine (frontal/glassine/complexe) :
+        prix_m2_reel = prix_m2 × (1 + taxe%/100) × taux_USD + supp_transport_m²
+        prix_bobine_reel = prix_m2_reel × surface_bobine_m²
+        val_reel        = quantite × prix_bobine_reel
+
+    Formule pour les autres catégories :
+        prix_reel = prix × (1 + taxe%/100) × taux_USD  (taxe uniquement si adhesif)
+        val_reel  = val × (1 + taxe%/100) × taux_USD
+    """
     for it in items:
         tax_mult = _row_tax_multiplier(it, import_tax_pct)
         usd_mult = _row_usd_multiplier(it, taux_eur_usd)
         mult = tax_mult * usd_mult
-        addon_raw = 0.0
-        mid = it.get("matiere_id")
-        if (
-            it.get("cout_transport_inclus")
-            and transport_fixed_eur > 0
-            and isinstance(mid, int)
-            and mid not in transport_applied
-        ):
-            addon_raw = float(transport_fixed_eur)
-            transport_applied.add(mid)
-        # Prix unitaire « réel » : la taxe puis l'USD, sans transport (forfait par matière).
-        if mult != 1.0:
-            it["prix_unitaire_reel"] = round((it.get("prix_unitaire") or 0) * mult, 4)
-            it["prix_eur_m2_reel"] = (
-                round((it.get("prix_eur_m2") or 0) * mult, 4)
-                if it.get("prix_eur_m2") is not None
-                else None
-            )
+        supp_per_m2 = _row_transport_supplement_eur_per_m2(
+            it, container_cost_full_eur, container_cost_half_eur, qte_m2_full, qte_m2_half
+        )
+        surface = _row_surface_bobine_m2(it)
+        supp_per_bobine = supp_per_m2 * surface
+
+        # Prix €/m² réel (bobines uniquement — sinon prix_eur_m2 est None)
+        base_prix_m2 = float(it.get("prix_eur_m2") or 0)
+        if it.get("prix_eur_m2") is not None:
+            prix_m2_reel = base_prix_m2 * mult + supp_per_m2
+            it["prix_eur_m2_reel"] = round(prix_m2_reel, 4)
         else:
-            it["prix_unitaire_reel"] = it.get("prix_unitaire") or 0
-            it["prix_eur_m2_reel"] = it.get("prix_eur_m2")
-        # Valorisation réelle : ((val × tax) + transport) × usd.
-        # On expose aussi le transport_addon converti en EUR (post-USD) pour l'affichage.
-        val_reel = ((it.get("valorisation") or 0) * tax_mult + addon_raw) * usd_mult
+            it["prix_eur_m2_reel"] = None
+
+        # Prix unitaire (par bobine ou par unité de gestion) réel
+        base_prix_unit = float(it.get("prix_unitaire") or 0)
+        prix_unitaire_reel = base_prix_unit * mult + supp_per_bobine
+        # Si aucun multiplicateur ni supplément → recopie tel quel (pour cohérence historique)
+        if mult == 1.0 and supp_per_bobine == 0.0:
+            it["prix_unitaire_reel"] = base_prix_unit
+        else:
+            it["prix_unitaire_reel"] = round(prix_unitaire_reel, 4)
+
+        # Valorisation réelle : val_base × mult + supplement_bobine × qté
+        qte = float(it.get("quantite") or 0)
+        val_reel = float(it.get("valorisation") or 0) * mult + supp_per_bobine * qte
         it["valorisation_reelle"] = round(val_reel, 2)
         it["reel_multiplier"] = round(mult, 6)
-        it["transport_addon_eur"] = round(addon_raw * usd_mult, 2)
-        it["transport_addon_raw"] = round(addon_raw, 2)
+        # Total supplément transport pour cette ligne (= supp × surface × quantité, en €)
+        it["transport_addon_eur"] = round(supp_per_bobine * qte, 2)
+        it["transport_addon_raw"] = round(supp_per_bobine, 4)
+        it["transport_supplement_eur_per_m2"] = round(supp_per_m2, 4)
 
 
 @router.get("/api/stock/valorisation")
@@ -4147,9 +4261,9 @@ def get_valorisation(request: Request):
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
-        transport_eur = _get_transport_cost_fixed_eur(conn) if can_see_usd else 0.0
-    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
-    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
+        c_full, c_half, q_full, q_half = _get_container_params(conn) if can_see_usd else (0.0, 0.0, 0.0, 0.0)
+    _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
+    summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = can_see_usd
     return {
         "items": items,
@@ -4268,9 +4382,9 @@ async def update_valorisation(matiere_id: int, request: Request):
         can_see_usd = _user_can_see_valorisation_usd(user)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
-        transport_eur = _get_transport_cost_fixed_eur(conn) if can_see_usd else 0.0
-    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
-    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
+        c_full, c_half, q_full, q_half = _get_container_params(conn) if can_see_usd else (0.0, 0.0, 0.0, 0.0)
+    _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
+    summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = can_see_usd
     # Pour les matières laizées, plusieurs lignes ont le même matiere_id → on renvoie toutes
     matching = [x for x in items if x["matiere_id"] == matiere_id]
@@ -4284,9 +4398,15 @@ async def update_valorisation(matiere_id: int, request: Request):
 
 @router.put("/api/stock/valorisation/{matiere_id}/cout-transport")
 async def toggle_valorisation_cout_transport(matiere_id: int, request: Request):
-    """Bascule le flag cout_transport_inclus pour une matière. Réservé Direction / superadmin.
-    Le forfait transport_cost_fixed_eur sera ajouté à la valorisation de cette référence
-    (une seule fois, peu importe la quantité)."""
+    """Cycle le flag cout_transport_inclus pour une matière (3 états).
+
+    - 0 : off
+    - 1 : container complet (supplément = coût container / m² × surface_bobine)
+    - 2 : demi-container    (supplément = coût demi-container / m² × surface_bobine)
+
+    Réservé Direction / superadmin. Sans body → cycle 0→1→2→0. Avec body
+    `{"cout_transport_inclus": N}` (N ∈ {0,1,2}) → fixe la valeur explicitement.
+    Une valeur booléenne True est mappée à 1 (rétrocompat clients v1)."""
     user = require_valorisation_usd_admin(request)
     body = await request.json() if request.headers.get("content-length") else {}
     requested = body.get("cout_transport_inclus") if isinstance(body, dict) else None
@@ -4302,29 +4422,40 @@ async def toggle_valorisation_cout_transport(matiere_id: int, request: Request):
             "SELECT cout_transport_inclus FROM mp_valorisation WHERE matiere_id=?",
             (matiere_id,),
         ).fetchone()
+        # Détermine la nouvelle valeur (0/1/2)
         if requested is None:
-            current = bool(prev["cout_transport_inclus"]) if prev else False
-            new_val = not current
+            try:
+                cur = int(prev["cout_transport_inclus"] or 0) if prev else 0
+            except (TypeError, ValueError):
+                cur = 0
+            new_val = (cur + 1) % 3
+        elif isinstance(requested, bool):
+            new_val = 1 if requested else 0
         else:
-            new_val = bool(requested)
+            try:
+                new_val = int(requested)
+            except (TypeError, ValueError):
+                new_val = 0
+            if new_val not in (0, 1, 2):
+                raise HTTPException(400, "cout_transport_inclus doit être 0, 1 ou 2.")
         if prev:
             conn.execute(
                 "UPDATE mp_valorisation SET cout_transport_inclus=?, updated_at=?, updated_by_name=? WHERE matiere_id=?",
-                (1 if new_val else 0, now, user_name, matiere_id),
+                (new_val, now, user_name, matiere_id),
             )
         else:
             conn.execute(
                 """INSERT INTO mp_valorisation (matiere_id, prix_unitaire, cout_transport_inclus, updated_at, updated_by_name)
                    VALUES (?,0,?,?,?)""",
-                (matiere_id, 1 if new_val else 0, now, user_name),
+                (matiere_id, new_val, now, user_name),
             )
         conn.commit()
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn)
         tax_pct = _get_import_tax_pct(conn)
-        transport_eur = _get_transport_cost_fixed_eur(conn)
-    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
-    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
+        c_full, c_half, q_full, q_half = _get_container_params(conn)
+    _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
+    summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = True
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {
@@ -4375,9 +4506,9 @@ async def toggle_valorisation_taxe_importation(matiere_id: int, request: Request
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn)
         tax_pct = _get_import_tax_pct(conn)
-        transport_eur = _get_transport_cost_fixed_eur(conn)
-    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
-    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
+        c_full, c_half, q_full, q_half = _get_container_params(conn)
+    _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
+    summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = True
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {
@@ -4430,9 +4561,9 @@ async def toggle_valorisation_prix_en_usd(matiere_id: int, request: Request):
         items = _valorisation_query(conn)
         taux = _get_taux_eur_usd(conn)
         tax_pct = _get_import_tax_pct(conn)
-        transport_eur = _get_transport_cost_fixed_eur(conn)
-    _enrich_items_with_usd(items, taux, tax_pct, transport_eur)
-    summary = _valorisation_summary(items, taux, tax_pct, transport_eur)
+        c_full, c_half, q_full, q_half = _get_container_params(conn)
+    _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
+    summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = True
     matching = [x for x in items if x["matiere_id"] == matiere_id]
     return {

@@ -13398,7 +13398,11 @@ async function toggleValorisationTransport(matiereId) {
     }
     if (data?.summary) v.summary = data.summary;
     renderValorisationView(true);
-    showToast(data.cout_transport_inclus ? 'Forfait transport appliqué.' : 'Forfait transport retiré.', 'success');
+    const st = Number(data?.cout_transport_inclus || 0);
+    const msg = st === 1 ? 'Transport container complet appliqué.'
+      : st === 2 ? 'Transport demi-container appliqué.'
+      : 'Transport retiré.';
+    showToast(msg, 'success');
   } catch (e) {
     showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
   }
@@ -13612,14 +13616,14 @@ function buildValorisationTableRow(item) {
 
   // ── Colonne « Prix unit. réel » : visible uniquement Direction / superadmin ──
   // Mêmes proportions que Prix unitaire (main /pal. + sous-titre €/kg · kg/pal.) mais
-  // en vert et sans bouton Modifier. Affichée pour les références USD OU taxe.
-  // Pour le forfait transport seul : on ne montre PAS de prix unitaire modifié
-  // (le forfait n'est pas un prix unitaire), juste un sous-titre « + X € transport ».
+  // en vert et sans bouton Modifier. Affichée dès que le prix unitaire diffère de la
+  // base (USD, taxe adhésif, ou supplément transport container appliqué).
   const canSeeUSD = valCanSeeUSD();
-  const hasPriceMult = (item.prix_en_usd || item.taxe_importation) && valored
+  const hasPriceMult = valored
     && Number(item.prix_unitaire_reel || 0) > 0
     && Math.abs(Number(item.prix_unitaire_reel) - Number(item.prix_unitaire)) > 0.00005;
-  const hasTransportAddon = !!item.cout_transport_inclus && Number(item.transport_addon_eur || 0) > 0;
+  const hasTransportAddon = Number(item.cout_transport_inclus || 0) > 0
+    && Number(item.transport_addon_eur || 0) > 0;
   let tdPrixReel = null;
   if (canSeeUSD) {
     if (hasPriceMult) {
@@ -13658,25 +13662,16 @@ function buildValorisationTableRow(item) {
           style: 'font-size:10px;color:#16a34a;opacity:.75;margin-top:2px;white-space:nowrap'
         }, subPieces.join(' · ')));
       }
-      // Forfait transport (en plus de USD/taxe) : ligne supplémentaire « + X € transport »
+      // Supplément transport container : sous-titre indiquant le type (plein ou demi)
       if (hasTransportAddon) {
+        const trState = Number(item.cout_transport_inclus || 0);
+        const label = trState === 2 ? 'demi-container' : 'container plein';
         reelChildren.push(el('div', {
           style: 'font-size:10px;color:#16a34a;font-weight:700;margin-top:1px;white-space:nowrap'
-        }, '+ ' + valFormatEuro(item.transport_addon_eur) + ' transport'));
+        }, '+ ' + valFormatEuro(item.transport_addon_eur) + ' transport ' + label));
       }
       tdPrixReel = el('td', { style: 'padding:10px 12px;text-align:right' },
         el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' }, ...reelChildren)
-      );
-    } else if (hasTransportAddon) {
-      // Transport seul (sans USD ni taxe) : on n'affiche que le forfait, le prix unitaire
-      // n'est pas modifié par le forfait (c'est une enveloppe par matière).
-      tdPrixReel = el('td', { style: 'padding:10px 12px;text-align:right' },
-        el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
-          el('div', {
-            style: 'font-size:13px;font-weight:700;color:#16a34a;font-variant-numeric:tabular-nums;white-space:nowrap'
-          }, '+ ' + valFormatEuro(item.transport_addon_eur)),
-          el('div', { style: 'font-size:10px;color:#16a34a;opacity:.75;margin-top:2px' }, 'transport forfait.')
-        )
       );
     } else {
       tdPrixReel = el('td', {
@@ -13731,63 +13726,83 @@ function buildValorisationTableRow(item) {
     usdBtn.appendChild(iconEl('dollar-sign', 14));
     actionsChildren.push(usdBtn);
 
-    // -- Action Taxe d'importation --
-    const taxOn = !!item.taxe_importation;
-    const taxRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.import_tax_pct) || 0);
-    const taxTxt = taxRaw > 0 ? taxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %' : null;
-    const taxTitle = taxOn
-      ? 'Taxe d\'importation appliquée — cliquer pour la retirer'
-      + (taxTxt ? ' (taux courant ' + taxTxt + ')' : '')
-      : 'Appliquer la taxe d\'importation à cette référence'
-      + (taxTxt ? ' (' + taxTxt + ')' : ' — taux à configurer dans Paramètres');
-    const taxBtn = el('button', {
-      type: 'button', title: taxTitle,
-      style:
-        'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
-        + (taxOn
-            ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-            : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
-      on: {
-        click: () => toggleValorisationTaxe(item.matiere_id || item.id),
-        mouseenter: (e) => {
-          if (!taxOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
+    // -- Action Taxe d'importation (adhésifs uniquement) --
+    const catLower = String(item.categorie || '').toLowerCase();
+    if (catLower === 'adhesif') {
+      const taxOn = !!item.taxe_importation;
+      const taxRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.import_tax_pct) || 0);
+      const taxTxt = taxRaw > 0 ? taxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %' : null;
+      const taxTitle = taxOn
+        ? 'Taxe d\'importation appliquée — cliquer pour la retirer'
+        + (taxTxt ? ' (taux courant ' + taxTxt + ')' : '')
+        : 'Appliquer la taxe d\'importation à cette référence'
+        + (taxTxt ? ' (' + taxTxt + ')' : ' — taux à configurer dans Paramètres');
+      const taxBtn = el('button', {
+        type: 'button', title: taxTitle,
+        style:
+          'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
+          + (taxOn
+              ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
+              : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+        on: {
+          click: () => toggleValorisationTaxe(item.matiere_id || item.id),
+          mouseenter: (e) => {
+            if (!taxOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
+          },
+          mouseleave: (e) => {
+            if (!taxOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+          },
         },
-        mouseleave: (e) => {
-          if (!taxOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
-        },
-      },
-    });
-    taxBtn.appendChild(iconEl('package', 14));
-    actionsChildren.push(taxBtn);
+      });
+      taxBtn.appendChild(iconEl('package', 14));
+      actionsChildren.push(taxBtn);
+    }
 
-    // -- Action Coût transport (forfait) --
-    const trOn = !!item.cout_transport_inclus;
-    const trRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.transport_cost_fixed_eur) || 0);
-    const trTxt = trRaw > 0 ? trRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' €' : null;
-    const trTitle = trOn
-      ? 'Forfait transport appliqué — cliquer pour le retirer'
-      + (trTxt ? ' (forfait courant ' + trTxt + ')' : '')
-      : 'Ajouter le forfait transport à cette référence'
-      + (trTxt ? ' (' + trTxt + ' une seule fois, peu importe la quantité)' : ' — montant à configurer dans Paramètres');
-    const trBtn = el('button', {
-      type: 'button', title: trTitle,
-      style:
-        'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
-        + (trOn
-            ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-            : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
-      on: {
-        click: () => toggleValorisationTransport(item.matiere_id || item.id),
-        mouseenter: (e) => {
-          if (!trOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
+    // -- Action Coût transport container (bobines uniquement : frontal, glassine, complexe) --
+    // 3 états : 0 off (gris) → 1 container complet (camion vert) → 2 demi-container (½ camion vert) → 0
+    if (catLower === 'frontal' || catLower === 'glassine' || catLower === 'complexe') {
+      const trState = Number(item.cout_transport_inclus || 0);
+      const summ = (S.valorisation && S.valorisation.summary) || {};
+      const suppFull = Number(summ.container_supplement_eur_per_m2_full || 0);
+      const suppHalf = Number(summ.container_supplement_eur_per_m2_half || 0);
+      const fmtEur = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+      let trTitle;
+      if (trState === 1) {
+        trTitle = 'Transport container complet appliqué — cliquer pour passer au demi-container'
+          + (suppFull > 0 ? ' (+ ' + fmtEur(suppFull) + ' €/m²)' : ' — coût container / qté m² à configurer');
+      } else if (trState === 2) {
+        trTitle = 'Transport demi-container appliqué — cliquer pour retirer le transport'
+          + (suppHalf > 0 ? ' (+ ' + fmtEur(suppHalf) + ' €/m²)' : ' — coût demi-container / qté m² à configurer');
+      } else {
+        trTitle = 'Cliquer pour appliquer un transport container complet'
+          + (suppFull > 0 ? ' (+ ' + fmtEur(suppFull) + ' €/m²)' : '');
+      }
+      const trActive = trState > 0;
+      const trBtn = el('button', {
+        type: 'button', title: trTitle,
+        style:
+          'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
+          + (trActive
+              ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
+              : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+        on: {
+          click: () => toggleValorisationTransport(item.matiere_id || item.id),
+          mouseenter: (e) => {
+            if (!trActive) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
+          },
+          mouseleave: (e) => {
+            if (!trActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+          },
         },
-        mouseleave: (e) => {
-          if (!trOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
-        },
-      },
-    });
-    trBtn.appendChild(iconEl('truck', 14));
-    actionsChildren.push(trBtn);
+      });
+      // Icône : camion (état 0/1) ou demi-camion custom (état 2)
+      if (trState === 2) {
+        trBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="6" width="10" height="10" rx="1"/><path d="M11 8h4l3 4v4h-2"/><circle cx="6" cy="18" r="2"/><circle cx="16" cy="18" r="2"/><text x="4" y="14" font-size="6" font-weight="700" font-family="system-ui" stroke="none" fill="currentColor">½</text></svg>';
+      } else {
+        trBtn.appendChild(iconEl('truck', 14));
+      }
+      actionsChildren.push(trBtn);
+    }
   }
   const tdHist = el('td', {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
@@ -14903,7 +14918,6 @@ async function openValorisationSettingsModal() {
 
   const rateInp = mkInput('vsm-rate', settings.eur_usd_rate, '0.0001');
   const taxInp = mkInput('vsm-tax', settings.import_tax_pct || 0, '0.01');
-  const transportInp = mkInput('vsm-transport', settings.transport_cost_fixed_eur || 0, '0.01');
   const chargeProdInp = mkInput('vsm-charge-prod', settings.charge_production_pct || 0, '0.01');
   const storageInp = mkInput('vsm-storage', settings.storage_fees_pct || 0, '0.01');
   const contCostInp = mkInput('vsm-cont-cost', settings.default_container_cost_usd, '1');
@@ -14956,13 +14970,8 @@ async function openValorisationSettingsModal() {
     'Source : ' + fxSrc + ' · MAJ : ' + fxDate));
 
   // -- Taxe d'importation --
-  box.appendChild(mkLabel('Taxe d\'importation (%)', 'Appliquée aux lignes cochées « package »'));
+  box.appendChild(mkLabel('Taxe d\'importation (%)', 'Appliquée aux adhésifs cochés « package »'));
   box.appendChild(taxInp);
-  box.appendChild(el('div', { style: 'height:14px' }));
-
-  // -- Coût transport forfaitaire --
-  box.appendChild(mkLabel('Coût transport — forfait (€)', 'Ajouté une fois par référence cochée « camion »'));
-  box.appendChild(transportInp);
   box.appendChild(el('div', { style: 'height:14px' }));
 
   // -- Charge de production --
@@ -15029,7 +15038,6 @@ async function openValorisationSettingsModal() {
       const payload = {
         eur_usd_rate: parseFloat(rateInp.value),
         import_tax_pct: parseFloat(taxInp.value || '0'),
-        transport_cost_fixed_eur: parseFloat(transportInp.value || '0'),
         charge_production_pct: parseFloat(chargeProdInp.value || '0'),
         storage_fees_pct: parseFloat(storageInp.value || '0'),
         default_container_cost_usd: parseFloat(contCostInp.value),
