@@ -4428,6 +4428,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 140, "mc_setting_charges_prod_stockage")
 
+    # v141 — Traçabilité clôture sondages : colonne closed_by (auteur du clic)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=141 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_polls)").fetchall()}
+        if "closed_by" not in cols:
+            conn.execute("ALTER TABLE chat_polls ADD COLUMN closed_by INTEGER DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 141, "chat_polls_closed_by")
+
 
 def create_default_admin():
     import bcrypt
