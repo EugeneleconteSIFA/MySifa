@@ -4053,10 +4053,15 @@ function refreshCtrlFiltersOptions(){
     // Ajoute : chaque entrée (manuelle ou ack) via son nom d'affichage canonique
     CTRL_STATE.list.forEach(c => { const n = _displayType(c); if(n) setTypes.add(n); });
     (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
-    // Ajoute : TOUTES les alertes configurées (même sans acquittement) pour
-    // que le filtre listant les types couvre toutes les alertes créées, pas
-    // seulement celles qui ont déjà été validées par un opérateur.
-    (CTRL_STATE.known_alerts || []).forEach(a => { if(a && a.nom) setTypes.add(a.nom); });
+    // Ajoute : les alertes autonomes (sans linked_maint_code) même sans ack.
+    // Les alertes auto-générées à partir d'un code maintenance (préfixe
+    // "Contrôle : XX – …") ne sont PAS ajoutées ici — le label du code est
+    // déjà présent via CTRL_TYPES_STATE, ce qui créerait un doublon.
+    (CTRL_STATE.known_alerts || []).forEach(a => {
+      if(!a || !a.nom) return;
+      if(a.linked_maint_code) return;  // évite le doublon avec le label du code
+      setTypes.add(a.nom);
+    });
     const types = Array.from(setTypes).sort((a,b) => a.localeCompare(b, 'fr'));
     typeSel.innerHTML = '<option value="">Tous les types</option>' +
       types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
