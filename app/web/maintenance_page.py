@@ -65,6 +65,17 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
+/* ── Contexte dossier + fiche technique dans le détail d'un contrôle ── */
+.ack-di-wrap{margin-top:6px}
+.ack-di-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.ack-di-badge{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px}
+.ack-di-badge-sub{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:600}
+.ack-di-section{margin-top:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.ack-di-title{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.ack-di-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 12px}
+.ack-di-kv{display:flex;flex-direction:column;gap:1px;min-width:0}
+.ack-di-k{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.ack-di-v{font-size:12px;color:var(--text);font-weight:600;word-break:break-word}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
@@ -3908,8 +3919,11 @@ async function loadCtrlAcks(){
       _alert_id: a.alert_id,
       _responses: a.responses || {},
       _raw_comment: a.comment || '',
+      _no_dossier: a.no_dossier || '',
+      _dossier_info: a.dossier_info || null,
     }));
     CTRL_STATE.alerts_meta = data.alerts_meta || {};
+    CTRL_STATE.known_alerts = Array.isArray(data.known_alerts) ? data.known_alerts : [];
   } catch(e){ CTRL_STATE.acks = []; }
   if(typeof renderCtrl === 'function') renderCtrl();
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
@@ -4039,6 +4053,10 @@ function refreshCtrlFiltersOptions(){
     // Ajoute : chaque entrée (manuelle ou ack) via son nom d'affichage canonique
     CTRL_STATE.list.forEach(c => { const n = _displayType(c); if(n) setTypes.add(n); });
     (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
+    // Ajoute : TOUTES les alertes configurées (même sans acquittement) pour
+    // que le filtre listant les types couvre toutes les alertes créées, pas
+    // seulement celles qui ont déjà été validées par un opérateur.
+    (CTRL_STATE.known_alerts || []).forEach(a => { if(a && a.nom) setTypes.add(a.nom); });
     const types = Array.from(setTypes).sort((a,b) => a.localeCompare(b, 'fr'));
     typeSel.innerHTML = '<option value="">Tous les types</option>' +
       types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
@@ -4202,13 +4220,84 @@ function openAckDetail(prefixedId){
   const contextLine = escHtml(ack.machine || '—') + ' · ' + escHtml(dt) + ' · ' + escHtml(ack.operateur || '—');
   const commentText = ack._raw_comment || '';
 
+  // ── Contexte dossier + fiche technique ──
+  const dosInfo = ack._dossier_info || null;
+  const noDos = ack._no_dossier || '';
+  let dossierHtml = '';
+  if(noDos){
+    const fmtVal = (v, suffix) => {
+      if(v == null || v === '' || v === 0) return '';
+      const s = String(v).trim();
+      if(!s) return '';
+      return escHtml(s) + (suffix ? ' ' + escHtml(suffix) : '');
+    };
+    const kv = (label, value) => {
+      if(!value) return '';
+      return '<div class="ack-di-kv"><span class="ack-di-k">' + escHtml(label) + '</span><span class="ack-di-v">' + value + '</span></div>';
+    };
+    const section = (title, kvs) => {
+      const inner = kvs.filter(Boolean).join('');
+      if(!inner) return '';
+      return '<div class="ack-di-section"><div class="ack-di-title">' + escHtml(title) + '</div><div class="ack-di-grid">' + inner + '</div></div>';
+    };
+    let sections = '';
+    if(dosInfo){
+      const clientRef = [];
+      if(dosInfo.ref_produit) clientRef.push(escHtml(dosInfo.ref_produit));
+      else if(dosInfo.ref_produit_norm) clientRef.push(escHtml(dosInfo.ref_produit_norm));
+      const dosSec = section('Dossier', [
+        kv('Client', fmtVal(dosInfo.client)),
+        kv('Désignation', fmtVal(dosInfo.description)),
+        kv('Réf produit', clientRef.join(' ')),
+        kv('Format', (dosInfo.format_l && dosInfo.format_h) ? escHtml(String(dosInfo.format_l)) + ' × ' + escHtml(String(dosInfo.format_h)) + ' mm' : (fmtVal(dosInfo.format_l, 'mm') || fmtVal(dosInfo.format_h, 'mm'))),
+        kv('Laize dossier', fmtVal(dosInfo.pe_laize, 'mm')),
+        kv('Dos', fmtVal(dosInfo.dos_rvgi)),
+      ]);
+      const bobSec = section('Bobine', [
+        kv('Ø mandrin', fmtVal(dosInfo.mandrin_dia)),
+        kv('Longueur mandrin', fmtVal(dosInfo.mandrin_longueur, 'mm')),
+        kv('Enroulement', fmtVal(dosInfo.enroulement)),
+        kv('Étiquettes / bobine', fmtVal(dosInfo.nb_etiq_bobin)),
+        kv('Ø extérieur', fmtVal(dosInfo.dia_ext, 'mm')),
+        kv('Poids', fmtVal(dosInfo.poids, 'kg')),
+      ]);
+      const matSec = section('Matière', [
+        kv('Matière', fmtVal(dosInfo.matiere)),
+        kv('Adhésif', fmtVal(dosInfo.adhesif)),
+        kv('Support', fmtVal(dosInfo.support)),
+        kv('Glassine', fmtVal(dosInfo.glassine)),
+        kv('Épaisseur', fmtVal(dosInfo.epaisseur, 'µm')),
+        kv('Laize fiche', fmtVal(dosInfo.ft_laize, 'mm')),
+        kv('Laize optimale', fmtVal(dosInfo.laize_optimale, 'mm')),
+      ]);
+      const etiSec = section('Étiquette', [
+        kv('Laize étiq.', fmtVal(dosInfo.eti_laize, 'mm')),
+        kv('Longueur étiq.', fmtVal(dosInfo.eti_longueur, 'mm')),
+        kv('Rayons', fmtVal(dosInfo.eti_rayons)),
+        kv('Perforations', fmtVal(dosInfo.eti_perforations)),
+      ]);
+      const impSec = section('Impression', [
+        kv('Anilox tête 1', fmtVal(dosInfo.tete1_anilox)),
+        kv('Composition tête 1', fmtVal(dosInfo.tete1_composition)),
+      ]);
+      sections = dosSec + bobSec + matSec + etiSec + impSec;
+    }
+    const dosHeader = '<div class="ack-di-head"><span class="ack-di-badge">Dossier ' + escHtml(noDos) + '</span>' + (dosInfo && dosInfo.client ? '<span class="ack-di-badge-sub">' + escHtml(dosInfo.client) + '</span>' : '') + '</div>';
+    if(sections){
+      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier &amp; fiche technique</label>' + dosHeader + sections + '</div>';
+    } else {
+      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier</label>' + dosHeader + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">Aucune fiche technique associée à ce dossier.</div></div>';
+    }
+  }
+
   const overlay = document.createElement('div');
   overlay.className = 'ta-sim ta-pl-center ta-blocking';
   overlay.id = 'ack-detail-overlay';
-  overlay.innerHTML = '<div class="ta-sim-alert">'
+  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:640px">'
     + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
     + '<div class="ta-sim-sub">' + contextLine + '</div>'
     + checklistHtml
+    + dossierHtml
     + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire</label>'
     + '<textarea disabled rows="2" placeholder="(aucun commentaire)" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;opacity:.85">' + escHtml(commentText) + '</textarea>'
     + '<div class="ta-sim-actions">'

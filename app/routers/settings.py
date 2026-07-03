@@ -2640,7 +2640,83 @@ def maintenance_alert_acks_list(request: Request):
             "ack_at": r["ack_at"],
             "responses": responses,
             "comment": r["comment"] or "",
+            "dossier_info": None,
         })
+
+    # ── Enrichissement dossier + fiche technique ────────────────────────────
+    # Pour chaque acquittement lié à un dossier (no_dossier renseigné) on va
+    # chercher dans planning_entries le contexte du dossier (client, réf produit,
+    # format, laize…) et, via ref_produit_norm, dans fiches_techniques les
+    # caractéristiques bobine / matière / étiquette. Objectif : afficher ces
+    # champs à côté de la tension / qualité serrage saisis par l'opérateur,
+    # sans jamais dupliquer la donnée en DB — extraction pure au moment T.
+    distinct_dossiers = sorted({(it["no_dossier"] or "").strip() for it in items if (it.get("no_dossier") or "").strip()})
+    if distinct_dossiers:
+        ph = ",".join(["?"] * len(distinct_dossiers))
+        with get_db() as conn3:
+            di_rows = conn3.execute(
+                f"""SELECT
+                      pe.reference          AS reference,
+                      pe.numero_of          AS numero_of,
+                      pe.client             AS client,
+                      pe.description        AS description,
+                      pe.ref_produit        AS ref_produit,
+                      pe.ref_produit_norm   AS ref_produit_norm,
+                      pe.format_l           AS format_l,
+                      pe.format_h           AS format_h,
+                      pe.laize              AS pe_laize,
+                      pe.dos_rvgi           AS dos_rvgi,
+                      ft.mandrin_dia        AS mandrin_dia,
+                      ft.mandrin_longueur   AS mandrin_longueur,
+                      ft.enroulement        AS enroulement,
+                      ft.nb_etiq_bobin      AS nb_etiq_bobin,
+                      ft.dia_ext            AS dia_ext,
+                      ft.poids              AS poids,
+                      ft.matiere            AS matiere,
+                      ft.adhesif            AS adhesif,
+                      ft.support            AS support,
+                      ft.glassine           AS glassine,
+                      ft.epaisseur          AS epaisseur,
+                      ft.laize              AS ft_laize,
+                      ft.laize_optimale     AS laize_optimale,
+                      ft.eti_laize          AS eti_laize,
+                      ft.eti_longueur       AS eti_longueur,
+                      ft.eti_rayons         AS eti_rayons,
+                      ft.eti_perforations   AS eti_perforations,
+                      ft.tete1_anilox       AS tete1_anilox,
+                      ft.tete1_composition  AS tete1_composition,
+                      ft.machine            AS ft_machine
+                    FROM planning_entries pe
+                    LEFT JOIN fiches_techniques ft ON ft.id = (
+                        SELECT ft2.id FROM fiches_techniques ft2
+                        WHERE TRIM(COALESCE(ft2.ref_produit_norm,'')) != ''
+                          AND TRIM(ft2.ref_produit_norm) = TRIM(COALESCE(pe.ref_produit_norm,''))
+                        ORDER BY
+                          CASE WHEN ft2.machine IS NOT NULL AND TRIM(ft2.machine) != '' THEN 0 ELSE 1 END,
+                          ft2.id ASC
+                        LIMIT 1
+                    )
+                    WHERE TRIM(pe.reference) IN ({ph})
+                       OR TRIM(COALESCE(pe.numero_of,'')) IN ({ph})""",
+                tuple(distinct_dossiers) * 2,
+            ).fetchall()
+        di_map: dict = {}
+        for r in di_rows:
+            payload = {k: r[k] for k in r.keys()}
+            for key_src in ("reference", "numero_of"):
+                k = str(r[key_src] or "").strip()
+                if not k or k not in distinct_dossiers:
+                    continue
+                prev = di_map.get(k)
+                cur_has_ft = payload.get("mandrin_dia") is not None or payload.get("matiere") is not None
+                prev_has_ft = bool(prev) and (prev.get("mandrin_dia") is not None or prev.get("matiere") is not None)
+                if prev is None or (cur_has_ft and not prev_has_ft):
+                    di_map[k] = payload
+        for it in items:
+            k = (it.get("no_dossier") or "").strip()
+            if k and k in di_map:
+                it["dossier_info"] = di_map[k]
+
     # Charger la structure des questionnaires (points de contrôle) pour les
     # alertes rencontrées, afin que le frontend puisse construire des colonnes
     # dynamiques dans l'historique.
@@ -2684,7 +2760,31 @@ def maintenance_alert_acks_list(request: Request):
                             entry["multi"] = bool(it.get("multi", True))
                         clean.append(entry)
             alerts_meta[str(mr["id"])] = {"checklist_items": clean}
-    return {"items": items, "alerts_meta": alerts_meta}
+
+    # ── Toutes les alertes connues (même sans ack) ────────────────────────
+    # Objectif : permettre à l'UI "Historique des contrôles" de proposer
+    # dans son dropdown de filtre TOUTES les alertes configurées, pas
+    # seulement celles qui ont déjà été acquittées. Sans ça, une nouvelle
+    # alerte reste "introuvable" tant qu'un opérateur ne l'a pas encore
+    # validée.
+    known_alerts = []
+    try:
+        with get_db() as conn4:
+            arows = conn4.execute(
+                "SELECT id, nom, active, linked_maint_code FROM maintenance_alerts "
+                "ORDER BY (linked_maint_code IS NULL), linked_maint_code, id"
+            ).fetchall()
+        for ar in arows:
+            known_alerts.append({
+                "id": int(ar["id"]),
+                "nom": ar["nom"] or "",
+                "active": int(ar["active"] or 0),
+                "linked_maint_code": ar["linked_maint_code"] or "",
+            })
+    except Exception:
+        known_alerts = []
+
+    return {"items": items, "alerts_meta": alerts_meta, "known_alerts": known_alerts}
 
 
 _MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
