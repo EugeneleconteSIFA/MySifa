@@ -3126,7 +3126,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (canClose) {
       footParts.push('<button type="button" class="cw-poll-close-btn" data-poll-close="' + p.id + '">Clôturer</button>');
     }
+<<<<<<< HEAD
     // Rouvrir : créateur ou admin, uniquement si clôturé
+=======
+>>>>>>> feature/messagerie-sondages
     if (closed && (mineIsAuthor || isAdmin)) {
       footParts.push('<button type="button" class="cw-poll-reopen-btn" data-poll-reopen="' + p.id + '">Rouvrir</button>');
     }
