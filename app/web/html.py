@@ -2178,7 +2178,7 @@ body.light .mobile-navbar{box-shadow:0 -4px 20px rgba(15,23,42,.06)}
   html body[class] #ai-chat-btn{display:none!important}
   #ai-chat-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important;right:8px!important;left:8px!important;width:auto!important;max-width:none!important}
   /* Widget chat_widget : bulle et barre flottantes cachées.
-     Spécificité boostée pour battre body.cw-use-bubble #cw-bubble injecté par chat_widget.js. */
+     Spécificité boostée pour battre body.cw-use-bubble #cw-bubble injecté par chat_widget.js?v=7. */
   html body #cw-bubble,html body #cw-bar,
   html body[class] #cw-bubble,html body[class] #cw-bar{display:none!important}
   #cw-panel{bottom:calc(70px + env(safe-area-inset-bottom,0px))!important}
@@ -2427,9 +2427,9 @@ __STAGING_BANDEAU_HTML__
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=6"></script>
+<script src="/static/chat_widget.js?v=7"></script>
 <script src="/static/mysifa_humeur.js"></script>
-<script src="/static/chat_widget_v2.js?v=2"></script>
+<script src="/static/chat_widget_v2.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/motion.js" defer></script>
@@ -13994,13 +13994,18 @@ function _mnbAiEnabled(){
   return AI_ROLES.indexOf(role)>=0;
 }
 function _mnbToggleAi(){
-  const btn=document.getElementById('ai-chat-btn');
-  if(btn){btn.click();return;}
-  // Fallback: force init si widget pas encore monté
-  if(typeof initAiChatWidget==='function'){
-    initAiChatWidget();
-    setTimeout(()=>{document.getElementById('ai-chat-btn')?.click();},50);
-  }
+  // Le widget IA écoute document.click pour se fermer. Si on déclenche le clic du
+  // FAB dans la même pile d'événements, l'event remonte au document et onDocClick
+  // referme le panel aussitôt ouvert. On défère donc le clic dans setTimeout(0).
+  const runClick=()=>{
+    const btn=document.getElementById('ai-chat-btn');
+    if(btn){btn.click();return;}
+    if(typeof initAiChatWidget==='function'){
+      initAiChatWidget();
+      setTimeout(()=>{document.getElementById('ai-chat-btn')?.click();},50);
+    }
+  };
+  setTimeout(runClick,0);
 }
 function _mnbOpenCmdK(){
   if(window.MysifaCmdK&&typeof window.MysifaCmdK.open==='function'){
@@ -14065,6 +14070,7 @@ function renderMobileNavbar(){
   root.querySelectorAll('.mobile-navbar-tab').forEach(btn=>{
     btn.addEventListener('click',(e)=>{
       e.preventDefault();
+      e.stopPropagation();
       const id=btn.getAttribute('data-nav');
       if(id==='home'){
         if(S.app==='portal'){window.scrollTo({top:0,behavior:'smooth'});return;}

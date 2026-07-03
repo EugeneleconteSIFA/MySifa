@@ -4353,6 +4353,82 @@ def _migrate(conn):
         _record_schema_migration(conn, 138, "maintenance_alert_settings_min_gap")
 
 
+    # v139 — Sondages dans la messagerie interne (chat_polls + options + votes)
+    # Rattachés à un chat_messages (cascade delete). Vote 100% anonyme possible :
+    # user_id/user_nom NULL, dédup via voter_hash = SHA256(poll_id || user_id || secret).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=139 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_polls (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id   INTEGER NOT NULL UNIQUE REFERENCES chat_messages(id) ON DELETE CASCADE,
+                channel_id   INTEGER NOT NULL,
+                question     TEXT    NOT NULL,
+                multi_choice INTEGER NOT NULL DEFAULT 0,
+                anonymous    INTEGER NOT NULL DEFAULT 0,
+                closes_at    TEXT    DEFAULT NULL,
+                closed_at    TEXT    DEFAULT NULL,
+                created_by   INTEGER NOT NULL,
+                created_at   TEXT    NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_poll_options (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                poll_id  INTEGER NOT NULL REFERENCES chat_polls(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL,
+                label    TEXT    NOT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poll_options_poll ON chat_poll_options(poll_id)"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS chat_poll_votes (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                poll_id     INTEGER NOT NULL REFERENCES chat_polls(id) ON DELETE CASCADE,
+                option_id   INTEGER NOT NULL REFERENCES chat_poll_options(id) ON DELETE CASCADE,
+                user_id     INTEGER DEFAULT NULL,
+                user_nom    TEXT    DEFAULT NULL,
+                voter_hash  TEXT    DEFAULT NULL,
+                voted_at    TEXT    NOT NULL
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON chat_poll_votes(poll_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poll_votes_option ON chat_poll_votes(option_id)"
+        )
+        # Unicité vote nominatif (1 vote par option par user)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_poll_votes_user "
+            "ON chat_poll_votes(poll_id, option_id, user_id) WHERE user_id IS NOT NULL"
+        )
+        # Unicité vote anonyme (1 vote par option par voter_hash)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_poll_votes_hash "
+            "ON chat_poll_votes(poll_id, option_id, voter_hash) WHERE voter_hash IS NOT NULL"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 139, "chat_polls")
+
+    # v140 — MyCouts : nouvelles clés mc_setting « charge de production » et
+    # « frais de stockage » (utilisées côté valorisation PF pour calculer
+    # total_pf_avec_charges = total_pf * (1 + storage/100) / (1 - charge/100)).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=140 LIMIT 1").fetchone():
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('charge_production_pct', 0)"
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('storage_fees_pct', 0)"
+            )
+        except Exception:
+            pass  # mc_setting peut ne pas exister sur les DB très anciennes
+        conn.commit()
+        _record_schema_migration(conn, 140, "mc_setting_charges_prod_stockage")
+
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

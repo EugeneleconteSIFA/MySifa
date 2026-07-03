@@ -281,7 +281,9 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .alert-status{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .alert-status.on{color:var(--success)}
 .alert-status.off{color:var(--muted)}
-.alert-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.alert-actions{display:grid;grid-template-columns:110px 92px 92px;gap:6px;align-items:center;flex-shrink:0}
+.alert-actions .btn-sm{width:100%;text-align:center;white-space:nowrap}
+@media(max-width:900px){.alert-actions{grid-template-columns:1fr 1fr 1fr;width:100%}}
 /* Toggle switch */
 .toggle{position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0;cursor:pointer}
 .toggle input{opacity:0;width:0;height:0;position:absolute}
@@ -1325,8 +1327,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=5"></script>
-<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/chat_widget.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=3"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -3427,8 +3429,6 @@ function renderAlertsList() {
     const configured = _alertIsConfigured(a);
     let cls = a.active ? 'is-active' : 'is-inactive';
     if (!configured) cls += ' is-todo';
-    const statusCls = a.active ? 'on' : 'off';
-    const statusLbl = a.active ? 'Active' : 'Inactive';
     const created = _fmtAlertDate(a.created_at);
     const autoBadge = isAuto
       ? '<span class="alert-badge auto" title="Alerte auto-générée depuis le code ' + esc(a.linked_maint_code) + '">Auto · ' + esc(a.linked_maint_code) + '</span>'
@@ -3450,7 +3450,7 @@ function renderAlertsList() {
       + '</label>'
       + '<div class="alert-info">'
       +   '<p class="alert-nom">' + esc(a.nom) + ' ' + badge + '</p>'
-      +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by ? ' · ' + esc(a.created_by) : '') + ' · <span class="alert-status ' + statusCls + '">' + statusLbl + '</span>' + lastAck + '</span>'
+      +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by_display ? ' · ' + esc(a.created_by_display) : '') + lastAck + '</span>'
       + '</div>'
       + '<div class="alert-actions">'
       +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
