@@ -387,6 +387,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
+      <div class="nav-subgroup-label"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
@@ -394,6 +395,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       <button type="button" class="nav-btn" data-tab="laizes">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
+      </button>
+      <button type="button" class="nav-btn" data-tab="importations">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        Importations
       </button>
       <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn active" data-tab="users">
@@ -927,6 +932,33 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-importations" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h2 style="margin:0 0 4px">Importations</h2>
+          <p class="sub" style="margin:0;font-size:12px">Quantités de matière (m²) contenues dans un container standard. Utilisées côté MyStock → Valorisation pour afficher le coût EUR/m² à partir du coût container.</p>
+        </div>
+        <div id="importations-loading" class="sub" style="padding:12px 0;font-size:13px">Chargement…</div>
+        <form id="importations-form" style="display:none;flex-direction:column;gap:16px;max-width:520px">
+          <div>
+            <label for="imp-qte-full" style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Quantité matière dans un container complet (m²)</label>
+            <input type="number" id="imp-qte-full" min="0" step="0.01" placeholder="Ex. 12000"
+              style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;outline:none;transition:border-color .15s;font-variant-numeric:tabular-nums">
+          </div>
+          <div>
+            <label for="imp-qte-half" style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Quantité matière dans un demi-container (m²)</label>
+            <input type="number" id="imp-qte-half" min="0" step="0.01" placeholder="Ex. 6000"
+              style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;outline:none;transition:border-color .15s;font-variant-numeric:tabular-nums">
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="submit" class="btn" id="imp-save-btn">Enregistrer</button>
+            <span id="imp-status" class="sub" style="font-size:12px"></span>
+          </div>
+        </form>
+        <div id="importations-error" class="sub" style="display:none;color:var(--danger);font-size:13px;padding:12px 0"></div>
+      </div>
+    </section>
+
     <section id="panel-operations" class="hidden">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
@@ -1327,8 +1359,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=7"></script>
-<script src="/static/chat_widget_v2.js?v=3"></script>
+<script src="/static/chat_widget.js?v=9"></script>
+<script src="/static/chat_widget_v2.js?v=5"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -1432,6 +1464,7 @@ function setTab(id) {
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
+  if (id === 'importations') initImportationsPanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
@@ -5145,6 +5178,80 @@ function renderLaizesList() {
     actions.append(toggleBtn, delBtn);
     row.appendChild(actions);
     wrap.appendChild(row);
+  });
+}
+
+// ── Importations (Logistique) ─────────────────────────────────
+let _impReady = false;
+async function initImportationsPanel() {
+  const loading = document.getElementById('importations-loading');
+  const form = document.getElementById('importations-form');
+  const errBox = document.getElementById('importations-error');
+  const inpFull = document.getElementById('imp-qte-full');
+  const inpHalf = document.getElementById('imp-qte-half');
+  const saveBtn = document.getElementById('imp-save-btn');
+  const status = document.getElementById('imp-status');
+  if (!form || !inpFull || !inpHalf) return;
+
+  const showError = (msg) => {
+    if (loading) loading.style.display = 'none';
+    form.style.display = 'none';
+    if (errBox) { errBox.style.display = 'block'; errBox.textContent = msg; }
+  };
+
+  try {
+    const r = await fetch('/api/pricing/settings', { credentials: 'include' });
+    if (r.status === 403) { showError('Accès réservé à la Direction et au super admin.'); return; }
+    if (!r.ok) { showError('Erreur de chargement (' + r.status + ').'); return; }
+    const data = await r.json();
+    inpFull.value = String(Number(data.logistique_qte_m2_container_complet || 0));
+    inpHalf.value = String(Number(data.logistique_qte_m2_demi_container || 0));
+    if (loading) loading.style.display = 'none';
+    if (errBox) errBox.style.display = 'none';
+    form.style.display = 'flex';
+  } catch (e) {
+    showError('Erreur de chargement : ' + (e?.message || 'inconnue'));
+    return;
+  }
+
+  if (_impReady) return;
+  _impReady = true;
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const full = parseFloat(inpFull.value || '0');
+    const half = parseFloat(inpHalf.value || '0');
+    if (isNaN(full) || full < 0 || isNaN(half) || half < 0) {
+      status.textContent = 'Valeurs invalides.';
+      status.style.color = 'var(--danger)';
+      return;
+    }
+    saveBtn.disabled = true;
+    status.textContent = 'Enregistrement…';
+    status.style.color = 'var(--muted)';
+    try {
+      const r = await fetch('/api/pricing/settings', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logistique_qte_m2_container_complet: full,
+          logistique_qte_m2_demi_container: half,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || ('HTTP ' + r.status));
+      }
+      status.textContent = 'Enregistré.';
+      status.style.color = 'var(--ok, #34d399)';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch (e) {
+      status.textContent = 'Erreur : ' + (e?.message || 'enregistrement impossible');
+      status.style.color = 'var(--danger)';
+    } finally {
+      saveBtn.disabled = false;
+    }
   });
 }
 
