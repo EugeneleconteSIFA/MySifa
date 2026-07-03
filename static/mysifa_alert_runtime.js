@@ -25,7 +25,7 @@
       '.ta-sz-small .ta-sim-alert{max-width:260px;width:100%}',
       '.ta-sz-medium .ta-sim-alert{max-width:340px;width:100%}',
       '.ta-sz-large .ta-sim-alert{max-width:440px;width:100%}',
-      '.ta-sim-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);line-height:1.3}',
+      '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}',
       '.ta-sim-actions{display:flex;gap:6px;margin-top:10px}',
       '.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}',
       '.ta-sim-btn:hover{filter:brightness(1.05)}',
