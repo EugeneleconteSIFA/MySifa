@@ -352,12 +352,12 @@ def me(request: Request):
     d["effective_role"] = eff_role
     d["effective_machine_id"] = eff_machine_id
     d["is_impersonating"] = is_imp
-    # app_access basé sur le rôle RÉEL — la sidebar doit rester complète pour le superadmin
-    # même en simulation ("toutes les pages accessibles + rendu contextualisé").
-    # Les endpoints API, eux, vérifient les droits sur le rôle effectif (user_has_app_access).
-    d["app_access"] = merged_app_access(real_role, ov_raw)
-    # effective_app_access : ce que le rôle simulé verrait — pour les toggles de features fines.
-    d["effective_app_access"] = merged_app_access(eff_role, ov_raw) if is_imp else d["app_access"]
+    # app_access suit le rôle effectif : simulation fidèle (le portail et la sidebar affichent
+    # exactement ce qu'un vrai opérateur du rôle simulé verrait). Le bouton "Revenir superadmin"
+    # reste toujours visible dans le bandeau : chemin de sortie garanti.
+    d["app_access"] = merged_app_access(eff_role, ov_raw)
+    # real_app_access exposé au cas où le front en a besoin (bandeau, debug, etc.).
+    d["real_app_access"] = merged_app_access(real_role, ov_raw)
     d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
     return d
 
