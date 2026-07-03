@@ -379,8 +379,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=7"></script>
-<script src="/static/chat_widget_v2.js?v=3"></script>
+<script src="/static/chat_widget.js?v=10"></script>
+<script src="/static/chat_widget_v2.js?v=6"></script>
 <script>
 'use strict';
 

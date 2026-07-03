@@ -1520,6 +1520,21 @@ def _poll_dict(conn, poll_row, uid: int) -> dict:
     total_voters = int(total_voters_row["c"]) if total_voters_row else 0
 
     is_closed = _poll_is_closed(poll_row)
+    # Cause : manual = clôture par bouton (closed_by renseigné) ; deadline = auto
+    closed_by = None
+    try:
+        closed_by = poll_row["closed_by"]
+    except (KeyError, IndexError):
+        closed_by = None
+    closed_by_nom = ""
+    if closed_by:
+        r = conn.execute("SELECT nom FROM users WHERE id=? LIMIT 1", (closed_by,)).fetchone()
+        if r:
+            closed_by_nom = r["nom"] or ""
+    if is_closed:
+        closed_reason = "manual" if closed_by else "deadline" if poll_row["closes_at"] else "unknown"
+    else:
+        closed_reason = ""
 
     return {
         "id": pid,
@@ -1530,6 +1545,9 @@ def _poll_dict(conn, poll_row, uid: int) -> dict:
         "anonymous": anonymous,
         "closes_at": poll_row["closes_at"] or "",
         "closed_at": poll_row["closed_at"] or "",
+        "closed_by": closed_by,
+        "closed_by_nom": closed_by_nom,
+        "closed_reason": closed_reason,
         "is_closed": is_closed,
         "created_by": poll_row["created_by"],
         "created_at": poll_row["created_at"],
@@ -1555,7 +1573,7 @@ def _fetch_polls_map(conn, msg_ids: List[int], uid: int) -> dict[int, dict]:
     ph = ",".join("?" * len(msg_ids))
     rows = conn.execute(
         f"""SELECT id, message_id, channel_id, question, multi_choice, anonymous,
-                   closes_at, closed_at, created_by, created_at
+                   closes_at, closed_at, closed_by, created_by, created_at
             FROM chat_polls WHERE message_id IN ({ph})""",
         msg_ids,
     ).fetchall()
@@ -1671,7 +1689,7 @@ async def create_poll(channel_id: int, request: Request):
         ).fetchone()
         poll_row = conn.execute(
             """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
-                      closes_at, closed_at, created_by, created_at
+                      closes_at, closed_at, closed_by, created_by, created_at
                FROM chat_polls WHERE id=?""",
             (poll_id,),
         ).fetchone()
@@ -1713,7 +1731,7 @@ async def vote_poll(poll_id: int, request: Request):
     with get_db() as conn:
         poll_row = conn.execute(
             """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
-                      closes_at, closed_at, created_by, created_at
+                      closes_at, closed_at, closed_by, created_by, created_at
                FROM chat_polls WHERE id=? LIMIT 1""",
             (poll_id,),
         ).fetchone()
@@ -1779,7 +1797,7 @@ async def close_poll(poll_id: int, request: Request):
     with get_db() as conn:
         poll_row = conn.execute(
             """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
-                      closes_at, closed_at, created_by, created_at
+                      closes_at, closed_at, closed_by, created_by, created_at
                FROM chat_polls WHERE id=? LIMIT 1""",
             (poll_id,),
         ).fetchone()
@@ -1795,12 +1813,13 @@ async def close_poll(poll_id: int, request: Request):
             return {"poll": _poll_dict(conn, poll_row, user["id"])}
         now = _now_iso()
         conn.execute(
-            "UPDATE chat_polls SET closed_at=? WHERE id=?", (now, poll_id)
+            "UPDATE chat_polls SET closed_at=?, closed_by=? WHERE id=?",
+            (now, user["id"], poll_id),
         )
         conn.commit()
         poll_row = conn.execute(
             """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
-                      closes_at, closed_at, created_by, created_at
+                      closes_at, closed_at, closed_by, created_by, created_at
                FROM chat_polls WHERE id=? LIMIT 1""",
             (poll_id,),
         ).fetchone()
@@ -1840,3 +1859,38 @@ def poll_voters(poll_id: int, request: Request):
                 for r in rows
             ]
         }
+
+
+@router.post("/polls/{poll_id}/reopen")
+async def reopen_poll(poll_id: int, request: Request):
+    """Rouvrir un sondage clôturé. Créateur, direction, superadmin.
+    Efface closed_at, closed_by, ET closes_at (pour éviter re-fermeture instantanée).
+    """
+    user = _require(request)
+    with get_db() as conn:
+        poll_row = conn.execute(
+            """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                      closes_at, closed_at, closed_by, created_by, created_at
+               FROM chat_polls WHERE id=? LIMIT 1""",
+            (poll_id,),
+        ).fetchone()
+        if not poll_row:
+            raise HTTPException(status_code=404, detail="Sondage introuvable")
+        _assert_member(conn, poll_row["channel_id"], user["id"])
+        if not _can_manage_poll(user, poll_row):
+            raise HTTPException(
+                status_code=403,
+                detail="Seul le créateur ou la direction peut rouvrir.",
+            )
+        conn.execute(
+            "UPDATE chat_polls SET closed_at=NULL, closed_by=NULL, closes_at=NULL WHERE id=?",
+            (poll_id,),
+        )
+        conn.commit()
+        poll_row = conn.execute(
+            """SELECT id, message_id, channel_id, question, multi_choice, anonymous,
+                      closes_at, closed_at, closed_by, created_by, created_at
+               FROM chat_polls WHERE id=? LIMIT 1""",
+            (poll_id,),
+        ).fetchone()
+        return {"poll": _poll_dict(conn, poll_row, user["id"])}

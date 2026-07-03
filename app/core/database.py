@@ -4428,6 +4428,34 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 140, "mc_setting_charges_prod_stockage")
 
+    # v141 — MyCouts + Logistique : coût demi-container (EUR) + quantités m² par
+    # container (renseignées via /settings > Logistique > Importations, utilisées
+    # pour afficher "soit X EUR/m²" sous les 2 champs coût container du modal).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=141 LIMIT 1").fetchone():
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('default_half_container_cost_eur', 0)"
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('logistique_qte_m2_container_complet', 0)"
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('logistique_qte_m2_demi_container', 0)"
+            )
+        except Exception:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 141, "mc_setting_demi_container_qte_m2")
+
+
+    # v140 — Traçabilité clôture sondages : colonne closed_by (auteur du clic)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=140 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_polls)").fetchall()}
+        if "closed_by" not in cols:
+            conn.execute("ALTER TABLE chat_polls ADD COLUMN closed_by INTEGER DEFAULT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 140, "chat_polls_closed_by")
+
 
 def create_default_admin():
     import bcrypt

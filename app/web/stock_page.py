@@ -1682,8 +1682,8 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=7"></script>
-<script src="/static/chat_widget_v2.js?v=3"></script>
+<script src="/static/chat_widget.js?v=10"></script>
+<script src="/static/chat_widget_v2.js?v=6"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -14907,8 +14907,21 @@ async function openValorisationSettingsModal() {
   const chargeProdInp = mkInput('vsm-charge-prod', settings.charge_production_pct || 0, '0.01');
   const storageInp = mkInput('vsm-storage', settings.storage_fees_pct || 0, '0.01');
   const contCostInp = mkInput('vsm-cont-cost', settings.default_container_cost_usd, '1');
+  const contHalfInp = mkInput('vsm-cont-half', settings.default_half_container_cost_eur || 0, '1');
   const contKgInp = mkInput('vsm-cont-kg', settings.default_container_kg, '1');
   const marginInp = mkInput('vsm-margin', settings.default_margin_eur_m2, '0.0001');
+
+  // Quantités m² par container (renseignées via /settings > Logistique > Importations).
+  // Utilisées pour afficher "soit X EUR/m²" sous les 2 champs coût container.
+  const qteM2Full = Number(settings.logistique_qte_m2_container_complet || 0);
+  const qteM2Half = Number(settings.logistique_qte_m2_demi_container || 0);
+  const fmtEurM2 = (cost, qte) => {
+    const c = Number(cost || 0);
+    if (c <= 0 || qte <= 0) return null;
+    const perM2 = c / qte;
+    return 'soit ' + perM2.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' EUR/m²';
+  };
+  const mkHintDiv = (id) => el('div', { id: id, style: 'font-size:10px;color:var(--muted);margin-top:4px' });
 
   const fxDate = settings.eur_usd_rate_updated_at
     ? String(settings.eur_usd_rate_updated_at).replace('T', ' ').slice(0, 16)
@@ -14962,9 +14975,32 @@ async function openValorisationSettingsModal() {
   box.appendChild(storageInp);
   box.appendChild(el('div', { style: 'height:14px' }));
 
-  // -- Default container cost --
-  box.appendChild(mkLabel('Container — coût par défaut (USD)'));
+  // -- Container — coût par défaut (EUR) --
+  box.appendChild(mkLabel('Container — coût par défaut (EUR)'));
   box.appendChild(contCostInp);
+  const contFullHint = mkHintDiv('vsm-cont-full-hint');
+  const setFullHint = () => {
+    const txt = fmtEurM2(contCostInp.value, qteM2Full);
+    contFullHint.textContent = txt || '';
+    contFullHint.style.display = txt ? 'block' : 'none';
+  };
+  setFullHint();
+  contCostInp.addEventListener('input', setFullHint);
+  box.appendChild(contFullHint);
+  box.appendChild(el('div', { style: 'height:14px' }));
+
+  // -- Demi-container — coût par défaut (EUR) --
+  box.appendChild(mkLabel('Demi-container — coût par défaut (EUR)'));
+  box.appendChild(contHalfInp);
+  const contHalfHint = mkHintDiv('vsm-cont-half-hint');
+  const setHalfHint = () => {
+    const txt = fmtEurM2(contHalfInp.value, qteM2Half);
+    contHalfHint.textContent = txt || '';
+    contHalfHint.style.display = txt ? 'block' : 'none';
+  };
+  setHalfHint();
+  contHalfInp.addEventListener('input', setHalfHint);
+  box.appendChild(contHalfHint);
   box.appendChild(el('div', { style: 'height:14px' }));
 
   // -- Default container kg --
@@ -14997,6 +15033,7 @@ async function openValorisationSettingsModal() {
         charge_production_pct: parseFloat(chargeProdInp.value || '0'),
         storage_fees_pct: parseFloat(storageInp.value || '0'),
         default_container_cost_usd: parseFloat(contCostInp.value),
+        default_half_container_cost_eur: parseFloat(contHalfInp.value || '0'),
         default_container_kg: parseFloat(contKgInp.value),
         default_margin_eur_m2: parseFloat(marginInp.value),
       };

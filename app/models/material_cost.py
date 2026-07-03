@@ -34,6 +34,14 @@ MC_SETTING_KEYS = frozenset(
         "transport_cost_fixed_eur",
         "charge_production_pct",
         "storage_fees_pct",
+        # Coût du demi-container (EUR) — affiché en info dans le modal Paramètres MyCouts.
+        # Le libellé du plein reste "default_container_cost_usd" pour compat, mais est
+        # affiché en EUR côté UI (change purement cosmétique).
+        "default_half_container_cost_eur",
+        # Quantités matière (m²) par container, saisies via /settings > Logistique > Importations.
+        # Servent à calculer "soit X EUR/m²" sous les 2 champs coût container du modal MyCouts.
+        "logistique_qte_m2_container_complet",
+        "logistique_qte_m2_demi_container",
     }
 )
 
@@ -46,6 +54,9 @@ MC_SETTING_DEFAULTS: dict[str, Decimal] = {
     "transport_cost_fixed_eur": Decimal("0"),
     "charge_production_pct": Decimal("0"),
     "storage_fees_pct": Decimal("0"),
+    "default_half_container_cost_eur": Decimal("0"),
+    "logistique_qte_m2_container_complet": Decimal("0"),
+    "logistique_qte_m2_demi_container": Decimal("0"),
 }
 
 

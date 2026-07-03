@@ -50,6 +50,9 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         "transport_cost_fixed_eur",
         "charge_production_pct",
         "storage_fees_pct",
+        "default_half_container_cost_eur",
+        "logistique_qte_m2_container_complet",
+        "logistique_qte_m2_demi_container",
     }
     required = {k for k in MC_SETTING_KEYS if k not in optional}
     missing = [k for k in required if k not in data]
@@ -64,6 +67,9 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         transport_cost_fixed_eur=data.get("transport_cost_fixed_eur", Decimal("0")),
         charge_production_pct=data.get("charge_production_pct", Decimal("0")),
         storage_fees_pct=data.get("storage_fees_pct", Decimal("0")),
+        default_half_container_cost_eur=data.get("default_half_container_cost_eur", Decimal("0")),
+        logistique_qte_m2_container_complet=data.get("logistique_qte_m2_container_complet", Decimal("0")),
+        logistique_qte_m2_demi_container=data.get("logistique_qte_m2_demi_container", Decimal("0")),
     )
 
 

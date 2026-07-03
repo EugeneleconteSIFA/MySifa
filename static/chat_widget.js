@@ -606,40 +606,45 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
 .cw-poll-btn-primary:disabled{opacity:.5;cursor:not-allowed;filter:none}
 /* ── Poll card (message) ──────────────────────────────────────────── */
 .cw-msg-poll{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:12px 14px;margin-top:4px;max-width:360px;font-family:inherit}
+  padding:14px 16px;margin-top:4px;max-width:360px;font-family:inherit;
+  box-shadow:0 1px 3px rgba(0,0,0,.06),inset 3px 0 0 var(--accent)}
 .cw-msg-mine .cw-msg-poll{background:rgba(0,0,0,.15);border-color:rgba(255,255,255,.2);color:var(--bg)}
 .cw-poll-head{display:flex;align-items:center;gap:6px;font-size:11px;
-  color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
-  font-weight:600;margin-bottom:6px}
+  color:var(--accent);text-transform:uppercase;letter-spacing:.5px;
+  font-weight:700;margin-bottom:8px}
+.cw-poll-head svg{color:var(--accent)}
 .cw-msg-mine .cw-poll-head{color:rgba(10,14,23,.7)}
 .cw-poll-badge{display:inline-flex;align-items:center;gap:4px}
 .cw-poll-question{font-size:14px;font-weight:700;color:var(--text);margin:0 0 12px;
   line-height:1.35;word-wrap:break-word}
 .cw-msg-mine .cw-poll-question{color:var(--bg)}
 .cw-poll-opt{display:block;width:100%;text-align:left;background:var(--bg);
-  border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;
   margin-bottom:6px;cursor:pointer;color:var(--text);font-family:inherit;
-  font-size:13px;position:relative;overflow:hidden;transition:border-color .15s}
+  font-size:13px;position:relative;overflow:hidden;transition:all .15s}
 .cw-msg-mine .cw-poll-opt{background:rgba(255,255,255,.9);color:var(--text);border-color:transparent}
-.cw-poll-opt:hover:not(:disabled){border-color:var(--accent)}
+.cw-poll-opt:hover:not(:disabled){border-color:var(--accent);background:var(--accent-bg)}
 .cw-poll-opt:disabled{cursor:default}
 .cw-poll-opt-bar{position:absolute;inset:0;background:var(--accent-bg);
   width:0%;transition:width .35s ease;z-index:0;pointer-events:none}
-.cw-poll-opt.cw-voted .cw-poll-opt-bar{background:rgba(34,211,238,.22)}
+.cw-poll-opt.cw-voted{border-color:var(--accent);background:var(--accent-bg)}
+.cw-poll-opt.cw-voted .cw-poll-opt-bar{background:rgba(34,211,238,.28)}
 .cw-poll-opt-row{position:relative;z-index:1;display:flex;
   align-items:center;justify-content:space-between;gap:10px}
 .cw-poll-opt-lbl{display:flex;align-items:center;gap:8px;font-weight:600;
   word-break:break-word;flex:1;min-width:0}
-.cw-poll-opt-check{width:16px;height:16px;border-radius:50%;
-  border:1.5px solid var(--muted);flex-shrink:0;display:inline-flex;
-  align-items:center;justify-content:center;transition:background .15s,border-color .15s}
-.cw-poll-opt.cw-voted .cw-poll-opt-check{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.cw-poll-opt-check{width:18px;height:18px;border-radius:50%;
+  border:2px solid var(--accent);opacity:.55;flex-shrink:0;display:inline-flex;
+  align-items:center;justify-content:center;transition:all .15s;background:var(--card)}
+.cw-poll-opt:hover:not(:disabled) .cw-poll-opt-check{opacity:1}
+.cw-poll-opt.cw-voted .cw-poll-opt-check{background:var(--accent);border-color:var(--accent);color:var(--bg);opacity:1;box-shadow:0 0 0 3px rgba(34,211,238,.18)}
 .cw-poll-opt-meta{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:600}
-.cw-poll-opt-pct{font-size:12px;font-weight:700;color:var(--text2)}
+.cw-poll-opt-pct{font-size:12px;font-weight:700;color:var(--accent)}
+.cw-poll-opt.cw-voted .cw-poll-opt-pct{color:var(--accent)}
 .cw-msg-mine .cw-poll-opt-meta,.cw-msg-mine .cw-poll-opt-pct{color:var(--muted)}
 .cw-poll-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
-  padding-top:10px;margin-top:6px;border-top:1px solid var(--border);
-  font-size:11px;color:var(--muted)}
+  padding-top:10px;margin-top:10px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--text2)}
 .cw-msg-mine .cw-poll-foot{border-top-color:rgba(0,0,0,.15);color:rgba(10,14,23,.6)}
 .cw-poll-foot-link{background:transparent;border:none;padding:0;color:var(--accent);
   font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline}
@@ -649,6 +654,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   cursor:pointer;font-family:inherit;transition:color .12s,border-color .12s}
 .cw-poll-close-btn:hover{color:var(--danger);border-color:var(--danger)}
 .cw-poll-closed-tag{color:var(--warn);font-weight:700}
+.cw-poll-reopen-btn{margin-left:auto;background:transparent;border:1px solid var(--accent);
+  border-radius:8px;padding:5px 10px;color:var(--accent);font-size:11px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:background .12s}
+.cw-poll-reopen-btn:hover{background:var(--accent-bg)}
 
 .cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
 `;
@@ -959,7 +968,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       ICO_ATTACH + '<span>Pièce jointe</span></button>' +
       '<div class="cw-plus-item-sep"></div>' +
       '<button type="button" class="cw-plus-item" data-plus-action="poll" role="menuitem">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 8 8 4"/><line x1="12" y1="6" x2="21" y2="6"/><rect x="3" y="10" width="6" height="4" rx="1"/><line x1="12" y1="12" x2="21" y2="12"/><rect x="3" y="16" width="6" height="4" rx="1"/><line x1="12" y1="18" x2="21" y2="18"/></svg>' +
       '<span>Sondage</span></button>' +
       '</div>' +
       '<textarea id="cw-input" rows="1" placeholder="Message…"></textarea>' +
@@ -3100,17 +3109,30 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       ' · ' + displayVoters + ' votant' + (displayVoters > 1 ? 's' : '') + '</span>');
     if (anon) footParts.push('<span>Anonyme</span>');
     if (p.multi_choice) footParts.push('<span>Choix multiples</span>');
-    if (closed) footParts.push('<span class="cw-poll-closed-tag">Sondage clôturé</span>');
-    else if (p.closes_at) footParts.push('<span>Clôture ' + fmtCloseAt(p.closes_at) + '</span>');
+    if (closed) {
+      let reason = 'Sondage clôturé';
+      if (p.closed_reason === 'manual' && p.closed_by_nom) {
+        reason = 'Clôturé par ' + escCW(p.closed_by_nom);
+      } else if (p.closed_reason === 'deadline') {
+        reason = 'Clôturé automatiquement';
+      }
+      footParts.push('<span class="cw-poll-closed-tag">' + reason + '</span>');
+    } else if (p.closes_at) {
+      footParts.push('<span>Clôture ' + fmtCloseAt(p.closes_at) + '</span>');
+    }
     if (!anon && displayTotal > 0) {
       footParts.push('<button type="button" class="cw-poll-foot-link" data-poll-voters="' + p.id + '">Voir les votants</button>');
     }
     if (canClose) {
       footParts.push('<button type="button" class="cw-poll-close-btn" data-poll-close="' + p.id + '">Clôturer</button>');
     }
+    // Rouvrir : créateur ou admin, uniquement si clôturé
+    if (closed && (mineIsAuthor || isAdmin)) {
+      footParts.push('<button type="button" class="cw-poll-reopen-btn" data-poll-reopen="' + p.id + '">Rouvrir</button>');
+    }
     const foot = '<div class="cw-poll-foot">' + footParts.join('') + '</div>';
     const head = '<div class="cw-poll-head"><span class="cw-poll-badge">' +
-      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>' +
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 8 8 4"/><line x1="12" y1="6" x2="21" y2="6"/><rect x="3" y="10" width="6" height="4" rx="1"/><line x1="12" y1="12" x2="21" y2="12"/><rect x="3" y="16" width="6" height="4" rx="1"/><line x1="12" y1="18" x2="21" y2="18"/></svg>' +
       'Sondage' + (anon ? ' anonyme' : '') + '</span></div>';
     const q = '<div class="cw-poll-question">' + escCW(p.question || '') + '</div>';
     return '<div class="cw-msg-poll" data-poll-id="' + p.id + '">' + head + q + optsHtml + foot + '</div>';
@@ -3184,7 +3206,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (closeBtn) {
       closeBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!confirm('Clôturer ce sondage ? Cette action est définitive.')) return;
+        if (!confirm('Fermer ce sondage ? Personne ne pourra plus voter. Tu pourras le rouvrir si besoin.')) return;
         try {
           const resp = await api('/api/chat/polls/' + p.id + '/close', { method: 'POST' });
           if (resp && resp.poll) {
@@ -3196,6 +3218,24 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
           }
         } catch (err) {
           cwToast(err && err.message ? err.message : 'Clôture impossible', 'danger');
+        }
+      });
+    }
+    const reopenBtn = pollEl.querySelector('[data-poll-reopen]');
+    if (reopenBtn) {
+      reopenBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const resp = await api('/api/chat/polls/' + p.id + '/reopen', { method: 'POST' });
+          if (resp && resp.poll) {
+            msg.poll = resp.poll;
+            const parent = wrap.parentElement;
+            const newWrap = renderMsg(msg);
+            if (parent && newWrap) parent.replaceChild(newWrap, wrap);
+            cwToast('Sondage rouvert.', 'success');
+          }
+        } catch (err) {
+          cwToast(err && err.message ? err.message : 'Réouverture impossible', 'danger');
         }
       });
     }

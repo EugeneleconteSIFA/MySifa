@@ -29,6 +29,11 @@ class PricingSettings:
     charge_production_pct: Decimal = Decimal("0")
     # Frais de stockage (%) — appliqués à la valorisation PF en mode « avec charges ».
     storage_fees_pct: Decimal = Decimal("0")
+    # Coût du demi-container (EUR) — info affichée, pas utilisé par le pricing engine.
+    default_half_container_cost_eur: Decimal = Decimal("0")
+    # Quantités m² de matière par container (renseignées via /settings > Logistique).
+    logistique_qte_m2_container_complet: Decimal = Decimal("0")
+    logistique_qte_m2_demi_container: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
