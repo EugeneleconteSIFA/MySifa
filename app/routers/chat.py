@@ -1520,12 +1520,7 @@ def _poll_dict(conn, poll_row, uid: int) -> dict:
     total_voters = int(total_voters_row["c"]) if total_voters_row else 0
 
     is_closed = _poll_is_closed(poll_row)
-<<<<<<< HEAD
-    # Cause : manual = clôture par bouton (closed_by renseigné) ; deadline = auto
-    closed_by = None
-=======
-    # closed_by peut être absent si migration v141 pas encore jouée
->>>>>>> feature/messagerie-sondages
+    # closed_by peut être absent si migration v142 pas encore jouée
     try:
         closed_by = poll_row["closed_by"]
     except (KeyError, IndexError):
@@ -1536,16 +1531,12 @@ def _poll_dict(conn, poll_row, uid: int) -> dict:
         if r:
             closed_by_nom = r["nom"] or ""
     if is_closed:
-<<<<<<< HEAD
-        closed_reason = "manual" if closed_by else "deadline" if poll_row["closes_at"] else "unknown"
-=======
         if closed_by:
             closed_reason = "manual"
         elif poll_row["closes_at"]:
             closed_reason = "deadline"
         else:
             closed_reason = "unknown"
->>>>>>> feature/messagerie-sondages
     else:
         closed_reason = ""
 
@@ -1877,11 +1868,7 @@ def poll_voters(poll_id: int, request: Request):
 @router.post("/polls/{poll_id}/reopen")
 async def reopen_poll(poll_id: int, request: Request):
     """Rouvrir un sondage clôturé. Créateur, direction, superadmin.
-<<<<<<< HEAD
-    Efface closed_at, closed_by, ET closes_at (pour éviter re-fermeture instantanée).
-=======
     Efface closed_at, closed_by ET closes_at (évite re-fermeture immédiate).
->>>>>>> feature/messagerie-sondages
     """
     user = _require(request)
     with get_db() as conn:
