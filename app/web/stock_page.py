@@ -8393,11 +8393,24 @@ function _fmtDateFRz1(d) {
   return dd + '/' + mm + '/' + d.getFullYear();
 }
 
-async function _fetchDossierEnCours() {
+async function _fetchZ1DossierContext() {
   try {
     const r = await api('/api/fabrication/dossier-en-cours');
-    return (r && r.dossier) || null;
-  } catch (e) { return null; }
+    return {
+      dossier: (r && r.dossier) || null,
+      precedents: Array.isArray(r && r.precedents) ? r.precedents : [],
+      machine: (r && r.machine) || null,
+      canSearchAll: !!(r && r.can_search_all),
+    };
+  } catch (e) {
+    return { dossier: null, precedents: [], machine: null, canSearchAll: false };
+  }
+}
+
+// Retro-compat : garde l'ancien nom si un consommateur externe l'utilise.
+async function _fetchDossierEnCours() {
+  const ctx = await _fetchZ1DossierContext();
+  return ctx.dossier;
 }
 
 async function _fetchPaletteTypes() {
@@ -8487,13 +8500,45 @@ function _renderZ1PalettesBlock(container) {
   });
 }
 
-function _renderZ1DossierBanner(container, dossier) {
+function _z1IsTermine(d) {
+  return !!(d && String(d.statut_reel || '') === 'reellement_termine');
+}
+
+function _z1FormatDossierLine(d) {
+  if (!d) return '';
+  const refLine = (d.ref_produit || '') + (d.description ? ' - ' + d.description : '');
+  return refLine;
+}
+
+function _z1MakeNoteFromDossier(dossier) {
+  if (!dossier || !dossier.no_dossier) return '';
+  return 'Production dossier ' + dossier.no_dossier + ' - ' + _fmtDateFRz1(new Date());
+}
+
+function _renderZ1DossierBanner(container, ctx) {
   if (!container) return;
   container.innerHTML = '';
-  if (!dossier) {
+  container.style.display = '';
+
+  const dossierSel = (S.pfModal && S.pfModal.dossier) || null;
+  const hasSel = !!(dossierSel && dossierSel.no_dossier);
+  const canPick = !!ctx && (
+    !!ctx.dossier
+    || (Array.isArray(ctx.precedents) && ctx.precedents.length > 0)
+    || !!ctx.canSearchAll
+    || !!S.pfModal._noDossierManual
+  );
+
+  // Cas "aucun dossier detecte ET pas selectionne" -> champ libre en direct.
+  if (!hasSel && (!ctx || (!ctx.dossier && !(ctx.precedents || []).length && !ctx.canSearchAll))) {
     const inp = el('input', {
       cls: 'field-input',
-      attrs: { type: 'text', placeholder: 'No de dossier (optionnel)', autocomplete: 'off' },
+      attrs: {
+        type: 'text',
+        placeholder: 'No de dossier (optionnel)',
+        autocomplete: 'off',
+        value: S.pfModal._noDossierManual || '',
+      },
       style: { textTransform: 'uppercase' },
     });
     inp.addEventListener('input', () => {
@@ -8504,49 +8549,346 @@ function _renderZ1DossierBanner(container, dossier) {
       el('label', null, 'Dossier de production (libre)'),
       inp,
       el('div', { cls: 'mp-hint' },
-        'Aucun dossier en cours detecte sur votre profil. Vous pouvez saisir le no manuellement.'),
+        'Aucun dossier detecte sur votre profil. Vous pouvez saisir le no manuellement.'),
     ));
-    container.style.display = '';
     return;
   }
-  const refLine = (dossier.ref_produit || '') + (dossier.description ? ' - ' + dossier.description : '');
+
+  const termine = _z1IsTermine(dossierSel);
+  const bandeauStyle = termine
+    ? { background: 'rgba(251,191,36,0.10)', borderColor: 'var(--warn)', color: 'var(--text)' }
+    : { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--text)' };
+
+  const label = hasSel
+    ? (termine ? 'Dossier selectionne (rattrapage)' : 'Dossier de production en cours')
+    : (S.pfModal._noDossierManual
+        ? 'Dossier de production (libre)'
+        : 'Aucun dossier selectionne');
+
+  const bodyLines = [];
+  if (hasSel) {
+    const refLine = _z1FormatDossierLine(dossierSel);
+    bodyLines.push(el('div', { style: { fontWeight: '700', fontSize: '14px' } },
+      (dossierSel.fictif ? '(hors planning) ' : '') + (dossierSel.no_dossier || '')));
+    if (dossierSel.client) {
+      bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
+        'Client : ' + dossierSel.client));
+    }
+    if (refLine) {
+      bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
+        'Reference : ' + refLine));
+    }
+    if (dossierSel.machine_nom) {
+      bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
+        'Machine : ' + dossierSel.machine_nom));
+    }
+    if (termine) {
+      bodyLines.push(el('div', {
+        style: {
+          fontSize: '11px',
+          color: 'var(--warn)',
+          marginTop: '6px',
+          fontWeight: '600',
+          textTransform: 'uppercase',
+          letterSpacing: '.5px',
+        },
+      }, 'Dossier termine - entree rattrapee'));
+    }
+  } else if (S.pfModal._noDossierManual) {
+    bodyLines.push(el('div', { style: { fontWeight: '700', fontSize: '14px' } },
+      String(S.pfModal._noDossierManual).toUpperCase()));
+    bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
+      'Saisie libre'));
+  } else {
+    bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--muted)' } },
+      'Cliquez sur "Choisir un autre dossier" pour en selectionner un.'));
+  }
+
+  const pickerLink = canPick
+    ? el('button', {
+        cls: 'btn btn-ghost',
+        type: 'button',
+        style: {
+          padding: '4px 10px',
+          fontSize: '11px',
+          color: 'var(--accent)',
+          background: 'transparent',
+          border: '1px solid var(--border)',
+          alignSelf: 'flex-start',
+        },
+        on: { click: (e) => {
+          e.preventDefault();
+          _openZ1DossierPicker(container, ctx);
+        } },
+      }, 'Choisir un autre dossier')
+    : null;
+
+  const bandeau = el('div', {
+    cls: 'mp-readonly',
+    style: bandeauStyle,
+  }, ...bodyLines);
+
   container.appendChild(el('div', { cls: 'mp-field' },
-    el('label', null, 'Dossier de production en cours'),
     el('div', {
-      cls: 'mp-readonly',
-      style: { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--text)' },
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' },
     },
-      el('div', { style: { fontWeight: '700', fontSize: '14px' } },
-        (dossier.fictif ? '(hors planning) ' : '') + (dossier.no_dossier || '')),
-      dossier.client ? el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
-        'Client : ' + dossier.client) : null,
-      refLine ? el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
-        'Reference : ' + refLine) : null,
-      dossier.machine_nom ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-        'Machine : ' + dossier.machine_nom) : null,
+      el('label', { style: { margin: 0 } }, label),
+      pickerLink,
     ),
+    bandeau,
   ));
-  container.style.display = '';
+}
+
+function _z1SetDossier(container, ctx, dossier, manualRef) {
+  if (!S.pfModal) return;
+  const noteTa = S.pfModal._noteTa || null;
+  const prevAuto = S.pfModal._noteAutoLast || '';
+  S.pfModal.dossier = dossier || null;
+  S.pfModal._noDossierManual = (manualRef || '').trim();
+  _renderZ1DossierBanner(container, ctx);
+
+  // Note auto : ne l'ecrase que si vide OU si elle correspond a la note auto precedente.
+  if (noteTa) {
+    const cur = (noteTa.value || '').trim();
+    if (!cur || cur === prevAuto) {
+      const newAuto = dossier ? _z1MakeNoteFromDossier(dossier) : '';
+      noteTa.value = newAuto;
+      S.pfModal._noteAutoLast = newAuto;
+    }
+  }
+}
+
+function _z1DossierRow(dossier, opts) {
+  const termine = _z1IsTermine(dossier);
+  const badgeText = opts && opts.badge
+    ? opts.badge
+    : (termine ? 'Termine' : (dossier.statut_reel === 'reellement_en_saisie' ? 'En cours' : ''));
+  const badgeStyle = termine
+    ? { color: 'var(--warn)', borderColor: 'var(--warn)' }
+    : { color: 'var(--accent)', borderColor: 'var(--accent)' };
+
+  const refLine = _z1FormatDossierLine(dossier);
+  const cli = dossier.client ? ' - ' + dossier.client : '';
+
+  return el('button', {
+    type: 'button',
+    cls: 'z1-picker-item',
+    style: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '10px',
+      padding: '10px 12px',
+      background: 'var(--card)',
+      border: '1px solid var(--border)',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      textAlign: 'left',
+      color: 'var(--text)',
+      width: '100%',
+    },
+    on: { click: opts && opts.onClick },
+  },
+    el('div', { style: { flex: '1', minWidth: 0 } },
+      el('div', { style: { fontWeight: '700', fontSize: '13px' } },
+        (dossier.no_dossier || '') + cli),
+      refLine
+        ? el('div', {
+            style: { fontSize: '11px', color: 'var(--text2)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+          }, refLine)
+        : null,
+      dossier.machine_nom
+        ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
+            'Machine : ' + dossier.machine_nom)
+        : null,
+    ),
+    badgeText
+      ? el('span', {
+          style: Object.assign({
+            padding: '2px 8px',
+            fontSize: '10px',
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: '.5px',
+            borderRadius: '999px',
+            border: '1px solid',
+            flex: '0 0 auto',
+          }, badgeStyle),
+        }, badgeText)
+      : null,
+  );
+}
+
+function _openZ1DossierPicker(bannerContainer, ctx) {
+  // Ferme l'eventuel picker precedent.
+  const prev = document.getElementById('z1-picker-overlay');
+  if (prev) prev.remove();
+
+  const overlay = el('div', {
+    attrs: { id: 'z1-picker-overlay' },
+    style: {
+      position: 'fixed', inset: '0', zIndex: '10001',
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '20px',
+    },
+    on: { click: (e) => { if (e.target === overlay) overlay.remove(); } },
+  });
+
+  const box = el('div', {
+    style: {
+      background: 'var(--card)', border: '1px solid var(--border)',
+      borderRadius: '12px', width: 'min(520px, 100%)', maxHeight: '80vh',
+      display: 'flex', flexDirection: 'column',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
+    },
+  });
+
+  box.appendChild(el('div', {
+    style: {
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '14px 16px', borderBottom: '1px solid var(--border)',
+    },
+  },
+    el('div', { style: { fontWeight: '700', fontSize: '14px' } }, 'Choisir un autre dossier'),
+    el('button', {
+      cls: 'mp-modal-close', type: 'button',
+      attrs: { 'aria-label': 'Fermer' },
+      on: { click: () => overlay.remove() },
+    }, 'x'),
+  ));
+
+  const listWrap = el('div', {
+    style: { padding: '14px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' },
+  });
+
+  const pick = (dossier) => {
+    _z1SetDossier(bannerContainer, ctx, dossier, '');
+    overlay.remove();
+  };
+
+  // Dossier en cours (accent)
+  if (ctx && ctx.dossier) {
+    listWrap.appendChild(el('div', {
+      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600' },
+    }, 'Dossier en cours'));
+    listWrap.appendChild(_z1DossierRow(ctx.dossier, {
+      badge: 'En cours', onClick: () => pick(ctx.dossier),
+    }));
+  }
+
+  // Precedents (2 max)
+  const precedents = (ctx && ctx.precedents) || [];
+  if (precedents.length) {
+    listWrap.appendChild(el('div', {
+      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
+    }, 'Precedents (' + (ctx.machine ? ctx.machine.nom : 'meme machine') + ')'));
+    precedents.forEach(d => {
+      listWrap.appendChild(_z1DossierRow(d, { badge: 'Termine', onClick: () => pick(d) }));
+    });
+  }
+
+  // Saisie libre
+  listWrap.appendChild(el('div', {
+    style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
+  }, 'Saisie libre'));
+
+  const manualInp = el('input', {
+    cls: 'field-input',
+    attrs: {
+      type: 'text',
+      placeholder: 'No de dossier (ex : 12345-01)',
+      autocomplete: 'off',
+      value: S.pfModal._noDossierManual || '',
+    },
+    style: { textTransform: 'uppercase', flex: '1' },
+  });
+  const manualBtn = el('button', {
+    cls: 'btn btn-accent', type: 'button',
+    style: { padding: '8px 14px', fontSize: '12px' },
+    on: { click: () => {
+      const v = (manualInp.value || '').trim().toUpperCase();
+      if (!v) { manualInp.focus(); return; }
+      _z1SetDossier(bannerContainer, ctx, null, v);
+      overlay.remove();
+    } },
+  }, 'Valider');
+  listWrap.appendChild(el('div', {
+    style: { display: 'flex', gap: '8px', alignItems: 'center' },
+  }, manualInp, manualBtn));
+
+  // Recherche globale (chef d'atelier / admin)
+  if (ctx && ctx.canSearchAll) {
+    listWrap.appendChild(el('div', {
+      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
+    }, 'Recherche libre (toutes machines)'));
+
+    const searchInp = el('input', {
+      cls: 'field-input',
+      attrs: {
+        type: 'text',
+        placeholder: 'Reference, client, description...',
+        autocomplete: 'off',
+      },
+    });
+    const results = el('div', {
+      style: { display: 'flex', flexDirection: 'column', gap: '6px' },
+    });
+    let searchDebounce = null;
+    const runSearch = async () => {
+      const q = (searchInp.value || '').trim();
+      results.innerHTML = '';
+      if (q.length < 2) return;
+      try {
+        const r = await api('/api/fabrication/dossiers-search?q=' + encodeURIComponent(q));
+        const list = (r && r.dossiers) || [];
+        if (!list.length) {
+          results.appendChild(el('div', { cls: 'mp-hint' }, 'Aucun resultat pour "' + q + '"'));
+          return;
+        }
+        list.forEach(d => results.appendChild(_z1DossierRow(d, { onClick: () => pick(d) })));
+      } catch (e) {
+        results.appendChild(el('div', { cls: 'mp-hint err' }, 'Erreur de recherche.'));
+      }
+    };
+    searchInp.addEventListener('input', () => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(runSearch, 220);
+    });
+    listWrap.appendChild(searchInp);
+    listWrap.appendChild(results);
+    requestAnimationFrame(() => searchInp.focus());
+  } else {
+    requestAnimationFrame(() => manualInp.focus());
+  }
+
+  box.appendChild(listWrap);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
 
 async function _initZ1Enrichment(dossierBanner, palettesBlock, noteTa) {
-  const [dossier, types] = await Promise.all([_fetchDossierEnCours(), _fetchPaletteTypes()]);
+  const [ctx, types] = await Promise.all([_fetchZ1DossierContext(), _fetchPaletteTypes()]);
   if (!S.pfModal) return;
-  S.pfModal.dossier = dossier;
+  S.pfModal._z1Ctx = ctx;
   S.pfModal._paletteTypes = types || [];
-  _renderZ1DossierBanner(dossierBanner, dossier);
+  S.pfModal._noteTa = noteTa || null;
+  // Selection par defaut : dossier actif s'il existe.
+  S.pfModal.dossier = ctx.dossier || null;
+
+  _renderZ1DossierBanner(dossierBanner, ctx);
   _renderZ1PalettesBlock(palettesBlock);
-  if (dossier && dossier.no_dossier && noteTa && !((noteTa.value || '').trim())) {
-    const today = _fmtDateFRz1(new Date());
-    noteTa.value = 'Production dossier ' + dossier.no_dossier + ' - ' + today;
+
+  if (ctx.dossier && ctx.dossier.no_dossier && noteTa && !((noteTa.value || '').trim())) {
+    const auto = _z1MakeNoteFromDossier(ctx.dossier);
+    noteTa.value = auto;
+    S.pfModal._noteAutoLast = auto;
   }
-  // Pre-remplit la reference produit depuis le dossier en cours.
-  // Si le produit existe deja en base, on re-rend la modale avec ses infos
-  // (designation, unite). Sinon on laisse le texte ; le submit Z1 auto-cree
-  // la reference au besoin.
-  if (dossier && dossier.ref_produit && S.pfModal.refInp
+
+  // Pre-remplit la reference produit depuis le dossier actif.
+  if (ctx.dossier && ctx.dossier.ref_produit && S.pfModal.refInp
       && !((S.pfModal.refInp.value || '').trim())) {
-    const refDossier = String(dossier.ref_produit).trim();
+    const refDossier = String(ctx.dossier.ref_produit).trim();
     S.pfModal.refInp.value = refDossier;
     try {
       const p = await resolvePfProduitByRef(refDossier);
