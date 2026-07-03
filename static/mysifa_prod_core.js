@@ -5254,7 +5254,7 @@ function _prodAggBy(rows, keyName){
   });
   return Object.values(m).map(v => {
     v.dossiers = v._dosSet.size; delete v._dosSet;
-    const den = v.prod_min + v.arret_min;
+    const den = Math.round(v.prod_min) + Math.round(v.arret_min);
     v.vitesse_m_min = den>0 ? Number((v.metrage_m/den).toFixed(2)) : 0;
     v.etiquettes = Math.round(v.etiquettes*10)/10;
     v.metrage_m = Math.round(v.metrage_m*10)/10;
@@ -5715,7 +5715,7 @@ function prodSynthTotals(sessions){
     t.arret_min+=Number(s.temps_arret_min||0);
   });
   t.metrage_m=Math.round(t.metrage_m*10)/10;
-  const den=t.prod_min+t.arret_min;
+  const den=Math.round(t.prod_min)+Math.round(t.arret_min);
   t.vitesse=den>0?(t.metrage_m/den).toFixed(2):'0.00';
   return t;
 }
@@ -5820,7 +5820,7 @@ function openProdSynthDetail(type,keys,index,opts){
     ];
     colSpan = showDossierCol?11:10;
     sessionRows = sessions.length ? sessions.map(s=>{
-      const den=Number(s.temps_prod_min||0)+Number(s.temps_arret_min||0);
+      const den=Math.round(Number(s.temps_prod_min||0))+Math.round(Number(s.temps_arret_min||0));
       const vit=den>0?(Number(s.metrage_m||0)/den).toFixed(2):'0.00';
       const cli=prodSynthCleanClient(s.client);
       const des=(s.designation||'').replace(/^,\s*/,'').trim();
@@ -6048,7 +6048,7 @@ function renderProdKpis(){
             h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_calage_min)),
             h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_prod_min)),
             h('td',{style:{fontFamily:'monospace',color:'var(--text2)'}},fMin(r.temps_arret_min)),
-            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Number(r.temps_prod_min||0)+Number(r.temps_arret_min||0);return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
+            h('td',{style:{fontFamily:'monospace',fontWeight:'800',color:'var(--warn)'}},(()=>{const den=Math.round(Number(r.temps_prod_min||0))+Math.round(Number(r.temps_arret_min||0));return (den>0?(Number(r.metrage_m||0)/den).toFixed(2):'0.00')+' m/min';})())
           )))
         ))
       ));
