@@ -1452,7 +1452,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
