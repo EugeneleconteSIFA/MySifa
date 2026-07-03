@@ -240,15 +240,47 @@
     return true;
   }
 
+  // Retrouve le no_dossier sur lequel l'operateur travaille au moment de
+  // l'ack. Ordre de priorite :
+  //   1. window.S.dossier (si on est sur la page /prod, deja hydrate)
+  //   2. /api/fabrication/dossier-en-cours -> dossier (01 sans 89 aujourd'hui)
+  //   3. /api/fabrication/dossier-en-cours -> last_touched_today (01/89 du jour)
+  // Jamais bloquant : en cas d'erreur, renvoie '' et l'ack passe quand meme.
+  async function _currentNoDossier() {
+    try {
+      const sDos = window.S && window.S.dossier;
+      if (sDos && (sDos.reference || sDos.no_dossier)) {
+        return String(sDos.reference || sDos.no_dossier).trim();
+      }
+    } catch (e) {}
+    try {
+      const r = await fetch('/api/fabrication/dossier-en-cours', { credentials: 'same-origin' });
+      if (!r.ok) return '';
+      const d = await r.json();
+      const dos = d && d.dossier;
+      if (dos && (dos.no_dossier || dos.reference)) {
+        return String(dos.no_dossier || dos.reference).trim();
+      }
+      const lt = d && d.last_touched_today;
+      if (lt && (lt.no_dossier || lt.reference)) {
+        return String(lt.no_dossier || lt.reference).trim();
+      }
+      return '';
+    } catch (e) {
+      return '';
+    }
+  }
+
   async function _submitAck(alertId, wrap) {
     const responses = _readResponses(wrap);
     const comment = wrap.querySelector('.ta-comment')?.value || '';
+    const no_dossier = await _currentNoDossier();
     try {
       const r = await fetch('/api/maintenance/alerts/' + alertId + '/ack', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ responses, comment }),
+        body: JSON.stringify({ responses, comment, no_dossier }),
       });
       if (!r.ok) {
         let msg = 'Erreur lors de la validation';

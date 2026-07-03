@@ -627,11 +627,40 @@ def get_dossier_en_cours(request: Request):
             ).fetchall()
             precedents = [_hydrate_dossier_row(r) for r in prev_rows]
 
+        # last_touched_today : dernier dossier reel manipule aujourd'hui
+        # (01 ou 89). Utilise par le runtime d'alertes maintenance pour
+        # attribuer un ack au dossier en cours meme apres le 89. MyStock
+        # continue de ne lire que `dossier` -- champ retro-compatible.
+        last_touched_today = None
+        if fallback_ref:
+            row_lt = conn.execute(
+                """SELECT pe.reference AS no_dossier,
+                          pe.client,
+                          pe.description,
+                          pe.ref_produit,
+                          pe.numero_of,
+                          pe.statut_reel,
+                          m.nom AS machine_nom
+                   FROM planning_entries pe
+                   LEFT JOIN machines m ON m.id = pe.machine_id
+                   WHERE pe.reference = ?""",
+                (fallback_ref,),
+            ).fetchone()
+            if row_lt:
+                last_touched_today = _hydrate_dossier_row(row_lt)
+            else:
+                last_touched_today = _fictif_dossier_payload(
+                    fallback_ref,
+                    machine.get("nom") if machine else None,
+                )
+                last_touched_today["fictif"] = _is_fictif_dossier(fallback_ref)
+
         return {
             "dossier": dossier,
             "precedents": precedents,
             "machine": machine,
             "can_search_all": can_search_all,
+            "last_touched_today": last_touched_today,
         }
 
 
@@ -2866,6 +2895,46 @@ def list_dossiers_repiquage(request: Request):
 
     with get_db() as conn:
         # Resolution machine Repiquage : soit via mid, soit via nom canonique
+        if mid:
+            machine = conn.execute(
+                "SELECT id, nom, code FROM machines WHERE id=? AND actif=1", (mid,)
+            ).fetchone()
+        else:
+            machine = conn.execute(
+                "SELECT id, nom, code FROM machines WHERE actif=1 "
+                "AND (lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
+                "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+            ).fetchone()
+        if not machine:
+            return {"dossiers": [], "machine": None}
+        mid = int(machine["id"])
+
+        rows = conn.execute(
+            """SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
+               FROM planning_entries pe
+               JOIN machines m ON m.id = pe.machine_id
+               WHERE pe.machine_id = ? AND pe.statut IN ('attente','en_cours')
+               ORDER BY pe.position ASC, pe.id ASC""",
+            (mid,),
+        ).fetchall()
+
+        dossiers = []
+        for r in rows:
+            d = dict(r)
+            ref = (d.get("reference") or "").strip()
+            if not ref:
+                dossiers.append(d)
+                continue
+            cum_c, cum_e = _rep_aggregate(conn, ref, operateur, today_only=False)
+            jour_c, jour_e = _rep_aggregate(conn, ref, operateur, today_only=True)
+            d["nb_cartons_cumul"] = cum_c
+            d["qte_etiq_cumul"] = cum_e
+            d["nb_cartons_jour"] = jour_c
+            d["qte_etiq_jour"] = jour_e
+            dossiers.append(d)
+
+    return {"dossiers": dossiers, "machine": dict(machine)}
+que
         if mid:
             machine = conn.execute(
                 "SELECT id, nom, code FROM machines WHERE id=? AND actif=1", (mid,)
