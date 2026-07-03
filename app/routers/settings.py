@@ -1991,12 +1991,26 @@ def _alert_row_to_dict(r) -> dict:
         last_ack = r["last_ack_at"]
     except (IndexError, KeyError):
         last_ack = None
+    raw_creator = r["created_by"] or ""
+    try:
+        creator_nom = r["creator_nom"]
+    except (IndexError, KeyError):
+        creator_nom = None
+    # created_by_display : nom lisible pour l'UI, vide pour les valeurs
+    # synthétiques (auto:migration, auto:code-sync)
+    if not raw_creator or raw_creator.startswith("auto:"):
+        created_by_display = ""
+    elif creator_nom:
+        created_by_display = creator_nom
+    else:
+        created_by_display = raw_creator
     return {
         "id": int(r["id"]),
         "nom": r["nom"],
         "active": bool(r["active"]),
         "params": params,
-        "created_by": r["created_by"] or "",
+        "created_by": raw_creator,
+        "created_by_display": created_by_display,
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
         "linked_maint_code": linked or "",
@@ -2012,10 +2026,13 @@ def maintenance_alerts_list(request: Request):
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, active, params, created_by, created_at, updated_at,
-                      linked_maint_code, last_ack_at
-               FROM maintenance_alerts
-               ORDER BY (linked_maint_code IS NULL), linked_maint_code, created_at DESC, id DESC"""
+            """SELECT a.id, a.nom, a.active, a.params, a.created_by,
+                      a.created_at, a.updated_at,
+                      a.linked_maint_code, a.last_ack_at,
+                      u.nom AS creator_nom
+               FROM maintenance_alerts a
+               LEFT JOIN users u ON u.email = a.created_by
+               ORDER BY (a.linked_maint_code IS NULL), a.linked_maint_code, a.created_at DESC, a.id DESC"""
         ).fetchall()
     return {"items": [_alert_row_to_dict(r) for r in rows]}
 
