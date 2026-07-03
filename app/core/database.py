@@ -4456,6 +4456,220 @@ def _migrate(conn):
         _record_schema_migration(conn, 142, "chat_polls_closed_by")
 
 
+    # v143 - Qualite Referentiel RSE / Normes & Certifications
+    # 4 tables :
+    #   qualite_ref_fiches       : catalogue des normes/certifs (definition, position SIFA, details, statuts)
+    #   qualite_ref_fichiers     : pieces jointes (certificats, attestations, FDS...)
+    #   qualite_ref_questions    : questions clients type indexees pour l autocompletion
+    #   qualite_ref_audit_liens  : jointure vers audit_dossiers (cas d usage passes)
+    # + seed idempotent d une trentaine de fiches socle (slug unique)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=143 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_ref_fiches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug TEXT NOT NULL UNIQUE,
+                nom TEXT NOT NULL,
+                acronyme TEXT,
+                categorie TEXT NOT NULL,
+                definition TEXT NOT NULL,
+                position_sifa TEXT NOT NULL DEFAULT '',
+                details TEXT NOT NULL DEFAULT '',
+                statut_sifa TEXT NOT NULL DEFAULT 'a_evaluer',
+                statut_validation TEXT NOT NULL DEFAULT 'brouillon',
+                source_url TEXT,
+                tags TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                created_by INTEGER REFERENCES users(id),
+                updated_at TEXT NOT NULL,
+                updated_by INTEGER REFERENCES users(id),
+                validated_at TEXT,
+                validated_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qref_categorie ON qualite_ref_fiches(categorie)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qref_statut ON qualite_ref_fiches(statut_validation)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qref_nom ON qualite_ref_fiches(nom)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_ref_fichiers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                uploaded_at TEXT NOT NULL,
+                uploaded_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qref_fichiers_fiche ON qualite_ref_fichiers(fiche_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_ref_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                texte TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                created_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qref_questions_fiche ON qualite_ref_questions(fiche_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_ref_audit_liens (
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                note TEXT,
+                created_at TEXT NOT NULL,
+                created_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (fiche_id, audit_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qref_audit_liens_audit ON qualite_ref_audit_liens(audit_id)")
+
+        _now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        _seed_fiches = [
+            ("reach", "REACH", "REACH", "environnement",
+             "Reglement europeen sur l enregistrement, l evaluation, l autorisation et la restriction des substances chimiques.",
+             "chimie,substances,ue,sve,svhc",
+             "https://echa.europa.eu/regulations/reach/understanding-reach"),
+            ("rohs", "RoHS", "RoHS", "environnement",
+             "Directive europeenne limitant les substances dangereuses dans les equipements electriques et electroniques.",
+             "plomb,mercure,cadmium,eee,ue",
+             "https://environment.ec.europa.eu/topics/waste-and-recycling/rohs-directive_en"),
+            ("pop", "Polluants organiques persistants (POP)", "POP", "environnement",
+             "Convention de Stockholm : substances chimiques a longue duree de vie, bioaccumulables et toxiques.",
+             "stockholm,pcb,pesticides,persistant",
+             "https://www.pops.int/"),
+            ("cov-voc", "Composes organiques volatils (COV / VOC)", "COV/VOC", "environnement",
+             "Substances chimiques qui s evaporent facilement a temperature ambiante ; concernees par les seuils d emissions.",
+             "solvants,emissions,air,peintures,colles",
+             ""),
+            ("iso-14001", "ISO 14001", "ISO 14001", "environnement",
+             "Norme internationale de systeme de management environnemental.",
+             "sme,environnement,certification,iso",
+             "https://www.iso.org/fr/iso-14001-environmental-management.html"),
+            ("iso-50001", "ISO 50001", "ISO 50001", "environnement",
+             "Norme internationale de management de l energie.",
+             "energie,performance,iso",
+             "https://www.iso.org/fr/iso-50001-energy-management.html"),
+            ("emas", "EMAS", "EMAS", "environnement",
+             "Systeme europeen de management environnemental et d audit, plus exigeant qu ISO 14001 (declaration publique).",
+             "ue,environnement,declaration",
+             "https://green-business.ec.europa.eu/eco-management-and-audit-scheme-emas_en"),
+            ("pefc", "PEFC", "PEFC", "environnement",
+             "Certification de gestion durable des forets (Programme for the Endorsement of Forest Certification).",
+             "foret,bois,papier,carton,chaine-controle",
+             "https://www.pefc.fr/"),
+            ("fsc", "FSC", "FSC", "environnement",
+             "Certification de gestion responsable des forets (Forest Stewardship Council).",
+             "foret,bois,papier,carton,chaine-controle",
+             "https://fr.fsc.org/"),
+            ("ademe-acv", "Bilan Carbone / ACV", "Bilan Carbone", "environnement",
+             "Methode ADEME d evaluation des emissions de gaz a effet de serre et analyse du cycle de vie produit.",
+             "carbone,ges,ademe,scope-1-2-3,acv",
+             "https://www.bilancarbone.ademe.fr/"),
+            ("ghg-protocol", "GHG Protocol", "GHG", "environnement",
+             "Standard international de comptabilite carbone couvrant les Scopes 1, 2 et 3.",
+             "carbone,scope-1,scope-2,scope-3,ges",
+             "https://ghgprotocol.org/"),
+            ("ppwr", "PPWR", "PPWR", "environnement",
+             "Reglement UE sur les emballages et dechets d emballages (successeur de la directive PPWD).",
+             "emballage,recyclage,ue,pfas",
+             "https://environment.ec.europa.eu/topics/waste-and-recycling/packaging-waste_en"),
+            ("loi-agec", "Loi AGEC", "AGEC", "environnement",
+             "Loi francaise anti-gaspillage pour une economie circulaire (2020).",
+             "economie-circulaire,rep,recyclage,france",
+             "https://www.ecologie.gouv.fr/loi-anti-gaspillage-economie-circulaire"),
+            ("triman", "Triman", "Triman", "environnement",
+             "Logo obligatoire d information au consommateur sur le tri des emballages en France.",
+             "tri,emballage,consommateur,info-tri",
+             "https://www.ademe.fr/"),
+            ("csrd", "CSRD", "CSRD", "environnement",
+             "Directive europeenne de reporting extra-financier (durabilite) pour les grandes entreprises.",
+             "reporting,esrs,esg,ue,double-materialite",
+             "https://finance.ec.europa.eu/capital-markets-union-and-financial-markets/company-reporting-and-auditing/company-reporting/corporate-sustainability-reporting_en"),
+            ("iso-26000", "ISO 26000", "ISO 26000", "social",
+             "Norme d orientation sur la responsabilite societale des organisations (non certifiable).",
+             "rse,societal,iso,orientation",
+             "https://www.iso.org/fr/iso-26000-social-responsibility.html"),
+            ("ecovadis", "Ecovadis", "Ecovadis", "social",
+             "Plateforme d evaluation RSE des fournisseurs (score sur 100, 4 piliers : environnement, social, ethique, achats responsables).",
+             "notation,fournisseur,rse,platine,or,argent,bronze",
+             "https://ecovadis.com/fr/"),
+            ("sedex-smeta", "Sedex / SMETA", "SMETA", "social",
+             "Plateforme et methodologie d audit ethique de la chaine d approvisionnement.",
+             "audit,ethique,fournisseur,4-piliers",
+             "https://www.sedex.com/"),
+            ("sapin-ii", "Loi Sapin II", "Sapin II", "social",
+             "Loi francaise de lutte contre la corruption (2016) : cartographie des risques, alerte interne, code de conduite.",
+             "anti-corruption,france,alerte,afa",
+             "https://www.legifrance.gouv.fr/"),
+            ("devoir-vigilance", "Devoir de vigilance", "Devoir vigilance", "social",
+             "Loi francaise imposant aux grandes entreprises un plan de prevention des atteintes aux droits humains et a l environnement.",
+             "droits-humains,vigilance,france,plan",
+             ""),
+            ("code-conduite-fournisseur", "Code de conduite fournisseur", "CCF", "social",
+             "Charte engageant les fournisseurs sur des criteres ethiques, sociaux et environnementaux.",
+             "fournisseur,charte,engagement",
+             ""),
+            ("modern-slavery-act", "Modern Slavery Act", "MSA", "social",
+             "Loi britannique (2015) exigeant un rapport annuel sur les mesures anti-esclavage moderne.",
+             "uk,esclavage,rapport,transparence",
+             "https://www.legislation.gov.uk/ukpga/2015/30/contents"),
+            ("conflict-minerals", "Conflict Minerals", "3TG", "social",
+             "Reglementation sur l approvisionnement responsable en minerais 3TG : etain, tantale, tungstene, or.",
+             "3tg,minerais,conflit,eu-2017-821",
+             "https://policy.trade.ec.europa.eu/development-and-sustainability/conflict-minerals-regulation_en"),
+            ("iso-9001", "ISO 9001", "ISO 9001", "tracabilite",
+             "Norme internationale de management de la qualite.",
+             "smq,qualite,iso,certification",
+             "https://www.iso.org/fr/iso-9001-quality-management.html"),
+            ("tracabilite-lot", "Tracabilite lot & origine", "Tracabilite", "tracabilite",
+             "Capacite a identifier l origine et le parcours d un lot de production, de la matiere premiere au produit fini.",
+             "lot,origine,parcours,mp,pf",
+             ""),
+            ("oeko-tex", "OEKO-TEX Standard 100", "OEKO-TEX", "tracabilite",
+             "Certification textile garantissant l absence de substances nocives.",
+             "textile,substances,certification",
+             "https://www.oeko-tex.com/fr/"),
+            ("gots", "GOTS", "GOTS", "tracabilite",
+             "Standard textile bio (Global Organic Textile Standard) integrant criteres environnementaux et sociaux.",
+             "textile,bio,coton,social",
+             "https://global-standard.org/"),
+            ("iso-45001", "ISO 45001", "ISO 45001", "securite",
+             "Norme de management de la sante et securite au travail (remplace OHSAS 18001).",
+             "sst,securite,sante,iso",
+             "https://www.iso.org/fr/iso-45001-occupational-health-and-safety.html"),
+            ("fds-sds", "Fiche de donnees de securite (FDS/SDS)", "FDS", "securite",
+             "Document normalise en 16 sections decrivant les dangers, precautions et usages d un produit chimique.",
+             "chimie,fds,sds,ghs,clp",
+             "https://echa.europa.eu/fr/safety-data-sheets"),
+            ("prop-65", "California Prop 65", "Prop 65", "securite",
+             "Loi californienne d etiquetage des substances cancerigenes ou toxiques pour la reproduction.",
+             "usa,californie,etiquetage,cmr",
+             "https://oehha.ca.gov/proposition-65"),
+            ("pbt-vpvb", "PBT / vPvB", "PBT", "securite",
+             "Criteres d identification des substances persistantes, bioaccumulables et toxiques (annexe XIII de REACH).",
+             "reach,persistant,bioaccumulable,toxique",
+             ""),
+        ]
+        for slug, nom, acr, cat, definition, tags, source in _seed_fiches:
+            conn.execute(
+                """INSERT OR IGNORE INTO qualite_ref_fiches
+                       (slug, nom, acronyme, categorie, definition, position_sifa, details,
+                        statut_sifa, statut_validation, source_url, tags,
+                        created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, '', '',
+                           'a_evaluer', 'brouillon', ?, ?,
+                           ?, ?)""",
+                (slug, nom, acr, cat, definition, source, tags, _now_iso, _now_iso),
+            )
+
+        conn.commit()
+        _record_schema_migration(conn, 143, "qualite_referentiel_rse")
+
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

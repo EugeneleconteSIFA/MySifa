@@ -13,7 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
 from config import classify_operation
-from app.services.auth_service import get_current_user, is_fabrication, is_admin
+from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
 
 router = APIRouter()
@@ -226,9 +226,12 @@ def _resolve_machine(user: dict, body: dict, conn) -> dict:
     Retourne le dict machine pour la saisie.
     - Opérateur normal : machine liée au compte (machine_id).
     - Admin sans machine liée : utilise machine_id passé dans le body.
+    - Superadmin en simulation : utilise la machine simulée (effective_machine_id).
     Lève 400 si aucune machine identifiable.
     """
-    machine_id = user.get("machine_id")
+    # effective_machine_id renvoie la machine simulée si superadmin impersonne,
+    # sinon la machine réelle du compte.
+    machine_id = effective_machine_id(user) or user.get("machine_id")
 
     # Admin peut surcharger avec le machine_id du body
     if is_admin(user) and body.get("machine_id"):
@@ -326,7 +329,7 @@ def list_dossiers(request: Request, machine_id: int = None):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = user.get("machine_id") or machine_id
+    mid = effective_machine_id(user) or machine_id
     q = (request.query_params.get("q") or "").strip()
 
     statut_sql = "pe.statut IN ('attente','en_cours')"
@@ -394,7 +397,7 @@ def get_session(request: Request, machine_id: int = None):
     _check_fab_access(user)
 
     # machine_id : préférence compte utilisateur, sinon query param (admin)
-    mid = user.get("machine_id") or machine_id
+    mid = effective_machine_id(user) or machine_id
     
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
@@ -471,66 +474,209 @@ def get_session(request: Request, machine_id: int = None):
         }
 
 
+def _last_dossier_ref_today(saisies: list) -> Optional[str]:
+    """Dernier dossier touche aujourd'hui (meme apres 89) — fallback pour deriver la machine."""
+    last_ref = None
+    for s in saisies:
+        code = str(s.get("operation_code") or "").strip()
+        if code in ("01", "89"):
+            ref = (s.get("no_dossier") or "").strip()
+            if ref:
+                last_ref = ref
+    return last_ref
+
+
+def _machine_id_for_ref(conn, ref: Optional[str]) -> Optional[int]:
+    if not ref:
+        return None
+    r = conn.execute(
+        "SELECT machine_id FROM planning_entries WHERE reference=? LIMIT 1",
+        (ref,),
+    ).fetchone()
+    return int(r["machine_id"]) if r and r["machine_id"] is not None else None
+
+
+def _hydrate_dossier_row(row) -> dict:
+    d = dict(row)
+    d["fictif"] = False
+    return d
+
+
+def _fictif_dossier_payload(ref: str, machine_nom: Optional[str] = None) -> dict:
+    return {
+        "no_dossier": ref,
+        "client": None,
+        "description": None,
+        "ref_produit": None,
+        "numero_of": _fictif_of_display(ref),
+        "machine_nom": machine_nom,
+        "statut_reel": None,
+        "fictif": True,
+    }
+
+
 @router.get("/api/fabrication/dossier-en-cours")
 def get_dossier_en_cours(request: Request):
-    """Renvoie le dossier de prod actuellement en saisie pour l'utilisateur courant.
+    """Dossier actif de l'operateur + 2 dossiers precedents terminees sur la machine.
 
-    Utilise par MyStock (modal Entree Z1) pour pre-remplir le lien dossier.
-    Accessible a tout utilisateur authentifie : si le profil n'a pas
-    d'`operateur_lie`/nom ou aucune saisie 01 ouverte du jour, on renvoie
-    {"dossier": null} sans lever d'erreur.
+    Utilise par MyStock (modal Entree Z1) pour pre-remplir et proposer un
+    picker "Choisir un autre dossier". Reponse :
+
+        {
+          "dossier":        { ... } | null,   # dossier actif
+          "precedents":     [ { ... }, ... ], # 2 max, statut_reel=reellement_termine
+          "machine":        { id, nom, code } | null,
+          "can_search_all": bool               # true pour admin (recherche libre)
+        }
+
+    Retrocompatible avec l'ancien front qui ne lit que `dossier`.
     """
     user = get_current_user(request)
+    can_search_all = is_admin(user)
 
     operateur = (user.get("operateur_lie") or user.get("nom") or "").strip()
-    if not operateur:
-        return {"dossier": None}
+    empty = {"dossier": None, "precedents": [], "machine": None, "can_search_all": can_search_all}
+    if not operateur and not can_search_all:
+        return empty
 
     today = _today_prefix()
     today_fr = date.today().strftime("%d/%m/%Y")
 
     with get_db() as conn:
-        rows = conn.execute(
-            """SELECT * FROM production_data
-               WHERE (operateur = ? OR operateur = ?) AND (
-                 date_operation LIKE ? OR date_operation LIKE ?
-               )
-               ORDER BY date_operation ASC, id ASC""",
-            (operateur, user.get("nom") or operateur, today + "%", today_fr + "%"),
-        ).fetchall()
-        saisies = [dict(r) for r in rows]
-        active_ref = _get_active_dossier(saisies)
-        if not active_ref:
-            return {"dossier": None}
+        saisies = []
+        if operateur:
+            rows = conn.execute(
+                """SELECT * FROM production_data
+                   WHERE (operateur = ? OR operateur = ?) AND (
+                     date_operation LIKE ? OR date_operation LIKE ?
+                   )
+                   ORDER BY date_operation ASC, id ASC""",
+                (operateur, user.get("nom") or operateur, today + "%", today_fr + "%"),
+            ).fetchall()
+            saisies = [dict(r) for r in rows]
 
-        row = conn.execute(
-            """SELECT pe.reference AS no_dossier,
+        active_ref = _get_active_dossier(saisies)
+        fallback_ref = _last_dossier_ref_today(saisies) if not active_ref else None
+
+        # Determine machine (priorite : dossier actif > dernier dossier du jour > profil)
+        mid = _machine_id_for_ref(conn, active_ref) \
+            or _machine_id_for_ref(conn, fallback_ref)
+        if mid is None:
+            try:
+                emid = effective_machine_id(user)
+                if emid is not None:
+                    mid = int(emid)
+            except (TypeError, ValueError):
+                mid = None
+
+        machine = None
+        if mid is not None:
+            mrow = conn.execute(
+                "SELECT id, nom, code FROM machines WHERE id=?",
+                (mid,),
+            ).fetchone()
+            if mrow:
+                machine = dict(mrow)
+
+        # Dossier actif
+        dossier = None
+        if active_ref:
+            row = conn.execute(
+                """SELECT pe.reference AS no_dossier,
+                          pe.client,
+                          pe.description,
+                          pe.ref_produit,
+                          pe.numero_of,
+                          pe.statut_reel,
+                          m.nom AS machine_nom
+                   FROM planning_entries pe
+                   LEFT JOIN machines m ON m.id = pe.machine_id
+                   WHERE pe.reference = ?""",
+                (active_ref,),
+            ).fetchone()
+            if row:
+                dossier = _hydrate_dossier_row(row)
+            else:
+                dossier = _fictif_dossier_payload(
+                    active_ref,
+                    machine.get("nom") if machine else None,
+                )
+                dossier["fictif"] = _is_fictif_dossier(active_ref)
+
+        # 2 dossiers precedents terminees sur la meme machine (exclut le dossier actif)
+        precedents = []
+        if mid is not None:
+            excl = active_ref or ""
+            prev_rows = conn.execute(
+                """SELECT pe.reference AS no_dossier,
+                          pe.client,
+                          pe.description,
+                          pe.ref_produit,
+                          pe.numero_of,
+                          pe.statut_reel,
+                          pe.updated_at,
+                          m.nom AS machine_nom
+                   FROM planning_entries pe
+                   LEFT JOIN machines m ON m.id = pe.machine_id
+                   WHERE pe.machine_id = ?
+                     AND pe.statut_reel = 'reellement_termine'
+                     AND pe.reference != ?
+                   ORDER BY pe.updated_at DESC, pe.id DESC
+                   LIMIT 2""",
+                (mid, excl),
+            ).fetchall()
+            precedents = [_hydrate_dossier_row(r) for r in prev_rows]
+
+        return {
+            "dossier": dossier,
+            "precedents": precedents,
+            "machine": machine,
+            "can_search_all": can_search_all,
+        }
+
+
+@router.get("/api/fabrication/dossiers-search")
+def search_dossiers(request: Request, q: str = "", limit: int = 20):
+    """Recherche libre de dossiers pour la modale Z1.
+
+    Reserve aux admins (direction, administration, superadmin). Cherche sur
+    reference, client, description, numero_of ; renvoie les plus recents.
+    """
+    user = get_current_user(request)
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Recherche libre reservee a l'administration")
+
+    q = (q or "").strip()
+    if len(q) < 2:
+        return {"dossiers": []}
+
+    try:
+        limit = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        limit = 20
+
+    pat = f"%{q}%"
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT pe.reference    AS no_dossier,
                       pe.client,
                       pe.description,
                       pe.ref_produit,
                       pe.numero_of,
-                      m.nom AS machine_nom
+                      pe.statut_reel,
+                      pe.updated_at,
+                      m.nom           AS machine_nom
                FROM planning_entries pe
                LEFT JOIN machines m ON m.id = pe.machine_id
-               WHERE pe.reference = ?""",
-            (active_ref,),
-        ).fetchone()
-
-        if row:
-            dossier = dict(row)
-            dossier["fictif"] = False
-        else:
-            dossier = {
-                "no_dossier": active_ref,
-                "client": None,
-                "description": None,
-                "ref_produit": None,
-                "numero_of": _fictif_of_display(active_ref) if _is_fictif_dossier(active_ref) else None,
-                "machine_nom": None,
-                "fictif": _is_fictif_dossier(active_ref),
-            }
-
-    return {"dossier": dossier}
+               WHERE pe.reference   LIKE ?
+                  OR pe.client      LIKE ?
+                  OR pe.description LIKE ?
+                  OR pe.numero_of   LIKE ?
+               ORDER BY pe.updated_at DESC, pe.id DESC
+               LIMIT ?""",
+            (pat, pat, pat, pat, limit),
+        ).fetchall()
+        return {"dossiers": [_hydrate_dossier_row(r) for r in rows]}
 
 
 @router.get("/api/fabrication/dossier/{no_dossier}/stats")
@@ -680,8 +826,8 @@ async def create_saisie(request: Request):
     cl = classify_operation(op_str)
 
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
-    # machine_id : préférence compte utilisateur
-    mid = user.get("machine_id")
+    # machine_id : préférence compte utilisateur (impersonation-aware)
+    mid = effective_machine_id(user)
     
     operateur = user.get("operateur_lie") or ""
     if is_admin(user) and body.get("operateur"):
@@ -1099,7 +1245,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = user.get("machine_id") or machine_id
+    mid = effective_machine_id(user) or machine_id
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
     if not operateur:
@@ -1593,7 +1739,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
-            mid = user.get("machine_id") or machine_id
+            mid = effective_machine_id(user) or machine_id
             where = "1=1"
             params: list = []
             if mid and not is_admin(user):
@@ -2709,7 +2855,7 @@ def list_dossiers_repiquage(request: Request):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = user.get("machine_id") or request.query_params.get("machine_id")
+    mid = effective_machine_id(user) or request.query_params.get("machine_id")
     if mid:
         try:
             mid = int(mid)
