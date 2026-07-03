@@ -23,6 +23,8 @@ from services.auth_service import (
     merged_app_access,
     parse_access_overrides_raw,
     require_superadmin,
+    is_real_superadmin,
+    IMPERSONATE_COOKIE,
 )
 from config import (
     ACCESS_OVERRIDABLE_APPS,
@@ -31,6 +33,7 @@ from config import (
     ROLE_SUPERADMIN,
     SESSION_HOURS,
     SUPERADMIN_EMAIL,
+    ENV_NAME,
 )
 
 router = APIRouter()
@@ -333,9 +336,86 @@ def me(request: Request):
     d = dict(row)
     ov_raw = d.get("access_overrides")
     d["access_overrides"] = parse_access_overrides_raw(ov_raw)
-    d["app_access"] = merged_app_access(d.get("role"), ov_raw)
+    # get_current_user a déjà posé effective_role / effective_machine_id / is_impersonating.
+    real_role = d.get("role")
+    real_machine_id = d.get("machine_id")
+    eff_role = user.get("effective_role") or real_role
+    eff_machine_id = user.get("effective_machine_id")
+    is_imp = bool(user.get("is_impersonating"))
+    # En impersonation on remplace role et machine_id : toutes les logiques front qui lisent
+    # S.user.role héritent naturellement du rôle simulé (rendu contextualisé).
+    if is_imp:
+        d["role"] = eff_role
+        d["machine_id"] = eff_machine_id
+    d["real_role"] = real_role
+    d["real_machine_id"] = real_machine_id
+    d["effective_role"] = eff_role
+    d["effective_machine_id"] = eff_machine_id
+    d["is_impersonating"] = is_imp
+    # app_access basé sur le rôle RÉEL — la sidebar doit rester complète pour le superadmin
+    # même en simulation ("toutes les pages accessibles + rendu contextualisé").
+    # Les endpoints API, eux, vérifient les droits sur le rôle effectif (user_has_app_access).
+    d["app_access"] = merged_app_access(real_role, ov_raw)
+    # effective_app_access : ce que le rôle simulé verrait — pour les toggles de features fines.
+    d["effective_app_access"] = merged_app_access(eff_role, ov_raw) if is_imp else d["app_access"]
     d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
     return d
+
+
+# ─── Impersonation (superadmin uniquement) ─────────────────────────
+@router.post("/api/impersonate")
+async def start_impersonation(request: Request, response: Response):
+    """Le superadmin passe en mode 'simulation d'un service'.
+
+    Body : {"role": "fabrication|logistique|...", "machine_id": <int|null>}
+    Superadmin réel uniquement (l'endpoint reste accessible même déjà en simulation).
+    """
+    user = get_current_user(request)
+    if not is_real_superadmin(user):
+        raise HTTPException(status_code=403, detail="Réservé au super administrateur")
+    body = await request.json()
+    role = str(body.get("role") or "").strip()
+    if role not in ASSIGNABLE_ROLES:
+        raise HTTPException(status_code=400, detail="Rôle invalide")
+    raw_mid = body.get("machine_id")
+    machine_id: Optional[int] = None
+    if raw_mid not in (None, "", 0):
+        try:
+            machine_id = int(raw_mid)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="machine_id invalide")
+    # Vérifie que la machine existe (si fournie)
+    if machine_id is not None:
+        with get_db() as conn:
+            m = conn.execute("SELECT id FROM machines WHERE id=? AND actif=1", (machine_id,)).fetchone()
+            if not m:
+                raise HTTPException(status_code=400, detail="Machine introuvable")
+    payload = json.dumps({"role": role, "machine_id": machine_id})
+    response.set_cookie(
+        key=IMPERSONATE_COOKIE,
+        value=payload,
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=SESSION_HOURS * 3600,
+    )
+    return {
+        "success": True,
+        "effective_role": role,
+        "effective_machine_id": machine_id,
+        "is_impersonating": True,
+        "env": ENV_NAME,
+    }
+
+
+@router.delete("/api/impersonate")
+def stop_impersonation(request: Request, response: Response):
+    """Retour au rôle réel. Accessible au vrai superadmin uniquement."""
+    user = get_current_user(request)
+    if not is_real_superadmin(user):
+        raise HTTPException(status_code=403, detail="Réservé au super administrateur")
+    response.delete_cookie(IMPERSONATE_COOKIE)
+    return {"success": True, "is_impersonating": False, "env": ENV_NAME}
 
 
 @router.put("/api/auth/me")

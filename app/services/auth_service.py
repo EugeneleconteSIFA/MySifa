@@ -21,11 +21,90 @@ from config import (
     ROLE_ADMINISTRATION,
     ROLE_EXPEDITION,
     ROLES_EXPE_WRITE,
+    ASSIGNABLE_ROLES,
     default_app_access_for_role,
 )
 
 # MyCalendrier — accès page (pas de rôle rh en base)
 CALENDRIER_PAGE_ROLES = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION})
+
+# ─── Impersonation (superadmin uniquement) ────────────────────────
+# Cookie posé par POST /api/impersonate, retiré par DELETE /api/impersonate.
+# Contenu JSON : {"role": "<role>", "machine_id": <int|null>}
+# Ne modifie JAMAIS user["role"] : les permissions passent par effective_role(user)
+# ce qui laisse un chemin de sortie (is_superadmin lit toujours le rôle réel).
+IMPERSONATE_COOKIE = "sifa_impersonate"
+
+
+def _parse_impersonate_cookie(request: Request) -> Optional[dict]:
+    """Retourne {'role': str, 'machine_id': int|None} ou None si absent/invalide."""
+    raw = request.cookies.get(IMPERSONATE_COOKIE)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    role = str(data.get("role") or "").strip()
+    if role not in ASSIGNABLE_ROLES:
+        return None
+    mid = data.get("machine_id")
+    try:
+        mid_int = int(mid) if mid not in (None, "", 0) else None
+    except (ValueError, TypeError):
+        mid_int = None
+    return {"role": role, "machine_id": mid_int}
+
+
+def _apply_impersonation(request: Request, user: dict) -> dict:
+    """Injecte les champs effectifs sur user. N'écrase pas user['role'].
+
+    Champs ajoutés :
+      - real_role, real_machine_id : rôle et machine réels (copie de sécurité).
+      - effective_role, effective_machine_id : à utiliser pour les checks de permission.
+      - is_impersonating : True si le superadmin joue actuellement un autre rôle.
+    """
+    user["real_role"] = user.get("role")
+    user["real_machine_id"] = user.get("machine_id")
+    user["effective_role"] = user.get("role")
+    user["effective_machine_id"] = user.get("machine_id")
+    user["is_impersonating"] = False
+    if user.get("role") != ROLE_SUPERADMIN:
+        return user
+    imp = _parse_impersonate_cookie(request)
+    if not imp:
+        return user
+    user["effective_role"] = imp["role"]
+    user["effective_machine_id"] = imp["machine_id"]
+    user["is_impersonating"] = True
+    return user
+
+
+def effective_role(user: dict) -> str:
+    """Rôle à utiliser pour les checks de permission (impersonation-aware)."""
+    if not user:
+        return ""
+    return user.get("effective_role") or user.get("role") or ""
+
+
+def effective_machine_id(user: dict) -> Optional[int]:
+    """Machine à utiliser pour les filtres (impersonation-aware)."""
+    if not user:
+        return None
+    val = user.get("effective_machine_id")
+    if val in (None, "", 0):
+        val = user.get("machine_id")
+    try:
+        return int(val) if val not in (None, "", 0) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def is_real_superadmin(user: dict) -> bool:
+    """Vrai superadmin (rôle en base), utile pour /api/impersonate."""
+    return bool(user and (user.get("real_role") or user.get("role")) == ROLE_SUPERADMIN)
 
 
 # ─── Passwords ────────────────────────────────────────────────────
@@ -107,12 +186,18 @@ def merged_app_access(role: str, overrides_raw: Any) -> dict:
 
 
 def user_has_app_access(user: dict, app: str) -> bool:
-    """Accès effectif à une application (inclut surcharges par utilisateur sauf Paramètres)."""
+    """Accès effectif à une application (inclut surcharges par utilisateur sauf Paramètres).
+
+    Utilise effective_role : quand un superadmin joue un rôle simulé, l'accès reflète
+    le rôle simulé. Paramètres reste réservé au superadmin réel (chemin de sortie).
+    """
     if app == "settings":
-        return user.get("role") == ROLE_SUPERADMIN
+        # /settings doit rester accessible au vrai superadmin même en impersonation
+        # (sinon impossible de sortir depuis /settings).
+        return (user.get("real_role") or user.get("role")) == ROLE_SUPERADMIN
     if app == "devis":
         app = "pricing"
-    role = user.get("role")
+    role = effective_role(user)
     if app == "pricing" and role not in ROLES_PRICING:
         return False
     acc = merged_app_access(role, user.get("access_overrides"))
@@ -121,7 +206,7 @@ def user_has_app_access(user: dict, app: str) -> bool:
 
 def user_can_write_expe(user: dict) -> bool:
     """MyExpé — écriture (départs, transporteurs). Logistique et commercial : lecture seule."""
-    return user.get("role") in ROLES_EXPE_WRITE
+    return effective_role(user) in ROLES_EXPE_WRITE
 
 
 # ─── Résolution utilisateur ───────────────────────────────────────
@@ -130,7 +215,10 @@ def get_optional_user(request: Request) -> Optional[dict]:
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         return None
-    return get_user_by_token(token)
+    user = get_user_by_token(token)
+    if not user:
+        return None
+    return _apply_impersonation(request, user)
 
 
 def get_current_user(request: Request) -> dict:
@@ -140,31 +228,32 @@ def get_current_user(request: Request) -> dict:
     user = get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Session expirée ou invalide")
-    return user
+    return _apply_impersonation(request, user)
 
 def require_admin(request: Request) -> dict:
-    """Exige direction, administration ou super admin."""
+    """Exige direction, administration ou super admin (rôle effectif)."""
     user = get_current_user(request)
-    if user["role"] not in ROLES_ADMIN:
+    if effective_role(user) not in ROLES_ADMIN:
         raise HTTPException(status_code=403, detail="Accès réservé à l'administration")
     return user
 
 
 def is_superadmin(user: dict) -> bool:
-    """Super admin : tout compte avec le rôle superadmin."""
-    return bool(user and user.get("role") == ROLE_SUPERADMIN)
+    """Super admin (rôle effectif — un superadmin qui joue un rôle simulé retourne False)."""
+    return bool(user and effective_role(user) == ROLE_SUPERADMIN)
 
 
 def require_superadmin(request: Request) -> dict:
+    """Superadmin réel — insensible à l'impersonation (pour /api/impersonate)."""
     user = get_current_user(request)
-    if not is_superadmin(user):
+    if not is_real_superadmin(user):
         raise HTTPException(status_code=403, detail="Accès réservé au super administrateur")
     return user
 
 
 def can_access_calendrier(user: dict) -> bool:
     """MyCalendrier : superadmin, direction, administration."""
-    return bool(user and user.get("role") in CALENDRIER_PAGE_ROLES)
+    return bool(user and effective_role(user) in CALENDRIER_PAGE_ROLES)
 
 
 def require_calendrier(request: Request) -> dict:
@@ -175,21 +264,21 @@ def require_calendrier(request: Request) -> dict:
 
 
 def is_admin(user: dict) -> bool:
-    return user.get("role") in ROLES_ADMIN
+    return effective_role(user) in ROLES_ADMIN
 
 def is_commercial(user: dict) -> bool:
-    return user.get("role") == "commercial"
+    return effective_role(user) == "commercial"
 
 def can_view_all_prod(user: dict) -> bool:
     """Vue globale MyProd : toutes machines et opérateurs (lecture seule hors admin)."""
     return (
         is_admin(user)
         or is_commercial(user)
-        or user.get("role") == ROLE_EXPEDITION
+        or effective_role(user) == ROLE_EXPEDITION
     )
 
 def is_fabrication(user: dict) -> bool:
-    return user["role"] == "fabrication"
+    return effective_role(user) == "fabrication"
 
 
 # ─── Login ────────────────────────────────────────────────────────
