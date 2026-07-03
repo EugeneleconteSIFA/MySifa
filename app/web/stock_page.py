@@ -13797,7 +13797,7 @@ function buildValorisationTableRow(item) {
       });
       // Icône : camion (état 0/1) ou demi-camion custom (état 2)
       if (trState === 2) {
-        trBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="6" width="10" height="10" rx="1"/><path d="M11 8h4l3 4v4h-2"/><circle cx="6" cy="18" r="2"/><circle cx="16" cy="18" r="2"/><text x="4" y="14" font-size="6" font-weight="700" font-family="system-ui" stroke="none" fill="currentColor">½</text></svg>';
+        trBtn.innerHTML = '<svg width="20" height="14" viewBox="0 0 32 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><text x="0" y="18" font-size="17" font-weight="800" font-family="system-ui,-apple-system,sans-serif" stroke="none" fill="currentColor">½</text><rect x="15" y="9" width="9" height="7" rx="0.5"/><path d="M24 11h3l3 3v2h-1"/><circle cx="18.5" cy="18" r="1.7"/><circle cx="27" cy="18" r="1.7"/></svg>';
       } else {
         trBtn.appendChild(iconEl('truck', 14));
       }
