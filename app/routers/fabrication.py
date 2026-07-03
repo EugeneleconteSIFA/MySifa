@@ -2934,6 +2934,83 @@ def list_dossiers_repiquage(request: Request):
             dossiers.append(d)
 
     return {"dossiers": dossiers, "machine": dict(machine)}
+is_author):
+            raise HTTPException(403, "Non autorise")
+
+        conn.execute("DELETE FROM repiquage_discussion WHERE id=?", (msg_id,))
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="DELETE",
+        module="fabrication",
+        objet=f"Discussion repiquage message #{msg_id}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
+
+
+@router.get("/api/fabrication/repiquage/dossiers")
+def list_dossiers_repiquage(request: Request):
+    """Liste des dossiers planifies sur la machine Repiquage + cumul par dossier.
+
+    Renvoie pour chaque dossier : ses infos planning + nb_cartons_cumul + qte_etiq_cumul
+    + nb_cartons_jour + qte_etiq_jour (sur l'equipe matin/aprem de l'operateur courant).
+    Pratique pour la grille de selection et la sidebar de switch rapide.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    mid = effective_machine_id(user) or request.query_params.get("machine_id")
+    if mid:
+        try:
+            mid = int(mid)
+        except (TypeError, ValueError):
+            mid = None
+
+    operateur = (user.get("operateur_lie") or "").strip() or (user.get("nom") or "").strip()
+
+    with get_db() as conn:
+        # Resolution machine Repiquage : soit via mid, soit via nom canonique
+        if mid:
+            machine = conn.execute(
+                "SELECT id, nom, code FROM machines WHERE id=? AND actif=1", (mid,)
+            ).fetchone()
+        else:
+            machine = conn.execute(
+                "SELECT id, nom, code FROM machines WHERE actif=1 "
+                "AND (lower(trim(COALESCE(nom,''))) LIKE 'repiquage%' "
+                "OR lower(trim(COALESCE(nom,''))) = 'rep')"
+            ).fetchone()
+        if not machine:
+            return {"dossiers": [], "machine": None}
+        mid = int(machine["id"])
+
+        rows = conn.execute(
+            """SELECT pe.*, m.nom AS machine_nom, m.code AS machine_code
+               FROM planning_entries pe
+               JOIN machines m ON m.id = pe.machine_id
+               WHERE pe.machine_id = ? AND pe.statut IN ('attente','en_cours')
+               ORDER BY pe.position ASC, pe.id ASC""",
+            (mid,),
+        ).fetchall()
+
+        dossiers = []
+        for r in rows:
+            d = dict(r)
+            ref = (d.get("reference") or "").strip()
+            if not ref:
+                dossiers.append(d)
+                continue
+            cum_c, cum_e = _rep_aggregate(conn, ref, operateur, today_only=False)
+            jour_c, jour_e = _rep_aggregate(conn, ref, operateur, today_only=True)
+            d["nb_cartons_cumul"] = cum_c
+            d["qte_etiq_cumul"] = cum_e
+            d["nb_cartons_jour"] = jour_c
+            d["qte_etiq_jour"] = jour_e
+            dossiers.append(d)
+
+    return {"dossiers": dossiers, "machine": dict(machine)}
 que
         if mid:
             machine = conn.execute(
