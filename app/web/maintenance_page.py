@@ -4625,8 +4625,8 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 }
 </script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=9"></script>
-<script src="/static/chat_widget_v2.js?v=5"></script>
+<script src="/static/chat_widget.js?v=10"></script>
+<script src="/static/chat_widget_v2.js?v=6"></script>
 <script src="/static/mysifa_alert_runtime.js"></script>
 <script src="/static/support_widget.js"></script>
 </body>

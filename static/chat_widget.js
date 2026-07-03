@@ -654,6 +654,10 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   cursor:pointer;font-family:inherit;transition:color .12s,border-color .12s}
 .cw-poll-close-btn:hover{color:var(--danger);border-color:var(--danger)}
 .cw-poll-closed-tag{color:var(--warn);font-weight:700}
+.cw-poll-reopen-btn{margin-left:auto;background:transparent;border:1px solid var(--accent);
+  border-radius:8px;padding:5px 10px;color:var(--accent);font-size:11px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:background .12s}
+.cw-poll-reopen-btn:hover{background:var(--accent-bg)}
 
 .cw-humeur-badge{position:absolute;bottom:-2px;left:-2px;font-size:14px;line-height:1;pointer-events:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));cursor:default}
 `;
@@ -3105,13 +3109,26 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       ' · ' + displayVoters + ' votant' + (displayVoters > 1 ? 's' : '') + '</span>');
     if (anon) footParts.push('<span>Anonyme</span>');
     if (p.multi_choice) footParts.push('<span>Choix multiples</span>');
-    if (closed) footParts.push('<span class="cw-poll-closed-tag">Sondage clôturé</span>');
-    else if (p.closes_at) footParts.push('<span>Clôture ' + fmtCloseAt(p.closes_at) + '</span>');
+    if (closed) {
+      let reason = 'Sondage clôturé';
+      if (p.closed_reason === 'manual' && p.closed_by_nom) {
+        reason = 'Clôturé par ' + escCW(p.closed_by_nom);
+      } else if (p.closed_reason === 'deadline') {
+        reason = 'Clôturé automatiquement';
+      }
+      footParts.push('<span class="cw-poll-closed-tag">' + reason + '</span>');
+    } else if (p.closes_at) {
+      footParts.push('<span>Clôture ' + fmtCloseAt(p.closes_at) + '</span>');
+    }
     if (!anon && displayTotal > 0) {
       footParts.push('<button type="button" class="cw-poll-foot-link" data-poll-voters="' + p.id + '">Voir les votants</button>');
     }
     if (canClose) {
       footParts.push('<button type="button" class="cw-poll-close-btn" data-poll-close="' + p.id + '">Clôturer</button>');
+    }
+    // Rouvrir : créateur ou admin, uniquement si clôturé
+    if (closed && (mineIsAuthor || isAdmin)) {
+      footParts.push('<button type="button" class="cw-poll-reopen-btn" data-poll-reopen="' + p.id + '">Rouvrir</button>');
     }
     const foot = '<div class="cw-poll-foot">' + footParts.join('') + '</div>';
     const head = '<div class="cw-poll-head"><span class="cw-poll-badge">' +
@@ -3189,7 +3206,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     if (closeBtn) {
       closeBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!confirm('Clôturer ce sondage ? Cette action est définitive.')) return;
+        if (!confirm('Fermer ce sondage ? Personne ne pourra plus voter. Tu pourras le rouvrir si besoin.')) return;
         try {
           const resp = await api('/api/chat/polls/' + p.id + '/close', { method: 'POST' });
           if (resp && resp.poll) {
@@ -3201,6 +3218,24 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
           }
         } catch (err) {
           cwToast(err && err.message ? err.message : 'Clôture impossible', 'danger');
+        }
+      });
+    }
+    const reopenBtn = pollEl.querySelector('[data-poll-reopen]');
+    if (reopenBtn) {
+      reopenBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          const resp = await api('/api/chat/polls/' + p.id + '/reopen', { method: 'POST' });
+          if (resp && resp.poll) {
+            msg.poll = resp.poll;
+            const parent = wrap.parentElement;
+            const newWrap = renderMsg(msg);
+            if (parent && newWrap) parent.replaceChild(newWrap, wrap);
+            cwToast('Sondage rouvert.', 'success');
+          }
+        } catch (err) {
+          cwToast(err && err.message ? err.message : 'Réouverture impossible', 'danger');
         }
       });
     }
