@@ -13465,7 +13465,13 @@ function buildValorisationKpis() {
     && (nbUsdOnly + nbTaxOnly + nbBoth + nbTransport) > 0
     && (tauxRaw > 0 || taxPctRaw > 0 || transportRaw > 0);
   const totalMPReel = Number(s.total_mp_reel || s.total_mp || 0);
-  const totalGlobalReel = totalMPReel + totalPF;
+  // pfHasCharges est calculé plus bas mais nécessaire ici pour le total réel — on le
+  // dérive directement à partir de pfS pour éviter la dépendance sur la variable.
+  const _pfCharge = pfLoaded ? Number(pfS.charge_production_pct || 0) : 0;
+  const _pfStorage = pfLoaded ? Number(pfS.storage_fees_pct || 0) : 0;
+  const _pfHasCharges = canSeeUSD && pfLoaded && (_pfCharge > 0 || _pfStorage > 0);
+  const totalPFReel = _pfHasCharges ? Number(pfS.total_pf_avec_charges || 0) : totalPF;
+  const totalGlobalReel = totalMPReel + totalPFReel;
 
   const wrap = el('div', { cls: 'val-kpis', style:
     'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:16px;' });
@@ -13486,16 +13492,25 @@ function buildValorisationKpis() {
   };
 
   // ── Total global ──────────────────────────────────────────────
+  // Chiffre recalculé en gros vert au-dessus, chiffre d'origine plus discret dessous
+  // dès qu'un breakdown est actif (MP réel OU PF avec charges).
+  const totalHasBreakdown = showReelBreakdown || _pfHasCharges;
   const kpiTotalChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
-    el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal)),
   ];
-  if (showReelBreakdown) {
+  if (totalHasBreakdown) {
     kpiTotalChildren.push(
-      el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px' },
-        valFormatEuro(totalGlobalReel),
-        el('span', { style: 'font-size:10px;font-weight:600;margin-left:6px;text-transform:uppercase;letter-spacing:.3px' }, 'réel')
+      el('div', { style: 'font-size:24px;font-weight:800;color:#16a34a' }, valFormatEuro(totalGlobalReel))
+    );
+    kpiTotalChildren.push(
+      el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
+        el('span', null, valFormatEuro(totalGlobal)),
+        el('span', { style: 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
+    );
+  } else {
+    kpiTotalChildren.push(
+      el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal))
     );
   }
   kpiTotalChildren.push(
@@ -13508,15 +13523,18 @@ function buildValorisationKpis() {
   );
 
   // ── Matières premières — dédoublé EUR / réel si réfs USD ou taxe ──
+  // Position inversée quand un breakdown est actif : réel en gros vert au-dessus.
   const kpiMPChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Matières premières'),
-    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, valFormatEuro(totalMP)),
   ];
   if (showReelBreakdown) {
     kpiMPChildren.push(
-      el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px;display:flex;align-items:baseline;gap:6px' },
-        el('span', null, valFormatEuro(totalMPReel)),
-        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'réel')
+      el('div', { style: 'font-size:24px;font-weight:800;color:#16a34a' }, valFormatEuro(totalMPReel))
+    );
+    kpiMPChildren.push(
+      el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
+        el('span', null, valFormatEuro(totalMP)),
+        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
     );
     const refsLabel = buildBreakdownLabel();
@@ -13548,22 +13566,28 @@ function buildValorisationKpis() {
     ...kpiMPChildren
   );
 
-  const pfChargePct = pfLoaded ? Number(pfS.charge_production_pct || 0) : 0;
-  const pfStoragePct = pfLoaded ? Number(pfS.storage_fees_pct || 0) : 0;
-  // Charges de prod. / stockage : réservé à Direction + superadmin (comme la colonne « réel » MP).
-  const pfHasCharges = canSeeUSD && pfLoaded && (pfChargePct > 0 || pfStoragePct > 0);
+  const pfChargePct = _pfCharge;
+  const pfStoragePct = _pfStorage;
+  const pfHasCharges = _pfHasCharges;
   const pfTotalAvecCharges = pfLoaded ? Number(pfS.total_pf_avec_charges || 0) : 0;
 
+  // Position inversée quand charges activées : « avec charges » en gros vert, base dessous.
   const kpiPFChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Produits finis'),
-    el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—'),
   ];
   if (pfHasCharges) {
     kpiPFChildren.push(
-      el('div', { style: 'font-size:15px;font-weight:800;color:#16a34a;margin-top:4px;display:flex;align-items:baseline;gap:6px' },
-        el('span', null, valFormatEuro(pfTotalAvecCharges)),
-        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'avec charges')
+      el('div', { style: 'font-size:24px;font-weight:800;color:#16a34a' }, valFormatEuro(pfTotalAvecCharges))
+    );
+    kpiPFChildren.push(
+      el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
+        el('span', null, valFormatEuro(totalPF)),
+        el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
+    );
+  } else {
+    kpiPFChildren.push(
+      el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—')
     );
   }
   const pfSubPieces = [];
