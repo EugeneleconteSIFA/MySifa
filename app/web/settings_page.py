@@ -1359,8 +1359,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=10"></script>
-<script src="/static/chat_widget_v2.js?v=6"></script>
+<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget_v2.js?v=7"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;

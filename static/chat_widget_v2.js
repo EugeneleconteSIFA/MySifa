@@ -43,6 +43,12 @@
 #cw-gif-btn{font-size:11px;font-weight:800;padding:0 8px;color:var(--accent);border:1px solid var(--accent);
   border-radius:10px;height:38px;background:transparent;cursor:pointer;font-family:inherit}
 #cw-gif-btn:hover{background:var(--accent-bg)}
+#cw-poll-btn{width:38px;height:38px;box-sizing:border-box;background:transparent;
+  border:1px solid var(--border);border-radius:10px;color:var(--text2);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:color .12s,border-color .12s,background .12s;font-family:inherit;padding:0}
+#cw-poll-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+#cw-poll-btn svg{display:block}
 #cw-input-wrap{flex:1;min-width:0;position:relative}
 #cw-mention-dd{position:absolute;bottom:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);
   border-radius:10px;max-height:200px;overflow-y:auto;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.35);display:none}
@@ -128,7 +134,7 @@
       '<button type="button" id="cw-attach" aria-label="Pièce jointe" title="Pièce jointe">' +
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>' +
       '<button type="button" id="cw-poll-btn" aria-label="Sondage" title="Sondage">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 8 8 4"/><line x1="12" y1="6" x2="21" y2="6"/><rect x="3" y="10" width="6" height="4" rx="1"/><line x1="12" y1="12" x2="21" y2="12"/><rect x="3" y="16" width="6" height="4" rx="1"/><line x1="12" y1="18" x2="21" y2="18"/></svg></button>' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 8 8 4" fill="none"/><line x1="12" y1="6" x2="21" y2="6"/><rect x="3" y="10" width="6" height="4" rx="1" fill="none"/><line x1="12" y1="12" x2="21" y2="12"/><rect x="3" y="16" width="6" height="4" rx="1" fill="none"/><line x1="12" y1="18" x2="21" y2="18"/></svg></button>' +
       '<button type="button" id="cw-gif-btn" aria-label="GIF">GIF</button></div>' +
       '<div id="cw-input-wrap"><div id="cw-mention-dd"></div><textarea id="cw-input" rows="1" placeholder="Message…"></textarea></div>' +
       '<button type="button" id="cw-send" aria-label="Envoyer">' +
