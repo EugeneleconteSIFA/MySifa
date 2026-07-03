@@ -4447,14 +4447,13 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 141, "mc_setting_demi_container_qte_m2")
 
-
-    # v140 — Traçabilité clôture sondages : colonne closed_by (auteur du clic)
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=140 LIMIT 1").fetchone():
+    # v142 — Traçabilité clôture sondages : colonne closed_by (auteur du clic)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=142 LIMIT 1").fetchone():
         cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_polls)").fetchall()}
         if "closed_by" not in cols:
             conn.execute("ALTER TABLE chat_polls ADD COLUMN closed_by INTEGER DEFAULT NULL")
         conn.commit()
-        _record_schema_migration(conn, 140, "chat_polls_closed_by")
+        _record_schema_migration(conn, 142, "chat_polls_closed_by")
 
 
 def create_default_admin():
