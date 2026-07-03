@@ -65,6 +65,11 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
+/* ── Colonne Dossier dans l'historique des contrôles ── */
+.col-dossier{white-space:nowrap}
+.ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
+tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
+.ctrl-dossier-empty{color:var(--muted);font-size:12px}
 /* ── Contexte dossier + fiche technique dans le détail d'un contrôle ── */
 .ack-di-wrap{margin-top:6px}
 .ack-di-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
@@ -4384,6 +4389,7 @@ function renderCtrl(){
     h += '<th data-sort-ctrl="date_saisie"' + activeAttr('date_saisie') + ' onclick="sortCtrl(\'date_saisie\')">Date saisie' + sortIco('date_saisie') + '</th>';
     h += '<th data-sort-ctrl="machine"' + activeAttr('machine') + ' onclick="sortCtrl(\'machine\')">Machine' + sortIco('machine') + '</th>';
     h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">Opérateur' + sortIco('operateur') + '</th>';
+    h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
     if(!singleType){
       h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
     }
@@ -4396,7 +4402,7 @@ function renderCtrl(){
     thead.innerHTML = h;
   }
 
-  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur (+type?) + extra + commentaires + actions
+  const totalCols = 4 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur+dossier (+type?) + extra + commentaires + actions
 
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
@@ -4410,6 +4416,13 @@ function renderCtrl(){
       cells += '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>';
       cells += '<td>' + escHtml(c.machine) + '</td>';
       cells += '<td>' + escHtml(c.operateur) + '</td>';
+      // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
+      // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
+      // technique complète du dossier.
+      const _dosCell = (c._source === 'alert' && c._no_dossier)
+        ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(c._no_dossier) + '</span>'
+        : '<span class="ctrl-dossier-empty">—</span>';
+      cells += '<td class="col-dossier">' + _dosCell + '</td>';
       if(!singleType){
         cells += '<td>' + escHtml(_displayType(c)) + '</td>';
       }
