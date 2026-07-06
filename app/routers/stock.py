@@ -3187,20 +3187,19 @@ async def mouvement_matiere_premiere(request: Request):
 
     is_fabrication_user = user.get("role") == "fabrication"
 
-    def _check_emplacement_code(code: Optional[str]) -> Optional[str]:
+    def _check_emplacement_code(code: Optional[str], allow_null: bool = False) -> Optional[str]:
         if not code:
-            if is_fabrication_user:
-                # Service fabrication : emplacement non requis, stocké NULL.
+            if allow_null or is_fabrication_user:
+                # Service fabrication ou matière laizée (frontal/glassine/complexe) : emplacement non requis.
                 return None
             raise HTTPException(400, "Emplacement obligatoire.")
         if not _is_valid_emplacement(code):
             raise HTTPException(400, f"Format emplacement invalide : {code}")
         return _normalize_emplacement(code)
 
-    if type_mvt == "entree":
-        emplacement_dest = _check_emplacement_code(emplacement_dest)
-    elif type_mvt == "sortie":
-        emplacement_source = _check_emplacement_code(emplacement_source)
+    # Les contrôles d'emplacement dépendent de la catégorie (laizée ou non) et
+    # sont donc effectués une fois que la matière a été récupérée dans le bloc DB
+    # ci-dessous.
 
     if type_mvt in ("entree", "sortie") and quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive.")
@@ -3228,6 +3227,11 @@ async def mouvement_matiere_premiere(request: Request):
             raise HTTPException(404, "Matière non trouvée.")
         unite_mp = _mp_unite_gestion(mp["categorie"])
         laizee = _mp_is_laizee(mp["categorie"])
+
+        if type_mvt == "entree":
+            emplacement_dest = _check_emplacement_code(emplacement_dest, allow_null=laizee)
+        elif type_mvt == "sortie":
+            emplacement_source = _check_emplacement_code(emplacement_source, allow_null=laizee)
 
         if laizee:
             if laize_id is None:
