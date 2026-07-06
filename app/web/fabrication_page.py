@@ -2476,8 +2476,7 @@ function _fabPrintWin(title, pageSize, css, bodyHtml){
   if(!w) return;
   w.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+title+'</title><style>'
     +'@page{size:'+pageSize+';margin:0}body{margin:0;padding:0;font-family:Arial,sans-serif}'+css+'</style></head><body>'
-    +bodyHtml+'<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js"><\/script>
-</body></html>');
+    +bodyHtml+'<script>window.onload=function(){window.focus();window.print();}<\/script><script src="/static/mysifa_impersonate.js"><\/script></body></html>');
   w.document.close();
 }
 
