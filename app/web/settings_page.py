@@ -1057,7 +1057,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
               </div>
               <span style="font-size:11px;color:var(--muted);white-space:nowrap">20 Mo max</span>
             </div>
-            <input type="file" id="maint-form-doc-file" style="display:none" onchange="_maintOnDocFileChange()">
+            <input type="file" id="maint-form-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" onchange="_maintOnDocFileChange()">
             <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
               <p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>
             </div>
@@ -3315,7 +3315,7 @@ async function openMaintDocsModal(code) {
     + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
     + '<div class="alert-modal-body">'
     +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
-    +   '<input type="file" id="maint-doc-file" style="display:none">'
+    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
     +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
     +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
     +     '<span>Ajouter un fichier</span>'
