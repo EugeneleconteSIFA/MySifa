@@ -2517,14 +2517,19 @@ def maintenance_alerts_active(request: Request):
     from database import get_db
     user = get_current_user(request)
     user_role = user.get("role") or ""
+    operateur = (user.get("operateur_lie") or user.get("nom") or "").strip()
+    user_nom = (user.get("nom") or "").strip()
     now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
     items = []
+    gap_until_str = None
+    gap_active = False
     with get_db() as conn:
         user_machine = _machine_name_from_user(conn, user)
-        # Gap global : si un ack a été validé récemment sur cette machine,
-        # aucune alerte n'est poussée pendant le délai de silence. Le gap
-        # démarre à partir de la validation, pas de l'affichage — ainsi
-        # l'opérateur a toujours une pause réelle entre deux contrôles.
+        # Gap : calcule si un ack recent existe sur cette machine. Ne bloque
+        # QUE les alertes periodiques -- les alertes evenementielles bypassent
+        # ce silence, car elles sont declenchees par l'action metier de
+        # l'operateur (fin/debut de dossier). Sinon un operateur qui clot un
+        # dossier juste apres un ack ne verrait jamais l'alerte suivante.
         if user_machine:
             settings_row = conn.execute(
                 "SELECT min_gap_minutes FROM maintenance_alert_settings WHERE id=1"
@@ -2543,11 +2548,8 @@ def maintenance_alerts_active(request: Request):
                 if last_any_ack_dt is not None:
                     gap_end = last_any_ack_dt + timedelta(minutes=min_gap_min)
                     if now_paris < gap_end:
-                        return {
-                            "items": [],
-                            "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S"),
-                            "gap_until": gap_end.strftime("%Y-%m-%dT%H:%M:%S"),
-                        }
+                        gap_active = True
+                        gap_until_str = gap_end.strftime("%Y-%m-%dT%H:%M:%S")
         rows = conn.execute(
             """SELECT id, nom, params, linked_maint_code
                FROM maintenance_alerts
@@ -2566,6 +2568,8 @@ def maintenance_alerts_active(request: Request):
             ttype = trig.get("type")
             should_show = False
             if ttype == "periodic":
+                if gap_active:
+                    continue
                 machine_for_check = user_machine
                 # Si superadmin sans machine assignée et la cible est une seule
                 # machine spécifique, on utilise cette machine pour le calcul.
@@ -2579,7 +2583,41 @@ def maintenance_alerts_active(request: Request):
                     should_show = _is_periodic_alert_due(
                         conn, int(r["id"]), params, machine_for_check, now_paris
                     )
-            # type manual / calendar / event : non implémenté en v1
+            elif ttype == "event":
+                # Trigger evenementiel : l'alerte s'affiche quand un evenement
+                # metier correspondant s'est produit APRES le dernier ack de
+                # cette alerte sur cette machine. Bypass du gap : l'alerte
+                # suit strictement les actions de l'operateur.
+                # Evenements supportes :
+                #   dossier_end   -> saisie operation_code = '89' (fin prod)
+                #   dossier_start -> saisie operation_code = '01' (debut prod)
+                event = str(trig.get("event") or "").strip()
+                op_code = None
+                if event == "dossier_end":
+                    op_code = "89"
+                elif event == "dossier_start":
+                    op_code = "01"
+                if op_code and user_machine and operateur:
+                    last_ack = conn.execute(
+                        "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+                        "WHERE alert_id=? AND machine=?",
+                        (int(r["id"]), user_machine),
+                    ).fetchone()
+                    last_ack_at_str = last_ack["m"] if last_ack else None
+                    q = ("SELECT 1 FROM production_data "
+                         "WHERE machine=? AND operation_code=? "
+                         "  AND (operateur=? OR operateur=?)")
+                    p = [user_machine, op_code, operateur, user_nom or operateur]
+                    if last_ack_at_str:
+                        q += " AND date_operation > ?"
+                        p.append(last_ack_at_str)
+                    else:
+                        q += " AND date_operation >= ?"
+                        p.append(now_paris.strftime("%Y-%m-%dT00:00:00"))
+                    q += " LIMIT 1"
+                    recent = conn.execute(q, tuple(p)).fetchone()
+                    should_show = recent is not None
+            # type manual / calendar : non implémenté en v1
             if should_show:
                 items.append({
                     "id": int(r["id"]),
@@ -2587,7 +2625,10 @@ def maintenance_alerts_active(request: Request):
                     "params": params,
                     "linked_maint_code": r["linked_maint_code"] or "",
                 })
-    return {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
+    resp = {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
+    if gap_until_str:
+        resp["gap_until"] = gap_until_str
+    return resp
 
 
 @router.get("/api/maintenance/alert-acks")
