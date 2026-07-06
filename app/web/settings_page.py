@@ -4269,9 +4269,16 @@ async function previewAlert(id) {
   // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
   const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
 
+  // Description eventuelle (contexte affiche a l'operateur)
+  const _descText = (a.params && typeof a.params.description === 'string') ? a.params.description.trim() : '';
+  const _descHtml = _descText
+    ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + esc(_descText) + '</div>'
+    : '';
+
   // Contenu de l'alerte (sans aucune chrome admin)
   const alertHtml = '<div class="ta-sim-alert">'
     + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
+    + _descHtml
     + checklistHtml
     + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
     + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
