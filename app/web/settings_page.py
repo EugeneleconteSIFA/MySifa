@@ -1037,16 +1037,26 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
           </div>
-          <div id="maint-form-docs" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-              <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Documents attaches</label>
-              <span style="font-size:11px;color:var(--muted)">20 Mo max par fichier</span>
+          <div id="maint-form-docs" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;gap:12px">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Documents attaches</div>
+                <div id="maint-form-docs-hint" style="font-size:11px;color:var(--muted);margin-top:2px">Fichiers explicatifs consultes par les operateurs quand ils executent l'operation.</div>
+              </div>
+              <span style="font-size:11px;color:var(--muted);white-space:nowrap">20 Mo max</span>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px;background:var(--bg);margin-bottom:10px">
-              <input type="file" id="maint-form-doc-file" style="flex:1;font-size:12px">
-              <button type="button" class="btn btn-sm" id="maint-form-doc-upload">Envoyer</button>
+            <input type="file" id="maint-form-doc-file" class="maint-doc-input-hidden" onchange="_maintOnDocFileChange()">
+            <div class="maint-doc-drop" id="maint-form-doc-drop">
+              <label for="maint-form-doc-file" class="maint-doc-drop-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Choisir un fichier</span>
+              </label>
+              <div class="maint-doc-drop-info" id="maint-form-doc-info">
+                <span class="maint-doc-drop-info-empty">Aucun fichier selectionne</span>
+              </div>
+              <button type="button" class="btn btn-sm" id="maint-form-doc-upload" disabled>Envoyer</button>
             </div>
-            <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px">
+            <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-top:12px">
               <p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>
             </div>
           </div>
@@ -3414,15 +3424,24 @@ function openMaintForm(code) {
     if (mInp)   mInp.value   = '';
   }
   _maintTogglePeriodiqueUI();
-  // Section Documents : visible uniquement en edition (code doit exister en base)
+  // Section Documents : visible dans les 2 modes.
+  // En creation : la liste est masquee (aucun doc encore), l'upload est
+  // possible des que le code est saisi. En edition : la liste est chargee
+  // et l'upload attache directement au code existant.
   const docsWrap = document.getElementById('maint-form-docs');
+  const docsList = document.getElementById('maint-form-docs-list');
+  const docsHint = document.getElementById('maint-form-docs-hint');
   if (docsWrap) {
+    docsWrap.style.display = '';
+    _maintResetDocPicker();
+    _bindMaintFormDocUpload(code);
     if (code) {
-      docsWrap.style.display = '';
+      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
+      if (docsList) docsList.style.display = '';
       _renderMaintFormDocs(code);
-      _bindMaintFormDocUpload(code);
     } else {
-      docsWrap.style.display = 'none';
+      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
+      if (docsList) docsList.style.display = 'none';
     }
   }
   codeInp.focus();
@@ -3474,6 +3493,7 @@ function _bindMaintFormDocUpload(code) {
     const codeNow = (document.getElementById('maint-code').value || '').trim() || code;
     const f = inp && inp.files && inp.files[0];
     if (!f) { toast('Selectionne un fichier', true); return; }
+    if (!codeNow) { toast('Renseigne le code d\'abord', true); return; }
     if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); return; }
     const fd = new FormData();
     fd.append('file', f);
@@ -3487,11 +3507,35 @@ function _bindMaintFormDocUpload(code) {
         toast(msg, true); return;
       }
       toast('Document ajoute');
-      inp.value = '';
+      _maintResetDocPicker();
       await _renderMaintFormDocs(codeNow);
       if (typeof loadMaintCodes === 'function') await loadMaintCodes();
     } catch(e) { toast('Erreur reseau', true); }
   });
+}
+
+// Met a jour l'affichage du picker de fichier (nom + taille) + toggle le bouton Envoyer.
+function _maintOnDocFileChange() {
+  const inp = document.getElementById('maint-form-doc-file');
+  const info = document.getElementById('maint-form-doc-info');
+  const btn = document.getElementById('maint-form-doc-upload');
+  if (!inp || !info || !btn) return;
+  const f = inp.files && inp.files[0];
+  if (!f) {
+    info.innerHTML = '<span class="maint-doc-drop-info-empty">Aucun fichier selectionne</span>';
+    btn.disabled = true;
+    return;
+  }
+  const kb = Math.round(f.size / 1024);
+  const sizeStr = kb > 1024 ? (Math.round(kb / 1024 * 10) / 10 + ' Mo') : (kb + ' Ko');
+  info.innerHTML = '<span class="maint-doc-drop-info-file" title="' + esc(f.name) + '">' + esc(f.name) + '</span>'
+    + '<span class="maint-doc-drop-info-size">' + sizeStr + '</span>';
+  btn.disabled = false;
+}
+function _maintResetDocPicker() {
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.value = '';
+  _maintOnDocFileChange();
 }
 // Active/désactive Intervalle et Réf. métrage selon Périodique :
 //   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut

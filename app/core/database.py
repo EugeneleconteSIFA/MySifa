@@ -5520,6 +5520,27 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 148, "mp_mouvements_prix_eur_m2")
 
+    # v149 - Documents maintenance : pieces jointes attachees a chaque code
+    # (contrôle ou intervention). Fichiers stockes sur disque sous
+    # data/uploads/maintenance_docs/{code}/, metadata en base.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=149 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_docs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                stored_path TEXT NOT NULL,
+                size_bytes INTEGER,
+                content_type TEXT,
+                uploaded_by TEXT,
+                uploaded_at TEXT NOT NULL,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_docs_code ON maintenance_docs(code)")
+        conn.commit()
+        _record_schema_migration(conn, 149, "maintenance_docs_table")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
