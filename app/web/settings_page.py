@@ -1037,6 +1037,19 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
           </div>
+          <div id="maint-form-docs" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+              <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Documents attaches</label>
+              <span style="font-size:11px;color:var(--muted)">20 Mo max par fichier</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px;background:var(--bg);margin-bottom:10px">
+              <input type="file" id="maint-form-doc-file" style="flex:1;font-size:12px">
+              <button type="button" class="btn btn-sm" id="maint-form-doc-upload">Envoyer</button>
+            </div>
+            <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px">
+              <p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>
+            </div>
+          </div>
         </div>
         <div class="op-toolbar">
           <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie, périodique…)" oninput="renderMaintList()">
@@ -3401,7 +3414,84 @@ function openMaintForm(code) {
     if (mInp)   mInp.value   = '';
   }
   _maintTogglePeriodiqueUI();
+  // Section Documents : visible uniquement en edition (code doit exister en base)
+  const docsWrap = document.getElementById('maint-form-docs');
+  if (docsWrap) {
+    if (code) {
+      docsWrap.style.display = '';
+      _renderMaintFormDocs(code);
+      _bindMaintFormDocUpload(code);
+    } else {
+      docsWrap.style.display = 'none';
+    }
+  }
   codeInp.focus();
+}
+
+async function _renderMaintFormDocs(code) {
+  const list = document.getElementById('maint-form-docs-list');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
+  try {
+    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+    const items = Array.isArray(r.items) ? r.items : [];
+    if (!items.length) {
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document. Attache un fichier ci-dessus pour donner du contexte a l\'operateur.</p>';
+      return;
+    }
+    list.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
+        + '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
+        + '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
+        + '<button type="button" class="btn-sm btn-ghost danger" data-form-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await _renderMaintFormDocs(code);
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Erreur de chargement.</p>';
+  }
+}
+
+function _bindMaintFormDocUpload(code) {
+  const btn = document.getElementById('maint-form-doc-upload');
+  if (!btn || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', async () => {
+    const inp = document.getElementById('maint-form-doc-file');
+    const codeNow = (document.getElementById('maint-code').value || '').trim() || code;
+    const f = inp && inp.files && inp.files[0];
+    if (!f) { toast('Selectionne un fichier', true); return; }
+    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); return; }
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
+        method: 'POST', credentials: 'same-origin', body: fd
+      });
+      if (!res.ok) {
+        let msg = 'Upload echoue';
+        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+        toast(msg, true); return;
+      }
+      toast('Document ajoute');
+      inp.value = '';
+      await _renderMaintFormDocs(codeNow);
+      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+    } catch(e) { toast('Erreur reseau', true); }
+  });
 }
 // Active/désactive Intervalle et Réf. métrage selon Périodique :
 //   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
