@@ -4421,8 +4421,12 @@ function renderCtrl(){
       // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
       // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
       // technique complète du dossier.
-      const _dosCell = (c._source === 'alert' && c._no_dossier)
-        ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(c._no_dossier) + '</span>'
+      const _di = c._dossier_info || null;
+      const _refP = _di ? (_di.ref_produit || _di.ref_produit_norm || '') : '';
+      const _adh  = _di ? (_di.adhesif || '') : '';
+      const _gla  = _di ? (_di.glassine || '') : '';
+      const _refCell = (c._source === 'alert' && _refP)
+        ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_refP) + '</span>'
         : '<span class="ctrl-dossier-empty">—</span>';
       cells += '<td class="col-dossier">' + _refCell + '</td>';
       cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
