@@ -179,6 +179,7 @@ _STAGING_FAVICON_REWRITES: list[tuple[bytes, bytes]] = [
     (b"/static/mys_icon_180.png",  b"/static/mys_icon-light_180.png"),
     (b"/static/favicon-32.png",    b"/static/favicon-light-32.png"),
     (b"/static/favicon-16.png",    b"/static/favicon-light-16.png"),
+    (b"/static/favicon.ico",       b"/static/favicon-light-32.png"),
     # Favicons spécifiques modules → MyS light équivalent (Chrome se débrouille
     # avec la taille, on garde le PNG le plus proche).
     (b"/static/stock_favicon.svg",           b"/static/mys_icon-light_192.png"),
@@ -231,10 +232,14 @@ async def inject_staging_bandeau(request: Request, call_next):
     body_bytes = b""
     async for chunk in response.body_iterator:
         body_bytes += chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode("utf-8")
-    # Ne rien faire si déjà présent (page rendue via render_frontend_html)
-    if b"staging-bandeau" in body_bytes:
-        # Le portail (html.py) a déjà le bandeau et sa propre logique de favicon
-        # via placeholders ; on ne touche pas au HTML.
+    # Portail (html.py) : identifié par l'id="msf-staging-bandeau" du <div bandeau>.
+    # Il gère déjà bandeau + favicon light + titre "MySifa test" via ses propres
+    # placeholders — on ne touche à rien pour éviter de doubler les injections.
+    # Note : ne pas se baser sur la simple présence du mot "staging-bandeau",
+    # qui apparaît aussi comme classe CSS body ("has-staging-bandeau") dans
+    # prod_page.py et d'autres pages standalone qui doivent, elles, être réécrites.
+    is_portal = b'id="msf-staging-bandeau"' in body_bytes
+    if is_portal:
         new_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
         return Response(
             content=body_bytes,
