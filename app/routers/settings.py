@@ -1844,8 +1844,10 @@ def maintenance_codes_list(request: Request):
                ORDER BY categorie ASC, code ASC"""
         ).fetchall()
         # Enrichissement : nombre de documents attaches par code
+        # (Table creee a la volee si absente, garantit la robustesse).
         docs_by_code = {}
         try:
+            _ensure_maint_docs_table(conn)
             drows = conn.execute(
                 "SELECT code, COUNT(*) AS n FROM maintenance_docs GROUP BY code"
             ).fetchall()
@@ -1989,6 +1991,27 @@ _MAINT_DOCS_SUBDIR = "data/uploads/maintenance_docs"
 _MAINT_DOCS_MAX_BYTES = 20 * 1024 * 1024  # 20 Mo
 
 
+def _ensure_maint_docs_table(conn) -> None:
+    """Garantit la presence de la table maintenance_docs. Ceinture + bretelles :
+    si la migration v149 n'a pas tourne (parce que v1 n'a pas encore restart,
+    ou parce qu'une migration precedente a plante), on cree la table ici.
+    Idempotent grace au CREATE TABLE IF NOT EXISTS."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS maintenance_docs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            stored_path TEXT NOT NULL,
+            size_bytes INTEGER,
+            content_type TEXT,
+            uploaded_by TEXT,
+            uploaded_at TEXT NOT NULL,
+            FOREIGN KEY (code) REFERENCES maintenance_codes(code) ON DELETE CASCADE
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_docs_code ON maintenance_docs(code)")
+
+
 def _maint_docs_dir(code: str) -> Path:
     d = Path(BASE_DIR) / _MAINT_DOCS_SUBDIR / code
     d.mkdir(parents=True, exist_ok=True)
@@ -2008,6 +2031,7 @@ def maintenance_code_docs_list(code: str, request: Request):
     get_current_user(request)
     from database import get_db
     with get_db() as conn:
+        _ensure_maint_docs_table(conn)
         # Verifier que le code existe
         row = conn.execute(
             "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
@@ -2040,6 +2064,7 @@ async def maintenance_code_doc_upload(
         raise HTTPException(422, "Fichier vide.")
     from database import get_db
     with get_db() as conn:
+        _ensure_maint_docs_table(conn)
         row = conn.execute(
             "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
         ).fetchone()
@@ -2056,6 +2081,7 @@ async def maintenance_code_doc_upload(
     author = user.get("nom") or user.get("email") or ""
     ctype = file.content_type or ""
     with get_db() as conn:
+        _ensure_maint_docs_table(conn)
         cur = conn.execute(
             """INSERT INTO maintenance_docs
                (code, filename, stored_path, size_bytes, content_type,
