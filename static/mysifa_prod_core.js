@@ -236,35 +236,63 @@
   }
 
   // ── 5. Favicon badge + alerts polling + sidebar toggles ────────────
+  // Base = vrai PNG "MyS" (dark ou light selon window.__MYSIFA_ENV__) en résolution
+  // 192, downscalé sur un canvas 64×64 pour un rendu net, pastille superposée.
+  // Détection env : window.__MYSIFA_ENV__ (portail) sinon fallback hostname.
+  const __IS_STAGING_FAV = (window.__MYSIFA_ENV__ === 'v1')
+    || /^v1\./i.test((window.location && window.location.hostname) || '');
+  const __FAV_SFX = __IS_STAGING_FAV ? '-light' : '';
+  const __FAV_BASE_SRC = '/static/mys_icon' + __FAV_SFX + '_192.png';
+  const __favBaseImg = new Image();
+  let __favBaseReady = false;
+  __favBaseImg.onload = function(){ __favBaseReady = true; try { refreshAlertsBadge(); } catch(e){} };
+  __favBaseImg.src = __FAV_BASE_SRC;
+
+  function __drawFavFallback(ctx){
+    const bg = __IS_STAGING_FAV ? '#f1f5f9' : '#0a0e17';
+    const fg = __IS_STAGING_FAV ? '#0f172a' : '#f1f5f9';
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 64, 64, 12);
+    else ctx.rect(0, 0, 64, 64);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    ctx.font = 'bold 40px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('M', 32, 34);
+  }
+
   function updateFaviconBadge(count){
     const canvas = document.createElement('canvas');
-    canvas.width = 32; canvas.height = 32;
+    canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');
     if(!ctx) return;
 
-    ctx.fillStyle = '#0a0e17';
-    ctx.beginPath();
-    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 32, 32, 6);
-    else ctx.rect(0, 0, 32, 32);
-    ctx.fill();
-
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = 'bold 20px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('M', 16, 17);
+    if(__favBaseReady){
+      try { ctx.drawImage(__favBaseImg, 0, 0, 64, 64); }
+      catch(e){ __drawFavFallback(ctx); }
+    } else {
+      __drawFavFallback(ctx);
+    }
 
     if(count > 0){
-      ctx.fillStyle = '#f87171';
+      // Contour blanc en v2 / foncé en v1 pour contraster avec le fond du favicon.
+      ctx.fillStyle = __IS_STAGING_FAV ? '#0f172a' : '#ffffff';
       ctx.beginPath();
-      ctx.arc(24, 8, 7, 0, Math.PI * 2);
+      ctx.arc(48, 16, 17, 0, Math.PI * 2);
       ctx.fill();
-
+      // Pastille rouge.
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(48, 16, 15, 0, Math.PI * 2);
+      ctx.fill();
+      // Chiffre.
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9px system-ui';
+      ctx.font = 'bold 20px system-ui,-apple-system,Segoe UI,sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(count > 9 ? '9+' : String(count), 24, 8);
+      ctx.fillText(count > 9 ? '9+' : String(count), 48, 17);
     }
 
     let link = document.querySelector('link[rel="icon"]');
@@ -5637,15 +5665,19 @@ async function loadSaisies(opts){
 async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set({devisList:d});}
 
 function renderProdPage(){
-  const subPage = S.subPage || 'kpis';
+  let subPage = S.subPage || 'kpis';
+  // Rôle « commercial » : pas d'accès à la vue Erreurs & Qualité
+  const hideErreurs = isCommercial(S.user);
+  if(hideErreurs && subPage==='erreurs'){ subPage = 'kpis'; S.subPage = 'kpis'; }
   // Gestion du polling temps réel machines
   if(subPage==='kpis'){startMachineStatusPolling();}
   else{stopMachineStatusPolling();}
-  const tabs = [
+  const allTabs = [
     {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
   ];
+  const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs'},
     ...tabs.map(t=>h('button',{
       type:'button',
@@ -5662,7 +5694,7 @@ function renderProdPage(){
   );
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
-  else if(subPage==='erreurs') content = renderHist();
+  else if(subPage==='erreurs' && !hideErreurs) content = renderHist();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
 }
@@ -5968,7 +6000,8 @@ function renderProdKpis(){
   }
 
   // ── Sanity score cliquable ───────────────────────────────────────
-  if(S.historique&&S.historique.sanity){
+  // Le rôle « commercial » n'a pas accès à la vue Erreurs & Qualité : on retire le clic vers ce détail.
+  if(S.historique&&S.historique.sanity && !isCommercial(S.user)){
     const sc=renderSanity(S.historique.sanity);
     if(sc){
       sc.style.cursor='pointer';

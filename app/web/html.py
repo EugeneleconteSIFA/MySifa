@@ -16,19 +16,19 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
 <link rel="icon" href="/static/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png">
-<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon__FAV_SFX__-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon__FAV_SFX__-16.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon__FAV_SFX2___512.png">
 <link rel="apple-touch-icon" __TOUCH_ICON__>
-<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon_1024.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon__FAV_SFX2___192.png">
+<link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon__FAV_SFX2___1024.png">
 <link rel="manifest" href="__MANIFEST__">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="__APP_TITLE__">
+<meta name="apple-mobile-web-app-title" content="__BRAND__">
 <meta name="theme-color" content="#0a0e17">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>__APP_TITLE__ — MySifa</title>
+<title>__PAGE_TITLE__</title>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
@@ -1254,11 +1254,11 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
 .portal-app--disabled:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
 
 /* ── Pill bar (haut droite) — fusion des 5 cartes corner en un seul cylindre ── */
-.portal-corner-stack{padding:8px 6px;background:var(--card);border:1px solid var(--border);border-radius:999px;
+.portal-corner-stack{padding:8px 6px;background:var(--card);border:1px solid var(--border);border-radius:20px;
   box-shadow:0 8px 32px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.04);gap:2px}
 body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-corner-stack .portal-settings-corner{
-  width:44px;height:44px;border-radius:50%;background:transparent;border:1px solid transparent;
+  width:44px;height:44px;border-radius:12px;background:transparent;border:1px solid transparent;
   color:var(--muted);box-shadow:none;transition:background .15s,color .15s,border-color .15s}
 .portal-corner-stack .portal-settings-corner:hover{
   background:var(--accent-bg);color:var(--accent);border-color:transparent;box-shadow:none}
@@ -2719,35 +2719,45 @@ function showToast(message,type){
   toast(message,t);
 }
 
+// Favicon : base = vrai PNG "MyS" (dark ou light selon env) en résolution 192,
+// downscalé sur un canvas 64×64 pour un rendu net, avec pastille de comptage.
+const __IS_STAGING_FAV=(window.__MYSIFA_ENV__==='v1')||/^v1\./i.test((window.location&&window.location.hostname)||'');
+const __FAV_SFX=__IS_STAGING_FAV?'-light':'';
+const __FAV_BASE_SRC='/static/mys_icon'+__FAV_SFX+'_192.png';
+const __favBaseImg=new Image();
+let __favBaseReady=false;
+__favBaseImg.onload=function(){__favBaseReady=true;try{refreshAlertsBadge();}catch(e){}};
+__favBaseImg.src=__FAV_BASE_SRC;
+
 function updateFaviconBadge(count){
   const canvas=document.createElement('canvas');
-  canvas.width=32;canvas.height=32;
+  canvas.width=64;canvas.height=64;
   const ctx=canvas.getContext('2d');
   if(!ctx)return;
 
-  ctx.fillStyle='#0a0e17';
-  ctx.beginPath();
-  if(typeof ctx.roundRect==='function')ctx.roundRect(0,0,32,32,6);
-  else ctx.rect(0,0,32,32);
-  ctx.fill();
-
-  ctx.fillStyle='#f1f5f9';
-  ctx.font='bold 20px system-ui';
-  ctx.textAlign='center';
-  ctx.textBaseline='middle';
-  ctx.fillText('M',16,17);
+  if(__favBaseReady){
+    try{ctx.drawImage(__favBaseImg,0,0,64,64);}catch(e){__drawFavFallback(ctx);}
+  }else{
+    __drawFavFallback(ctx);
+  }
 
   if(count>0){
-    ctx.fillStyle='#f87171';
+    // Contour blanc en v2 / foncé en v1 pour toujours contraster avec le favicon.
+    ctx.fillStyle=__IS_STAGING_FAV?'#0f172a':'#ffffff';
     ctx.beginPath();
-    ctx.arc(24,8,7,0,Math.PI*2);
+    ctx.arc(48,16,17,0,Math.PI*2);
     ctx.fill();
-
+    // Pastille rouge.
+    ctx.fillStyle='#dc2626';
+    ctx.beginPath();
+    ctx.arc(48,16,15,0,Math.PI*2);
+    ctx.fill();
+    // Chiffre.
     ctx.fillStyle='#ffffff';
-    ctx.font='bold 9px system-ui';
+    ctx.font='bold 20px system-ui,-apple-system,Segoe UI,sans-serif';
     ctx.textAlign='center';
     ctx.textBaseline='middle';
-    ctx.fillText(count>9?'9+':String(count),24,8);
+    ctx.fillText(count>9?'9+':String(count),48,17);
   }
 
   let link=document.querySelector('link[rel="icon"]');
@@ -2757,6 +2767,21 @@ function updateFaviconBadge(count){
     document.head.appendChild(link);
   }
   link.href=canvas.toDataURL();
+}
+
+function __drawFavFallback(ctx){
+  const bg=__IS_STAGING_FAV?'#f1f5f9':'#0a0e17';
+  const fg=__IS_STAGING_FAV?'#0f172a':'#f1f5f9';
+  ctx.fillStyle=bg;
+  ctx.beginPath();
+  if(typeof ctx.roundRect==='function')ctx.roundRect(0,0,64,64,12);
+  else ctx.rect(0,0,64,64);
+  ctx.fill();
+  ctx.fillStyle=fg;
+  ctx.font='bold 40px system-ui';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText('M',32,34);
 }
 
 async function refreshAlertsBadge(){
@@ -4374,8 +4399,8 @@ function renderPortal(){
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
   const isAo = isSuper || urole === 'direction';
-  const isBAT = isSuper || !!(urole && ['direction','administration'].includes(urole));
-  const isQualite = isSuper || !!(urole && ['direction','administration'].includes(urole));
+  const isBAT = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
+  const isQualite = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
   const isMaintenance = isSuper || _uident === 'loic.gognau';
   const isLight=document.body.classList.contains('light');
@@ -14540,6 +14565,23 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         staging_initial_class = "env-prod"
         staging_initial_hidden = "hidden"
         staging_initial_msg = ""
+    # Favicons : en staging v1, on sert la variante "light" (fond clair, texte foncé)
+    # pour distinguer visuellement l'onglet Chrome de celui de la prod.
+    fav_sfx = "-light" if IS_STAGING else ""
+    # touch_icon : en staging, remplacer mys_icon_180.png par mys_icon-light_180.png
+    # (idem pour les icônes de module si un jour on en fait des variantes light).
+    touch_icon = cfg["touch_icon"]
+    if IS_STAGING:
+        touch_icon = touch_icon.replace("mys_icon_180.png", "mys_icon-light_180.png")
+    # Marque affichée dans le titre onglet + apple-mobile-web-app-title.
+    # Prod → "MySifa" ; staging v1 → "MySifa test" (impossible de confondre les 2 onglets).
+    brand = "MySifa test" if IS_STAGING else "MySifa"
+    # Page-title : si l'app_title == "MySifa", pas de doublon (on affiche la brand seule).
+    # Sinon on préfixe : "MyExpé — MySifa" / "MyExpé — MySifa test".
+    if cfg["app_title"] == "MySifa":
+        page_title = brand
+    else:
+        page_title = f"{cfg['app_title']} — {brand}"
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
@@ -14550,7 +14592,11 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__STAGING_INITIAL_MSG__", staging_initial_msg)
         .replace("__ENV_NAME_VALUE__", ENV_NAME)
         .replace("__INITIAL_APP_VALUE__", initial_app)
-        .replace("__TOUCH_ICON__", cfg["touch_icon"])
+        .replace("__FAV_SFX__", fav_sfx)
+        .replace("__FAV_SFX2__", fav_sfx)
+        .replace("__TOUCH_ICON__", touch_icon)
+        .replace("__PAGE_TITLE__", page_title)
+        .replace("__BRAND__", brand)
         .replace("__APP_TITLE__", cfg["app_title"])
         .replace("__MANIFEST__", cfg["manifest"])
         .replace("__EXPE_TRANSPORTEURS_CSS__", EXPE_TRANSPORTEURS_CSS)
