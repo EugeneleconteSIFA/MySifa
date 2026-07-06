@@ -2065,8 +2065,8 @@ async function deleteAudit(){
   setView('audits-list');
 }
 
-async function sendAuditMessage(
-  if(S.isQualiteReadonly) return;){
+async function sendAuditMessage(){
+  if(S.isQualiteReadonly) return;
   const inp=document.getElementById('aud-msg-input');
   if(!inp) return;
   const text=inp.value.trim();
@@ -2083,8 +2083,8 @@ async function sendAuditMessage(
   }catch(e){showToast('Erreur réseau','danger');}
 }
 
-async function removeAuditeur(
-  if(S.isQualiteReadonly) return;uid){
+async function removeAuditeur(uid){
+  if(S.isQualiteReadonly) return;
   if(!confirm('Retirer cet auditeur ?')) return;
   const r=await api('/api/qualite/audits/'+S.currentAudit.id+'/auditeurs/'+uid,{method:'DELETE'});
   if(!r.ok){showToast('Erreur','danger');return;}
