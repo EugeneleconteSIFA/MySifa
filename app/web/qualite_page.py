@@ -3167,6 +3167,7 @@ document.addEventListener('keydown', function(ev){
 
 init();
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
 """

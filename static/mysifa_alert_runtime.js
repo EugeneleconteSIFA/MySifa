@@ -36,7 +36,18 @@
       '.ta-chip span{white-space:nowrap}',
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}'
+      '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}',
+      '.ta-sim-alert{position:relative;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
+      '.ta-sim-title{cursor:grab;user-select:none}',
+      '.ta-sim-title.ta-dragging{cursor:grabbing}',
+      '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s;z-index:1}',
+      '.ta-sim-min:hover{background:var(--bg);color:var(--text)}',
+      '.ta-sim-restore-icon{display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#fff}',
+      '.ta-sim-alert.ta-minimized{width:56px;height:56px;min-width:0;max-width:56px!important;padding:0;border-radius:50%;cursor:pointer;background:var(--accent);border-color:var(--accent);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:taMinPulse 1.8s ease-in-out infinite}',
+      '.ta-sim-alert.ta-minimized>*:not(.ta-sim-restore-icon){display:none!important}',
+      '.ta-sim-alert.ta-minimized .ta-sim-restore-icon{display:flex}',
+      '.ta-sim-alert.ta-minimized:hover{filter:brightness(1.08);animation:none}',
+      '@keyframes taMinPulse{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.4)}50%{box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 10px rgba(34,211,238,.28)}}'
     ].join('\n');
     document.head.appendChild(style);
   })();
@@ -297,6 +308,184 @@
     }
   }
 
+  function _loadAlertPos() {
+    try {
+      const raw = localStorage.getItem('mysifa_alert_position');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (p && typeof p.left === 'number' && typeof p.top === 'number') return p;
+    } catch (e) {}
+    return null;
+  }
+
+  function _saveAlertPos(left, top) {
+    try {
+      localStorage.setItem('mysifa_alert_position', JSON.stringify({ left: left, top: top }));
+    } catch (e) {}
+  }
+
+  function _applyAlertPos(alertEl) {
+    const pos = _loadAlertPos();
+    if (!pos) return;
+    const w = window.innerWidth || document.documentElement.clientWidth;
+    const h = window.innerHeight || document.documentElement.clientHeight;
+    const rect = alertEl.getBoundingClientRect();
+    const maxLeft = Math.max(0, w - Math.min(rect.width, 200));
+    const maxTop = Math.max(0, h - Math.min(rect.height, 100));
+    const left = Math.max(0, Math.min(pos.left, maxLeft));
+    const top = Math.max(0, Math.min(pos.top, maxTop));
+    alertEl.style.position = 'fixed';
+    alertEl.style.left = left + 'px';
+    alertEl.style.top = top + 'px';
+    alertEl.style.right = 'auto';
+    alertEl.style.bottom = 'auto';
+    alertEl.style.margin = '0';
+  }
+
+  let _dragState = null;
+
+  function _startDrag(ev, alertEl) {
+    if (ev.target.closest('button, input, textarea, label, select')) return;
+    const isTouch = !!(ev.touches && ev.touches.length);
+    const clientX = isTouch ? ev.touches[0].clientX : ev.clientX;
+    const clientY = isTouch ? ev.touches[0].clientY : ev.clientY;
+    const rect = alertEl.getBoundingClientRect();
+    _dragState = {
+      offsetX: clientX - rect.left,
+      offsetY: clientY - rect.top,
+      alertEl: alertEl,
+    };
+    const title = alertEl.querySelector('.ta-sim-title');
+    if (title) title.classList.add('ta-dragging');
+    document.addEventListener('mousemove', _doDrag);
+    document.addEventListener('mouseup', _endDrag);
+    document.addEventListener('touchmove', _doDrag, { passive: false });
+    document.addEventListener('touchend', _endDrag);
+    ev.preventDefault();
+  }
+
+  function _doDrag(ev) {
+    if (!_dragState) return;
+    if (ev.touches) ev.preventDefault();
+    const isTouch = !!(ev.touches && ev.touches.length);
+    const clientX = isTouch ? ev.touches[0].clientX : ev.clientX;
+    const clientY = isTouch ? ev.touches[0].clientY : ev.clientY;
+    const newLeft = clientX - _dragState.offsetX;
+    const newTop = clientY - _dragState.offsetY;
+    const el = _dragState.alertEl;
+    el.style.position = 'fixed';
+    el.style.left = newLeft + 'px';
+    el.style.top = newTop + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+    el.style.margin = '0';
+  }
+
+  function _endDrag() {
+    if (!_dragState) return;
+    const el = _dragState.alertEl;
+    const rect = el.getBoundingClientRect();
+    _saveAlertPos(rect.left, rect.top);
+    const title = el.querySelector('.ta-sim-title');
+    if (title) title.classList.remove('ta-dragging');
+    document.removeEventListener('mousemove', _doDrag);
+    document.removeEventListener('mouseup', _endDrag);
+    document.removeEventListener('touchmove', _doDrag);
+    document.removeEventListener('touchend', _endDrag);
+    _dragState = null;
+  }
+
+  function _minimizeAlert(alertEl, targetX, targetY) {
+    // Mémorise la position déployée pour la restaurer au clic sur le cercle.
+    const rect = alertEl.getBoundingClientRect();
+    alertEl._expandedPos = { left: rect.left, top: rect.top };
+
+    // Positionne le cercle réduit centré sur (targetX, targetY) si fournis
+    // (typiquement, le centre du bouton "-"). Sinon retombe sur le coin haut-gauche.
+    const size = 56;
+    let left, top;
+    if (typeof targetX === 'number' && typeof targetY === 'number') {
+      left = targetX - size / 2;
+      top = targetY - size / 2;
+    } else {
+      left = rect.left;
+      top = rect.top;
+    }
+    const w = window.innerWidth || document.documentElement.clientWidth;
+    const h = window.innerHeight || document.documentElement.clientHeight;
+    left = Math.max(0, Math.min(left, w - size));
+    top = Math.max(0, Math.min(top, h - size));
+
+    alertEl.style.position = 'fixed';
+    alertEl.style.left = left + 'px';
+    alertEl.style.top = top + 'px';
+    alertEl.style.right = 'auto';
+    alertEl.style.bottom = 'auto';
+    alertEl.style.margin = '0';
+    alertEl.classList.add('ta-minimized');
+    alertEl.setAttribute('title', 'Cliquer pour rouvrir l\'alerte');
+    if (!alertEl._minHandlerAttached) {
+      alertEl._minHandlerAttached = true;
+      alertEl.addEventListener('mousedown', (ev) => _startMinInteract(ev, alertEl));
+      alertEl.addEventListener('touchstart', (ev) => _startMinInteract(ev, alertEl), { passive: false });
+    }
+  }
+
+  function _restoreAlert(alertEl) {
+    alertEl.classList.remove('ta-minimized');
+    alertEl.removeAttribute('title');
+    // Restaure la position exacte qu'occupait l'alerte avant réduction.
+    if (alertEl._expandedPos) {
+      alertEl.style.left = alertEl._expandedPos.left + 'px';
+      alertEl.style.top = alertEl._expandedPos.top + 'px';
+    }
+  }
+
+  function _startMinInteract(ev, alertEl) {
+    if (!alertEl.classList.contains('ta-minimized')) return;
+    if (ev.target.closest('button, input, textarea, select')) return;
+    const isTouch = !!(ev.touches && ev.touches.length);
+    const startX = isTouch ? ev.touches[0].clientX : ev.clientX;
+    const startY = isTouch ? ev.touches[0].clientY : ev.clientY;
+    const rect = alertEl.getBoundingClientRect();
+    const offsetX = startX - rect.left;
+    const offsetY = startY - rect.top;
+    const threshold = 5;
+    let hasMoved = false;
+
+    function onMove(mv) {
+      if (mv.touches) mv.preventDefault();
+      const cx = mv.touches ? mv.touches[0].clientX : mv.clientX;
+      const cy = mv.touches ? mv.touches[0].clientY : mv.clientY;
+      const dx = Math.abs(cx - startX);
+      const dy = Math.abs(cy - startY);
+      if (!hasMoved && (dx > threshold || dy > threshold)) hasMoved = true;
+      if (hasMoved) {
+        alertEl.style.left = (cx - offsetX) + 'px';
+        alertEl.style.top = (cy - offsetY) + 'px';
+      }
+    }
+
+    function onEnd() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      if (!hasMoved) {
+        _restoreAlert(alertEl);
+      } else {
+        const r = alertEl.getBoundingClientRect();
+        _saveAlertPos(r.left, r.top);
+      }
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    ev.preventDefault();
+  }
+
   function _renderAlert(alert) {
     const wrap = document.createElement('div');
     wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
@@ -309,6 +498,12 @@
       ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + _esc(_desc) + '</div>'
       : '';
     const html = '<div class="ta-sim-alert">'
+      + '<button type="button" class="ta-sim-min" title="Réduire l\'alerte" aria-label="Réduire l\'alerte">'
+      +   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+      + '</button>'
+      + '<span class="ta-sim-restore-icon" aria-hidden="true">'
+      +   '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>'
+      + '</span>'
       + '<div class="ta-sim-title">' + _esc(_stripAutoPrefix(alert.nom)) + '</div>'
       + _descHtml
       + _renderChecklist(alert.checklist)
@@ -320,6 +515,26 @@
       + '</div>';
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
+
+    const alertEl = wrap.querySelector('.ta-sim-alert');
+    if (alertEl) _applyAlertPos(alertEl);
+
+    const titleEl = wrap.querySelector('.ta-sim-title');
+    if (titleEl && alertEl) {
+      titleEl.addEventListener('mousedown', (ev) => _startDrag(ev, alertEl));
+      titleEl.addEventListener('touchstart', (ev) => _startDrag(ev, alertEl), { passive: false });
+    }
+
+    const minBtn = wrap.querySelector('.ta-sim-min');
+    if (minBtn && alertEl) {
+      minBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const btnRect = minBtn.getBoundingClientRect();
+        const cx = btnRect.left + btnRect.width / 2;
+        const cy = btnRect.top + btnRect.height / 2;
+        _minimizeAlert(alertEl, cx, cy);
+      });
+    }
 
     const closeWithSuccess = () => {
       wrap.remove();
@@ -366,7 +581,7 @@
       }
       _displayed.add(raw.id);
       const alert = _normalizeAlert(raw);
-      _renderAlert(alert);
+           _renderAlert(alert);
       if (_settings.stack_mode !== 'stack') {
         break;
       }

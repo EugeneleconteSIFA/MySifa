@@ -362,5 +362,6 @@ if(window.electronAPI?.resizeTo && typeof ResizeObserver !== 'undefined'){
   new ResizeObserver(()=>requestFit()).observe(document.body);
 }
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""

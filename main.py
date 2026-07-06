@@ -164,10 +164,63 @@ _STAGING_BANDEAU_HTML = (
 )
 _BODY_OPEN_RE = re.compile(rb"(<body[^>]*>)", re.IGNORECASE)
 
+# ── Réécritures favicons sur v1 ──────────────────────────────────────────────
+# Les pages standalone (stock_page, expe_page, planning_rh_page, etc.) ont leur
+# propre <link rel="icon"> hardcodé sur un favicon spécifique au module (SVG
+# cyan sur fond foncé). Sur v1, on veut le MyS light partout — impossible de
+# confondre l'onglet avec la prod. On remplace donc les paths dans le HTML
+# servi. Le patch côté JS (mysifa_favicon_badge.js) arrive trop tard pour
+# éviter que Chrome cache le premier favicon dark.
+_STAGING_FAVICON_REWRITES: list[tuple[bytes, bytes]] = [
+    # Icônes MySifa génériques
+    (b"/static/mys_icon_1024.png", b"/static/mys_icon-light_1024.png"),
+    (b"/static/mys_icon_512.png",  b"/static/mys_icon-light_512.png"),
+    (b"/static/mys_icon_192.png",  b"/static/mys_icon-light_192.png"),
+    (b"/static/mys_icon_180.png",  b"/static/mys_icon-light_180.png"),
+    (b"/static/favicon-32.png",    b"/static/favicon-light-32.png"),
+    (b"/static/favicon-16.png",    b"/static/favicon-light-16.png"),
+    (b"/static/favicon.ico",       b"/static/favicon-light-32.png"),
+    # Favicons spécifiques modules → MyS light équivalent (Chrome se débrouille
+    # avec la taille, on garde le PNG le plus proche).
+    (b"/static/stock_favicon.svg",           b"/static/mys_icon-light_192.png"),
+    (b"/static/stock_favicon-32.png",        b"/static/favicon-light-32.png"),
+    (b"/static/stock_favicon-180.png",       b"/static/mys_icon-light_180.png"),
+    (b"/static/stock_favicon-192.png",       b"/static/mys_icon-light_192.png"),
+    (b"/static/stock_favicon-512.png",       b"/static/mys_icon-light_512.png"),
+    (b"/static/expe_favicon.svg",            b"/static/mys_icon-light_192.png"),
+    (b"/static/expe_favicon-32.png",         b"/static/favicon-light-32.png"),
+    (b"/static/expe_favicon-180.png",        b"/static/mys_icon-light_180.png"),
+    (b"/static/expe_favicon-192.png",        b"/static/mys_icon-light_192.png"),
+    (b"/static/expe_favicon-512.png",        b"/static/mys_icon-light_512.png"),
+    (b"/static/expe_portail_favicon.svg",    b"/static/mys_icon-light_192.png"),
+    (b"/static/expe_portail_favicon-32.png", b"/static/favicon-light-32.png"),
+    (b"/static/expe_portail_favicon-180.png",b"/static/mys_icon-light_180.png"),
+    (b"/static/planning_rh_favicon.svg",     b"/static/mys_icon-light_192.png"),
+    (b"/static/planning_rh_favicon-32.png",  b"/static/favicon-light-32.png"),
+    (b"/static/planning_rh_favicon-180.png", b"/static/mys_icon-light_180.png"),
+    (b"/static/planning_rh_favicon-192.png", b"/static/mys_icon-light_192.png"),
+    (b"/static/planning_rh_favicon-512.png", b"/static/mys_icon-light_512.png"),
+]
+
+
+def _apply_staging_html_rewrites(body_bytes: bytes) -> bytes:
+    """Applique les réécritures spécifiques v1 : favicons dark → light + titre."""
+    for old, new in _STAGING_FAVICON_REWRITES:
+        if old in body_bytes:
+            body_bytes = body_bytes.replace(old, new)
+    # Titre onglet : ajoute " test" avant </title> pour marquer visuellement v1.
+    # Ne re-remplace pas si "MySifa test</title>" est déjà présent (portail html.py).
+    body_bytes = re.sub(
+        rb"MySifa</title>",
+        b"MySifa test</title>",
+        body_bytes,
+    )
+    return body_bytes
+
 
 @app.middleware("http")
 async def inject_staging_bandeau(request: Request, call_next):
-    """Injecte le bandeau staging dans toutes les réponses HTML quand ENV_NAME=v1."""
+    """Injecte le bandeau staging + réécrit les favicons dark → light quand ENV_NAME=v1."""
     response = await call_next(request)
     if not IS_STAGING:
         return response
@@ -179,8 +232,14 @@ async def inject_staging_bandeau(request: Request, call_next):
     body_bytes = b""
     async for chunk in response.body_iterator:
         body_bytes += chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode("utf-8")
-    # Ne rien faire si déjà présent (page rendue via render_frontend_html)
-    if b"staging-bandeau" in body_bytes:
+    # Portail (html.py) : identifié par l'id="msf-staging-bandeau" du <div bandeau>.
+    # Il gère déjà bandeau + favicon light + titre "MySifa test" via ses propres
+    # placeholders — on ne touche à rien pour éviter de doubler les injections.
+    # Note : ne pas se baser sur la simple présence du mot "staging-bandeau",
+    # qui apparaît aussi comme classe CSS body ("has-staging-bandeau") dans
+    # prod_page.py et d'autres pages standalone qui doivent, elles, être réécrites.
+    is_portal = b'id="msf-staging-bandeau"' in body_bytes
+    if is_portal:
         new_headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
         return Response(
             content=body_bytes,
@@ -188,6 +247,8 @@ async def inject_staging_bandeau(request: Request, call_next):
             headers=new_headers,
             media_type=response.media_type,
         )
+    # Pages standalone : réécritures favicons + titre.
+    body_bytes = _apply_staging_html_rewrites(body_bytes)
     # Injection CSS avant </head>
     css_bytes = _STAGING_BANDEAU_CSS.encode("utf-8")
     if b"</head>" in body_bytes:

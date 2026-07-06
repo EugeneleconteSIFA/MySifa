@@ -134,5 +134,6 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/pricing_app.js" defer></script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""

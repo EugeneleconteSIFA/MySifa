@@ -2784,5 +2784,6 @@ function printConges(){
   if(S.tab==='conges')await loadSoldes();
 })();
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""

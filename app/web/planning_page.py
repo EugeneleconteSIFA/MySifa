@@ -5064,6 +5064,7 @@ async function acknowledgeUpdates(ids,overlay){
 
 boot();
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
 """

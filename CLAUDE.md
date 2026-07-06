@@ -69,6 +69,18 @@ Les deux instances ont chacune **leur propre base de données** (`DB_PATH` disti
 
 `APP_VERSION` dans `config.py` ligne 31. Le script `promote_v2.sh` ne bump **pas** automatiquement. Pour incrémenter le numéro affiché en bas de page, édite la constante en local, commit, push, puis promu (la promotion utilisera la nouvelle valeur committée).
 
+**Proposition automatique de bump** (règle pour Claude / Cursor / Windsurf) — dès qu'une conversation aboutit à une modif fonctionnelle prête à être poussée (nouvelle feature, fix visible, changement UI, migration DB, changement de comportement API), l'IA **doit systématiquement** :
+
+1. Lire la valeur actuelle de `APP_VERSION` dans `config.py`.
+2. Proposer explicitement une nouvelle valeur en respectant semver adapté au projet :
+   - **patch** (`1.1.2 → 1.1.3`) : fix, ajustement mineur, correction UI, wording
+   - **minor** (`1.1.2 → 1.2.0`) : nouvelle feature visible utilisateur, nouveau module, changement notable de comportement
+   - **major** (`1.1.2 → 2.0.0`) : refonte structurelle, breaking change côté données, migration lourde
+3. Formuler la proposition sous forme d'une phrase courte, par exemple : « Je propose de passer `APP_VERSION` de `1.1.2` à `1.1.3` (patch — fix bandeau login). Ok ? »
+4. Attendre la validation d'Eugène avant d'éditer `config.py`.
+
+Ne jamais bumper la version sans proposition explicite. Ne jamais bumper si la conversation portait uniquement sur de l'exploration, du debug non déployable, ou un travail non terminé.
+
 **Endpoint santé**
 
 `GET /healthz` (dans `main.py`) répond `{"status":"ok","env":"v2","version":"0.6.1"}` si la DB répond, 503 sinon. C'est ce que le script de promotion utilise pour valider la mise à jour avant de conclure ou de rollback.

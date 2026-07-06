@@ -10,7 +10,7 @@ Strategie de migration (Phase 2 - extraction du monolithe html.py) :
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, IS_STAGING, PROD_STANDALONE
+from config import APP_VERSION, ENV_NAME, IS_STAGING, PROD_STANDALONE
 from frontend.html import render_frontend_html
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
@@ -21,22 +21,15 @@ router = APIRouter()
 
 def _build_prod_html() -> str:
     """Construit le HTML standalone /prod en injectant les variables runtime
-    (APP_VERSION, bandeau staging). Appele a chaque requete pour rester
-    aligne sur la config en cours."""
-    if IS_STAGING:
-        staging_html = (
-            '<div class="staging-bandeau">'
-            'v1 - Environnement de test - DB partagee avec la prod'
-            '</div>'
-        )
-        staging_class = "has-staging-bandeau"
-    else:
-        staging_html = ""
-        staging_class = ""
+    (APP_VERSION, ENV_NAME). Le bandeau et son sélecteur d'impersonation sont
+    injectés par /static/mysifa_impersonate.js — self-contained."""
+    # En v1 on ajoute la classe pour le padding-top du body (le JS la maintient
+    # de son côté, mais on la pose dès le HTML pour éviter le saut visuel).
+    staging_class = "has-staging-bandeau" if IS_STAGING else ""
     return (
         _PROD_HTML_TEMPLATE
         .replace("__V_LABEL__", f"v{APP_VERSION}")
-        .replace("__STAGING_BANDEAU_HTML__", staging_html)
+        .replace("__ENV_NAME_VALUE__", ENV_NAME)
         .replace("__STAGING_BODY_CLASS__", staging_class)
     )
 
@@ -85,15 +78,15 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 </head>
 <body class="__STAGING_BODY_CLASS__">
-__STAGING_BANDEAU_HTML__
+<script>window.__MYSIFA_ENV__="__ENV_NAME_VALUE__";window.__APP_VERSION__="__V_LABEL__";</script>
 <div id="root">
   <div style="padding:40px;text-align:center;color:var(--text2);font-size:13px">
     Chargement...
   </div>
 </div>
-<script>window.__APP_VERSION__ = "__V_LABEL__";</script>
 <script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 </body>
 </html>"""

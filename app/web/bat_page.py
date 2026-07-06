@@ -1016,6 +1016,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js"></script>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
 
