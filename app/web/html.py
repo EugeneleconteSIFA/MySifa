@@ -8483,7 +8483,7 @@ function startLoginTrainAnimation(){
     'clipboard':     {name:'MyAO',           desc:"Appels d'offre fournisseurs"},
     'palette':       {name:'MyBAT',          desc:'Bons À Tirer — suivi client'},
     'shield-check':  {name:'MyQualité',      desc:'Non-conformités & audits client'},
-    'tool':          {name:'Maintenance',    desc:'Suivi et planification'}
+    'toolbox':       {name:'Maintenance',    desc:'Suivi et planification'}
   };
   const ICONS=Object.keys(APPS);
   const SPACING_PX=72;
