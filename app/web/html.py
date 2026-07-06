@@ -143,28 +143,33 @@ body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 1
    une trajectoire courbe aléatoire. Passe derrière la carte de connexion
    (z-index 0 vs .login-page z-index 1). Cyan accent, ne gêne pas les clics. */
 .login-train-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.login-box{position:relative;z-index:2} /* passe devant le layer d'animation */
 .login-wagon{
   position:absolute;top:0;left:0;
-  width:28px;height:28px;
-  margin:-14px 0 0 -14px; /* centre le point de trajet sur l'icône */
+  width:42px;height:42px;
+  margin:-21px 0 0 -21px; /* centre le point de trajet sur l'icône */
+  display:flex;align-items:center;justify-content:center;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:11px;
   color:var(--accent);
   opacity:0;
   offset-rotate:0deg;
-  will-change:transform,opacity;
+  will-change:transform,opacity,offset-distance;
   animation-name:login-wagon-travel;
-  animation-timing-function:cubic-bezier(.42,.05,.58,.95);
+  animation-timing-function:linear; /* linéaire = écart constant entre wagons */
   animation-fill-mode:forwards;
   animation-iteration-count:1;
-  filter:drop-shadow(0 0 8px rgba(34,211,238,.55));
+  box-shadow:0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(34,211,238,.18);
 }
-.login-wagon svg{width:28px;height:28px;display:block}
+.login-wagon svg{width:22px;height:22px;display:block}
 @keyframes login-wagon-travel{
-  0%   {offset-distance:0%;   opacity:0;   transform:scale(.85)}
-  8%   {opacity:.85;          transform:scale(1)}
-  92%  {opacity:.85;          transform:scale(1)}
-  100% {offset-distance:100%; opacity:0;   transform:scale(.85)}
+  0%   {offset-distance:0%;   opacity:0;   transform:scale(.7)}
+  6%   {opacity:.95;          transform:scale(1)}
+  94%  {opacity:.95;          transform:scale(1)}
+  100% {offset-distance:100%; opacity:0;   transform:scale(.7)}
 }
-body.light .login-wagon{filter:drop-shadow(0 0 8px rgba(8,145,178,.45))}
+body.light .login-wagon{box-shadow:0 6px 16px rgba(15,23,42,.10), 0 0 0 1px rgba(8,145,178,.20)}
 @media (prefers-reduced-motion: reduce){
   .login-train-layer{display:none}
 }
@@ -8416,19 +8421,33 @@ function renderLogin(){
 function startLoginTrainAnimation(){
   const layer=document.getElementById('login-train-layer');
   if(!layer) return;
-  if(layer.dataset.trainOn==='1') return; // déjà en cours
+  if(layer.dataset.trainOn==='1') return; // déjà en cours sur ce layer
   layer.dataset.trainOn='1';
   const ICONS=['edit','wrench','package','printer','calculator','truck','users','file-text','clipboard','palette','shield-check','tool'];
+  const SPACING_PX=72;   // écart constant entre chaque wagon (px sur la trajectoire)
+  const WAGON_SIZE=42;   // synchro avec le CSS
 
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
   function pickSide(){return ['top','right','bottom','left'][Math.floor(Math.random()*4)];}
   function pointOnSide(side,W,H){
-    const off=100; // hors écran pour entrer/sortir proprement
-    const inset=60; // marge pour ne pas coller aux coins
+    const off=WAGON_SIZE*2; // hors écran pour entrer/sortir proprement
+    const inset=80;
     if(side==='top')    return [inset+Math.random()*(W-inset*2), -off];
     if(side==='bottom') return [inset+Math.random()*(W-inset*2),  H+off];
     if(side==='left')   return [-off, inset+Math.random()*(H-inset*2)];
     /* right */          return [W+off, inset+Math.random()*(H-inset*2)];
+  }
+  // Mesure la longueur du chemin SVG (nécessaire pour un espacement constant)
+  function measurePath(d){
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('width','0');svg.setAttribute('height','0');
+    svg.style.cssText='position:absolute;width:0;height:0;visibility:hidden;pointer-events:none';
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',d);
+    svg.appendChild(p);document.body.appendChild(svg);
+    let L=0;try{L=p.getTotalLength();}catch(e){L=1000;}
+    document.body.removeChild(svg);
+    return L||1000;
   }
 
   function spawnTrain(){
@@ -8444,25 +8463,29 @@ function startLoginTrainAnimation(){
     const cx=W*0.5 + (Math.random()-0.5)*W*0.5;
     const cy=H*0.5 + (Math.random()-0.5)*H*0.5;
     const pathStr='M '+x1.toFixed(0)+' '+y1.toFixed(0)+' Q '+cx.toFixed(0)+' '+cy.toFixed(0)+' '+x2.toFixed(0)+' '+y2.toFixed(0);
-    // Durée du trajet: assez lent (10-16s)
-    const duration=10000+Math.random()*6000;
-    const wagonGap=260; // ms entre wagons
+    const pathLen=measurePath(pathStr);
+    // Vitesse cible: ~90 à 130 px/s (lent)
+    const speed=90+Math.random()*40;
+    const duration=Math.round(pathLen/speed*1000); // ms
+    // Espacement temporel qui donne SPACING_PX constant, tout timing linéaire.
+    const wagonGap=Math.round(SPACING_PX/pathLen*duration);
     const wagons=shuffle(ICONS.slice());
     wagons.forEach((name,i)=>{
       const w=document.createElement('span');
       w.className='login-wagon';
       w.style.offsetPath='path("'+pathStr+'")';
+      w.style.motionPath=w.style.offsetPath; // legacy fallback
       w.style.animationDuration=duration+'ms';
       w.style.animationDelay=(i*wagonGap)+'ms';
-      // Astuce Safari/anciennes versions: préfixe motion-*
-      w.style.motionPath=w.style.offsetPath;
-      w.innerHTML=icon(name,28);
+      w.innerHTML=icon(name,22);
       layer.appendChild(w);
-      const total=duration+i*wagonGap+400;
-      setTimeout(()=>{if(w.parentNode)w.parentNode.removeChild(w);},total);
+      const life=duration+i*wagonGap+400;
+      setTimeout(()=>{if(w.parentNode)w.parentNode.removeChild(w);},life);
     });
-    // Prochain train: attente aléatoire (2.5-7s) après le début du premier wagon.
-    const nextWait=2500+Math.random()*4500;
+    // Prochain train: on attend que le dernier wagon soit sur le point de sortir,
+    // avec un jitter → jamais deux trains complets superposés, timing variable.
+    const totalTrainTime=duration + wagons.length*wagonGap;
+    const nextWait=Math.max(1200, totalTrainTime - 1500 + Math.random()*3500);
     setTimeout(spawnTrain,nextWait);
   }
   // Premier train après un petit délai
