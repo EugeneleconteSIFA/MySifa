@@ -4389,7 +4389,9 @@ function renderCtrl(){
     h += '<th data-sort-ctrl="date_saisie"' + activeAttr('date_saisie') + ' onclick="sortCtrl(\'date_saisie\')">Date saisie' + sortIco('date_saisie') + '</th>';
     h += '<th data-sort-ctrl="machine"' + activeAttr('machine') + ' onclick="sortCtrl(\'machine\')">Machine' + sortIco('machine') + '</th>';
     h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">Opérateur' + sortIco('operateur') + '</th>';
-    h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
+    h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
+    h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
+    h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     if(!singleType){
       h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
     }
@@ -4402,7 +4404,7 @@ function renderCtrl(){
     thead.innerHTML = h;
   }
 
-  const totalCols = 4 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur+dossier (+type?) + extra + commentaires + actions
+  const totalCols = 6 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur+refproduit+adhesif+glassine (+type?) + extra + commentaires + actions
 
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
@@ -4422,7 +4424,9 @@ function renderCtrl(){
       const _dosCell = (c._source === 'alert' && c._no_dossier)
         ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(c._no_dossier) + '</span>'
         : '<span class="ctrl-dossier-empty">—</span>';
-      cells += '<td class="col-dossier">' + _dosCell + '</td>';
+      cells += '<td class="col-dossier">' + _refCell + '</td>';
+      cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
+      cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
       if(!singleType){
         cells += '<td>' + escHtml(_displayType(c)) + '</td>';
       }
