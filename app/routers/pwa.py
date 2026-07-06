@@ -8,7 +8,11 @@ import json
 from fastapi import APIRouter
 from fastapi.responses import Response
 
-from config import APP_VERSION
+from config import APP_VERSION, IS_STAGING
+
+# Suffix des icônes MySifa (dark par défaut, -light en staging v1).
+_MYS_SFX = "-light" if IS_STAGING else ""
+_MYS_BG = "#f1f5f9" if IS_STAGING else "#0a0e17"
 
 
 router = APIRouter()
@@ -28,17 +32,19 @@ def _manifest_response(body: dict) -> Response:
 @router.get("/manifest.webmanifest")
 def manifest():
     # Icônes carrées, l'OS applique son propre masque (iOS/Android/desktop).
+    # En staging v1, on sert la variante light (fond clair) pour distinguer
+    # visuellement l'icône PWA de celle de la prod.
     return _manifest_response({
-        "name": "MySifa",
-        "short_name": "MySifa",
+        "name": "MySifa" + (" (v1)" if IS_STAGING else ""),
+        "short_name": "MySifa" + (" v1" if IS_STAGING else ""),
         "start_url": "/",
         "scope": "/",
         "display": "standalone",
-        "background_color": "#0a0e17",
-        "theme_color": "#0a0e17",
+        "background_color": _MYS_BG,
+        "theme_color": _MYS_BG,
         "icons": [
-            {"src": "/static/mys_icon_192.png", "sizes": "192x192", "type": "image/png"},
-            {"src": "/static/mys_icon_512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": f"/static/mys_icon{_MYS_SFX}_192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": f"/static/mys_icon{_MYS_SFX}_512.png", "sizes": "512x512", "type": "image/png"},
         ],
     })
 

@@ -16,12 +16,12 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
 <link rel="icon" href="/static/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16.png">
-<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon__FAV_SFX__-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/static/favicon__FAV_SFX__-16.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon__FAV_SFX2___512.png">
 <link rel="apple-touch-icon" __TOUCH_ICON__>
-<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon_1024.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon__FAV_SFX2___192.png">
+<link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon__FAV_SFX2___1024.png">
 <link rel="manifest" href="__MANIFEST__">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="__APP_TITLE__">
@@ -14540,6 +14540,14 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         staging_initial_class = "env-prod"
         staging_initial_hidden = "hidden"
         staging_initial_msg = ""
+    # Favicons : en staging v1, on sert la variante "light" (fond clair, texte foncé)
+    # pour distinguer visuellement l'onglet Chrome de celui de la prod.
+    fav_sfx = "-light" if IS_STAGING else ""
+    # touch_icon : en staging, remplacer mys_icon_180.png par mys_icon-light_180.png
+    # (idem pour les icônes de module si un jour on en fait des variantes light).
+    touch_icon = cfg["touch_icon"]
+    if IS_STAGING:
+        touch_icon = touch_icon.replace("mys_icon_180.png", "mys_icon-light_180.png")
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
@@ -14550,7 +14558,9 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__STAGING_INITIAL_MSG__", staging_initial_msg)
         .replace("__ENV_NAME_VALUE__", ENV_NAME)
         .replace("__INITIAL_APP_VALUE__", initial_app)
-        .replace("__TOUCH_ICON__", cfg["touch_icon"])
+        .replace("__FAV_SFX__", fav_sfx)
+        .replace("__FAV_SFX2__", fav_sfx)
+        .replace("__TOUCH_ICON__", touch_icon)
         .replace("__APP_TITLE__", cfg["app_title"])
         .replace("__MANIFEST__", cfg["manifest"])
         .replace("__EXPE_TRANSPORTEURS_CSS__", EXPE_TRANSPORTEURS_CSS)
