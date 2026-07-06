@@ -67,6 +67,17 @@
     if (m) m.innerHTML = html;
   }
 
+  function clearSlot() {
+    var slot = $('msf-impersonate-slot');
+    if (slot) { slot.innerHTML = ''; slot.setAttribute('hidden', ''); }
+  }
+
+  function isLoginScreen() {
+    // Écran de connexion : jamais de sélecteur ni de bandeau superadmin, même si un
+    // cookie de session traîne encore côté navigateur (cas d'un retour rapide sur /).
+    return !!(window.S && window.S.app === 'login');
+  }
+
   function fetchMachines() {
     return fetch('/api/fabrication/machines', { credentials: 'include' })
       .then(function (r) { return r.ok ? r.json() : { machines: [] }; })
@@ -161,22 +172,11 @@
       .catch(function () { alert('Impossible de revenir au superadmin'); });
   }
 
-  function clearSlot() {
-    var slot = $('msf-impersonate-slot');
-    if (slot) { slot.innerHTML = ''; slot.setAttribute('hidden', ''); }
-  }
-
-  function isLoginScreen() {
-    // Écran de connexion : jamais de sélecteur ni de bandeau superadmin, même si un
-    // cookie de session traîne encore côté navigateur (cas d'un retour rapide sur /).
-    return !!(window.S && window.S.app === 'login');
-  }
-
   function init(user) {
     state.user = user || null;
     if (isLoginScreen() || !user) {
-      // Pas de session (ou écran de login affiché) : purge le sélecteur.
-      // En v1 le bandeau rouge d'info reste, en prod on cache tout.
+      // Écran de connexion ou pas de session : purge le sélecteur, en v1 on garde
+      // le bandeau rouge d'info, en prod on cache tout.
       clearSlot();
       if (isStaging()) {
         showBandeau(true);
@@ -241,8 +241,9 @@
   // Petit retard pour attraper S.user une fois checkAuth exécuté.
   setTimeout(poll, 1500);
 
-  // Watcher léger : re-init si S.user (id ou is_impersonating) change — login, logout,
-  // basculement d'impersonation… évite un bandeau superadmin bloqué après logout.
+  // Watcher léger : re-init dès que S.user (id, is_impersonating, real_role) ou S.app
+  // change — login, logout, bascule d'impersonation… évite un bandeau superadmin
+  // bloqué après logout.
   var _lastSig = '__init__';
   setInterval(function () {
     var u = (window.S && window.S.user) || null;

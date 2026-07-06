@@ -2721,7 +2721,7 @@ function showToast(message,type){
 
 // Favicon : base = vrai PNG "MyS" (dark ou light selon env) en résolution 192,
 // downscalé sur un canvas 64×64 pour un rendu net, avec pastille de comptage.
-const __IS_STAGING_FAV=(window.__MYSIFA_ENV__==='v1');
+const __IS_STAGING_FAV=(window.__MYSIFA_ENV__==='v1')||/^v1\./i.test((window.location&&window.location.hostname)||'');
 const __FAV_SFX=__IS_STAGING_FAV?'-light':'';
 const __FAV_BASE_SRC='/static/mys_icon'+__FAV_SFX+'_192.png';
 const __favBaseImg=new Image();

@@ -4,8 +4,13 @@
  * en staging v1). Le badge de comptage est superposé en canvas.
  */
 (function () {
-  var ENV = (typeof window !== 'undefined' && window.__MYSIFA_ENV__) || 'v2';
-  var IS_STAGING = (ENV === 'v1');
+  // Détection env : priorité à window.__MYSIFA_ENV__ (défini sur le portail),
+  // fallback sur le hostname pour les pages qui ne définissent pas la variable
+  // (stock, planning, calendrier, paie, profil, fabrication, messages, etc.).
+  var _envVar = (typeof window !== 'undefined' && window.__MYSIFA_ENV__) || null;
+  var _host = (typeof window !== 'undefined' && window.location && window.location.hostname) || '';
+  var IS_STAGING = (_envVar === 'v1') || /^v1\./i.test(_host);
+  var ENV = IS_STAGING ? 'v1' : 'v2';
   // Base : PNG "MyS" 192px (dark ou light), downscalé net sur un canvas 64×64.
   var BASE_SRC = '/static/mys_icon' + (IS_STAGING ? '-light' : '') + '_192.png';
 

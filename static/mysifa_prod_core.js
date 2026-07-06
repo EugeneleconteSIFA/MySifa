@@ -238,7 +238,9 @@
   // ── 5. Favicon badge + alerts polling + sidebar toggles ────────────
   // Base = vrai PNG "MyS" (dark ou light selon window.__MYSIFA_ENV__) en résolution
   // 192, downscalé sur un canvas 64×64 pour un rendu net, pastille superposée.
-  const __IS_STAGING_FAV = (window.__MYSIFA_ENV__ === 'v1');
+  // Détection env : window.__MYSIFA_ENV__ (portail) sinon fallback hostname.
+  const __IS_STAGING_FAV = (window.__MYSIFA_ENV__ === 'v1')
+    || /^v1\./i.test((window.location && window.location.hostname) || '');
   const __FAV_SFX = __IS_STAGING_FAV ? '-light' : '';
   const __FAV_BASE_SRC = '/static/mys_icon' + __FAV_SFX + '_192.png';
   const __favBaseImg = new Image();
