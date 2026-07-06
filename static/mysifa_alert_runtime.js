@@ -143,7 +143,9 @@
         multi: (it && it.multi === false) ? false : true,
       };
     });
+    const description = (typeof p.description === 'string') ? p.description : '';
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
+             description: description,
              trigger: trig, target: { machines }, validation: val, checklist: cl };
   }
 
@@ -302,7 +304,7 @@
     const machines = alert.target.machines || ['*'];
     const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(_esc).join(', ');
 
-    const _desc = (alert && alert.params && typeof alert.params.description === 'string') ? alert.params.description.trim() : '';
+    const _desc = (alert && typeof alert.description === 'string') ? alert.description.trim() : '';
     const _descHtml = _desc
       ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + _esc(_desc) + '</div>'
       : '';
