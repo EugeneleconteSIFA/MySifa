@@ -1,6 +1,7 @@
 """MySifa — Router MyBAT (Bons À Tirer)
 Route prefix : /api/bat
-Accès : superadmin, direction, administration
+Accès écriture : superadmin, direction, administration
+Accès lecture : + commercial (read-only)
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from app.services.auth_service import get_current_user
 from config import UPLOAD_DIR
 
 ROLES_BAT = {"superadmin", "direction", "administration"}
+ROLES_BAT_VIEW = ROLES_BAT | {"commercial"}
 BAT_STATUTS = {"a_faire", "en_attente", "valide"}
 BAT_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "bat")
 os.makedirs(BAT_UPLOAD_DIR, exist_ok=True)
@@ -26,9 +28,18 @@ router = APIRouter()
 
 
 def _require_bat_access(request: Request) -> dict:
+    """Écriture : direction / administration / superadmin uniquement."""
     user = get_current_user(request)
     if user["role"] not in ROLES_BAT:
         raise HTTPException(status_code=403, detail="Accès réservé à l'administration et la direction")
+    return user
+
+
+def _require_bat_view(request: Request) -> dict:
+    """Lecture : + commercial (read-only)."""
+    user = get_current_user(request)
+    if user["role"] not in ROLES_BAT_VIEW:
+        raise HTTPException(status_code=403, detail="Accès réservé à l'administration, la direction et le commercial")
     return user
 
 
@@ -80,7 +91,7 @@ def _enrich_entries(conn, entries: list) -> list:
 
 @router.get("/api/bat")
 def list_bat(request: Request, statut: Optional[str] = None):
-    _require_bat_access(request)
+    _require_bat_view(request)
     with get_db() as conn:
         if statut and statut in BAT_STATUTS:
             rows = conn.execute(
@@ -106,7 +117,7 @@ def list_bat(request: Request, statut: Optional[str] = None):
 
 @router.get("/api/bat/{bat_id}")
 def get_bat(bat_id: int, request: Request):
-    _require_bat_access(request)
+    _require_bat_view(request)
     with get_db() as conn:
         row = conn.execute(
             """SELECT b.*, u1.nom AS created_by_nom, u2.nom AS updated_by_nom
@@ -302,7 +313,7 @@ async def upload_bat_pdf(bat_id: int, request: Request, file: UploadFile = File(
 @router.get("/api/bat/{bat_id}/pdf")
 def download_bat_pdf(bat_id: int, request: Request):
     """Rétrocompatibilité : sert le premier PDF de la liste."""
-    _require_bat_access(request)
+    _require_bat_view(request)
     with get_db() as conn:
         row = conn.execute("SELECT * FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
         if not row:
@@ -336,7 +347,7 @@ def download_bat_pdf(bat_id: int, request: Request):
 @router.get("/api/bat/{bat_id}/pdf/{pdf_id}")
 def download_bat_pdf_by_id(bat_id: int, pdf_id: int, request: Request):
     """Sert un PDF spécifique parmi ceux associés à ce BAT."""
-    _require_bat_access(request)
+    _require_bat_view(request)
     with get_db() as conn:
         bat_row = conn.execute("SELECT id FROM bat_entries WHERE id=?", (bat_id,)).fetchone()
         if not bat_row:

@@ -1,6 +1,7 @@
 """MySifa — Page MyBAT (Bons À Tirer)
 Route : /bat
-Accès : superadmin, direction, administration
+Accès écriture : superadmin, direction, administration
+Accès lecture : + commercial (read-only)
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -10,6 +11,7 @@ from app.web.access_denied import access_denied_response
 from config import APP_VERSION
 
 ROLES_BAT = {"superadmin", "direction", "administration"}
+ROLES_BAT_VIEW = ROLES_BAT | {"commercial"}
 
 router = APIRouter()
 
@@ -22,9 +24,14 @@ def bat_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/bat", status_code=302)
         raise
-    if user["role"] not in ROLES_BAT:
+    if user["role"] not in ROLES_BAT_VIEW:
         return access_denied_response("MyBAT")
-    html = BAT_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
+    is_readonly = user["role"] not in ROLES_BAT
+    html = (
+        BAT_HTML
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__IS_BAT_READONLY__", "true" if is_readonly else "false")
+    )
     return HTMLResponse(
         content=html,
         headers={
@@ -279,7 +286,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
           <div class="page-title">My<span>BAT</span></div>
           <div class="page-subtitle">Gestion des Bons À Tirer</div>
         </div>
-        <button type="button" class="btn btn-accent" onclick="openCreateModal()">
+        <button type="button" class="btn btn-accent" id="btn-new-bat" onclick="openCreateModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Nouveau BAT
         </button>
@@ -418,7 +425,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
     <div class="modal-title" id="pdf-picker-title">Fichiers PDF</div>
     <div id="pdf-picker-list"></div>
     <div class="modal-actions" style="margin-top:18px">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="openUploadFromPicker()">
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-pdf-add" onclick="openUploadFromPicker()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Ajouter un PDF
       </button>
@@ -445,6 +452,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 
 <script>
 'use strict';
+
+// ── Rôle : lecture seule pour le rôle « commercial » ─────────────────
+const IS_READONLY = __IS_BAT_READONLY__;
 
 // ── État central ───────────────────────────────────────────────────
 const S = {
@@ -509,6 +519,9 @@ async function doLogout(){
 function statutLabel(s){return{a_faire:'À faire',en_attente:'En attente',valide:'Validé'}[s]||s;}
 function statutBadge(e){
   const cls={a_faire:'badge-afaire',en_attente:'badge-attente',valide:'badge-valide'}[e.statut]||'';
+  if(IS_READONLY){
+    return `<span class="badge ${cls}">${escHtml(statutLabel(e.statut))}</span>`;
+  }
   return `<span class="badge ${cls} badge-clickable" onclick="openStatutModal(${e.id})" title="Cliquer pour modifier le statut">${escHtml(statutLabel(e.statut))}</span>`;
 }
 
@@ -581,14 +594,14 @@ function renderTable(){
             ${pdfLabel}
           </button>`
         :'';
-      const uploadBtn=`<button type="button" class="ico-btn" onclick="openUploadModal(${e.id},'${escHtml(e.reference)}')" title="Ajouter un PDF">
+      const uploadBtn=IS_READONLY?'':`<button type="button" class="ico-btn" onclick="openUploadModal(${e.id},'${escHtml(e.reference)}')" title="Ajouter un PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           + PDF
         </button>`;
-      const editBtn=`<button type="button" class="ico-btn" onclick="openEditModal(${e.id})" title="Modifier">
+      const editBtn=IS_READONLY?'':`<button type="button" class="ico-btn" onclick="openEditModal(${e.id})" title="Modifier">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>`;
-      const delBtn=`<button type="button" class="ico-btn danger" onclick="openDelModal(${e.id},'${escHtml(e.description||e.numero_article)}')" title="Supprimer">
+      const delBtn=IS_READONLY?'':`<button type="button" class="ico-btn danger" onclick="openDelModal(${e.id},'${escHtml(e.description||e.numero_article)}')" title="Supprimer">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>`;
       const updDate=e.updated_at?e.updated_at.slice(0,16).replace('T',' '):'—';
@@ -660,6 +673,7 @@ async function loadMe(){
 
 // ── Modals — Création ──────────────────────────────────────────────
 function openCreateModal(){
+  if(IS_READONLY) return;
   document.getElementById('inp-desc').value='';
   document.getElementById('inp-article').value='';
   document.getElementById('inp-delai').value='';
@@ -695,6 +709,7 @@ async function submitCreate(){
 
 // ── Modals — Upload PDF ────────────────────────────────────────────
 function openUploadModal(id,ref){
+  if(IS_READONLY) return;
   S.uploadBatId=id;S.uploadFile=null;
   document.getElementById('upload-modal-title').textContent=ref?`Ajouter un PDF — ${ref}`:'Ajouter un PDF';
   document.getElementById('upload-zone-label').textContent='Glisser-déposer un PDF ici, ou cliquer pour choisir';
@@ -748,6 +763,7 @@ async function submitUpload(){
 
 // ── Modals — Édition ──────────────────────────────────────────────
 function openEditModal(id){
+  if(IS_READONLY) return;
   const e=S.entries.find(x=>x.id===id);
   if(!e) return;
   S.editBatId=id;
@@ -786,6 +802,7 @@ async function submitEdit(){
 
 // ── Modals — Changement statut ────────────────────────────────────
 function openStatutModal(id){
+  if(IS_READONLY) return;
   const e=S.entries.find(x=>x.id===id);
   if(!e) return;
   S.statutBatId=id;
@@ -849,6 +866,7 @@ async function submitStatutChange(newStatut){
 
 // ── Modals — Suppression ──────────────────────────────────────────
 function openDelModal(id,ref){
+  if(IS_READONLY) return;
   S.delBatId=id;
   document.getElementById('del-modal-msg').textContent=`Le BAT "${ref}" sera définitivement supprimé. Cette action est irréversible.`;
   document.getElementById('del-modal').style.display='flex';
@@ -901,9 +919,9 @@ function renderPdfPickerList(e){
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(dt)}</div>
       </div>
       <a href="/api/bat/${e.id}/pdf/${p.id}" target="_blank" class="ico-btn ok btn-sm" style="text-decoration:none;flex-shrink:0">Ouvrir</a>
-      <button type="button" class="ico-btn danger btn-sm" onclick="openPdfDelModal(${e.id},${p.id},'${escHtml(p.original_name)}')" title="Supprimer ce PDF" style="flex-shrink:0">
+      ${IS_READONLY?'':`<button type="button" class="ico-btn danger btn-sm" onclick="openPdfDelModal(${e.id},${p.id},'${escHtml(p.original_name)}')" title="Supprimer ce PDF" style="flex-shrink:0">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-      </button>
+      </button>`}
     </div>`;
   }).join('');
 }
@@ -917,6 +935,7 @@ function openUploadFromPicker(){
 
 // ── PDF Delete (individuel) ───────────────────────────────────────
 function openPdfDelModal(batId,pdfId,name){
+  if(IS_READONLY) return;
   S.pdfPickerBatId=S.pdfPickerBatId||batId;
   S.pdfDelId={batId,pdfId};
   document.getElementById('pdf-del-modal-msg').textContent=`Le fichier "${name}" sera définitivement supprimé. Cette action est irréversible.`;
@@ -966,6 +985,13 @@ async function submitPdfDelete(){
     else document.body.classList.remove('light');
     updateThemeBtn();
   }catch(e){}
+
+  // Rôle lecture seule : masquer les boutons d'écriture définis en HTML statique.
+  if(IS_READONLY){
+    const _hide=(id)=>{const el=document.getElementById(id); if(el) el.style.display='none';};
+    _hide('btn-new-bat');
+    _hide('btn-pdf-add');
+  }
 
   loadMe();
   loadEntries();

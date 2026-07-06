@@ -13316,7 +13316,8 @@ function valEnsureState() {
       historiqueLoading: false,
       exporting: false,
       mpCollapsed: false,
-      pfCollapsed: false };
+      pfCollapsed: false,
+      snapshotDate: null };
   }
   return S.valorisation;
 }
@@ -13326,7 +13327,8 @@ async function loadValorisation() {
   v.loading = true;
   renderValorisationView(false);
   try {
-    const data = await api('/api/stock/valorisation');
+    const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
+    const data = await api('/api/stock/valorisation' + qs);
     v.items = Array.isArray(data?.items) ? data.items : [];
     v.summary = data?.summary || null;
   } catch (e) {
@@ -14560,10 +14562,12 @@ function valPFEnsureState() {
 
 async function loadValorisationPF() {
   const pf = valPFEnsureState();
+  const v = valEnsureState();
   pf.loading = true;
   renderValorisationView(true);
   try {
-    const data = await api('/api/stock/valorisation/pf');
+    const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
+    const data = await api('/api/stock/valorisation/pf' + qs);
     pf.items = Array.isArray(data?.items) ? data.items : [];
     pf.summary = data?.summary || null;
   } catch (e) {
@@ -15216,7 +15220,49 @@ function buildValorisationToolbar() {
     on: { click: () => loadValorisation() } });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
 
-  wrap.append(inp, exportBtn, refreshBtn);
+  // ── Sélecteur de date (Direction / superadmin) ──
+  // Permet de figer la valorisation à une date passée : quantités reconstituées
+  // via l'historique des mouvements + prix historiques (params multiplicateurs actuels).
+  let dateWrap = null;
+  if (valCanSeeUSD()) {
+    dateWrap = el('div', { style: 'display:inline-flex;align-items:center;gap:6px;padding:2px 4px 2px 10px;border:1px solid var(--border);border-radius:10px;background:var(--card)' });
+    const dateLbl = el('span', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px' }, 'Au');
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const dateInp = el('input', {
+      type: 'date', id: 'val-snapshot-date', max: todayIso, min: '2020-01-01',
+      title: 'Figer la valorisation à une date passée',
+      style: 'padding:8px 10px;border:none;background:transparent;color:var(--text);font-size:13px;font-family:inherit;outline:none;font-variant-numeric:tabular-nums;cursor:pointer;color-scheme:light dark'
+    });
+    dateInp.value = v.snapshotDate || todayIso;
+    dateInp.addEventListener('change', async () => {
+      const iso = dateInp.value || '';
+      v.snapshotDate = (iso && iso !== todayIso) ? iso : null;
+      await loadValorisation();
+      await loadValorisationPF();
+    });
+    // Bouton reset (retour à aujourd'hui)
+    const resetBtn = el('button', {
+      type: 'button', title: 'Revenir à aujourd\'hui',
+      style: 'width:24px;height:24px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;line-height:1',
+      on: {
+        click: async () => {
+          if (!v.snapshotDate) return;
+          v.snapshotDate = null;
+          dateInp.value = todayIso;
+          await loadValorisation();
+          await loadValorisationPF();
+        },
+        mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
+        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--muted)'; },
+      },
+    }, '×');
+    // Grise le reset si aucune date custom
+    if (!v.snapshotDate) resetBtn.style.opacity = '.3';
+    dateWrap.append(dateLbl, dateInp, resetBtn);
+  }
+
+  if (dateWrap) wrap.append(inp, dateWrap, exportBtn, refreshBtn);
+  else wrap.append(inp, exportBtn, refreshBtn);
 
   // ── Icône Paramètres MyCouts (Direction / superadmin uniquement) ──
   // Ouvre les paramètres en modal superposé (pas de redirection MyCouts).
@@ -15445,6 +15491,17 @@ function buildValorisation() {
       'Saisie des prix unitaires (€/unité de gestion) et consolidation par catégorie. Direction · Administration · Super admin.')
   );
   root.appendChild(head);
+
+  // Bandeau « figée au JJ/MM/AAAA » quand une date passée est sélectionnée
+  if (v.snapshotDate) {
+    const parts = v.snapshotDate.split('-');
+    const fr = parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : v.snapshotDate;
+    const badge = el('div', { style:
+      'display:flex;align-items:center;gap:8px;padding:10px 14px;margin-bottom:14px;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,0.08);color:#c2410c;font-size:13px;font-weight:600' });
+    badge.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+    badge.appendChild(el('span', null, 'Valorisation figée au ' + fr + ' — quantités et prix reconstitués à cette date. Paramètres globaux actuels (taux USD, taxe, containers, charges de prod).'));
+    root.appendChild(badge);
+  }
 
   if (v.loading && !v.items.length) {
     root.appendChild(el('div', { style: 'padding:60px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'));
