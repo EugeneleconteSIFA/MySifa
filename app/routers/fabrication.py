@@ -15,6 +15,13 @@ from database import get_db, parse_datetime
 from config import classify_operation
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
+from app.routers.stock import (
+    _apply_stock_mouvement as _pf_apply_mouvement,
+    _is_valid_emplacement as _stock_is_valid_emplacement,
+    _normalize_emplacement as _stock_normalize_emplacement,
+    _mp_is_laizee as _stock_mp_is_laizee,
+    _mp_unite_gestion as _stock_mp_unite_gestion,
+)
 
 router = APIRouter()
 
@@ -3097,3 +3104,649 @@ def list_dossiers_repiquage(request: Request):
             dossiers.append(d)
 
     return {"dossiers": dossiers, "machine": dict(machine)}
+
+
+# =============================================================================
+# MyProd x MyStock -- saisies EP / SP / EM / SM
+# =============================================================================
+# Endpoints permettant aux operateurs de creer des mouvements de stock
+# (produits finis Z1, matieres premieres) directement depuis MyProd > Saisie
+# de production. Chaque saisie est rattachee a un dossier de production
+# (no_dossier obligatoire). Source de verite : MyStock (mouvements_stock +
+# mp_mouvements).
+
+_STOCK_CODES_PF = {"EP": "entree", "SP": "sortie"}
+_STOCK_CODES_MP = {"EM": "entree", "SM": "sortie"}
+_EP_DEFAULT_EMPLACEMENT = "Z1"
+
+
+def _resolve_dossier_ctx(conn, no_dossier: str) -> dict:
+    """Renvoie {machine, client, designation} depuis planning_entries.
+    Vide si dossier fictif / inconnu -- pas d'erreur.
+    """
+    if not no_dossier:
+        return {}
+    row = conn.execute(
+        """SELECT pe.client, pe.description, m.nom AS machine_nom
+           FROM planning_entries pe
+           LEFT JOIN machines m ON m.id = pe.machine_id
+           WHERE trim(pe.reference) = trim(?)
+           LIMIT 1""",
+        (no_dossier,),
+    ).fetchone()
+    if not row:
+        return {}
+    d = dict(row)
+    return {
+        "machine": d.get("machine_nom") or "",
+        "client": d.get("client") or "",
+        "designation": d.get("description") or "",
+    }
+
+
+@router.post("/api/fabrication/saisie-stock")
+async def create_saisie_stock(request: Request):
+    """Cree une saisie stock (EP/SP/EM/SM) depuis MyProd.
+
+    Ecrit dans mouvements_stock (EP/SP) ou mp_mouvements (EM/SM) en rattachant
+    au dossier de production courant.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    code = (body.get("code") or "").strip().upper()
+    if code not in _STOCK_CODES_PF and code not in _STOCK_CODES_MP:
+        raise HTTPException(400, "Code invalide (attendu : EP / SP / EM / SM)")
+
+    no_dossier = (body.get("no_dossier") or "").strip()
+    if not no_dossier:
+        raise HTTPException(400, "no_dossier obligatoire pour une saisie stock")
+
+    note = (body.get("note") or "").strip() or None
+    date_op = _resolve_date_operation(body.get("date_operation"))
+
+    try:
+        quantite = float(body.get("quantite") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quantite invalide") from None
+    if quantite <= 0:
+        raise HTTPException(400, "Quantite doit etre positive")
+
+    with get_db() as conn:
+        ctx = _resolve_dossier_ctx(conn, no_dossier)
+        machine = (body.get("machine") or "").strip() or ctx.get("machine") or ""
+        client = ctx.get("client") or ""
+        designation = ctx.get("designation") or ""
+
+        # ── EP / SP : produits finis via _apply_stock_mouvement ───────────────
+        if code in _STOCK_CODES_PF:
+            type_mvt = _STOCK_CODES_PF[code]
+            produit_id = body.get("produit_id")
+            if not produit_id:
+                raise HTTPException(400, "produit_id obligatoire pour EP/SP")
+            try:
+                produit_id = int(produit_id)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "produit_id invalide") from None
+
+            empl_raw = (body.get("emplacement") or "").strip()
+            if code == "EP" and not empl_raw:
+                empl_raw = _EP_DEFAULT_EMPLACEMENT
+            if not empl_raw:
+                raise HTTPException(400, "emplacement obligatoire pour SP")
+            if not _stock_is_valid_emplacement(empl_raw):
+                raise HTTPException(400, f"Format emplacement invalide : {empl_raw}")
+            emplacement = _stock_normalize_emplacement(empl_raw)
+
+            # Palettes (EP uniquement)
+            palettes_clean: list = []
+            palettes_in = body.get("palettes") or []
+            if code == "EP" and palettes_in:
+                if not isinstance(palettes_in, list):
+                    raise HTTPException(400, "palettes doit etre une liste")
+                for it in palettes_in:
+                    if not isinstance(it, dict):
+                        continue
+                    try:
+                        mid = int(it.get("matiere_id"))
+                        nb = int(it.get("nombre"))
+                    except (TypeError, ValueError):
+                        raise HTTPException(400, "palette : matiere_id et nombre numeriques requis") from None
+                    if nb <= 0:
+                        continue
+                    palettes_clean.append((mid, nb))
+                if palettes_clean:
+                    ids = list({mid for mid, _ in palettes_clean})
+                    ph = ",".join("?" * len(ids))
+                    rows = conn.execute(
+                        f"SELECT id, categorie FROM matieres_premieres WHERE id IN ({ph})",
+                        ids,
+                    ).fetchall()
+                    found = {r["id"]: (r["categorie"] or "") for r in rows}
+                    for mid, _ in palettes_clean:
+                        if mid not in found:
+                            raise HTTPException(400, f"Palette inconnue (matiere_id={mid})")
+                        if (found[mid] or "").strip().lower() != "palette":
+                            raise HTTPException(400, f"Reference {mid} n'est pas une palette")
+
+            result, ref_audit, audit_action = _pf_apply_mouvement(
+                conn, user, produit_id, emplacement, type_mvt, quantite, note or "",
+                date_entree=None, no_dossier=no_dossier,
+            )
+            mvt_id = result.get("mouvement_id")
+            if palettes_clean and mvt_id:
+                now = datetime.now().isoformat()
+                conn.executemany(
+                    """INSERT INTO mouvement_palettes (mouvement_id, matiere_id, nombre, created_at)
+                       VALUES (?,?,?,?)""",
+                    [(mvt_id, mid, nb, now) for mid, nb in palettes_clean],
+                )
+            conn.commit()
+
+            log_action(
+                user=user, action=audit_action, module="fabrication",
+                objet=f"{code} - {ref_audit} - {emplacement} - {quantite} - dossier {no_dossier}",
+                detail={
+                    "code": code, "kind": "stock_pf", "produit_id": produit_id,
+                    "emplacement": emplacement, "quantite": quantite,
+                    "no_dossier": no_dossier, "machine": machine,
+                    "palettes": [{"matiere_id": m, "nombre": n} for m, n in palettes_clean],
+                },
+                ip=request.client.host if request.client else None,
+            )
+            return {
+                "ok": True, "kind": "stock_pf", "id": mvt_id,
+                "code": code, "no_dossier": no_dossier, "machine": machine,
+                "client": client, "designation": designation,
+                **result,
+            }
+
+        # ── EM / SM : matieres premieres via mp_mouvements ────────────────────
+        type_mvt = _STOCK_CODES_MP[code]
+        matiere_id = body.get("matiere_id")
+        if not matiere_id:
+            raise HTTPException(400, "matiere_id obligatoire pour EM/SM")
+        try:
+            matiere_id = int(matiere_id)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "matiere_id invalide") from None
+
+        laize_id_raw = body.get("laize_id")
+        laize_id = None
+        if laize_id_raw not in (None, ""):
+            try:
+                laize_id = int(laize_id_raw)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "laize_id invalide") from None
+
+        emplacement_source = body.get("emplacement_source")
+        emplacement_dest = body.get("emplacement_dest")
+        if emplacement_source:
+            emplacement_source = str(emplacement_source).strip().upper() or None
+        if emplacement_dest:
+            emplacement_dest = str(emplacement_dest).strip().upper() or None
+        ref_bl = (body.get("ref_bl") or "").strip() or None
+
+        mp = conn.execute(
+            "SELECT id, categorie FROM matieres_premieres WHERE id=? AND actif=1",
+            (matiere_id,),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matiere non trouvee")
+        laizee = _stock_mp_is_laizee(mp["categorie"])
+        unite = _stock_mp_unite_gestion(mp["categorie"])
+
+        def _valid_or_none(code_e, *, needed):
+            if not code_e:
+                if needed and not laizee:
+                    raise HTTPException(400, "Emplacement obligatoire")
+                return None
+            if not _stock_is_valid_emplacement(code_e):
+                raise HTTPException(400, f"Format emplacement invalide : {code_e}")
+            return _stock_normalize_emplacement(code_e)
+
+        if type_mvt == "entree":
+            emplacement_dest = _valid_or_none(emplacement_dest, needed=False)
+        else:
+            emplacement_source = _valid_or_none(emplacement_source, needed=True)
+
+        if laizee:
+            if laize_id is None:
+                raise HTTPException(400, "Laize obligatoire pour cette categorie")
+            assoc = conn.execute(
+                "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone()
+            if not assoc:
+                raise HTTPException(400, "Cette laize n'est pas associee a cette matiere")
+            stock = conn.execute(
+                "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+                (matiere_id, laize_id),
+            ).fetchone()
+        else:
+            stock = conn.execute(
+                "SELECT quantite FROM mp_stock WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
+        quantite_avant = float(stock["quantite"]) if stock else 0.0
+
+        if type_mvt == "entree":
+            quantite_apres = quantite_avant + quantite
+        else:
+            quantite_apres = quantite_avant - quantite
+            if quantite_apres < 0:
+                raise HTTPException(
+                    400,
+                    f"Stock insuffisant -- actuel : {quantite_avant:g} {unite}",
+                )
+
+        created_by = user.get("id")
+        created_by_name = (user.get("nom") or "").strip() or None
+
+        if laizee:
+            conn.execute(
+                """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+                   VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)
+                   ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                     quantite=excluded.quantite,
+                     updated_at=excluded.updated_at,
+                     updated_by_name=excluded.updated_by_name""",
+                (matiere_id, laize_id, quantite_apres, created_by_name),
+            )
+            total = conn.execute(
+                "SELECT COALESCE(SUM(quantite),0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT OR REPLACE INTO mp_stock(matiere_id,quantite,updated_at,updated_by_name)
+                   VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+                (matiere_id, float(total["s"] or 0), created_by_name),
+            )
+        else:
+            conn.execute(
+                """INSERT OR REPLACE INTO mp_stock(matiere_id,quantite,updated_at,updated_by_name)
+                   VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+                (matiere_id, quantite_apres, created_by_name),
+            )
+
+        cur = conn.execute(
+            """INSERT INTO mp_mouvements
+               (matiere_id, type_mouvement, quantite, quantite_avant, quantite_apres,
+                ref_bl, note, emplacement_source, emplacement_dest,
+                created_at, created_by, created_by_name, laize_id,
+                no_dossier, machine, client, designation)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                matiere_id, type_mvt, quantite, quantite_avant, quantite_apres,
+                ref_bl, note, emplacement_source, emplacement_dest,
+                date_op, created_by, created_by_name, laize_id,
+                no_dossier, machine or None, client or None, designation or None,
+            ),
+        )
+        mvt_id = cur.lastrowid
+        conn.commit()
+
+        mat = conn.execute(
+            "SELECT reference FROM matieres_premieres WHERE id=?",
+            (matiere_id,),
+        ).fetchone()
+        ref_audit = (mat["reference"] if mat else str(matiere_id)) or ""
+
+        log_action(
+            user=user,
+            action=("CREATE" if code == "EM" else "DELETE"),
+            module="fabrication",
+            objet=f"{code} - {ref_audit} - {quantite} - dossier {no_dossier}",
+            detail={
+                "code": code, "kind": "stock_mp",
+                "matiere_id": matiere_id, "laize_id": laize_id,
+                "quantite": quantite, "no_dossier": no_dossier, "machine": machine,
+            },
+            ip=request.client.host if request.client else None,
+        )
+
+        return {
+            "ok": True, "kind": "stock_mp", "id": mvt_id,
+            "code": code, "no_dossier": no_dossier, "machine": machine,
+            "client": client, "designation": designation,
+            "quantite_avant": quantite_avant, "quantite_apres": quantite_apres,
+        }
+
+
+# ── PATCH /api/fabrication/saisie-stock/{kind}/{mvt_id} ────────────────────
+#
+# Edition partielle d'une saisie stock EP/SP/EM/SM. Autorise uniquement les
+# champs "surs" qui ne touchent pas au calcul de stock : note, ref_bl,
+# no_dossier (+ refresh client/designation/machine), machine.
+#
+# Quantite, matiere_id, produit_id, laize_id, emplacement -> pas editables ici.
+# L'operateur doit supprimer + recreer si besoin de changer un de ces champs.
+# Cela evite tout risque de cascade recalcul sur mp_stock / stock_emplacements /
+# lots_stock (FIFO).
+
+_PATCH_SAFE_FIELDS_PF = {"note", "no_dossier"}
+_PATCH_SAFE_FIELDS_MP = {"note", "ref_bl", "no_dossier"}
+_PATCH_LOCKED_FIELDS = {
+    "quantite", "matiere_id", "produit_id", "laize_id",
+    "emplacement", "emplacement_source", "emplacement_dest",
+    "type_mouvement",
+}
+
+
+def _can_edit_saisie_stock(user: dict, row: dict, *, kind: str) -> bool:
+    """Autorise admin partout, sinon meme utilisateur et meme jour."""
+    if is_admin(user):
+        return True
+    if not is_fabrication(user):
+        return False
+    today = _today_prefix()
+    created_at = str(row.get("created_at") or "")
+    if not created_at.startswith(today):
+        return False
+    if kind == "stock_pf":
+        return (row.get("created_by") or "").strip().lower() == (user.get("email") or "").strip().lower()
+    # stock_mp : created_by = user.id (int)
+    try:
+        return int(row.get("created_by") or 0) == int(user.get("id") or 0)
+    except (TypeError, ValueError):
+        return False
+
+
+@router.patch("/api/fabrication/saisie-stock/{kind}/{mvt_id}")
+async def patch_saisie_stock(kind: str, mvt_id: int, request: Request):
+    """Edition partielle d'une saisie stock. Champs surs uniquement."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    kind = (kind or "").strip().lower()
+    if kind not in ("stock_pf", "stock_mp"):
+        raise HTTPException(400, "kind invalide (stock_pf ou stock_mp)")
+
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Body JSON attendu")
+
+    locked = _PATCH_LOCKED_FIELDS & set(body.keys())
+    if locked:
+        raise HTTPException(
+            400,
+            "Champs non modifiables via PATCH (supprimer + recreer) : "
+            + ", ".join(sorted(locked)),
+        )
+
+    with get_db() as conn:
+        if kind == "stock_pf":
+            row = conn.execute(
+                "SELECT * FROM mouvements_stock WHERE id=?", (mvt_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Mouvement introuvable")
+            row_d = dict(row)
+            if not _can_edit_saisie_stock(user, row_d, kind=kind):
+                raise HTTPException(403, "Edition non autorisee sur cette saisie")
+
+            allowed = _PATCH_SAFE_FIELDS_PF
+        else:
+            row = conn.execute(
+                "SELECT * FROM mp_mouvements WHERE id=?", (mvt_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Mouvement introuvable")
+            row_d = dict(row)
+            if not _can_edit_saisie_stock(user, row_d, kind=kind):
+                raise HTTPException(403, "Edition non autorisee sur cette saisie")
+
+            allowed = _PATCH_SAFE_FIELDS_MP
+
+        updates: dict = {}
+        for k in allowed:
+            if k in body:
+                v = body[k]
+                if v is None:
+                    updates[k] = None
+                else:
+                    v = str(v).strip()
+                    updates[k] = v or None
+
+        # Si no_dossier a change : rafraichir machine/client/designation
+        if "no_dossier" in updates:
+            new_dossier = updates["no_dossier"] or ""
+            if new_dossier:
+                ctx = _resolve_dossier_ctx(conn, new_dossier)
+                if kind == "stock_mp":
+                    updates["machine"] = ctx.get("machine") or None
+                    updates["client"] = ctx.get("client") or None
+                    updates["designation"] = ctx.get("designation") or None
+
+        # Machine explicite dans le body (MP only, PF n'a pas de colonne machine)
+        if kind == "stock_mp":
+            for k in ("machine", "client", "designation"):
+                if k in body:
+                    v = body[k]
+                    updates[k] = (str(v).strip() or None) if v is not None else None
+
+        if not updates:
+            return {"ok": True, "updated_fields": [], "id": mvt_id, "kind": kind}
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        params = list(updates.values()) + [mvt_id]
+        table = "mouvements_stock" if kind == "stock_pf" else "mp_mouvements"
+        conn.execute(f"UPDATE {table} SET {set_clause} WHERE id = ?", params)
+        conn.commit()
+
+        log_action(
+            user=user, action="UPDATE", module="fabrication",
+            objet=f"PATCH {kind} #{mvt_id} : " + ", ".join(sorted(updates.keys())),
+            detail={"kind": kind, "id": mvt_id, "updates": updates},
+            ip=request.client.host if request.client else None,
+        )
+
+    return {"ok": True, "updated_fields": sorted(updates.keys()), "id": mvt_id, "kind": kind}
+
+
+# ── DELETE /api/fabrication/saisie-stock/{kind}/{mvt_id} ──────────────────
+#
+# Suppression d'une saisie stock EP/SP/EM/SM avec reversion propre du stock.
+# Regles :
+# - Meme jour + auteur ou admin (via _can_edit_saisie_stock)
+# - Refus si un mouvement posterieur existe sur le meme produit (PF) ou la
+#   meme matiere (MP) -- eviterait une incoherence stock non triviale
+# - PF entree : DELETE lots_stock qui matchent + UPDATE stock_emplacements
+# - PF sortie : refus (reversion FIFO complexe ; passer par /stock)
+# - MP entree/sortie : UPDATE mp_stock (et mp_stock_laize si laizee) via
+#   quantite_avant enregistree sur la ligne
+# - Palettes : suppression explicite (par prudence, sans dependre du CASCADE)
+
+def _pf_has_subsequent(conn, row: dict) -> bool:
+    """Y a-t-il un mouvement PF posterieur sur le meme produit+emplacement ?"""
+    r = conn.execute(
+        """SELECT 1 FROM mouvements_stock
+           WHERE produit_id = ? AND emplacement = ? AND id > ?
+           LIMIT 1""",
+        (row["produit_id"], row["emplacement"], row["id"]),
+    ).fetchone()
+    return r is not None
+
+
+def _mp_has_subsequent(conn, row: dict) -> bool:
+    """Y a-t-il un mouvement MP posterieur sur la meme matiere (+ laize) ?"""
+    if row.get("laize_id") is not None:
+        r = conn.execute(
+            """SELECT 1 FROM mp_mouvements
+               WHERE matiere_id = ? AND laize_id = ? AND id > ?
+               LIMIT 1""",
+            (row["matiere_id"], row["laize_id"], row["id"]),
+        ).fetchone()
+    else:
+        r = conn.execute(
+            """SELECT 1 FROM mp_mouvements
+               WHERE matiere_id = ? AND (laize_id IS NULL) AND id > ?
+               LIMIT 1""",
+            (row["matiere_id"], row["id"]),
+        ).fetchone()
+    return r is not None
+
+
+@router.delete("/api/fabrication/saisie-stock/{kind}/{mvt_id}")
+async def delete_saisie_stock(kind: str, mvt_id: int, request: Request):
+    """Supprime une saisie stock avec reversion du stock."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    kind = (kind or "").strip().lower()
+    if kind not in ("stock_pf", "stock_mp"):
+        raise HTTPException(400, "kind invalide (stock_pf ou stock_mp)")
+
+    now = datetime.now().isoformat()
+
+    with get_db() as conn:
+        if kind == "stock_pf":
+            row = conn.execute(
+                "SELECT * FROM mouvements_stock WHERE id=?", (mvt_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, "Mouvement introuvable")
+            row_d = dict(row)
+            if not _can_edit_saisie_stock(user, row_d, kind=kind):
+                raise HTTPException(403, "Suppression non autorisee sur cette saisie")
+
+            if _pf_has_subsequent(conn, row_d):
+                raise HTTPException(
+                    400,
+                    "Impossible de supprimer : un mouvement posterieur existe sur ce produit / emplacement. "
+                    "Il faudrait d'abord supprimer les mouvements suivants."
+                )
+
+            type_mvt = (row_d.get("type_mouvement") or "").strip()
+            if type_mvt == "sortie":
+                raise HTTPException(
+                    400,
+                    "Suppression d'une sortie produit fini non supportee ici (reversion FIFO complexe). "
+                    "Passer par MyStock pour ce cas particulier."
+                )
+            if type_mvt != "entree":
+                raise HTTPException(
+                    400,
+                    f"Suppression non supportee pour type_mouvement={type_mvt!r}"
+                )
+
+            # PF entree : rembobiner
+            produit_id = row_d["produit_id"]
+            emplacement = row_d["emplacement"]
+            quantite = float(row_d.get("quantite") or 0)
+            quantite_avant = float(row_d.get("quantite_avant") or 0)
+
+            # 1) DELETE lots_stock crees par ce mouvement -- match sur
+            #    produit + emplacement + created_by + quantite_initiale +
+            #    date (troncature journee) pour eviter faux positifs.
+            same_day = str(row_d.get("created_at") or "")[:10]
+            conn.execute(
+                """DELETE FROM lots_stock
+                   WHERE produit_id=? AND emplacement=? AND created_by=?
+                     AND quantite_initiale=? AND quantite_restante=?
+                     AND substr(created_at,1,10)=?""",
+                (produit_id, emplacement, row_d.get("created_by"),
+                 quantite, quantite, same_day),
+            )
+
+            # 2) UPDATE stock_emplacements -> revenir a quantite_avant
+            conn.execute(
+                """UPDATE stock_emplacements
+                   SET quantite=?, updated_at=?, updated_by=?
+                   WHERE produit_id=? AND emplacement=?""",
+                (quantite_avant, now, user.get("email") or "system",
+                 produit_id, emplacement),
+            )
+
+            # 3) DELETE palettes puis mvt
+            conn.execute(
+                "DELETE FROM mouvement_palettes WHERE mouvement_id=?", (mvt_id,)
+            )
+            conn.execute("DELETE FROM mouvements_stock WHERE id=?", (mvt_id,))
+            conn.commit()
+
+            log_action(
+                user=user, action="DELETE", module="fabrication",
+                objet=f"delete stock_pf #{mvt_id} - produit {produit_id} - {emplacement} - {quantite}",
+                detail={
+                    "kind": "stock_pf", "id": mvt_id,
+                    "produit_id": produit_id, "emplacement": emplacement,
+                    "quantite": quantite, "no_dossier": row_d.get("no_dossier"),
+                },
+                ip=request.client.host if request.client else None,
+            )
+            return {"ok": True, "kind": "stock_pf", "id": mvt_id,
+                    "quantite_apres_reversion": quantite_avant}
+
+        # ── stock_mp ─────────────────────────────────────────────────────────
+        row = conn.execute(
+            "SELECT * FROM mp_mouvements WHERE id=?", (mvt_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Mouvement introuvable")
+        row_d = dict(row)
+        if not _can_edit_saisie_stock(user, row_d, kind=kind):
+            raise HTTPException(403, "Suppression non autorisee sur cette saisie")
+
+        if _mp_has_subsequent(conn, row_d):
+            raise HTTPException(
+                400,
+                "Impossible de supprimer : un mouvement posterieur existe sur cette matiere. "
+                "Supprimer d'abord les mouvements suivants."
+            )
+
+        type_mvt = (row_d.get("type_mouvement") or "").strip()
+        if type_mvt not in ("entree", "sortie"):
+            raise HTTPException(
+                400,
+                f"Suppression non supportee pour type_mouvement={type_mvt!r}"
+            )
+
+        matiere_id = row_d["matiere_id"]
+        laize_id = row_d.get("laize_id")
+        quantite_avant = float(row_d.get("quantite_avant") or 0)
+        created_by_name = (user.get("nom") or "").strip() or None
+
+        # Rembobinage : restaurer quantite_avant sur mp_stock / mp_stock_laize
+        if laize_id is not None:
+            conn.execute(
+                """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+                   VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)
+                   ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                     quantite=excluded.quantite,
+                     updated_at=excluded.updated_at,
+                     updated_by_name=excluded.updated_by_name""",
+                (matiere_id, laize_id, quantite_avant, created_by_name),
+            )
+            total = conn.execute(
+                "SELECT COALESCE(SUM(quantite),0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
+            conn.execute(
+                """INSERT OR REPLACE INTO mp_stock(matiere_id,quantite,updated_at,updated_by_name)
+                   VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+                (matiere_id, float(total["s"] or 0), created_by_name),
+            )
+        else:
+            conn.execute(
+                """INSERT OR REPLACE INTO mp_stock(matiere_id,quantite,updated_at,updated_by_name)
+                   VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+                (matiere_id, quantite_avant, created_by_name),
+            )
+
+        conn.execute("DELETE FROM mp_mouvements WHERE id=?", (mvt_id,))
+        conn.commit()
+
+        log_action(
+            user=user, action="DELETE", module="fabrication",
+            objet=f"delete stock_mp #{mvt_id} - matiere {matiere_id} - {type_mvt}",
+            detail={
+                "kind": "stock_mp", "id": mvt_id,
+                "matiere_id": matiere_id, "laize_id": laize_id,
+                "type_mouvement": type_mvt, "no_dossier": row_d.get("no_dossier"),
+            },
+            ip=request.client.host if request.client else None,
+        )
+        return {"ok": True, "kind": "stock_mp", "id": mvt_id,
+                "quantite_apres_reversion": quantite_avant}

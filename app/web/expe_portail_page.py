@@ -62,6 +62,7 @@ def get_portail_404_html() -> str:
     <p>Ce lien n'est pas reconnu. Contactez votre interlocuteur SIFA pour obtenir un nouveau lien.</p>
   </div>
 """ + _PORTAIL_FOOTER + """
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
 

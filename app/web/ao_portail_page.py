@@ -105,6 +105,7 @@ p{font-size:14px;color:var(--muted);line-height:1.6}
 <h1>Lien invalide ou expiré</h1>
 <p>Ce lien de demande de prix n'est pas reconnu. Contactez votre interlocuteur SIFA pour obtenir un nouveau lien.</p>
 </div>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
 

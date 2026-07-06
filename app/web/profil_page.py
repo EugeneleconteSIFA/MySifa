@@ -1425,6 +1425,7 @@ document.getElementById('btn-logout').onclick=async()=>{
   }
 })();
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
 """

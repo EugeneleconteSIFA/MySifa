@@ -1838,5 +1838,6 @@ function render() {
   render();
 })();
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
