@@ -36,7 +36,15 @@
       '.ta-chip span{white-space:nowrap}',
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}'
+      '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}',
+      '.ta-sim-alert{position:relative}',
+      '.ta-sim-title{cursor:grab;user-select:none}',
+      '.ta-sim-title.ta-dragging{cursor:grabbing}',
+      '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s}',
+      '.ta-sim-min:hover{background:var(--bg);color:var(--text)}',
+      '.ta-alert-chip{position:fixed;bottom:24px;right:24px;background:var(--accent);color:#fff;border-radius:999px;padding:12px 18px;font-size:13px;font-weight:600;cursor:pointer;z-index:2500;box-shadow:0 6px 24px rgba(0,0,0,.4);display:flex;align-items:center;gap:10px;font-family:inherit;border:2px solid #fff;animation:taChipPulse 1.8s ease-in-out infinite}',
+      '.ta-alert-chip:hover{filter:brightness(1.08);animation:none;transform:scale(1.03)}',
+      '@keyframes taChipPulse{0%,100%{box-shadow:0 6px 24px rgba(0,0,0,.4)}50%{box-shadow:0 6px 24px rgba(0,0,0,.4),0 0 0 8px rgba(34,211,238,.25)}}'
     ].join('\n');
     document.head.appendChild(style);
   })();
@@ -297,6 +305,110 @@
     }
   }
 
+  function _loadAlertPos() {
+    try {
+      const raw = localStorage.getItem('mysifa_alert_position');
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (p && typeof p.left === 'number' && typeof p.top === 'number') return p;
+    } catch (e) {}
+    return null;
+  }
+
+  function _saveAlertPos(left, top) {
+    try {
+      localStorage.setItem('mysifa_alert_position', JSON.stringify({ left: left, top: top }));
+    } catch (e) {}
+  }
+
+  function _applyAlertPos(alertEl) {
+    const pos = _loadAlertPos();
+    if (!pos) return;
+    const w = window.innerWidth || document.documentElement.clientWidth;
+    const h = window.innerHeight || document.documentElement.clientHeight;
+    const rect = alertEl.getBoundingClientRect();
+    const maxLeft = Math.max(0, w - Math.min(rect.width, 200));
+    const maxTop = Math.max(0, h - Math.min(rect.height, 100));
+    const left = Math.max(0, Math.min(pos.left, maxLeft));
+    const top = Math.max(0, Math.min(pos.top, maxTop));
+    alertEl.style.position = 'fixed';
+    alertEl.style.left = left + 'px';
+    alertEl.style.top = top + 'px';
+    alertEl.style.right = 'auto';
+    alertEl.style.bottom = 'auto';
+    alertEl.style.margin = '0';
+  }
+
+  let _dragState = null;
+
+  function _startDrag(ev, alertEl) {
+    if (ev.target.closest('button, input, textarea, label, select')) return;
+    const isTouch = !!(ev.touches && ev.touches.length);
+    const clientX = isTouch ? ev.touches[0].clientX : ev.clientX;
+    const clientY = isTouch ? ev.touches[0].clientY : ev.clientY;
+    const rect = alertEl.getBoundingClientRect();
+    _dragState = {
+      offsetX: clientX - rect.left,
+      offsetY: clientY - rect.top,
+      alertEl: alertEl,
+    };
+    const title = alertEl.querySelector('.ta-sim-title');
+    if (title) title.classList.add('ta-dragging');
+    document.addEventListener('mousemove', _doDrag);
+    document.addEventListener('mouseup', _endDrag);
+    document.addEventListener('touchmove', _doDrag, { passive: false });
+    document.addEventListener('touchend', _endDrag);
+    ev.preventDefault();
+  }
+
+  function _doDrag(ev) {
+    if (!_dragState) return;
+    if (ev.touches) ev.preventDefault();
+    const isTouch = !!(ev.touches && ev.touches.length);
+    const clientX = isTouch ? ev.touches[0].clientX : ev.clientX;
+    const clientY = isTouch ? ev.touches[0].clientY : ev.clientY;
+    const newLeft = clientX - _dragState.offsetX;
+    const newTop = clientY - _dragState.offsetY;
+    const el = _dragState.alertEl;
+    el.style.position = 'fixed';
+    el.style.left = newLeft + 'px';
+    el.style.top = newTop + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+    el.style.margin = '0';
+  }
+
+  function _endDrag() {
+    if (!_dragState) return;
+    const el = _dragState.alertEl;
+    const rect = el.getBoundingClientRect();
+    _saveAlertPos(rect.left, rect.top);
+    const title = el.querySelector('.ta-sim-title');
+    if (title) title.classList.remove('ta-dragging');
+    document.removeEventListener('mousemove', _doDrag);
+    document.removeEventListener('mouseup', _endDrag);
+    document.removeEventListener('touchmove', _doDrag);
+    document.removeEventListener('touchend', _endDrag);
+    _dragState = null;
+  }
+
+  function _minimizeAlert(wrap) {
+    wrap.style.display = 'none';
+    const existing = document.getElementById('ta-alert-chip');
+    if (existing) existing.remove();
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'ta-alert-chip';
+    chip.id = 'ta-alert-chip';
+    chip.setAttribute('aria-label', 'Alerte en attente — cliquer pour rouvrir');
+    chip.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span>Alerte en attente</span>';
+    chip.addEventListener('click', () => {
+      wrap.style.display = '';
+      chip.remove();
+    });
+    document.body.appendChild(chip);
+  }
+
   function _renderAlert(alert) {
     const wrap = document.createElement('div');
     wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
@@ -309,6 +421,9 @@
       ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + _esc(_desc) + '</div>'
       : '';
     const html = '<div class="ta-sim-alert">'
+      + '<button type="button" class="ta-sim-min" title="Masquer temporairement" aria-label="Masquer l\'alerte">'
+      +   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+      + '</button>'
       + '<div class="ta-sim-title">' + _esc(_stripAutoPrefix(alert.nom)) + '</div>'
       + _descHtml
       + _renderChecklist(alert.checklist)
@@ -321,9 +436,28 @@
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
 
+    const alertEl = wrap.querySelector('.ta-sim-alert');
+    if (alertEl) _applyAlertPos(alertEl);
+
+    const titleEl = wrap.querySelector('.ta-sim-title');
+    if (titleEl && alertEl) {
+      titleEl.addEventListener('mousedown', (ev) => _startDrag(ev, alertEl));
+      titleEl.addEventListener('touchstart', (ev) => _startDrag(ev, alertEl), { passive: false });
+    }
+
+    const minBtn = wrap.querySelector('.ta-sim-min');
+    if (minBtn) {
+      minBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _minimizeAlert(wrap);
+      });
+    }
+
     const closeWithSuccess = () => {
       wrap.remove();
       _displayed.delete(alert.id);
+      const chip = document.getElementById('ta-alert-chip');
+      if (chip) chip.remove();
     };
 
     const onValidate = async () => {
