@@ -1889,7 +1889,7 @@ def ref_get_fiche(fiche_id: int, request: Request):
         # Questions type
         f["questions"] = [
             dict(r) for r in conn.execute(
-                "SELECT id, texte, created_at, created_by FROM qualite_ref_questions "
+                "SELECT id, texte, reponse, created_at, created_by FROM qualite_ref_questions "
                 "WHERE fiche_id=? ORDER BY id",
                 (fiche_id,),
             ).fetchall()
@@ -2112,9 +2112,15 @@ def ref_delete_fiche(fiche_id: int, request: Request):
     return {"ok": True}
 
 
-# ─── Questions type ───────────────────────────────────────────────────────
+# ─── Questions type (avec reponse) ────────────────────────────────────────
 class RefQuestionCreate(BaseModel):
     texte: str
+    reponse: Optional[str] = ""
+
+
+class RefQuestionUpdate(BaseModel):
+    texte: Optional[str] = None
+    reponse: Optional[str] = None
 
 
 @router.post("/api/qualite/ref/fiches/{fiche_id}/questions")
@@ -2123,16 +2129,46 @@ def ref_add_question(fiche_id: int, body: RefQuestionCreate, request: Request):
     texte = (body.texte or "").strip()
     if not texte or len(texte) > 400:
         raise HTTPException(status_code=400, detail="Question invalide (1 a 400 caracteres)")
+    reponse = (body.reponse or "").strip()
+    if len(reponse) > 4000:
+        raise HTTPException(status_code=400, detail="Reponse trop longue (max 4000 caracteres)")
     now = _now()
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM qualite_ref_fiches WHERE id=?", (fiche_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Fiche introuvable")
         cur = conn.execute(
-            "INSERT INTO qualite_ref_questions (fiche_id, texte, created_at, created_by) VALUES (?, ?, ?, ?)",
-            (fiche_id, texte, now, user["id"]),
+            "INSERT INTO qualite_ref_questions (fiche_id, texte, reponse, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
+            (fiche_id, texte, reponse, now, user["id"]),
         )
         conn.commit()
-    return {"id": cur.lastrowid, "texte": texte}
+    return {"id": cur.lastrowid, "texte": texte, "reponse": reponse}
+
+
+@router.put("/api/qualite/ref/fiches/{fiche_id}/questions/{qid}")
+def ref_update_question(fiche_id: int, qid: int, body: RefQuestionUpdate, request: Request):
+    get_current_user(request)
+    fields = []
+    params: List = []
+    if body.texte is not None:
+        t = body.texte.strip()
+        if not t or len(t) > 400:
+            raise HTTPException(status_code=400, detail="Question invalide (1 a 400 caracteres)")
+        fields.append("texte=?"); params.append(t)
+    if body.reponse is not None:
+        r = body.reponse.strip()
+        if len(r) > 4000:
+            raise HTTPException(status_code=400, detail="Reponse trop longue (max 4000 caracteres)")
+        fields.append("reponse=?"); params.append(r)
+    if not fields:
+        raise HTTPException(status_code=400, detail="Aucun champ a modifier")
+    params.extend([qid, fiche_id])
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE qualite_ref_questions SET {', '.join(fields)} WHERE id=? AND fiche_id=?",
+            params,
+        )
+        conn.commit()
+    return {"ok": True}
 
 
 @router.delete("/api/qualite/ref/fiches/{fiche_id}/questions/{qid}")

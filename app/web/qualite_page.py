@@ -567,6 +567,8 @@ const S = {
   refSuggests: null,         // {questions:[], fiches:[]}
   refSuggestIx: -1,          // index sélectionné dans le dropdown
   refAuditsPicker: [],       // audits pour le picker de lien
+  refOpenQaId: null,         // ID de la question ouverte dans l'accordéon
+  refEditQaId: null,         // ID de la question en cours d'édition inline
   isQualiteAdmin: __IS_QUALITE_ADMIN__,
 };
 
@@ -2349,6 +2351,115 @@ async function init(){
 .ref-empty{padding:60px 20px;text-align:center;color:var(--muted)}
 .ref-empty .emp-title{font-size:15px;color:var(--text);font-weight:600;margin-bottom:6px}
 .ref-empty .emp-sub{font-size:12px;line-height:1.5}
+
+/* Fix : styles des inputs dans le bandeau d edition (etaient sans theme) */
+.ref-detail-head input[type=text],
+.ref-detail-head input[type=url],
+.ref-detail-head select{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px;
+  transition:border-color .15s
+}
+.ref-detail-head input:focus,
+.ref-detail-head select:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none
+}
+
+/* Bloc DEFINITION mis en avant : hero card avec bord accent, typo forte */
+.ref-def-hero{
+  background:linear-gradient(135deg, var(--accent-bg) 0%, transparent 60%);
+  border:1px solid var(--border);
+  border-left:4px solid var(--accent);
+  border-radius:14px;padding:22px 26px;margin-bottom:18px;
+  position:relative;overflow:hidden
+}
+.ref-def-hero::before{
+  content:"";position:absolute;top:0;right:0;width:120px;height:120px;
+  background:radial-gradient(circle at top right, var(--accent-bg) 0%, transparent 70%);
+  pointer-events:none
+}
+.ref-def-hero--environnement{border-left-color:var(--ok);background:linear-gradient(135deg,rgba(52,211,153,.10) 0%,transparent 60%)}
+.ref-def-hero--environnement::before{background:radial-gradient(circle at top right, rgba(52,211,153,.14) 0%, transparent 70%)}
+.ref-def-hero--social{border-left-color:var(--accent)}
+.ref-def-hero--tracabilite{border-left-color:var(--warn);background:linear-gradient(135deg,rgba(251,191,36,.10) 0%,transparent 60%)}
+.ref-def-hero--tracabilite::before{background:radial-gradient(circle at top right, rgba(251,191,36,.14) 0%, transparent 70%)}
+.ref-def-hero--securite{border-left-color:var(--danger);background:linear-gradient(135deg,rgba(248,113,113,.10) 0%,transparent 60%)}
+.ref-def-hero--securite::before{background:radial-gradient(circle at top right, rgba(248,113,113,.14) 0%, transparent 70%)}
+.ref-def-hero-label{
+  font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:1px;
+  color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px
+}
+.ref-def-hero-label svg{opacity:.7}
+.ref-def-hero-text{
+  font-size:17px;line-height:1.55;color:var(--text);font-weight:500;
+  position:relative;z-index:1
+}
+.ref-def-hero-text .acr{
+  display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  padding:2px 10px;font-size:13px;color:var(--accent);font-weight:600;margin-right:6px;
+  vertical-align:1px
+}
+
+/* Accordeon Q/R */
+.ref-qa-list{display:flex;flex-direction:column;gap:6px}
+.ref-qa-item{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;transition:border-color .15s
+}
+.ref-qa-item:hover{border-color:var(--accent)}
+.ref-qa-item.open{border-color:var(--accent);background:var(--card)}
+.ref-qa-q{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+  font-size:13px;color:var(--text);font-weight:500;user-select:none
+}
+.ref-qa-q .chev{
+  display:inline-block;transition:transform .18s;color:var(--muted);flex-shrink:0
+}
+.ref-qa-item.open .ref-qa-q .chev{transform:rotate(90deg);color:var(--accent)}
+.ref-qa-q .q-text{flex:1}
+.ref-qa-q .actions{display:flex;gap:4px;opacity:0;transition:opacity .15s}
+.ref-qa-item:hover .ref-qa-q .actions{opacity:1}
+.ref-qa-q .actions .btn-mini{
+  background:none;border:none;color:var(--muted);cursor:pointer;padding:3px 6px;
+  border-radius:6px;font-size:12px;transition:.15s
+}
+.ref-qa-q .actions .btn-mini:hover{background:var(--card);color:var(--text)}
+.ref-qa-q .actions .btn-mini.del:hover{color:var(--danger)}
+.ref-qa-r{
+  padding:0 14px 12px 34px;font-size:13px;color:var(--text2);line-height:1.6;
+  white-space:pre-wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:2px
+}
+.ref-qa-r-empty{color:var(--muted);font-style:italic;font-size:12px}
+
+/* Formulaire ajout Q/R : deux champs */
+.ref-qa-add{
+  display:flex;flex-direction:column;gap:8px;margin-top:12px;
+  padding:12px;background:var(--bg);border:1px dashed var(--border);border-radius:10px
+}
+.ref-qa-add input,.ref-qa-add textarea{
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;
+  transition:border-color .15s;width:100%
+}
+.ref-qa-add textarea{min-height:60px;resize:vertical}
+.ref-qa-add input:focus,.ref-qa-add textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none
+}
+.ref-qa-add-actions{display:flex;justify-content:flex-end;gap:8px}
+
+/* Edition inline d une question */
+.ref-qa-edit-form{padding:12px 14px;background:var(--card);border-top:1px solid var(--border)}
+.ref-qa-edit-form input,.ref-qa-edit-form textarea{
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px;
+  transition:border-color .15s;width:100%;margin-bottom:8px
+}
+.ref-qa-edit-form textarea{min-height:80px;resize:vertical}
+.ref-qa-edit-form input:focus,.ref-qa-edit-form textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none
+}
+.ref-qa-edit-actions{display:flex;justify-content:flex-end;gap:6px}
 `;
   document.head.appendChild(st);
 })();
@@ -2597,10 +2708,16 @@ function renderRefDetail(){
         ? `<p>${escHtml(f.details)}</p>`
         : `<p style="color:var(--muted);font-style:italic">Pas de détails complémentaires.</p>`);
 
-  // Bloc "Définition" éditable
+  // Bloc DÉFINITION mis en avant (hero card, couleur selon catégorie)
   const defHtml = S.refEdit
-    ? `<textarea id="ref-def">${escHtml(S.refEditBuf.definition||'')}</textarea>`
-    : `<p>${escHtml(f.definition||'')}</p>`;
+    ? `<div class="ref-block"><h3>Définition</h3><textarea id="ref-def">${escHtml(S.refEditBuf.definition||'')}</textarea></div>`
+    : `<div class="ref-def-hero ref-def-hero--${escAttr(f.categorie)}">
+        <div class="ref-def-hero-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Définition
+        </div>
+        <div class="ref-def-hero-text">${f.acronyme?`<span class="acr">${escHtml(f.acronyme)}</span>`:''}${escHtml(f.definition||'')}</div>
+      </div>`;
 
   // Bandeau haut
   const headHtml = S.refEdit
@@ -2622,23 +2739,56 @@ function renderRefDetail(){
   // Tags
   const tagsList = (f.tags||'').split(',').map(t=>t.trim()).filter(Boolean);
   const tagsHtml = S.refEdit
-    ? `<div class="ref-field"><label>Mots-clés (séparés par virgule)</label><input type="text" id="ref-tags" style="width:100%" value="${escAttr(S.refEditBuf.tags||'')}"></div>`
-    : (tagsList.length?`<div class="ref-tags">${tagsList.map(t=>`<span class="ref-tag">${escHtml(t)}</span>`).join('')}</div>`:'');
+    ? `<div class="ref-block"><div class="ref-field"><label>Mots-clés (séparés par virgule)</label><input type="text" id="ref-tags" style="width:100%" value="${escAttr(S.refEditBuf.tags||'')}"></div></div>`
+    : (tagsList.length?`<div class="ref-tags" style="margin:-6px 0 14px 4px">${tagsList.map(t=>`<span class="ref-tag">${escHtml(t)}</span>`).join('')}</div>`:'');
 
   const sourceHtml = S.refEdit
-    ? `<div class="ref-field"><label>Source officielle (URL)</label><input type="url" id="ref-src" style="width:100%" value="${escAttr(S.refEditBuf.source_url||'')}" placeholder="https://..."></div>`
+    ? `<div class="ref-block"><div class="ref-field"><label>Source officielle (URL)</label><input type="url" id="ref-src" style="width:100%" value="${escAttr(S.refEditBuf.source_url||'')}" placeholder="https://..."></div></div>`
     : '';
 
-  // Questions type
+  // Questions clients type (accordéon : clic sur Q → révèle R)
+  const chevSvg = '<span class="chev"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></span>';
   const questionsHtml = `
     <div class="ref-block">
-      <h3>Questions clients type <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${(f.questions||[]).length}) — alimentent la recherche</span></h3>
-      <div class="ref-questions-list">
-        ${(f.questions||[]).map(q=>`<div class="ref-question-item"><span>${escHtml(q.texte)}</span><span class="x" onclick="deleteRefQuestion(${f.id},${q.id})" title="Retirer">×</span></div>`).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucune question enregistrée.</div>'}
+      <h3>Questions clients type <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${(f.questions||[]).length}) — cliquer pour voir la réponse</span></h3>
+      <div class="ref-qa-list">
+        ${(f.questions||[]).map(q=>{
+          const isOpen = S.refOpenQaId === q.id;
+          const isEdit = S.refEditQaId === q.id;
+          if(isEdit){
+            return `<div class="ref-qa-item open">
+              <div class="ref-qa-q">${chevSvg}<span class="q-text">Modifier la question</span></div>
+              <div class="ref-qa-edit-form">
+                <input type="text" id="ref-qa-edit-q-${q.id}" value="${escAttr(q.texte)}" placeholder="Question">
+                <textarea id="ref-qa-edit-r-${q.id}" placeholder="Réponse SIFA (facultative)">${escHtml(q.reponse||'')}</textarea>
+                <div class="ref-qa-edit-actions">
+                  <button class="btn btn-ghost" onclick="cancelEditRefQa()">Annuler</button>
+                  <button class="btn btn-accent" onclick="saveEditRefQa(${f.id},${q.id})">Enregistrer</button>
+                </div>
+              </div>
+            </div>`;
+          }
+          return `<div class="ref-qa-item${isOpen?' open':''}">
+            <div class="ref-qa-q" onclick="toggleRefQa(${q.id})">
+              ${chevSvg}
+              <span class="q-text">${escHtml(q.texte)}</span>
+              <span class="actions">
+                <button class="btn-mini" title="Modifier" onclick="event.stopPropagation();startEditRefQa(${q.id})">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+                <button class="btn-mini del" title="Retirer" onclick="event.stopPropagation();deleteRefQuestion(${f.id},${q.id})">×</button>
+              </span>
+            </div>
+            ${isOpen?`<div class="ref-qa-r">${q.reponse?escHtml(q.reponse):'<span class="ref-qa-r-empty">Aucune réponse enregistrée. Cliquer sur le crayon pour en ajouter une.</span>'}</div>`:''}
+          </div>`;
+        }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucune question enregistrée.</div>'}
       </div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <input type="text" id="ref-newq" placeholder="Ex : vos produits sont-ils conformes REACH ?" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:13px">
-        <button class="btn btn-accent" onclick="addRefQuestion(${f.id})">Ajouter</button>
+      <div class="ref-qa-add">
+        <input type="text" id="ref-newq" placeholder="Question : Ex. vos produits sont-ils conformes REACH ?">
+        <textarea id="ref-newr" placeholder="Réponse type (facultative) : Ex. Oui, SIFA vérifie annuellement…"></textarea>
+        <div class="ref-qa-add-actions">
+          <button class="btn btn-accent" onclick="addRefQuestion(${f.id})">Ajouter</button>
+        </div>
       </div>
     </div>`;
 
@@ -2695,7 +2845,7 @@ function renderRefDetail(){
       <div style="display:flex;gap:8px;flex-wrap:wrap">${actions.join('')}</div>
     </div>
     <div class="ref-detail-head">${headHtml}</div>
-    <div class="ref-block"><h3>Définition</h3>${defHtml}${tagsHtml}${sourceHtml}</div>
+    ${defHtml}${tagsHtml}${sourceHtml}
     <div class="ref-block"><h3>Notre position (SIFA)</h3>${positionHtml}</div>
     <div class="ref-block"><h3>Détails</h3>${detailsHtml}</div>
     ${questionsHtml}
@@ -2772,11 +2922,42 @@ async function deleteRef(id){
 // ─── Questions type ───────────────────────────────────────────────────────
 async function addRefQuestion(fid){
   const inp = document.getElementById('ref-newq');
+  const inpR = document.getElementById('ref-newr');
   const t = (inp.value||'').trim();
+  const rep = (inpR ? inpR.value : '');
   if(!t){ inp.focus(); return; }
-  const r = await api('/api/qualite/ref/fiches/'+fid+'/questions', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte:t})});
+  const r = await api('/api/qualite/ref/fiches/'+fid+'/questions', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte:t, reponse:rep})});
   if(!r.ok){ showToast('Erreur ajout','danger'); return; }
-  inp.value = '';
+  inp.value = ''; if(inpR) inpR.value = '';
+  await openRef(fid);
+}
+
+// Toggle accordéon Q/R
+function toggleRefQa(qid){
+  S.refOpenQaId = (S.refOpenQaId === qid) ? null : qid;
+  S.refEditQaId = null;
+  renderRefDetail();
+}
+
+// Édition inline d une question
+function startEditRefQa(qid){
+  S.refEditQaId = qid;
+  S.refOpenQaId = qid;
+  renderRefDetail();
+  requestAnimationFrame(()=>{ const el=document.getElementById('ref-qa-edit-q-'+qid); if(el){ el.focus(); el.select(); } });
+}
+function cancelEditRefQa(){
+  S.refEditQaId = null;
+  renderRefDetail();
+}
+async function saveEditRefQa(fid, qid){
+  const q = document.getElementById('ref-qa-edit-q-'+qid).value.trim();
+  const r = document.getElementById('ref-qa-edit-r-'+qid).value;
+  if(!q){ showToast('Question vide','danger'); return; }
+  const resp = await api('/api/qualite/ref/fiches/'+fid+'/questions/'+qid, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({texte:q, reponse:r})});
+  if(!resp.ok){ showToast('Erreur enregistrement','danger'); return; }
+  S.refEditQaId = null;
+  showToast('Question enregistrée.','success');
   await openRef(fid);
 }
 async function deleteRefQuestion(fid, qid){
