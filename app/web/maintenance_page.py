@@ -4389,9 +4389,6 @@ function renderCtrl(){
     h += '<th data-sort-ctrl="date_saisie"' + activeAttr('date_saisie') + ' onclick="sortCtrl(\'date_saisie\')">Date saisie' + sortIco('date_saisie') + '</th>';
     h += '<th data-sort-ctrl="machine"' + activeAttr('machine') + ' onclick="sortCtrl(\'machine\')">Machine' + sortIco('machine') + '</th>';
     h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">Opérateur' + sortIco('operateur') + '</th>';
-    h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
-    h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
-    h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     if(!singleType){
       h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
     }
@@ -4399,6 +4396,9 @@ function renderCtrl(){
       const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
       h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
     }
+    h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
+    h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
+    h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     h += '<th>Commentaires</th>';
     h += '<th aria-label="Actions"></th>';
     thead.innerHTML = h;
@@ -4418,6 +4418,18 @@ function renderCtrl(){
       cells += '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>';
       cells += '<td>' + escHtml(c.machine) + '</td>';
       cells += '<td>' + escHtml(c.operateur) + '</td>';
+      if(!singleType){
+        cells += '<td>' + escHtml(_displayType(c)) + '</td>';
+      }
+      for(let i = 0; i < extraCols.length; i++){
+        let val = '';
+        if(c._source === 'alert' && c._responses){
+          const r = c._responses[String(i)];
+          if(Array.isArray(r)){ val = r.join(', '); }
+          else if(r != null && r !== ''){ val = String(r); }
+        }
+        cells += '<td>' + escHtml(val) + '</td>';
+      }
       // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
       // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
       // technique complète du dossier.
@@ -4431,18 +4443,6 @@ function renderCtrl(){
       cells += '<td class="col-dossier">' + _refCell + '</td>';
       cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
       cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
-      if(!singleType){
-        cells += '<td>' + escHtml(_displayType(c)) + '</td>';
-      }
-      for(let i = 0; i < extraCols.length; i++){
-        let val = '';
-        if(c._source === 'alert' && c._responses){
-          const r = c._responses[String(i)];
-          if(Array.isArray(r)){ val = r.join(', '); }
-          else if(r != null && r !== ''){ val = String(r); }
-        }
-        cells += '<td>' + escHtml(val) + '</td>';
-      }
       // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
       // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
       const commentText = singleType
