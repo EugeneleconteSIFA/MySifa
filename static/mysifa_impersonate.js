@@ -166,11 +166,17 @@
     if (slot) { slot.innerHTML = ''; slot.setAttribute('hidden', ''); }
   }
 
+  function isLoginScreen() {
+    // Écran de connexion : jamais de sélecteur ni de bandeau superadmin, même si un
+    // cookie de session traîne encore côté navigateur (cas d'un retour rapide sur /).
+    return !!(window.S && window.S.app === 'login');
+  }
+
   function init(user) {
     state.user = user || null;
-    if (!user) {
-      // Pas de session : en v1 on garde le bandeau rouge par défaut, en prod caché.
-      // On vide le sélecteur au cas où l'utilisateur vient de se déconnecter.
+    if (isLoginScreen() || !user) {
+      // Pas de session (ou écran de login affiché) : purge le sélecteur.
+      // En v1 le bandeau rouge d'info reste, en prod on cache tout.
       clearSlot();
       if (isStaging()) {
         showBandeau(true);
@@ -240,7 +246,10 @@
   var _lastSig = '__init__';
   setInterval(function () {
     var u = (window.S && window.S.user) || null;
-    var sig = u ? (String(u.id || 0) + ':' + (u.is_impersonating ? '1' : '0') + ':' + (u.real_role || u.role || '')) : 'null';
+    var app = (window.S && window.S.app) || '';
+    var sig = u
+      ? (app + ':' + String(u.id || 0) + ':' + (u.is_impersonating ? '1' : '0') + ':' + (u.real_role || u.role || ''))
+      : (app + ':null');
     if (sig !== _lastSig) {
       _lastSig = sig;
       init(u);

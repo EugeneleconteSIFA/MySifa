@@ -236,23 +236,42 @@
   }
 
   // ── 5. Favicon badge + alerts polling + sidebar toggles ────────────
+  // Base = vrai PNG "MyS" (dark ou light selon window.__MYSIFA_ENV__),
+  // la pastille de comptage est superposée en canvas.
+  const __IS_STAGING_FAV = (window.__MYSIFA_ENV__ === 'v1');
+  const __FAV_BASE_SRC = '/static/favicon' + (__IS_STAGING_FAV ? '-light' : '') + '-32.png';
+  const __favBaseImg = new Image();
+  let __favBaseReady = false;
+  __favBaseImg.onload = function(){ __favBaseReady = true; try { refreshAlertsBadge(); } catch(e){} };
+  __favBaseImg.src = __FAV_BASE_SRC;
+
+  function __drawFavFallback(ctx){
+    const bg = __IS_STAGING_FAV ? '#f1f5f9' : '#0a0e17';
+    const fg = __IS_STAGING_FAV ? '#0f172a' : '#f1f5f9';
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 32, 32, 6);
+    else ctx.rect(0, 0, 32, 32);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    ctx.font = 'bold 20px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('M', 16, 17);
+  }
+
   function updateFaviconBadge(count){
     const canvas = document.createElement('canvas');
     canvas.width = 32; canvas.height = 32;
     const ctx = canvas.getContext('2d');
     if(!ctx) return;
 
-    ctx.fillStyle = '#0a0e17';
-    ctx.beginPath();
-    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 32, 32, 6);
-    else ctx.rect(0, 0, 32, 32);
-    ctx.fill();
-
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = 'bold 20px system-ui';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('M', 16, 17);
+    if(__favBaseReady){
+      try { ctx.drawImage(__favBaseImg, 0, 0, 32, 32); }
+      catch(e){ __drawFavFallback(ctx); }
+    } else {
+      __drawFavFallback(ctx);
+    }
 
     if(count > 0){
       ctx.fillStyle = '#f87171';
