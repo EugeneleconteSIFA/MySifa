@@ -161,10 +161,17 @@
       .catch(function () { alert('Impossible de revenir au superadmin'); });
   }
 
+  function clearSlot() {
+    var slot = $('msf-impersonate-slot');
+    if (slot) { slot.innerHTML = ''; slot.setAttribute('hidden', ''); }
+  }
+
   function init(user) {
     state.user = user || null;
     if (!user) {
       // Pas de session : en v1 on garde le bandeau rouge par défaut, en prod caché.
+      // On vide le sélecteur au cas où l'utilisateur vient de se déconnecter.
+      clearSlot();
       if (isStaging()) {
         showBandeau(true);
         setBandeauMode('staging');
@@ -176,6 +183,7 @@
     }
     if (!isRealSuperadmin(user)) {
       // Non-superadmin : bandeau v1 reste tel quel, aucun sélecteur.
+      clearSlot();
       if (isStaging()) {
         showBandeau(true);
         setBandeauMode('staging');
@@ -226,4 +234,16 @@
   }
   // Petit retard pour attraper S.user une fois checkAuth exécuté.
   setTimeout(poll, 1500);
+
+  // Watcher léger : re-init si S.user (id ou is_impersonating) change — login, logout,
+  // basculement d'impersonation… évite un bandeau superadmin bloqué après logout.
+  var _lastSig = '__init__';
+  setInterval(function () {
+    var u = (window.S && window.S.user) || null;
+    var sig = u ? (String(u.id || 0) + ':' + (u.is_impersonating ? '1' : '0') + ':' + (u.real_role || u.role || '')) : 'null';
+    if (sig !== _lastSig) {
+      _lastSig = sig;
+      init(u);
+    }
+  }, 800);
 })();
