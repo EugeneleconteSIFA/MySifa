@@ -8179,7 +8179,8 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
   const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
 
   if (typeMvt === 'entree') {
-    const hideEmpl = !!S.fabStockMode;
+    const isLaizeeCat = mpIsLaizeeCategory(S.mpModal.categorie) || (mat && mpIsLaizeeCategory(mat.categorie));
+    const hideEmpl = !!S.fabStockMode || isLaizeeCat;
     const emplField = hideEmpl ? null : buildMpEmplacementField();
     const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
@@ -8212,7 +8213,8 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
       return null;
     };
   } else if (typeMvt === 'sortie') {
-    const hideEmpl = !!S.fabStockMode;
+    const isLaizeeCat = mpIsLaizeeCategory(S.mpModal.categorie) || (mat && mpIsLaizeeCategory(mat.categorie));
+    const hideEmpl = !!S.fabStockMode || isLaizeeCat;
     const emplField = hideEmpl ? null : buildMpEmplacementField();
     hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
