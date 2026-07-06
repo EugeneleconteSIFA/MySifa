@@ -3314,12 +3314,13 @@ async function openMaintDocsModal(code) {
   overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
     + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
     + '<div class="alert-modal-body">'
-    +   '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px dashed var(--border);border-radius:8px;background:var(--bg);margin-bottom:12px">'
-    +     '<input type="file" id="maint-doc-file" style="flex:1;font-size:12px">'
-    +     '<button type="button" class="btn" id="maint-doc-upload-btn">Envoyer</button>'
-    +   '</div>'
-    +   '<div style="font-size:11px;color:var(--muted);margin-bottom:8px">20 Mo max par fichier. Tous les types acceptes.</div>'
-    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
+    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
+    +   '<input type="file" id="maint-doc-file" style="display:none">'
+    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
+    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+    +     '<span>Ajouter un fichier</span>'
+    +   '</button>'
+    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
     + '</div>'
     + '<div class="alert-modal-foot">'
     +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
@@ -3367,11 +3368,14 @@ async function openMaintDocsModal(code) {
   };
   await refresh();
 
-  overlay.querySelector('#maint-doc-upload-btn').addEventListener('click', async () => {
-    const inp = overlay.querySelector('#maint-doc-file');
-    const f = inp && inp.files && inp.files[0];
-    if (!f) { toast('Selectionne un fichier', true); return; }
-    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); return; }
+  const fileInp = overlay.querySelector('#maint-doc-file');
+  const addBtn = overlay.querySelector('#maint-doc-add-btn');
+  addBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
+    addBtn.disabled = true;
     const fd = new FormData();
     fd.append('file', f);
     try {
@@ -3384,10 +3388,10 @@ async function openMaintDocsModal(code) {
         toast(msg, true); return;
       }
       toast('Document ajoute');
-      inp.value = '';
+      fileInp.value = '';
       await refresh();
       if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-    } catch(e) { toast('Erreur reseau', true); }
+    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
   });
 }
 function openMaintForm(code) {
@@ -3494,10 +3498,38 @@ async function _renderMaintFormDocs(code) {
 }
 
 // Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
-function _maintTriggerDocPicker() {
+async function _maintTriggerDocPicker() {
   const codeInp = document.getElementById('maint-code');
   const codeNow = codeInp ? (codeInp.value || '').trim() : '';
   if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
+  // En creation : sauvegarde le code en base avant l'upload, pour eviter
+  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
+  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
+  if (!codeExists) {
+    const labelInp = document.getElementById('maint-label');
+    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
+    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
+    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+    const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
+    const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
+    const periodique = (rawPer === 'oui');
+    const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
+    const metrage_ref = periodique ? (document.getElementById('maint-metrage-ref')?.value || '').trim() : '';
+    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
+    try {
+      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Code enregistre - upload en cours');
+      _maintEditCode = codeNow;
+      codeInp.disabled = true;
+      await loadMaintCodes();
+      const listEl = document.getElementById('maint-form-docs-list');
+      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
+    } catch(e) {
+      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
+      return;
+    }
+  }
   const inp = document.getElementById('maint-form-doc-file');
   if (inp) inp.click();
 }
