@@ -152,7 +152,237 @@ def list_saisies(
                 ORDER BY date_operation ASC, id ASC LIMIT ? OFFSET ?""",
             params + [limit, offset]
         ).fetchall()
-    return {"total": total, "rows": [dict(r) for r in rows]}
+    # --- Mouvements stock EP/SP/EM/SM avec no_dossier ---------------------
+    stock_rows: list = []
+    try:
+        with get_db() as conn2:
+            stock_rows = _fetch_stock_saisies_saisies(
+                conn2,
+                date_from=date_from,
+                date_to=date_to,
+                operateurs=operateurs if can_view_all_prod(user) else ([user_operateur] if user_operateur else []),
+                user_email=(user.get("email") or None) if not can_view_all_prod(user) else None,
+                user_id=(user.get("id")) if not can_view_all_prod(user) else None,
+                dossiers=dossiers if can_view_all_prod(user) else None,
+                machines=machines if can_view_all_prod(user) else None,
+            )
+    except Exception:
+        # Ne pas casser /api/saisies si le join stock echoue -- degradation gracieuse.
+        stock_rows = []
+
+    rows_out = [dict(r) for r in rows]
+    for r in rows_out:
+        r["kind"] = "prod"
+    rows_out.extend(stock_rows)
+    # Retri : date_operation ASC, id ASC
+    rows_out.sort(key=lambda r: ((r.get("date_operation") or ""), str(r.get("kind") or ""), int(r.get("id") or 0)))
+
+    return {"total": total + len(stock_rows), "rows": rows_out}
+
+
+# ----------------------------------------------------------------------------
+# Timeline unifiee : mouvements MyStock EP/SP/EM/SM rattaches a un dossier
+# ----------------------------------------------------------------------------
+
+_STOCK_LABELS_S = {
+    "EP": "Entree Z1",
+    "SP": "Sortie produit fini",
+    "EM": "Entree matiere",
+    "SM": "Sortie matiere",
+}
+
+
+def _normalize_stock_pf_row(r: dict) -> Optional[dict]:
+    tm = (r.get("type_mouvement") or "").strip()
+    code = "EP" if tm == "entree" else ("SP" if tm == "sortie" else None)
+    if not code:
+        return None
+    return {
+        "id": r["id"],
+        "kind": "stock_pf",
+        "operateur": r.get("created_by") or "",
+        "operateur_nom": r.get("created_by_name") or "",
+        "date_operation": r.get("created_at") or "",
+        "operation": _STOCK_LABELS_S[code],
+        "operation_code": code,
+        "operation_severity": "info",
+        "operation_category": "stock_pf",
+        "machine": r.get("pe_machine") or "",
+        "no_dossier": r.get("no_dossier") or "",
+        "client": r.get("pe_client") or "",
+        "designation": r.get("pe_description") or "",
+        "quantite_traitee": r.get("quantite"),
+        "quantite_a_traiter": None,
+        "quantite_avant": r.get("quantite_avant"),
+        "quantite_apres": r.get("quantite_apres"),
+        "emplacement": r.get("emplacement") or "",
+        "produit_id": r.get("produit_id"),
+        "produit_reference": r.get("produit_reference") or "",
+        "produit_designation": r.get("produit_designation") or "",
+        "note": r.get("note") or "",
+        "commentaire": r.get("note") or "",
+        "service": "fabrication",
+    }
+
+
+def _normalize_stock_mp_row(r: dict) -> Optional[dict]:
+    tm = (r.get("type_mouvement") or "").strip()
+    code = "EM" if tm == "entree" else ("SM" if tm == "sortie" else None)
+    if not code:
+        return None
+    return {
+        "id": r["id"],
+        "kind": "stock_mp",
+        "operateur": r.get("created_by_email") or "",
+        "operateur_nom": r.get("created_by_name") or "",
+        "date_operation": r.get("created_at") or "",
+        "operation": _STOCK_LABELS_S[code],
+        "operation_code": code,
+        "operation_severity": "info",
+        "operation_category": "stock_mp",
+        "machine": r.get("machine") or "",
+        "no_dossier": r.get("no_dossier") or "",
+        "client": r.get("client") or "",
+        "designation": r.get("designation") or "",
+        "quantite_traitee": r.get("quantite"),
+        "quantite_a_traiter": None,
+        "quantite_avant": r.get("quantite_avant"),
+        "quantite_apres": r.get("quantite_apres"),
+        "emplacement_source": r.get("emplacement_source") or "",
+        "emplacement_dest": r.get("emplacement_dest") or "",
+        "matiere_id": r.get("matiere_id"),
+        "matiere_reference": r.get("matiere_reference") or "",
+        "matiere_designation": r.get("matiere_designation") or "",
+        "ref_bl": r.get("ref_bl") or "",
+        "laize_id": r.get("laize_id"),
+        "note": r.get("note") or "",
+        "commentaire": r.get("note") or "",
+        "service": "fabrication",
+    }
+
+
+def _fetch_stock_saisies_saisies(
+    conn,
+    *,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    operateurs: Optional[list] = None,
+    dossiers: Optional[list] = None,
+    machines: Optional[list] = None,
+    user_email: Optional[str] = None,
+    user_id: Optional[int] = None,
+    limit: int = 500,
+) -> list:
+    """Retourne les mouvements stock EP/SP/EM/SM eligibles pour /api/saisies.
+    Filtres facultatifs : plage date, operateurs, dossiers, machines.
+    """
+    result: list = []
+
+    # -- PF (mouvements_stock) -------------------------------------------------
+    pf_where = ["ms.no_dossier IS NOT NULL", "trim(ms.no_dossier) != ''"]
+    pf_args: list = []
+    if date_from:
+        pf_where.append("ms.created_at >= ?"); pf_args.append(date_from)
+    if date_to:
+        pf_where.append("ms.created_at <= ?"); pf_args.append(date_to + "T23:59:59")
+    if user_email:
+        pf_where.append("LOWER(TRIM(COALESCE(ms.created_by,''))) = LOWER(TRIM(?))")
+        pf_args.append(user_email)
+    if operateurs:
+        # Filtre par nom operateur -> jointure users pour matcher created_by (email)
+        ops = [o for o in operateurs if o]
+        if ops:
+            ph = ",".join("?" * len(ops))
+            pf_where.append(
+                f"EXISTS (SELECT 1 FROM users u2 WHERE LOWER(TRIM(u2.email)) = LOWER(TRIM(ms.created_by)) "
+                f"AND (u2.operateur_lie IN ({ph}) OR u2.nom IN ({ph})))"
+            )
+            pf_args.extend(ops); pf_args.extend(ops)
+    if dossiers:
+        ph = ",".join("?" * len(dossiers))
+        pf_where.append(f"ms.no_dossier IN ({ph})")
+        pf_args.extend(dossiers)
+    if machines:
+        ph = ",".join("?" * len(machines))
+        pf_where.append(f"m.nom IN ({ph})")
+        pf_args.extend(machines)
+
+    pf_sql = f"""
+        SELECT
+          ms.id, ms.produit_id, ms.emplacement, ms.type_mouvement, ms.quantite,
+          ms.quantite_avant, ms.quantite_apres, ms.note, ms.created_at,
+          ms.created_by, ms.created_by_name, ms.no_dossier,
+          p.reference AS produit_reference,
+          p.designation AS produit_designation,
+          pe.client AS pe_client,
+          pe.description AS pe_description,
+          m.nom AS pe_machine
+        FROM mouvements_stock ms
+        LEFT JOIN produits p ON p.id = ms.produit_id
+        LEFT JOIN planning_entries pe ON trim(pe.reference) = trim(ms.no_dossier)
+        LEFT JOIN machines m ON m.id = pe.machine_id
+        WHERE {" AND ".join(pf_where)}
+        ORDER BY ms.created_at DESC
+        LIMIT ?
+    """
+    for r in conn.execute(pf_sql, pf_args + [limit]).fetchall():
+        norm = _normalize_stock_pf_row(dict(r))
+        if norm:
+            result.append(norm)
+
+    # -- MP (mp_mouvements) ----------------------------------------------------
+    mp_where = ["mm.no_dossier IS NOT NULL", "trim(mm.no_dossier) != ''"]
+    mp_args: list = []
+    if date_from:
+        mp_where.append("mm.created_at >= ?"); mp_args.append(date_from)
+    if date_to:
+        mp_where.append("mm.created_at <= ?"); mp_args.append(date_to + "T23:59:59")
+    if user_id is not None:
+        try:
+            mp_where.append("mm.created_by = ?"); mp_args.append(int(user_id))
+        except (TypeError, ValueError):
+            pass
+    if operateurs:
+        ops = [o for o in operateurs if o]
+        if ops:
+            ph = ",".join("?" * len(ops))
+            mp_where.append(
+                f"EXISTS (SELECT 1 FROM users u3 WHERE u3.id = mm.created_by "
+                f"AND (u3.operateur_lie IN ({ph}) OR u3.nom IN ({ph})))"
+            )
+            mp_args.extend(ops); mp_args.extend(ops)
+    if dossiers:
+        ph = ",".join("?" * len(dossiers))
+        mp_where.append(f"mm.no_dossier IN ({ph})")
+        mp_args.extend(dossiers)
+    if machines:
+        ph = ",".join("?" * len(machines))
+        mp_where.append(f"mm.machine IN ({ph})")
+        mp_args.extend(machines)
+
+    mp_sql = f"""
+        SELECT
+          mm.id, mm.matiere_id, mm.type_mouvement, mm.quantite,
+          mm.quantite_avant, mm.quantite_apres, mm.ref_bl, mm.note,
+          mm.emplacement_source, mm.emplacement_dest,
+          mm.created_at, mm.created_by, mm.created_by_name,
+          mm.no_dossier, mm.machine, mm.client, mm.designation, mm.laize_id,
+          mp.reference AS matiere_reference,
+          mp.designation AS matiere_designation,
+          u.email AS created_by_email
+        FROM mp_mouvements mm
+        LEFT JOIN matieres_premieres mp ON mp.id = mm.matiere_id
+        LEFT JOIN users u ON u.id = mm.created_by
+        WHERE {" AND ".join(mp_where)}
+        ORDER BY mm.created_at DESC
+        LIMIT ?
+    """
+    for r in conn.execute(mp_sql, mp_args + [limit]).fetchall():
+        norm = _normalize_stock_mp_row(dict(r))
+        if norm:
+            result.append(norm)
+
+    return result
 
 
 @router.get("/api/saisies/reassign/fictif-sources")
