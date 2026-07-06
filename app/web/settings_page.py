@@ -6251,6 +6251,7 @@ async function syncDbV1() {
   }
 }
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
 """

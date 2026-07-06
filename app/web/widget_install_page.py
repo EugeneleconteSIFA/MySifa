@@ -228,5 +228,6 @@ body.light{
   if(btn) btn.addEventListener('click', toggleTheme);
 })();
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
