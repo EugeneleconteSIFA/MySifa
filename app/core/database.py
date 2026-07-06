@@ -5520,6 +5520,30 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 148, "mp_mouvements_prix_eur_m2")
 
+    # v149 - MyProd x MyStock : tracabilite mouvement matiere -> dossier de prod.
+    # - mp_mouvements.no_dossier   : dossier de production a l'origine du mouvement
+    # - mp_mouvements.machine      : machine concernee (snapshot pour timeline)
+    # - mp_mouvements.client       : client (snapshot pour timeline)
+    # - mp_mouvements.designation  : designation dossier (snapshot pour timeline)
+    # + index no_dossier pour l'endpoint unifie /api/fabrication/saisies-jour
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version=150 LIMIT 1"
+    ).fetchone():
+        mvt_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_mouvements)").fetchall()}
+        for col, sql in (
+            ("no_dossier",  "ALTER TABLE mp_mouvements ADD COLUMN no_dossier TEXT"),
+            ("machine",     "ALTER TABLE mp_mouvements ADD COLUMN machine TEXT"),
+            ("client",      "ALTER TABLE mp_mouvements ADD COLUMN client TEXT"),
+            ("designation", "ALTER TABLE mp_mouvements ADD COLUMN designation TEXT"),
+        ):
+            if col not in mvt_cols:
+                conn.execute(sql)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_mvt_dossier ON mp_mouvements(no_dossier)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 150, "mp_mouvements_dossier_link")
+
     # v149 - Documents maintenance : pieces jointes attachees a chaque code
     # (contrôle ou intervention). Fichiers stockes sur disque sous
     # data/uploads/maintenance_docs/{code}/, metadata en base.
