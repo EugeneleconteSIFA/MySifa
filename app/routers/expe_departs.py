@@ -2187,7 +2187,7 @@ def _trouver_ligne_tarif(
                   AND zone_valeur=?
                   AND actif=1
                   AND tranche_min <= ?
-                  AND (tranche_max IS NULL OR tranche_max > ?)
+                  AND (tranche_max IS NULL OR tranche_max >= ?)
                 ORDER BY tranche_min DESC
                 LIMIT 1
                 """,
@@ -2250,7 +2250,7 @@ def _trouver_toutes_lignes_tarif(
                   AND zone_valeur=?
                   AND actif=1
                   AND tranche_min <= ?
-                  AND (tranche_max IS NULL OR tranche_max > ?)
+                  AND (tranche_max IS NULL OR tranche_max >= ?)
                 ORDER BY tranche_min DESC
                 LIMIT 1
                 """,
