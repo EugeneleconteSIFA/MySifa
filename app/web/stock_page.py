@@ -4861,7 +4861,7 @@ function mpCtx(catOrMatiere) {
 }
 function mpIsBobineCategory(catOrMatiere) {
   const c = mpCtx(catOrMatiere).categorie;
-  return c === 'frontal' || c === 'glassine';
+  return c === 'frontal' || c === 'glassine' || c === 'complexe';
 }
 function mpIsGlassineCategory(catOrMatiere) {
   return mpCtx(catOrMatiere).categorie === 'glassine';
@@ -5175,6 +5175,9 @@ function buildMpMvtHistory(mouvements, matiere) {
           const empl = mpMvtEmplacementLabel(m);
           const noteParts = [];
           if (m.ref_bl) noteParts.push('BL ' + m.ref_bl);
+          if (m.prix_eur_m2 != null && m.prix_eur_m2 > 0) {
+            noteParts.push('Prix ' + parseFloat(m.prix_eur_m2).toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²');
+          }
           if (m.note) noteParts.push(m.note);
           return el('div', { cls: 'mvt-row' },
             el('div', { cls: 'mvt-icon ' + t }, icons[t] || '·'),
@@ -5283,13 +5286,20 @@ function buildMatiereDetail() {
         )
       ));
       const tbody = el('tbody');
-      const prix_m2 = parseFloat(m.prix_eur_m2 || 0);
+      const prix_m2_matiere = parseFloat(m.prix_eur_m2 || 0);
       const metres = parseFloat(m.metres_lineaires_par_bobine || 0);
+      const prixParLaize = !!m.prix_par_laize;
       m.stock_par_laize.forEach(spl => {
+        const prix_m2 = prixParLaize
+          ? parseFloat(spl.prix_eur_m2 != null ? spl.prix_eur_m2 : 0)
+          : prix_m2_matiere;
         const valoBobine = (parseFloat(spl.valeur_mm || 0) / 1000) * metres * prix_m2;
         const valo = valoBobine * parseFloat(spl.quantite || 0);
         tbody.appendChild(el('tr', { style: 'border-bottom:1px solid var(--border)' },
-          el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' }, spl.label || (spl.valeur_mm + ' mm')),
+          el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' },
+            (spl.label || (spl.valeur_mm + ' mm')) + (prixParLaize && prix_m2 > 0
+              ? ' · ' + prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²'
+              : '')),
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums' },
             fN(spl.quantite) + ' bob.'),
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (valo > 0 ? 'var(--text)' : 'var(--muted)') },
@@ -5298,7 +5308,9 @@ function buildMatiereDetail() {
       });
       tbl.appendChild(tbody);
       const paramsLine = el('div', { style: 'font-size:12px;color:var(--text2);margin-top:8px' },
-        'Prix m² : ', el('strong', null, prix_m2 > 0 ? prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €' : 'non défini'),
+        prixParLaize
+          ? el('span', null, 'Tarification : ', el('strong', null, 'prix par laize'))
+          : el('span', null, 'Prix m² : ', el('strong', null, prix_m2_matiere > 0 ? prix_m2_matiere.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €' : 'non défini')),
         ' · Métrage bobine : ', el('strong', null, metres > 0 ? metres.toLocaleString('fr-FR') + ' m' : 'non défini'),
       );
       laizeDetail = el('div', {
@@ -7547,8 +7559,31 @@ function appendMatiereRefEditFields(parent, item) {
   metresInp.value = String(item.metres_lineaires_par_bobine != null ? item.metres_lineaires_par_bobine : '');
   const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
   prixM2Inp.value = String(item.prix_eur_m2 != null ? item.prix_eur_m2 : '');
+  const prixM2Field = el('div', { cls: 'mp-field' },
+    el('label', null, 'Prix au m² (€) — commun à toutes les laizes'), prixM2Inp);
+  // Radio « prix unique / prix par laize »
+  const prixModeName = 'prixmode-' + item.id;
+  const prixModeUniInp = el('input', { type: 'radio', name: prixModeName, value: '0' });
+  const prixModeLaiInp = el('input', { type: 'radio', name: prixModeName, value: '1' });
+  const isPrixParLaize = !!item.prix_par_laize;
+  if (isPrixParLaize) prixModeLaiInp.checked = true; else prixModeUniInp.checked = true;
+  const prixModeField = el('div', { cls: 'mp-field' },
+    el('label', null, 'Tarification'),
+    el('div', { style: 'display:flex;gap:14px;flex-wrap:wrap;margin-top:4px' },
+      el('label', { style: 'display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)' },
+        prixModeUniInp, el('span', null, 'Prix unique')),
+      el('label', { style: 'display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)' },
+        prixModeLaiInp, el('span', null, 'Prix par laize')),
+    ),
+  );
+  // Map des prix pré-remplis par laize_id
+  const laizePriceInputs = {};
+  const laizePriceMap = {};
+  (item.stock_par_laize || []).forEach(spl => {
+    if (spl && spl.prix_eur_m2 != null) laizePriceMap[spl.laize_id] = String(spl.prix_eur_m2);
+  });
   const laizeChecks = el('div', { cls: 'mp-laize-grid',
-    style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
+    style: 'display:flex;flex-direction:column;gap:6px;margin-top:6px' });
   const currentLaizeIds = new Set((item.stock_par_laize || []).map(s => s.laize_id));
   (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id)).forEach(l => {
     const lid = 'editmat-laize-' + item.id + '-' + l.id;
@@ -7559,20 +7594,43 @@ function appendMatiereRefEditFields(parent, item) {
       style: 'display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid ' + (inp.checked ? 'var(--accent)' : 'var(--border)') + ';border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;background:' + (inp.checked ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);user-select:none;transition:border-color .15s,background .15s;line-height:1' },
       inp, el('span', null, l.label),
     );
+    const priceInp = el('input', {
+      attrs: { type: 'number', min: '0', step: '0.0001', placeholder: '€/m²' },
+      style: 'width:90px;padding:4px 8px;font-size:12px',
+    });
+    priceInp.value = laizePriceMap[l.id] || '';
+    laizePriceInputs[l.id] = priceInp;
+    const priceWrap = el('span', {
+      cls: 'laize-price-wrap',
+      style: 'display:' + (isPrixParLaize ? 'inline-flex' : 'none') + ';align-items:center;gap:4px;font-size:12px;color:var(--muted)',
+    }, priceInp, el('span', null, '€/m²'));
+    const row = el('div', { cls: 'laize-row', style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' }, lbl, priceWrap);
     inp.addEventListener('change', () => {
       lbl.style.borderColor = inp.checked ? 'var(--accent)' : 'var(--border)';
       lbl.style.background = inp.checked ? 'var(--accent-bg)' : 'var(--bg)';
     });
-    laizeChecks.appendChild(lbl);
+    laizeChecks.appendChild(row);
   });
+  // Bascule affichage prix unique vs prix par laize
+  function applyPrixMode() {
+    const parLaize = prixModeLaiInp.checked;
+    prixM2Field.style.display = parLaize ? 'none' : '';
+    laizeChecks.querySelectorAll('.laize-price-wrap').forEach(w => {
+      w.style.display = parLaize ? 'inline-flex' : 'none';
+    });
+  }
+  prixModeUniInp.addEventListener('change', applyPrixMode);
+  prixModeLaiInp.addEventListener('change', applyPrixMode);
   laizeWrap.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Mètres linéaires par bobine'), metresInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Prix au m² (€)'), prixM2Inp),
+    prixModeField,
+    prixM2Field,
     el('div', { cls: 'mp-field' },
       el('label', null, 'Laizes disponibles'),
       laizeChecks,
     ),
   );
+  applyPrixMode();
   // Bloc conditionnement (carton / adhésif / mandrin) — unités par palette
   const hasCond = mpHasConditionnement(item.categorie);
   const uppWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } });
@@ -7603,7 +7661,7 @@ function appendMatiereRefEditFields(parent, item) {
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -7620,6 +7678,22 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
         .map(i => parseInt(i.value, 10)).filter(x => x > 0);
       const metres = parseFloat((fields.metresInp.value || '').replace(',', '.')) || 0;
       const prix = parseFloat((fields.prixM2Inp.value || '').replace(',', '.')) || 0;
+      // Mode prix : 0 = unique, 1 = par laize
+      const prixParLaize = fields.prixModeLaiInp && fields.prixModeLaiInp.checked ? 1 : 0;
+      // Prix par laize : uniquement pour les laizes sélectionnées
+      const laizePrices = {};
+      if (prixParLaize && fields.laizePriceInputs) {
+        selectedLaizeIds.forEach(lid => {
+          const inp = fields.laizePriceInputs[lid];
+          const raw = inp ? (inp.value || '').replace(',', '.').trim() : '';
+          if (raw === '') {
+            laizePrices[lid] = null;
+          } else {
+            const v = parseFloat(raw);
+            if (!isNaN(v) && v >= 0) laizePrices[lid] = v;
+          }
+        });
+      }
       await api('/api/stock/matieres/' + item.id + '/laizes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -7627,6 +7701,8 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
           laize_ids: selectedLaizeIds,
           metres_lineaires_par_bobine: metres,
           prix_eur_m2: prix,
+          prix_par_laize: prixParLaize,
+          laize_prices: laizePrices,
         }),
       });
       await loadMatieresIncompleteCount();
@@ -8184,6 +8260,33 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
     const emplField = hideEmpl ? null : buildMpEmplacementField();
     const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
     const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
+    // Prix €/m² de la réception — uniquement pour bobines laizées
+    const showPrix = isLaizeeCat && !!mat;
+    const prixInp = showPrix ? el('input', {
+      attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' }
+    }) : null;
+    const prixHint = showPrix ? el('div', { cls: 'mp-hint',
+      style: 'font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4' }, '') : null;
+    function computeCurrentPrix() {
+      if (!mat) return 0;
+      const parLaize = !!mat.prix_par_laize;
+      if (parLaize && S.mpModal.laizeId && Array.isArray(mat.stock_par_laize)) {
+        const spl = mat.stock_par_laize.find(s => s.laize_id === S.mpModal.laizeId);
+        return spl && spl.prix_eur_m2 != null ? parseFloat(spl.prix_eur_m2) : 0;
+      }
+      return parseFloat(mat.prix_eur_m2 || 0);
+    }
+    function refreshPrixHint() {
+      if (!prixHint) return;
+      const p = computeCurrentPrix();
+      const modeTxt = mat.prix_par_laize ? ' (par laize)' : ' (matière)';
+      if (p > 0) {
+        prixHint.textContent = 'Prix courant' + modeTxt + ' : ' + p.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+          + ' €/m². Laisser vide pour le conserver, sinon le PMP sera recalculé automatiquement.';
+      } else {
+        prixHint.textContent = 'Aucun prix courant enregistré. Si tu saisis un prix, il devient le prix de référence.';
+      }
+    }
     if (emplField) body.appendChild(emplField.wrap);
     body.appendChild(el('div', { cls: 'mp-field' },
       el('label', null, 'Référence BL / Fournisseur'),
@@ -8193,15 +8296,36 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
       el('label', null, mpQuantiteFieldLabel(mpCat)),
       qInp,
     ));
-    S.mpModal.getBody = () => ({
-      matiere_id: S.mpModal.matiereId,
-      type_mouvement: 'entree',
-      quantite: parseFloat(qInp.value),
-      ref_bl: (blInp.value || '').trim() || null,
-      note: null,
-      emplacement_source: null,
-      emplacement_dest: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
-    });
+    if (prixInp) {
+      body.appendChild(el('div', { cls: 'mp-field' },
+        el('label', null, 'Prix €/m² de cette réception'),
+        prixInp,
+        prixHint,
+      ));
+      refreshPrixHint();
+      // Le hint dépend de la laize choisie — on la met à jour au change
+      const laizeSelEl = body.querySelector('#mp-modal-laize-select');
+      if (laizeSelEl) laizeSelEl.addEventListener('change', refreshPrixHint);
+    }
+    S.mpModal.getBody = () => {
+      const b = {
+        matiere_id: S.mpModal.matiereId,
+        type_mouvement: 'entree',
+        quantite: parseFloat(qInp.value),
+        ref_bl: (blInp.value || '').trim() || null,
+        note: null,
+        emplacement_source: null,
+        emplacement_dest: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
+      };
+      if (prixInp) {
+        const raw = (prixInp.value || '').replace(',', '.').trim();
+        if (raw !== '') {
+          const v = parseFloat(raw);
+          if (!isNaN(v) && v >= 0) b.prix_eur_m2 = v;
+        }
+      }
+      return b;
+    };
     S.mpModal.validate = () => {
       const q = parseFloat(qInp.value);
       if (!S.mpModal.matiereId) return 'Matière obligatoire.';
@@ -8210,6 +8334,11 @@ function renderMpMouvementModal(type, matiere, categorieFilter) {
         if (emplErr) return emplErr;
       }
       if (!q || q <= 0) return 'Quantité invalide.';
+      if (prixInp && prixInp.value) {
+        const raw = prixInp.value.replace(',', '.').trim();
+        const v = parseFloat(raw);
+        if (isNaN(v) || v < 0) return 'Prix €/m² invalide.';
+      }
       return null;
     };
   } else if (typeMvt === 'sortie') {
