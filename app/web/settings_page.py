@@ -3598,6 +3598,7 @@ function _alertDefaults(existing) {
     };
   });
   return {
+    description: (typeof p.description === 'string') ? p.description : '',
     trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
     target: { machines: machines },
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
@@ -3649,7 +3650,13 @@ function _renderAlertFormFields(params, opts) {
     ? '<div class="alert-field"><label class="alert-field-label">Titre <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code</span></label><input type="text" class="alert-field-input" value="' + escAttr(opts.nomValue || '') + '" disabled></div>'
     : '<div class="alert-field"><label class="alert-field-label">Titre de l\'alerte <span style="color:var(--danger)">*</span></label><input type="text" id="af-nom" class="alert-field-input" maxlength="120" placeholder="Ex. Contrôle qualité Cohésio 1" value="' + escAttr(opts.nomValue || '') + '"></div>';
 
+  const descBlock = '<div class="alert-field">'
+    +   '<label class="alert-field-label">Description <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— contexte affiché à l\'opérateur</span></label>'
+    +   '<textarea id="af-description" class="alert-field-input" rows="2" maxlength="800" placeholder="Ex. Vérifier la tension Errepi et le serrage de la bobine — noter la valeur exacte pour analyse.">' + esc(d.description || '') + '</textarea>'
+    +   '<div class="alert-field-help">Optionnel. Affiché sous le titre de l\'alerte quand elle apparaît chez l\'opérateur.</div>'
+    + '</div>';
   return nomBlock
+    + descBlock
     + '<div class="alert-field">'
     +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
     +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
@@ -3996,7 +4003,10 @@ function _afReadParams() {
       _tgt = { machines: ms };
     }
   }
+  const descEl = document.getElementById('af-description');
+  const descVal = descEl ? (descEl.value || '').trim() : '';
   return {
+    description: descVal.slice(0, 800),
     trigger: trig,
     target: _tgt,
     validation: {
