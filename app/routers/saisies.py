@@ -200,7 +200,7 @@ def _normalize_stock_pf_row(r: dict) -> Optional[dict]:
     return {
         "id": r["id"],
         "kind": "stock_pf",
-        "operateur": r.get("created_by") or "",
+        "operateur": r.get("created_by_name") or r.get("created_by") or "",
         "operateur_nom": r.get("created_by_name") or "",
         "date_operation": r.get("created_at") or "",
         "operation": _STOCK_LABELS_S[code],
@@ -233,7 +233,7 @@ def _normalize_stock_mp_row(r: dict) -> Optional[dict]:
     return {
         "id": r["id"],
         "kind": "stock_mp",
-        "operateur": r.get("created_by_email") or "",
+        "operateur": r.get("created_by_name") or r.get("created_by_email") or "",
         "operateur_nom": r.get("created_by_name") or "",
         "date_operation": r.get("created_at") or "",
         "operation": _STOCK_LABELS_S[code],
@@ -311,7 +311,9 @@ def _fetch_stock_saisies_saisies(
         SELECT
           ms.id, ms.produit_id, ms.emplacement, ms.type_mouvement, ms.quantite,
           ms.quantite_avant, ms.quantite_apres, ms.note, ms.created_at,
-          ms.created_by, ms.created_by_name, ms.no_dossier,
+          ms.created_by,
+          COALESCE(NULLIF(TRIM(ms.created_by_name),''), u.nom) AS created_by_name,
+          ms.no_dossier,
           p.reference AS produit_reference,
           p.designation AS produit_designation,
           pe.client AS pe_client,
@@ -321,6 +323,7 @@ def _fetch_stock_saisies_saisies(
         LEFT JOIN produits p ON p.id = ms.produit_id
         LEFT JOIN planning_entries pe ON trim(pe.reference) = trim(ms.no_dossier)
         LEFT JOIN machines m ON m.id = pe.machine_id
+        LEFT JOIN users u ON LOWER(TRIM(u.email)) = LOWER(TRIM(COALESCE(ms.created_by,'')))
         WHERE {" AND ".join(pf_where)}
         ORDER BY ms.created_at DESC
         LIMIT ?
@@ -365,7 +368,8 @@ def _fetch_stock_saisies_saisies(
           mm.id, mm.matiere_id, mm.type_mouvement, mm.quantite,
           mm.quantite_avant, mm.quantite_apres, mm.ref_bl, mm.note,
           mm.emplacement_source, mm.emplacement_dest,
-          mm.created_at, mm.created_by, mm.created_by_name,
+          mm.created_at, mm.created_by,
+          COALESCE(NULLIF(TRIM(mm.created_by_name),''), u.nom) AS created_by_name,
           mm.no_dossier, mm.machine, mm.client, mm.designation, mm.laize_id,
           mp.reference AS matiere_reference,
           mp.designation AS matiere_designation,

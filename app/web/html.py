@@ -142,34 +142,78 @@ body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 1
    Un train composé des icônes des tuiles du portail traverse l'écran en suivant
    une trajectoire courbe aléatoire. Passe derrière la carte de connexion
    (z-index 0 vs .login-page z-index 1). Cyan accent, ne gêne pas les clics. */
-.login-train-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.login-train-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:visible}
 .login-box{position:relative;z-index:2} /* passe devant le layer d'animation */
 .login-wagon{
   position:absolute;top:0;left:0;
+  width:0;height:0; /* point de trajet — les enfants sont positionnés autour */
+  pointer-events:none;
+  offset-rotate:0deg;
+  opacity:0;
+  will-change:opacity,offset-distance;
+  animation-name:login-wagon-travel;
+  animation-timing-function:linear; /* écart constant entre wagons */
+  animation-fill-mode:forwards;
+  animation-iteration-count:1;
+}
+.login-wagon-tile{
+  position:absolute;top:0;left:0;
   width:42px;height:42px;
-  margin:-21px 0 0 -21px; /* centre le point de trajet sur l'icône */
+  margin:-21px 0 0 -21px;
   display:flex;align-items:center;justify-content:center;
   background:var(--card);
   border:1px solid var(--border);
   border-radius:11px;
   color:var(--accent);
-  opacity:0;
-  offset-rotate:0deg;
-  will-change:transform,opacity,offset-distance;
-  animation-name:login-wagon-travel;
-  animation-timing-function:linear; /* linéaire = écart constant entre wagons */
-  animation-fill-mode:forwards;
-  animation-iteration-count:1;
   box-shadow:0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(34,211,238,.18);
+  transform:scale(1);
+  transform-origin:center;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  pointer-events:auto;
+  cursor:pointer;
 }
-.login-wagon svg{width:22px;height:22px;display:block}
+.login-wagon-tile svg{width:22px;height:22px;display:block}
+body.light .login-wagon-tile{box-shadow:0 6px 16px rgba(15,23,42,.10), 0 0 0 1px rgba(8,145,178,.20)}
+.login-wagon-tile:hover{
+  transform:scale(1.22);
+  border-color:var(--accent);
+  box-shadow:0 10px 26px rgba(0,0,0,.42), 0 0 0 2px rgba(34,211,238,.45);
+}
+body.light .login-wagon-tile:hover{
+  box-shadow:0 10px 26px rgba(15,23,42,.18), 0 0 0 2px rgba(8,145,178,.35);
+}
+.login-wagon-tip{
+  position:absolute;
+  top:34px;left:0;
+  transform:translateX(-50%);
+  min-width:170px;max-width:240px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:9px 13px;
+  text-align:center;
+  box-shadow:0 10px 26px rgba(0,0,0,.42);
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transition:opacity .18s ease, visibility .18s ease, transform .18s ease;
+  z-index:10;
+}
+.login-wagon-tile:hover ~ .login-wagon-tip{
+  opacity:1;
+  visibility:visible;
+  transform:translateX(-50%) translateY(4px);
+}
+.login-wagon-tip .tip-name{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px;white-space:nowrap}
+.login-wagon-tip .tip-desc{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+/* Quand un wagon est survolé → tout le train se fige */
+.login-train-layer.paused .login-wagon{animation-play-state:paused}
 @keyframes login-wagon-travel{
-  0%   {offset-distance:0%;   opacity:0;   transform:scale(.7)}
-  6%   {opacity:.95;          transform:scale(1)}
-  94%  {opacity:.95;          transform:scale(1)}
-  100% {offset-distance:100%; opacity:0;   transform:scale(.7)}
+  0%   {offset-distance:0%;   opacity:0}
+  6%   {offset-distance:6%;   opacity:.95}
+  94%  {offset-distance:94%;  opacity:.95}
+  100% {offset-distance:100%; opacity:0}
 }
-body.light .login-wagon{box-shadow:0 6px 16px rgba(15,23,42,.10), 0 0 0 1px rgba(8,145,178,.20)}
 @media (prefers-reduced-motion: reduce){
   .login-train-layer{display:none}
 }
@@ -2885,6 +2929,7 @@ function icon(name,size=16){
     'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
     'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     'tool': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    'toolbox': '<rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>',
     'credit-card': '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
     'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
@@ -4591,7 +4636,7 @@ function renderPortal(){
       draggable:'true',
       onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/maintenance';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('tool',28)),
+      h('div',{className:'portal-app-icon'},iconEl('toolbox',28)),
       h('div',{className:'portal-app-name'},'Maintenance'),
       h('div',{className:'portal-app-desc'},'Suivi et planification (en cours)')
     )});
@@ -8421,23 +8466,38 @@ function renderLogin(){
 function startLoginTrainAnimation(){
   const layer=document.getElementById('login-train-layer');
   if(!layer) return;
-  if(layer.dataset.trainOn==='1') return; // déjà en cours sur ce layer
+  if(layer.dataset.trainOn==='1') return;
   layer.dataset.trainOn='1';
-  const ICONS=['edit','wrench','package','printer','calculator','truck','users','file-text','clipboard','palette','shield-check','tool'];
-  const SPACING_PX=72;   // écart constant entre chaque wagon (px sur la trajectoire)
-  const WAGON_SIZE=42;   // synchro avec le CSS
+  layer._paused=false;
+  // Métadonnées de chaque icône : nom d'appli + description (miroir du portail).
+  const APPS={
+    'edit':          {name:'Saisie Prod',    desc:'Saisie opérateur — machine'},
+    'wrench':        {name:'MyProd',         desc:'Suivi de production & Planning'},
+    'package':       {name:'MyStock',        desc:'Gestion des stocks produits'},
+    'printer':       {name:'MyPrint',        desc:'Étiquettes de traçabilité'},
+    'calculator':    {name:'MyCompta',       desc:'Comptabilité — accès réservé'},
+    'truck':         {name:'MyExpé',         desc:'Expédition & Suivi'},
+    'users':         {name:'Planning RH',    desc:'Planning personnel & Congés'},
+    'file-text':     {name:'Coûts matières', desc:'Matières, produits et calcul €/m²'},
+    'clipboard':     {name:'MyAO',           desc:"Appels d'offre fournisseurs"},
+    'palette':       {name:'MyBAT',          desc:'Bons À Tirer — suivi client'},
+    'shield-check':  {name:'MyQualité',      desc:'Non-conformités & audits client'},
+    'tool':          {name:'Maintenance',    desc:'Suivi et planification'}
+  };
+  const ICONS=Object.keys(APPS);
+  const SPACING_PX=72;
+  const WAGON_SIZE=42;
 
   function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
   function pickSide(){return ['top','right','bottom','left'][Math.floor(Math.random()*4)];}
   function pointOnSide(side,W,H){
-    const off=WAGON_SIZE*2; // hors écran pour entrer/sortir proprement
+    const off=WAGON_SIZE*2;
     const inset=80;
     if(side==='top')    return [inset+Math.random()*(W-inset*2), -off];
     if(side==='bottom') return [inset+Math.random()*(W-inset*2),  H+off];
     if(side==='left')   return [-off, inset+Math.random()*(H-inset*2)];
-    /* right */          return [W+off, inset+Math.random()*(H-inset*2)];
+    return [W+off, inset+Math.random()*(H-inset*2)];
   }
-  // Mesure la longueur du chemin SVG (nécessaire pour un espacement constant)
   function measurePath(d){
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('width','0');svg.setAttribute('height','0');
@@ -8449,46 +8509,60 @@ function startLoginTrainAnimation(){
     document.body.removeChild(svg);
     return L||1000;
   }
+  function escHtmlLocal(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+  function makeWagon(name){
+    const w=document.createElement('span');
+    w.className='login-wagon';
+    const tile=document.createElement('span');
+    tile.className='login-wagon-tile';
+    tile.setAttribute('aria-label',APPS[name].name);
+    tile.innerHTML=icon(name,22);
+    const tip=document.createElement('span');
+    tip.className='login-wagon-tip';
+    tip.innerHTML='<span class="tip-name">'+escHtmlLocal(APPS[name].name)+'</span><span class="tip-desc">'+escHtmlLocal(APPS[name].desc)+'</span>';
+    // Pause / reprise du train + agrandissement + apparition tip via CSS
+    tile.addEventListener('mouseenter',()=>{layer.classList.add('paused');layer._paused=true;});
+    tile.addEventListener('mouseleave',()=>{layer.classList.remove('paused');layer._paused=false;});
+    w.appendChild(tile);
+    w.appendChild(tip);
+    return w;
+  }
 
   function spawnTrain(){
     const stillHere=document.getElementById('login-train-layer');
-    if(!stillHere || stillHere!==layer){ return; } // page démontée
+    if(!stillHere || stillHere!==layer){ return; }
+    if(layer._paused){ setTimeout(spawnTrain,400); return; } // ne pas empiler pendant le hover
     const W=window.innerWidth, H=window.innerHeight;
     const entry=pickSide();
     let exit=pickSide();
     if(exit===entry) exit=({top:'bottom',bottom:'top',left:'right',right:'left'})[entry];
     const [x1,y1]=pointOnSide(entry,W,H);
     const [x2,y2]=pointOnSide(exit,W,H);
-    // Point de contrôle: proche centre, décalé aléatoirement → arc de cercle
     const cx=W*0.5 + (Math.random()-0.5)*W*0.5;
     const cy=H*0.5 + (Math.random()-0.5)*H*0.5;
     const pathStr='M '+x1.toFixed(0)+' '+y1.toFixed(0)+' Q '+cx.toFixed(0)+' '+cy.toFixed(0)+' '+x2.toFixed(0)+' '+y2.toFixed(0);
     const pathLen=measurePath(pathStr);
-    // Vitesse cible: ~90 à 130 px/s (lent)
-    const speed=90+Math.random()*40;
-    const duration=Math.round(pathLen/speed*1000); // ms
-    // Espacement temporel qui donne SPACING_PX constant, tout timing linéaire.
+    const speed=90+Math.random()*40; // 90-130 px/s
+    const duration=Math.round(pathLen/speed*1000);
     const wagonGap=Math.round(SPACING_PX/pathLen*duration);
     const wagons=shuffle(ICONS.slice());
     wagons.forEach((name,i)=>{
-      const w=document.createElement('span');
-      w.className='login-wagon';
+      const w=makeWagon(name);
       w.style.offsetPath='path("'+pathStr+'")';
-      w.style.motionPath=w.style.offsetPath; // legacy fallback
+      w.style.motionPath=w.style.offsetPath;
       w.style.animationDuration=duration+'ms';
       w.style.animationDelay=(i*wagonGap)+'ms';
-      w.innerHTML=icon(name,22);
       layer.appendChild(w);
-      const life=duration+i*wagonGap+400;
-      setTimeout(()=>{if(w.parentNode)w.parentNode.removeChild(w);},life);
+      // Removal via animationend (respecte le pause). Fallback timeout large au cas où.
+      w.addEventListener('animationend',()=>{if(w.parentNode)w.parentNode.removeChild(w);},{once:true});
+      const safety=duration+i*wagonGap+120000; // 2 min de marge en cas de pause longue
+      setTimeout(()=>{if(w.parentNode)w.parentNode.removeChild(w);},safety);
     });
-    // Prochain train: on attend que le dernier wagon soit sur le point de sortir,
-    // avec un jitter → jamais deux trains complets superposés, timing variable.
     const totalTrainTime=duration + wagons.length*wagonGap;
     const nextWait=Math.max(1200, totalTrainTime - 1500 + Math.random()*3500);
     setTimeout(spawnTrain,nextWait);
   }
-  // Premier train après un petit délai
   setTimeout(spawnTrain, 900);
 }
 
