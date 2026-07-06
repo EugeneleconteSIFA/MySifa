@@ -65,6 +65,14 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
+/* ── Toggle Colonnes produit dans l'historique des contrôles ── */
+.ctrl-extra-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s;user-select:none}
+.ctrl-extra-toggle:hover{border-color:var(--accent);color:var(--text)}
+.ctrl-extra-toggle-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .15s}
+.ctrl-extra-toggle-on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.ctrl-extra-toggle-on .ctrl-extra-toggle-dot{background:var(--accent)}
+.ctrl-extra-toggle-state{font-weight:700;letter-spacing:.4px}
+
 /* ── Colonne Dossier dans l'historique des contrôles ── */
 .col-dossier{white-space:nowrap}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
@@ -819,6 +827,11 @@ body.light .toast.info{background:#fff;color:var(--text)}
           <div class="ops-list-head">
             <div class="ops-list-title">Historique des contrôles</div>
             <div class="ops-list-head-right">
+              <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
+                <span class="ctrl-extra-toggle-label">Colonnes produit</span>
+                <span class="ctrl-extra-toggle-dot" id="ctrl-extra-toggle-dot"></span>
+                <span class="ctrl-extra-toggle-state" id="ctrl-extra-toggle-state">OFF</span>
+              </button>
               <div class="ops-list-count" id="ctrl-count">0 contrôle</div>
               <button type="button" class="ops-btn-add" onclick="openCtrlModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -3878,7 +3891,28 @@ function renderOpsTypes(){
 // Historique des contrôles
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
+const CTRL_EXTRA_KEY = 'mysifa_ctrl_show_extra_v1';
 const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {} };
+
+// Toggle "Colonnes produit" : par defaut off, persistance localStorage.
+function getShowExtraCols(){
+  try { return localStorage.getItem(CTRL_EXTRA_KEY) === '1'; } catch(e){ return false; }
+}
+function setShowExtraCols(v){
+  try { localStorage.setItem(CTRL_EXTRA_KEY, v ? '1' : '0'); } catch(e){}
+}
+function updateExtraToggleUI(){
+  const on = getShowExtraCols();
+  const state = document.getElementById('ctrl-extra-toggle-state');
+  const btn = document.getElementById('ctrl-extra-toggle');
+  if(state) state.textContent = on ? 'ON' : 'OFF';
+  if(btn) btn.classList.toggle('ctrl-extra-toggle-on', on);
+}
+function toggleExtraCols(){
+  setShowExtraCols(!getShowExtraCols());
+  updateExtraToggleUI();
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
 
 function loadCtrl(){
   try{
@@ -4378,6 +4412,7 @@ function renderCtrl(){
   }
 
   // Reconstruire le thead
+  const showExtra = getShowExtraCols();
   const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
   if(thead){
     const sortIco = (col) => {
@@ -4396,15 +4431,17 @@ function renderCtrl(){
       const unitSuffix = (col.type === 'value' && col.unit) ? ' (' + escHtml(col.unit) + ')' : '';
       h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
     }
-    h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
-    h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
-    h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
+    if(showExtra){
+      h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
+      h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
+      h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
+    }
     h += '<th>Commentaires</th>';
     h += '<th aria-label="Actions"></th>';
     thead.innerHTML = h;
   }
 
-  const totalCols = 6 + (singleType ? 0 : 1) + extraCols.length + 2;  // date+machine+operateur+refproduit+adhesif+glassine (+type?) + extra + commentaires + actions
+  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 3 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
@@ -4430,19 +4467,21 @@ function renderCtrl(){
         }
         cells += '<td>' + escHtml(val) + '</td>';
       }
-      // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
-      // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
-      // technique complète du dossier.
-      const _di = c._dossier_info || null;
-      const _refP = _di ? (_di.ref_produit || _di.ref_produit_norm || '') : '';
-      const _adh  = _di ? (_di.adhesif || '') : '';
-      const _gla  = _di ? (_di.glassine || '') : '';
-      const _refCell = (c._source === 'alert' && _refP)
-        ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_refP) + '</span>'
-        : '<span class="ctrl-dossier-empty">—</span>';
-      cells += '<td class="col-dossier">' + _refCell + '</td>';
-      cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
-      cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
+      if(showExtra){
+        // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
+        // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
+        // technique complète du dossier.
+        const _di = c._dossier_info || null;
+        const _refP = _di ? (_di.ref_produit || _di.ref_produit_norm || '') : '';
+        const _adh  = _di ? (_di.adhesif || '') : '';
+        const _gla  = _di ? (_di.glassine || '') : '';
+        const _refCell = (c._source === 'alert' && _refP)
+          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_refP) + '</span>'
+          : '<span class="ctrl-dossier-empty">—</span>';
+        cells += '<td class="col-dossier">' + _refCell + '</td>';
+        cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
+        cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
+      }
       // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
       // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
       const commentText = singleType
@@ -4719,6 +4758,7 @@ async function loadMe(){
     if(typeof renderMaintCards === 'function') renderMaintCards();
   });
   loadCtrl();
+  updateExtraToggleUI();
   loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
