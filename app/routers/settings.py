@@ -1561,6 +1561,14 @@ def _validate_alert_params(params: dict) -> dict:
         raise HTTPException(422, "params doit être un objet JSON.")
     out = {}
 
+    # description : contexte affiche a l'operateur au moment du declenchement.
+    # Optionnelle, plafonnee a 800 caracteres pour rester lisible.
+    desc_in = params.get("description")
+    if isinstance(desc_in, str):
+        desc_clean = desc_in.strip()[:800]
+        if desc_clean:
+            out["description"] = desc_clean
+
     # trigger
     trig_in = params.get("trigger") or {}
     if not isinstance(trig_in, dict):

@@ -5564,6 +5564,59 @@ async def import_valorisation_pf(request: Request, file: UploadFile = File(...))
     }
 
 
+@router.get("/api/stock/valorisation/export-pdf")
+def export_valorisation_pdf(
+    request: Request,
+    date: str | None = None,
+    type: str = "sommaire",
+):
+    """Export PDF de la valorisation (MP + PF).
+
+    Query params :
+      - date : YYYY-MM-DD optionnel → snapshot à cette date
+      - type : lignes | sommaire | insights (par défaut sommaire)
+
+    Réservé Direction + superadmin (contient des chiffres réels/avec charges)."""
+    user = require_valorisation_usd_admin(request)
+    snapshot_date = _parse_snapshot_date(date)
+    type_vue = str(type or "sommaire").strip().lower()
+    if type_vue not in ("lignes", "sommaire", "insights"):
+        raise HTTPException(400, "Type de vue PDF invalide (attendu : lignes | sommaire | insights).")
+    with get_db() as conn:
+        items_mp = _valorisation_query_at_date(conn, snapshot_date)
+        items_pf = _pf_valo_query_at_date(conn, snapshot_date)
+        taux = _get_taux_eur_usd(conn)
+        tax_pct = _get_import_tax_pct(conn)
+        c_full, c_half, q_full, q_half = _get_container_params(conn)
+        charge = _get_charge_production_pct(conn)
+        storage = _get_storage_fees_pct(conn)
+    _enrich_items_with_usd(items_mp, taux, tax_pct, c_full, c_half, q_full, q_half)
+    summary_mp = _valorisation_summary(items_mp, taux, tax_pct, c_full, c_half, q_full, q_half)
+    _pf_enrich_charges(items_pf, charge_prod_pct=charge, storage_fees_pct=storage)
+    summary_pf = _pf_valo_summary(items_pf, charge_prod_pct=charge, storage_fees_pct=storage)
+    try:
+        from app.services.valorisation_pdf import build_valorisation_pdf
+    except ImportError as e:
+        raise HTTPException(500, f"Générateur PDF indisponible : {e}") from None
+    try:
+        pdf_bytes = build_valorisation_pdf(
+            type_vue=type_vue,
+            items_mp=items_mp, items_pf=items_pf,
+            summary_mp=summary_mp, summary_pf=summary_pf,
+            snapshot_date=snapshot_date,
+            generated_by=(user.get("nom") or user.get("email") or "").strip() or None,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Erreur génération PDF : {e}") from None
+    date_slug = snapshot_date or datetime.now().strftime("%Y-%m-%d")
+    filename = f"valorisation_{type_vue}_{date_slug}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/api/stock/valorisation/pf/export")
 def export_valorisation_pf(request: Request):
     """Export Excel des prix unitaires PF actuels (format ré-importable)."""

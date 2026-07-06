@@ -302,8 +302,13 @@
     const machines = alert.target.machines || ['*'];
     const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(_esc).join(', ');
 
+    const _desc = (alert && alert.params && typeof alert.params.description === 'string') ? alert.params.description.trim() : '';
+    const _descHtml = _desc
+      ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + _esc(_desc) + '</div>'
+      : '';
     const html = '<div class="ta-sim-alert">'
       + '<div class="ta-sim-title">' + _esc(_stripAutoPrefix(alert.nom)) + '</div>'
+      + _descHtml
       + _renderChecklist(alert.checklist)
       + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
       + '<textarea class="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'

@@ -15203,7 +15203,26 @@ function buildValorisationGlobalToolbar() {
       'display:inline-flex;align-items:center;gap:10px;padding:6px 14px 6px 12px;border:1px solid ' +
       (isSnapshot ? '#f59e0b' : 'var(--border)') +
       ';border-radius:10px;background:' + (isSnapshot ? 'rgba(245,158,11,0.06)' : 'var(--card)') +
-      ';transition:background .15s, border-color .15s'
+      ';transition:background .15s, border-color .15s;cursor:pointer;user-select:none',
+      title: 'Cliquer pour choisir une date'
+    });
+    // Toute la capsule est cliquable : ouvre le calendrier natif via showPicker().
+    // Fallback focus si l'API n'est pas dispo (vieux navigateur).
+    dateWrap.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'BUTTON')) return;
+      try {
+        if (typeof dateInp.showPicker === 'function') dateInp.showPicker();
+        else { dateInp.focus(); dateInp.click(); }
+      } catch (_e) {
+        dateInp.focus();
+      }
+    });
+    dateWrap.addEventListener('mouseenter', () => {
+      if (!isSnapshot) dateWrap.style.background = 'var(--bg)';
+    });
+    dateWrap.addEventListener('mouseleave', () => {
+      if (!isSnapshot) dateWrap.style.background = 'var(--card)';
     });
     // Icône calendrier
     const icon = el('span', { style:
@@ -15228,7 +15247,11 @@ function buildValorisationGlobalToolbar() {
       await loadValorisationPF();
     });
     // Lien « Aujourd'hui » (visible seulement en mode snapshot)
-    dateWrap.append(icon, lbl, dateInp);
+    // Chevron pour signaler l'affordance (calendrier ouvrable)
+    const chevron = el('span', { style:
+      'display:inline-flex;color:' + (isSnapshot ? '#c2410c' : 'var(--muted)') + ';opacity:.6' });
+    chevron.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    dateWrap.append(icon, lbl, dateInp, chevron);
     if (isSnapshot) {
       const resetLink = el('button', {
         type: 'button', title: 'Revenir à aujourd\'hui',
@@ -15251,14 +15274,75 @@ function buildValorisationGlobalToolbar() {
   const spacer = el('div', { style: 'flex:1;min-width:0' });
   wrap.append(spacer);
 
-  // ── Bouton Exporter Excel ──
+  // ── Bouton Exporter (dropdown : Excel + 3 vues PDF) ──
+  const exportWrap = el('div', { style: 'position:relative;display:inline-flex' });
   const exportBtn = el('button', {
     type: 'button', disabled: v.exporting ? true : null,
-      style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (v.exporting ? 'opacity:.6;cursor:wait' : ''),
-    on: { click: exportValorisationExcel } });
+      style: 'padding:9px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (v.exporting ? 'opacity:.6;cursor:wait' : ''),
+  });
   exportBtn.appendChild(iconEl('download', 14));
-  exportBtn.appendChild(el('span', null, v.exporting ? 'Export en cours…' : 'Exporter Excel'));
-  wrap.append(exportBtn);
+  exportBtn.appendChild(el('span', null, v.exporting ? 'Export en cours…' : 'Exporter'));
+  const expChev = el('span', { style: 'display:inline-flex;opacity:.7' });
+  expChev.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  exportBtn.appendChild(expChev);
+
+  const exportMenu = el('div', { style:
+    'position:absolute;top:calc(100% + 6px);right:0;min-width:260px;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);padding:6px;display:none;z-index:100;flex-direction:column;gap:2px'
+  });
+
+  const mkOpt = (iconName, label, sub, onClick) => {
+    const btn = el('button', {
+      type: 'button',
+      style: 'display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border:none;background:transparent;color:var(--text);border-radius:8px;cursor:pointer;text-align:left;font-family:inherit;transition:background .12s',
+      on: {
+        click: () => { exportMenu.style.display = 'none'; onClick(); },
+        mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; },
+        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; },
+      },
+    });
+    const iconWrap = el('span', { style: 'display:inline-flex;color:var(--accent);margin-top:2px' });
+    iconWrap.appendChild(iconEl(iconName, 15));
+    const txt = el('div', { style: 'display:flex;flex-direction:column;line-height:1.3' },
+      el('span', { style: 'font-size:13px;font-weight:600;color:var(--text)' }, label),
+      el('span', { style: 'font-size:11px;color:var(--muted);margin-top:1px' }, sub),
+    );
+    btn.append(iconWrap, txt);
+    return btn;
+  };
+
+  const triggerPdf = (typeVue) => {
+    const params = new URLSearchParams();
+    if (v.snapshotDate) params.set('date', v.snapshotDate);
+    params.set('type', typeVue);
+    window.open('/api/stock/valorisation/export-pdf?' + params.toString(), '_blank');
+  };
+
+  exportMenu.append(
+    mkOpt('file-spreadsheet', 'Excel', 'Détail complet MP (format historique)', () => exportValorisationExcel()),
+    mkOpt('list', 'PDF · lignes', 'Tableau ligne par ligne (MP + PF)', () => triggerPdf('lignes')),
+    mkOpt('layout', 'PDF · sommaire', 'Totaux + répartition par catégorie', () => triggerPdf('sommaire')),
+    mkOpt('bar-chart-2', 'PDF · sommaire + insights', 'Sommaire + graphiques (répartition + top 10)', () => triggerPdf('insights')),
+  );
+
+  exportBtn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    const willOpen = exportMenu.style.display !== 'flex';
+    exportMenu.style.display = willOpen ? 'flex' : 'none';
+    if (willOpen) {
+      setTimeout(() => {
+        const closer = (e) => {
+          if (!exportWrap.contains(e.target)) {
+            exportMenu.style.display = 'none';
+            document.removeEventListener('click', closer);
+          }
+        };
+        document.addEventListener('click', closer);
+      }, 0);
+    }
+  });
+
+  exportWrap.append(exportBtn, exportMenu);
+  wrap.append(exportWrap);
 
   // ── Bouton Rafraîchir (MP + PF) ──
   const refreshBtn = el('button', {
