@@ -193,13 +193,25 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         except (TypeError, ValueError):
             unites_par_palette = None
     laizee = _mp_is_laizee(cat)
+    prix_par_laize = False
+    if "prix_par_laize" in keys and r["prix_par_laize"] is not None:
+        try:
+            prix_par_laize = bool(int(r["prix_par_laize"]))
+        except (TypeError, ValueError):
+            prix_par_laize = False
     # Pour les matières laizées, la quantité totale = somme des stocks par laize
     if laizee and stock_par_laize is not None:
         qte = sum(float(x.get("quantite") or 0) for x in stock_par_laize)
     complete = True
     if laizee:
         has_laizes = bool(stock_par_laize) and len(stock_par_laize) > 0
-        complete = has_laizes and (prix_m2 or 0) > 0 and (metres or 0) > 0
+        metres_ok = (metres or 0) > 0
+        if prix_par_laize and stock_par_laize:
+            # Mode prix par laize : chaque laize doit avoir un prix > 0
+            prix_ok = all((float(spl.get("prix_eur_m2") or 0) > 0) for spl in stock_par_laize)
+        else:
+            prix_ok = (prix_m2 or 0) > 0
+        complete = has_laizes and prix_ok and metres_ok
     sous_section = None
     if "sous_section" in r.keys() and r["sous_section"]:
         sous_section = str(r["sous_section"]).strip() or None
@@ -218,6 +230,7 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "laizee": laizee,
         "metres_lineaires_par_bobine": metres,
         "prix_eur_m2": prix_m2,
+        "prix_par_laize": prix_par_laize,
         "stock_par_laize": stock_par_laize if laizee else None,
         "sous_section": sous_section,
         "avec_conditionnement": _mp_a_conditionnement(cat),
@@ -2861,6 +2874,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
+                   COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette,
                    mp.sous_section,
                    COALESCE(s.quantite, 0) AS quantite
@@ -2874,7 +2888,8 @@ def list_matieres_premieres(request: Request, all: int = 0):
         laize_rows = conn.execute(
             """
             SELECT ml.matiere_id, l.id AS laize_id, l.valeur_mm, l.label, l.ordre, l.actif,
-                   COALESCE(sl.quantite, 0) AS quantite
+                   COALESCE(sl.quantite, 0) AS quantite,
+                   ml.prix_eur_m2 AS laize_prix_eur_m2
             FROM mp_matiere_laizes ml
             JOIN mp_laizes l ON l.id = ml.laize_id
             LEFT JOIN mp_stock_laize sl ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
@@ -2883,12 +2898,17 @@ def list_matieres_premieres(request: Request, all: int = 0):
         ).fetchall()
     by_mat: dict[int, list[dict]] = {}
     for r in laize_rows:
+        try:
+            l_prix = float(r["laize_prix_eur_m2"]) if r["laize_prix_eur_m2"] is not None else None
+        except (TypeError, ValueError):
+            l_prix = None
         by_mat.setdefault(r["matiere_id"], []).append({
             "laize_id": r["laize_id"],
             "valeur_mm": float(r["valeur_mm"] or 0),
             "label": r["label"],
             "actif": int(r["actif"] or 0),
             "quantite": float(r["quantite"] or 0),
+            "prix_eur_m2": l_prix,
         })
     out = []
     for r in rows:
@@ -3218,15 +3238,31 @@ async def mouvement_matiere_premiere(request: Request):
         except (TypeError, ValueError):
             raise HTTPException(400, "laize_id invalide.") from None
 
+    # Prix €/m² de la réception (optionnel, uniquement pour bobines laizées)
+    prix_eur_m2_mvt_raw = body.get("prix_eur_m2")
+    prix_eur_m2_mvt: Optional[float] = None
+    if prix_eur_m2_mvt_raw not in (None, ""):
+        try:
+            prix_eur_m2_mvt = float(prix_eur_m2_mvt_raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "prix_eur_m2 invalide.") from None
+        if prix_eur_m2_mvt < 0:
+            raise HTTPException(400, "prix_eur_m2 négatif.")
+        if prix_eur_m2_mvt > 1_000_000:
+            raise HTTPException(400, "prix_eur_m2 hors limites.")
+
     with get_db() as conn:
         mp = conn.execute(
-            "SELECT id, categorie FROM matieres_premieres WHERE id=? AND actif=1",
+            """SELECT id, categorie, COALESCE(prix_par_laize, 0) AS prix_par_laize,
+                      COALESCE(prix_eur_m2, 0) AS prix_matiere_eur_m2
+               FROM matieres_premieres WHERE id=? AND actif=1""",
             (matiere_id,),
         ).fetchone()
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
         unite_mp = _mp_unite_gestion(mp["categorie"])
         laizee = _mp_is_laizee(mp["categorie"])
+        prix_par_laize_mode = bool(int(mp["prix_par_laize"] or 0))
 
         if type_mvt == "entree":
             emplacement_dest = _check_emplacement_code(emplacement_dest, allow_null=laizee)
@@ -3309,14 +3345,61 @@ async def mouvement_matiere_premiere(request: Request):
                 """,
                 (matiere_id, quantite_apres, created_by_name),
             )
+
+        # Prix moyen pondéré (PMP) — uniquement sur entrée d'une matière laizée avec un prix fourni
+        if laizee and type_mvt == "entree" and prix_eur_m2_mvt is not None and prix_eur_m2_mvt > 0:
+            if prix_par_laize_mode:
+                # PMP au niveau de la laize
+                ancien_prix_row = conn.execute(
+                    "SELECT prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                    (matiere_id, laize_id),
+                ).fetchone()
+                ancien_prix = 0.0
+                if ancien_prix_row and ancien_prix_row["prix_eur_m2"] is not None:
+                    try:
+                        ancien_prix = float(ancien_prix_row["prix_eur_m2"])
+                    except (TypeError, ValueError):
+                        ancien_prix = 0.0
+                if quantite_avant > 0 and ancien_prix > 0:
+                    nouveau_prix = (
+                        (quantite_avant * ancien_prix) + (quantite * prix_eur_m2_mvt)
+                    ) / (quantite_avant + quantite)
+                else:
+                    # Stock vide ou prix inconnu → on adopte le prix de cette entrée
+                    nouveau_prix = prix_eur_m2_mvt
+                conn.execute(
+                    "UPDATE mp_matiere_laizes SET prix_eur_m2=? WHERE matiere_id=? AND laize_id=?",
+                    (round(nouveau_prix, 6), matiere_id, laize_id),
+                )
+            else:
+                # PMP au niveau matière (agrège toutes les laizes)
+                ancien_prix = float(mp["prix_matiere_eur_m2"] or 0)
+                stock_mat_row = conn.execute(
+                    "SELECT COALESCE(quantite, 0) AS q FROM mp_stock WHERE matiere_id=?",
+                    (matiere_id,),
+                ).fetchone()
+                # On utilise le stock matière AVANT l'entrée : le mp_stock vient d'être mis à jour,
+                # donc on soustrait la quantité entrée pour retrouver l'état ancien
+                stock_mat_apres = float(stock_mat_row["q"]) if stock_mat_row else 0.0
+                stock_mat_avant = max(0.0, stock_mat_apres - quantite)
+                if stock_mat_avant > 0 and ancien_prix > 0:
+                    nouveau_prix = (
+                        (stock_mat_avant * ancien_prix) + (quantite * prix_eur_m2_mvt)
+                    ) / (stock_mat_avant + quantite)
+                else:
+                    nouveau_prix = prix_eur_m2_mvt
+                conn.execute(
+                    "UPDATE matieres_premieres SET prix_eur_m2=? WHERE id=?",
+                    (round(nouveau_prix, 6), matiere_id),
+                )
         conn.execute(
             """
             INSERT INTO mp_mouvements (
                 matiere_id, type_mouvement, quantite,
                 quantite_avant, quantite_apres,
                 ref_bl, note, emplacement_source, emplacement_dest,
-                created_by, created_by_name, laize_id
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                created_by, created_by_name, laize_id, prix_eur_m2
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 matiere_id,
@@ -3331,6 +3414,7 @@ async def mouvement_matiere_premiere(request: Request):
                 created_by,
                 created_by_name,
                 laize_id,
+                prix_eur_m2_mvt,
             ),
         )
         conn.commit()
@@ -4078,6 +4162,8 @@ def _valorisation_query(conn) -> list[dict]:
                mp.sous_section,
                COALESCE(mp.metres_lineaires_par_bobine, 0) AS metres,
                COALESCE(mp.prix_eur_m2, 0) AS prix_eur_m2,
+               COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
+               ml.prix_eur_m2 AS laize_prix_eur_m2,
                COALESCE(v.prix_en_usd, 0) AS prix_en_usd,
                COALESCE(v.taxe_importation, 0) AS taxe_importation,
                COALESCE(v.cout_transport_inclus, 0) AS cout_transport_inclus,
@@ -4178,7 +4264,14 @@ def _valorisation_query(conn) -> list[dict]:
         cat = r["categorie"]
         qte = float(r["quantite"] or 0)
         metres = float(r["metres"] or 0)
-        prix_m2 = float(r["prix_eur_m2"] or 0)
+        prix_matiere = float(r["prix_eur_m2"] or 0)
+        prix_par_laize = int(r["prix_par_laize"] or 0) == 1
+        laize_prix_raw = r["laize_prix_eur_m2"] if "laize_prix_eur_m2" in r.keys() else None
+        try:
+            prix_laize_val = float(laize_prix_raw) if laize_prix_raw is not None else None
+        except (TypeError, ValueError):
+            prix_laize_val = None
+        prix_m2 = prix_laize_val if (prix_par_laize and prix_laize_val is not None) else prix_matiere
         laize_mm = float(r["valeur_mm"] or 0)
         surface_bobine = (laize_mm / 1000.0) * metres
         valo_bobine = surface_bobine * prix_m2
@@ -5816,7 +5909,8 @@ def _mp_laizes_for_matiere(conn, matiere_id: int) -> list[dict]:
     rows = conn.execute(
         """
         SELECT l.id, l.valeur_mm, l.label, l.ordre, l.actif,
-               COALESCE(s.quantite, 0) AS quantite
+               COALESCE(s.quantite, 0) AS quantite,
+               ml.prix_eur_m2 AS laize_prix_eur_m2
         FROM mp_matiere_laizes ml
         JOIN mp_laizes l ON l.id = ml.laize_id
         LEFT JOIN mp_stock_laize s ON s.matiere_id = ml.matiere_id AND s.laize_id = ml.laize_id
@@ -5825,21 +5919,27 @@ def _mp_laizes_for_matiere(conn, matiere_id: int) -> list[dict]:
         """,
         (matiere_id,),
     ).fetchall()
-    return [
-        {
+    out = []
+    for r in rows:
+        try:
+            lprix = float(r["laize_prix_eur_m2"]) if r["laize_prix_eur_m2"] is not None else None
+        except (TypeError, ValueError):
+            lprix = None
+        out.append({
             "laize_id": r["id"],
             "valeur_mm": float(r["valeur_mm"] or 0),
             "label": r["label"],
             "actif": int(r["actif"] or 0),
             "quantite": float(r["quantite"] or 0),
-        }
-        for r in rows
-    ]
+            "prix_eur_m2": lprix,
+        })
+    return out
 
 
-def _mp_is_complete(mp_row, has_laizes: bool) -> bool:
-    """Une matière laizée est 'complète' si elle a >=1 laize, prix_eur_m2 > 0
-    et metres_lineaires_par_bobine > 0."""
+def _mp_is_complete(mp_row, has_laizes: bool, all_laizes_priced: bool = False) -> bool:
+    """Une matière laizée est 'complète' si elle a >=1 laize + metres_lineaires_par_bobine > 0
+    et soit prix_eur_m2 (matière) > 0 (mode unique), soit toutes les laizes ont un prix > 0
+    (mode prix par laize)."""
     cat = (mp_row["categorie"] or "").lower()
     if cat not in _MP_CATEGORIES_LAIZEES:
         return True
@@ -5850,7 +5950,18 @@ def _mp_is_complete(mp_row, has_laizes: bool) -> bool:
         metres = float(mp_row["metres_lineaires_par_bobine"] or 0)
     except (TypeError, ValueError):
         return False
-    return prix > 0 and metres > 0
+    if metres <= 0:
+        return False
+    keys = mp_row.keys() if hasattr(mp_row, "keys") else []
+    prix_par_laize = False
+    if "prix_par_laize" in keys:
+        try:
+            prix_par_laize = bool(int(mp_row["prix_par_laize"] or 0))
+        except (TypeError, ValueError):
+            prix_par_laize = False
+    if prix_par_laize:
+        return all_laizes_priced
+    return prix > 0
 
 
 @router.get("/api/stock/matieres/incompletes")
@@ -5861,14 +5972,20 @@ def count_matieres_incompletes(request: Request):
             """
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
                    mp.prix_eur_m2, mp.metres_lineaires_par_bobine,
-                   (SELECT COUNT(*) FROM mp_matiere_laizes ml WHERE ml.matiere_id = mp.id) AS nb_laizes
+                   COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
+                   (SELECT COUNT(*) FROM mp_matiere_laizes ml WHERE ml.matiere_id = mp.id) AS nb_laizes,
+                   (SELECT COUNT(*) FROM mp_matiere_laizes ml WHERE ml.matiere_id = mp.id AND ml.prix_eur_m2 IS NOT NULL AND ml.prix_eur_m2 > 0) AS nb_laizes_priced
             FROM matieres_premieres mp
             WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
             """
         ).fetchall()
     incomplete = []
     for r in rows:
-        if not _mp_is_complete(r, (r["nb_laizes"] or 0) > 0):
+        nb_laizes = int(r["nb_laizes"] or 0)
+        nb_priced = int(r["nb_laizes_priced"] or 0)
+        has_laizes = nb_laizes > 0
+        all_priced = has_laizes and nb_priced == nb_laizes
+        if not _mp_is_complete(r, has_laizes, all_laizes_priced=all_priced):
             incomplete.append({
                 "id": r["id"],
                 "categorie": r["categorie"],
@@ -5901,6 +6018,34 @@ async def set_matiere_laizes(matiere_id: int, request: Request):
         raise HTTPException(400, "métrage négatif.")
     if prix is not None and prix < 0:
         raise HTTPException(400, "prix négatif.")
+    # Mode prix par laize (radio) : 0 = prix unique matière, 1 = prix distinct par laize
+    prix_par_laize_raw = body.get("prix_par_laize")
+    prix_par_laize: Optional[int] = None
+    if prix_par_laize_raw is not None:
+        try:
+            prix_par_laize = 1 if int(prix_par_laize_raw) else 0
+        except (TypeError, ValueError):
+            raise HTTPException(400, "prix_par_laize invalide.") from None
+    # Prix par laize : dict {laize_id: prix_eur_m2}
+    laize_prices_raw = body.get("laize_prices") or {}
+    if not isinstance(laize_prices_raw, dict):
+        raise HTTPException(400, "laize_prices doit être un objet.")
+    laize_prices: dict[int, Optional[float]] = {}
+    for k, v in laize_prices_raw.items():
+        try:
+            lid = int(k)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "laize_prices: clé invalide.") from None
+        if v in (None, ""):
+            laize_prices[lid] = None
+        else:
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"laize_prices[{lid}] invalide.") from None
+            if fv < 0:
+                raise HTTPException(400, f"laize_prices[{lid}] négatif.")
+            laize_prices[lid] = fv
     with get_db() as conn:
         mat = conn.execute(
             "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
@@ -5954,18 +6099,32 @@ async def set_matiere_laizes(matiere_id: int, request: Request):
                 "INSERT OR IGNORE INTO mp_stock_laize (matiere_id, laize_id, quantite) VALUES (?, ?, 0)",
                 (matiere_id, aid),
             )
-        # Mise à jour métrage / prix
+        # Mise à jour métrage / prix / mode prix_par_laize
         sets: list[str] = []
         args: list[Any] = []
         if metres is not None:
             sets.append("metres_lineaires_par_bobine=?"); args.append(metres)
         if prix is not None:
             sets.append("prix_eur_m2=?"); args.append(prix)
+        if prix_par_laize is not None:
+            sets.append("prix_par_laize=?"); args.append(prix_par_laize)
         if sets:
             args.append(matiere_id)
             conn.execute(
                 f"UPDATE matieres_premieres SET {', '.join(sets)} WHERE id=?", args
             )
+        # Prix par laize (n'est appliqué que sur les laizes associées à la matière)
+        if laize_prices:
+            active_ids = {r["laize_id"] for r in conn.execute(
+                "SELECT laize_id FROM mp_matiere_laizes WHERE matiere_id=?", (matiere_id,)
+            ).fetchall()}
+            for lid, fv in laize_prices.items():
+                if lid not in active_ids:
+                    continue
+                conn.execute(
+                    "UPDATE mp_matiere_laizes SET prix_eur_m2=? WHERE matiere_id=? AND laize_id=?",
+                    (fv, matiere_id, lid),
+                )
         conn.commit()
         laizes = _mp_laizes_for_matiere(conn, matiere_id)
     return {"ok": True, "laizes": laizes}
@@ -5978,6 +6137,7 @@ def get_matiere_laizes(matiere_id: int, request: Request):
         mat = conn.execute(
             """SELECT id, categorie, reference, designation,
                       COALESCE(prix_eur_m2, 0) AS prix_eur_m2,
+                      COALESCE(prix_par_laize, 0) AS prix_par_laize,
                       COALESCE(metres_lineaires_par_bobine, 0) AS metres_lineaires_par_bobine
                FROM matieres_premieres WHERE id=?""",
             (matiere_id,),
@@ -5991,6 +6151,7 @@ def get_matiere_laizes(matiere_id: int, request: Request):
         "reference": mat["reference"],
         "designation": mat["designation"],
         "prix_eur_m2": float(mat["prix_eur_m2"] or 0),
+        "prix_par_laize": bool(int(mat["prix_par_laize"] or 0)) if "prix_par_laize" in mat.keys() else False,
         "metres_lineaires_par_bobine": float(mat["metres_lineaires_par_bobine"] or 0),
         "laizes": laizes,
     }

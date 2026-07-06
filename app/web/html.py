@@ -1254,11 +1254,11 @@ body.light .portal-logout:hover:last-of-type{text-shadow:0 0 12px rgba(220,38,38
 .portal-app--disabled:hover .portal-app-icon{background:var(--accent-bg);color:var(--accent)}
 
 /* ── Pill bar (haut droite) — fusion des 5 cartes corner en un seul cylindre ── */
-.portal-corner-stack{padding:8px 6px;background:var(--card);border:1px solid var(--border);border-radius:999px;
+.portal-corner-stack{padding:8px 6px;background:var(--card);border:1px solid var(--border);border-radius:20px;
   box-shadow:0 8px 32px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.04);gap:2px}
 body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-corner-stack .portal-settings-corner{
-  width:44px;height:44px;border-radius:50%;background:transparent;border:1px solid transparent;
+  width:44px;height:44px;border-radius:12px;background:transparent;border:1px solid transparent;
   color:var(--muted);box-shadow:none;transition:background .15s,color .15s,border-color .15s}
 .portal-corner-stack .portal-settings-corner:hover{
   background:var(--accent-bg);color:var(--accent);border-color:transparent;box-shadow:none}
