@@ -2019,9 +2019,10 @@ def _maint_docs_dir(code: str) -> Path:
 
 
 def _maint_safe_filename(name: str) -> str:
+    import re as _re
     import unicodedata as _ud
     name = _ud.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
-    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._-")
+    name = _re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._-")
     return name or "fichier"
 
 
