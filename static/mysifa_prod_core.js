@@ -264,44 +264,9 @@
   }
 
   function updateFaviconBadge(count){
-    const canvas = document.createElement('canvas');
-    canvas.width = 64; canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if(!ctx) return;
-
-    if(__favBaseReady){
-      try { ctx.drawImage(__favBaseImg, 0, 0, 64, 64); }
-      catch(e){ __drawFavFallback(ctx); }
-    } else {
-      __drawFavFallback(ctx);
-    }
-
-    if(count > 0){
-      // Contour blanc en v2 / foncé en v1 pour contraster avec le fond du favicon.
-      ctx.fillStyle = __IS_STAGING_FAV ? '#0f172a' : '#ffffff';
-      ctx.beginPath();
-      ctx.arc(48, 16, 17, 0, Math.PI * 2);
-      ctx.fill();
-      // Pastille rouge.
-      ctx.fillStyle = '#dc2626';
-      ctx.beginPath();
-      ctx.arc(48, 16, 15, 0, Math.PI * 2);
-      ctx.fill();
-      // Chiffre.
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px system-ui,-apple-system,Segoe UI,sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(count > 9 ? '9+' : String(count), 48, 17);
-    }
-
-    let link = document.querySelector('link[rel="icon"]');
-    if(!link){
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = canvas.toDataURL();
+    // Pastille de comptage désactivée (juillet 2026). Le favicon reste celui servi
+    // par le <link rel="icon"> du HTML — pas de canvas overlay, pas d'écrasement.
+    return;
   }
 
   async function refreshAlertsBadge(){
