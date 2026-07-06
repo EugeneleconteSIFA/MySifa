@@ -16,24 +16,31 @@
 
   function patchIcons() {
     if (!IS_STAGING) return;
+    // Sur v1, on force le MyS light comme favicon de TOUTES les pages, y compris
+    // celles qui ont normalement un favicon spécifique (stock_favicon,
+    // expe_favicon, planning_rh_favicon, etc.). L'onglet Chrome doit toujours
+    // être MyS light — impossible de confondre avec la prod.
+    var LIGHT_PNG_192 = '/static/mys_icon-light_192.png';
+    var LIGHT_PNG_180 = '/static/mys_icon-light_180.png';
     var links = document.querySelectorAll(
       'link[rel="icon"], link[rel="apple-touch-icon"], link[rel="shortcut icon"]'
     );
     links.forEach(function (link) {
-      var href = link.getAttribute('href') || '';
-      // Remplace uniquement les icônes MySifa "mys_icon_XXX.png" et "favicon-XX.png"
-      // par leur variante -light. Laisse tel quel les favicons spécifiques aux modules
-      // (stock_favicon, expe_favicon, planning_rh_favicon).
-      var m1 = href.match(/^(.*\/)mys_icon(_\d+\.png)(\?.*)?$/);
-      if (m1) {
-        link.setAttribute('href', m1[1] + 'mys_icon-light' + m1[2] + (m1[3] || ''));
-        return;
-      }
-      var m2 = href.match(/^(.*\/)favicon(-\d+\.png)(\?.*)?$/);
-      if (m2) {
-        link.setAttribute('href', m2[1] + 'favicon-light' + m2[2] + (m2[3] || ''));
-      }
+      var rel = (link.getAttribute('rel') || '').toLowerCase();
+      var href = rel === 'apple-touch-icon' ? LIGHT_PNG_180 : LIGHT_PNG_192;
+      link.setAttribute('href', href);
+      link.setAttribute('type', 'image/png');
+      // Retire sizes/type explicites qui pourraient forcer un autre asset.
+      link.removeAttribute('sizes');
     });
+    // Si aucun <link rel="icon"> n'était présent, on en ajoute un.
+    if (!document.querySelector('link[rel="icon"]')) {
+      var l = document.createElement('link');
+      l.rel = 'icon';
+      l.type = 'image/png';
+      l.href = LIGHT_PNG_192;
+      document.head.appendChild(l);
+    }
   }
 
   // Shim rétrocompat au cas où d'autres scripts appellent MySifaFaviconBadge.

@@ -99,6 +99,176 @@ def _enrich_saisies_client(conn, saisies: list) -> None:
             s["client"] = client_map[ref]
 
 
+# ─── Timeline unifiee : mouvements MyStock (EP/SP/EM/SM) ─────────────────────
+# Regle metier : seuls les mouvements rattaches a un dossier de production
+# apparaissent dans la timeline MyProd. Les inventaires / ajustements /
+# transferts inter-emplacements restent visibles uniquement dans MyStock.
+
+_STOCK_PF_CODES = {"entree": "EP", "sortie": "SP"}   # mouvements_stock -> EP/SP
+_STOCK_MP_CODES = {"entree": "EM", "sortie": "SM"}   # mp_mouvements    -> EM/SM
+
+_STOCK_LABELS = {
+    "EP": "Entree Z1",
+    "SP": "Sortie produit fini",
+    "EM": "Entree matiere",
+    "SM": "Sortie matiere",
+}
+
+
+def _normalize_stock_pf(row: dict) -> Optional[dict]:
+    """Convertit une ligne mouvements_stock enrichie -> format saisie MyProd."""
+    code = _STOCK_PF_CODES.get((row.get("type_mouvement") or "").strip())
+    if not code:
+        return None
+    return {
+        "id": row["id"],
+        "kind": "stock_pf",
+        "operateur": row.get("created_by") or "",
+        "operateur_nom": row.get("created_by_name") or row.get("created_by") or "",
+        "date_operation": row.get("created_at") or "",
+        "operation": _STOCK_LABELS[code],
+        "operation_code": code,
+        "operation_severity": "info",
+        "operation_category": "stock_pf",
+        "machine": row.get("pe_machine") or "",
+        "no_dossier": row.get("no_dossier") or "",
+        "client": row.get("pe_client") or "",
+        "designation": row.get("pe_description") or "",
+        "quantite_traitee": row.get("quantite"),
+        "quantite_avant": row.get("quantite_avant"),
+        "quantite_apres": row.get("quantite_apres"),
+        "emplacement": row.get("emplacement") or "",
+        "produit_id": row.get("produit_id"),
+        "produit_reference": row.get("produit_reference") or "",
+        "produit_designation": row.get("produit_designation") or "",
+        "produit_unite": row.get("produit_unite") or "",
+        "note": row.get("note") or "",
+    }
+
+
+def _normalize_stock_mp(row: dict) -> Optional[dict]:
+    """Convertit une ligne mp_mouvements enrichie -> format saisie MyProd."""
+    code = _STOCK_MP_CODES.get((row.get("type_mouvement") or "").strip())
+    if not code:
+        return None
+    return {
+        "id": row["id"],
+        "kind": "stock_mp",
+        "operateur": row.get("created_by_email") or "",  # backfill via users
+        "operateur_nom": row.get("created_by_name") or "",
+        "date_operation": row.get("created_at") or "",
+        "operation": _STOCK_LABELS[code],
+        "operation_code": code,
+        "operation_severity": "info",
+        "operation_category": "stock_mp",
+        "machine": row.get("machine") or "",
+        "no_dossier": row.get("no_dossier") or "",
+        "client": row.get("client") or "",
+        "designation": row.get("designation") or "",
+        "quantite_traitee": row.get("quantite"),
+        "quantite_avant": row.get("quantite_avant"),
+        "quantite_apres": row.get("quantite_apres"),
+        "emplacement_source": row.get("emplacement_source") or "",
+        "emplacement_dest": row.get("emplacement_dest") or "",
+        "matiere_id": row.get("matiere_id"),
+        "matiere_reference": row.get("matiere_reference") or "",
+        "matiere_designation": row.get("matiere_designation") or "",
+        "matiere_categorie": row.get("matiere_categorie") or "",
+        "ref_bl": row.get("ref_bl") or "",
+        "prix_eur_m2": row.get("prix_eur_m2"),
+        "laize_id": row.get("laize_id"),
+        "note": row.get("note") or "",
+    }
+
+
+def _fetch_stock_saisies_du_jour(
+    conn,
+    today: str,
+    today_fr: str,
+    *,
+    user_id: Optional[int] = None,
+    user_email: Optional[str] = None,
+) -> list:
+    """Retourne la liste des mouvements stock du jour (EP/SP/EM/SM) rattaches
+    a un dossier, filtres eventuellement par utilisateur (id pour MP, email
+    pour PF). Format normalise identique aux saisies production_data.
+    """
+    saisies: list = []
+
+    # -- Mouvements PF (mouvements_stock) --------------------------------------
+    pf_where = ["ms.no_dossier IS NOT NULL", "trim(ms.no_dossier) != ''",
+                "(ms.created_at LIKE ? OR ms.created_at LIKE ?)"]
+    pf_args = [today + "%", today_fr + "%"]
+    if user_email:
+        pf_where.append("LOWER(TRIM(COALESCE(ms.created_by,''))) = LOWER(TRIM(?))")
+        pf_args.append(user_email)
+    pf_sql = f"""
+        SELECT
+          ms.id, ms.produit_id, ms.emplacement, ms.type_mouvement, ms.quantite,
+          ms.quantite_avant, ms.quantite_apres, ms.note, ms.created_at,
+          ms.created_by, ms.created_by_name, ms.no_dossier,
+          p.reference AS produit_reference,
+          p.designation AS produit_designation,
+          p.unite AS produit_unite,
+          pe.client AS pe_client,
+          pe.description AS pe_description,
+          m.nom AS pe_machine
+        FROM mouvements_stock ms
+        LEFT JOIN produits p ON p.id = ms.produit_id
+        LEFT JOIN planning_entries pe ON trim(pe.reference) = trim(ms.no_dossier)
+        LEFT JOIN machines m ON m.id = pe.machine_id
+        WHERE {" AND ".join(pf_where)}
+    """
+    for r in conn.execute(pf_sql, pf_args).fetchall():
+        norm = _normalize_stock_pf(dict(r))
+        if norm:
+            saisies.append(norm)
+
+    # -- Mouvements MP (mp_mouvements) -----------------------------------------
+    mp_where = ["mm.no_dossier IS NOT NULL", "trim(mm.no_dossier) != ''",
+                "(mm.created_at LIKE ? OR mm.created_at LIKE ?)"]
+    mp_args = [today + "%", today_fr + "%"]
+    if user_id is not None:
+        mp_where.append("mm.created_by = ?")
+        mp_args.append(int(user_id))
+    mp_sql = f"""
+        SELECT
+          mm.id, mm.matiere_id, mm.type_mouvement, mm.quantite,
+          mm.quantite_avant, mm.quantite_apres, mm.ref_bl, mm.note,
+          mm.emplacement_source, mm.emplacement_dest,
+          mm.created_at, mm.created_by, mm.created_by_name,
+          mm.no_dossier, mm.machine, mm.client, mm.designation,
+          mm.prix_eur_m2, mm.laize_id,
+          mp.reference AS matiere_reference,
+          mp.designation AS matiere_designation,
+          mp.categorie AS matiere_categorie,
+          u.email AS created_by_email
+        FROM mp_mouvements mm
+        LEFT JOIN matieres_premieres mp ON mp.id = mm.matiere_id
+        LEFT JOIN users u ON u.id = mm.created_by
+        WHERE {" AND ".join(mp_where)}
+    """
+    for r in conn.execute(mp_sql, mp_args).fetchall():
+        norm = _normalize_stock_mp(dict(r))
+        if norm:
+            saisies.append(norm)
+
+    return saisies
+
+
+def _merge_and_sort_timeline(saisies: list) -> list:
+    """Tri final timeline : machine, date_operation, kind, id."""
+    def key(s):
+        return (
+            (s.get("machine") or "").strip().lower(),
+            s.get("date_operation") or "",
+            str(s.get("kind") or ""),
+            str(s.get("id") or ""),
+        )
+    saisies.sort(key=key)
+    return saisies
+
+
 def _resolve_date_operation(client_raw: Optional[str]) -> str:
     """Horodatage canonique avec secondes (client au clic ou serveur).
 
@@ -434,9 +604,25 @@ def get_session(request: Request, machine_id: int = None):
             rows = []
 
         saisies = [dict(r) for r in rows]
+        for s in saisies:
+            s["kind"] = "prod"
         _enrich_saisies_client(conn, saisies)
+        # Etat et dossier actif : uniquement sur les saisies production_data
         etat = _compute_etat(saisies)
         active_ref = _get_active_dossier(saisies)
+        # Mouvements stock du jour de l'operateur (EP/SP/EM/SM)
+        user_email_scope = (user.get("email") or "").strip() or None
+        user_id_scope = user.get("id")
+        try:
+            user_id_scope = int(user_id_scope) if user_id_scope is not None else None
+        except (TypeError, ValueError):
+            user_id_scope = None
+        saisies.extend(_fetch_stock_saisies_du_jour(
+            conn, today, today_fr,
+            user_id=user_id_scope, user_email=user_email_scope,
+        ))
+        _enrich_saisies_client(conn, [s for s in saisies if not (s.get("client") or "").strip()])
+        _merge_and_sort_timeline(saisies)
 
         # Récupérer le dossier actif depuis le planning
         dossier = None
@@ -807,7 +993,13 @@ def list_saisies_jour_all(request: Request):
             (today + "%", today_fr + "%"),
         ).fetchall()
         saisies = [dict(r) for r in rows]
+        for s in saisies:
+            s["kind"] = "prod"
         _enrich_saisies_client(conn, saisies)
+        # Mouvements stock EP/SP/EM/SM du jour, tous operateurs
+        saisies.extend(_fetch_stock_saisies_du_jour(conn, today, today_fr))
+        _enrich_saisies_client(conn, [s for s in saisies if not (s.get("client") or "").strip()])
+        _merge_and_sort_timeline(saisies)
     return {"saisies": saisies}
 
 
