@@ -4118,6 +4118,93 @@ function openAddModal(templateRow) {
   document.getElementById('root').appendChild(modal);
 }
  
+// ── openEditStockModal : modal dedie EP/SP/EM/SM ────────────────
+// Edite les champs surs (note, no_dossier, ref_bl) via PATCH
+// /api/fabrication/saisie-stock/{kind}/{id}, ou supprime via DELETE.
+// Les champs verrouilles (quantite, produit/matiere, emplacement, laize)
+// necessitent supprimer + recreer.
+function openEditStockModal(row){
+  try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(e){}
+  const kind = row.kind; // stock_pf | stock_mp
+  const code = row.operation_code || '';
+  const codeLabel = ({EP:'Entree Z1',SP:'Sortie produit fini',EM:'Entree matiere',SP:'Sortie produit fini',SM:'Sortie matiere'})[code] || code;
+  const isMP = (kind === 'stock_mp');
+
+  const overlay = h('div',{className:'add-row-modal',style:{position:'fixed',inset:'0',background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}});
+  const box = h('div',{style:{background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'22px',width:'min(560px,92vw)',maxHeight:'86vh',overflow:'auto',boxShadow:'0 12px 40px rgba(0,0,0,.35)'}});
+
+  // Titre + badge lettres
+  const badgeColor = isMP ? '#c4b5fd' : '#a7f3d0';
+  const badgeBg = isMP ? 'rgba(196,181,253,.18)' : 'rgba(167,243,208,.18)';
+  box.appendChild(h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}},
+    h('span',{style:{padding:'3px 10px',borderRadius:'8px',background:badgeBg,color:badgeColor,fontWeight:'700',fontFamily:'monospace',fontSize:'13px'}},code),
+    h('h3',{style:{margin:0}},codeLabel)
+  ));
+  box.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'12px',marginBottom:'16px'}},
+    (row.produit_reference||row.matiere_reference||'') + ' · ' +
+    (row.produit_designation||row.matiere_designation||'') + ' · qte ' + (row.quantite_traitee||0)
+  ));
+
+  // Champs editables
+  const fields = [];
+  function addField(label, key, placeholder=''){
+    const wrap = h('div',{style:{marginBottom:'12px'}});
+    wrap.appendChild(h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}}, label));
+    const inp = h('input',{type:'text',value:row[key]||'',placeholder:placeholder,style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontSize:'13px'}});
+    wrap.appendChild(inp);
+    box.appendChild(wrap);
+    fields.push({key, inp});
+  }
+  addField('Dossier (no_dossier)','no_dossier','ex: 26000123');
+  if(isMP){
+    addField('Ref BL','ref_bl','Bordereau de livraison');
+  }
+  addField('Note','note','');
+
+  // Info fields non editables
+  const lockedInfo = h('div',{style:{marginTop:'8px',padding:'10px 12px',background:'rgba(148,163,184,.06)',border:'1px solid var(--border)',borderRadius:'8px',fontSize:'12px',color:'var(--muted)',lineHeight:'1.6'}},
+    'Quantite, ' + (isMP?'matiere, laize':'produit fini, emplacement') + ' non modifiables ici. Pour les changer : supprimer puis recreer.'
+  );
+  box.appendChild(lockedInfo);
+
+  // Actions
+  const actions = h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'20px',gap:'12px'}});
+  const delBtn = h('button',{className:'btn-danger',style:{padding:'10px 16px',borderRadius:'8px',fontWeight:'600'}},'Supprimer');
+  delBtn.addEventListener('click', async ()=>{
+    if(!confirm('Supprimer cette saisie stock ? Le stock sera restaure a la valeur precedente.')) return;
+    try{
+      await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'DELETE'});
+      toast('Saisie supprimee');
+      overlay.remove();
+      await loadSaisies();
+    }catch(e){ toast(e.message||'Erreur suppression','danger'); }
+  });
+  const rightWrap = h('div',{style:{display:'flex',gap:'8px'}});
+  const cancelBtn = h('button',{style:{padding:'10px 16px',borderRadius:'8px',background:'transparent',border:'1px solid var(--border)',color:'var(--text2)',cursor:'pointer'}},'Annuler');
+  cancelBtn.addEventListener('click',()=>overlay.remove());
+  const saveBtn = h('button',{className:'btn-accent',style:{padding:'10px 18px',borderRadius:'8px',fontWeight:'700'}},'Enregistrer');
+  saveBtn.addEventListener('click', async ()=>{
+    const body = {};
+    fields.forEach(f=>{ const v=(f.inp.value||'').trim(); if(v!==String(row[f.key]||'')) body[f.key]=v||null; });
+    if(Object.keys(body).length===0){ overlay.remove(); return; }
+    try{
+      await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      toast('Saisie modifiee');
+      overlay.remove();
+      await loadSaisies();
+    }catch(e){ toast(e.message||'Erreur','danger'); }
+  });
+  rightWrap.appendChild(cancelBtn);
+  rightWrap.appendChild(saveBtn);
+  actions.appendChild(delBtn);
+  actions.appendChild(rightWrap);
+  box.appendChild(actions);
+
+  overlay.appendChild(box);
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+  document.getElementById('root').appendChild(overlay);
+}
+
 function openEditModal(row) {
   try{
     const m = document.querySelector('.add-row-modal');
@@ -4515,6 +4602,10 @@ function renderSaisies(){
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
     } else if (row.operation_severity === 'attention') {
       rowBg = 'rgba(251,191,36,.18)';           // jaune soutenu
+    } else if (row.kind === 'stock_pf' || cat === 'stock_pf') {
+      rowBg = 'rgba(167,243,208,.18)';          // vert pastel produits finis (EP/SP)
+    } else if (row.kind === 'stock_mp' || cat === 'stock_mp') {
+      rowBg = 'rgba(196,181,253,.22)';          // violet pastel matieres premieres (EM/SM)
     } else if (cat === 'production' || opCode === '03' || opCode === '88') {
       rowBg = 'rgba(52,211,153,.12)';           // vert production
     } else if (cat === 'personnel' || opCode === '86' || opCode === '87') {
@@ -4525,7 +4616,7 @@ function renderSaisies(){
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
  
-    if(!readOnly) tr.addEventListener('click',()=>openEditModal(row));
+    if(!readOnly) tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
  
     // Checkbox ligne
     const chk=h('input',{type:'checkbox'});
