@@ -7576,15 +7576,29 @@ function appendMatiereRefEditFields(parent, item) {
         prixModeLaiInp, el('span', null, 'Prix par laize')),
     ),
   );
-  // Map des prix pré-remplis par laize_id
+  // Map des prix pré-remplis par laize_id (persistants même si la case est décochée puis recochée)
   const laizePriceInputs = {};
-  const laizePriceMap = {};
+  const laizePriceValues = {};
   (item.stock_par_laize || []).forEach(spl => {
-    if (spl && spl.prix_eur_m2 != null) laizePriceMap[spl.laize_id] = String(spl.prix_eur_m2);
+    if (spl && spl.prix_eur_m2 != null) laizePriceValues[spl.laize_id] = String(spl.prix_eur_m2);
   });
+  // Bloc « prix €/m² par laize sélectionnée » — visible uniquement en mode par laize
+  const laizePricesGrid = el('div', {
+    cls: 'mp-laize-prices',
+    style: 'display:flex;flex-direction:column;gap:6px;margin-top:6px',
+  });
+  const laizePricesEmpty = el('div', { cls: 'mp-hint',
+    style: 'font-size:12px;color:var(--muted);font-style:italic' }, 'Coche au moins une laize ci-dessous pour saisir son prix.');
+  const laizePricesField = el('div', { cls: 'mp-field' },
+    el('label', null, 'Prix €/m² par laize'),
+    laizePricesGrid,
+    laizePricesEmpty,
+  );
+  // Vue laize (compact, comme avant : flex-wrap horizontal)
   const laizeChecks = el('div', { cls: 'mp-laize-grid',
-    style: 'display:flex;flex-direction:column;gap:6px;margin-top:6px' });
+    style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
   const currentLaizeIds = new Set((item.stock_par_laize || []).map(s => s.laize_id));
+  const laizeMetaById = {};
   (S.laizes || []).filter(l => l.actif || currentLaizeIds.has(l.id)).forEach(l => {
     const lid = 'editmat-laize-' + item.id + '-' + l.id;
     const inp = el('input', { type: 'checkbox', id: lid, value: String(l.id) });
@@ -7594,30 +7608,55 @@ function appendMatiereRefEditFields(parent, item) {
       style: 'display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid ' + (inp.checked ? 'var(--accent)' : 'var(--border)') + ';border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;background:' + (inp.checked ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);user-select:none;transition:border-color .15s,background .15s;line-height:1' },
       inp, el('span', null, l.label),
     );
-    const priceInp = el('input', {
-      attrs: { type: 'number', min: '0', step: '0.0001', placeholder: '€/m²' },
-      style: 'width:90px;padding:4px 8px;font-size:12px',
-    });
-    priceInp.value = laizePriceMap[l.id] || '';
-    laizePriceInputs[l.id] = priceInp;
-    const priceWrap = el('span', {
-      cls: 'laize-price-wrap',
-      style: 'display:' + (isPrixParLaize ? 'inline-flex' : 'none') + ';align-items:center;gap:4px;font-size:12px;color:var(--muted)',
-    }, priceInp, el('span', null, '€/m²'));
-    const row = el('div', { cls: 'laize-row', style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' }, lbl, priceWrap);
+    laizeMetaById[l.id] = { label: l.label, checkbox: inp };
     inp.addEventListener('change', () => {
       lbl.style.borderColor = inp.checked ? 'var(--accent)' : 'var(--border)';
       lbl.style.background = inp.checked ? 'var(--accent-bg)' : 'var(--bg)';
+      // Persiste la saisie courante avant re-render
+      Object.entries(laizePriceInputs).forEach(([k, elInp]) => {
+        laizePriceValues[k] = (elInp.value || '').trim();
+      });
+      renderLaizePrices();
     });
-    laizeChecks.appendChild(row);
+    laizeChecks.appendChild(lbl);
   });
+  // Génère la liste des inputs prix par laize cochée
+  function renderLaizePrices() {
+    laizePricesGrid.innerHTML = '';
+    Object.keys(laizePriceInputs).forEach(k => { delete laizePriceInputs[k]; });
+    const selected = Object.entries(laizeMetaById)
+      .filter(([, meta]) => meta.checkbox.checked)
+      .map(([id, meta]) => ({ id: parseInt(id, 10), label: meta.label }));
+    if (!selected.length) {
+      laizePricesEmpty.style.display = '';
+      return;
+    }
+    laizePricesEmpty.style.display = 'none';
+    selected.forEach(({ id, label }) => {
+      const priceInp = el('input', {
+        attrs: { type: 'number', min: '0', step: '0.0001', placeholder: '€/m²' },
+        style: 'flex:1;min-width:120px;padding:8px 12px;font-size:13px',
+      });
+      if (laizePriceValues[id] != null) priceInp.value = laizePriceValues[id];
+      laizePriceInputs[id] = priceInp;
+      const row = el('div', {
+        style: 'display:flex;align-items:center;gap:10px',
+      },
+        el('div', {
+          style: 'min-width:80px;font-size:12px;font-weight:700;color:var(--text);padding:6px 10px;border:1px solid var(--accent);background:var(--accent-bg);border-radius:6px;text-align:center',
+        }, label),
+        priceInp,
+        el('span', { style: 'font-size:12px;color:var(--muted);font-weight:600' }, '€/m²'),
+      );
+      laizePricesGrid.appendChild(row);
+    });
+  }
   // Bascule affichage prix unique vs prix par laize
   function applyPrixMode() {
     const parLaize = prixModeLaiInp.checked;
     prixM2Field.style.display = parLaize ? 'none' : '';
-    laizeChecks.querySelectorAll('.laize-price-wrap').forEach(w => {
-      w.style.display = parLaize ? 'inline-flex' : 'none';
-    });
+    laizePricesField.style.display = parLaize ? '' : 'none';
+    if (parLaize) renderLaizePrices();
   }
   prixModeUniInp.addEventListener('change', applyPrixMode);
   prixModeLaiInp.addEventListener('change', applyPrixMode);
@@ -7625,6 +7664,7 @@ function appendMatiereRefEditFields(parent, item) {
     el('div', { cls: 'mp-field' }, el('label', null, 'Mètres linéaires par bobine'), metresInp),
     prixModeField,
     prixM2Field,
+    laizePricesField,
     el('div', { cls: 'mp-field' },
       el('label', null, 'Laizes disponibles'),
       laizeChecks,
