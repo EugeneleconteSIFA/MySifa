@@ -395,11 +395,30 @@
     _dragState = null;
   }
 
-  function _minimizeAlert(alertEl) {
+  function _minimizeAlert(alertEl, targetX, targetY) {
+    // Mémorise la position déployée pour la restaurer au clic sur le cercle.
     const rect = alertEl.getBoundingClientRect();
+    alertEl._expandedPos = { left: rect.left, top: rect.top };
+
+    // Positionne le cercle réduit centré sur (targetX, targetY) si fournis
+    // (typiquement, le centre du bouton "-"). Sinon retombe sur le coin haut-gauche.
+    const size = 56;
+    let left, top;
+    if (typeof targetX === 'number' && typeof targetY === 'number') {
+      left = targetX - size / 2;
+      top = targetY - size / 2;
+    } else {
+      left = rect.left;
+      top = rect.top;
+    }
+    const w = window.innerWidth || document.documentElement.clientWidth;
+    const h = window.innerHeight || document.documentElement.clientHeight;
+    left = Math.max(0, Math.min(left, w - size));
+    top = Math.max(0, Math.min(top, h - size));
+
     alertEl.style.position = 'fixed';
-    alertEl.style.left = rect.left + 'px';
-    alertEl.style.top = rect.top + 'px';
+    alertEl.style.left = left + 'px';
+    alertEl.style.top = top + 'px';
     alertEl.style.right = 'auto';
     alertEl.style.bottom = 'auto';
     alertEl.style.margin = '0';
@@ -415,6 +434,11 @@
   function _restoreAlert(alertEl) {
     alertEl.classList.remove('ta-minimized');
     alertEl.removeAttribute('title');
+    // Restaure la position exacte qu'occupait l'alerte avant réduction.
+    if (alertEl._expandedPos) {
+      alertEl.style.left = alertEl._expandedPos.left + 'px';
+      alertEl.style.top = alertEl._expandedPos.top + 'px';
+    }
   }
 
   function _startMinInteract(ev, alertEl) {
@@ -505,7 +529,10 @@
     if (minBtn && alertEl) {
       minBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        _minimizeAlert(alertEl);
+        const btnRect = minBtn.getBoundingClientRect();
+        const cx = btnRect.left + btnRect.width / 2;
+        const cy = btnRect.top + btnRect.height / 2;
+        _minimizeAlert(alertEl, cx, cy);
       });
     }
 
@@ -554,7 +581,7 @@
       }
       _displayed.add(raw.id);
       const alert = _normalizeAlert(raw);
-      _renderAlert(alert);
+           _renderAlert(alert);
       if (_settings.stack_mode !== 'stack') {
         break;
       }
