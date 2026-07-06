@@ -833,10 +833,6 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 <span class="ctrl-extra-toggle-state" id="ctrl-extra-toggle-state">OFF</span>
               </button>
               <div class="ops-list-count" id="ctrl-count">0 contrôle</div>
-              <button type="button" class="ops-btn-add" onclick="openCtrlModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Nouveau contrôle
-              </button>
             </div>
           </div>
           <div class="ops-table-wrap">
@@ -4447,7 +4443,7 @@ function renderCtrl(){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
       ? 'Aucun contrôle ne correspond aux filtres.'
-      : 'Aucun contrôle enregistré. Cliquez sur « Nouveau contrôle » pour commencer.';
+      : 'Aucun contrôle enregistré pour cette période.';
     tbody.innerHTML = '<tr><td colspan="' + totalCols + '" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
     const rows = filtered.map(c => {
@@ -4491,12 +4487,9 @@ function renderCtrl(){
       // Actions
       let actionHtml = '';
       if(c._source === 'alert'){
-        actionHtml = '<div class="ctrl-actions-stack">' +
-          '<span class="ctrl-src-badge" title="Validation issue d\'une alerte opérateur">Alerte</span>' +
-          '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          '</button>' +
-        '</div>';
+        actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        '</button>';
       } else {
         actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
