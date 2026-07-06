@@ -10,6 +10,7 @@ from app.web.access_denied import access_denied_response
 from config import APP_VERSION
 
 ROLES_QUALITE = {"superadmin", "direction", "administration"}
+ROLES_QUALITE_READONLY = {"commercial"}
 
 router = APIRouter()
 
@@ -25,13 +26,17 @@ def qualite_page(request: Request):
     # Acces module Qualite :
     # - Roles ROLES_QUALITE (superadmin/direction/administration) : acces complet
     #   (NC, Canaux NC, Audits client, Referentiel RSE).
+    # - Roles ROLES_QUALITE_READONLY (commercial) : lecture seule NC/Canaux/Audits,
+    #   pas d'ecriture. Les boutons sont masques via IS_QUALITE_READONLY cote JS.
     # - Autres roles connectes : acces limite au Referentiel en lecture/proposition.
     #   Les tabs NC / Canaux / Audits sont masques via le flag IS_QUALITE_ADMIN cote JS.
     is_admin = user["role"] in ROLES_QUALITE
+    is_readonly = user["role"] in ROLES_QUALITE_READONLY
     html = (
         QUALITE_HTML
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__IS_QUALITE_ADMIN__", "true" if is_admin else "false")
+        .replace("__IS_QUALITE_READONLY__", "true" if is_readonly else "false")
     )
     return HTMLResponse(
         content=html,
@@ -221,6 +226,15 @@ body.light .table-wrap tbody tr:hover td{background:rgba(0,0,0,.02)}
 .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
 .form-textarea{resize:vertical;min-height:80px;line-height:1.5}
 .form-input[readonly]{background:transparent;cursor:default;color:var(--muted)}
+/* Rôle « commercial » : lecture seule sur NC/Canaux/Audits — on masque tout ce qui écrit,
+   on rend les champs de saisie non modifiables (curseur classique, pas de focus visuel). */
+body.qualite-readonly .qual-write{display:none !important}
+body.qualite-readonly .form-input,
+body.qualite-readonly .form-select,
+body.qualite-readonly .form-textarea{background:transparent;color:var(--text2);cursor:default;pointer-events:none;border-color:var(--border)}
+body.qualite-readonly .chip{cursor:default;pointer-events:none;opacity:.85}
+body.qualite-readonly .badge-clickable{cursor:default}
+body.qualite-readonly .aud-aud-chip .x{display:none}
 .form-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 .chips-row{display:flex;flex-wrap:wrap;gap:6px}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;background:var(--bg);border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--text2);cursor:pointer;transition:.15s;font-family:inherit}
@@ -570,6 +584,7 @@ const S = {
   refOpenQaId: null,         // ID de la question ouverte dans l'accordéon
   refEditQaId: null,         // ID de la question en cours d'édition inline
   isQualiteAdmin: __IS_QUALITE_ADMIN__,
+  isQualiteReadonly: __IS_QUALITE_READONLY__,
 };
 
 const STATUTS = [
@@ -826,7 +841,7 @@ function renderList(){
         <div class="page-title">Non-<span>conformités</span></div>
         <div class="page-subtitle">Suivi des NC internes, clients, fournisseurs et logistiques</div>
       </div>
-      <div class="header-actions">
+      <div class="header-actions qual-write">
         <button type="button" class="btn btn-ghost" onclick="openImportModal()">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Importer xlsx
@@ -917,7 +932,7 @@ function renderDetail(){
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Exporter PDF
         </a>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="openDelModal(${n.id})">
+        <button type="button" class="btn btn-ghost btn-sm qual-write" onclick="openDelModal(${n.id})">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           Supprimer
         </button>
@@ -1110,6 +1125,7 @@ function toggleService(s){
 
 let _saveTimers = {};
 function saveField(field, value){
+  if(S.isQualiteReadonly) return;
   if(!S.current) return;
   // Optimistic update
   S.current[field]=value;
@@ -1139,6 +1155,7 @@ function saveField(field, value){
 }
 
 async function signValid(kind){
+  if(S.isQualiteReadonly) return;
   if(!S.current) return;
   try{
     const r=await api('/api/qualite/nc/'+S.current.id+'/valider',{
@@ -1149,6 +1166,7 @@ async function signValid(kind){
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 async function revokeValid(kind){
+  if(S.isQualiteReadonly) return;
   if(!S.current) return;
   if(!confirm('Retirer la signature ?')) return;
   try{
@@ -1174,14 +1192,14 @@ function renderFichiersTab(n){
       </div>
       <div class="file-actions">
         <a class="btn btn-ghost btn-sm" href="/api/qualite/nc/${n.id}/fichiers/${f.id}" target="_blank" rel="noopener">Ouvrir</a>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="delFichier(${f.id})">Supprimer</button>
+        <button type="button" class="btn btn-ghost btn-sm qual-write" onclick="delFichier(${f.id})">Supprimer</button>
       </div>
     </div>`;
   }).join(''):'<div class="empty" style="padding:30px"><div class="empty-title">Aucun fichier</div><div class="empty-sub">Ajoutez les pièces jointes (emails, PDF, photos, xlsx…) via la zone ci-dessus.</div></div>';
 
   return `<div class="card">
     <div class="card-title">Pièces jointes</div>
-    <label class="upload-zone" id="upload-zone" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, ${n.id})">
+    <label class="upload-zone qual-write" id="upload-zone" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, ${n.id})">
       <div style="display:flex;justify-content:center;margin-bottom:10px">
         <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -1210,6 +1228,7 @@ async function onFileInput(e, ncId){
   e.target.value='';
 }
 async function uploadFile(ncId, file){
+  if(S.isQualiteReadonly) return;
   try{
     const fd=new FormData();fd.append('file', file);
     const r=await api('/api/qualite/nc/'+ncId+'/fichiers',{method:'POST',body:fd});
@@ -1220,6 +1239,7 @@ async function uploadFile(ncId, file){
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 async function delFichier(fileId){
+  if(S.isQualiteReadonly) return;
   if(!S.current) return;
   if(!confirm('Supprimer ce fichier ?')) return;
   try{
@@ -1257,7 +1277,7 @@ function renderDiscussionTab(n){
   return `<div class="card">
     <div class="card-title">Fil de discussion</div>
     <div class="msg-list" id="msg-list">${messagesHtml}</div>
-    <div class="msg-input-wrap">
+    <div class="msg-input-wrap qual-write">
       <textarea id="msg-input" class="msg-input" placeholder="Écrire un message…" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendMessage();}"></textarea>
       <button type="button" class="btn btn-accent" onclick="sendMessage()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -1269,6 +1289,7 @@ function renderDiscussionTab(n){
 }
 
 async function sendMessage(){
+  if(S.isQualiteReadonly) return;
   if(!S.current) return;
   const inp=document.getElementById('msg-input');
   const text=(inp?.value||'').trim();
@@ -1326,6 +1347,7 @@ function renderCanaux(){
 
 // ── Création NC ────────────────────────────────────────────────────
 function openCreateModal(){
+  if(S.isQualiteReadonly) return;
   document.getElementById('c-titre').value='';
   document.getElementById('c-ar').value='';
   document.getElementById('c-type').value='interne';
@@ -1342,6 +1364,7 @@ function openCreateModal(){
 function closeCreateModal(){document.getElementById('create-modal').style.display='none';}
 
 async function submitCreate(){
+  if(S.isQualiteReadonly) return;
   const titre=document.getElementById('c-titre').value.trim();
   if(!titre){showToast('Titre obligatoire','danger');return;}
   const body={
@@ -1372,6 +1395,7 @@ async function submitCreate(){
 
 // ── Import xlsx ────────────────────────────────────────────────────
 function openImportModal(){
+  if(S.isQualiteReadonly) return;
   document.getElementById('import-file').value='';
   document.getElementById('import-zone-label').textContent='Glisser-déposer le fichier xlsx, ou cliquer pour choisir';
   document.getElementById('import-progress').style.display='none';
@@ -1390,6 +1414,7 @@ function onImportFile(e){
   if(files.length) submitImport(files[0]);
 }
 async function submitImport(file){
+  if(S.isQualiteReadonly) return;
   const name=(file.name||'').toLowerCase();
   if(!name.endsWith('.xlsx')&&!name.endsWith('.xlsm')){
     showToast('Format requis : .xlsx ou .xlsm','danger');return;
@@ -1451,6 +1476,7 @@ function pickDossier(no){
 
 // ── Suppression ────────────────────────────────────────────────────
 function openDelModal(id){
+  if(S.isQualiteReadonly) return;
   S.delId=id;
   const nc=S.current||S.ncs.find(n=>n.id===id);
   document.getElementById('del-msg').textContent=`La NC ${nc?nc.numero:''} sera définitivement supprimée, ainsi que tous ses fichiers et messages. Cette action est irréversible.`;
@@ -1458,6 +1484,7 @@ function openDelModal(id){
 }
 function closeDelModal(){document.getElementById('del-modal').style.display='none';S.delId=null;}
 async function confirmDelete(){
+  if(S.isQualiteReadonly) return;
   if(!S.delId) return;
   try{
     const r=await api('/api/qualite/nc/'+S.delId,{method:'DELETE'});
@@ -1552,7 +1579,27 @@ async function confirmDelete(){
     .aud-drop-hint{padding:14px 18px;border:2px dashed var(--border);border-radius:10px;text-align:center;
       color:var(--muted);font-size:12px;margin:8px 14px 0;transition:.12s}
     .aud-drop-hint.over{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
-  `;
+  
+/* Badge Source officielle : mis en avant avec fond accent */
+.ref-source-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--accent-bg);
+  border:1px solid var(--accent);
+  color:var(--accent);
+  border-radius:20px;padding:5px 12px;
+  font-size:11.5px;font-weight:600;
+  text-decoration:none;
+  transition:all .15s;
+  white-space:nowrap
+}
+.ref-source-btn:hover{
+  background:var(--accent);
+  color:var(--btn-fg);
+  transform:translateY(-1px);
+  box-shadow:0 4px 12px rgba(34,211,238,.25)
+}
+.ref-source-btn svg{opacity:.85}
+`;
   document.head.appendChild(st);
 })();
 
@@ -1616,7 +1663,7 @@ function renderAuditsList(){
   root.innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
       <h2 style="margin:0;font-size:18px;color:var(--text)">Audits client</h2>
-      <button type="button" class="btn btn-accent" onclick="openCreateAuditModal()">
+      <button type="button" class="btn btn-accent qual-write" onclick="openCreateAuditModal()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Nouvel audit
       </button>
@@ -1696,7 +1743,7 @@ function renderAuditDetail(){
         <h2 style="margin:8px 0 4px;font-size:18px;color:var(--text)">${escHtml(a.client_nom||'—')}</h2>
         <div style="font-size:12px;color:var(--muted)">Audit du ${escHtml(fmtDate(a.date_audit))} · ${(a.auditeurs||[]).length} auditeur(s)</div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
         ${a.statut==='ouvert'?`<button class="btn btn-accent" onclick="cloturerAudit()" style="padding:8px 14px;font-size:12px">Clôturer</button>`:`<button class="btn btn-ghost" onclick="rouvrirAudit()" style="padding:8px 14px;font-size:12px">Rouvrir</button>`}
         <button class="btn btn-danger" onclick="deleteAudit()" style="padding:8px 14px;font-size:12px">Supprimer</button>
       </div>
@@ -1891,6 +1938,7 @@ function renderAuditDiscussionHTML(){
 function navFolder(id){S.currentFolderId=id;renderAuditTab();}
 
 async function createSubfolder(){
+  if(S.isQualiteReadonly) return;
   const nom=prompt('Nom du sous-dossier :');
   if(!nom||!nom.trim()) return;
   try{
@@ -1922,6 +1970,7 @@ async function renameFolder(fid){
 }
 
 async function deleteFolderConfirm(fid){
+  if(S.isQualiteReadonly) return;
   const f=S.currentAuditFolders.find(x=>x.id===fid);
   if(!f) return;
   if(!confirm('Supprimer le sous-dossier « '+f.nom+' » et tout son contenu ?')) return;
@@ -1935,6 +1984,7 @@ async function deleteFolderConfirm(fid){
 }
 
 async function uploadAuditFiles(files){
+  if(S.isQualiteReadonly) return;
   if(!files||!files.length) return;
   const id=S.currentAudit.id;
   for(const f of files){
@@ -1962,6 +2012,7 @@ function openFile(fid){
 }
 
 async function deleteAuditFile(fid){
+  if(S.isQualiteReadonly) return;
   if(!confirm('Supprimer ce fichier ?')) return;
   try{
     const r=await api('/api/qualite/audits/'+S.currentAudit.id+'/fichiers/'+fid,{method:'DELETE'});
@@ -1972,6 +2023,7 @@ async function deleteAuditFile(fid){
 }
 
 async function saveAuditField(field,val){
+  if(S.isQualiteReadonly) return;
   try{
     const body={};body[field]=val;
     const r=await api('/api/qualite/audits/'+S.currentAudit.id,{
@@ -1984,6 +2036,7 @@ async function saveAuditField(field,val){
 }
 
 async function cloturerAudit(){
+  if(S.isQualiteReadonly) return;
   if(!confirm('Clôturer cet audit ?')) return;
   const r=await api('/api/qualite/audits/'+S.currentAudit.id+'/cloturer',{method:'POST'});
   if(!r.ok){showToast('Erreur','danger');return;}
@@ -1993,6 +2046,7 @@ async function cloturerAudit(){
   loadUnread();
 }
 async function rouvrirAudit(){
+  if(S.isQualiteReadonly) return;
   const r=await api('/api/qualite/audits/'+S.currentAudit.id+'/rouvrir',{method:'POST'});
   if(!r.ok){showToast('Erreur','danger');return;}
   S.currentAudit=await r.json();
@@ -2001,6 +2055,7 @@ async function rouvrirAudit(){
   loadUnread();
 }
 async function deleteAudit(){
+  if(S.isQualiteReadonly) return;
   if(!confirm('Supprimer définitivement cet audit et tous ses fichiers ?')) return;
   const r=await api('/api/qualite/audits/'+S.currentAudit.id,{method:'DELETE'});
   if(!r.ok){showToast('Erreur suppression','danger');return;}
@@ -2010,7 +2065,8 @@ async function deleteAudit(){
   setView('audits-list');
 }
 
-async function sendAuditMessage(){
+async function sendAuditMessage(
+  if(S.isQualiteReadonly) return;){
   const inp=document.getElementById('aud-msg-input');
   if(!inp) return;
   const text=inp.value.trim();
@@ -2027,7 +2083,8 @@ async function sendAuditMessage(){
   }catch(e){showToast('Erreur réseau','danger');}
 }
 
-async function removeAuditeur(uid){
+async function removeAuditeur(
+  if(S.isQualiteReadonly) return;uid){
   if(!confirm('Retirer cet auditeur ?')) return;
   const r=await api('/api/qualite/audits/'+S.currentAudit.id+'/auditeurs/'+uid,{method:'DELETE'});
   if(!r.ok){showToast('Erreur','danger');return;}
@@ -2037,6 +2094,7 @@ async function removeAuditeur(uid){
 
 // ── Modal création audit ────────────────────────────────────────
 function openCreateAuditModal(){
+  if(S.isQualiteReadonly) return;
   const wrap=document.getElementById('mroot')||(function(){
     const d=document.createElement('div');d.id='mroot';document.body.appendChild(d);return d;
   })();
@@ -2154,6 +2212,7 @@ function pickClient(id,nom){
 }
 
 async function submitCreateAudit(){
+  if(S.isQualiteReadonly) return;
   const client=(document.getElementById('ac-client').value||'').trim();
   const clientIdRaw=(document.getElementById('ac-client-id').value||'').trim();
   const clientId=clientIdRaw?parseInt(clientIdRaw,10):null;
@@ -2224,6 +2283,7 @@ function renderAddAuditeurList(q){
   </div>`).join(''):'<div style="padding:12px;color:var(--muted);font-size:12px;text-align:center">Aucun candidat</div>';
 }
 async function addAuditeurNow(uid){
+  if(S.isQualiteReadonly) return;
   const r=await api('/api/qualite/audits/'+S.currentAudit.id+'/auditeurs',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({user_id:uid})
@@ -2240,8 +2300,8 @@ async function addAuditeurNow(uid){
 async function init(){
   updateThemeBtn();
   await loadMe();
-  // Masquer les tabs reservees aux roles Qualite si l utilisateur n a pas les droits
-  if(!S.isQualiteAdmin){
+  // Rôle sans droits Qualite ni lecture seule : on masque NC/Canaux/Audits et on bascule sur le référentiel
+  if(!S.isQualiteAdmin && !S.isQualiteReadonly){
     ['nav-nc','nav-canaux','nav-audits'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.style.display='none';
     });
@@ -2251,6 +2311,13 @@ async function init(){
     await loadRefMeta();
     await loadRefFiches();
     return;
+  }
+  // Rôle lecture seule (commercial) : masquer le tab Référentiel (édition ref réservée aux admin qualité)
+  if(S.isQualiteReadonly && !S.isQualiteAdmin){
+    const refBtn=document.getElementById('nav-ref');
+    if(refBtn) refBtn.style.display='none';
+    // Marquer le body pour masquer via CSS les boutons d'écriture
+    document.body.classList.add('qualite-readonly');
   }
   await loadUsers();
   await Promise.all([loadNCs(),loadCanaux(),loadUnread(),loadRefMeta()]);
@@ -2732,7 +2799,7 @@ function renderRefDetail(){
         <div class="ref-detail-sub">
           ${cat} ${badge}
           <span title="Statut SIFA">${dot}${escHtml(_refStatSLabel(f.statut_sifa))}</span>
-          ${f.source_url?`<a href="${escAttr(f.source_url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-size:11px">Source officielle ↗</a>`:''}
+          ${f.source_url?`<a class="ref-source-btn" href="${escAttr(f.source_url)}" target="_blank" rel="noopener" title="${escAttr(f.source_url)}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Source officielle</a>`:''}
         </div>
       </div>`;
 

@@ -4374,8 +4374,8 @@ function renderPortal(){
   const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
   const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
   const isAo = isSuper || urole === 'direction';
-  const isBAT = isSuper || !!(urole && ['direction','administration'].includes(urole));
-  const isQualite = isSuper || !!(urole && ['direction','administration'].includes(urole));
+  const isBAT = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
+  const isQualite = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
   const isMaintenance = isSuper || _uident === 'loic.gognau';
   const isLight=document.body.classList.contains('light');
