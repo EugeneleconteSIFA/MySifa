@@ -4133,9 +4133,9 @@ function openEditStockModal(row){
   const overlay = h('div',{className:'add-row-modal',style:{position:'fixed',inset:'0',background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}});
   const box = h('div',{style:{background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px',padding:'22px',width:'min(560px,92vw)',maxHeight:'86vh',overflow:'auto',boxShadow:'0 12px 40px rgba(0,0,0,.35)'}});
 
-  // Titre + badge lettres
-  const badgeColor = isMP ? '#c4b5fd' : '#a7f3d0';
-  const badgeBg = isMP ? 'rgba(196,181,253,.18)' : 'rgba(167,243,208,.18)';
+  // Titre + badge lettres (meme teinte violet pastel pour tous les codes stock)
+  const badgeColor = '#c4b5fd';
+  const badgeBg = 'rgba(196,181,253,.22)';
   box.appendChild(h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'6px'}},
     h('span',{style:{padding:'3px 10px',borderRadius:'8px',background:badgeBg,color:badgeColor,fontWeight:'700',fontFamily:'monospace',fontSize:'13px'}},code),
     h('h3',{style:{margin:0}},codeLabel)
@@ -4602,10 +4602,8 @@ function renderSaisies(){
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
     } else if (row.operation_severity === 'attention') {
       rowBg = 'rgba(251,191,36,.18)';           // jaune soutenu
-    } else if (row.kind === 'stock_pf' || cat === 'stock_pf') {
-      rowBg = 'rgba(167,243,208,.18)';          // vert pastel produits finis (EP/SP)
-    } else if (row.kind === 'stock_mp' || cat === 'stock_mp') {
-      rowBg = 'rgba(196,181,253,.22)';          // violet pastel matieres premieres (EM/SM)
+    } else if (row.kind === 'stock_pf' || row.kind === 'stock_mp' || cat === 'stock_pf' || cat === 'stock_mp') {
+      rowBg = 'rgba(196,181,253,.22)';          // violet pastel mouvements stock (EP/SP/EM/SM)
     } else if (cat === 'production' || opCode === '03' || opCode === '88') {
       rowBg = 'rgba(52,211,153,.12)';           // vert production
     } else if (cat === 'personnel' || opCode === '86' || opCode === '87') {
