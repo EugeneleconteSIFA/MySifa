@@ -236,10 +236,11 @@
   }
 
   // ── 5. Favicon badge + alerts polling + sidebar toggles ────────────
-  // Base = vrai PNG "MyS" (dark ou light selon window.__MYSIFA_ENV__),
-  // la pastille de comptage est superposée en canvas.
+  // Base = vrai PNG "MyS" (dark ou light selon window.__MYSIFA_ENV__) en résolution
+  // 192, downscalé sur un canvas 64×64 pour un rendu net, pastille superposée.
   const __IS_STAGING_FAV = (window.__MYSIFA_ENV__ === 'v1');
-  const __FAV_BASE_SRC = '/static/favicon' + (__IS_STAGING_FAV ? '-light' : '') + '-32.png';
+  const __FAV_SFX = __IS_STAGING_FAV ? '-light' : '';
+  const __FAV_BASE_SRC = '/static/mys_icon' + __FAV_SFX + '_192.png';
   const __favBaseImg = new Image();
   let __favBaseReady = false;
   __favBaseImg.onload = function(){ __favBaseReady = true; try { refreshAlertsBadge(); } catch(e){} };
@@ -250,40 +251,46 @@
     const fg = __IS_STAGING_FAV ? '#0f172a' : '#f1f5f9';
     ctx.fillStyle = bg;
     ctx.beginPath();
-    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 32, 32, 6);
-    else ctx.rect(0, 0, 32, 32);
+    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 64, 64, 12);
+    else ctx.rect(0, 0, 64, 64);
     ctx.fill();
     ctx.fillStyle = fg;
-    ctx.font = 'bold 20px system-ui';
+    ctx.font = 'bold 40px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('M', 16, 17);
+    ctx.fillText('M', 32, 34);
   }
 
   function updateFaviconBadge(count){
     const canvas = document.createElement('canvas');
-    canvas.width = 32; canvas.height = 32;
+    canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');
     if(!ctx) return;
 
     if(__favBaseReady){
-      try { ctx.drawImage(__favBaseImg, 0, 0, 32, 32); }
+      try { ctx.drawImage(__favBaseImg, 0, 0, 64, 64); }
       catch(e){ __drawFavFallback(ctx); }
     } else {
       __drawFavFallback(ctx);
     }
 
     if(count > 0){
-      ctx.fillStyle = '#f87171';
+      // Contour blanc en v2 / foncé en v1 pour contraster avec le fond du favicon.
+      ctx.fillStyle = __IS_STAGING_FAV ? '#0f172a' : '#ffffff';
       ctx.beginPath();
-      ctx.arc(24, 8, 7, 0, Math.PI * 2);
+      ctx.arc(48, 16, 17, 0, Math.PI * 2);
       ctx.fill();
-
+      // Pastille rouge.
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(48, 16, 15, 0, Math.PI * 2);
+      ctx.fill();
+      // Chiffre.
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9px system-ui';
+      ctx.font = 'bold 20px system-ui,-apple-system,Segoe UI,sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(count > 9 ? '9+' : String(count), 24, 8);
+      ctx.fillText(count > 9 ? '9+' : String(count), 48, 17);
     }
 
     let link = document.querySelector('link[rel="icon"]');

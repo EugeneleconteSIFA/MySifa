@@ -6,8 +6,8 @@
 (function () {
   var ENV = (typeof window !== 'undefined' && window.__MYSIFA_ENV__) || 'v2';
   var IS_STAGING = (ENV === 'v1');
-  // Suffix des icônes MySifa : dark par défaut, -light en staging v1.
-  var BASE_SRC = '/static/favicon' + (IS_STAGING ? '-light' : '') + '-32.png';
+  // Base : PNG "MyS" 192px (dark ou light), downscalé net sur un canvas 64×64.
+  var BASE_SRC = '/static/mys_icon' + (IS_STAGING ? '-light' : '') + '_192.png';
 
   // Précharge l'image de base une fois — réutilisée à chaque refresh.
   var baseImg = new Image();
@@ -18,34 +18,37 @@
 
   function updateFaviconBadge(count) {
     var canvas = document.createElement('canvas');
-    canvas.width = 32;
-    canvas.height = 32;
+    canvas.width = 64;
+    canvas.height = 64;
     var ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     if (baseReady) {
-      // Dessine le vrai logo MyS.
-      try { ctx.drawImage(baseImg, 0, 0, 32, 32); }
+      try { ctx.drawImage(baseImg, 0, 0, 64, 64); }
       catch (e) { drawFallback(ctx); }
     } else {
       drawFallback(ctx);
     }
 
     if (count > 0) {
-      // Pastille rouge — visible sur fond clair (v1) comme sur fond foncé (v2).
-      ctx.fillStyle = '#f87171';
+      // Contour blanc en v2 / foncé en v1 pour contraster avec le fond du favicon.
+      ctx.fillStyle = IS_STAGING ? '#0f172a' : '#ffffff';
       ctx.beginPath();
-      ctx.arc(24, 8, 7, 0, Math.PI * 2);
+      ctx.arc(48, 16, 17, 0, Math.PI * 2);
       ctx.fill();
-
+      // Pastille rouge.
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(48, 16, 15, 0, Math.PI * 2);
+      ctx.fill();
+      // Chiffre.
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9px system-ui';
+      ctx.font = 'bold 20px system-ui,-apple-system,Segoe UI,sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(count > 9 ? '9+' : String(count), 24, 8);
+      ctx.fillText(count > 9 ? '9+' : String(count), 48, 17);
     }
 
-    // Remplace le <link rel="icon"> — tous les navigateurs modernes acceptent data URL.
     var link = document.querySelector('link[rel="icon"]');
     if (!link) {
       link = document.createElement('link');
@@ -55,23 +58,22 @@
     link.href = canvas.toDataURL();
   }
 
-  // Fallback si l'image PNG n'a pas pu charger : "M" simple, couleurs env-dépendantes.
   function drawFallback(ctx) {
     var bg = IS_STAGING ? '#f1f5f9' : '#0a0e17';
     var fg = IS_STAGING ? '#0f172a' : '#f1f5f9';
     ctx.fillStyle = bg;
     ctx.beginPath();
     if (typeof ctx.roundRect === 'function') {
-      ctx.roundRect(0, 0, 32, 32, 6);
+      ctx.roundRect(0, 0, 64, 64, 12);
     } else {
-      ctx.rect(0, 0, 32, 32);
+      ctx.rect(0, 0, 64, 64);
     }
     ctx.fill();
     ctx.fillStyle = fg;
-    ctx.font = 'bold 20px system-ui';
+    ctx.font = 'bold 40px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('M', 16, 17);
+    ctx.fillText('M', 32, 34);
   }
 
   async function refreshAlertsBadge() {

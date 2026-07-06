@@ -24,11 +24,11 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="1024x1024" href="/static/mys_icon__FAV_SFX2___1024.png">
 <link rel="manifest" href="__MANIFEST__">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="__APP_TITLE__">
+<meta name="apple-mobile-web-app-title" content="__BRAND__">
 <meta name="theme-color" content="#0a0e17">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>__APP_TITLE__ — MySifa</title>
+<title>__PAGE_TITLE__</title>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
@@ -2719,9 +2719,11 @@ function showToast(message,type){
   toast(message,t);
 }
 
-// Favicon : base = vrai PNG "MyS" (dark ou light selon env), pastille superposée.
+// Favicon : base = vrai PNG "MyS" (dark ou light selon env) en résolution 192,
+// downscalé sur un canvas 64×64 pour un rendu net, avec pastille de comptage.
 const __IS_STAGING_FAV=(window.__MYSIFA_ENV__==='v1');
-const __FAV_BASE_SRC='/static/favicon'+(__IS_STAGING_FAV?'-light':'')+'-32.png';
+const __FAV_SFX=__IS_STAGING_FAV?'-light':'';
+const __FAV_BASE_SRC='/static/mys_icon'+__FAV_SFX+'_192.png';
 const __favBaseImg=new Image();
 let __favBaseReady=false;
 __favBaseImg.onload=function(){__favBaseReady=true;try{refreshAlertsBadge();}catch(e){}};
@@ -2729,27 +2731,33 @@ __favBaseImg.src=__FAV_BASE_SRC;
 
 function updateFaviconBadge(count){
   const canvas=document.createElement('canvas');
-  canvas.width=32;canvas.height=32;
+  canvas.width=64;canvas.height=64;
   const ctx=canvas.getContext('2d');
   if(!ctx)return;
 
   if(__favBaseReady){
-    try{ctx.drawImage(__favBaseImg,0,0,32,32);}catch(e){__drawFavFallback(ctx);}
+    try{ctx.drawImage(__favBaseImg,0,0,64,64);}catch(e){__drawFavFallback(ctx);}
   }else{
     __drawFavFallback(ctx);
   }
 
   if(count>0){
-    ctx.fillStyle='#f87171';
+    // Contour blanc en v2 / foncé en v1 pour toujours contraster avec le favicon.
+    ctx.fillStyle=__IS_STAGING_FAV?'#0f172a':'#ffffff';
     ctx.beginPath();
-    ctx.arc(24,8,7,0,Math.PI*2);
+    ctx.arc(48,16,17,0,Math.PI*2);
     ctx.fill();
-
+    // Pastille rouge.
+    ctx.fillStyle='#dc2626';
+    ctx.beginPath();
+    ctx.arc(48,16,15,0,Math.PI*2);
+    ctx.fill();
+    // Chiffre.
     ctx.fillStyle='#ffffff';
-    ctx.font='bold 9px system-ui';
+    ctx.font='bold 20px system-ui,-apple-system,Segoe UI,sans-serif';
     ctx.textAlign='center';
     ctx.textBaseline='middle';
-    ctx.fillText(count>9?'9+':String(count),24,8);
+    ctx.fillText(count>9?'9+':String(count),48,17);
   }
 
   let link=document.querySelector('link[rel="icon"]');
@@ -2766,14 +2774,14 @@ function __drawFavFallback(ctx){
   const fg=__IS_STAGING_FAV?'#0f172a':'#f1f5f9';
   ctx.fillStyle=bg;
   ctx.beginPath();
-  if(typeof ctx.roundRect==='function')ctx.roundRect(0,0,32,32,6);
-  else ctx.rect(0,0,32,32);
+  if(typeof ctx.roundRect==='function')ctx.roundRect(0,0,64,64,12);
+  else ctx.rect(0,0,64,64);
   ctx.fill();
   ctx.fillStyle=fg;
-  ctx.font='bold 20px system-ui';
+  ctx.font='bold 40px system-ui';
   ctx.textAlign='center';
   ctx.textBaseline='middle';
-  ctx.fillText('M',16,17);
+  ctx.fillText('M',32,34);
 }
 
 async function refreshAlertsBadge(){
@@ -14565,6 +14573,15 @@ def render_frontend_html(initial_app: str = "portal") -> str:
     touch_icon = cfg["touch_icon"]
     if IS_STAGING:
         touch_icon = touch_icon.replace("mys_icon_180.png", "mys_icon-light_180.png")
+    # Marque affichée dans le titre onglet + apple-mobile-web-app-title.
+    # Prod → "MySifa" ; staging v1 → "MySifa test" (impossible de confondre les 2 onglets).
+    brand = "MySifa test" if IS_STAGING else "MySifa"
+    # Page-title : si l'app_title == "MySifa", pas de doublon (on affiche la brand seule).
+    # Sinon on préfixe : "MyExpé — MySifa" / "MyExpé — MySifa test".
+    if cfg["app_title"] == "MySifa":
+        page_title = brand
+    else:
+        page_title = f"{cfg['app_title']} — {brand}"
     return (
         _FRONTEND_HTML_TEMPLATE.replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
@@ -14578,6 +14595,8 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__FAV_SFX__", fav_sfx)
         .replace("__FAV_SFX2__", fav_sfx)
         .replace("__TOUCH_ICON__", touch_icon)
+        .replace("__PAGE_TITLE__", page_title)
+        .replace("__BRAND__", brand)
         .replace("__APP_TITLE__", cfg["app_title"])
         .replace("__MANIFEST__", cfg["manifest"])
         .replace("__EXPE_TRANSPORTEURS_CSS__", EXPE_TRANSPORTEURS_CSS)
