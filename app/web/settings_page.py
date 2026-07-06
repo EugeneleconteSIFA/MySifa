@@ -118,6 +118,18 @@ body.light .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba
 .op-filter{flex:1;min-width:200px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .op-filter:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 body.light .op-filter:focus{box-shadow:0 0 0 3px rgba(8,145,178,.1)}
+.maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
+.maint-doc-add-btn:hover{filter:brightness(1.06)}
+.maint-doc-add-btn:active{transform:translateY(1px)}
+.maint-doc-add-btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
+.maint-doc-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.maint-doc-row-info{flex:1;min-width:0}
+.maint-doc-row-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.maint-doc-row-meta{font-size:10px;color:var(--muted);margin-top:2px;display:block}
+.maint-doc-row-link{padding:4px 10px;font-size:11px;font-weight:600;color:var(--accent);border:1px solid var(--border);border-radius:6px;text-decoration:none;transition:border-color .12s}
+.maint-doc-row-link:hover{border-color:var(--accent)}
+.maint-doc-row-del{padding:4px 8px;font-size:11px;color:var(--danger);border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer;font-family:inherit}
+.maint-doc-row-del:hover{border-color:var(--danger);background:rgba(248,113,113,.08)}
 .op-form-panel{margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
 .op-form-panel h3{margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .op-table-wrap{margin-top:4px}
@@ -1036,6 +1048,23 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
+          </div>
+          <div id="maint-form-docs" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Documents attaches</div>
+                <div id="maint-form-docs-hint" style="font-size:11px;color:var(--muted);margin-top:2px">Fichiers explicatifs consultes par les operateurs.</div>
+              </div>
+              <span style="font-size:11px;color:var(--muted);white-space:nowrap">20 Mo max</span>
+            </div>
+            <input type="file" id="maint-form-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" onchange="_maintOnDocFileChange()">
+            <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+              <p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>
+            </div>
+            <button type="button" class="maint-doc-add-btn" id="maint-form-doc-add-btn" onclick="_maintTriggerDocPicker()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>Ajouter un fichier</span>
+            </button>
           </div>
         </div>
         <div class="op-toolbar">
@@ -3211,7 +3240,7 @@ function renderMaintList() {
   let body = '';
   ['controles', 'interventions'].forEach(cat => {
     if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="9">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="10">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(String(o.code));
       const niv = parseInt(o.niveau, 10) || 1;
@@ -3252,6 +3281,10 @@ function renderMaintList() {
         + '<td>' + intervalleDisplay + '</td>'
         + '<td>' + metrageDisplay + '</td>'
         + '<td>' + lastInterventionDisplay + '</td>'
+        + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
+        +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+        +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
+        + '</button></td>'
         + '<td><div class="op-act">'
         + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
         + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
@@ -3259,13 +3292,106 @@ function renderMaintList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Dernière intervention</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Dernière intervention</th><th>Documents</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-maint-edit]').forEach(btn => {
     btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
   });
   el.querySelectorAll('[data-maint-del]').forEach(btn => {
     btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
+  });
+  el.querySelectorAll('[data-maint-docs]').forEach(btn => {
+    btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
+  });
+}
+
+// ── Documents attaches aux codes maintenance ─────────────────────────────
+async function openMaintDocsModal(code) {
+  const item = _maintItems.find(x => String(x.code) === String(code));
+  const label = item ? item.label : '';
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
+    + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
+    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
+    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
+    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+    +     '<span>Ajouter un fichier</span>'
+    +   '</button>'
+    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const listEl = overlay.querySelector('#maint-docs-list');
+  const renderDocs = (items) => {
+    if (!items.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document pour l\'instant.</p>';
+      return;
+    }
+    listEl.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes / 1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0, 16).replace('T', ' ')) : '';
+      return '<div class="maint-doc-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
+        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
+        +   '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
+        +   '<button type="button" class="btn-sm btn-ghost danger" data-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    listEl.querySelectorAll('[data-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await refresh();
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  };
+  const refresh = async () => {
+    try {
+      const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+      renderDocs(Array.isArray(r.items) ? r.items : []);
+    } catch(e) {
+      listEl.innerHTML = '<p style="color:var(--danger);font-size:12px">' + esc(e.message || 'Erreur') + '</p>';
+    }
+  };
+  await refresh();
+
+  const fileInp = overlay.querySelector('#maint-doc-file');
+  const addBtn = overlay.querySelector('#maint-doc-add-btn');
+  addBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
+    addBtn.disabled = true;
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
+        method: 'POST', credentials: 'same-origin', body: fd
+      });
+      if (!res.ok) {
+        let msg = 'Upload echoue';
+        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+        toast(msg, true); return;
+      }
+      toast('Document ajoute');
+      fileInp.value = '';
+      await refresh();
+      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
   });
 }
 function openMaintForm(code) {
@@ -3308,7 +3434,156 @@ function openMaintForm(code) {
     if (mInp)   mInp.value   = '';
   }
   _maintTogglePeriodiqueUI();
+  // Section Documents : visible dans les 2 modes.
+  // En creation : la liste est masquee (aucun doc encore), l'upload est
+  // possible des que le code est saisi. En edition : la liste est chargee
+  // et l'upload attache directement au code existant.
+  const docsWrap = document.getElementById('maint-form-docs');
+  const docsList = document.getElementById('maint-form-docs-list');
+  const docsHint = document.getElementById('maint-form-docs-hint');
+  if (docsWrap) {
+    docsWrap.style.display = '';
+    _maintResetDocPicker();
+    _bindMaintFormDocUpload(code);
+    if (code) {
+      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
+      if (docsList) docsList.style.display = '';
+      _renderMaintFormDocs(code);
+    } else {
+      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
+      if (docsList) docsList.style.display = 'none';
+    }
+  }
   codeInp.focus();
+}
+
+async function _renderMaintFormDocs(code) {
+  const list = document.getElementById('maint-form-docs-list');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
+  try {
+    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+    const items = Array.isArray(r.items) ? r.items : [];
+    if (!items.length) {
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>';
+      return;
+    }
+    list.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      const meta = [sz, dt, d.uploaded_by ? esc(d.uploaded_by) : ''].filter(Boolean).join(' · ');
+      return '<div class="maint-doc-row">'
+        + '<div class="maint-doc-row-info">'
+        +   '<span class="maint-doc-row-name" title="' + esc(d.filename) + '">' + esc(d.filename) + '</span>'
+        +   '<span class="maint-doc-row-meta">' + meta + '</span>'
+        + '</div>'
+        + '<a class="maint-doc-row-link" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener">Telecharger</a>'
+        + '<button type="button" class="maint-doc-row-del" data-form-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await _renderMaintFormDocs(code);
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
+  }
+}
+
+// Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
+async function _maintTriggerDocPicker() {
+  const codeInp = document.getElementById('maint-code');
+  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
+  if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
+  // En creation : sauvegarde le code en base avant l'upload, pour eviter
+  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
+  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
+  if (!codeExists) {
+    const labelInp = document.getElementById('maint-label');
+    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
+    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
+    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+    const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
+    const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
+    const periodique = (rawPer === 'oui');
+    const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
+    const metrage_ref = periodique ? (document.getElementById('maint-metrage-ref')?.value || '').trim() : '';
+    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
+    try {
+      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Code enregistre - upload en cours');
+      _maintEditCode = codeNow;
+      codeInp.disabled = true;
+      await loadMaintCodes();
+      const listEl = document.getElementById('maint-form-docs-list');
+      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
+    } catch(e) {
+      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
+      return;
+    }
+  }
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.click();
+}
+
+// Compat : appele par openMaintForm, mais l'upload est declenche directement
+// par onchange du <input type=file>. No-op.
+function _bindMaintFormDocUpload(code) { /* upload direct via _maintOnDocFileChange */ }
+
+// Picker onchange -> upload immediat (pas de bouton Envoyer intermediaire).
+async function _maintOnDocFileChange() {
+  const inp = document.getElementById('maint-form-doc-file');
+  const f = inp && inp.files && inp.files[0];
+  if (!f) return;
+  if (f.size > 20 * 1024 * 1024) {
+    toast('Fichier trop volumineux (max 20 Mo)', true);
+    inp.value = '';
+    return;
+  }
+  const codeInp = document.getElementById('maint-code');
+  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
+  if (!codeNow) {
+    toast('Renseigne d\'abord le code', true);
+    inp.value = '';
+    return;
+  }
+  const btn = document.getElementById('maint-form-doc-add-btn');
+  if (btn) btn.disabled = true;
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
+      method: 'POST', credentials: 'same-origin', body: fd
+    });
+    if (!res.ok) {
+      let msg = 'Upload echoue';
+      try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+      toast(msg, true); return;
+    }
+    toast('Document ajoute');
+    inp.value = '';
+    const listEl = document.getElementById('maint-form-docs-list');
+    if (listEl) listEl.style.display = '';
+    await _renderMaintFormDocs(codeNow);
+    if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+  } catch(e) {
+    toast('Erreur reseau', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _maintResetDocPicker() {
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.value = '';
 }
 // Active/désactive Intervalle et Réf. métrage selon Périodique :
 //   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut

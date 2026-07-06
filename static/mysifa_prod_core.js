@@ -236,44 +236,37 @@
   }
 
   // ── 5. Favicon badge + alerts polling + sidebar toggles ────────────
-  function updateFaviconBadge(count){
-    const canvas = document.createElement('canvas');
-    canvas.width = 32; canvas.height = 32;
-    const ctx = canvas.getContext('2d');
-    if(!ctx) return;
+  // Base = vrai PNG "MyS" (dark ou light selon window.__MYSIFA_ENV__) en résolution
+  // 192, downscalé sur un canvas 64×64 pour un rendu net, pastille superposée.
+  // Détection env : window.__MYSIFA_ENV__ (portail) sinon fallback hostname.
+  const __IS_STAGING_FAV = (window.__MYSIFA_ENV__ === 'v1')
+    || /^v1\./i.test((window.location && window.location.hostname) || '');
+  const __FAV_SFX = __IS_STAGING_FAV ? '-light' : '';
+  const __FAV_BASE_SRC = '/static/mys_icon' + __FAV_SFX + '_192.png';
+  const __favBaseImg = new Image();
+  let __favBaseReady = false;
+  __favBaseImg.onload = function(){ __favBaseReady = true; try { refreshAlertsBadge(); } catch(e){} };
+  __favBaseImg.src = __FAV_BASE_SRC;
 
-    ctx.fillStyle = '#0a0e17';
+  function __drawFavFallback(ctx){
+    const bg = __IS_STAGING_FAV ? '#f1f5f9' : '#0a0e17';
+    const fg = __IS_STAGING_FAV ? '#0f172a' : '#f1f5f9';
+    ctx.fillStyle = bg;
     ctx.beginPath();
-    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 32, 32, 6);
-    else ctx.rect(0, 0, 32, 32);
+    if(typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, 64, 64, 12);
+    else ctx.rect(0, 0, 64, 64);
     ctx.fill();
-
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = 'bold 20px system-ui';
+    ctx.fillStyle = fg;
+    ctx.font = 'bold 40px system-ui';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('M', 16, 17);
+    ctx.fillText('M', 32, 34);
+  }
 
-    if(count > 0){
-      ctx.fillStyle = '#f87171';
-      ctx.beginPath();
-      ctx.arc(24, 8, 7, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9px system-ui';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(count > 9 ? '9+' : String(count), 24, 8);
-    }
-
-    let link = document.querySelector('link[rel="icon"]');
-    if(!link){
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = canvas.toDataURL();
+  function updateFaviconBadge(count){
+    // Pastille de comptage désactivée (juillet 2026). Le favicon reste celui servi
+    // par le <link rel="icon"> du HTML — pas de canvas overlay, pas d'écrasement.
+    return;
   }
 
   async function refreshAlertsBadge(){

@@ -5487,6 +5487,60 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 146, "qualite_ref_qa_accordion")
 
+    # v147 — Prix m² distinct par laize pour les matières bobines (frontal/glassine/complexe).
+    # Ajoute un flag prix_par_laize sur matieres_premieres (0=prix unique matière, 1=prix par laize)
+    # et une colonne prix_eur_m2 sur mp_matiere_laizes pour stocker le prix distinct par laize.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version=147 LIMIT 1"
+    ).fetchone():
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "prix_par_laize" not in mp_cols:
+            conn.execute(
+                "ALTER TABLE matieres_premieres ADD COLUMN prix_par_laize INTEGER NOT NULL DEFAULT 0"
+            )
+        ml_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_matiere_laizes)").fetchall()}
+        if "prix_eur_m2" not in ml_cols:
+            conn.execute(
+                "ALTER TABLE mp_matiere_laizes ADD COLUMN prix_eur_m2 REAL"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 147, "mp_prix_par_laize")
+
+    # v148 — Prix €/m² sur chaque mouvement d'entrée matière première.
+    # Permet de tracer le prix payé à chaque réception pour les bobines et de calculer
+    # un PMP (prix moyen pondéré) automatique. NULL pour les mouvements sans prix connu.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version=148 LIMIT 1"
+    ).fetchone():
+        mvt_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_mouvements)").fetchall()}
+        if "prix_eur_m2" not in mvt_cols:
+            conn.execute(
+                "ALTER TABLE mp_mouvements ADD COLUMN prix_eur_m2 REAL"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 148, "mp_mouvements_prix_eur_m2")
+
+    # v149 - Documents maintenance : pieces jointes attachees a chaque code
+    # (contrôle ou intervention). Fichiers stockes sur disque sous
+    # data/uploads/maintenance_docs/{code}/, metadata en base.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=149 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_docs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                stored_path TEXT NOT NULL,
+                size_bytes INTEGER,
+                content_type TEXT,
+                uploaded_by TEXT,
+                uploaded_at TEXT NOT NULL,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_docs_code ON maintenance_docs(code)")
+        conn.commit()
+        _record_schema_migration(conn, 149, "maintenance_docs_table")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

@@ -895,6 +895,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
                 <tr>
                   <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
                   <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
+                  <th>Documents</th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -2810,6 +2811,7 @@ async function loadOpsTypes(){
         metrage_ref: (it.metrage_ref || '').toString(),
         frequence: (it.intervalle || '').toString(),  // alias compat _parseFrequenceDays
         detail: '',
+        docs_count: parseInt(it.docs_count, 10) || 0,
         _readonly: true,
       }));
   }catch(e){
@@ -4549,6 +4551,7 @@ async function loadCtrlTypes(){
         nom: it.label,
         niveau: parseInt(it.niveau, 10) || 1,
         detail: '',
+        docs_count: parseInt(it.docs_count, 10) || 0,
         _readonly: true,
       }));
   }catch(e){
@@ -4667,7 +4670,7 @@ function renderCtrlTypes(){
     if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="4" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres → Maintenance.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres → Maintenance.</td></tr>';
   } else {
     const rows = sorted.map(t => {
       let dtDisplay = '—';
@@ -4681,9 +4684,14 @@ function renderCtrlTypes(){
           }
         }catch(e){}
       }
+      const _dc = t.docs_count || 0;
+      const docsBtn = _dc
+        ? '<button type="button" class="ops-row-btn maint-view-docs" data-doc-code="' + escAttr(t.id) + '" title="Voir les documents attaches">' + _dc + ' doc' + (_dc>1?'s':'') + '</button>'
+        : '<span style="color:var(--muted);font-size:12px">—</span>';
       return '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span></td>' +
+        '<td>' + docsBtn + '</td>' +
         '<td class="col-comment">' + escHtml(t.detail || '') + '</td>' +
         '<td class="col-actions"></td>' +
       '</tr>';
@@ -4694,6 +4702,56 @@ function renderCtrlTypes(){
     const n = CTRL_TYPES_STATE.list.length;
     count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
   }
+  document.querySelectorAll('.maint-view-docs[data-doc-code]').forEach(b => {
+    b.addEventListener('click', () => viewMaintDocs(b.getAttribute('data-doc-code')));
+  });
+}
+
+// Modal read-only : liste les documents attaches a un code avec liens
+// de telechargement. Pas d'upload ni suppression cote operateur.
+async function viewMaintDocs(code){
+  const overlay = document.createElement('div');
+  overlay.className = 'ta-sim ta-pl-center ta-blocking';
+  overlay.id = 'maint-docs-view-overlay';
+  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:520px">'
+    + '<div class="ta-sim-title">Documents · ' + escHtml(code) + '</div>'
+    + '<div id="maint-docs-view-list" style="display:flex;flex-direction:column;gap:6px;margin:12px 0">'
+    +   '<p style="color:var(--muted);font-size:12px">Chargement…</p>'
+    + '</div>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" class="ta-sim-btn" onclick="closeMaintDocsView()">Fermer</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) closeMaintDocsView(); });
+  try{
+    const r = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', { credentials: 'same-origin' });
+    if(!r.ok) throw new Error('Erreur ' + r.status);
+    const d = await r.json();
+    const items = Array.isArray(d.items) ? d.items : [];
+    const list = document.getElementById('maint-docs-view-list');
+    if(!list) return;
+    if(!items.length){
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document.</p>';
+      return;
+    }
+    list.innerHTML = items.map(doc => {
+      const sz = doc.size_bytes != null ? (Math.round(doc.size_bytes/1024) + ' Ko') : '';
+      const dt = doc.uploaded_at ? escHtml(doc.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(doc.filename) + '</div>'
+        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + '</div></div>'
+        +   '<a href="/api/maintenance/docs/' + doc.id + '/download" target="_blank" rel="noopener" class="ta-sim-btn" style="text-decoration:none;padding:6px 12px;font-size:12px">Ouvrir</a>'
+        + '</div>';
+    }).join('');
+  } catch(e){
+    const list = document.getElementById('maint-docs-view-list');
+    if(list) list.innerHTML = '<p style="color:var(--danger);font-size:12px">Erreur de chargement.</p>';
+  }
+}
+function closeMaintDocsView(){
+  const el = document.getElementById('maint-docs-view-overlay');
+  if(el) el.remove();
 }
 
 function toggleTheme(){

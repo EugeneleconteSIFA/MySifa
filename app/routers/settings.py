@@ -1843,7 +1843,24 @@ def maintenance_codes_list(request: Request):
                FROM maintenance_codes
                ORDER BY categorie ASC, code ASC"""
         ).fetchall()
-    return {"items": [_maint_row_to_dict(r) for r in rows]}
+        # Enrichissement : nombre de documents attaches par code
+        # (Table creee a la volee si absente, garantit la robustesse).
+        docs_by_code = {}
+        try:
+            _ensure_maint_docs_table(conn)
+            drows = conn.execute(
+                "SELECT code, COUNT(*) AS n FROM maintenance_docs GROUP BY code"
+            ).fetchall()
+            for dr in drows:
+                docs_by_code[dr["code"]] = int(dr["n"])
+        except Exception:
+            docs_by_code = {}
+    items = []
+    for r in rows:
+        d = _maint_row_to_dict(r)
+        d["docs_count"] = docs_by_code.get(d["code"], 0)
+        items.append(d)
+    return {"items": items}
 
 
 @router.post("/api/maintenance/codes")
@@ -1963,6 +1980,185 @@ async def maintenance_codes_bulk_import(request: Request):
     log_action(user=user, action="IMPORT", module="maintenance_codes",
                objet="bulk", detail=f"{imported} codes")
     return {"ok": True, "imported": imported, "received": len(items)}
+
+
+# ── Documents attaches aux codes maintenance ───────────────────────────────
+# Fichiers explicatifs (PDF, images, videos, etc.) uploades pour chaque code
+# de maintenance. Consultes par les operateurs depuis /maintenance quand ils
+# executent le controle ou l'intervention correspondante.
+
+_MAINT_DOCS_SUBDIR = "data/uploads/maintenance_docs"
+_MAINT_DOCS_MAX_BYTES = 20 * 1024 * 1024  # 20 Mo
+
+
+def _ensure_maint_docs_table(conn) -> None:
+    """Garantit la presence de la table maintenance_docs. Ceinture + bretelles :
+    si la migration v149 n'a pas tourne (parce que v1 n'a pas encore restart,
+    ou parce qu'une migration precedente a plante), on cree la table ici.
+    Idempotent grace au CREATE TABLE IF NOT EXISTS."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS maintenance_docs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            stored_path TEXT NOT NULL,
+            size_bytes INTEGER,
+            content_type TEXT,
+            uploaded_by TEXT,
+            uploaded_at TEXT NOT NULL,
+            FOREIGN KEY (code) REFERENCES maintenance_codes(code) ON DELETE CASCADE
+        )"""
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_docs_code ON maintenance_docs(code)")
+
+
+def _maint_docs_dir(code: str) -> Path:
+    d = Path(BASE_DIR) / _MAINT_DOCS_SUBDIR / code
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _maint_safe_filename(name: str) -> str:
+    import re as _re
+    import unicodedata as _ud
+    name = _ud.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
+    name = _re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._-")
+    return name or "fichier"
+
+
+@router.get("/api/maintenance/codes/{code}/docs")
+def maintenance_code_docs_list(code: str, request: Request):
+    """Liste les documents attaches a un code maintenance."""
+    import traceback
+    try:
+        get_current_user(request)
+        from database import get_db
+        with get_db() as conn:
+            _ensure_maint_docs_table(conn)
+            row = conn.execute(
+                "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"Code {code} introuvable.")
+            rows = conn.execute(
+                """SELECT id, filename, size_bytes, content_type,
+                          uploaded_by, uploaded_at
+                   FROM maintenance_docs
+                   WHERE code=?
+                   ORDER BY uploaded_at DESC, id DESC""",
+                (code,),
+            ).fetchall()
+        return {"items": [dict(r) for r in rows]}
+    except HTTPException:
+        raise
+    except Exception as _e:
+        _tb = traceback.format_exc()
+        # Remonte l'erreur telle quelle au client pour debug (temporaire).
+        raise HTTPException(500, f"DEBUG: {type(_e).__name__}: {_e} | TRACE (last 400): {_tb[-400:]}")
+
+
+@router.post("/api/maintenance/codes/{code}/docs")
+async def maintenance_code_doc_upload(
+    code: str,
+    request: Request,
+    file: UploadFile = File(...),
+):
+    """Upload d'un document rattache au code. Reservee au writer maintenance."""
+    import traceback
+    try:
+        user = _require_maint_writer(request)
+        contents = await file.read()
+        if len(contents) > _MAINT_DOCS_MAX_BYTES:
+            raise HTTPException(413, "Fichier trop volumineux (max 20 Mo).")
+        if len(contents) == 0:
+            raise HTTPException(422, "Fichier vide.")
+        from database import get_db
+        with get_db() as conn:
+            _ensure_maint_docs_table(conn)
+            row = conn.execute(
+                "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"Code {code} introuvable.")
+        orig_name = (file.filename or "fichier").strip()
+        safe = _maint_safe_filename(orig_name)
+        unique = f"{uuid.uuid4().hex[:12]}_{safe}"
+        dest = _maint_docs_dir(code) / unique
+        with open(dest, "wb") as out:
+            out.write(contents)
+        rel = f"{_MAINT_DOCS_SUBDIR}/{code}/{unique}"
+        now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+        author = user.get("nom") or user.get("email") or ""
+        ctype = file.content_type or ""
+        with get_db() as conn:
+            _ensure_maint_docs_table(conn)
+            cur = conn.execute(
+                """INSERT INTO maintenance_docs
+                   (code, filename, stored_path, size_bytes, content_type,
+                    uploaded_by, uploaded_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (code, orig_name, rel, len(contents), ctype, author, now),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+        log_action(user=user, action="UPLOAD", module="maintenance_docs",
+                   objet=str(new_id), detail=f"{code} · {orig_name}")
+        return {"ok": True, "id": new_id, "filename": orig_name,
+                "size_bytes": len(contents)}
+    except HTTPException:
+        raise
+    except Exception as _e:
+        _tb = traceback.format_exc()
+        raise HTTPException(500, f"DEBUG: {type(_e).__name__}: {_e} | TRACE (last 400): {_tb[-400:]}")
+
+
+@router.get("/api/maintenance/docs/{doc_id}/download")
+def maintenance_doc_download(doc_id: int, request: Request):
+    """Telecharge un document. Accessible a tout utilisateur connecte."""
+    from fastapi.responses import FileResponse
+    get_current_user(request)
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT filename, stored_path FROM maintenance_docs WHERE id=?",
+            (doc_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Document introuvable.")
+    path_abs = Path(BASE_DIR) / row["stored_path"]
+    if not path_abs.exists():
+        raise HTTPException(404, "Fichier absent du disque.")
+    return FileResponse(
+        path=str(path_abs),
+        filename=row["filename"] or path_abs.name,
+    )
+
+
+@router.delete("/api/maintenance/docs/{doc_id}")
+def maintenance_doc_delete(doc_id: int, request: Request):
+    """Suppression d'un document. Reservee au writer maintenance."""
+    user = _require_maint_writer(request)
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT code, filename, stored_path FROM maintenance_docs WHERE id=?",
+            (doc_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Document introuvable.")
+        conn.execute("DELETE FROM maintenance_docs WHERE id=?", (doc_id,))
+        conn.commit()
+    # Best-effort suppression fichier disque
+    try:
+        p = Path(BASE_DIR) / row["stored_path"]
+        if p.exists():
+            p.unlink()
+    except Exception:
+        pass
+    log_action(user=user, action="DELETE", module="maintenance_docs",
+               objet=str(doc_id), detail=f"{row['code']} · {row['filename']}")
+    return {"ok": True}
+
 
 
 # ── Alertes de maintenance ─────────────────────────────────────────
