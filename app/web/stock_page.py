@@ -13316,7 +13316,8 @@ function valEnsureState() {
       historiqueLoading: false,
       exporting: false,
       mpCollapsed: false,
-      pfCollapsed: false };
+      pfCollapsed: false,
+      snapshotDate: null };
   }
   return S.valorisation;
 }
@@ -13326,7 +13327,8 @@ async function loadValorisation() {
   v.loading = true;
   renderValorisationView(false);
   try {
-    const data = await api('/api/stock/valorisation');
+    const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
+    const data = await api('/api/stock/valorisation' + qs);
     v.items = Array.isArray(data?.items) ? data.items : [];
     v.summary = data?.summary || null;
   } catch (e) {
@@ -14560,10 +14562,12 @@ function valPFEnsureState() {
 
 async function loadValorisationPF() {
   const pf = valPFEnsureState();
+  const v = valEnsureState();
   pf.loading = true;
   renderValorisationView(true);
   try {
-    const data = await api('/api/stock/valorisation/pf');
+    const qs = v.snapshotDate ? ('?date=' + encodeURIComponent(v.snapshotDate)) : '';
+    const data = await api('/api/stock/valorisation/pf' + qs);
     pf.items = Array.isArray(data?.items) ? data.items : [];
     pf.summary = data?.summary || null;
   } catch (e) {
@@ -15184,14 +15188,119 @@ function buildValorisationMPHeader() {
   );
 }
 
-function buildValorisationToolbar() {
+// Toolbar globale (au-dessus des KPIs) : sélecteur de date + export + refresh
+// + paramètres MyCouts. Pilote la valorisation du stock TOTAL (MP + PF).
+function buildValorisationGlobalToolbar() {
   const v = valEnsureState();
   const wrap = el('div', { style:
-    'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px' });
+    'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px' });
+
+  // ── Sélecteur de date « Valorisation au … » (Direction / superadmin) ──
+  if (valCanSeeUSD()) {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const isSnapshot = !!v.snapshotDate && v.snapshotDate !== todayIso;
+    const dateWrap = el('div', { style:
+      'display:inline-flex;align-items:center;gap:10px;padding:6px 14px 6px 12px;border:1px solid ' +
+      (isSnapshot ? '#f59e0b' : 'var(--border)') +
+      ';border-radius:10px;background:' + (isSnapshot ? 'rgba(245,158,11,0.06)' : 'var(--card)') +
+      ';transition:background .15s, border-color .15s'
+    });
+    // Icône calendrier
+    const icon = el('span', { style:
+      'display:inline-flex;color:' + (isSnapshot ? '#c2410c' : 'var(--muted)') });
+    icon.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+    // Label
+    const lbl = el('span', { style:
+      'font-size:11px;font-weight:700;color:' + (isSnapshot ? '#c2410c' : 'var(--muted)') +
+      ';text-transform:uppercase;letter-spacing:.5px'
+    }, 'Valorisation au');
+    // Input date
+    const dateInp = el('input', {
+      type: 'date', id: 'val-snapshot-date', max: todayIso, min: '2020-01-01',
+      title: 'Figer la valorisation à une date passée',
+      style: 'padding:4px 6px;border:none;background:transparent;color:var(--text);font-size:14px;font-weight:700;font-family:inherit;outline:none;font-variant-numeric:tabular-nums;cursor:pointer;color-scheme:light dark'
+    });
+    dateInp.value = v.snapshotDate || todayIso;
+    dateInp.addEventListener('change', async () => {
+      const iso = dateInp.value || '';
+      v.snapshotDate = (iso && iso !== todayIso) ? iso : null;
+      await loadValorisation();
+      await loadValorisationPF();
+    });
+    // Lien « Aujourd'hui » (visible seulement en mode snapshot)
+    dateWrap.append(icon, lbl, dateInp);
+    if (isSnapshot) {
+      const resetLink = el('button', {
+        type: 'button', title: 'Revenir à aujourd\'hui',
+        style: 'padding:3px 8px;border:1px solid #f59e0b;border-radius:6px;background:transparent;color:#c2410c;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.3px',
+        on: {
+          click: async () => {
+            v.snapshotDate = null;
+            dateInp.value = todayIso;
+            await loadValorisation();
+            await loadValorisationPF();
+          },
+        },
+      }, 'Aujourd\'hui');
+      dateWrap.append(resetLink);
+    }
+    wrap.append(dateWrap);
+  }
+
+  // ── Espaceur (pousse les actions à droite) ──
+  const spacer = el('div', { style: 'flex:1;min-width:0' });
+  wrap.append(spacer);
+
+  // ── Bouton Exporter Excel ──
+  const exportBtn = el('button', {
+    type: 'button', disabled: v.exporting ? true : null,
+      style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (v.exporting ? 'opacity:.6;cursor:wait' : ''),
+    on: { click: exportValorisationExcel } });
+  exportBtn.appendChild(iconEl('download', 14));
+  exportBtn.appendChild(el('span', null, v.exporting ? 'Export en cours…' : 'Exporter Excel'));
+  wrap.append(exportBtn);
+
+  // ── Bouton Rafraîchir (MP + PF) ──
+  const refreshBtn = el('button', {
+    type: 'button', title: 'Recharger MP + PF',
+      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
+    on: {
+      click: async () => { await loadValorisation(); await loadValorisationPF(); },
+      mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
+      mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+    } });
+  refreshBtn.appendChild(iconEl('refresh-ccw', 14));
+  wrap.append(refreshBtn);
+
+  // ── Bouton Paramètres MyCouts (Direction / superadmin) ──
+  if (valCanSeeUSD()) {
+    const settingsBtn = el('button', {
+      type: 'button',
+      title: 'Paramètres MyCouts',
+      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
+      on: {
+        click: () => openValorisationSettingsModal(),
+        mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
+        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+      },
+    });
+    settingsBtn.appendChild(iconEl('settings', 14));
+    wrap.append(settingsBtn);
+  }
+
+  return wrap;
+}
+
+function buildValorisationToolbar() {
+  // Toolbar MP simplifiée : uniquement la recherche.
+  // Les actions globales (date, export, refresh, settings) sont dans la toolbar
+  // globale au-dessus des KPIs.
+  const v = valEnsureState();
+  const wrap = el('div', { style: 'margin-bottom:14px' });
 
   const inp = el('input', {
     type: 'search', id: 'val-search', placeholder: 'Rechercher (référence, désignation, catégorie…)',
-      style: 'flex:1;min-width:240px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;transition:border-color .15s' });
+      style: 'width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:13px;transition:border-color .15s' });
   inp.value = v.query || '';
   inp.addEventListener('input', () => {
     v.query = inp.value;
@@ -15203,37 +15312,7 @@ function buildValorisationToolbar() {
     }
   });
 
-  const exportBtn = el('button', {
-    type: 'button', disabled: v.exporting ? true : null,
-      style: 'padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;' + (v.exporting ? 'opacity:.6;cursor:wait' : ''),
-    on: { click: exportValorisationExcel } });
-  exportBtn.appendChild(iconEl('download', 14));
-  exportBtn.appendChild(el('span', null, v.exporting ? 'Export en cours…' : 'Exporter Excel'));
-
-  const refreshBtn = el('button', {
-    type: 'button', title: 'Recharger les données de valorisation',
-      style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
-    on: { click: () => loadValorisation() } });
-  refreshBtn.appendChild(iconEl('refresh-ccw', 14));
-
-  wrap.append(inp, exportBtn, refreshBtn);
-
-  // ── Icône Paramètres MyCouts (Direction / superadmin uniquement) ──
-  // Ouvre les paramètres en modal superposé (pas de redirection MyCouts).
-  if (valCanSeeUSD()) {
-    const settingsBtn = el('button', {
-      type: 'button',
-      title: 'Paramètres MyCouts — Taux EUR/USD, taxe d\'importation, marge, container',
-      style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:all .15s',
-      on: {
-        click: () => openValorisationSettingsModal(),
-        mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
-      },
-    });
-    settingsBtn.appendChild(iconEl('settings', 14));
-    wrap.append(settingsBtn);
-  }
+  wrap.append(inp);
   return wrap;
 }
 
@@ -15445,6 +15524,20 @@ function buildValorisation() {
       'Saisie des prix unitaires (€/unité de gestion) et consolidation par catégorie. Direction · Administration · Super admin.')
   );
   root.appendChild(head);
+
+  // Toolbar globale : date + export + refresh + settings (pilote la valo TOTALE)
+  root.appendChild(buildValorisationGlobalToolbar());
+
+  // Bandeau « figée au JJ/MM/AAAA » quand une date passée est sélectionnée
+  if (v.snapshotDate) {
+    const parts = v.snapshotDate.split('-');
+    const fr = parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + parts[0]) : v.snapshotDate;
+    const badge = el('div', { style:
+      'display:flex;align-items:center;gap:8px;padding:10px 14px;margin-bottom:14px;border:1px solid #f59e0b;border-radius:10px;background:rgba(245,158,11,0.08);color:#c2410c;font-size:13px;font-weight:600' });
+    badge.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+    badge.appendChild(el('span', null, 'Valorisation figée au ' + fr + ' — quantités et prix reconstitués à cette date. Paramètres globaux actuels (taux USD, taxe, containers, charges de prod).'));
+    root.appendChild(badge);
+  }
 
   if (v.loading && !v.items.length) {
     root.appendChild(el('div', { style: 'padding:60px;text-align:center;color:var(--muted);font-size:13px' }, 'Chargement…'));

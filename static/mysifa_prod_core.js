@@ -5637,15 +5637,19 @@ async function loadSaisies(opts){
 async function loadDevis(){const d=await api('/api/rentabilite/devis');if(d)set({devisList:d});}
 
 function renderProdPage(){
-  const subPage = S.subPage || 'kpis';
+  let subPage = S.subPage || 'kpis';
+  // Rôle « commercial » : pas d'accès à la vue Erreurs & Qualité
+  const hideErreurs = isCommercial(S.user);
+  if(hideErreurs && subPage==='erreurs'){ subPage = 'kpis'; S.subPage = 'kpis'; }
   // Gestion du polling temps réel machines
   if(subPage==='kpis'){startMachineStatusPolling();}
   else{stopMachineStatusPolling();}
-  const tabs = [
+  const allTabs = [
     {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
   ];
+  const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs'},
     ...tabs.map(t=>h('button',{
       type:'button',
@@ -5662,7 +5666,7 @@ function renderProdPage(){
   );
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
-  else if(subPage==='erreurs') content = renderHist();
+  else if(subPage==='erreurs' && !hideErreurs) content = renderHist();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
 }
@@ -5968,7 +5972,8 @@ function renderProdKpis(){
   }
 
   // ── Sanity score cliquable ───────────────────────────────────────
-  if(S.historique&&S.historique.sanity){
+  // Le rôle « commercial » n'a pas accès à la vue Erreurs & Qualité : on retire le clic vers ce détail.
+  if(S.historique&&S.historique.sanity && !isCommercial(S.user)){
     const sc=renderSanity(S.historique.sanity);
     if(sc){
       sc.style.cursor='pointer';

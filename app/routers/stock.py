@@ -336,6 +336,246 @@ def _get_container_params(conn) -> tuple[float, float, float, float]:
     )
 
 
+# ─── Snapshot valorisation à une date passée ─────────────────────────────────
+# Reconstitue les quantités en stock et les prix unitaires tels qu'ils étaient au
+# soir de la date `date_iso` (YYYY-MM-DD). Les paramètres globaux (taux USD, taxe,
+# containers, charges de prod) restent ceux d'aujourd'hui — c'est un choix produit :
+# on veut « combien valait ce stock à l'époque, aux tarifs actuels ».
+#
+# Algo stock : pour chaque référence, on prend la `quantite_avant` du premier
+# mouvement postérieur à la date. C'est par définition l'état exact du stock juste
+# avant ce mouvement, donc l'état à la date. Aucune référence n'a de mouvement
+# postérieur → stock actuel (pas de changement depuis).
+#
+# Algo prix : pour chaque référence, on prend le `prix_apres` du dernier changement
+# historisé avant ou à la date. Aucun changement historisé avant la date → prix
+# actuel (le prix courant s'appliquait déjà à l'époque, faute d'historique).
+
+
+def _date_iso_end_of_day(date_iso: str) -> str:
+    """YYYY-MM-DD → YYYY-MM-DDT23:59:59 (fin de journée locale, cohérent avec le
+    format de created_at écrit par le code : strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))."""
+    return f"{date_iso}T23:59:59"
+
+
+def _mp_stock_snapshot_at_date(conn, date_iso: str) -> tuple[dict[int, float], dict[tuple[int, int], float]]:
+    """Retourne (stock_non_laize, stock_laize) au soir de date_iso.
+
+    - stock_non_laize : dict {matiere_id → quantite}
+    - stock_laize     : dict {(matiere_id, laize_id) → quantite}
+    """
+    end = _date_iso_end_of_day(date_iso)
+    # Non-laizées : premier mouvement > end avec laize_id NULL
+    rows = conn.execute(
+        """
+        WITH ranked AS (
+          SELECT matiere_id, quantite_avant,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY matiere_id
+                   ORDER BY created_at ASC, id ASC
+                 ) AS rn
+          FROM mp_mouvements
+          WHERE created_at > ? AND laize_id IS NULL
+        )
+        SELECT matiere_id, quantite_avant FROM ranked WHERE rn = 1
+        """,
+        (end,),
+    ).fetchall()
+    non_laize: dict[int, float] = {}
+    for r in rows:
+        try:
+            non_laize[int(r["matiere_id"])] = float(r["quantite_avant"] or 0)
+        except (TypeError, ValueError):
+            pass
+    # Fallback stock actuel pour matières sans mouvement postérieur
+    all_stock = conn.execute("SELECT matiere_id, quantite FROM mp_stock").fetchall()
+    for r in all_stock:
+        try:
+            mid = int(r["matiere_id"])
+        except (TypeError, ValueError):
+            continue
+        if mid not in non_laize:
+            non_laize[mid] = float(r["quantite"] or 0)
+
+    # Laizées : premier mouvement > end par (matiere_id, laize_id)
+    rows = conn.execute(
+        """
+        WITH ranked AS (
+          SELECT matiere_id, laize_id, quantite_avant,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY matiere_id, laize_id
+                   ORDER BY created_at ASC, id ASC
+                 ) AS rn
+          FROM mp_mouvements
+          WHERE created_at > ? AND laize_id IS NOT NULL
+        )
+        SELECT matiere_id, laize_id, quantite_avant FROM ranked WHERE rn = 1
+        """,
+        (end,),
+    ).fetchall()
+    laize: dict[tuple[int, int], float] = {}
+    for r in rows:
+        try:
+            k = (int(r["matiere_id"]), int(r["laize_id"]))
+            laize[k] = float(r["quantite_avant"] or 0)
+        except (TypeError, ValueError):
+            pass
+    # Fallback stock actuel par (matiere, laize)
+    try:
+        all_laize = conn.execute(
+            "SELECT matiere_id, laize_id, quantite FROM mp_stock_laize"
+        ).fetchall()
+    except Exception:
+        all_laize = []
+    for r in all_laize:
+        try:
+            k = (int(r["matiere_id"]), int(r["laize_id"]))
+        except (TypeError, ValueError):
+            continue
+        if k not in laize:
+            laize[k] = float(r["quantite"] or 0)
+    return non_laize, laize
+
+
+def _pf_stock_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
+    """Retourne dict {produit_id → quantite totale (tous emplacements)} au soir de date_iso.
+    Reconstitution : premier mouvement > end par (produit_id, emplacement) — on somme
+    ensuite les quantite_avant pour retrouver le stock global.
+    Fallback = stock actuel agrégé toutes emplacements pour les produits sans mouvement postérieur."""
+    end = _date_iso_end_of_day(date_iso)
+    rows = conn.execute(
+        """
+        WITH ranked AS (
+          SELECT produit_id, emplacement, quantite_avant,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY produit_id, emplacement
+                   ORDER BY created_at ASC, id ASC
+                 ) AS rn
+          FROM mouvements_stock
+          WHERE created_at > ?
+        )
+        SELECT produit_id, emplacement, quantite_avant FROM ranked WHERE rn = 1
+        """,
+        (end,),
+    ).fetchall()
+    # Reconstitue par (produit, emplacement) → somme par produit
+    by_prod_empl: dict[tuple[int, str], float] = {}
+    seen_prods: set[int] = set()
+    for r in rows:
+        try:
+            pid = int(r["produit_id"])
+        except (TypeError, ValueError):
+            continue
+        empl = r["emplacement"] or ""
+        by_prod_empl[(pid, empl)] = float(r["quantite_avant"] or 0)
+        seen_prods.add(pid)
+    # Complète avec stock actuel pour tous les couples (produit, emplacement)
+    # NON couverts par un mouvement postérieur.
+    try:
+        current = conn.execute(
+            "SELECT produit_id, emplacement, quantite FROM stock_emplacements"
+        ).fetchall()
+    except Exception:
+        current = []
+    for r in current:
+        try:
+            pid = int(r["produit_id"])
+        except (TypeError, ValueError):
+            continue
+        empl = r["emplacement"] or ""
+        k = (pid, empl)
+        if k not in by_prod_empl:
+            by_prod_empl[k] = float(r["quantite"] or 0)
+    # Agrège par produit_id
+    out: dict[int, float] = {}
+    for (pid, _empl), q in by_prod_empl.items():
+        out[pid] = out.get(pid, 0.0) + q
+    return out
+
+
+def _mp_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
+    """Retourne dict {matiere_id → prix} au soir de date_iso.
+
+    - Matières non-laizées : prix = prix_unitaire courant à la date
+    - Matières laizées     : prix = prix_eur_m2 courant à la date
+    L'historique mp_valorisation_historique stocke les deux dans la même colonne
+    prix_apres (le sens dépend du type de matière — géré par le caller)."""
+    end = _date_iso_end_of_day(date_iso)
+    rows = conn.execute(
+        """
+        WITH ranked AS (
+          SELECT matiere_id, prix_apres,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY matiere_id
+                   ORDER BY created_at DESC, id DESC
+                 ) AS rn
+          FROM mp_valorisation_historique
+          WHERE created_at <= ?
+        )
+        SELECT matiere_id, prix_apres FROM ranked WHERE rn = 1
+        """,
+        (end,),
+    ).fetchall()
+    out: dict[int, float] = {}
+    for r in rows:
+        try:
+            out[int(r["matiere_id"])] = float(r["prix_apres"] or 0)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _pf_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
+    """Retourne dict {produit_id → prix_unitaire_ht} au soir de date_iso."""
+    end = _date_iso_end_of_day(date_iso)
+    rows = conn.execute(
+        """
+        WITH ranked AS (
+          SELECT produit_id, prix_apres,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY produit_id
+                   ORDER BY created_at DESC, id DESC
+                 ) AS rn
+          FROM pf_valorisation_historique
+          WHERE created_at <= ?
+        )
+        SELECT produit_id, prix_apres FROM ranked WHERE rn = 1
+        """,
+        (end,),
+    ).fetchall()
+    out: dict[int, float] = {}
+    for r in rows:
+        try:
+            out[int(r["produit_id"])] = float(r["prix_apres"] or 0)
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _parse_snapshot_date(raw: str | None) -> str | None:
+    """Valide un YYYY-MM-DD provenant d'un query param. Retourne la string validée
+    ou None si absent/invalid. Bornes : 2020-01-01 <= date <= aujourd'hui."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    if not raw:
+        return None
+    import re
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+        return None
+    try:
+        y, m, d = int(raw[:4]), int(raw[5:7]), int(raw[8:10])
+        # Validation légère
+        if y < 2020 or y > 2100 or m < 1 or m > 12 or d < 1 or d > 31:
+            return None
+        today = datetime.now().strftime("%Y-%m-%d")
+        if raw > today:
+            return None  # pas d'avenir
+    except (TypeError, ValueError):
+        return None
+    return raw
+
+
 def _get_storage_fees_pct(conn) -> float:
     """Lit le paramètre Frais de stockage (mc_setting.storage_fees_pct), en %.
     Retourne 0.0 si non configuré."""
@@ -4020,6 +4260,75 @@ def _valorisation_query(conn) -> list[dict]:
 _TRANSPORT_BOBINE_CATEGORIES = frozenset({"frontal", "glassine", "complexe"})
 
 
+def _valorisation_query_at_date(conn, snapshot_date: str | None) -> list[dict]:
+    """Idem _valorisation_query mais avec quantités et prix reconstitués à la date.
+
+    Si snapshot_date est None → délègue tel quel à _valorisation_query.
+    Sinon override quantite + prix_unitaire (non-laizées) OU quantite + prix_eur_m2
+    (laizées), puis recalcule les champs dérivés (valorisation, prix_palette,
+    valorisation_bobine)."""
+    items = _valorisation_query(conn)
+    if not snapshot_date:
+        return items
+    stock_nl, stock_l = _mp_stock_snapshot_at_date(conn, snapshot_date)
+    prix_map = _mp_price_snapshot_at_date(conn, snapshot_date)
+    for it in items:
+        mid = it.get("matiere_id")
+        try:
+            mid_int = int(mid) if mid is not None else None
+        except (TypeError, ValueError):
+            mid_int = None
+        # Override quantité (snapshot) — laizée vs non-laizée
+        if it.get("laizee") and it.get("laize_id") is not None:
+            try:
+                lid_int = int(it["laize_id"])
+            except (TypeError, ValueError):
+                lid_int = None
+            k = (mid_int, lid_int) if (mid_int is not None and lid_int is not None) else None
+            new_qte = float(stock_l.get(k, it.get("quantite") or 0)) if k else float(it.get("quantite") or 0)
+        elif mid_int is not None:
+            new_qte = float(stock_nl.get(mid_int, it.get("quantite") or 0))
+        else:
+            new_qte = float(it.get("quantite") or 0)
+        it["quantite"] = round(new_qte, 4)
+        # Override prix (snapshot)
+        if mid_int is not None and mid_int in prix_map:
+            historique_prix = float(prix_map[mid_int])
+        else:
+            historique_prix = None
+        if it.get("laizee"):
+            # Laizées : le prix historisé est prix_eur_m2. Recalcule valorisation_bobine et valorisation.
+            if historique_prix is not None:
+                it["prix_eur_m2"] = round(historique_prix, 4)
+            surface = float(it.get("surface_bobine_m2") or 0)
+            prix_m2 = float(it.get("prix_eur_m2") or 0)
+            valo_bobine = surface * prix_m2
+            it["valorisation_bobine"] = round(valo_bobine, 4)
+            it["prix_unitaire"] = round(valo_bobine, 4)
+            it["valorisation"] = round(new_qte * valo_bobine, 2)
+        else:
+            # Non-laizées : le prix historisé est prix_unitaire.
+            if historique_prix is not None:
+                it["prix_unitaire"] = round(historique_prix, 4)
+            prix = float(it.get("prix_unitaire") or 0)
+            avec_cond = bool(it.get("avec_conditionnement"))
+            upp = it.get("unites_par_palette")
+            if avec_cond and upp and float(upp) > 0:
+                prix_palette = prix * float(upp)
+                it["prix_palette"] = round(prix_palette, 4)
+                it["valorisation"] = round(new_qte * prix_palette, 2)
+                it["incomplete"] = False
+            elif avec_cond:
+                it["prix_palette"] = 0.0
+                it["valorisation"] = 0.0
+                it["incomplete"] = True
+            else:
+                it["prix_palette"] = round(prix, 4)
+                it["valorisation"] = round(new_qte * prix, 2)
+                it["incomplete"] = False
+    return items
+
+
 def _row_tax_multiplier(item: dict, import_tax_pct: float) -> float:
     """Multiplicateur Taxe d'importation seul (1 + taxe%/100).
 
@@ -4254,17 +4563,22 @@ def _enrich_items_with_usd(
 
 
 @router.get("/api/stock/valorisation")
-def get_valorisation(request: Request):
+def get_valorisation(request: Request, date: str | None = None):
+    """Valorisation MP. Query optionnel `date=YYYY-MM-DD` → figée à cette date
+    (quantités reconstituées via l'historique des mouvements + prix historiques).
+    Paramètres globaux (taux USD, taxe, containers) restent actuels."""
     user = require_stock_matieres_admin(request)
     can_see_usd = _user_can_see_valorisation_usd(user)
+    snapshot_date = _parse_snapshot_date(date)
     with get_db() as conn:
-        items = _valorisation_query(conn)
+        items = _valorisation_query_at_date(conn, snapshot_date)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
         tax_pct = _get_import_tax_pct(conn) if can_see_usd else 0.0
         c_full, c_half, q_full, q_half = _get_container_params(conn) if can_see_usd else (0.0, 0.0, 0.0, 0.0)
     _enrich_items_with_usd(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary = _valorisation_summary(items, taux, tax_pct, c_full, c_half, q_full, q_half)
     summary["can_see_usd"] = can_see_usd
+    summary["snapshot_date"] = snapshot_date  # None si aujourd'hui
     return {
         "items": items,
         "summary": summary,
@@ -4842,6 +5156,28 @@ def _pf_valo_query(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
+def _pf_valo_query_at_date(conn: sqlite3.Connection, snapshot_date: str | None) -> list[dict]:
+    """Idem _pf_valo_query mais reconstitue quantité et prix HT à la date."""
+    items = _pf_valo_query(conn)
+    if not snapshot_date:
+        return items
+    stock_pf = _pf_stock_snapshot_at_date(conn, snapshot_date)
+    prix_map = _pf_price_snapshot_at_date(conn, snapshot_date)
+    for it in items:
+        try:
+            pid = int(it["id"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        new_qte = float(stock_pf.get(pid, it.get("quantite") or 0))
+        new_prix = float(prix_map[pid]) if pid in prix_map else float(it.get("prix_unitaire_ht") or 0)
+        divisor = 1000.0 if it.get("par_mille") else 1.0
+        it["quantite"] = round(new_qte, 4)
+        it["prix_unitaire_ht"] = new_prix
+        it["valorisation"] = round(new_qte * new_prix / divisor, 2)
+        it["has_price"] = new_prix > 0
+    return items
+
+
 def _pf_valo_summary(
     items: list[dict],
     *,
@@ -4915,20 +5251,19 @@ def _pf_enrich_charges(
 
 
 @router.get("/api/stock/valorisation/pf")
-def list_valorisation_pf(request: Request):
-    """Liste tous les produits finis (fabrique + négoce) avec prix HT courant et stock."""
+def list_valorisation_pf(request: Request, date: str | None = None):
+    """Liste tous les produits finis (fabrique + négoce) avec prix HT courant et stock.
+    Query optionnel `date=YYYY-MM-DD` → snapshot à la date (stock + prix historisés)."""
     require_stock_matieres_admin(request)
+    snapshot_date = _parse_snapshot_date(date)
     with get_db() as conn:
-        items = _pf_valo_query(conn)
+        items = _pf_valo_query_at_date(conn, snapshot_date)
         charge = _get_charge_production_pct(conn)
         storage = _get_storage_fees_pct(conn)
     _pf_enrich_charges(items, charge_prod_pct=charge, storage_fees_pct=storage)
-    return {
-        "items": items,
-        "summary": _pf_valo_summary(
-            items, charge_prod_pct=charge, storage_fees_pct=storage
-        ),
-    }
+    summary = _pf_valo_summary(items, charge_prod_pct=charge, storage_fees_pct=storage)
+    summary["snapshot_date"] = snapshot_date
+    return {"items": items, "summary": summary}
 
 
 @router.put("/api/stock/valorisation/pf/{produit_id}")

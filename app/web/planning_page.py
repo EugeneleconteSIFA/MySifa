@@ -760,6 +760,9 @@ let ME=null;
 let PENDING_OF_COUNT=0;
 let CAN_EDIT=false;
 let IS_DIR_OR_SUPER=false;
+// Rôle « commercial » : lecture seule sur le planning + accès à la modal dossier en consultation
+// (champs désactivés, boutons Enregistrer/Supprimer/À destocker masqués, œil OF conservé).
+let IS_PLANNING_RO_ROLE=false;
 const IS_OF_ADMIN=__IS_OF_ADMIN__;
 let SHOW_DOSSIERS=false;
 let _autoScrollKey=null;
@@ -1125,18 +1128,21 @@ async function load(){
   S.loading=true;_showAllTermine=false;render();
   try{
     const showDossiers = !!(ME && isAdmin(ME));
+    // Le rôle « commercial » a besoin de S.entries pour ouvrir la modal dossier
+    // en lecture seule via double-clic sur un slot (mais ne voit pas la liste latérale).
+    const loadEntriesForRO = !!(ME && ME.role==="commercial");
     // Important: la timeline persiste planned_start/planned_end en DB.
     // Pour que les statuts calculés (en_cours/termine) soient à jour après un reorder,
-    // on charge d'abord la timeline, puis la liste des entrées (admin uniquement).
+    // on charge d'abord la timeline, puis la liste des entrées (admin + commercial RO).
     const [m, tl, activeDoss] = await Promise.all([
-      api(`/machines/${MID}`), 
+      api(`/machines/${MID}`),
       api(`/machines/${MID}/timeline`),
       loadActiveDossier()
     ]);
     S.machine = m;
     S.timeline = (tl && tl.slots) ? tl.slots : [];
     S.activeDossier = activeDoss;
-    if(showDossiers){
+    if(showDossiers || loadEntriesForRO){
       const en = await api(`/machines/${MID}/entries`);
       S.entries = en || [];
     }else{
@@ -1771,6 +1777,7 @@ function render(){
   const m=S.machine||{nom:"?"};
   CAN_EDIT = isAdmin(ME);
   IS_DIR_OR_SUPER = !!(ME && (ME.role==="superadmin" || ME.role==="direction"));
+  IS_PLANNING_RO_ROLE = !!(ME && ME.role==="commercial");
   const IS_COMPTA_RO = !!(ME && ME.role==="comptabilite");
   SHOW_DOSSIERS = CAN_EDIT;
   let runLbl="";
@@ -3558,8 +3565,9 @@ async function openFscRapport(noDossier){
 }
 
 function openEdit(id){
-  if(!CAN_EDIT) return;
+  if(!CAN_EDIT && !IS_PLANNING_RO_ROLE) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
+  const RO=(!CAN_EDIT && IS_PLANNING_RO_ROLE);
 
   const isLocked=(e.statut==="en_cours"||e.statut==="termine");
   const isTermine=e.statut==="termine";
@@ -3604,13 +3612,15 @@ function openEdit(id){
       <circle cx="12" cy="12" r="3"/>
     </svg>
   </button>`;
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}${ofEyeBtn}<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
+  // En lecture seule (commercial) : on masque le bouton « À destocker » et on ne garde que l'œil OF.
+  const destockActionBtn=RO?"":`<button type="button" id="destock-btn-${id}" onclick="toggleDestockage(${id})"
     title="${destockDone?"Matières destockées — cliquer pour annuler":"Matières à destocker — cliquer pour valider"}"
     style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;border:1.5px solid ${destockBorder};background:${destockBg};color:${destockColor};font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit;white-space:nowrap"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
     ${destockIcon}
     <span>${destockDone?"Destocké":"À destocker"}</span>
-  </button></div>`;
+  </button>`;
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
 
   // Traçabilité création/modification
   const fmtDate=(iso)=>{
@@ -3634,19 +3644,39 @@ function openEdit(id){
 
   const titlePrefix=statLabel?`<span style="color:${statColor};font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-right:6px">${statLabel}</span>`:"";
 
-  const delBtn=isTermine
+  const delBtn=RO?""
+    :isTermine
     ?`<button type="button" disabled style="display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;cursor:not-allowed;opacity:.4;font-family:inherit" title="Suppression impossible — dossier terminé">${icon('trash-2',14)} Supprimer</button>`
     :`<button type="button" onclick="if(confirm('Supprimer ce dossier ?')){closeM();delEntry(${id})}" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;border:1px solid var(--danger);background:rgba(248,113,113,.08);color:var(--danger);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit" onmouseenter="this.style.background='rgba(248,113,113,.18)'" onmouseleave="this.style.background='rgba(248,113,113,.08)'" title="Supprimer ce dossier">${icon('trash-2',14)} Supprimer</button>`;
+
+  // En lecture seule : « Fermer » au lieu d'Enregistrer.
+  const submitLabel = RO ? "Fermer" : "Enregistrer";
+  const submitFn    = RO ? "closeM()" : `submitEdit(${id})`;
 
   document.getElementById("mroot").innerHTML=modalHTML(
     `${titlePrefix}${(e.numero_of||e.reference)||''}`,
     fieldsHtml+traceHtml+resetBlock,
-    "Enregistrer",`submitEdit(${id})`,
+    submitLabel, submitFn,
     headerAction,
     delBtn,
     true,
     "md--dossier"
   );
+
+  // En lecture seule : désactiver tous les champs de saisie du modal.
+  if(RO){
+    const root=document.getElementById("mroot");
+    if(root){
+      root.querySelectorAll(".dossier-sections input, .dossier-sections textarea, .dossier-sections select").forEach(el=>{
+        try{
+          el.disabled=true;
+          if(el.tagName==="TEXTAREA"||(el.tagName==="INPUT" && !["checkbox","radio"].includes(el.type))){
+            el.setAttribute("readonly","readonly");
+          }
+        }catch(_){}
+      });
+    }
+  }
 }
 
 async function submitEditDuree(id){

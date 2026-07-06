@@ -19,6 +19,7 @@ from app.services.auth_service import get_current_user
 from config import UPLOAD_DIR
 
 ROLES_QUALITE = {"superadmin", "direction", "administration"}
+ROLES_QUALITE_VIEW = ROLES_QUALITE | {"commercial"}
 NC_STATUTS = ("ouverte", "en_analyse", "action_corrective", "en_verification", "cloturee")
 NC_TYPES = ("interne", "client", "fournisseur", "logistique")
 NC_GRAVITES = ("mineure", "majeure", "critique")
@@ -30,9 +31,18 @@ router = APIRouter()
 
 
 def _require_qualite_access(request: Request) -> dict:
+    """Écriture : direction / administration / superadmin uniquement."""
     user = get_current_user(request)
     if user["role"] not in ROLES_QUALITE:
         raise HTTPException(status_code=403, detail="Accès réservé à l'administration et la direction")
+    return user
+
+
+def _require_qualite_view(request: Request) -> dict:
+    """Lecture : + commercial (read-only)."""
+    user = get_current_user(request)
+    if user["role"] not in ROLES_QUALITE_VIEW:
+        raise HTTPException(status_code=403, detail="Accès réservé à l'administration, la direction et le commercial")
     return user
 
 
@@ -140,7 +150,7 @@ def _enrich_unread(conn, user_id: int, nc_dicts: List[dict]) -> List[dict]:
 
 @router.get("/api/qualite/nc")
 def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[str] = None):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         sql = """SELECT nc.*,
                         ue.nom AS emetteur_nom,
@@ -170,7 +180,7 @@ def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[st
 
 @router.get("/api/qualite/nc/{nc_id}")
 def get_nc(nc_id: int, request: Request):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         row = conn.execute(
             """SELECT nc.*,
@@ -404,7 +414,7 @@ def delete_nc(nc_id: int, request: Request):
 
 @router.get("/api/qualite/nc/{nc_id}/fichiers")
 def list_fichiers(nc_id: int, request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone():
             raise HTTPException(status_code=404, detail="NC introuvable")
@@ -449,7 +459,7 @@ async def upload_fichier(nc_id: int, request: Request, file: UploadFile = File(.
 
 @router.get("/api/qualite/nc/{nc_id}/fichiers/{file_id}")
 def download_fichier(nc_id: int, file_id: int, request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT * FROM nc_fichiers WHERE id=? AND nc_id=?", (file_id, nc_id)
@@ -488,7 +498,7 @@ def delete_fichier(nc_id: int, file_id: int, request: Request):
 
 @router.get("/api/qualite/nc/{nc_id}/messages")
 def list_messages(nc_id: int, request: Request):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone():
             raise HTTPException(status_code=404, detail="NC introuvable")
@@ -569,7 +579,7 @@ def post_message(nc_id: int, body: NCMessageCreate, request: Request):
 
 @router.get("/api/qualite/canaux")
 def list_canaux(request: Request):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT nc.id, nc.numero, nc.titre, nc.statut, nc.type_nc, nc.gravite,
@@ -590,7 +600,7 @@ def list_canaux(request: Request):
 @router.get("/api/qualite/unread-total")
 def unread_total(request: Request):
     """Total des messages non lus pour la sidebar/portail."""
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT nc.id,
@@ -618,7 +628,7 @@ def unread_total(request: Request):
 
 @router.get("/api/qualite/dossiers-search")
 def search_dossiers(request: Request, q: str = ""):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     q = (q or "").strip()
     with get_db() as conn:
         if q:
@@ -819,7 +829,7 @@ async def import_nc_xlsx(request: Request, file: UploadFile = File(...)):
 
 @router.get("/api/qualite/nc/{nc_id}/pdf")
 def export_nc_pdf(nc_id: int, request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     from fastapi.responses import Response
     from app.services.nc_pdf import render_nc_pdf
     nc = get_nc(nc_id, request)
@@ -836,7 +846,7 @@ def export_nc_pdf(nc_id: int, request: Request):
 
 @router.get("/api/qualite/users")
 def list_users(request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, nom, role FROM users WHERE actif=1 ORDER BY nom"
@@ -958,7 +968,7 @@ def _notify_auditeur(audit_id: int, audit_numero: str, audit_client: str, user_i
 
 @router.get("/api/qualite/audits")
 def list_audits(request: Request, statut: Optional[str] = None, q: Optional[str] = None):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         sql = """SELECT a.*,
                         uc.nom AS created_by_nom,
@@ -987,7 +997,7 @@ def list_audits(request: Request, statut: Optional[str] = None, q: Optional[str]
 
 @router.get("/api/qualite/audits/{audit_id}")
 def get_audit(audit_id: int, request: Request):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         row = conn.execute(
             """SELECT a.*,
@@ -1260,7 +1270,7 @@ def remove_auditeur(audit_id: int, user_id: int, request: Request):
 
 @router.get("/api/qualite/audits/{audit_id}/folders")
 def list_folders(audit_id: int, request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Audit introuvable")
@@ -1417,7 +1427,7 @@ def delete_folder(audit_id: int, folder_id: int, request: Request):
 
 @router.get("/api/qualite/audits/{audit_id}/fichiers")
 def list_audit_fichiers(audit_id: int, request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Audit introuvable")
@@ -1474,7 +1484,7 @@ async def upload_audit_fichier(
 
 @router.get("/api/qualite/audits/{audit_id}/fichiers/{file_id}")
 def download_audit_fichier(audit_id: int, file_id: int, request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT * FROM audit_fichiers WHERE id=? AND audit_id=?", (file_id, audit_id)
@@ -1543,7 +1553,7 @@ def move_audit_fichier(audit_id: int, file_id: int, body: AuditFichierMove, requ
 
 @router.get("/api/qualite/audits/{audit_id}/messages")
 def list_audit_messages(audit_id: int, request: Request):
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Audit introuvable")
@@ -1623,7 +1633,7 @@ def post_audit_message(audit_id: int, body: AuditMessageCreate, request: Request
 
 @router.get("/api/qualite/clients-search")
 def search_clients_qualite(request: Request, q: str = ""):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     q = (q or "").strip()
     with get_db() as conn:
         if q:
@@ -1647,7 +1657,7 @@ def search_clients_qualite(request: Request, q: str = ""):
 
 @router.get("/api/qualite/auditeurs")
 def list_auditeurs(request: Request):
-    _require_qualite_access(request)
+    _require_qualite_view(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT id, nom, role FROM users
@@ -1669,7 +1679,7 @@ def qualite_badges(request: Request):
         audits_assigned_open : nb d'audits ouverts où l'utilisateur est affecté
         total : somme à afficher dans le badge
     """
-    user = _require_qualite_access(request)
+    user = _require_qualite_view(request)
     uid = user["id"]
     with get_db() as conn:
         # NC unread
