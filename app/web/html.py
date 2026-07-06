@@ -138,6 +138,36 @@ body.light .login-theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 1
 .login-error{background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--danger);margin-bottom:16px;display:none}
 .login-error.show{display:block}
 .login-footer{text-align:center;margin-top:20px;font-size:11px;color:var(--muted)}
+/* ── Animation train d'icônes sur la page de login ────────────────────────────
+   Un train composé des icônes des tuiles du portail traverse l'écran en suivant
+   une trajectoire courbe aléatoire. Passe derrière la carte de connexion
+   (z-index 0 vs .login-page z-index 1). Cyan accent, ne gêne pas les clics. */
+.login-train-layer{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.login-wagon{
+  position:absolute;top:0;left:0;
+  width:28px;height:28px;
+  margin:-14px 0 0 -14px; /* centre le point de trajet sur l'icône */
+  color:var(--accent);
+  opacity:0;
+  offset-rotate:0deg;
+  will-change:transform,opacity;
+  animation-name:login-wagon-travel;
+  animation-timing-function:cubic-bezier(.42,.05,.58,.95);
+  animation-fill-mode:forwards;
+  animation-iteration-count:1;
+  filter:drop-shadow(0 0 8px rgba(34,211,238,.55));
+}
+.login-wagon svg{width:28px;height:28px;display:block}
+@keyframes login-wagon-travel{
+  0%   {offset-distance:0%;   opacity:0;   transform:scale(.85)}
+  8%   {opacity:.85;          transform:scale(1)}
+  92%  {opacity:.85;          transform:scale(1)}
+  100% {offset-distance:100%; opacity:0;   transform:scale(.85)}
+}
+body.light .login-wagon{filter:drop-shadow(0 0 8px rgba(8,145,178,.45))}
+@media (prefers-reduced-motion: reduce){
+  .login-train-layer{display:none}
+}
 /* Bandeau staging v1 — fine bande rouge permanente, n'apparaît que si ENV_NAME=v1.
    Sert aussi de hôte au sélecteur d'impersonation (superadmin only, v1 & prod). */
 .staging-bandeau{position:fixed;top:0;left:0;right:0;height:24px;background:#dc2626;color:#fff;
@@ -8350,7 +8380,11 @@ function renderLogin(){
     h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
     h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
   );
+  const trainLayer=h('div',{className:'login-train-layer',id:'login-train-layer'});
+  // Démarre l'animation train juste après le mount (attend que le layer soit dans le DOM).
+  setTimeout(startLoginTrainAnimation,60);
   return h('div',{className:'login-page'},
+    trainLayer,
     themeBtn,
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},
@@ -8370,6 +8404,69 @@ function renderLogin(){
       h('div',{className:'login-footer'},'© SIFA — MySifa __V_LABEL__')
     )
   );
+}
+
+// ── Animation train d'icônes sur la page de login ─────────────────
+// Fait défiler périodiquement une file d'icônes des tuiles du portail
+// (edit, wrench, package, printer, calculator, truck, users, file-text,
+// clipboard, palette, shield-check, tool) le long d'une trajectoire
+// courbe (arc quadratique) aléatoire. Chaque wagon suit le précédent
+// avec un léger décalage — effet train. Ne se relance pas tant qu'une
+// instance tourne déjà (résiste aux re-renders).
+function startLoginTrainAnimation(){
+  const layer=document.getElementById('login-train-layer');
+  if(!layer) return;
+  if(layer.dataset.trainOn==='1') return; // déjà en cours
+  layer.dataset.trainOn='1';
+  const ICONS=['edit','wrench','package','printer','calculator','truck','users','file-text','clipboard','palette','shield-check','tool'];
+
+  function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+  function pickSide(){return ['top','right','bottom','left'][Math.floor(Math.random()*4)];}
+  function pointOnSide(side,W,H){
+    const off=100; // hors écran pour entrer/sortir proprement
+    const inset=60; // marge pour ne pas coller aux coins
+    if(side==='top')    return [inset+Math.random()*(W-inset*2), -off];
+    if(side==='bottom') return [inset+Math.random()*(W-inset*2),  H+off];
+    if(side==='left')   return [-off, inset+Math.random()*(H-inset*2)];
+    /* right */          return [W+off, inset+Math.random()*(H-inset*2)];
+  }
+
+  function spawnTrain(){
+    const stillHere=document.getElementById('login-train-layer');
+    if(!stillHere || stillHere!==layer){ return; } // page démontée
+    const W=window.innerWidth, H=window.innerHeight;
+    const entry=pickSide();
+    let exit=pickSide();
+    if(exit===entry) exit=({top:'bottom',bottom:'top',left:'right',right:'left'})[entry];
+    const [x1,y1]=pointOnSide(entry,W,H);
+    const [x2,y2]=pointOnSide(exit,W,H);
+    // Point de contrôle: proche centre, décalé aléatoirement → arc de cercle
+    const cx=W*0.5 + (Math.random()-0.5)*W*0.5;
+    const cy=H*0.5 + (Math.random()-0.5)*H*0.5;
+    const pathStr='M '+x1.toFixed(0)+' '+y1.toFixed(0)+' Q '+cx.toFixed(0)+' '+cy.toFixed(0)+' '+x2.toFixed(0)+' '+y2.toFixed(0);
+    // Durée du trajet: assez lent (10-16s)
+    const duration=10000+Math.random()*6000;
+    const wagonGap=260; // ms entre wagons
+    const wagons=shuffle(ICONS.slice());
+    wagons.forEach((name,i)=>{
+      const w=document.createElement('span');
+      w.className='login-wagon';
+      w.style.offsetPath='path("'+pathStr+'")';
+      w.style.animationDuration=duration+'ms';
+      w.style.animationDelay=(i*wagonGap)+'ms';
+      // Astuce Safari/anciennes versions: préfixe motion-*
+      w.style.motionPath=w.style.offsetPath;
+      w.innerHTML=icon(name,28);
+      layer.appendChild(w);
+      const total=duration+i*wagonGap+400;
+      setTimeout(()=>{if(w.parentNode)w.parentNode.removeChild(w);},total);
+    });
+    // Prochain train: attente aléatoire (2.5-7s) après le début du premier wagon.
+    const nextWait=2500+Math.random()*4500;
+    setTimeout(spawnTrain,nextWait);
+  }
+  // Premier train après un petit délai
+  setTimeout(spawnTrain, 900);
 }
 
 // ── Sidebar ─────────────────────────────────────────────────────
