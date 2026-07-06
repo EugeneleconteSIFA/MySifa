@@ -2028,25 +2028,32 @@ def _maint_safe_filename(name: str) -> str:
 @router.get("/api/maintenance/codes/{code}/docs")
 def maintenance_code_docs_list(code: str, request: Request):
     """Liste les documents attaches a un code maintenance."""
-    get_current_user(request)
-    from database import get_db
-    with get_db() as conn:
-        _ensure_maint_docs_table(conn)
-        # Verifier que le code existe
-        row = conn.execute(
-            "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, f"Code {code} introuvable.")
-        rows = conn.execute(
-            """SELECT id, filename, size_bytes, content_type,
-                      uploaded_by, uploaded_at
-               FROM maintenance_docs
-               WHERE code=?
-               ORDER BY uploaded_at DESC, id DESC""",
-            (code,),
-        ).fetchall()
-    return {"items": [dict(r) for r in rows]}
+    import traceback
+    try:
+        get_current_user(request)
+        from database import get_db
+        with get_db() as conn:
+            _ensure_maint_docs_table(conn)
+            row = conn.execute(
+                "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"Code {code} introuvable.")
+            rows = conn.execute(
+                """SELECT id, filename, size_bytes, content_type,
+                          uploaded_by, uploaded_at
+                   FROM maintenance_docs
+                   WHERE code=?
+                   ORDER BY uploaded_at DESC, id DESC""",
+                (code,),
+            ).fetchall()
+        return {"items": [dict(r) for r in rows]}
+    except HTTPException:
+        raise
+    except Exception as _e:
+        _tb = traceback.format_exc()
+        # Remonte l'erreur telle quelle au client pour debug (temporaire).
+        raise HTTPException(500, f"DEBUG: {type(_e).__name__}: {_e} | TRACE (last 400): {_tb[-400:]}")
 
 
 @router.post("/api/maintenance/codes/{code}/docs")
@@ -2056,45 +2063,52 @@ async def maintenance_code_doc_upload(
     file: UploadFile = File(...),
 ):
     """Upload d'un document rattache au code. Reservee au writer maintenance."""
-    user = _require_maint_writer(request)
-    contents = await file.read()
-    if len(contents) > _MAINT_DOCS_MAX_BYTES:
-        raise HTTPException(413, "Fichier trop volumineux (max 20 Mo).")
-    if len(contents) == 0:
-        raise HTTPException(422, "Fichier vide.")
-    from database import get_db
-    with get_db() as conn:
-        _ensure_maint_docs_table(conn)
-        row = conn.execute(
-            "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, f"Code {code} introuvable.")
-    orig_name = (file.filename or "fichier").strip()
-    safe = _maint_safe_filename(orig_name)
-    unique = f"{uuid.uuid4().hex[:12]}_{safe}"
-    dest = _maint_docs_dir(code) / unique
-    with open(dest, "wb") as out:
-        out.write(contents)
-    rel = f"{_MAINT_DOCS_SUBDIR}/{code}/{unique}"
-    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
-    author = user.get("nom") or user.get("email") or ""
-    ctype = file.content_type or ""
-    with get_db() as conn:
-        _ensure_maint_docs_table(conn)
-        cur = conn.execute(
-            """INSERT INTO maintenance_docs
-               (code, filename, stored_path, size_bytes, content_type,
-                uploaded_by, uploaded_at)
-               VALUES (?,?,?,?,?,?,?)""",
-            (code, orig_name, rel, len(contents), ctype, author, now),
-        )
-        conn.commit()
-        new_id = cur.lastrowid
-    log_action(user=user, action="UPLOAD", module="maintenance_docs",
-               objet=str(new_id), detail=f"{code} · {orig_name}")
-    return {"ok": True, "id": new_id, "filename": orig_name,
-            "size_bytes": len(contents)}
+    import traceback
+    try:
+        user = _require_maint_writer(request)
+        contents = await file.read()
+        if len(contents) > _MAINT_DOCS_MAX_BYTES:
+            raise HTTPException(413, "Fichier trop volumineux (max 20 Mo).")
+        if len(contents) == 0:
+            raise HTTPException(422, "Fichier vide.")
+        from database import get_db
+        with get_db() as conn:
+            _ensure_maint_docs_table(conn)
+            row = conn.execute(
+                "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"Code {code} introuvable.")
+        orig_name = (file.filename or "fichier").strip()
+        safe = _maint_safe_filename(orig_name)
+        unique = f"{uuid.uuid4().hex[:12]}_{safe}"
+        dest = _maint_docs_dir(code) / unique
+        with open(dest, "wb") as out:
+            out.write(contents)
+        rel = f"{_MAINT_DOCS_SUBDIR}/{code}/{unique}"
+        now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+        author = user.get("nom") or user.get("email") or ""
+        ctype = file.content_type or ""
+        with get_db() as conn:
+            _ensure_maint_docs_table(conn)
+            cur = conn.execute(
+                """INSERT INTO maintenance_docs
+                   (code, filename, stored_path, size_bytes, content_type,
+                    uploaded_by, uploaded_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (code, orig_name, rel, len(contents), ctype, author, now),
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+        log_action(user=user, action="UPLOAD", module="maintenance_docs",
+                   objet=str(new_id), detail=f"{code} · {orig_name}")
+        return {"ok": True, "id": new_id, "filename": orig_name,
+                "size_bytes": len(contents)}
+    except HTTPException:
+        raise
+    except Exception as _e:
+        _tb = traceback.format_exc()
+        raise HTTPException(500, f"DEBUG: {type(_e).__name__}: {_e} | TRACE (last 400): {_tb[-400:]}")
 
 
 @router.get("/api/maintenance/docs/{doc_id}/download")
