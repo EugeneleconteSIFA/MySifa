@@ -117,6 +117,11 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 
 /* ── Colonne Dossier dans l'historique des contrôles ── */
 .col-dossier{white-space:nowrap}
+.col-nodos{white-space:nowrap}
+.ctrl-row-nc td{background:rgba(248,113,113,0.06);border-top:1px solid rgba(248,113,113,0.18);border-bottom:1px solid rgba(248,113,113,0.18)}
+.ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
+.ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
+.ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
 tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ctrl-dossier-empty{color:var(--muted);font-size:12px}
@@ -4735,6 +4740,30 @@ function closeAckDetail(){
   if(el) el.remove();
 }
 
+// Détecte une non-conformité : au moins une réponse choice de l'ack diffère
+// de la première réponse proposée (considérée comme "conforme" par convention).
+// Types "value" et clés "_other" ne sont pas évalués (l'admin peut fixer des
+// bornes numériques, mais la couleur de la ligne se base sur les choix).
+function _ackHasNonConformite(c){
+  if(!c || c._source !== 'alert') return false;
+  const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)];
+  if(!meta || !Array.isArray(meta.checklist_items)) return false;
+  const resp = c._responses || {};
+  for(let i = 0; i < meta.checklist_items.length; i++){
+    const it = meta.checklist_items[i];
+    if(!it || it.type === 'value') continue;
+    const responses = Array.isArray(it.responses) ? it.responses : [];
+    if(!responses.length) continue;
+    const first = String(responses[0] || '').trim();
+    const r = resp[String(i)];
+    if(!Array.isArray(r)) continue;
+    for(const sel of r){
+      if(String(sel || '').trim() !== first) return true;
+    }
+  }
+  return false;
+}
+
 function renderCtrl(){
   refreshCtrlFiltersOptions();
   updateCtrlDatePresetChips();
@@ -4808,6 +4837,7 @@ function renderCtrl(){
       h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
     }
     if(showExtra){
+      h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
       h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
       h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
       h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
@@ -4817,7 +4847,7 @@ function renderCtrl(){
     thead.innerHTML = h;
   }
 
-  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 3 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
+  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
@@ -4849,9 +4879,13 @@ function renderCtrl(){
         cells += '<td>' + escHtml(val) + '</td>';
       }
       if(showExtra){
-        // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
-        // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
-        // technique complète du dossier.
+        // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
+        const _nd = c._no_dossier || '';
+        const _ndCell = (c._source === 'alert' && _nd)
+          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_nd) + '</span>'
+          : '<span class="ctrl-dossier-empty">—</span>';
+        cells += '<td class="col-nodos">' + _ndCell + '</td>';
+        // Colonnes produit (fiche technique associée)
         const _di = c._dossier_info || null;
         const _refP = _di ? (_di.ref_produit || _di.ref_produit_norm || '') : '';
         const _adh  = _di ? (_di.adhesif || '') : '';
@@ -4881,10 +4915,13 @@ function renderCtrl(){
         '</button>';
       }
       cells += '<td class="col-actions">' + actionHtml + '</td>';
+      const isNc = _ackHasNonConformite(c);
+      const trClass = isNc ? ' class="ctrl-row-nc"' : '';
+      const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
       const dblAttr = (c._source === 'alert')
-        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer" title="Double-clic pour voir le détail"'
+        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le détail"')
         : '';
-      return '<tr' + dblAttr + '>' + cells + '</tr>';
+      return '<tr' + trClass + dblAttr + ncTitle + '>' + cells + '</tr>';
     });
     tbody.innerHTML = rows.join('');
   }
