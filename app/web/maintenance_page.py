@@ -1,24 +1,65 @@
 """MySifa — Page Maintenance
 Route : /maintenance
-Accès strict : superadmin + utilisateur d'identifiant `loic.gognau`
+
+Contrôle d'accès multi-rôle :
+- Admin (accès complet) : superadmin, direction, administration.
+- Opérateur (vue « Mes tâches ») : rôle fabrication, uniquement quand le flag
+  global MAINTENANCE_OPEN_BETA est activé dans .env. Sert à ouvrir
+  progressivement le module aux opérateurs sur v1 (staging) avant la promotion
+  en prod, sans exposer l'interface encore incomplète à toute l'usine.
+- Whitelist historique MAINTENANCE_ALLOWED_IDENTS conservée en secours : un
+  ident listé conserve l'accès complet (rôle "admin") même si son rôle n'est
+  pas dans la liste admin. Utile pour donner un accès ponctuel sans changer
+  le rôle en base.
+
+Le rôle effectif (admin / operator) est injecté dans le tag racine via
+l'attribut data-maint-role, ce qui permet au CSS et au JS de la page de
+basculer l'affichage entre les vues admin et opérateur sans deux templates
+séparés.
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from typing import Optional
 
-from app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_user, effective_role
 from app.web.access_denied import access_denied_response
-from config import APP_VERSION
+from config import (
+    APP_VERSION,
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION,
+    ROLE_FABRICATION,
+    MAINTENANCE_OPEN_BETA,
+)
 
 MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
 
+_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
+
+
+def _get_maintenance_role(user: dict) -> Optional[str]:
+    """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
+
+    - 'admin'    : superadmin, direction, administration, ou ident whitelisté.
+    - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
+    - None       : pas d'accès (déclencher access_denied_response).
+    """
+    if not user:
+        return None
+    ident = str(user.get("identifiant") or "").strip().lower()
+    if ident in MAINTENANCE_ALLOWED_IDENTS:
+        return "admin"
+    role = effective_role(user)
+    if role in _MAINTENANCE_ADMIN_ROLES:
+        return "admin"
+    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
+        return "operator"
+    return None
+
 
 def _has_maintenance_access(user: dict) -> bool:
-    if not user:
-        return False
-    if user.get("role") == "superadmin":
-        return True
-    ident = str(user.get("identifiant") or "").strip().lower()
-    return ident in MAINTENANCE_ALLOWED_IDENTS
+    """Compat : True dès que l'user a un rôle maintenance quelconque."""
+    return _get_maintenance_role(user) is not None
 
 
 router = APIRouter()
@@ -32,9 +73,14 @@ def maintenance_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/maintenance", status_code=302)
         raise
-    if not _has_maintenance_access(user):
+    maint_role = _get_maintenance_role(user)
+    if maint_role is None:
         return access_denied_response("Maintenance")
-    html = MAINTENANCE_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
+    html = (
+        MAINTENANCE_HTML
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__MAINT_ROLE__", maint_role)
+    )
     return HTMLResponse(
         content=html,
         headers={
@@ -579,7 +625,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
 .ctrl-point-filters-inputs .pf-num{width:60px}
 </style>
 </head>
-<body>
+<body data-maint-role="__MAINT_ROLE__">
 <div class="app">
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 

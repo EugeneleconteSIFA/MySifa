@@ -72,6 +72,14 @@ MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {
 # Sera retiré complètement en phase 2n (suppression du code Prod du monolithe).
 PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "yes", "YES"}
 
+# MAINTENANCE_OPEN_BETA : ouvre l'accès du module Maintenance aux opérateurs
+# (rôle `fabrication`) pendant la phase de test. Quand désactivé (0, défaut),
+# seuls les rôles admin (superadmin, direction, administration) peuvent y
+# entrer. Passer à 1 dans le .env pour laisser les opérateurs tester leur
+# vue « Mes tâches » sur v1 avant la promotion en prod. Les endpoints API
+# vérifient ce flag côté serveur — inutile de patcher la sidebar seule.
+MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
+
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
 # Configuration SMTP via variables d’environnement (prod).
