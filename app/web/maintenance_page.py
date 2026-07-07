@@ -627,6 +627,11 @@ body.light .toast.info{background:#fff;color:var(--text)}
 body[data-maint-role="admin"] .op-only{display:none !important}
 body[data-maint-role="operator"] .adm-only{display:none !important}
 
+/* Force l'alignement en haut de contenu pour les vues opérateur — sinon
+   certaines instances chrome/edge appliquent un justify-content mystérieux
+   qui centre verticalement les enfants d'un flex column vide. */
+.view.op-only{justify-content:flex-start;align-items:stretch}
+
 /* ── UI opérateur : conteneur actions dans .page-header ─────────── */
 .op-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .op-date-picker{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:6px 12px;min-height:38px}
@@ -660,6 +665,13 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
 /* ── État vide (aucune tâche) ───────────────────────────────────── */
 .op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
 .op-empty h3{font-size:18px;color:var(--text2);margin:0 0 8px 0;font-weight:600}
+
+/* ── Sous-onglets (Planning personnel / Planning général) ──────── */
+.op-subtabs{display:inline-flex;gap:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px}
+.op-subtab{padding:8px 16px;border-radius:8px;background:transparent;border:none;color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
+.op-subtab:hover{color:var(--text)}
+.op-subtab.active{background:var(--accent-bg);color:var(--accent)}
+.op-tab-content{flex:1}
 
 /* ── Vue Planning opérateur : tableau read-only ──────────────────── */
 .op-plan-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
@@ -1206,12 +1218,12 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
         <div id="op-tasks-list"></div>
       </div>
 
-      <!-- View opérateur : Planning read-only -->
+      <!-- View opérateur : Planning avec 2 sous-onglets -->
       <div class="view op-only" id="view-op-planning" style="display:none">
         <div class="page-header">
           <div>
-            <div class="page-title">Planning de la journée</div>
-            <div class="page-subtitle">Vue globale — mes tâches sont surlignées</div>
+            <div class="page-title">Planning</div>
+            <div class="page-subtitle">Vue de la journée — mes tâches sont surlignées</div>
           </div>
           <div class="op-actions">
             <div class="op-date-picker">
@@ -1220,7 +1232,12 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
             </div>
           </div>
         </div>
-        <div id="op-planning-list"></div>
+        <div class="op-subtabs" role="tablist">
+          <button type="button" class="op-subtab active" data-op-plan-tab="personnel" onclick="opSetPlanTab('personnel')">Planning personnel</button>
+          <button type="button" class="op-subtab" data-op-plan-tab="general" onclick="opSetPlanTab('general')">Planning général</button>
+        </div>
+        <div class="op-tab-content" id="op-plan-personnel"></div>
+        <div class="op-tab-content" id="op-plan-general" style="display:none"></div>
       </div>
   </main>
 </div>
@@ -5288,22 +5305,11 @@ async function opSubmitNew(){
 
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
-async function opLoadPlanning(){
-  if(MAINT_ROLE !== 'operator') return;
-  const dateInput = document.getElementById('op-plan-date');
-  const d = dateInput.value || _fmtDateISO(new Date());
-  if(!dateInput.value) dateInput.value = d;
-  const r = await fetch('/api/maintenance/tasks?date=' + encodeURIComponent(d));
-  const data = await r.json();
-  const rows = data.tasks || [];
-  const list = document.getElementById('op-planning-list');
-  if(!list) return;
+function _opRenderPlanTable(rows, meId){
   if(rows.length === 0){
-    list.innerHTML = '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
-    return;
+    return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
   }
-  const meId = (S && S.me) ? S.me.id : null;
-  const table = `<table class="op-plan-table">
+  return `<table class="op-plan-table">
     <thead><tr><th>Code</th><th>Opération</th><th>Machine</th><th>Opérateur</th><th>Statut</th></tr></thead>
     <tbody>${rows.map(t => {
       const mine = (t.operator_id === meId);
@@ -5316,7 +5322,34 @@ async function opLoadPlanning(){
       </tr>`;
     }).join('')}</tbody>
   </table>`;
-  list.innerHTML = table;
+}
+
+async function opLoadPlanning(){
+  if(MAINT_ROLE !== 'operator') return;
+  const dateInput = document.getElementById('op-plan-date');
+  const d = dateInput.value || _fmtDateISO(new Date());
+  if(!dateInput.value) dateInput.value = d;
+  const r = await fetch('/api/maintenance/tasks?date=' + encodeURIComponent(d));
+  const data = await r.json();
+  const rows = data.tasks || [];
+  const meId = (S && S.me) ? S.me.id : null;
+  // Onglet Personnel : uniquement mes tâches assignées.
+  const personnel = rows.filter(t => t.operator_id === meId);
+  const persoEl = document.getElementById('op-plan-personnel');
+  if(persoEl) persoEl.innerHTML = _opRenderPlanTable(personnel, meId);
+  // Onglet Général : toutes les tâches (y compris les miennes, surlignées).
+  const genEl = document.getElementById('op-plan-general');
+  if(genEl) genEl.innerHTML = _opRenderPlanTable(rows, meId);
+}
+
+function opSetPlanTab(name){
+  document.querySelectorAll('[data-op-plan-tab]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-op-plan-tab') === name);
+  });
+  const perso = document.getElementById('op-plan-personnel');
+  const gen = document.getElementById('op-plan-general');
+  if(perso) perso.style.display = (name === 'personnel') ? '' : 'none';
+  if(gen) gen.style.display = (name === 'general') ? '' : 'none';
 }
 
 /* ── Modal admin : créer une tâche assignée ──────────────────────── */
