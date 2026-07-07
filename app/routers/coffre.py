@@ -12,6 +12,7 @@ reste celui remis en main propre / par email par la comptabilité.
 from __future__ import annotations
 
 import hashlib
+import mimetypes
 import os
 import re
 import uuid
@@ -107,8 +108,12 @@ def list_my_documents(request: Request, annee: Optional[int] = None, type: Optio
 
 
 @router.get("/api/coffre/documents/{doc_id}/download")
-def download_document(doc_id: int, request: Request):
-    """Télécharge un document RH — propriétaire ou compta/superadmin uniquement."""
+def download_document(doc_id: int, request: Request, inline: bool = False):
+    """Télécharge ou prévisualise (?inline=1) un document RH.
+
+    Propriétaire ou compta/superadmin uniquement. En mode inline, sert le
+    fichier avec Content-Disposition: inline pour affichage dans iframe/img.
+    """
     user = get_current_user(request)
     with get_db() as conn:
         row = conn.execute(
@@ -127,18 +132,25 @@ def download_document(doc_id: int, request: Request):
             (datetime.now().isoformat(timespec="seconds"), doc_id),
         )
         _log_doc_access(
-            conn, doc_id, user, "download",
+            conn, doc_id, user, "preview" if inline else "download",
             request.client.host if request.client else None,
         )
         conn.commit()
     path = Path(d["fichier_path"])
     if not path.is_file():
         raise HTTPException(410, "Fichier absent du serveur")
-    return FileResponse(
-        str(path),
-        filename=d["fichier_nom"] or path.name,
-        media_type="application/pdf",
-    )
+    fname = d["fichier_nom"] or path.name
+    mime, _ = mimetypes.guess_type(fname)
+    if not mime:
+        mime = "application/pdf"
+    if inline:
+        # Content-Disposition: inline → aperçu dans le navigateur (iframe/img)
+        return FileResponse(
+            str(path),
+            media_type=mime,
+            headers={"Content-Disposition": f'inline; filename="{fname}"'},
+        )
+    return FileResponse(str(path), filename=fname, media_type=mime)
 
 
 # ── Notes de frais — vue salarié (dépôt + workflow) ──────────────────────
@@ -287,8 +299,11 @@ def delete_ndf(ndf_id: int, request: Request):
 
 
 @router.get("/api/coffre/notes-frais/{ndf_id}/justificatif")
-def download_ndf_justificatif(ndf_id: int, request: Request):
-    """Télécharge le justificatif — propriétaire ou compta/superadmin."""
+def download_ndf_justificatif(ndf_id: int, request: Request, inline: bool = False):
+    """Télécharge ou prévisualise (?inline=1) le justificatif d'une note de frais.
+
+    Propriétaire ou compta/superadmin uniquement.
+    """
     user = get_current_user(request)
     with get_db() as conn:
         row = conn.execute(
@@ -303,4 +318,14 @@ def download_ndf_justificatif(ndf_id: int, request: Request):
     path = Path(row["justificatif_path"])
     if not path.is_file():
         raise HTTPException(410, "Fichier absent du serveur")
-    return FileResponse(str(path), filename=row["justificatif_nom"] or path.name)
+    fname = row["justificatif_nom"] or path.name
+    mime, _ = mimetypes.guess_type(fname)
+    if not mime:
+        mime = "application/octet-stream"
+    if inline:
+        return FileResponse(
+            str(path),
+            media_type=mime,
+            headers={"Content-Disposition": f'inline; filename="{fname}"'},
+        )
+    return FileResponse(str(path), filename=fname, media_type=mime)

@@ -5856,7 +5856,7 @@ function renderProdPage(){
   // V1 : onglet Rapport hebdo réservé au super admin (phase de test).
   const isSuper = !!(S.user && String(S.user.role||'').toLowerCase()==='superadmin');
   if(isSuper){
-    allTabs.push({key:'rapport', label:'Rapport hebdo', icon:'calendar'});
+    allTabs.push({key:'rapport', label:'Rapport hebdo', icon:'bar-chart-2'});
   }
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs'},

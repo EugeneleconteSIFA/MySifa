@@ -6304,7 +6304,7 @@ function renderProdPage(){
   ];
   // V1 : onglet Rapport hebdo réservé au super admin (phase de test).
   if(isSuper){
-    tabs.push({key:'rapport', label:'Rapport hebdo', icon:'calendar'});
+    tabs.push({key:'rapport', label:'Rapport hebdo', icon:'bar-chart-2'});
   }
   const subNav = h('div',{className:'nav-tabs'},
     ...tabs.map(t=>h('button',{

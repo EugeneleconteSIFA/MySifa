@@ -41,16 +41,20 @@ from config import (
 
 # Rôles → sections affichées dans le rapport
 ROLE_SECTIONS: Dict[str, List[str]] = {
-    ROLE_SUPERADMIN:     ["summary", "prod_by_machine", "top_dossiers", "flop_dossiers",
+    # Note : les sections top_dossiers / flop_dossiers ont été retirées de toutes les vues
+    # (retour utilisateur : trop de deep dive dossier par dossier dans le rapport hebdo).
+    # Les données restent collectées dans data["top_dossiers"] / data["flop_dossiers"]
+    # au cas où on veuille les réactiver plus tard.
+    ROLE_SUPERADMIN:     ["summary", "prod_by_machine",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_DIRECTION:      ["summary", "prod_by_machine", "top_dossiers", "flop_dossiers",
+    ROLE_DIRECTION:      ["summary", "prod_by_machine",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_ADMINISTRATION: ["summary", "prod_by_machine", "top_dossiers", "flop_dossiers",
+    ROLE_ADMINISTRATION: ["summary", "prod_by_machine",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_FABRICATION:    ["summary_light", "prod_by_machine", "top_dossiers", "flop_dossiers",
+    ROLE_FABRICATION:    ["summary_light", "prod_by_machine",
                           "sanity_global", "sanity_by_operateur", "repiquage", "alerts_fab"],
     ROLE_LOGISTIQUE:     ["summary_light", "stock_freshness", "stock_from_prod", "expes", "alerts_log"],
     ROLE_COMPTABILITE:   ["summary_light", "stock_freshness", "expes"],
@@ -1029,7 +1033,9 @@ def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
 
         heures_txt = f'{_fnum(heures, 1)} h' if heures > 0 else "—"
         metrage_txt = f'{_fnum(metrage, 0)} m' if metrage > 0 else "—"
-        vitesse_txt = f'{_fnum(vitesse, 0)} m/h' if vitesse > 0 else "—"
+        # `vitesse` est stocké en m/h (metrage / duree_h) — on convertit en m/min pour l'affichage.
+        vitesse_min = vitesse / 60.0 if vitesse > 0 else 0.0
+        vitesse_txt = f'{_fnum(vitesse_min, 0)} m/min' if vitesse_min > 0 else "—"
 
         pill = _sanity_pill(r.get("sanity_mention", "") or "—",
                             r.get("sanity_color", "muted"), email)
@@ -1274,12 +1280,16 @@ def _render_repiquage(data: Dict[str, Any], email: bool) -> str:
 
 
 def _render_expes(data: Dict[str, Any], email: bool) -> str:
-    """3 KPI cards + chips transporteurs + alerte retards (si présents)."""
+    """3 KPI cards + chips transporteurs.
+
+    Note : la section "Retards de livraison" a été retirée sur retour utilisateur.
+    Les données restent collectées dans data["expes"]["retards"] au cas où on
+    voudrait les réactiver plus tard.
+    """
     ex = data.get("expes", {})
     text = _color("text", email)
     muted = _color("muted", email)
     border = _color("border", email)
-    warn = _color("warn", email)
 
     kpis = (
         f'<div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:12px">'
@@ -1309,30 +1319,7 @@ def _render_expes(data: Dict[str, Any], email: bool) -> str:
             f'{"".join(chips)}</div>'
         )
 
-    retards = ex.get("retards", []) or []
-    retards_html = ""
-    if retards:
-        lines = []
-        for r in retards:
-            lines.append(
-                f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                f'font-size:13px;color:{text};padding:4px 0">'
-                f'<div><b>{_esc(r.get("ref_sifa") or "")}</b> · '
-                f'<span style="color:{muted}">{_esc(r.get("transporteur") or "")}</span></div>'
-                f'<div style="font-size:11px;color:{warn}">livraison prévue {_esc(r.get("date_livraison_prevue") or "")}</div>'
-                f'</div>'
-            )
-        retards_html = (
-            f'<div style="margin-top:14px;padding:12px;border:1px solid {warn};'
-            f'border-radius:10px;background:rgba(251,191,36,0.06)">'
-            f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
-            f'font-weight:600;letter-spacing:.3px;margin-bottom:8px">'
-            f'Retards de livraison</div>'
-            f'<div style="display:flex;flex-direction:column;gap:6px">{"".join(lines)}</div>'
-            f'</div>'
-        )
-
-    return _section_title("Expéditions", email) + _card_wrap(kpis + chips_html + retards_html, email)
+    return _section_title("Expéditions", email) + _card_wrap(kpis + chips_html, email)
 
 
 def _render_alerts(data: Dict[str, Any], email: bool, scope: str = "all") -> str:
