@@ -5985,6 +5985,106 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 159, "mylearning_module")
 
+    # v160 — MyLearning step 2 : refonte du schéma modules pour supporter
+    # plusieurs vidéos par module + séparation stricte tracking vidéo vs
+    # validation module.
+    #
+    # Changements par rapport à v159 :
+    #   - formation_modules perd `youtube_id` et `duree_sec` (ces champs
+    #     appartiennent désormais à formation_videos, N vidéos par module).
+    #   - Nouvelle table `formation_videos` (module_id, ordre, titre,
+    #     youtube_id, duree_sec).
+    #   - `user_progression` (v159) devient obsolète — remplacée par :
+    #       * user_video_progression : pct_vu par vidéo (granulaire)
+    #       * user_module_validation : quiz_score + valide_le par module
+    #
+    # Comme aucun contenu MyLearning n'a été créé entre v159 et v160
+    # (l'écran admin n'existait pas encore à l'étape 1), le DROP + CREATE
+    # est safe : aucune donnée perdue en prod comme en staging.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=160 LIMIT 1").fetchone():
+        conn.executescript("""
+            -- Purge des tables v159 qui changent de structure.
+            DROP TABLE IF EXISTS formation_quiz;
+            DROP TABLE IF EXISTS user_progression;
+            DROP TABLE IF EXISTS formation_modules;
+
+            -- Nouveau formation_modules (sans youtube_id / duree_sec).
+            CREATE TABLE formation_modules (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                formation_id INTEGER NOT NULL,
+                ordre        INTEGER DEFAULT 100,
+                titre        TEXT NOT NULL,
+                description  TEXT,
+                actif        INTEGER DEFAULT 1,
+                cree_le      TEXT NOT NULL,
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_formation_modules_formation_v2
+                ON formation_modules(formation_id, ordre);
+
+            -- Vidéos d'un module (N vidéos possibles, ordonnées).
+            CREATE TABLE formation_videos (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id   INTEGER NOT NULL,
+                ordre       INTEGER DEFAULT 100,
+                titre       TEXT NOT NULL,
+                youtube_id  TEXT NOT NULL,               -- 11 caractères YouTube
+                duree_sec   INTEGER DEFAULT 0,
+                cree_le     TEXT NOT NULL,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_formation_videos_module
+                ON formation_videos(module_id, ordre);
+
+            -- Quiz : questions QCM 4 choix, 1 bonne réponse.
+            -- Contrainte métier (côté API) : au moins 1 question par module.
+            CREATE TABLE formation_quiz (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id      INTEGER NOT NULL,
+                ordre          INTEGER DEFAULT 100,
+                question       TEXT NOT NULL,
+                choix_json     TEXT NOT NULL,             -- JSON array (généralement 4 choix)
+                bonne_reponse  INTEGER NOT NULL,          -- index 0-based dans choix_json
+                explication    TEXT,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_formation_quiz_module_v2
+                ON formation_quiz(module_id, ordre);
+
+            -- Progression utilisateur au niveau vidéo (granulaire).
+            CREATE TABLE user_video_progression (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                video_id   INTEGER NOT NULL,
+                pct_vu     INTEGER DEFAULT 0,             -- 0-100
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, video_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (video_id) REFERENCES formation_videos(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_user_video_prog_user
+                ON user_video_progression(user_id);
+
+            -- Validation d'un module (quiz réussi + toutes vidéos vues).
+            -- quiz_score : 0-100 (% de bonnes réponses).
+            -- valide_le : timestamp ISO si module validé, NULL sinon.
+            CREATE TABLE user_module_validation (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                module_id  INTEGER NOT NULL,
+                quiz_score INTEGER,
+                valide_le  TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, module_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_user_module_valid_user
+                ON user_module_validation(user_id);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 160, "mylearning_videos_split")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
