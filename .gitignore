@@ -10,11 +10,21 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Base locale (ne jamais versionner la DB active)
+# Base locale (ne jamais versionner la DB active).
+# CRITIQUE : ne JAMAIS tracker un .db dans git.
+# Un blob git écrase la DB à chaque git reset --hard.
+# En juillet 2026, app/data/production-v1.db et data/production.db étaient
+# tous les deux trackés avec un blob vide (0 octet) — chaque pull cron du
+# VPS écrasait la DB v1 en 8 Ko. Diagnostic 502 en boucle jusqu'au untrack.
 data/production.db
 data/production.db.*
 data/*.bak
 data/*.backup
+app/data/*.db
+app/data/*.db-*
+*.db-journal
+*.db-shm
+*.db-wal
 mysifa.db
 production.db
 
