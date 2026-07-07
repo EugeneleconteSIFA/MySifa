@@ -10,12 +10,8 @@ from app.web.access_denied import access_denied_response
 
 router = APIRouter()
 
-# Rôles autorisés à voir la page
-_PAGE_ROLES = {
-    "superadmin", "direction", "administration",
-    "fabrication", "logistique", "comptabilite",
-    "expedition", "commercial",
-}
+# V1 : accès restreint au super administrateur uniquement (test interne).
+# À élargir plus tard aux autres rôles quand le rapport sera validé.
 
 
 @router.get("/reports/weekly", response_class=HTMLResponse)
@@ -26,14 +22,17 @@ def weekly_report_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/reports/weekly", status_code=302)
         raise
-    role = effective_role(user)
-    if role not in _PAGE_ROLES:
+    if not is_superadmin(user):
         return access_denied_response(
             "Rapport hebdomadaire",
-            detail="Accès non autorisé à ce rôle."
+            detail=(
+                "Ce module est en phase de test et réservé au super administrateur. "
+                "Il sera étendu aux autres rôles prochainement."
+            ),
         )
-    can_send = role in ("superadmin", "direction")
-    can_switch_role = role in ("superadmin", "direction")
+    role = effective_role(user)
+    can_send = True
+    can_switch_role = True
     return HTMLResponse(
         content=REPORTS_HTML
         .replace("__V_LABEL__", f"v{APP_VERSION}")

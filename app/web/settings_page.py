@@ -535,6 +535,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <input type="text" id="cu-ident" placeholder="Identifiant (auto si vide)" autocomplete="off">
           <input type="email" id="cu-email" placeholder="Email" autocomplete="off">
           <input type="password" id="cu-pwd" placeholder="Mot de passe (8+)" autocomplete="new-password">
+          <input type="text" id="cu-mat" placeholder="Matricule (paie, optionnel)" autocomplete="off">
           <select id="cu-role"></select>
           <select id="cu-op"><option value="">— Opérateur lié —</option></select>
           <select id="cu-mac"><option value="">— Machine (fabrication) —</option></select>
@@ -2253,17 +2254,19 @@ document.getElementById('cu-go').onclick = async () => {
   const password = document.getElementById('cu-pwd').value;
   const role = document.getElementById('cu-role').value;
   const operateur_lie = document.getElementById('cu-op').value || null;
+  const matricule = document.getElementById('cu-mat').value.trim() || null;
   const mid = document.getElementById('cu-mac').value;
   const machine_id = mid ? Number(mid) : null;
   if (!nom || !email || !password || !role) return toast('Champs requis', true);
   try {
     await api('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, identifiant, email, password, role, operateur_lie, machine_id }) });
+      body: JSON.stringify({ nom, identifiant, email, password, role, operateur_lie, matricule, machine_id }) });
     toast('Utilisateur créé');
     document.getElementById('cu-nom').value = '';
     document.getElementById('cu-ident').value = '';
     document.getElementById('cu-email').value = '';
     document.getElementById('cu-pwd').value = '';
+    document.getElementById('cu-mat').value = '';
     await loadUsers();
     await loadMatrix();
   } catch (e) { toast(e.message, true); }
@@ -2314,6 +2317,7 @@ async function openEdit(id) {
     '<label class="sub">Identifiant</label><input id="ed-ident" value="' + esc(u.identifiant || '') + '" style="margin-bottom:10px" placeholder="auto si vide">' +
     '<label class="sub">Email</label><input id="ed-email" type="email" value="' + esc(u.email) + '" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' +
     '<label class="sub">Téléphone</label><input id="ed-tel" value="' + esc(u.telephone || '') + '" style="margin-bottom:10px" placeholder="">' +
+    '<label class="sub">Matricule (paie)</label><input id="ed-mat" value="' + esc(u.matricule || '') + '" style="margin-bottom:10px" placeholder="ex. 12345">' +
     '<label class="sub">Adresse</label><input id="ed-adr" value="' + esc(u.adresse || '') + '" style="margin-bottom:10px" placeholder="">' +
     '<label class="sub">Date de naissance</label><input id="ed-birth" type="date" value="' + esc(u.date_naissance || '') + '" style="margin-bottom:10px">' +
     '<label class="sub">Rôle</label><select id="ed-role" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' + roleOpts + '</select>' +
@@ -2344,6 +2348,7 @@ async function openEdit(id) {
       identifiant: dlg.querySelector('#ed-ident').value.trim(),
       email: dlg.querySelector('#ed-email').value.trim(),
       telephone: dlg.querySelector('#ed-tel').value.trim(),
+      matricule: dlg.querySelector('#ed-mat').value.trim(),
       adresse: dlg.querySelector('#ed-adr').value.trim(),
       date_naissance: dlg.querySelector('#ed-birth').value.trim(),
       role: dlg.querySelector('#ed-role').value,
