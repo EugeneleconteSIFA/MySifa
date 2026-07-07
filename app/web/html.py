@@ -89,23 +89,31 @@ body::after{
   position:fixed;inset:0;
   pointer-events:none;z-index:0;
   background-image:
-    radial-gradient(ellipse 70vw 55vh at 20% 30%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 62%),
-    radial-gradient(ellipse 60vw 48vh at 80% 25%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%),
-    radial-gradient(ellipse 72vw 58vh at 55% 90%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 62%);
+    radial-gradient(ellipse 65vw 50vh at 12% 20%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%),
+    radial-gradient(ellipse 60vw 45vh at 50% 12%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%),
+    radial-gradient(ellipse 62vw 48vh at 88% 22%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%),
+    radial-gradient(ellipse 68vw 52vh at 22% 55%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 62%),
+    radial-gradient(ellipse 62vw 48vh at 78% 58%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%),
+    radial-gradient(ellipse 72vw 55vh at 45% 88%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 62%),
+    radial-gradient(ellipse 58vw 45vh at 92% 90%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%);
   filter:blur(14px);
-  animation:cloud-drift 30s ease-in-out infinite alternate;
+  animation:cloud-drift 32s ease-in-out infinite alternate;
   will-change:transform;
 }
 body.light::after{
   background-image:
-    radial-gradient(ellipse 70vw 55vh at 20% 30%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 62%),
-    radial-gradient(ellipse 60vw 48vh at 80% 25%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 60%),
-    radial-gradient(ellipse 72vw 58vh at 55% 90%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 62%);
+    radial-gradient(ellipse 65vw 50vh at 12% 20%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 60%),
+    radial-gradient(ellipse 60vw 45vh at 50% 12%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 60%),
+    radial-gradient(ellipse 62vw 48vh at 88% 22%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 60%),
+    radial-gradient(ellipse 68vw 52vh at 22% 55%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 62%),
+    radial-gradient(ellipse 62vw 48vh at 78% 58%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 60%),
+    radial-gradient(ellipse 72vw 55vh at 45% 88%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 62%),
+    radial-gradient(ellipse 58vw 45vh at 92% 90%,rgba(241,245,249,1) 0%,rgba(241,245,249,0) 60%);
 }
 @keyframes cloud-drift{
-  0%  {transform:translate(-4vw,-3vh) scale(1)}
-  50% {transform:translate(4vw,3vh) scale(1.12)}
-  100%{transform:translate(-2vw,4vh) scale(1.05)}
+  0%  {transform:translate(-3vw,-2vh) scale(1)}
+  50% {transform:translate(3vw,2vh) scale(1.08)}
+  100%{transform:translate(-1vw,3vh) scale(1.04)}
 }
 body.bg-anim-off::before,body.bg-anim-off::after{display:none}
 @media (prefers-reduced-motion:reduce){
