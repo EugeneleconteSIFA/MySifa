@@ -146,15 +146,16 @@ tr:hover td{background:var(--accent-bg)}
 .actions-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
 .actions-row h2{margin:0}
 
-.preview-back{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:500;display:flex;flex-direction:column;padding:0}
-.preview-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
+.preview-back{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:500;display:flex;align-items:center;justify-content:center;padding:2.5vh 2vw;backdrop-filter:blur(4px)}
+.preview-modal{width:100%;height:100%;max-width:1400px;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.preview-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
 .preview-title{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .preview-actions{display:flex;gap:8px;flex-shrink:0;align-items:center}
-.preview-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:#0a0e17}
+.preview-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg)}
 .preview-body iframe{width:100%;height:100%;border:none;background:#fff;border-radius:8px}
 .preview-body img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
 .preview-body .preview-unknown{color:var(--muted);font-size:13px;text-align:center;padding:30px}
-@media(max-width:640px){.preview-header{padding:10px 12px}.preview-title{font-size:12px}.preview-body{padding:8px}}
+@media(max-width:640px){.preview-back{padding:0}.preview-modal{border-radius:0;max-width:none;border:none}.preview-header{padding:10px 12px}.preview-title{font-size:12px}.preview-body{padding:8px}}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;max-height:90vh;overflow:auto}
 .modal h3{margin:0 0 16px;font-size:16px;font-weight:700}
@@ -322,17 +323,19 @@ function previewDocument(url, filename){
   const safeUrl=esc(url);
   const safeInline=esc(inlineUrl);
   back.innerHTML=`
-    <div class="preview-header">
-      <div class="preview-title">${safeName}</div>
-      <div class="preview-actions">
-        <a class="btn ghost small" href="${safeUrl}" target="_blank" rel="noopener">Télécharger</a>
-        <button type="button" class="btn ghost small" id="preview-close">Fermer</button>
+    <div class="preview-modal">
+      <div class="preview-header">
+        <div class="preview-title">${safeName}</div>
+        <div class="preview-actions">
+          <a class="btn ghost small" href="${safeUrl}" target="_blank" rel="noopener">Télécharger</a>
+          <button type="button" class="btn ghost small" id="preview-close">Fermer</button>
+        </div>
       </div>
-    </div>
-    <div class="preview-body">
-      ${isImg
-        ? `<img src="${safeInline}" alt="${safeName}">`
-        : `<iframe src="${safeInline}" title="Aperçu"></iframe>`}
+      <div class="preview-body">
+        ${isImg
+          ? `<img src="${safeInline}" alt="${safeName}">`
+          : `<iframe src="${safeInline}" title="Aperçu"></iframe>`}
+      </div>
     </div>`;
   document.body.appendChild(back);
   const close=()=>{back.remove();document.removeEventListener('keydown',onKey);};

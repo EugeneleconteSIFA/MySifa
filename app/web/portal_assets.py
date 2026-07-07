@@ -998,16 +998,33 @@ function renderPortal(){
 
   if(isCoffreRH){
     const id='rh_coffre';
+    const rhIcoEl=h('div',{className:'portal-app-icon'},iconEl('folder',28));
+    const rhBadge=h('span',{className:'portal-app-badge','id':'portal-rh-coffre-badge',style:{display:'none'}},'0');
+    rhIcoEl.appendChild(rhBadge);
     tileSpecs.push({id,el:h('div',{
       className:'portal-app',
       'data-portal-id':id,
       draggable:'true',
       onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/rh/coffre';}
     },
-      h('div',{className:'portal-app-icon'},iconEl('folder',28)),
+      rhIcoEl,
       h('div',{className:'portal-app-name'},'Coffre RH'),
       h('div',{className:'portal-app-desc'},'Depot bulletins & validation notes de frais')
     )});
+    // Compteur de NDF a traiter (statut=soumise)
+    setTimeout(()=>{
+      fetch('/api/rh-coffre/badges',{credentials:'include'})
+        .then(r=>r.ok?r.json():null)
+        .then(d=>{
+          if(!d) return;
+          const el=document.getElementById('portal-rh-coffre-badge');
+          if(!el) return;
+          const n=Number(d.ndf_soumises||0);
+          if(n>0){el.style.display='inline-flex';el.textContent=n>99?'99+':String(n);}
+          else el.style.display='none';
+        })
+        .catch(()=>{});
+    },0);
   }
 
   if(isMaintenance){

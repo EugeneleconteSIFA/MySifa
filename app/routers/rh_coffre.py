@@ -98,6 +98,24 @@ def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# ── Compteurs portail (badge tuile) ─────────────────────────────────────
+
+@router.get("/api/rh-coffre/badges")
+def rh_coffre_badges(request: Request):
+    """Compteur leger de NDF a traiter (statut=soumise).
+
+    Utilise par la tuile portail Coffre RH pour afficher un badge.
+    Reserve compta + superadmin.
+    """
+    _require_rh(request)
+    with get_db() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM notes_de_frais "
+            "WHERE statut='soumise' AND deleted_at IS NULL"
+        ).fetchone()[0]
+    return {"ndf_soumises": int(count)}
+
+
 # ── Documents RH — Dashboard ────────────────────────────────────────────
 
 @router.get("/api/rh-coffre/employes")
