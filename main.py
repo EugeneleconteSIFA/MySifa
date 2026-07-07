@@ -203,11 +203,26 @@ _STAGING_FAVICON_REWRITES: list[tuple[bytes, bytes]] = [
 ]
 
 
+_INJECT_FAV_LINK = (
+    b'<link rel="icon" type="image/png" sizes="192x192" '
+    b'href="/static/mys_icon-light_192.png">'
+)
+
+
 def _apply_staging_html_rewrites(body_bytes: bytes) -> bytes:
     """Applique les réécritures spécifiques v1 : favicons dark → light + titre."""
     for old, new in _STAGING_FAVICON_REWRITES:
         if old in body_bytes:
             body_bytes = body_bytes.replace(old, new)
+    # Si la page ne déclare AUCUN <link rel="icon">, on en injecte un pointant
+    # sur le MyS light. Nécessaire pour compta_page, expe_page, etc. qui n'ont
+    # pas de favicon en dur et retomberaient sur /favicon.ico (déjà géré côté
+    # route, mais Chrome le cache différemment).
+    if b'rel="icon"' not in body_bytes and b"rel='icon'" not in body_bytes:
+        if b"</head>" in body_bytes:
+            body_bytes = body_bytes.replace(
+                b"</head>", _INJECT_FAV_LINK + b"</head>", 1
+            )
     # Titre onglet : ajoute " test" avant </title> pour marquer visuellement v1.
     # Ne re-remplace pas si "MySifa test</title>" est déjà présent (portail html.py).
     body_bytes = re.sub(
@@ -355,6 +370,11 @@ def healthz():
 
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
+    # Sur v1 (staging), on sert directement le PNG light — les pages qui n'ont
+    # pas de <link rel="icon"> en dur (compta_page, expe_page…) tombent sur
+    # /favicon.ico par défaut et doivent aussi voir le MyS clair.
+    if IS_STAGING:
+        return FileResponse(os.path.join(BASE_DIR, "static", "favicon-light-32.png"))
     return FileResponse(os.path.join(BASE_DIR, "static", "favicon.ico"))
 
 

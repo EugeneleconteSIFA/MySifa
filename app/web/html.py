@@ -204,10 +204,11 @@ body.light .login-wagon-tile:hover{
   visibility:visible;
   transform:translateX(-50%) translateY(4px);
 }
-.login-wagon-tip .tip-name{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px;white-space:nowrap}
-.login-wagon-tip .tip-desc{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+.login-wagon-tip .tip-desc{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.2px;line-height:1.35}
 /* Quand un wagon est survolé → tout le train se fige */
 .login-train-layer.paused .login-wagon{animation-play-state:paused}
+/* Wagon survolé passe au-dessus des autres (tile + tip visibles au-dessus) */
+.login-wagon.is-hovered{z-index:1000}
 @keyframes login-wagon-travel{
   0%   {offset-distance:0%;   opacity:0}
   6%   {offset-distance:6%;   opacity:.95}
@@ -8482,7 +8483,7 @@ function startLoginTrainAnimation(){
     'clipboard':     {name:'MyAO',           desc:"Appels d'offre fournisseurs"},
     'palette':       {name:'MyBAT',          desc:'Bons À Tirer — suivi client'},
     'shield-check':  {name:'MyQualité',      desc:'Non-conformités & audits client'},
-    'tool':          {name:'Maintenance',    desc:'Suivi et planification'}
+    'toolbox':       {name:'Maintenance',    desc:'Suivi et planification'}
   };
   const ICONS=Object.keys(APPS);
   const SPACING_PX=72;
@@ -8520,10 +8521,16 @@ function startLoginTrainAnimation(){
     tile.innerHTML=icon(name,22);
     const tip=document.createElement('span');
     tip.className='login-wagon-tip';
-    tip.innerHTML='<span class="tip-name">'+escHtmlLocal(APPS[name].name)+'</span><span class="tip-desc">'+escHtmlLocal(APPS[name].desc)+'</span>';
+    tip.innerHTML='<span class="tip-desc">'+escHtmlLocal(APPS[name].desc)+'</span>';
     // Pause / reprise du train + agrandissement + apparition tip via CSS
-    tile.addEventListener('mouseenter',()=>{layer.classList.add('paused');layer._paused=true;});
-    tile.addEventListener('mouseleave',()=>{layer.classList.remove('paused');layer._paused=false;});
+    tile.addEventListener('mouseenter',()=>{
+      layer.classList.add('paused');layer._paused=true;
+      w.classList.add('is-hovered'); // wagon passe au-dessus des autres
+    });
+    tile.addEventListener('mouseleave',()=>{
+      layer.classList.remove('paused');layer._paused=false;
+      w.classList.remove('is-hovered');
+    });
     w.appendChild(tile);
     w.appendChild(tip);
     return w;
