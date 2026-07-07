@@ -5732,6 +5732,44 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 155, "maintenance_tasks_table")
 
+    # v156 — MyExpé : transporteurs avec numéros de téléphone multiples (numéro + service).
+    # Ajoute contact_tels TEXT (JSON list de {numero, service}). Backfill depuis
+    # contact_tel legacy : soit une string simple, soit plusieurs séparées par , ; ou saut de ligne.
+    # Numéro v156 (initialement prévue en v155, renumérotée au merge staging pour ne pas
+    # entrer en collision avec maintenance_tasks_table de Loïc, mergée le même jour).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=156 LIMIT 1").fetchone():
+        import json as _json
+        import re as _re
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
+        if "contact_tels" not in cols:
+            conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN contact_tels TEXT")
+        # Backfill : contact_tel legacy -> contact_tels JSON
+        rows = conn.execute(
+            "SELECT id, contact_tel, contact_tels FROM expe_transporteurs"
+        ).fetchall()
+        for r in rows:
+            has_tels = bool((r["contact_tels"] or "").strip())
+            if has_tels:
+                continue
+            old = (r["contact_tel"] or "").strip()
+            if not old:
+                conn.execute(
+                    "UPDATE expe_transporteurs SET contact_tels=? WHERE id=?",
+                    ("[]", r["id"]),
+                )
+                continue
+            parts = []
+            for chunk in _re.split(r"[,;\n\r\t]+", old):
+                v = chunk.strip()
+                if v:
+                    parts.append({"numero": v, "service": ""})
+            conn.execute(
+                "UPDATE expe_transporteurs SET contact_tels=? WHERE id=?",
+                (_json.dumps(parts, ensure_ascii=False), r["id"]),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 156, "expe_transporteurs_contact_tels")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

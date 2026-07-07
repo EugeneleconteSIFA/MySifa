@@ -173,58 +173,88 @@ def _saisies_semaine(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def _heures_prod_par_machine(rows: List[Dict[str, Any]]) -> Dict[str, float]:
+def _prod_par_machine_dossier_by_dossier(
+    conn, rows: List[Dict[str, Any]], wstart: str, wend: str,
+) -> Dict[str, Dict[str, Any]]:
     """
-    Approximation V1 : pour chaque paire (op 01 → op 89) d'un même
-    (opérateur, machine, no_dossier), somme le delta temps si les deux existent
-    et sont < 48h d'écart. Sinon 0.
+    Agrégation prod par machine, dossier par dossier.
 
-    Note: la vraie logique se trouve dans production.py:788 (delta entre saisies
-    successives). Ici on approxime pour ne pas dupliquer 100 lignes de logique.
-    Voir TODO dans collect_week_data.
+    Pour chaque no_dossier ayant une op 89 dans la semaine [wstart, wend] :
+      - metrage_dossier = metrage_reel de la ligne op 89
+      - duree_dossier_mn = temps de production réel via LEAD (op 03/88),
+        même logique que rentabilite.py lignes 67-82
+      - machine = norm_machine_canonical(machine) de la ligne op 89
+
+    Résultat par machine (dossiers valides : metrage>0 ET duree>0) :
+      metrage       = Σ metrage_dossier
+      duree_h       = Σ duree_dossier_mn / 60
+      vitesse_m_h   = metrage / duree_h  (0 si duree_h = 0)
+      dossiers      = nb dossiers valides
+      detail_dossiers = liste [{no_dossier, metrage, duree_h}, ...]
     """
-    by_key: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
+    by_dossier: Dict[str, Dict[str, Any]] = {}
     for r in rows:
-        code = str(r.get("operation_code") or "")
-        if code not in (CODE_DEBUT_DOS, CODE_FIN_DOS):
+        if str(r.get("operation_code") or "") != CODE_FIN_DOS:
             continue
-        m = norm_machine_canonical(r.get("machine") or "") or (r.get("machine") or "—")
-        op = r.get("operateur") or "?"
-        dossier = r.get("no_dossier") or ""
-        by_key.setdefault((m, op, dossier), []).append(r)
-    heures: Dict[str, float] = {}
-    for (m, _op, _d), lignes in by_key.items():
-        lignes.sort(key=lambda x: str(x.get("date_operation") or ""))
-        debut = next((x for x in lignes if str(x.get("operation_code")) == CODE_DEBUT_DOS), None)
-        fin = next((x for x in lignes[::-1] if str(x.get("operation_code")) == CODE_FIN_DOS), None)
-        if not debut or not fin:
+        no_d = r.get("no_dossier") or ""
+        if not no_d:
             continue
         try:
-            d1 = datetime.strptime(str(debut["date_operation"])[:19], "%Y-%m-%dT%H:%M:%S")
-            d2 = datetime.strptime(str(fin["date_operation"])[:19], "%Y-%m-%dT%H:%M:%S")
-            dh = (d2 - d1).total_seconds() / 3600.0
-            if 0 < dh < 48:
-                heures[m] = heures.get(m, 0.0) + dh
-        except (ValueError, TypeError, KeyError):
-            continue
-    return heures
+            m_val = float(r.get("metrage_reel") or 0)
+        except (TypeError, ValueError):
+            m_val = 0.0
+        m_machine = norm_machine_canonical(r.get("machine") or "") or (r.get("machine") or "—")
+        entry = by_dossier.setdefault(no_d, {"metrage": 0.0, "machine": m_machine, "date_fin": None})
+        if m_val > 0:
+            entry["metrage"] += m_val
+        d_op = str(r.get("date_operation") or "")
+        if not entry.get("date_fin") or d_op > entry["date_fin"]:
+            entry["date_fin"] = d_op
+            entry["machine"] = m_machine
 
-
-def _metrage_par_machine(rows: List[Dict[str, Any]]) -> Dict[str, float]:
-    """Somme metrage_reel par machine (canonique)."""
-    out: Dict[str, float] = {}
-    for r in rows:
-        code = str(r.get("operation_code") or "")
-        if code != CODE_FIN_DOS:
-            continue
-        m = norm_machine_canonical(r.get("machine") or "") or (r.get("machine") or "—")
+    result: Dict[str, Dict[str, Any]] = {}
+    for no_d, entry in by_dossier.items():
+        metrage = float(entry.get("metrage") or 0)
         try:
-            v = float(r.get("metrage_reel") or 0)
-            if v > 0:
-                out[m] = out.get(m, 0.0) + v
-        except (ValueError, TypeError):
+            row = conn.execute(
+                """SELECT COALESCE(SUM(
+                        CASE WHEN operation_code IN ('03','88')
+                        THEN (julianday(lead_date) - julianday(date_operation)) * 1440
+                        ELSE 0 END
+                    ), 0) AS tps_mn
+                     FROM (
+                        SELECT date_operation, operation_code,
+                               LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
+                          FROM production_data
+                         WHERE no_dossier = ?
+                     ) WHERE operation_code IN ('03','88')""",
+                (no_d,),
+            ).fetchone()
+            duree_mn = float(row["tps_mn"] or 0) if row else 0.0
+        except Exception:
+            duree_mn = 0.0
+
+        if metrage <= 0 or duree_mn <= 0:
             continue
-    return out
+
+        machine = entry.get("machine") or "—"
+        agg = result.setdefault(machine, {
+            "metrage": 0.0, "duree_h": 0.0, "vitesse_m_h": 0.0,
+            "dossiers": 0, "detail_dossiers": [],
+        })
+        agg["metrage"] += metrage
+        agg["duree_h"] += duree_mn / 60.0
+        agg["dossiers"] += 1
+        agg["detail_dossiers"].append({
+            "no_dossier": no_d,
+            "metrage": metrage,
+            "duree_h": duree_mn / 60.0,
+        })
+
+    for m, agg in result.items():
+        agg["vitesse_m_h"] = (agg["metrage"] / agg["duree_h"]) if agg["duree_h"] > 0 else 0.0
+
+    return result
 
 
 def _dossiers_termines(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -459,17 +489,19 @@ def _dossiers_scores(conn, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # ─────────────────────────── agrégation par semaine ───────────────────────────
 
 def _kpis_semaine(conn, year: int, week: int) -> Dict[str, Any]:
-    """Retourne les KPI bruts d'une semaine ISO donnée."""
+    """Retourne les KPI bruts d'une semaine ISO donnée.
+
+    Cohérence : heures_prod et metrage_total proviennent de la même
+    agrégation dossier-par-dossier utilisée pour la vue "par machine",
+    afin que la somme des machines égale les KPI globaux.
+    """
     wstart, wend = _week_str_bounds(year, week)
     rows = _saisies_semaine(conn, wstart, wend)
 
-    # Heures prod (approximation via paires 01/89)
-    heures_par_m = _heures_prod_par_machine(rows)
-    heures_prod = sum(heures_par_m.values())
-
-    # Métrage total (somme metrage_reel sur op 89)
-    m_par_m = _metrage_par_machine(rows)
-    metrage_total = sum(m_par_m.values())
+    # Agrégation dossier-par-dossier (base commune KPI + prod par machine)
+    prod_par_m = _prod_par_machine_dossier_by_dossier(conn, rows, wstart, wend)
+    heures_prod = sum(a["duree_h"] for a in prod_par_m.values())
+    metrage_total = sum(a["metrage"] for a in prod_par_m.values())
 
     # Dossiers terminés (nb op 89 distinct dossier)
     doss_termines = set()
@@ -544,16 +576,8 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         rows_no_repi = [r for r in rows
                         if norm_machine_canonical(r.get("machine") or "") != "Repiquage"]
 
-        # ────── Prod par machine
-        heures_par_m = _heures_prod_par_machine(rows_no_repi)
-        m_par_m = _metrage_par_machine(rows_no_repi)
-        # dossiers distincts par machine (op 89)
-        doss_par_m: Dict[str, set] = {}
-        for r in rows_no_repi:
-            if str(r.get("operation_code") or "") == CODE_FIN_DOS:
-                m = norm_machine_canonical(r.get("machine") or "") or (r.get("machine") or "—")
-                doss_par_m.setdefault(m, set()).add(r.get("no_dossier") or "")
-        # sanity par machine
+        # ────── Prod par machine (agrégation dossier-par-dossier)
+        prod_par_m = _prod_par_machine_dossier_by_dossier(conn, rows_no_repi, wstart, wend)
         sanity_par_m: Dict[str, Dict[str, Any]] = {}
         by_m: Dict[str, List[Dict[str, Any]]] = {}
         for r in rows_no_repi:
@@ -562,21 +586,17 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         for m, sub in by_m.items():
             sanity_par_m[m] = compute_sanity_score_v2(sub)
 
-        machines_present = sorted(set(list(heures_par_m.keys())
-                                      + list(m_par_m.keys())
-                                      + list(doss_par_m.keys())
-                                      + list(sanity_par_m.keys())))
+        machines_present = sorted(set(list(prod_par_m.keys()) + list(sanity_par_m.keys())))
         prod_by_machine = []
         for m in machines_present:
-            h = heures_par_m.get(m, 0.0)
-            met = m_par_m.get(m, 0.0)
-            vit = (met / h) if h > 0 else 0.0
+            agg = prod_par_m.get(m, {})
             prod_by_machine.append({
                 "machine": m,
-                "heures": h,
-                "metrage": met,
-                "vitesse_moy": vit,
-                "dossiers": len(doss_par_m.get(m, set())),
+                "heures": float(agg.get("duree_h", 0.0)),
+                "metrage": float(agg.get("metrage", 0.0)),
+                "vitesse_moy": float(agg.get("vitesse_m_h", 0.0)),
+                "dossiers": int(agg.get("dossiers", 0)),
+                "detail_dossiers": agg.get("detail_dossiers", []),
                 "sanity_score": sanity_par_m.get(m, {}).get("score", 0),
                 "sanity_mention": sanity_par_m.get(m, {}).get("mention", ""),
                 "sanity_color": sanity_par_m.get(m, {}).get("color", "muted"),
@@ -598,8 +618,10 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         sanity_by_operateur = []
         for op, sub in by_op.items():
             s = compute_sanity_score_v2(sub)
-            # activité en h = approximé par paires 01/89 dessus
-            h = sum(_heures_prod_par_machine(sub).values())
+            # activité en h = somme des durées des dossiers valides (op 89)
+            # travaillés par cet opérateur, agrégation dossier-par-dossier.
+            _h_agg = _prod_par_machine_dossier_by_dossier(conn, sub, wstart, wend)
+            h = sum(a["duree_h"] for a in _h_agg.values())
             sanity_by_operateur.append({
                 "operateur": op,
                 "score": s.get("score", 0),
@@ -990,71 +1012,90 @@ def _render_summary(data: Dict[str, Any], email: bool, light: bool = False) -> s
 
 def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
     rows_data = data.get("prod_by_machine", [])
+    """Grille de mini-cards, une par machine — pas de tableau."""
     if not rows_data:
         return ""
     text = _color("text", email)
     muted = _color("muted", email)
     border = _color("border", email)
-    thead = (
-        f'<tr style="text-align:left">'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Machine</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Heures</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Métrage</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Vitesse moy</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Dossiers</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Sanity</th>'
-        f'</tr>'
-    )
-    body = ""
+    card_bg = _color("card", email)
+
+    cards = []
     for r in rows_data:
-        pill = _sanity_pill(f"{r.get('sanity_score', 0)} — {r.get('sanity_mention', '')}",
+        heures = float(r.get("heures", 0) or 0)
+        metrage = float(r.get("metrage", 0) or 0)
+        vitesse = float(r.get("vitesse_moy", 0) or 0)
+        dossiers = int(r.get("dossiers", 0) or 0)
+
+        heures_txt = f'{_fnum(heures, 1)} h' if heures > 0 else "—"
+        metrage_txt = f'{_fnum(metrage, 0)} m' if metrage > 0 else "—"
+        vitesse_txt = f'{_fnum(vitesse, 0)} m/h' if vitesse > 0 else "—"
+
+        pill = _sanity_pill(r.get("sanity_mention", "") or "—",
                             r.get("sanity_color", "muted"), email)
-        body += (
-            f'<tr>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(r["machine"])}</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(r["heures"], 1)} h</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(r["metrage"], 0)} m</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(r["vitesse_moy"], 1)} m/h</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{r["dossiers"]}</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{pill}</td>'
-            f'</tr>'
+
+        cards.append(
+            f'<div style="flex:1 1 220px;background:{card_bg};'
+            f'border:1px solid {border};border-radius:10px;padding:14px;min-width:200px">'
+            f'<div style="font-size:16px;font-weight:700;color:{text};margin-bottom:12px">'
+            f'{_esc(r["machine"])}</div>'
+            f'<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:10px">'
+            f'<div style="text-align:left"><div style="font-size:10px;color:{muted};'
+            f'text-transform:uppercase;letter-spacing:.3px;font-weight:600">Heures</div>'
+            f'<div style="font-size:15px;color:{text};font-weight:700;margin-top:2px">{heures_txt}</div></div>'
+            f'<div style="text-align:center"><div style="font-size:10px;color:{muted};'
+            f'text-transform:uppercase;letter-spacing:.3px;font-weight:600">Métrage</div>'
+            f'<div style="font-size:15px;color:{text};font-weight:700;margin-top:2px">{metrage_txt}</div></div>'
+            f'<div style="text-align:right"><div style="font-size:10px;color:{muted};'
+            f'text-transform:uppercase;letter-spacing:.3px;font-weight:600">Vitesse</div>'
+            f'<div style="font-size:15px;color:{text};font-weight:700;margin-top:2px">{vitesse_txt}</div></div>'
+            f'</div>'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding-top:10px;border-top:1px solid {border}">'
+            f'<div style="font-size:11px;color:{muted}">{dossiers} dossier{"s" if dossiers > 1 else ""}</div>'
+            f'<div>{pill}</div>'
+            f'</div>'
+            f'</div>'
         )
-    table = f'<table style="width:100%;border-collapse:collapse">{thead}{body}</table>'
-    return _section_title("Production par machine", email) + _card_wrap(table, email)
+
+    grid = f'<div style="display:flex;flex-wrap:wrap;gap:12px">{"".join(cards)}</div>'
+    return _section_title("Production par machine", email) + grid
 
 
 def _render_dossiers_table(rows_data: List[Dict[str, Any]], title: str, email: bool) -> str:
+    """Liste compacte, une ligne par dossier. Pas de tableau. Max 5 lignes."""
     if not rows_data:
         return ""
     text = _color("text", email)
     muted = _color("muted", email)
     border = _color("border", email)
-    thead = (
-        f'<tr style="text-align:left">'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Dossier</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Client</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Métrage</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Durée</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Score</th>'
-        f'</tr>'
-    )
-    body = ""
-    for r in rows_data:
+
+    items = []
+    for r in rows_data[:5]:
         pill = _sanity_pill(f"{r['score']}/3 — {r['label']}", r["color"], email)
-        # Petit indicateur textuel quand le score est calculé sans devis (fallback planning)
+        metrage_reel = _fnum(r.get("metrage_reel", 0), 0)
+        metrage_prevu = _fnum(r.get("metrage_prevu", 0), 0)
+        duree_reel = _fnum(r.get("duree_reel_h", 0), 1)
+        duree_prevu = _fnum(r.get("duree_prevu_h", 0), 1)
+        no_devis_txt = ""
         if r.get("has_devis") is False:
-            pill += f' <span style="color:{muted};font-size:10px">(sans devis)</span>'
-        body += (
-            f'<tr>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{_esc(r["no_dossier"])}</b></td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(r["client"])}</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(r["metrage_reel"], 0)} m / {_fnum(r["metrage_prevu"], 0)} m</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(r["duree_reel_h"], 1)} h / {_fnum(r["duree_prevu_h"], 1)} h</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{pill}</td>'
-            f'</tr>'
+            no_devis_txt = f' <span style="color:{muted};font-size:10px">(sans devis)</span>'
+        items.append(
+            f'<div style="display:flex;align-items:center;gap:10px;padding:10px 0;'
+            f'border-bottom:1px solid {border}">'
+            f'<div style="flex:1;min-width:0">'
+            f'<div style="font-size:13px;font-weight:700;color:{text}">'
+            f'{_esc(r["no_dossier"])} · <span style="font-weight:400;color:{muted}">'
+            f'{_esc(r.get("client", "") or "—")}</span></div>'
+            f'<div style="font-size:11px;color:{muted};margin-top:2px">'
+            f'{metrage_reel} m / {metrage_prevu} m · {duree_reel} h / {duree_prevu} h'
+            f'</div>'
+            f'</div>'
+            f'<div style="white-space:nowrap">{pill}{no_devis_txt}</div>'
+            f'</div>'
         )
-    table = f'<table style="width:100%;border-collapse:collapse">{thead}{body}</table>'
-    return _section_title(title, email) + _card_wrap(table, email)
+    body = "".join(items)
+    return _section_title(title, email) + _card_wrap(body, email)
 
 
 def _render_sanity_global(data: Dict[str, Any], email: bool) -> str:
@@ -1070,118 +1111,147 @@ def _render_sanity_global(data: Dict[str, Any], email: bool) -> str:
 
 
 def _render_sanity_operateurs(data: Dict[str, Any], email: bool) -> str:
+    """Grille de chips opérateur — pas de tableau, score numérique masqué."""
     ops = data.get("sanity_by_operateur", [])
     if not ops:
         return ""
     text = _color("text", email)
     muted = _color("muted", email)
     border = _color("border", email)
-    thead = (
-        f'<tr style="text-align:left">'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Opérateur</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Score</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Mention</th>'
-        f'<th style="padding:8px 10px;font-size:11px;text-transform:uppercase;color:{muted};border-bottom:1px solid {border}">Activité</th>'
-        f'</tr>'
-    )
-    body = ""
-    for o in ops:
-        body += (
-            f'<tr>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(o["operateur"])}</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{o["score"]}</b>/100</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_sanity_pill(o["mention"], o["color"], email)}</td>'
-            f'<td style="padding:8px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(o["activite_h"], 1)} h</td>'
-            f'</tr>'
+
+    ops_sorted = sorted(ops, key=lambda o: -float(o.get("activite_h", 0) or 0))
+
+    chips = []
+    for o in ops_sorted:
+        h = float(o.get("activite_h", 0) or 0)
+        h_txt = f'{_fnum(h, 1)} h' if h > 0 else "—"
+        pill = _sanity_pill(o.get("mention", "") or "—", o.get("color", "muted"), email)
+        chips.append(
+            f'<div style="padding:8px 12px;border:1px solid {border};border-radius:10px;'
+            f'display:flex;align-items:center;gap:8px">'
+            f'<div style="font-size:13px;font-weight:600;color:{text}">{_esc(o["operateur"])}</div>'
+            f'<div style="font-size:11px;color:{muted}">{h_txt}</div>'
+            f'<div>{pill}</div>'
+            f'</div>'
         )
-    return _section_title("Sanity score par opérateur", email) + _card_wrap(
-        f'<table style="width:100%;border-collapse:collapse">{thead}{body}</table>', email
-    )
+    grid = f'<div style="display:flex;flex-wrap:wrap;gap:8px">{"".join(chips)}</div>'
+    return _section_title("Sanity par opérateur", email) + _card_wrap(grid, email)
 
 
 def _render_stock_freshness(data: Dict[str, Any], email: bool) -> str:
+    """4 mini-KPIs (entrées/sorties MP + PF) + liste compacte des refs stagnantes."""
     sf = data.get("stock_freshness", {})
     text = _color("text", email)
     muted = _color("muted", email)
     border = _color("border", email)
-    # Mouvements MP par catégorie
-    mp_html = ""
-    for m in sf.get("mp_by_categorie", []):
-        mp_html += (
-            f'<tr>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(m["categorie"])}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{m["entrees"]}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{m["sorties"]}</td>'
-            f'</tr>'
+    card_bg = _color("card", email)
+    warn = _color("warn", email)
+
+    mp_entrees = 0
+    mp_sorties = 0
+    for c in sf.get("mp_by_categorie", []) or []:
+        mp_entrees += int(c.get("entrees", 0) or 0)
+        mp_sorties += int(c.get("sorties", 0) or 0)
+    pf_entrees = int(sf.get("pf_entrees", 0) or 0)
+    pf_sorties = int(sf.get("pf_sorties", 0) or 0)
+
+    def _mini_kpi(label: str, value: int) -> str:
+        return (
+            f'<div style="flex:1 1 130px;padding:12px 14px;background:{card_bg};'
+            f'border:1px solid {border};border-radius:10px;text-align:center">'
+            f'<div style="font-size:22px;font-weight:700;color:{text}">{value}</div>'
+            f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
+            f'letter-spacing:.3px;font-weight:600;margin-top:2px">{_esc(label)}</div>'
+            f'</div>'
         )
-    mp_table = ""
-    if mp_html:
-        mp_table = (
-            f'<div style="font-size:12px;color:{muted};text-transform:uppercase;font-weight:600;margin-bottom:6px">Mouvements MP par catégorie</div>'
-            f'<table style="width:100%;border-collapse:collapse">'
-            f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Catégorie</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Entrées</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Sorties</th></tr>'
-            f'{mp_html}</table>'
-        )
-    pf_line = (
-        f'<div style="font-size:13px;color:{text};margin:12px 0">'
-        f'PF : <b>{sf.get("pf_entrees", 0)}</b> entrées · <b>{sf.get("pf_sorties", 0)}</b> sorties'
+
+    kpis_html = (
+        f'<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">'
+        f'{_mini_kpi("Entrées MP", mp_entrees)}'
+        f'{_mini_kpi("Sorties MP", mp_sorties)}'
+        f'{_mini_kpi("Entrées PF", pf_entrees)}'
+        f'{_mini_kpi("Sorties PF", pf_sorties)}'
         f'</div>'
     )
-    # Refs stagnantes
+
+    refs = sf.get("refs_stagnantes", []) or []
     stag_html = ""
-    for r in sf.get("refs_stagnantes", []):
-        stag_html += (
-            f'<tr>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{_esc(r["reference"])}</b></td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(r.get("designation", "") or "")}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{_color("warn", email)};border-bottom:1px solid {border}"><b>{r["jours_sans_mouv"]} j</b></td>'
-            f'</tr>'
+    if refs:
+        items = []
+        for r in refs[:8]:
+            items.append(
+                f'<div style="padding:6px 0;border-bottom:1px solid {border};'
+                f'font-size:13px;color:{text}">'
+                f'<b>{_esc(r["reference"])}</b> — '
+                f'<span style="color:{muted}">{_esc(r.get("designation", "") or "")}</span> · '
+                f'<span style="color:{warn};font-weight:600">{r.get("jours_sans_mouv", 0)} j</span>'
+                f'</div>'
+            )
+        stag_html = (
+            f'<div style="margin-top:6px">'
+            f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
+            f'font-weight:600;letter-spacing:.3px;margin-bottom:4px">'
+            f'Références sans mouvement (&gt;30 j)</div>'
+            f'{"".join(items)}'
+            f'</div>'
         )
-    stag_table = ""
-    if stag_html:
-        stag_table = (
-            f'<div style="font-size:12px;color:{muted};text-transform:uppercase;font-weight:600;margin:12px 0 6px">Refs sans mouvement (>30 j)</div>'
-            f'<table style="width:100%;border-collapse:collapse">'
-            f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Référence</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Désignation</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Ancienneté</th></tr>'
-            f'{stag_html}</table>'
-        )
-    return _section_title("Fraîcheur des stocks", email) + _card_wrap(mp_table + pf_line + stag_table, email)
+
+    return _section_title("Fraîcheur des stocks", email) + _card_wrap(kpis_html + stag_html, email)
 
 
 def _render_stock_from_prod(data: Dict[str, Any], email: bool) -> str:
+    """Cohérence prod → stock — section visible et actionnable.
+
+    Ligne principale + alerte warn si des dossiers terminés n'ont pas d'entrée
+    stock dans les 48 h après la fin. Message de succès sinon.
+    """
     sp = data.get("stock_from_prod", {})
     text = _color("text", email)
     muted = _color("muted", email)
-    border = _color("border", email)
-    intro = (
-        f'<div style="font-size:13px;color:{text};margin-bottom:10px">'
-        f'{sp.get("dossiers_op89_semaine", 0)} dossiers terminés · '
-        f'<b style="color:{_color("warn", email)}">{len(sp.get("dossiers_op89_sans_stock", []))}</b> sans entrée stock dans les 48 h'
+    warn = _color("warn", email)
+    ok = _color("ok", email)
+
+    total = int(sp.get("dossiers_op89_semaine", 0) or 0)
+    sans_stock = sp.get("dossiers_op89_sans_stock", []) or []
+    n_sans = len(sans_stock)
+
+    header = (
+        f'<div style="font-size:15px;color:{text}">'
+        f'{total} dossier{"s" if total > 1 else ""} terminé{"s" if total > 1 else ""} cette semaine · '
+        f'<b style="color:{warn}">{n_sans} sans entrée stock dans les 48 h</b>'
         f'</div>'
     )
-    lst = ""
-    for d in sp.get("dossiers_op89_sans_stock", []):
-        lst += (
-            f'<tr>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{_esc(d["no_dossier"])}</b></td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(d.get("client", ""))}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{muted};border-bottom:1px solid {border}">{_esc(d.get("date_fin", ""))}</td>'
-            f'</tr>'
+
+    if n_sans > 0:
+        lines = []
+        for d in sans_stock:
+            date_fin = str(d.get("date_fin") or "")[:10]
+            lines.append(
+                f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                f'font-size:13px;color:{text};padding:4px 0">'
+                f'<div><b>{_esc(d["no_dossier"])}</b> · '
+                f'<span style="color:{muted}">{_esc(d.get("client", "") or "—")}</span></div>'
+                f'<div style="font-size:11px;color:{muted}">terminé le {_esc(date_fin)}</div>'
+                f'</div>'
+            )
+        body = (
+            f'{header}'
+            f'<div style="margin-top:14px;padding:12px;border:1px solid {warn};'
+            f'border-radius:10px;background:rgba(251,191,36,0.06)">'
+            f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
+            f'font-weight:600;letter-spacing:.3px;margin-bottom:8px">'
+            f'À vérifier — mise en stock manquante</div>'
+            f'<div style="display:flex;flex-direction:column;gap:6px">{"".join(lines)}</div>'
+            f'</div>'
         )
-    tab = ""
-    if lst:
-        tab = (
-            f'<table style="width:100%;border-collapse:collapse">'
-            f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Dossier</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Client</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Fin de production</th></tr>'
-            f'{lst}</table>'
+    else:
+        body = (
+            f'{header}'
+            f'<div style="margin-top:10px;color:{ok};font-size:13px">'
+            f'✓ Toutes les productions terminées ont été mises en stock.</div>'
         )
-    return _section_title("Cohérence prod → stock", email) + _card_wrap(intro + tab, email)
+
+    return _section_title("Cohérence prod → stock", email) + _card_wrap(body, email)
 
 
 def _render_repiquage(data: Dict[str, Any], email: bool) -> str:
@@ -1204,10 +1274,13 @@ def _render_repiquage(data: Dict[str, Any], email: bool) -> str:
 
 
 def _render_expes(data: Dict[str, Any], email: bool) -> str:
+    """3 KPI cards + chips transporteurs + alerte retards (si présents)."""
     ex = data.get("expes", {})
     text = _color("text", email)
     muted = _color("muted", email)
     border = _color("border", email)
+    warn = _color("warn", email)
+
     kpis = (
         f'<div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:12px">'
         f'<div><div style="font-size:11px;color:{muted};text-transform:uppercase">Départs</div>'
@@ -1218,107 +1291,105 @@ def _render_expes(data: Dict[str, Any], email: bool) -> str:
         f'<div style="font-size:22px;color:{text};font-weight:700">{_fnum(ex.get("poids_total_kg", 0), 0)} kg</div></div>'
         f'</div>'
     )
-    transp_html = ""
-    for t in ex.get("by_transporteur", []):
-        transp_html += (
-            f'<tr>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(t["transporteur"])}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{t["count"]}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(t["palettes"], 0)}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(t["poids"], 0)} kg</td>'
-            f'</tr>'
+
+    chips_html = ""
+    transps = ex.get("by_transporteur", []) or []
+    if transps:
+        chips = []
+        for t in transps:
+            chips.append(
+                f'<div style="padding:6px 10px;border:1px solid {border};border-radius:8px;'
+                f'font-size:12px;color:{text}">'
+                f'<b>{_esc(t["transporteur"])}</b> · {t["count"]} départ{"s" if t["count"] > 1 else ""} · '
+                f'{_fnum(t["palettes"], 0)} pal'
+                f'</div>'
+            )
+        chips_html = (
+            f'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">'
+            f'{"".join(chips)}</div>'
         )
-    transp_tab = ""
-    if transp_html:
-        transp_tab = (
-            f'<div style="font-size:12px;color:{muted};text-transform:uppercase;font-weight:600;margin-bottom:6px">Par transporteur</div>'
-            f'<table style="width:100%;border-collapse:collapse">'
-            f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Transporteur</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Départs</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Palettes</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Poids</th></tr>'
-            f'{transp_html}</table>'
-        )
-    # Retards
+
+    retards = ex.get("retards", []) or []
     retards_html = ""
-    for r in ex.get("retards", []):
-        retards_html += (
-            f'<tr>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{_esc(r["ref_sifa"])}</b></td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(r["transporteur"])}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(r["date_enlevement"] or "")}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{_color("warn", email)};border-bottom:1px solid {border}">{_esc(r["date_livraison_prevue"] or "")}</td>'
-            f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(r["statut"] or "")}</td>'
-            f'</tr>'
+    if retards:
+        lines = []
+        for r in retards:
+            lines.append(
+                f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                f'font-size:13px;color:{text};padding:4px 0">'
+                f'<div><b>{_esc(r.get("ref_sifa") or "")}</b> · '
+                f'<span style="color:{muted}">{_esc(r.get("transporteur") or "")}</span></div>'
+                f'<div style="font-size:11px;color:{warn}">livraison prévue {_esc(r.get("date_livraison_prevue") or "")}</div>'
+                f'</div>'
+            )
+        retards_html = (
+            f'<div style="margin-top:14px;padding:12px;border:1px solid {warn};'
+            f'border-radius:10px;background:rgba(251,191,36,0.06)">'
+            f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
+            f'font-weight:600;letter-spacing:.3px;margin-bottom:8px">'
+            f'Retards de livraison</div>'
+            f'<div style="display:flex;flex-direction:column;gap:6px">{"".join(lines)}</div>'
+            f'</div>'
         )
-    retards_tab = ""
-    if retards_html:
-        retards_tab = (
-            f'<div style="font-size:12px;color:{muted};text-transform:uppercase;font-weight:600;margin:12px 0 6px">Retards de livraison</div>'
-            f'<table style="width:100%;border-collapse:collapse">'
-            f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Réf SIFA</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Transporteur</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Enlèvement</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Livraison prévue</th>'
-            f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Statut</th></tr>'
-            f'{retards_html}</table>'
-        )
-    return _section_title("Expéditions", email) + _card_wrap(kpis + transp_tab + retards_tab, email)
+
+    return _section_title("Expéditions", email) + _card_wrap(kpis + chips_html + retards_html, email)
 
 
 def _render_alerts(data: Dict[str, Any], email: bool, scope: str = "all") -> str:
-    """scope='all'|'fab'|'log' → filtre le contenu."""
+    """scope='all'|'fab'|'log' — chaque catégorie devient une liste compacte avec cadre coloré."""
     a = data.get("alerts", {})
     text = _color("text", email)
     muted = _color("muted", email)
-    border = _color("border", email)
+    warn = _color("warn", email)
+    danger = _color("danger", email)
+
     parts = []
+
     if scope in ("all", "fab"):
-        trous = a.get("trous_saisie", [])
+        trous = a.get("trous_saisie", []) or []
         if trous:
-            body = ""
+            lines = []
             for t in trous:
-                body += (
-                    f'<tr>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{_esc(t["no_dossier"])}</b></td>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(t.get("client", ""))}</td>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_esc(t.get("machine", ""))}</td>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{_color("warn", email)};border-bottom:1px solid {border}"><b>{t.get("jours_ecoules", 0)} j</b></td>'
-                    f'</tr>'
+                lines.append(
+                    f'<div style="font-size:13px;color:{text}">'
+                    f'<b>{_esc(t["no_dossier"])}</b> · '
+                    f'{_esc(t.get("client", "") or "—")} · '
+                    f'{_esc(t.get("machine", "") or "—")} · '
+                    f'<span style="color:{warn};font-weight:600">{t.get("jours_ecoules", 0)} j</span>'
+                    f'</div>'
                 )
             parts.append(
-                f'<div style="font-size:12px;color:{muted};text-transform:uppercase;font-weight:600;margin-bottom:6px">'
-                f'Trous de saisie (op 01 sans op 89, > 5 j)</div>'
-                f'<table style="width:100%;border-collapse:collapse">'
-                f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Dossier</th>'
-                f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Client</th>'
-                f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Machine</th>'
-                f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Ancienneté</th></tr>'
-                f'{body}</table>'
+                f'<div style="padding:10px 12px;border-left:3px solid {warn};'
+                f'background:rgba(251,191,36,0.05);margin-bottom:8px">'
+                f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
+                f'font-weight:600;letter-spacing:.3px;margin-bottom:6px">'
+                f'Trous de saisie · op 01 sans op 89 &gt; 5 j</div>'
+                f'<div style="display:flex;flex-direction:column;gap:4px">{"".join(lines)}</div>'
+                f'</div>'
             )
+
     if scope in ("all", "fab"):
-        dep = a.get("depassements", [])
+        dep = a.get("depassements", []) or []
         if dep:
-            body = ""
+            lines = []
             for d in dep:
-                body += (
-                    f'<tr>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}"><b>{_esc(d["no_dossier"])}</b></td>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(d["duree_reel"], 1)} h</td>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{text};border-bottom:1px solid {border}">{_fnum(d["duree_prevu"], 1)} h</td>'
-                    f'<td style="padding:6px 10px;font-size:13px;color:{_color("danger", email)};border-bottom:1px solid {border}"><b>{_pct(d["ecart_pct"])}</b></td>'
-                    f'</tr>'
+                lines.append(
+                    f'<div style="font-size:13px;color:{text}">'
+                    f'<b>{_esc(d["no_dossier"])}</b> · '
+                    f'{_fnum(d["duree_reel"], 1)} h réelles / {_fnum(d["duree_prevu"], 1)} h prévues · '
+                    f'<span style="color:{danger};font-weight:600">{_pct(d["ecart_pct"])}</span>'
+                    f'</div>'
                 )
             parts.append(
-                f'<div style="font-size:12px;color:{muted};text-transform:uppercase;font-weight:600;margin:12px 0 6px">'
-                f'Dépassements de durée (> 30 %)</div>'
-                f'<table style="width:100%;border-collapse:collapse">'
-                f'<tr><th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Dossier</th>'
-                f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Durée réelle</th>'
-                f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Durée prévue</th>'
-                f'<th style="padding:6px 10px;text-align:left;font-size:11px;color:{muted};border-bottom:1px solid {border}">Écart</th></tr>'
-                f'{body}</table>'
+                f'<div style="padding:10px 12px;border-left:3px solid {danger};'
+                f'background:rgba(248,113,113,0.05);margin-bottom:8px">'
+                f'<div style="font-size:11px;color:{muted};text-transform:uppercase;'
+                f'font-weight:600;letter-spacing:.3px;margin-bottom:6px">'
+                f'Dépassements de durée &gt; 30 %</div>'
+                f'<div style="display:flex;flex-direction:column;gap:4px">{"".join(lines)}</div>'
+                f'</div>'
             )
+
     if not parts:
         return ""
     return _section_title("Alertes", email) + _card_wrap("".join(parts), email)
