@@ -29,7 +29,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="__META_DESCRIPTION__">
-<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="icon" href="__FAV_ICO__" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon__FAV_SFX__-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon__FAV_SFX__-16.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon__FAV_SFX2___512.png">
@@ -4413,6 +4413,26 @@ function buildParams(){
 
 async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
 async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
+async function loadWeeklyReport(opts){
+  // Charge le rapport hebdomadaire (semaine ISO précédente par défaut).
+  // opts = {year, week, role}
+  const q = [];
+  if(opts && opts.year)  q.push('year=' +encodeURIComponent(opts.year));
+  if(opts && opts.week)  q.push('week=' +encodeURIComponent(opts.week));
+  if(opts && opts.role)  q.push('role=' +encodeURIComponent(opts.role));
+  const qs = q.length ? ('?'+q.join('&')) : '';
+  const d = await api('/api/reports/weekly/preview'+qs);
+  if(d){
+    S.weeklyReport = {
+      html: d.html || '',
+      data: d.data || null,
+      role: d.role || (opts&&opts.role) || 'superadmin',
+      year: (d.data&&d.data.week&&d.data.week.year) || (opts&&opts.year) || null,
+      week: (d.data&&d.data.week&&d.data.week.num)  || (opts&&opts.week) || null,
+      loading: false,
+    };
+  }
+}
 async function loadMachineStatus(){
   try{
     const d=await api('/api/production/machine-status');
@@ -6276,11 +6296,16 @@ function renderProdPage(){
   // Gestion du polling temps réel machines
   if(subPage==='kpis'){startMachineStatusPolling();}
   else{stopMachineStatusPolling();}
+  const isSuper = !!(S.user && String(S.user.role||'').toLowerCase()==='superadmin');
   const tabs = [
     {key:'kpis',    label:"Vue d'ensemble", icon:'wrench'},
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
   ];
+  // V1 : onglet Rapport hebdo réservé au super admin (phase de test).
+  if(isSuper){
+    tabs.push({key:'rapport', label:'Rapport hebdo', icon:'calendar'});
+  }
   const subNav = h('div',{className:'nav-tabs'},
     ...tabs.map(t=>h('button',{
       type:'button',
@@ -6291,6 +6316,7 @@ function renderProdPage(){
         else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
+        if(t.key==='rapport'&&!S.weeklyReport) await loadWeeklyReport();
         render();
       }
     }, iconEl(t.icon,14),' '+t.label))
@@ -6298,8 +6324,62 @@ function renderProdPage(){
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
   else if(subPage==='erreurs') content = renderHist();
+  else if(subPage==='rapport') content = renderWeeklyReport();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
+}
+
+// ── Rapport hebdomadaire ────────────────────────────────────────
+function renderWeeklyReport(){
+  const wr = S.weeklyReport;
+  if(!wr){
+    return h('div',{className:'card-empty'},'Chargement du rapport hebdomadaire...');
+  }
+  // Toolbar : semaine ISO + sélecteur de rôle (super admin)
+  const isSuper = !!(S.user && String(S.user.role||'').toLowerCase()==='superadmin');
+  const weekVal = (wr.year && wr.week)
+    ? (wr.year + '-W' + String(wr.week).padStart(2,'0'))
+    : '';
+  const roles = ['superadmin','direction','administration','fabrication','logistique','comptabilite','expedition','commercial'];
+  const changeWeek = async (e)=>{
+    const v = (e && e.target && e.target.value) || '';
+    // format YYYY-Www
+    const m = /^(\d{4})-W(\d{1,2})$/.exec(v);
+    if(!m) return;
+    S.weeklyReport = null; render();
+    await loadWeeklyReport({ year:parseInt(m[1],10), week:parseInt(m[2],10), role: wr.role });
+    render();
+  };
+  const changeRole = async (e)=>{
+    const role = (e && e.target && e.target.value) || wr.role;
+    S.weeklyReport = null; render();
+    await loadWeeklyReport({ year: wr.year, week: wr.week, role });
+    render();
+  };
+  const toolbar = h('div',{style:{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center',margin:'0 0 14px'}},
+    h('label',{style:{fontSize:'11px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px'}},'Semaine'),
+    h('input',{
+      type:'week',
+      defaultValue: weekVal,
+      onChange: changeWeek,
+      style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'}
+    }),
+    ...(isSuper ? [
+      h('label',{style:{fontSize:'11px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginLeft:'8px'}},'Vue'),
+      h('select',{
+        value: wr.role,
+        onChange: changeRole,
+        style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'}
+      }, ...roles.map(r=>h('option',{value:r,selected:r===wr.role}, r)))
+    ] : [])
+  );
+  // Fragment HTML retourné par le service — h() renvoie un vrai noeud DOM,
+  // on injecte le fragment via .innerHTML sur le noeud créé.
+  // Le fragment utilise déjà les CSS vars (--card, --text, --accent...)
+  // donc il hérite automatiquement du thème/palette parent.
+  const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
+  frag.innerHTML = wr.html || '<div class="card-empty">Aucun contenu.</div>';
+  return h('div',null, toolbar, frag);
 }
 
 // ── Historique ──────────────────────────────────────────────────
@@ -10870,6 +10950,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__INITIAL_APP_VALUE__", initial_app)
         .replace("__FAV_SFX__", fav_sfx)
         .replace("__FAV_SFX2__", fav_sfx)
+        .replace("__FAV_ICO__", "/static/favicon-light-32.png" if IS_STAGING else "/static/favicon.ico")
         .replace("__TOUCH_ICON__", touch_icon)
         .replace("__PAGE_TITLE__", page_title)
         .replace("__BRAND__", brand)
