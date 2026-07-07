@@ -196,6 +196,17 @@ def _prod_par_machine_dossier_by_dossier(
       dossiers      = nb dossiers valides
       detail_dossiers = liste [{no_dossier, metrage, duree_h}, ...]
     """
+    # IMPORTANT — encodage historique de `metrage_reel` sur op 89 :
+    # En pratique, à chaque fin de session (op 89) l'opérateur relève le COMPTEUR
+    # MACHINE brut (ex: 91 994 681 m sur Cohésio 2), pas un delta consommé.
+    # Un dossier long avec plusieurs pauses génère donc plusieurs op 89 avec des
+    # valeurs de compteur croissantes. Sommer ces valeurs (comme le fait
+    # rentabilite.py legacy) donne des chiffres absurdes (100 M m/semaine).
+    #
+    # Vrai métrage produit sur le dossier = MAX(m_reel op 89) - MIN(m_reel op 89)
+    # = delta compteur cumulé sur toutes les sessions. Manque uniquement la
+    # production entre le vrai démarrage (op 01, où m_reel = NULL) et la 1re op 89
+    # observée — négligeable en pratique (quelques minutes).
     by_dossier: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         if str(r.get("operation_code") or "") != CODE_FIN_DOS:
@@ -208,17 +219,35 @@ def _prod_par_machine_dossier_by_dossier(
         except (TypeError, ValueError):
             m_val = 0.0
         m_machine = norm_machine_canonical(r.get("machine") or "") or (r.get("machine") or "—")
-        entry = by_dossier.setdefault(no_d, {"metrage": 0.0, "machine": m_machine, "date_fin": None})
+        entry = by_dossier.setdefault(no_d, {
+            "m_values": [], "machine": m_machine, "date_fin": None,
+        })
         if m_val > 0:
-            entry["metrage"] += m_val
+            entry["m_values"].append(m_val)
         d_op = str(r.get("date_operation") or "")
         if not entry.get("date_fin") or d_op > entry["date_fin"]:
             entry["date_fin"] = d_op
             entry["machine"] = m_machine
 
+    # Seuil au-dessus duquel une valeur unique de m_reel est présumée être un
+    # compteur brut (typiquement millions/dizaines de millions) plutôt qu'un
+    # vrai delta produit sur un seul dossier.
+    _COMPTEUR_THRESHOLD = 1_000_000.0
+
     result: Dict[str, Dict[str, Any]] = {}
     for no_d, entry in by_dossier.items():
-        metrage = float(entry.get("metrage") or 0)
+        m_vals = entry.get("m_values") or []
+        if len(m_vals) >= 2:
+            # Delta compteur = vrai métrage produit sur toutes les sessions.
+            metrage = max(m_vals) - min(m_vals)
+        elif len(m_vals) == 1:
+            val = m_vals[0]
+            # 1 seule op 89 : pas de delta possible. On accepte la valeur telle
+            # quelle si elle ressemble à un vrai métrage produit (< seuil),
+            # sinon on l'exclut (compteur brut).
+            metrage = val if val < _COMPTEUR_THRESHOLD else 0.0
+        else:
+            metrage = 0.0
         try:
             row = conn.execute(
                 """SELECT COALESCE(SUM(
