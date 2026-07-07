@@ -5784,6 +5784,93 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 157, "maintenance_tasks_time_slots")
 
+    # v158 — Refonte du modèle Maintenance : passe d'un modèle plat
+    # (1 maintenance_tasks = 1 op + 1 opérateur) à un modèle 3-tables plus
+    # riche :
+    #   maintenance_events           : le créneau (machine, date, heures, source)
+    #   maintenance_event_ops        : les N opérations d'un créneau (statut/saisie
+    #                                  partagés par tout le groupe)
+    #   maintenance_event_operators  : les M opérateurs assignés au créneau
+    #
+    # `updated_by` sur maintenance_event_ops assure la traçabilité : on sait
+    # quel membre du groupe a rempli / modifié quoi.
+    #
+    # La table `maintenance_tasks` (v155 + v157) devient obsolète et est
+    # supprimée : les rares tâches déjà créées en dev sont jetées.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=158 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine TEXT NOT NULL,
+                date_prevue TEXT NOT NULL,
+                heure_debut TEXT,
+                heure_fin TEXT,
+                source TEXT NOT NULL DEFAULT 'planifie',
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_events_date_machine "
+            "ON maintenance_events(date_prevue, machine)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_events_source "
+            "ON maintenance_events(source)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_event_ops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                statut TEXT NOT NULL DEFAULT 'a_faire',
+                duree_reelle_min INTEGER,
+                pieces_changees TEXT,
+                observations TEXT,
+                photos_json TEXT,
+                done_at TEXT,
+                done_by INTEGER,
+                updated_by INTEGER,
+                updated_at TEXT,
+                FOREIGN KEY (event_id) REFERENCES maintenance_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+                FOREIGN KEY (done_by) REFERENCES users(id),
+                FOREIGN KEY (updated_by) REFERENCES users(id),
+                UNIQUE (event_id, code)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_ops_event "
+            "ON maintenance_event_ops(event_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_ops_code "
+            "ON maintenance_event_ops(code)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_ops_statut "
+            "ON maintenance_event_ops(statut)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_event_operators (
+                event_id INTEGER NOT NULL,
+                operator_id INTEGER NOT NULL,
+                PRIMARY KEY (event_id, operator_id),
+                FOREIGN KEY (event_id) REFERENCES maintenance_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (operator_id) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_operators_op "
+            "ON maintenance_event_operators(operator_id)"
+        )
+        # Suppression de l'ancienne table maintenance_tasks (v155 / v157).
+        conn.execute("DROP TABLE IF EXISTS maintenance_tasks")
+        conn.commit()
+        _record_schema_migration(conn, 158, "maintenance_events_refonte")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
