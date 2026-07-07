@@ -5565,6 +5565,103 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 149, "maintenance_docs_table")
 
+    # v151 - Coffre RH : matricule sur users (matching bulletins par nom fichier)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=151 LIMIT 1").fetchone():
+        cols_u = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "matricule" not in cols_u:
+            conn.execute("ALTER TABLE users ADD COLUMN matricule TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_matricule ON users(matricule)")
+        conn.commit()
+        _record_schema_migration(conn, 151, "users_matricule")
+
+    # v152 - Coffre RH : table documents_rh (bulletins de paie, contrats, attestations)
+    # Stockage fichiers sur disque sous data/uploads/coffre_rh/{user_id}/, metadata en base.
+    # Chaque doc a un type, une annee, un mois, un hash SHA256 pour detecter les modifs.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=152 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS documents_rh (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employe_user_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                annee INTEGER,
+                mois INTEGER,
+                libelle TEXT,
+                fichier_path TEXT NOT NULL,
+                fichier_nom TEXT,
+                taille_bytes INTEGER,
+                hash_sha256 TEXT,
+                uploaded_by_user_id INTEGER,
+                uploaded_by_nom TEXT,
+                uploaded_at TEXT NOT NULL,
+                distribue_at TEXT,
+                consulte_at TEXT,
+                visible_salarie INTEGER DEFAULT 1,
+                deleted_at TEXT,
+                deleted_by_nom TEXT,
+                FOREIGN KEY (employe_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_user ON documents_rh(employe_user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_type ON documents_rh(type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_periode ON documents_rh(annee, mois)")
+        conn.commit()
+        _record_schema_migration(conn, 152, "documents_rh_table")
+
+    # v153 - Coffre RH : table notes_de_frais (workflow salarie -> compta)
+    # Statuts : brouillon, soumise, validee, payee, refusee.
+    # Categorisation libre (champ texte). Justificatif optionnel.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=153 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS notes_de_frais (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employe_user_id INTEGER NOT NULL,
+                date_frais TEXT NOT NULL,
+                categorie TEXT,
+                montant_ttc REAL NOT NULL DEFAULT 0,
+                montant_tva REAL,
+                description TEXT,
+                justificatif_path TEXT,
+                justificatif_nom TEXT,
+                statut TEXT NOT NULL DEFAULT 'brouillon',
+                created_at TEXT NOT NULL,
+                soumise_at TEXT,
+                validee_at TEXT,
+                validee_by_user_id INTEGER,
+                validee_by_nom TEXT,
+                payee_at TEXT,
+                payee_by_user_id INTEGER,
+                payee_by_nom TEXT,
+                motif_refus TEXT,
+                note_interne TEXT,
+                deleted_at TEXT,
+                FOREIGN KEY (employe_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ndf_user ON notes_de_frais(employe_user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ndf_statut ON notes_de_frais(statut)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ndf_date ON notes_de_frais(date_frais)")
+        conn.commit()
+        _record_schema_migration(conn, 153, "notes_de_frais_table")
+
+    # v154 - Coffre RH : journal d'acces (RGPD - trace consultation/download/print).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=154 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS documents_rh_access_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL,
+                user_id INTEGER,
+                user_nom TEXT,
+                action TEXT NOT NULL,
+                ip TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (document_id) REFERENCES documents_rh(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_log_doc ON documents_rh_access_log(document_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_log_user ON documents_rh_access_log(user_id)")
+        conn.commit()
+        _record_schema_migration(conn, 154, "documents_rh_access_log_table")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

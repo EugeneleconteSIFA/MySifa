@@ -599,7 +599,7 @@ def list_users(request: Request):
     with get_db() as conn:
         rows = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
-                      u.created_at,u.last_login,u.access_overrides,
+                      u.matricule,u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
@@ -622,7 +622,7 @@ def get_user(user_id: int, request: Request):
     with get_db() as conn:
         row = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
-                      u.created_at,u.last_login,u.access_overrides,
+                      u.matricule,u.created_at,u.last_login,u.access_overrides,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
@@ -650,6 +650,7 @@ async def create_user(request: Request):
     role  = body.get("role", "fabrication")
     op    = (body.get("operateur_lie") or "").strip() or None
     tel   = (body.get("telephone") or "").strip() or None
+    matricule = (body.get("matricule") or "").strip() or None
     machine_id = body.get("machine_id") or None
 
     if not email or not nom or not pwd:
@@ -670,9 +671,9 @@ async def create_user(request: Request):
                 ident = _default_identifiant_from_nom(nom)
             ident = _ensure_unique_identifiant(conn, ident) if ident else ""
             conn.execute(
-                """INSERT INTO users (email,identifiant,nom,password_hash,role,operateur_lie,telephone,machine_id,actif,created_at)
-                   VALUES (?,?,?,?,?,?,?,?,1,?)""",
-                (email, ident or None, nom, hash_password(pwd), role, op, tel, machine_id, datetime.now().isoformat())
+                """INSERT INTO users (email,identifiant,nom,password_hash,role,operateur_lie,telephone,machine_id,matricule,actif,created_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,1,?)""",
+                (email, ident or None, nom, hash_password(pwd), role, op, tel, machine_id, matricule, datetime.now().isoformat())
             )
             conn.commit()
         except Exception:
@@ -710,6 +711,11 @@ async def update_user(user_id: int, request: Request):
         email    = (body.get("email") or exd["email"]).strip().lower()
         ident_in = (body.get("identifiant") if "identifiant" in body else exd.get("identifiant")) or ""
         ident_in = str(ident_in).strip().lower()
+        if "matricule" in body:
+            mat_raw = body.get("matricule")
+            matricule = (str(mat_raw).strip() or None) if mat_raw is not None else None
+        else:
+            matricule = exd.get("matricule")
         pwd_hash = exd["password_hash"]
         # machine_id : None si la clé est présente et vide, sinon valeur existante
         if "machine_id" in body:
@@ -743,10 +749,10 @@ async def update_user(user_id: int, request: Request):
 
         conn.execute(
             """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=? WHERE id=?""",
+               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=?,matricule=? WHERE id=?""",
             (nom, email, ident_sql or None, role_eff, op, actif, tel,
              (adresse or None), (date_naissance or None),
-             pwd_hash, ao_sql, machine_id, user_id),
+             pwd_hash, ao_sql, machine_id, matricule, user_id),
         )
         conn.commit()
 

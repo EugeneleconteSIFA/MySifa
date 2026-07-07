@@ -38,9 +38,9 @@ from app.services.weekly_report import (
 
 router = APIRouter()
 
-# Rôles autorisés à envoyer / voir n'importe quel rôle
-_SEND_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION}
-_VIEW_ANY_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION}
+# V1 : accès restreint au super administrateur uniquement (phase de test).
+_SEND_ROLES = {ROLE_SUPERADMIN}
+_VIEW_ANY_ROLES = {ROLE_SUPERADMIN}
 
 ARCHIVE_DIR = Path(BASE_DIR) / "data" / "weekly_reports"
 
@@ -62,6 +62,8 @@ def preview_weekly_report(request: Request, year: int | None = None,
                           week: int | None = None, role: str | None = None):
     """Preview du rapport pour un rôle donné (fragment HTML + data)."""
     user = get_current_user(request)
+    if not is_superadmin(user):
+        raise HTTPException(status_code=403, detail="Accès réservé au super administrateur (phase de test).")
     eff = effective_role(user)
     if year is None or week is None:
         d = _default_week()
