@@ -96,7 +96,7 @@ body::after{
     radial-gradient(ellipse 62vw 48vh at 78% 58%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%),
     radial-gradient(ellipse 72vw 55vh at 45% 88%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 62%),
     radial-gradient(ellipse 58vw 45vh at 92% 90%,rgba(10,14,23,1) 0%,rgba(10,14,23,0) 60%);
-  filter:blur(14px);
+  filter:url(#cloudNoise) blur(4px);
   animation:cloud-drift 32s ease-in-out infinite alternate;
   will-change:transform;
 }
@@ -1697,6 +1697,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 </style>
 </head>
 <body class="__STAGING_BODY_CLASS__">
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><filter id="cloudNoise" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.014" numOctaves="2" seed="7" stitchTiles="stitch"/><feDisplacementMap in="SourceGraphic" scale="55"/></filter></svg>
 <div class="staging-bandeau __STAGING_INITIAL_CLASS__" id="msf-staging-bandeau" __STAGING_INITIAL_HIDDEN__>
   <span class="msf-imp-msg" id="msf-staging-msg">__STAGING_INITIAL_MSG__</span>
   <span class="msf-imp-slot" id="msf-impersonate-slot" hidden></span>
