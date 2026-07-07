@@ -5870,6 +5870,120 @@ Ressources :
         conn.execute("DROP TABLE IF EXISTS maintenance_tasks")
         conn.commit()
         _record_schema_migration(conn, 158, "maintenance_events_refonte")
+    # v159 — Module MyLearning : e-learning avec habilitation progressive.
+    # 7 tables couvrant catalogue formations, modules vidéo YouTube,
+    # quiz de validation, mapping formation → permissions, progression
+    # utilisateur, habilitations obtenues et parcours d'accueil par rôle.
+    # Voir app/core/permissions.py pour la liste des permission_code.
+    #
+    # Note importante : les ON DELETE CASCADE ci-dessous sont inactifs
+    # tant que get_db() n'active pas PRAGMA foreign_keys=ON (cf. étape 3
+    # admin CRUD : la suppression d'une formation devra explicitement
+    # supprimer les modules, quiz, permissions, progression et habilitations
+    # associés en Python, ou activer foreign_keys ponctuellement).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=159 LIMIT 1").fetchone():
+        conn.executescript("""
+            -- Catalogue des parcours de formation. Un parcours = un poste.
+            CREATE TABLE IF NOT EXISTS formations (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                code         TEXT UNIQUE NOT NULL,       -- ex: 'operateur_cohesio'
+                titre        TEXT NOT NULL,
+                description  TEXT,
+                role_cible   TEXT,                        -- rôle métier libre (ex: 'Opérateur Cohésio')
+                ordre        INTEGER DEFAULT 100,
+                actif        INTEGER DEFAULT 1,
+                cree_le      TEXT NOT NULL,
+                maj_le       TEXT
+            );
+
+            -- Modules d'un parcours (chapitres vidéo).
+            CREATE TABLE IF NOT EXISTS formation_modules (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                formation_id INTEGER NOT NULL,
+                ordre        INTEGER DEFAULT 100,
+                titre        TEXT NOT NULL,
+                description  TEXT,
+                youtube_id   TEXT NOT NULL,               -- ID de la vidéo YouTube (ex: 'dQw4w9WgXcQ')
+                duree_sec    INTEGER DEFAULT 0,
+                actif        INTEGER DEFAULT 1,
+                cree_le      TEXT NOT NULL,
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_formation_modules_formation
+                ON formation_modules(formation_id, ordre);
+
+            -- Questions du quiz de fin de module. choix_json est un tableau
+            -- JSON de chaînes (ex: ["Choix A","Choix B","Choix C","Choix D"]).
+            CREATE TABLE IF NOT EXISTS formation_quiz (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id      INTEGER NOT NULL,
+                ordre          INTEGER DEFAULT 100,
+                question       TEXT NOT NULL,
+                choix_json     TEXT NOT NULL,             -- JSON array
+                bonne_reponse  INTEGER NOT NULL,          -- index 0-based dans choix_json
+                explication    TEXT,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_formation_quiz_module
+                ON formation_quiz(module_id, ordre);
+
+            -- Mapping formation → permissions débloquées à la validation.
+            -- Une formation peut débloquer plusieurs permissions (ex: le
+            -- parcours "Opérateur Cohésio" donne prod.saisie_operateur ET
+            -- prod.suppression_saisie).
+            CREATE TABLE IF NOT EXISTS formation_permissions (
+                formation_id     INTEGER NOT NULL,
+                permission_code  TEXT NOT NULL,
+                PRIMARY KEY (formation_id, permission_code),
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+
+            -- Progression utilisateur module par module.
+            -- pct_vu : 0-100 (%). quiz_score : 0-100 (%) ou NULL si pas de quiz.
+            -- valide_le : timestamp ISO si module validé (visionnage + quiz OK).
+            CREATE TABLE IF NOT EXISTS user_progression (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                module_id  INTEGER NOT NULL,
+                pct_vu     INTEGER DEFAULT 0,
+                quiz_score INTEGER,
+                valide_le  TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, module_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_progression_user
+                ON user_progression(user_id);
+
+            -- Cache dénormalisé des habilitations (permissions obtenues).
+            -- Alimenté quand tous les modules d'une formation sont validés.
+            -- Utilisé pour des lookup O(1) au moment du guard require_habilitation.
+            CREATE TABLE IF NOT EXISTS user_habilitations (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL,
+                permission_code TEXT NOT NULL,
+                formation_id    INTEGER NOT NULL,
+                obtenu_le       TEXT NOT NULL,
+                UNIQUE(user_id, permission_code),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_habilitations_user
+                ON user_habilitations(user_id, permission_code);
+
+            -- Parcours d'accueil obligatoire par rôle.
+            -- À la création d'un compte, le rôle détermine 1..N parcours
+            -- à valider avant d'accéder pleinement à l'app.
+            CREATE TABLE IF NOT EXISTS role_parcours_defaut (
+                role         TEXT NOT NULL,
+                formation_id INTEGER NOT NULL,
+                PRIMARY KEY (role, formation_id),
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 159, "mylearning_module")
 
 def create_default_admin():
     import bcrypt
