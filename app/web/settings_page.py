@@ -3782,6 +3782,24 @@ function renderAlertsList() {
   });
 }
 
+function _taOnOtherChange(inp){
+  const item = inp.closest('.ta-cl-item');
+  if(!item) return;
+  const txt = item.querySelector('.ta-cl-other-text');
+  if(!txt) return;
+  const isMulti = inp.type === 'checkbox';
+  let show;
+  if(isMulti){
+    show = inp.checked;
+  } else {
+    // radio : Autre est le seul coché à cet instant
+    show = inp.checked;
+  }
+  txt.style.display = show ? '' : 'none';
+  if(show){ setTimeout(() => txt.focus(), 30); }
+  else { txt.value = ''; }
+}
+
 function _taOnValueInput(inp) {
   // Feedback visuel en mode test : bordure rouge si valeur hors tolérance.
   // Aucun blocage — purement informatif.
@@ -3870,6 +3888,7 @@ function _alertDefaults(existing) {
       label: (it && it.label) || '',
       responses: responses.length ? responses : ['Conforme'],
       multi: (it && it.multi === false) ? false : true,
+      allow_other: !!(it && it.allow_other),
     };
   });
   return {
@@ -4042,6 +4061,10 @@ function _afChecklistCardBody(item) {
     + '</div>'
     + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
     + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
+    + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
+    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
+    +   '<span>Ajouter une réponse <strong style="color:var(--text)">« Autre »</strong> avec zone d\'explication optionnelle</span>'
+    + '</label>'
     + '</div>';
 }
 
@@ -4068,7 +4091,7 @@ function _afOnTypeChange(sel) {
   const newType = sel.value;
   const defaultItem = (newType === 'value')
     ? { type: 'value', label: '', unit: '', min: null, max: null }
-    : { type: 'choice', label: '', responses: ['Conforme'], multi: true };
+    : { type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false };
   const tmp = document.createElement('div');
   tmp.innerHTML = _afChecklistCardBody(defaultItem);
   const newBody = tmp.firstElementChild;
@@ -4084,7 +4107,7 @@ function _afAddChecklistItem() {
   const wrap = document.getElementById('af-checklist-items');
   if (!wrap) return;
   const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true });
+  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false });
   const card = tmp.firstElementChild;
   wrap.appendChild(card);
   card.querySelector('.af-cl-label')?.focus();
@@ -4263,7 +4286,8 @@ function _afReadParams() {
       if (!responses.length) return;
       const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
       const multi = (multiSel === 'single') ? false : true;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi });
+      const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -4528,9 +4552,20 @@ async function previewAlert(id) {
               + '<span>' + esc(r) + '</span>'
               + '</label>'
             ).join('');
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
+            let otherHtml = '';
+            if (it.allow_other) {
+              otherHtml = '<label class="ta-chip ta-chip-other">'
+                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="_taOnOtherChange(this)">'
+                + '<span>Autre</span>'
+                + '</label>';
+            }
+            const otherArea = it.allow_other
+              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+              : '';
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
               + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
+              + otherArea
               + '</div>';
           }).join('')
       + '</div>'
