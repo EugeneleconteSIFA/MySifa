@@ -2660,6 +2660,44 @@ EXPE_MAIN_CSS = r"""
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
+
+/* Tableau départs (suivi + historique) : compact pour afficher toutes les colonnes
+   sans scroll horizontal, avec ellipsis sur les libellés longs. */
+.expe-departs-table,.expe-hist-table{width:100%;font-size:12px;table-layout:auto}
+.expe-departs-table th,.expe-departs-table td,
+.expe-hist-table th,.expe-hist-table td{padding:8px 8px}
+.expe-departs-table th,.expe-hist-table th{padding:10px 8px;font-size:10px;letter-spacing:.3px}
+.expe-departs-table td,.expe-hist-table td{overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;max-width:180px}
+.expe-departs-table td.expe-dep-actions-td,
+.expe-hist-table td.expe-dep-actions-td{max-width:none;overflow:visible;white-space:normal}
+/* Colonnes texte long : autorise wrap + word-break si nécessaire */
+.expe-departs-table td:nth-child(4),   /* Client (suivi) */
+.expe-departs-table td:nth-child(8),   /* Cde transp. (suivi) */
+.expe-departs-table td:nth-child(10),  /* Type pal. (suivi) */
+.expe-hist-table td:nth-child(3),      /* Client (histo) */
+.expe-hist-table td:nth-child(6),      /* Cde transp. (histo) */
+.expe-hist-table td:nth-child(9)       /* Type pal. (histo) */
+{white-space:normal;word-break:break-word;overflow-wrap:anywhere;max-width:160px}
+/* Colonnes numériques et dates : jamais tronquées */
+.expe-departs-table td:nth-child(1),   /* Date enl. */
+.expe-departs-table td:nth-child(11),  /* Pal. */
+.expe-departs-table td:nth-child(12),  /* Poids */
+.expe-departs-table td:nth-child(13),  /* Liv. prév. */
+.expe-hist-table td:nth-child(1),      /* Validé le */
+.expe-hist-table td:nth-child(2),      /* Date enl. */
+.expe-hist-table td:nth-child(10),     /* Pal. */
+.expe-hist-table td:nth-child(11),     /* Poids */
+.expe-hist-table td:nth-child(12)      /* Liv. prév. */
+{white-space:nowrap;max-width:none}
+/* Chip / badge des colonnes typées */
+.expe-departs-table td:nth-child(3),.expe-hist-table td:nth-child(8){max-width:none}
+/* Marge accrue en dessous 1280 : on garde le container scrollable au cas où */
+@media(max-width:1280px){
+  .expe-departs-table th,.expe-departs-table td,
+  .expe-hist-table th,.expe-hist-table td{padding:6px 6px}
+  .expe-departs-table,.expe-hist-table{font-size:11.5px}
+}
 .expe-day-sep-row td.expe-day-sep-cell {
   padding: 28px 14px 12px !important;
   background: var(--bg) !important;
