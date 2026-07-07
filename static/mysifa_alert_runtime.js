@@ -34,6 +34,7 @@
       '.ta-chip:hover{border-color:var(--accent)}',
       '.ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}',
       '.ta-chip span{white-space:nowrap}',
+      '.ta-chip-other{border-style:dashed}',
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
       '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}',
@@ -152,6 +153,7 @@
         type: 'choice', label: (it && it.label) || '',
         responses: responses.length ? responses : ['Conforme'],
         multi: (it && it.multi === false) ? false : true,
+        allow_other: !!(it && it.allow_other),
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
@@ -175,6 +177,18 @@
     inp.style.color = oor ? 'var(--danger)' : 'var(--text)';
   }
   window._mysifaAlertOnValueInput = _onValueInput;
+
+  function _onOtherChange(inp) {
+    const item = inp.closest('.ta-cl-item');
+    if (!item) return;
+    const txt = item.querySelector('.ta-cl-other-text');
+    if (!txt) return;
+    const show = !!inp.checked;
+    txt.style.display = show ? '' : 'none';
+    if (show) { setTimeout(() => txt.focus(), 30); }
+    else { txt.value = ''; }
+  }
+  window._mysifaAlertOnOtherChange = _onOtherChange;
 
   function _renderChecklist(cl) {
     if (!cl.enabled || !cl.items.length) return '';
@@ -209,9 +223,20 @@
               + '<span>' + _esc(r) + '</span>'
               + '</label>'
             ).join('');
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice">'
+            let otherHtml = '';
+            if (it.allow_other) {
+              otherHtml = '<label class="ta-chip ta-chip-other">'
+                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="window._mysifaAlertOnOtherChange(this)">'
+                + '<span>Autre</span>'
+                + '</label>';
+            }
+            const otherArea = it.allow_other
+              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+              : '';
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
               + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
+              + otherArea
               + '</div>';
           }).join('')
       + '</div>';
@@ -232,6 +257,12 @@
             const txt = c.parentElement?.querySelector('span')?.textContent || '';
             return txt.trim();
           });
+        }
+        // Si Autre est activé et coché, on remonte l'explication libre (optionnelle)
+        const otherChecked = item.querySelector('.ta-cl-resp-other:checked');
+        if (otherChecked) {
+          const txt = (item.querySelector('.ta-cl-other-text')?.value || '').trim();
+          if (txt) responses[idx + '_other'] = txt.slice(0, 500);
         }
       }
     });

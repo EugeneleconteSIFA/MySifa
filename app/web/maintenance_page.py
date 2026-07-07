@@ -4242,16 +4242,21 @@ function openAckDetail(prefixedId){
             }
             // choice : cases à cocher pré-remplies selon les réponses stockées
             const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
-            const chips = ['Nette'];  // placeholder, écrasé ci-dessous
             // On n'a pas la liste complète des réponses possibles dans l'ack ;
             // on n'affiche donc que les réponses réellement cochées (comme des
             // pills sélectionnées). C'est fidèle à la donnée enregistrée.
             const respHtml = selected.length
               ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>' + escHtml(s) + '</span></label>').join('')
               : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
+            // Si "Autre" est coché et qu'une précision a été saisie, on l'affiche.
+            const otherTxt = responses[String(idx) + '_other'];
+            const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
+              ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(otherTxt)) + '</div>'
+              : '';
             return '<div class="ta-cl-item" data-type="choice">'
               + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
+              + otherHtml
               + '</div>';
           }).join('')
       + '</div>';
@@ -4462,6 +4467,11 @@ function renderCtrl(){
           const r = c._responses[String(i)];
           if(Array.isArray(r)){ val = r.join(', '); }
           else if(r != null && r !== ''){ val = String(r); }
+          // Si "Autre" a été coché avec une précision, on l'ajoute au texte du cell.
+          const otherTxt = c._responses[String(i) + '_other'];
+          if(otherTxt != null && String(otherTxt).trim() !== ''){
+            val = val ? val + ' — ' + String(otherTxt) : String(otherTxt);
+          }
         }
         cells += '<td>' + escHtml(val) + '</td>';
       }

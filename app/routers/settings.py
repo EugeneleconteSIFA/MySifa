@@ -1761,8 +1761,13 @@ def _validate_alert_params(params: dict) -> dict:
         # (checkboxes). Si false, une seule réponse possible (radio).
         # Défaut true pour préserver le comportement des alertes existantes.
         multi = bool(it.get("multi", True))
+        # allow_other : si true, l'opérateur voit une case "Autre" en plus des
+        # réponses configurées, et peut compléter avec une explication libre
+        # (stockée dans responses["<idx>_other"] lors de l'ack).
+        allow_other = bool(it.get("allow_other", False))
         clean_items.append({"type": "choice", "label": label,
-                            "responses": clean_responses, "multi": multi})
+                            "responses": clean_responses, "multi": multi,
+                            "allow_other": allow_other})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:
@@ -3003,6 +3008,7 @@ def maintenance_alert_acks_list(request: Request):
                         else:
                             entry["responses"] = it.get("responses") or []
                             entry["multi"] = bool(it.get("multi", True))
+                            entry["allow_other"] = bool(it.get("allow_other", False))
                         clean.append(entry)
             alerts_meta[str(mr["id"])] = {"checklist_items": clean}
 
