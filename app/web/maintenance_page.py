@@ -627,29 +627,27 @@ body.light .toast.info{background:#fff;color:var(--text)}
 body[data-maint-role="admin"] .op-only{display:none !important}
 body[data-maint-role="operator"] .adm-only{display:none !important}
 
-/* ── UI opérateur : Mes tâches ───────────────────────────────────── */
-.op-hdr{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:18px}
-.op-hdr h2{font-size:20px;font-weight:700;color:var(--text);margin:0}
-.op-hdr .op-hdr-sub{font-size:13px;color:var(--muted)}
-.op-hdr-actions{margin-left:auto;display:flex;gap:10px}
-.op-date-picker{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 14px}
-.op-date-picker input[type="date"]{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;outline:none}
-.op-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
-.op-btn:hover{border-color:var(--accent);color:var(--accent)}
-.op-btn-primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
-.op-btn-primary:hover{filter:brightness(1.08);color:var(--accent-fg)}
+/* ── UI opérateur : conteneur actions dans .page-header ─────────── */
+.op-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-date-picker{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:6px 12px;min-height:38px}
+.op-date-picker label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:0}
+.op-date-picker input[type="date"]{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;outline:none;padding:0}
+.btn.op-btn-accent{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.op-btn-accent:hover{filter:brightness(1.08);border-color:var(--accent);color:var(--accent-fg)}
+.btn.op-btn-accent .btn-ico{color:var(--accent-fg)}
 
+/* ── Cartes de tâches ───────────────────────────────────────────── */
 .op-tasks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .op-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s;position:relative;display:flex;flex-direction:column;gap:10px}
 .op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
-.op-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:100px}
 .op-code{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.4px;font-family:monospace}
 .op-cat{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
 .op-cat-interventions{background:rgba(167,139,250,.16);color:#8b5cf6}
 .op-cat-suivi{background:rgba(251,191,36,.16);color:#f59e0b}
 .op-card-title{font-size:14px;font-weight:600;color:var(--text);line-height:1.4}
-.op-card-meta{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12px;color:var(--text2)}
+.op-card-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--text2)}
 .op-card-meta span{display:inline-flex;align-items:center;gap:5px}
 .op-card-meta strong{color:var(--text);font-weight:600}
 .op-status{position:absolute;top:14px;right:14px;font-size:10px;font-weight:800;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.5px}
@@ -659,8 +657,9 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
 .op-status-reporte{background:rgba(248,113,113,.16);color:var(--danger)}
 .op-badge-source{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,.14);color:#f59e0b;text-transform:uppercase;letter-spacing:.4px}
 
-.op-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
-.op-empty h3{font-size:18px;color:var(--text2);margin-bottom:8px;font-weight:600}
+/* ── État vide (aucune tâche) ───────────────────────────────────── */
+.op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
+.op-empty h3{font-size:18px;color:var(--text2);margin:0 0 8px 0;font-weight:600}
 
 /* ── Vue Planning opérateur : tableau read-only ──────────────────── */
 .op-plan-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
@@ -1185,19 +1184,21 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
       </div>
     </div>
       <!-- View opérateur : Mes tâches -->
-      <div class="view op-only" id="view-op-tasks" style="display:flex;flex-direction:column">
-        <div class="op-hdr">
+      <div class="view op-only" id="view-op-tasks">
+        <div class="page-header">
           <div>
-            <h2>Mes tâches</h2>
-            <div class="op-hdr-sub" id="op-tasks-count">—</div>
+            <div class="page-title">Mes tâches</div>
+            <div class="page-subtitle" id="op-tasks-count">0 tâche</div>
           </div>
-          <div class="op-hdr-actions">
+          <div class="op-actions">
             <div class="op-date-picker">
-              <label style="margin:0" for="op-tasks-date">Date</label>
+              <label for="op-tasks-date">Date</label>
               <input type="date" id="op-tasks-date" onchange="opLoadTasks()">
             </div>
-            <button type="button" class="op-btn op-btn-primary" onclick="opOpenNewModal()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
+              <span class="btn-ico">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </span>
               Nouvelle intervention
             </button>
           </div>
@@ -1206,15 +1207,15 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
       </div>
 
       <!-- View opérateur : Planning read-only -->
-      <div class="view op-only" id="view-op-planning" style="display:none;flex-direction:column">
-        <div class="op-hdr">
+      <div class="view op-only" id="view-op-planning" style="display:none">
+        <div class="page-header">
           <div>
-            <h2>Planning de la journée</h2>
-            <div class="op-hdr-sub">Vue globale — mes tâches sont surlignées</div>
+            <div class="page-title">Planning de la journée</div>
+            <div class="page-subtitle">Vue globale — mes tâches sont surlignées</div>
           </div>
-          <div class="op-hdr-actions">
+          <div class="op-actions">
             <div class="op-date-picker">
-              <label style="margin:0" for="op-plan-date">Date</label>
+              <label for="op-plan-date">Date</label>
               <input type="date" id="op-plan-date" onchange="opLoadPlanning()">
             </div>
           </div>
@@ -5040,8 +5041,8 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <textarea id="op-fld-obs" placeholder="Remarques, anomalies, prochaine étape…"></textarea>
     </div>
     <div class="op-modal-actions">
-      <button type="button" class="op-btn" onclick="opCloseSaisie()">Annuler</button>
-      <button type="button" class="op-btn op-btn-primary" onclick="opSubmitSaisie()">Enregistrer</button>
+      <button type="button" class="btn" onclick="opCloseSaisie()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="opSubmitSaisie()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -5065,8 +5066,8 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       </select>
     </div>
     <div class="op-modal-actions">
-      <button type="button" class="op-btn" onclick="opCloseNewModal()">Annuler</button>
-      <button type="button" class="op-btn op-btn-primary" onclick="opSubmitNew()">Créer et remplir</button>
+      <button type="button" class="btn" onclick="opCloseNewModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="opSubmitNew()">Créer et remplir</button>
     </div>
   </div>
 </div>
@@ -5100,8 +5101,8 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       </select>
     </div>
     <div class="op-modal-actions">
-      <button type="button" class="op-btn" onclick="admCloseCreateTask()">Annuler</button>
-      <button type="button" class="op-btn op-btn-primary" onclick="admSubmitCreateTask()">Créer</button>
+      <button type="button" class="btn" onclick="admCloseCreateTask()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="admSubmitCreateTask()">Créer</button>
     </div>
   </div>
 </div>
@@ -5163,7 +5164,7 @@ function opRenderTasks(){
   const cnt = document.getElementById('op-tasks-count');
   if(!list) return;
   const tasks = MAINT_STATE.tasks;
-  if(cnt) cnt.textContent = tasks.length + (tasks.length > 1 ? ' tâches' : ' tâche');
+  if(cnt) cnt.textContent = tasks.length + (tasks.length > 1 ? ' tâches assignées' : ' tâche assignée');
   if(tasks.length === 0){
     list.innerHTML = '<div class="op-empty"><h3>Aucune tâche pour cette date</h3>Tu peux déclarer une intervention non planifiée avec le bouton ci-dessus.</div>';
     return;
