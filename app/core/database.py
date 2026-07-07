@@ -5770,6 +5770,20 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 156, "expe_transporteurs_contact_tels")
 
+    # v157 — Créneaux horaires sur les tâches de maintenance : ajoute
+    # heure_debut / heure_fin nullable à maintenance_tasks. Les tâches créées
+    # depuis le calendrier admin (vues mois/semaine/jour) auront des créneaux
+    # explicites ; les tâches libres créées par un opérateur en cours de
+    # session laissent ces champs vides.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=157 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_tasks)").fetchall()}
+        if "heure_debut" not in cols:
+            conn.execute("ALTER TABLE maintenance_tasks ADD COLUMN heure_debut TEXT")
+        if "heure_fin" not in cols:
+            conn.execute("ALTER TABLE maintenance_tasks ADD COLUMN heure_fin TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 157, "maintenance_tasks_time_slots")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

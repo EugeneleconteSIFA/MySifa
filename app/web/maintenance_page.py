@@ -815,7 +815,7 @@ body[data-maint-role="operator"] .content{display:none !important}
               <span id="cal-month-label">—</span>
             </div>
             <div class="cal-controls">
-              <button type="button" class="op-btn op-btn-primary adm-only" style="margin-right:12px" onclick="admOpenCreateTask()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer une tâche</button><div class="cal-view-tabs">
+              <div class="cal-view-tabs">
                 <button type="button" class="cal-view-tab" data-cal-view="month" onclick="setCalView('month')">Mois</button>
                 <button type="button" class="cal-view-tab active" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
                 <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>

@@ -84,6 +84,8 @@ def _row_to_dict(row) -> dict:
     return {
         "id": row["id"],
         "date_prevue": row["date_prevue"],
+        "heure_debut": row["heure_debut"] if "heure_debut" in row.keys() else None,
+        "heure_fin": row["heure_fin"] if "heure_fin" in row.keys() else None,
         "code": row["code"],
         "code_label": row["code_label"],
         "code_categorie": row["code_categorie"],
@@ -107,7 +109,8 @@ def _row_to_dict(row) -> dict:
 # hydrater le libellé du code et le nom de l'opérateur d'un seul aller-retour.
 _TASKS_SELECT = """
     SELECT
-        t.id, t.date_prevue, t.code, t.machine, t.operator_id, t.statut,
+        t.id, t.date_prevue, t.heure_debut, t.heure_fin,
+        t.code, t.machine, t.operator_id, t.statut,
         t.source, t.duree_reelle_min, t.pieces_changees, t.observations,
         t.photos_json, t.created_by, t.created_at, t.updated_at, t.done_at,
         c.label     AS code_label,
@@ -123,6 +126,8 @@ _TASKS_SELECT = """
 
 class TaskCreateBody(BaseModel):
     date_prevue: str        # YYYY-MM-DD
+    heure_debut: Optional[str] = None   # HH:MM (calendrier admin)
+    heure_fin: Optional[str] = None     # HH:MM
     code: str
     machine: str
     operator_id: Optional[int] = None
@@ -131,6 +136,8 @@ class TaskCreateBody(BaseModel):
 
 class TaskUpdateBody(BaseModel):
     date_prevue: Optional[str] = None
+    heure_debut: Optional[str] = None
+    heure_fin: Optional[str] = None
     code: Optional[str] = None
     machine: Optional[str] = None
     operator_id: Optional[int] = None
@@ -274,9 +281,11 @@ def create_task(body: TaskCreateBody, request: Request):
         now = _now_paris_iso()
         cur = conn.execute(
             """INSERT INTO maintenance_tasks
-               (date_prevue, code, machine, operator_id, statut, source, created_by, created_at)
-               VALUES (?, ?, ?, ?, 'a_faire', ?, ?, ?)""",
-            (body.date_prevue, body.code, body.machine, operator_id, src, user["id"], now),
+               (date_prevue, heure_debut, heure_fin, code, machine, operator_id,
+                statut, source, created_by, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'a_faire', ?, ?, ?)""",
+            (body.date_prevue, body.heure_debut, body.heure_fin, body.code,
+             body.machine, operator_id, src, user["id"], now),
         )
         task_id = cur.lastrowid
         conn.commit()
@@ -310,7 +319,8 @@ def update_task(task_id: int, body: TaskUpdateBody, request: Request):
             raise HTTPException(status_code=403, detail="Tâche assignée à un autre opérateur")
 
         # Champs autorisés selon le rôle.
-        admin_fields = {"date_prevue", "code", "machine", "operator_id"}
+        admin_fields = {"date_prevue", "heure_debut", "heure_fin",
+                        "code", "machine", "operator_id"}
         common_fields = {"statut", "duree_reelle_min", "pieces_changees",
                          "observations", "photos_json"}
         allowed = admin_fields | common_fields if maint_role == "admin" else common_fields
