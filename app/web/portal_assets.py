@@ -798,7 +798,7 @@ function renderPortal(){
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
   const isQualite = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
-  const isReports = isSuper;
+  // Rapport hebdo : intégré comme 4e onglet dans MyProd → Production (pas de tuile portail séparée).
   const isCoffreRH = isSuper || urole === 'comptabilite';
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
   const isMaintenance = isSuper || _uident === 'loic.gognau';
@@ -891,20 +891,6 @@ function renderPortal(){
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},
         ((urole==='logistique'||urole==='commercial')&&!isSuper)?'Expédition & suivi — lecture seule':'Expédition & Suivi')
-    )});
-  }
-
-  if(isReports){
-    const id='reports';
-    tileSpecs.push({id,el:h('div',{
-      className:'portal-app',
-      'data-portal-id':id,
-      draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/reports/weekly';}
-    },
-      h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
-      h('div',{className:'portal-app-name'},'Rapport hebdo'),
-      h('div',{className:'portal-app-desc'},'Résumé de la semaine passée')
     )});
   }
 
