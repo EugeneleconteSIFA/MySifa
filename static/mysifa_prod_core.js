@@ -3856,24 +3856,75 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const ops_list = S.filters.operators || [];
   const inputs = {};
  
-  // Sélect opération
+  // Sélect opération -- prod codes + stock codes EP/SP/EM/SM
+  const STOCK_CODES_UI = [
+    { code:'EP', label:'Entrée Z1 (produit fini)' },
+    { code:'SP', label:'Sortie produit fini' },
+    { code:'EM', label:'Entrée matière première' },
+    { code:'SM', label:'Sortie matière première' },
+  ];
   const opSel = h('select', null,
     h('option', { value: '' }, '— Choisir une opération —'),
     ...Object.entries(ops).map(([code, cfg]) => {
       const opt = h('option', { value: code+'           '+cfg.label }, code+' — '+cfg.label);
-      // Pré-sélection si edit
       if (prefill && prefill.operation && prefill.operation.startsWith(code)) opt.selected = true;
+      return opt;
+    }),
+    h('option', { disabled: true, style:'font-weight:600;color:var(--muted);background:var(--bg)' }, '── Mouvements stock ──'),
+    ...STOCK_CODES_UI.map(o => {
+      const opt = h('option', { value: o.code+'           '+o.label }, o.code+' — '+o.label);
+      if (prefill && prefill.operation_code === o.code) opt.selected = true;
       return opt;
     })
   );
   const opPreview = h('div', { className: 'op-preview' });
-  opSel.addEventListener('change', () => {
-    const code = opSel.value.split(' ')[0];
+  let stockRefCache = { code:null, items:[] };
+  async function refreshStockRefDatalist(code){
+    if(!['EP','SP','EM','SM'].includes(code)) return;
+    if(stockRefCache.code === code && stockRefCache.items.length) return;
+    try{
+      const endpoint = (code==='EP'||code==='SP') ? '/api/stock/produits?limit=300' : '/api/stock/matieres';
+      const data = await api(endpoint);
+      const items = Array.isArray(data) ? data : (data.rows||[]);
+      stockDatalist.innerHTML = '';
+      items.forEach(it => {
+        const ref = it.reference || '';
+        if(!ref) return;
+        const opt = h('option', { value: ref }, ref + (it.designation ? ' — '+it.designation : ''));
+        stockDatalist.appendChild(opt);
+      });
+      stockRefCache = { code, items };
+    }catch(_){}
+  }
+  function updateFormForOp(){
+    const raw = opSel.value || '';
+    const code = raw.split(/\s+/)[0] || '';
+    const isStock = ['EP','SP','EM','SM'].includes(code);
     const cfg = ops[code];
-    opPreview.textContent = cfg
-      ? (cfg.severity==='critique'?'🔴 Critique':cfg.severity==='attention'?'🟡 Attention':'🟢 '+cfg.category)
-      : '';
-  });
+    // Preview label
+    if(isStock){
+      opPreview.textContent = '🟣 Mouvement stock';
+    } else {
+      opPreview.textContent = cfg
+        ? (cfg.severity==='critique'?'🔴 Critique':cfg.severity==='attention'?'🟡 Attention':'🟢 '+cfg.category)
+        : '';
+    }
+    // Toggle prod-only / stock-only rows
+    const formEl = opSel.closest('.add-row-form');
+    if(formEl){
+      formEl.querySelectorAll('[data-role="prod-only"]').forEach(el=>{ el.style.display = isStock ? 'none' : ''; });
+      formEl.querySelectorAll('[data-role="stock-only"]').forEach(el=>{ el.style.display = isStock ? '' : 'none'; });
+    }
+    // Defaults for stock
+    if(isStock){
+      if(code === 'EP' && !stockEmplacementInput.value) stockEmplacementInput.value = 'Z1';
+      if(code !== 'EP' && stockEmplacementInput.value === 'Z1') stockEmplacementInput.value = '';
+      refreshStockRefDatalist(code);
+    }
+  }
+  opSel.addEventListener('change', updateFormForOp);
+  // Init si prefill == stock code
+  setTimeout(updateFormForOp, 0);
   // Déclencher preview si pré-rempli
   if (prefill && prefill.operation) {
     const m = prefill.operation.match(/^(\d+)/);
@@ -3911,6 +3962,12 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const metrageReelI      = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_reel!=null)        ? prefill.metrage_reel        : '' });
   const metrageDebutI     = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_debut!=null) ? prefill.metrage_total_debut : '' });
   const metrageFinI       = h('input', { type: 'number', placeholder: '0', value: (prefill && prefill.metrage_total_fin!=null)   ? prefill.metrage_total_fin   : '' });
+
+  // -- Stock EP/SP/EM/SM : inputs specifiques --
+  const stockRefInput = h('input', { type:'text', placeholder:'Ref produit ou matiere', list:'stock-ref-datalist-'+Math.random().toString(36).slice(2,7) });
+  const stockDatalistId = stockRefInput.getAttribute('list');
+  const stockDatalist = h('datalist', { id: stockDatalistId });
+  const stockEmplacementInput = h('input', { type:'text', placeholder:'ex: Z1', value:'' });
   inputs.metrage_reel         = metrageReelI;
   inputs.metrage_total_debut  = metrageDebutI;
   inputs.metrage_total_fin    = metrageFinI;
@@ -3934,17 +3991,28 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       h('div', { className: 'form-row' },
         h('div', null, h('label', null, 'No Dossier'), dosI)
       ),
+      h('div', { className: 'form-row', 'data-role':'stock-only', style:{display:'none'} },
+        h('div', null,
+          h('label', null, 'Référence produit / matière *'),
+          stockRefInput,
+          stockDatalist
+        ),
+        h('div', null,
+          h('label', null, 'Emplacement'),
+          stockEmplacementInput
+        )
+      ),
       h('div', { className: 'form-row' },
         h('div', null, h('label', null, 'Qté traitée'), qteTI),
         h('div', null, h('label', null, 'Note'), noteI)
       ),
-      h('div', { className: 'form-row' },
+      h('div', { className: 'form-row', 'data-role':'prod-only' },
         h('div', null,
           h('label', null, 'Métrage réel (m)'),
           metrageReelI
         )
       ),
-      h('div', { className: 'form-row' },
+      h('div', { className: 'form-row', 'data-role':'prod-only' },
         h('div', null,
           h('label', null, 'Compteur début (m)'),
           metrageDebutI
@@ -3954,7 +4022,7 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
           metrageFinI
         )
       ),
-      h('div', { className: 'form-row' },
+      h('div', { className: 'form-row', 'data-role':'prod-only' },
         h('div', { style:{ gridColumn:'span 2' } },
           h('label', null, 'Commentaire'),
           commentaireI
@@ -3968,8 +4036,42 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
             const opVal = opSel.value;
             if (!opVal) { toast('Sélectionnez une opération', 'error'); return; }
             const opText = opVal.replace('           ', ' ');
+            const code = opVal.split(/\s+/)[0] || '';
             const dtVal = getDateVal();
             if(!dtVal){ toast('Heure invalide (format HH:MM:SS, 24h)', 'error'); return; }
+            // ── Route stock EP/SP/EM/SM vers /api/fabrication/saisie-stock ──
+            if(['EP','SP','EM','SM'].includes(code)){
+              const stockRef = (stockRefInput.value||'').trim();
+              const noDossier = (dosI.value||'').trim();
+              const qte = parseFloat(qteTI.value) || 0;
+              const empl = (stockEmplacementInput.value||'').trim();
+              if(!stockRef){ toast('Reference produit / matiere requise','error'); return; }
+              if(!noDossier){ toast('No dossier obligatoire pour un mouvement stock','error'); return; }
+              if(qte <= 0){ toast('Quantite doit etre positive','error'); return; }
+              const stockBody = {
+                code, no_dossier: noDossier, quantite: qte,
+                note: (noteI.value||'').trim() || null,
+                date_operation: dtVal,
+                machine: (machI.value||'').trim() || null,
+              };
+              if(code === 'EP' || code === 'SP'){
+                stockBody.produit_reference = stockRef;
+                stockBody.emplacement = empl || (code==='EP' ? 'Z1' : '');
+              } else {
+                stockBody.matiere_reference = stockRef;
+                if(code === 'EM') stockBody.emplacement_dest = empl || null;
+                else stockBody.emplacement_source = empl || null;
+              }
+              (async ()=>{
+                try{
+                  await api('/api/fabrication/saisie-stock', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(stockBody) });
+                  toast('Saisie stock ajoutee');
+                  closeModal();
+                  await loadSaisies();
+                }catch(e){ toast(e.message||'Erreur','error'); }
+              })();
+              return;
+            }
             onSubmit({
               operation:          opText,
               operateur:          opField.value || '',
