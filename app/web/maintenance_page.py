@@ -4740,10 +4740,11 @@ function closeAckDetail(){
   if(el) el.remove();
 }
 
-// Détecte une non-conformité : au moins une réponse choice de l'ack diffère
-// de la première réponse proposée (considérée comme "conforme" par convention).
-// Types "value" et clés "_other" ne sont pas évalués (l'admin peut fixer des
-// bornes numériques, mais la couleur de la ligne se base sur les choix).
+// Détecte une non-conformité : au moins une réponse choice de l'ack figure
+// dans la liste nc_responses définie par l'admin lors de la création de
+// l'alerte. Les items de type "value" et les clés "_other" (précision de la
+// case Autre) ne sont pas évalués — l'admin cible explicitement quelles
+// réponses signalent un problème.
 function _ackHasNonConformite(c){
   if(!c || c._source !== 'alert') return false;
   const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)];
@@ -4752,13 +4753,12 @@ function _ackHasNonConformite(c){
   for(let i = 0; i < meta.checklist_items.length; i++){
     const it = meta.checklist_items[i];
     if(!it || it.type === 'value') continue;
-    const responses = Array.isArray(it.responses) ? it.responses : [];
-    if(!responses.length) continue;
-    const first = String(responses[0] || '').trim();
+    const ncSet = Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : [];
+    if(!ncSet.length) continue;
     const r = resp[String(i)];
     if(!Array.isArray(r)) continue;
     for(const sel of r){
-      if(String(sel || '').trim() !== first) return true;
+      if(ncSet.indexOf(String(sel || '').trim()) !== -1) return true;
     }
   }
   return false;
