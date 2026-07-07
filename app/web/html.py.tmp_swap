@@ -4285,7 +4285,6 @@ function renderPortal(){
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
   const isQualite = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
-  const isReports = isSuper || !!(urole && ['direction','administration'].includes(urole));
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
   const isMaintenance = isSuper || _uident === 'loic.gognau';
   const isLight=document.body.classList.contains('light');
@@ -4377,20 +4376,6 @@ function renderPortal(){
       h('div',{className:'portal-app-name'},'MyExpé'),
       h('div',{className:'portal-app-desc'},
         ((urole==='logistique'||urole==='commercial')&&!isSuper)?'Expédition & suivi — lecture seule':'Expédition & Suivi')
-    )});
-  }
-
-  if(isReports){
-    const id='reports';
-    tileSpecs.push({id,el:h('div',{
-      className:'portal-app',
-      'data-portal-id':id,
-      draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/reports/weekly';}
-    },
-      h('div',{className:'portal-app-icon'},iconEl('file-text',28)),
-      h('div',{className:'portal-app-name'},'Rapport hebdo'),
-      h('div',{className:'portal-app-desc'},'Résumé de la semaine passée')
     )});
   }
 

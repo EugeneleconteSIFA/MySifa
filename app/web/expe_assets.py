@@ -2511,3 +2511,1677 @@ function refreshExpeCartePanel(){
 }
 """
 )
+
+
+EXPE_MAIN_CSS = r"""
+/* ── MyExpé ─────────────────────────────────────────────────────── */
+.expe-fields{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px}
+@media(max-width:1100px){.expe-fields{grid-template-columns:repeat(2,minmax(150px,1fr))}}
+@media(max-width:520px){.expe-fields{grid-template-columns:1fr}}
+.expe-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.expe-field input,.expe-field select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.expe-field input:focus,.expe-field select:focus{border-color:var(--accent)}
+.expe-help{font-size:10px;color:var(--muted);margin-top:4px}
+.expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
+.expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
+.expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
+.expe-day-sep-row td.expe-day-sep-cell {
+  padding: 28px 14px 12px !important;
+  background: var(--bg) !important;
+  border-top: 2px solid var(--border);
+}
+.expe-departs-table tbody tr.expe-day-sep-row:hover td{background:var(--bg)!important}
+.expe-day-sep-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text2);
+}
+.expe-dep-actions-cell{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px}
+.expe-dep-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;flex-shrink:0}
+.expe-dep-acts .btn-ghost,.expe-dep-acts .btn-danger{width:32px;height:30px;padding:0;margin:0;
+  display:flex;align-items:center;justify-content:center;border-radius:6px}
+.expe-dep-valider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
+  white-space:nowrap;flex-shrink:0}
+.expe-dep-invalider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
+  white-space:nowrap;flex-shrink:0;background:color-mix(in srgb,var(--warn) 18%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn) 45%,var(--border));color:var(--warn)}
+.expe-dep-invalider-btn:hover{filter:brightness(1.06)}
+.expe-hist-pager{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;
+  padding:12px 18px;border-top:1px solid var(--border)}
+.expe-hist-pager .page-btn{padding:6px 12px;border-radius:7px;border:1px solid var(--border);
+  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;font-family:inherit}
+.expe-hist-pager .page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.expe-hist-pager .page-btn:disabled{opacity:.35;cursor:not-allowed}
+.expe-hist-pager .page-info{font-size:12px;color:var(--muted);padding:0 4px;white-space:nowrap}
+.expe-dep-ab[title],.expe-dep-valider-btn[title],.expe-dep-invalider-btn[title]{position:relative;overflow:visible}
+.expe-dep-ab[title]:hover::after,.expe-dep-valider-btn[title]:hover::after,.expe-dep-invalider-btn[title]:hover::after{
+  content:attr(title);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);
+  background:var(--card);border:1px solid var(--border);border-radius:7px;
+  padding:6px 10px;font-size:10px;font-weight:500;color:var(--text2);line-height:1.4;
+  white-space:normal;max-width:240px;text-align:center;
+  pointer-events:none;z-index:200;box-shadow:0 4px 16px color-mix(in srgb,var(--bg) 55%,transparent)}
+.expe-dep-ab[title]:hover::before,.expe-dep-valider-btn[title]:hover::before,.expe-dep-invalider-btn[title]:hover::before{
+  content:'';position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--border);pointer-events:none;z-index:200}
+.expe-hist-table th{padding:6px 10px;font-size:9px}
+
+/* MyExpé — onglets internes modal Ajouter départ */
+.expe-form-tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0}
+.expe-form-tab{background:transparent;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:10px 16px;cursor:pointer;border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:6px;transition:color .15s,border-color .15s}
+.expe-form-tab:hover{color:var(--text2)}
+.expe-form-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* MyExpé — picker dossier */
+.expe-picker-wrap{display:flex;flex-direction:column;gap:10px}
+.expe-picker-hint{font-size:11px;color:var(--muted);line-height:1.5;padding:0 2px}
+.expe-picker-search{width:100%;padding:10px 14px;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:10px;font-size:13px;outline:none;transition:border-color .15s}
+.expe-picker-search:focus{border-color:var(--accent)}
+.expe-picker-list{max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:6px}
+.expe-picker-section{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:8px 6px 4px}
+.expe-picker-item{padding:10px 12px;margin:2px 0;border:1px solid var(--border);border-radius:8px;cursor:pointer;background:var(--card);transition:border-color .15s,background .15s}
+.expe-picker-item:hover{border-color:var(--accent);background:var(--accent-bg)}
+.expe-picker-item--active{border-left:3px solid var(--accent)}
+.expe-picker-line1{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.expe-picker-ref{color:var(--accent);font-family:monospace}
+.expe-picker-sep{color:var(--muted);font-weight:400}
+.expe-picker-client{color:var(--text)}
+.expe-picker-line2{font-size:12px;color:var(--text2);margin-top:3px}
+.expe-picker-meta{font-size:10px;color:var(--muted);display:flex;gap:8px;margin-top:5px;flex-wrap:wrap;align-items:center}
+.expe-picker-statut{padding:2px 8px;border-radius:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:9px}
+.expe-picker-statut--en_cours{background:rgba(34,211,238,.18);color:var(--accent)}
+.expe-picker-statut--attente{background:rgba(251,191,36,.18);color:var(--warn)}
+.expe-picker-statut--termine{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
+.expe-picker-warn{background:rgba(248,113,113,.15);color:var(--danger);padding:2px 8px;border-radius:10px;font-weight:600;font-size:9px;text-transform:uppercase;letter-spacing:.3px}
+.expe-picker-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:13px}
+
+/* MyExpé — sidebar sections collapsibles */
+.expe-sidebar-sections{display:flex;flex-direction:column;gap:2px}
+.expe-sec-header{display:flex;align-items:center;gap:8px;background:transparent;border:none;
+  padding:14px 16px 6px 12px;cursor:pointer;color:var(--muted);
+  font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+  width:100%;text-align:left;transition:color .15s}
+.expe-sec-header:hover{color:var(--text2)}
+.expe-sec-header.has-active{color:var(--text2)}
+.expe-sec-header .expe-sec-chev{display:inline-flex;transition:transform .15s;flex-shrink:0;color:var(--muted)}
+.expe-sec-header.collapsed .expe-sec-chev{opacity:.6}
+.expe-sec-header.has-active .expe-sec-chev{color:var(--accent)}
+.expe-sec-label{flex:1}
+.expe-sec-body{display:flex;flex-direction:column;gap:2px;padding-bottom:4px}
+
+/* MyExpé — Palettes Europe */
+.expe-pal-eur-totaux{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-bottom:14px}
+@media(max-width:760px){.expe-pal-eur-totaux{grid-template-columns:repeat(2,1fr)}}
+.expe-pal-eur-tot-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px}
+.expe-pal-eur-tot-card--ok{border-left:3px solid var(--success,#34d399)}
+.expe-pal-eur-tot-card--warn{border-left:3px solid var(--warn)}
+.expe-pal-eur-tot-card--bad{border-left:3px solid var(--danger)}
+.expe-pal-eur-tot-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+.expe-pal-eur-tot-val{font-size:24px;font-weight:800;color:var(--text);font-family:monospace}
+.expe-pal-eur-recap{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.expe-pal-eur-recap-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.expe-pal-eur-recap-card--debt{border-left:3px solid var(--warn)}
+.expe-pal-eur-recap-client{font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.expe-pal-eur-recap-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:12px}
+.expe-pal-eur-recap-row--solde{margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-weight:700}
+.expe-pal-eur-recap-lbl{color:var(--text2)}
+.expe-pal-eur-recap-val{font-family:monospace;font-weight:600;color:var(--text)}
+.expe-pal-eur-recap-val--ok{color:var(--success,#34d399)}
+.expe-pal-eur-recap-val--bad{color:var(--danger)}
+.expe-pal-eur-recap-val--warn{color:var(--warn)}
+.expe-pal-eur-badge{padding:3px 10px;border-radius:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10px;white-space:nowrap}
+.expe-pal-eur-badge--en_attente{background:rgba(251,191,36,.18);color:var(--warn)}
+.expe-pal-eur-badge--retournee{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
+.expe-pal-eur-badge--perdue{background:rgba(248,113,113,.18);color:var(--danger)}
+.expe-pal-eur-acts-cell{white-space:nowrap;text-align:right}
+.expe-pal-eur-acts{display:inline-flex;gap:4px;justify-content:flex-end}
+.expe-pal-eur-act{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid var(--border);border-radius:7px;cursor:pointer;color:var(--text2);
+  transition:border-color .15s,color .15s,background .15s}
+.expe-pal-eur-act:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.expe-pal-eur-act--ok:hover{border-color:var(--success,#34d399);color:var(--success,#34d399);background:rgba(52,211,153,.12)}
+.expe-pal-eur-act--bad:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.12)}
+.expe-hist-table td{padding:6px 10px;max-width:140px}
+.expe-hist-table td:nth-child(1){max-width:110px} /* Validé le */
+.expe-hist-table td:nth-child(2){max-width:120px} /* Par */
+.expe-hist-table td:nth-child(4){max-width:160px} /* Client */
+.expe-hist-table td:nth-child(5){max-width:160px} /* Réf SIFA */
+.expe-hist-table td:nth-child(7){max-width:140px} /* Cde transp. */
+.expe-hist-table td:nth-child(8){max-width:140px} /* N° BL */
+.expe-hist-table td:nth-child(9){max-width:140px} /* Transp. */
+.expe-top3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:18px}
+.expe-score{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;position:relative}
+.expe-score .stripe{height:4px}
+.expe-score .body{padding:16px 20px}
+.expe-score .carrier{font-size:18px;font-weight:800;letter-spacing:-.5px}
+.expe-score .price{font-size:28px;font-weight:800;font-family:monospace;margin:8px 0}
+.expe-score .price .unit{font-size:13px;font-weight:500;color:var(--muted);margin-left:4px}
+.expe-score .medal{font-size:24px;flex-shrink:0}
+.expe-note{font-size:10px;color:rgba(148,163,184,.8);margin-top:12px}
+
+/* MyExpé — mobile : titres de page / sections déjà dans la topbar */
+@media (max-width:900px){
+  body.mysifa-app-expe .main .container > h1,
+  body.mysifa-app-expe .main .container > .subtitle{
+    display:none!important;
+  }
+  body.mysifa-app-expe .expe-mobile-hide-head{display:none!important}
+  body.mysifa-app-expe .card-header:has(> .expe-mobile-hide-head:only-child){display:none}
+  body.mysifa-app-expe .card-header:has(> h3.expe-mobile-hide-head){
+    min-height:0;
+    padding-top:10px;
+    padding-bottom:10px;
+  }
+}
+"""
+
+EXPE_MAIN_JS = r"""
+// ── MyExpé ────────────────────────────────────────────────────────
+const EXPE_CONTACTS_KEY='mysifa_transport_contacts';
+const EXPE_DEFAULT_CONTACTS={
+  'Coupé':{type:'url',value:'https://coupe.station-chargeur.com/coupe/',label:'Portail Coupé'},
+  'Ceva':{type:'url',value:'https://connect.gefco.net/psc-portal/login.html#LogIn',label:'Portail Ceva/Gefco'},
+  'Coquelle':{type:'email',value:'eugeneleconte@outlook.com',label:'Mail Coquelle'},
+  'Dimotrans':{type:'email',value:'eugeneleconte@outlook.com',label:'Mail Dimotrans'},
+};
+const EXPE_COLORS={'Coupé':'#22d3ee','Coquelle':'#a78bfa','Ceva':'#34d399','Dimotrans':'#fbbf24'};
+function expeCC(c){return EXPE_COLORS[c]||'#94a3b8';}
+function expeLoadContacts(){
+  try{return {...EXPE_DEFAULT_CONTACTS,...JSON.parse(localStorage.getItem(EXPE_CONTACTS_KEY)||'{}')};}
+  catch(e){return {...EXPE_DEFAULT_CONTACTS};}
+}
+function expeEnsureContacts(){if(!S.expeContacts)S.expeContacts=expeLoadContacts();return S.expeContacts;}
+function expeOpenContact(carrier){
+  if(typeof T!=='undefined'&&Array.isArray(T.list)){
+    const tr=T.list.find(x=>String(x.nom||'')===String(carrier||''));
+    if(tr&&typeof expeTrpOpenContact==='function'){expeTrpOpenContact(tr);return;}
+  }
+  const c=expeEnsureContacts()[carrier];if(!c)return;
+  if(c.type==='url')window.open(c.value,'_blank','noopener');
+  else{
+    const s=encodeURIComponent('Demande de tarif SIFA - '+carrier);
+    const b=encodeURIComponent('Bonjour,\n\nNous souhaitons obtenir un tarif pour :\n- Département : '+(S.expeDept||'')+'\n- Poids : '+(S.expeKg||'?')+' kg\n- Palettes : '+(S.expeNbPal||'?')+'\n\nCordialement,\nSIFA Roubaix');
+    window.location.href='mailto:'+c.value+'?subject='+s+'&body='+b;
+  }
+}
+async function ensureExpeRawData(){
+  if(S.expeRaw||S.expeRawLoading)return;
+  S.expeRawLoading=true;S.expeRawError=null;render();
+  try{
+    const r=await fetch('/static/transport_tarifs.json?v=4',{credentials:'same-origin'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    S.expeRaw=await r.json();S.expeRawLoading=false;render();
+  }catch(e){S.expeRawLoading=false;S.expeRawError='Impossible de charger les grilles.';render();}
+}
+
+// ── Calcul poids ─────────────────────────────────────────────────
+function _calcCoupePoids(raw,dept,kg){
+  const p=raw.coupe_poids&&raw.coupe_poids[dept];if(!p)return null;
+  const b=raw.coupe_poids_brackets;
+  for(let i=0;i<b.length;i++){
+    if(kg<=b[i]){
+      if(i<10)return p[i];
+      return p[i]!=null?(kg/100)*p[i]:null;
+    }
+  }
+  return null;
+}
+function _calcCevaPoids(raw,dept,kg){
+  const p=raw.ceva_poids&&raw.ceva_poids[dept];if(!p)return null;
+  const b=raw.ceva_poids_brackets;
+  for(let i=0;i<b.length;i++){
+    if(kg<=b[i]){
+      if(i<10)return p[i];
+      return p[i]!=null?(kg/100)*p[i]:null;
+    }
+  }
+  return null;
+}
+
+// ── Calcul palette ───────────────────────────────────────────────
+function _calcCoupePal(raw,dept,n){
+  const p=raw.coupe_pal&&raw.coupe_pal[dept];
+  if(!p||n<1||n>5)return null;
+  return p[n-1]||null;
+}
+function _calcCevaPal(raw,dept,n){
+  const p=raw.ceva_pal&&raw.ceva_pal[dept];
+  if(!p||n<1||n>4)return null;
+  return p[n-1]||null;
+}
+function _calcCoquellePal(raw,dept,n){
+  const p=raw.coquelle_pal&&raw.coquelle_pal[dept];
+  if(!p||n<1||n>33)return null;
+  return p[n-1]||null;
+}
+function _calcDimotransPal(raw,dept,n){
+  const p=raw.dimotrans_pal&&raw.dimotrans_pal[dept];
+  if(!p||n<1||n>28)return null;
+  return p[Math.min(n,28)-1]||null;
+}
+
+function expeCompute(){
+  if(!S.expeRaw){toast('Grilles non chargées','warn');return;}
+  const raw=S.expeRaw;
+  const d=String(S.expeDept||'').trim().padStart(2,'0');
+  const kg=Number(S.expeKg)||0;
+  const nbPal=parseInt(S.expeNbPal,10)||0;
+  const fuel=(Number(S.expeFuelPct)||0)/100;
+  const r2=v=>v!=null?Math.round(v*100)/100:null;
+  const af=v=>v!=null?r2(v*(1+fuel)):null;
+
+  const poids=[];
+  if(kg>0){
+    [{c:'Coupé',fn:_calcCoupePoids},{c:'Ceva',fn:_calcCevaPoids}].forEach(({c,fn})=>{
+      const p=af(fn(raw,d,kg));
+      if(p!=null&&p>0)poids.push({carrier:c,price:p});
+    });
+    poids.sort((a,b)=>a.price-b.price);
+  }
+  const palette=[];
+  if(nbPal>0){
+    [
+      {c:'Coupé',fn:_calcCoupePal,max:5},
+      {c:'Coquelle',fn:_calcCoquellePal,max:33},
+      {c:'Ceva',fn:_calcCevaPal,max:4},
+      {c:'Dimotrans',fn:_calcDimotransPal,max:28},
+    ].forEach(({c,fn})=>{
+      const p=af(fn(raw,d,nbPal));
+      if(p!=null&&p>0)palette.push({carrier:c,price:p});
+    });
+    palette.sort((a,b)=>a.price-b.price);
+  }
+  set({expeResults:{dept:d,kg,nbPal,fuel:Number(S.expeFuelPct)||0,poids,palette}});
+}
+
+// ── UI helpers ───────────────────────────────────────────────────
+function renderExpeScore(item,rank){
+  const col=expeCC(item.carrier);
+  const medals=['\u{1F947}','\u{1F948}','\u{1F949}'];
+  return h('div',{className:'expe-score'},
+    h('div',{className:'stripe',style:{background:col}}),
+    h('div',{className:'body'},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}},
+        h('div',{className:'carrier',style:{color:col}},item.carrier),
+        rank<3?h('span',{className:'medal'},medals[rank]):null
+      ),
+      h('div',{className:'price',style:{color:'var(--text)'}},
+        item.price.toFixed(2),
+        h('span',{className:'unit'},'\u20ac HT')
+      ),
+      h('button',{className:'btn-ghost',
+        style:{width:'100%',borderColor:col+'55',color:col},
+        onClick:()=>expeOpenContact(item.carrier)
+      },expeEnsureContacts()[item.carrier]&&expeEnsureContacts()[item.carrier].type==='url'?'Portail':'Contacter')
+    )
+  );
+}
+function renderExpeRankTable(title,rows){
+  if(!rows||!rows.length)return h('div',{className:'card-empty'},'Aucun tarif disponible.');
+  return h('div',{className:'card',style:{marginTop:10}},
+    h('div',{className:'card-header'},h('h3',null,title+' ('+rows.length+')')),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{style:{minWidth:500}},
+        h('thead',null,h('tr',null,
+          h('th',null,'#'),h('th',null,'Transporteur'),h('th',null,'Prix HT'),h('th',null,'Contact')
+        )),
+        h('tbody',null,...rows.map((r,i)=>{
+          const col=expeCC(r.carrier);
+          return h('tr',null,
+            h('td',null,String(i+1)),
+            h('td',null,h('span',{style:{fontWeight:700,color:col}},r.carrier)),
+            h('td',null,h('span',{style:{fontFamily:'monospace',fontWeight:800,color:col}},r.price.toFixed(2)+' \u20ac')),
+            h('td',null,h('button',{className:'btn-ghost',style:{borderColor:col+'44',color:col},
+              onClick:()=>expeOpenContact(r.carrier)
+            },expeEnsureContacts()[r.carrier]&&expeEnsureContacts()[r.carrier].type==='url'?'Portail':'Email'))
+          );
+        }))
+      )
+    )
+  );
+}
+function renderExpeContactModal(){
+  const cur=JSON.parse(JSON.stringify(expeEnsureContacts()));
+  const overlay=h('div',{className:'contact-modal-overlay'});
+  const box=h('div',{className:'contact-modal',style:{maxWidth:520}});
+  box.appendChild(h('div',{className:'contact-modal-head'},
+    h('h3',null,'Contacts transporteurs'),
+    h('button',{className:'contact-close-btn',onClick:()=>set({expeShowContacts:false})},'\u2715')
+  ));
+  const body=h('div',{className:'contact-modal-body',style:{display:'grid',gap:10}});
+  Object.keys(cur).forEach(name=>{
+    const row=h('div',{style:{border:'1px solid var(--border)',borderRadius:10,padding:10}});
+    row.appendChild(h('div',{style:{fontSize:13,fontWeight:700,color:expeCC(name),marginBottom:8}},name));
+    const sel=h('select',{className:'form-sel',style:{width:110}},
+      h('option',{value:'email',selected:cur[name].type==='email'},'Email'),
+      h('option',{value:'url',selected:cur[name].type==='url'},'Site web'));
+    const inp=h('input',{value:cur[name].value||'',placeholder:cur[name].type==='url'?'https://...':'contact@...',style:{flex:1,minWidth:0}});
+    sel.addEventListener('change',e=>{cur[name].type=e.target.value;});
+    inp.addEventListener('input',e=>{cur[name].value=e.target.value;});
+    row.appendChild(h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},sel,inp));
+    body.appendChild(row);
+  });
+  box.appendChild(body);
+  box.appendChild(h('div',{className:'contact-modal-actions'},
+    h('button',{className:'btn-ghost',onClick:()=>set({expeShowContacts:false})},'Annuler'),
+    h('button',{className:'btn-sm',onClick:()=>{
+      try{localStorage.setItem(EXPE_CONTACTS_KEY,JSON.stringify(cur));}catch(e){}
+      set({expeContacts:{...EXPE_DEFAULT_CONTACTS,...cur},expeShowContacts:false});
+    }},'Enregistrer')
+  ));
+  overlay.appendChild(box);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)set({expeShowContacts:false});});
+  return overlay;
+}
+function renderExpeComparateur(){
+  return renderExpeComparateurTarifs();
+}
+__EXPE_COMPARATEUR_JS__
+__EXPE_DEVIS_JS__
+__EXPE_TRANSPORTEURS_JS__
+__EXPE_CARTE_FRANCE_JS__
+function renderExpePoids(){
+  const rows=S.expePoidsRows||[];
+  const fKg=v=>v.toFixed(3)+'\u00a0kg';
+  const wNum=x=>{const v=parseFloat(x);return Number.isFinite(v)?v:0;};
+
+  // Recalcul sans rerender (garde le focus dans les inputs)
+  const weightEls=[];
+  let etiqTotalEl=null, palTotalEl=null, grandTotalEl=null, grandPalPartEl=null;
+  function recalc(){
+    const gram=wNum(S.expePoidsGram)||155;
+    const coeff=wNum(S.expePoidsCoeff)||1.05;
+    let etiqTotal=0;
+    for(let i=0;i<rows.length;i++){
+      const r=rows[i]||{};
+      const q=wNum(r.qty), l=wNum(r.laize), d=wNum(r.dev);
+      const w = (q&&l&&d) ? (q*l*d*coeff*gram/1e6) : null;
+      if(w!=null) etiqTotal += w;
+      if(weightEls[i]) weightEls[i].textContent = w!=null ? fKg(w) : '—';
+      if(weightEls[i]){
+        weightEls[i].style.opacity = w!=null ? '1' : '0.25';
+        weightEls[i].style.fontWeight = w!=null ? '600' : 'normal';
+      }
+    }
+    const palNb=wNum(S.expoPoidsPalNb)||0;
+    const palKg=wNum(S.expoPoidsPalKg)||0;
+    const palTotal=palNb*palKg;
+    const grandTotal=etiqTotal+palTotal;
+    if(etiqTotalEl) etiqTotalEl.textContent = etiqTotal>0 ? fKg(etiqTotal) : '—';
+    if(palTotalEl) palTotalEl.textContent = palTotal>0 ? fKg(palTotal) : '—';
+    if(grandTotalEl) grandTotalEl.textContent = grandTotal>0 ? grandTotal.toFixed(3)+'\u00a0kg' : '—';
+    if(grandPalPartEl) grandPalPartEl.textContent = (grandTotal>0&&palTotal>0) ? ('dont palette\u00a0: '+fKg(palTotal)) : '';
+  }
+
+  const inp=(val,cb,extra={})=>{
+    const el=h('input',Object.assign({type:'number',min:'0',step:'any',placeholder:'0',value:val,
+      style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+             background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem',boxSizing:'border-box'}},extra));
+    el.addEventListener('input',e=>cb(e.target.value));
+    return el;
+  };
+  const paramCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
+    h('div',{className:'card-header'},h('span',null,'Paramètres')),
+    h('div',{style:{padding:'1rem 1rem 1.25rem'}},
+      h('div',{style:{marginBottom:'1rem'}},
+        h('div',{style:{display:'flex',alignItems:'center',gap:'0.5rem'}},
+          (()=>{
+            const el=h('input',{type:'number',min:'1',step:'any',placeholder:'155',
+              value:S.expePoidsGram||'',
+              style:{width:'90px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                     background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+            el.addEventListener('input',e=>{S.expePoidsGram=e.target.value;recalc();});
+            return el;
+          })(),
+          h('span',{style:{fontSize:'0.85rem',opacity:0.75}},'g/m²')
+        )
+      ),
+      h('div',null,
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.45rem'}},'Coefficient'),
+        (()=>{const el=h('input',{type:'number',step:'0.01',min:'0.1',value:S.expePoidsCoeff,
+          style:{width:'90px',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                 background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+          el.addEventListener('input',e=>{S.expePoidsCoeff=e.target.value;recalc();});return el;})()
+      )
+    )
+  );
+
+  const thStyle={padding:'0.4rem 0.5rem',textAlign:'left',fontSize:'0.75rem',opacity:0.6,fontWeight:'600',borderBottom:'1px solid var(--border)'};
+  const tdStyle={padding:'0.3rem 0.4rem',verticalAlign:'middle'};
+  const thead=h('thead',null,h('tr',null,
+    h('th',{style:{...thStyle,width:'1.8rem',textAlign:'center'}},'#'),
+    h('th',{style:thStyle},'Qté (mille)'),
+    h('th',{style:thStyle},'Laize (mm)'),
+    h('th',{style:thStyle},'Développé (mm)'),
+    h('th',{style:{...thStyle,textAlign:'right'}},'Poids (kg)')
+  ));
+  const tbody=h('tbody',null,...rows.map((r,i)=>{
+    const updateRow=(key,val)=>{
+      if(!S.expePoidsRows) S.expePoidsRows=[];
+      if(!S.expePoidsRows[i]) S.expePoidsRows[i]={qty:'',laize:'',dev:''};
+      S.expePoidsRows[i][key]=val;
+      recalc();
+    };
+    const wEl=h('span',null,'—');
+    weightEls[i]=wEl;
+    return h('tr',null,
+      h('td',{style:{...tdStyle,textAlign:'center',fontSize:'0.75rem',opacity:0.4}},String(i+1)),
+      h('td',{style:tdStyle},inp(r.qty,v=>updateRow('qty',v))),
+      h('td',{style:tdStyle},inp(r.laize,v=>updateRow('laize',v))),
+      h('td',{style:tdStyle},inp(r.dev,v=>updateRow('dev',v))),
+      h('td',{style:{...tdStyle,textAlign:'right',fontWeight:'normal',opacity:0.25,fontSize:'0.85rem',whiteSpace:'nowrap'}},wEl)
+    );
+  }));
+
+  const resetBtn=h('button',{className:'btn-ghost',style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',marginRight:'0.4rem'}},'Remettre à 0');
+  resetBtn.addEventListener('click',()=>{
+    set({expePoidsRows:[{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''},{qty:'',laize:'',dev:''}]});
+  });
+  const addBtn=h('button',{style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
+    border:'1px solid var(--border)',background:'transparent',color:'var(--fg)'}},'+\u00a0Ligne');
+  addBtn.addEventListener('click',()=>set({expePoidsRows:[...rows,{qty:'',laize:'',dev:''}]}));
+  const delBtn=(rows.length>1)?h('button',{style:{padding:'0.25rem 0.65rem',fontSize:'0.8rem',borderRadius:'6px',cursor:'pointer',
+    border:'1px solid var(--border)',background:'transparent',color:'var(--fg)',marginLeft:'0.4rem'}},'\u2212\u00a0Ligne'):null;
+  if(delBtn)delBtn.addEventListener('click',()=>set({expePoidsRows:rows.slice(0,-1)}));
+
+  const rowsCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
+    h('div',{className:'card-header',style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+      h('span',null,'Étiquettes'),
+      h('div',null,resetBtn,addBtn,delBtn||null)
+    ),
+    h('div',{style:{overflowX:'auto',padding:'0.25rem 0.75rem 0.75rem'}},
+      h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'0.88rem'}},thead,tbody)
+    ),
+    (()=>{
+      etiqTotalEl=h('strong',null,'—');
+      return h('div',{style:{padding:'0.1rem 1rem 0.75rem',textAlign:'right',fontSize:'0.88rem',opacity:0.75}},
+        'Sous-total étiquettes\u00a0: ',etiqTotalEl
+      );
+    })()
+  );
+
+  const palCard=h('div',{className:'card',style:{marginBottom:'1rem'}},
+    h('div',{className:'card-header'},h('span',null,'Palette (optionnel)')),
+    h('div',{style:{padding:'1rem',display:'flex',gap:'1rem',flexWrap:'wrap',alignItems:'flex-end'}},
+      h('div',{style:{flex:'0 0 100px'}},
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.4rem'}},'Nb palettes'),
+        (()=>{const el=h('input',{type:'number',min:'0',step:'1',placeholder:'0',value:S.expoPoidsPalNb,
+          style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                 background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+          el.addEventListener('input',e=>{S.expoPoidsPalNb=e.target.value;recalc();});return el;})()
+      ),
+      h('div',{style:{flex:'0 0 120px'}},
+        h('label',{style:{display:'block',fontSize:'0.75rem',opacity:0.65,marginBottom:'0.4rem'}},'Poids / palette (kg)'),
+        (()=>{const el=h('input',{type:'number',min:'0',step:'any',placeholder:'0',value:S.expoPoidsPalKg,
+          style:{width:'100%',padding:'0.3rem 0.5rem',borderRadius:'6px',border:'1px solid var(--border)',
+                 background:'var(--card)',color:'var(--fg)',fontSize:'0.85rem'}});
+          el.addEventListener('input',e=>{S.expoPoidsPalKg=e.target.value;recalc();});return el;})()
+      ),
+      (()=>{
+        palTotalEl=h('strong',null,'—');
+        return h('div',{style:{paddingBottom:'0.2rem',fontSize:'0.88rem',opacity:0.75}},
+          'Sous-total\u00a0: ',palTotalEl
+        );
+      })()
+    )
+  );
+
+  const totalCard=h('div',{className:'card',style:{textAlign:'center',padding:'1.5rem 1rem',
+    background:'var(--accent)',color:'#fff',borderRadius:'12px',marginBottom:'0.5rem'}},
+    h('div',{style:{fontSize:'0.78rem',letterSpacing:'0.08em',opacity:0.85,marginBottom:'0.4rem'}},'POIDS TOTAL ESTIMÉ'),
+    (()=>{
+      grandTotalEl=h('div',{style:{fontSize:'2.4rem',fontWeight:'700',letterSpacing:'-1px',lineHeight:1.1}},'—');
+      grandPalPartEl=h('div',{style:{fontSize:'0.8rem',opacity:0.8,marginTop:'0.35rem'}},'');
+      return h('div',null,grandTotalEl,grandPalPartEl);
+    })()
+  );
+
+  const root=h('div',{style:{maxWidth:'680px'}},
+    h('p',{style:{opacity:0.55,fontSize:'0.82rem',marginBottom:'1.25rem',fontStyle:'italic'}},
+      'Formule\u00a0: Qté\u2009(mille)\u2009×\u2009Laize\u2009×\u2009Développé\u2009×\u2009Coeff\u2009×\u2009Grammage\u2009/\u20091\u202f000\u202f000'),
+    paramCard,rowsCard,palCard,totalCard
+  );
+  // Initial calc after DOM is built
+  queueMicrotask(recalc);
+  return root;
+}
+
+function expeParisDayISO(){
+  try{return new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Paris'});}
+  catch(e){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+}
+async function loadExpePaletteTypes(){
+  if(S.app!=='expe')return;
+  if(S.expePaletteTypesLoading) return;
+  if((S.expePaletteTypes||[]).length) return;
+  set({expePaletteTypesLoading:true});
+  try{
+    const rows=await api('/api/expe/matieres-palettes');
+    set({expePaletteTypes:Array.isArray(rows)?rows:[],expePaletteTypesLoading:false});
+  }catch(e){
+    set({expePaletteTypesLoading:false});
+  }
+}
+function expePaletteTypeLabel(row){
+  if(!row) return '—';
+  if((row.type_colis||'').trim().toLowerCase()==='vrac') return 'Vrac';
+  if(row.type_palette_label) return row.type_palette_label;
+  const id=row.type_palette_matiere_id;
+  if(id==null||id==='') return '—';
+  const items=S.expePaletteTypes||[];
+  const m=items.find(x=>String(x.id)===String(id));
+  if(!m) return '—';
+  const ref=(m.reference||'').trim();
+  const des=(m.designation||'').trim();
+  return ref?(des?ref+' — '+des:ref):'—';
+}
+async function loadExpeDepartJour(){
+  if(S.app!=='expe')return;
+  void loadExpePaletteTypes();
+  if(_expeJourInflight)return await _expeJourInflight;
+  _expeJourInflight=(async()=>{
+    set({expeDepartLoading:true});
+    try{
+      const rows=await api('/api/expe/departs/jour');
+      set({expeDepartList:Array.isArray(rows)?rows:[],expeDepartLoading:false});
+    }catch(e){
+      set({expeDepartLoading:false});
+      toast(e.message||'Chargement impossible','error');
+    }
+  })();
+  try{return await _expeJourInflight;}finally{_expeJourInflight=null;}
+}
+async function loadExpeDepartHistorique(resetPage){
+  if(S.app!=='expe')return;
+  void loadExpePaletteTypes();
+  if(resetPage) S.expeDepartHistPage=1;
+  // Préserver le focus/caret de la searchbar pendant les re-renders (chargement + résultats)
+  const qEl = document.getElementById('expe-hist-search');
+  const hadFocus = !!(qEl && document.activeElement === qEl);
+  const caret = (hadFocus && typeof qEl.selectionStart === 'number') ? [qEl.selectionStart, qEl.selectionEnd] : null;
+
+  set({expeDepartHistLoading:true});
+  try{
+    const qq=(S.expeDepartHistQ||'').trim();
+    const page=S.expeDepartHistPage||1;
+    const data=await api('/api/expe/departs/historique?q='+encodeURIComponent(qq)+'&page='+page+'&limit=50');
+    const rows=Array.isArray(data)?data:(data&&data.rows)||[];
+    set({
+      expeDepartHist:rows,
+      expeDepartHistTotal:data&&data.total!=null?data.total:rows.length,
+      expeDepartHistPage:data&&data.page!=null?data.page:page,
+      expeDepartHistPages:data&&data.pages!=null?data.pages:1,
+      expeDepartHistLoading:false
+    });
+  }catch(e){
+    set({expeDepartHistLoading:false});
+    toast(e.message||'Chargement impossible','error');
+  }
+  if(hadFocus){
+    requestAnimationFrame(()=>{
+      const ne = document.getElementById('expe-hist-search');
+      if(!ne) return;
+      try{
+        ne.focus();
+        if(caret){
+          const a=Math.min(caret[0]!=null?caret[0]:0, ne.value.length);
+          const b=Math.min(caret[1]!=null?caret[1]:a, ne.value.length);
+          ne.setSelectionRange(a,b);
+        }
+      }catch(e){}
+    });
+  }
+}
+function scheduleExpeHistSearch(){
+  if(_expeHistSearchT)clearTimeout(_expeHistSearchT);
+  _expeHistSearchT=setTimeout(()=>{loadExpeDepartHistorique(true);},380);
+}
+function expeHistChangePage(delta){
+  const pages=S.expeDepartHistPages||1;
+  const next=(S.expeDepartHistPage||1)+delta;
+  if(next<1||next>pages)return;
+  S.expeDepartHistPage=next;
+  void loadExpeDepartHistorique();
+}
+async function expeValiderDepart(id){
+  try{
+    await api('/api/expe/departs/'+id+'/valider',{method:'POST'});
+    toast('Départ validé — entrée dans l\'historique');
+    await loadExpeDepartJour();
+  }catch(e){toast(e.message||'Validation impossible','error');}
+}
+async function expeInvaliderDepart(id){
+  if(!confirm('Remettre ce départ dans le suivi du jour ?\n\nIl disparaîtra de l\'historique et pourra être modifié ou validé à nouveau.')) return;
+  try{
+    await api('/api/expe/departs/'+id+'/invalider',{method:'POST'});
+    toast('Départ remis dans le suivi du jour');
+    await loadExpeDepartHistorique();
+    if((S.expeDepartSubTab||'jour')==='jour') await loadExpeDepartJour();
+  }catch(e){toast(e.message||'Action impossible','error');}
+}
+
+function expeOpenDepartModal(prefill, mode){
+  const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
+  const src = prefill || {};
+  const srcDate = (src.date_enlevement||'') ? String(src.date_enlevement).slice(0,10) : '';
+  void loadExpePaletteTypes();
+  // En édition ou duplication : onglet manuel direct ; nouveau départ : onglet picker dossier
+  const isEdit = !!(mode==='edit' && src && src.id);
+  const initialTab = (mode==='new' && !prefill) ? 'dossier' : 'manuel';
+  if(initialTab==='dossier'){
+    void loadExpeDepartDossiers();
+  }
+  set({
+    expeDepartModalOpen:true,
+    expeDepartEditId: isEdit ? src.id : null,
+    expeDepartFormTab: initialTab,
+    expeDepartDossierQuery:'',
+    expeDepartDossierHi:-1,
+    expeDepartForm:{
+      date_enlevement: srcDate || dayVal,
+      affreteurs: src.affreteurs||'',
+      transporteur: src.transporteur||'',
+      client: src.client||'',
+      code_postal_destination: src.code_postal_destination||'',
+      ref_sifa: src.ref_sifa||'',
+      arc: src.arc||'',
+      no_cde_transport: src.no_cde_transport||'',
+      no_bl: src.no_bl||'',
+      type_palette_matiere_id: (src.type_colis||'').trim().toLowerCase()==='vrac'
+        ? '__vrac__'
+        : (src.type_palette_matiere_id!=null && src.type_palette_matiere_id!=='')
+          ? String(src.type_palette_matiere_id) : '',
+      nb_palette: (src.nb_palette!=null && src.nb_palette!=='') ? String(src.nb_palette) : '',
+      poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
+      date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
+      planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
+      palette_europe: src.palette_europe ? 1 : 0,
+    }
+  });
+}
+function expeCloseDepartModal(){
+  set({expeDepartModalOpen:false, expeDepartEditId:null, expeDepartFormTab:'dossier'});
+}
+
+// Charge la liste des dossiers disponibles pour le picker MyExpé
+async function loadExpeDepartDossiers(force){
+  if(S.expeDepartDossiersLoading) return;
+  if(!force && (S.expeDepartDossiers||[]).length) return;
+  set({expeDepartDossiersLoading:true});
+  try{
+    const data = await api('/api/expe/dossiers-disponibles');
+    const list = (data && Array.isArray(data.dossiers)) ? data.dossiers : [];
+    set({expeDepartDossiers:list, expeDepartDossiersLoading:false});
+  }catch(e){
+    set({expeDepartDossiersLoading:false});
+    toast(e.message||'Chargement des dossiers impossible','error');
+  }
+}
+
+// Filtre + tri pour le picker (recherche libre)
+function _expeFilterDossiers(q){
+  const list = S.expeDepartDossiers || [];
+  const term = (q||'').trim().toLowerCase();
+  if(!term) return list.slice();
+  const norm = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const lqNorm = norm(term);
+  return list.filter(d=>{
+    const fields = [
+      d.reference, d.client, d.ref_produit, d.description,
+      d.numero_of, d.machine_nom, d.date_livraison,
+    ];
+    return fields.some(f=>{
+      if(f==null||f==='') return false;
+      const s = String(f).toLowerCase();
+      return s.includes(term) || norm(s).includes(lqNorm);
+    });
+  });
+}
+
+// Au clic sur un dossier : pré-remplit le form et bascule onglet "Saisie manuelle"
+function expeSelectDossier(d){
+  if(!d) return;
+  const f = S.expeDepartForm || {};
+  // ARC = pe.reference (numéro de dossier). On surcharge toujours.
+  f.arc = d.reference || f.arc || '';
+  f.client = d.client || f.client || '';
+  f.ref_sifa = d.ref_produit || f.ref_sifa || '';
+  f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
+  f.planning_entry_id = d.id ? String(d.id) : '';
+  // Estimation nb palettes via fiche technique si dispo (cartons sol × hauteur ÷ ratio)
+  // Si pas de donnée fiche : laisser vide pour saisie manuelle
+  if(!f.nb_palette){
+    const nSol = parseFloat(d.ft_palette_nb_cartons_sol || d.ft_nb_au_sol || 0);
+    const nHaut = parseFloat(d.ft_palette_nb_cartons_hauteur || d.ft_nb_etage || 0);
+    if(nSol > 0 && nHaut > 0){
+      // Fiche technique donne 1 palette ; quantité réelle dépend de l'OF
+      f.nb_palette = '1';
+    }
+  }
+  // type_palette : si fiche technique donne palette_type connu, essayer de matcher la réf MyStock
+  if(!f.type_palette_matiere_id && d.ft_palette_type){
+    const pt = String(d.ft_palette_type||'').toLowerCase().trim();
+    const items = S.expePaletteTypes || [];
+    const match = items.find(m=>{
+      const ref = String(m.reference||'').toLowerCase();
+      const des = String(m.designation||'').toLowerCase();
+      return pt && (ref.includes(pt) || des.includes(pt) || pt.includes(ref));
+    });
+    if(match){
+      f.type_palette_matiere_id = String(match.id);
+      if(match.is_europe) f.palette_europe = 1;
+    }
+  }
+  set({expeDepartForm:f, expeDepartFormTab:'manuel'});
+  toast('Champs préremplis depuis le dossier '+(d.reference||''));
+}
+
+// Recherche dans le picker — re-render incrémental sans reconstruire la searchbar
+function _expeRefreshDossierPickerList(){
+  const list = document.getElementById('expe-picker-list-inner');
+  if(!list) return;
+  list.innerHTML = '';
+  _expeBuildDossierPickerItems(S.expeDepartDossierQuery).forEach(el=>list.appendChild(el));
+}
+
+function _expeBuildDossierPickerItems(q){
+  const filtered = _expeFilterDossiers(q);
+  if(!filtered.length){
+    const empty = document.createElement('div');
+    empty.className = 'expe-picker-empty';
+    empty.textContent = q ? ('Aucun résultat pour « '+q+' »')
+                          : (S.expeDepartDossiersLoading ? 'Chargement…' : 'Aucun dossier disponible');
+    return [empty];
+  }
+  const sectionLabel = (sec)=>{
+    if(sec==='en_cours') return 'En cours';
+    if(sec==='prochain') return 'Prochain en attente';
+    if(sec==='termine_recent') return 'Récemment terminés';
+    return 'Autres dossiers';
+  };
+  const sectionOrder = ['en_cours','prochain','termine_recent','autre'];
+  // Regrouper par section uniquement si pas de recherche active
+  const groups = {};
+  filtered.forEach(d=>{
+    const k = d.displayed_section || 'autre';
+    (groups[k] = groups[k]||[]).push(d);
+  });
+  const els = [];
+  sectionOrder.forEach(sec=>{
+    const arr = groups[sec];
+    if(!arr || !arr.length) return;
+    if(!q){
+      const lbl = document.createElement('div');
+      lbl.className = 'expe-picker-section';
+      lbl.textContent = sectionLabel(sec);
+      els.push(lbl);
+    }
+    arr.forEach(d=>{
+      const dossierBlocked = d.departs_count && d.departs_count > 0;
+      const ref = d.reference || '—';
+      const client = d.client || 'Client non renseigné';
+      const refProd = d.ref_produit || d.description || '';
+      const livr = d.date_livraison ? d.date_livraison.slice(0,10) : '';
+      const wrap = document.createElement('div');
+      wrap.className = 'expe-picker-item'+(sec==='en_cours'?' expe-picker-item--active':'');
+      wrap.onclick = ()=>expeSelectDossier(d);
+      const line1 = document.createElement('div');
+      line1.className = 'expe-picker-line1';
+      line1.innerHTML = '<span class="expe-picker-ref">'+escHtml(ref)+'</span>'
+                     + '<span class="expe-picker-sep">·</span>'
+                     + '<span class="expe-picker-client">'+escHtml(client)+'</span>';
+      wrap.appendChild(line1);
+      const line2 = document.createElement('div');
+      line2.className = 'expe-picker-line2';
+      const parts = [];
+      if(refProd) parts.push(escHtml(refProd));
+      if(d.machine_nom) parts.push(escHtml(d.machine_nom));
+      if(livr) parts.push('Livr. '+escHtml(livr));
+      line2.innerHTML = parts.join('  ·  ');
+      if(parts.length) wrap.appendChild(line2);
+      const meta = document.createElement('div');
+      meta.className = 'expe-picker-meta';
+      const statutLbl = d.statut==='en_cours'?'En cours'
+                      : d.statut==='termine'?'Terminé'
+                      : d.statut==='attente'?'En attente':(d.statut||'');
+      meta.innerHTML = '<span class="expe-picker-statut expe-picker-statut--'+escAttr(d.statut||'')+'">'+escHtml(statutLbl)+'</span>'
+                     + (dossierBlocked ? '<span class="expe-picker-warn">Déjà expédié ('+d.departs_count+')</span>' : '');
+      wrap.appendChild(meta);
+      els.push(wrap);
+    });
+  });
+  return els;
+}
+
+function renderExpeDepartModal(){
+  if(!S.expeDepartModalOpen) return null;
+  const dayVal=(S.expeDepartJourDate&&String(S.expeDepartJourDate).trim())||expeParisDayISO();
+  const f=S.expeDepartForm||{};
+  const isEdit = !!S.expeDepartEditId;
+  const formTab = S.expeDepartFormTab || (isEdit ? 'manuel' : 'dossier');
+
+  function mk(label,key,type,ph){
+    const i=h('input',{type:type||'text',placeholder:ph||'',value:(f[key]!=null?String(f[key]):''),name:key});
+    i.addEventListener('input',e=>{S.expeDepartForm[key]=e.target.value; expeScheduleSaveLocal();});
+    return h('div',{className:'expe-field'},h('label',null,label),i);
+  }
+
+  const paletteItems=S.expePaletteTypes||[];
+  const palSel=h('select',{name:'type_palette_matiere_id'});
+  palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
+  paletteItems.forEach(m=>{
+    const ref=(m.reference||'').trim();
+    const des=(m.designation||'').trim();
+    const lbl=ref?(des?ref+' — '+des:ref):('Réf. #'+m.id);
+    const opt=h('option',{value:String(m.id)},lbl);
+    if(String(f.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
+    palSel.appendChild(opt);
+  });
+  const vracOpt=h('option',{value:'__vrac__'},'Vrac (sans palette — UPS…)');
+  if(f.type_palette_matiere_id==='__vrac__') vracOpt.selected=true;
+  palSel.appendChild(vracOpt);
+  palSel.addEventListener('change',e=>{
+    S.expeDepartForm.type_palette_matiere_id=e.target.value;
+    expeScheduleSaveLocal();
+  });
+  const palField=h('div',{className:'expe-field'},
+    h('label',null,'Type de palette'),
+    palSel
+  );
+  if(!paletteItems.length && S.expePaletteTypesLoading){
+    palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},'Chargement des références…'));
+  }else if(!paletteItems.length){
+    palField.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'4px'}},
+      'Aucune référence palette active (MyStock > Matières premières).'));
+  }
+
+  const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)expeCloseDepartModal();});
+
+  const box=h('div',{className:'add-row-form',style:{maxWidth:'760px'}});
+  const closeBtn=h('button',{type:'button',className:'add-row-close',onClick:expeCloseDepartModal},'×');
+  const header=h('div',{className:'add-row-header'},
+    h('h3',null,isEdit?'Modifier un départ':'Ajouter un départ'),
+    h('div',{className:'badge',style:{marginLeft:'auto'}},'Jour : ',dayVal)
+  );
+
+  const form=h('form',{onSubmit:async(e)=>{
+    e.preventDefault();
+    if(S.expeDepartSubmitting) return;
+    const dateEnl = (S.expeDepartForm.date_enlevement||'').trim() || dayVal;
+    const body={
+      date_enlevement: dateEnl,
+      affreteurs:(S.expeDepartForm.affreteurs||'').trim()||null,
+      transporteur:(S.expeDepartForm.transporteur||'').trim()||null,
+      client:(S.expeDepartForm.client||'').trim()||null,
+      code_postal_destination:(S.expeDepartForm.code_postal_destination||'').trim()||null,
+      ref_sifa:(S.expeDepartForm.ref_sifa||'').trim()||null,
+      arc:(S.expeDepartForm.arc||'').trim()||null,
+      no_cde_transport:(S.expeDepartForm.no_cde_transport||'').trim()||null,
+      no_bl:(S.expeDepartForm.no_bl||'').trim()||null,
+      type_palette_matiere_id:(S.expeDepartForm.type_palette_matiere_id||'')==='__vrac__'?null:(S.expeDepartForm.type_palette_matiere_id||'').trim()||null,
+      type_colis:(S.expeDepartForm.type_palette_matiere_id||'')==='__vrac__'?'vrac':null,
+      nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
+      poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
+      date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null,
+      planning_entry_id:(S.expeDepartForm.planning_entry_id||'').trim()||null,
+      palette_europe: S.expeDepartForm.palette_europe ? 1 : 0
+    };
+    if(!body.date_enlevement){toast("Date d'enlèvement obligatoire",'error');return;}
+    set({expeDepartSubmitting:true});
+    try{
+      if(isEdit){
+        await api('/api/expe/departs/'+S.expeDepartEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        toast('Départ modifié');
+      }else{
+        await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        toast('Départ enregistré');
+      }
+      set({expeDepartSubmitting:false});
+      expeCloseDepartModal();
+      if((S.expeDepartSubTab||'jour')==='historique') await loadExpeDepartHistorique();
+      else await loadExpeDepartJour();
+    }catch(err){
+      set({expeDepartSubmitting:false});
+      toast(err.message||'Erreur','error');
+    }
+  }});
+
+  // Case à cocher palette Europe (modifiable manuellement)
+  const europeCheck = h('input',{type:'checkbox',id:'expe-form-pal-europe'});
+  europeCheck.checked = !!(f.palette_europe);
+  europeCheck.addEventListener('change',e=>{
+    S.expeDepartForm.palette_europe = e.target.checked ? 1 : 0;
+    expeScheduleSaveLocal();
+  });
+  const europeField = h('div',{className:'expe-field'},
+    h('label',null,'Palette Europe (consignée)'),
+    h('div',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'8px 0'}},
+      europeCheck,
+      h('label',{htmlFor:'expe-form-pal-europe',style:{fontSize:'12px',color:'var(--text2)',cursor:'pointer'}},
+        'Suivre le retour de cette palette dans l\'onglet Palettes Europe')
+    )
+  );
+
+  const fields=h('div',{className:'expe-fields'},
+    mk("Date d'enlèvement",'date_enlevement','date'),
+    mk('Affréteurs','affreteurs'),
+    mk('Transporteur','transporteur'),
+    mk('Client','client'),
+    mk('Code postal / destination','code_postal_destination'),
+    mk('Réf. SIFA','ref_sifa'),
+    mk('ARC','arc'),
+    mk('N° commande transporteur','no_cde_transport'),
+    mk('N° BL','no_bl'),
+    palField,
+    mk('Nombre de palettes','nb_palette','number','ex: 2'),
+    mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
+    mk('Date livraison (prévue)','date_livraison','date'),
+    europeField
+  );
+
+  // Onglets internes : "Depuis un dossier" / "Saisie manuelle" — masqués en édition
+  const tabsNav = !isEdit ? h('div',{className:'expe-form-tabs'},
+    h('button',{type:'button',
+      className:'expe-form-tab'+(formTab==='dossier'?' active':''),
+      onClick:()=>{
+        set({expeDepartFormTab:'dossier', expeDepartDossierQuery:'', expeDepartDossierHi:-1});
+        void loadExpeDepartDossiers();
+      }},
+      iconEl('folder',13),' Depuis un dossier'),
+    h('button',{type:'button',
+      className:'expe-form-tab'+(formTab==='manuel'?' active':''),
+      onClick:()=>set({expeDepartFormTab:'manuel'})},
+      iconEl('edit',13),' Saisie manuelle')
+  ) : null;
+
+  // Picker dossier (onglet "Depuis un dossier")
+  let pickerBody = null;
+  if(!isEdit && formTab==='dossier'){
+    const searchInp = h('input',{
+      type:'text',
+      id:'expe-picker-search',
+      className:'expe-picker-search',
+      placeholder:'Rechercher (réf dossier, client, réf produit, OF…)',
+      autoComplete:'off',
+      value:S.expeDepartDossierQuery||'',
+    });
+    searchInp.addEventListener('input',e=>{
+      S.expeDepartDossierQuery = e.target.value;
+      _expeRefreshDossierPickerList();
+    });
+    const listEl = h('div',{className:'expe-picker-list',id:'expe-picker-list-inner'});
+    requestAnimationFrame(()=>{
+      _expeRefreshDossierPickerList();
+      document.getElementById('expe-picker-search')?.focus();
+    });
+    pickerBody = h('div',{className:'expe-picker-wrap'},
+      h('div',{className:'expe-picker-hint'},
+        'Sélectionnez un dossier pour préremplir ARC, client, réf. SIFA, type et nb de palettes, livraison prévue. Vous pourrez ensuite ajuster manuellement.'),
+      searchInp,
+      listEl,
+      h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:'10px'}},
+        h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',padding:'6px 12px'},
+          onClick:()=>set({expeDepartFormTab:'manuel'})},
+          'Continuer en saisie manuelle →')
+      )
+    );
+  }
+
+  const actions=h('div',{className:'form-actions'},
+    h('button',{type:'button',className:'btn-ghost',onClick:expeCloseDepartModal},'Annuler'),
+    h('button',{type:'submit',className:'btn',disabled:!!S.expeDepartSubmitting},S.expeDepartSubmitting?'Enregistrement…':'Enregistrer le départ')
+  );
+
+  if(tabsNav) form.appendChild(tabsNav);
+  if(pickerBody) form.appendChild(pickerBody);
+  if(formTab==='manuel' || isEdit){
+    form.appendChild(fields);
+    form.appendChild(actions);
+  }
+  box.appendChild(closeBtn);
+  box.appendChild(header);
+  box.appendChild(form);
+  overlay.appendChild(box);
+  return overlay;
+}
+
+// Résolution couleur transporteur : JOIN DB en priorité, sinon lookup par nom dans T.list
+function trpColorFromRow(r){
+  if(r.transporteur_couleur)return r.transporteur_couleur;
+  const nom=(r.transporteur||'').trim().toLowerCase();
+  if(!nom)return '';
+  const t=(T.list||[]).find(x=>(x.nom||'').trim().toLowerCase()===nom);
+  return t?(t.couleur||''):'';
+}
+
+function expeDepartActsGrid(buttons,validerBtn){
+  const kids=(buttons||[]).filter(Boolean);
+  if(!kids.length&&!validerBtn) return null;
+  return h('div',{className:'expe-dep-actions-cell'},
+    kids.length?h('div',{className:'expe-dep-acts'},...kids):null,
+    validerBtn||null
+  );
+}
+
+// ── MyExpé : suivi des palettes Europe ────────────────────────
+async function loadExpePalettesEurope(){
+  if(S.app!=='expe')return;
+  if(S.expePalettesEuropeLoading) return;
+  set({expePalettesEuropeLoading:true});
+  try{
+    const params = new URLSearchParams();
+    if(S.expePalettesEuropeStatutFilter) params.set('statut', S.expePalettesEuropeStatutFilter);
+    if(S.expePalettesEuropeClientFilter) params.set('client', S.expePalettesEuropeClientFilter);
+    if(S.expePalettesEuropeQuery) params.set('q', S.expePalettesEuropeQuery);
+    const qs = params.toString();
+    const data = await api('/api/expe/palettes-europe'+(qs?'?'+qs:''));
+    set({expePalettesEuropeData:data, expePalettesEuropeLoading:false});
+  }catch(e){
+    set({expePalettesEuropeLoading:false});
+    toast(e.message||'Chargement palettes Europe impossible','error');
+  }
+}
+
+async function expeChangePaletteEuropeStatut(departId, statut, dateRetour){
+  try{
+    const body = {statut: statut};
+    if(dateRetour !== undefined) body.date_retour = dateRetour;
+    await api('/api/expe/departs/'+departId+'/palette-europe', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    toast('Statut palette mis à jour');
+    await loadExpePalettesEurope();
+  }catch(e){
+    toast(e.message||'Mise à jour impossible','error');
+  }
+}
+
+function _expePalEuropeStatutLabel(s){
+  if(s==='retournee') return 'Retournée';
+  if(s==='perdue') return 'Perdue';
+  return 'En attente';
+}
+
+function _expePalEuropeStatutBadge(s){
+  const lbl = _expePalEuropeStatutLabel(s);
+  const cls = 'expe-pal-eur-badge expe-pal-eur-badge--'+(s||'en_attente');
+  return h('span',{className:cls},lbl);
+}
+
+function renderExpePalettesEurope(){
+  const data = S.expePalettesEuropeData || {departs:[], recap_clients:[], totaux:{}};
+  const departs = data.departs || [];
+  const recap = data.recap_clients || [];
+  const tot = data.totaux || {};
+  const subTab = S.expePalEurSubTab || 'suivi';
+
+  // Sous-onglets
+  const subTabs = [
+    {key:'suivi', label:'Suivi', icon:'clipboard'},
+    {key:'recap', label:'Récap clients', icon:'users'},
+  ];
+  const subNav = h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
+    ...subTabs.map(t=>h('button',{
+      type:'button',
+      className:'nav-tab'+(subTab===t.key?' active':''),
+      onClick:()=>set({expePalEurSubTab:t.key})
+    },iconEl(t.icon,14),' ',t.label))
+  );
+
+  // Bandeau totaux (commun aux deux sous-onglets)
+  const totauxBlock = h('div',{className:'expe-pal-eur-totaux'},
+    h('div',{className:'expe-pal-eur-tot-card'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Total envoyées'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_envoyees||0))
+    ),
+    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--ok'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Retournées'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_retournees||0))
+    ),
+    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--warn'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'En attente'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_en_attente||0))
+    ),
+    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--bad'},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Perdues'),
+      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_perdues||0))
+    )
+  );
+
+  // Filtres
+  const statutSel = h('select',{
+    value:S.expePalettesEuropeStatutFilter||'',
+    onChange:e=>{
+      S.expePalettesEuropeStatutFilter = e.target.value;
+      void loadExpePalettesEurope();
+    }
+  });
+  ['','en_attente','retournee','perdue'].forEach(v=>{
+    const lbl = v===''?'Tous statuts':_expePalEuropeStatutLabel(v);
+    const opt = h('option',{value:v},lbl);
+    if((S.expePalettesEuropeStatutFilter||'')===v) opt.selected=true;
+    statutSel.appendChild(opt);
+  });
+
+  const searchInp = h('input',{
+    id:'expe-pal-eur-search',
+    type:'search',
+    placeholder:'Rechercher (client, ARC, BL…)',
+    value:S.expePalettesEuropeQuery||'',
+    style:{flex:'1',minWidth:'240px',padding:'8px 12px',borderRadius:'8px',
+      border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:'13px'}
+  });
+  let _palEurSearchT = null;
+  searchInp.addEventListener('input',e=>{
+    S.expePalettesEuropeQuery = e.target.value;
+    if(_palEurSearchT) clearTimeout(_palEurSearchT);
+    _palEurSearchT = setTimeout(()=>void loadExpePalettesEurope(), 380);
+  });
+
+  // Vue récap par client (cards)
+  const recapCards = recap.length ? h('div',{className:'expe-pal-eur-recap'},
+    ...recap.map(r=>{
+      const solde = (parseFloat(r.nb_pal_en_attente)||0);
+      return h('div',{className:'expe-pal-eur-recap-card'+(solde>0?' expe-pal-eur-recap-card--debt':'')},
+        h('div',{className:'expe-pal-eur-recap-client'},r.client||'—'),
+        h('div',{className:'expe-pal-eur-recap-row'},
+          h('span',{className:'expe-pal-eur-recap-lbl'},'Envoyées'),
+          h('span',{className:'expe-pal-eur-recap-val'},String(r.nb_pal_envoyees||0))
+        ),
+        h('div',{className:'expe-pal-eur-recap-row'},
+          h('span',{className:'expe-pal-eur-recap-lbl'},'Retournées'),
+          h('span',{className:'expe-pal-eur-recap-val expe-pal-eur-recap-val--ok'},String(r.nb_pal_retournees||0))
+        ),
+        h('div',{className:'expe-pal-eur-recap-row'},
+          h('span',{className:'expe-pal-eur-recap-lbl'},'Perdues'),
+          h('span',{className:'expe-pal-eur-recap-val expe-pal-eur-recap-val--bad'},String(r.nb_pal_perdues||0))
+        ),
+        h('div',{className:'expe-pal-eur-recap-row expe-pal-eur-recap-row--solde'},
+          h('span',{className:'expe-pal-eur-recap-lbl'},'En attente'),
+          h('span',{className:'expe-pal-eur-recap-val'+(solde>0?' expe-pal-eur-recap-val--warn':'')},String(solde))
+        ),
+        h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'11px',padding:'4px 8px',marginTop:'8px',width:'100%'},
+          onClick:()=>{S.expePalettesEuropeClientFilter = r.client || ''; void loadExpePalettesEurope();}
+        },'Filtrer ses départs')
+      );
+    })
+  ) : h('div',{style:{padding:'18px',color:'var(--muted)',fontSize:'13px',textAlign:'center'}},
+    'Aucune palette Europe enregistrée.');
+
+  // Tableau des départs palette Europe
+  const head = h('tr',null,
+    ...['Date enl.','Client','Transp.','ARC','N° BL','Pal.','Statut','Date retour','Note','Actions'].map(t=>h('th',null,t))
+  );
+  const bodyRows = departs.length ? departs.map(r=>{
+    const statut = r.palette_europe_statut || 'en_attente';
+    const noteInp = h('input',{
+      type:'text',
+      placeholder:'Note…',
+      value:r.palette_europe_note||'',
+      style:{width:'100%',padding:'4px 8px',fontSize:'11px',background:'var(--bg)',
+        border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
+    });
+    let _noteT = null;
+    noteInp.addEventListener('input',e=>{
+      const v = e.target.value;
+      if(_noteT) clearTimeout(_noteT);
+      _noteT = setTimeout(async()=>{
+        try{
+          await api('/api/expe/departs/'+r.id+'/palette-europe',{
+            method:'PATCH',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({note: v})
+          });
+        }catch(e){ /* silencieux */ }
+      }, 800);
+    });
+    const dateInp = h('input',{
+      type:'date',
+      value:(r.palette_europe_date_retour||'').slice(0,10),
+      style:{padding:'4px 8px',fontSize:'12px',background:'var(--bg)',
+        border:'1px solid var(--border)',borderRadius:'6px',color:'var(--text)'}
+    });
+    dateInp.addEventListener('change',async(e)=>{
+      const v = e.target.value;
+      try{
+        await api('/api/expe/departs/'+r.id+'/palette-europe',{
+          method:'PATCH',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({date_retour: v, statut: v ? 'retournee' : statut})
+        });
+        toast('Date retour enregistrée');
+        await loadExpePalettesEurope();
+      }catch(e){ toast(e.message||'Erreur','error'); }
+    });
+    return h('tr',null,
+      h('td',null,(r.date_enlevement||'').slice(0,10)),
+      h('td',null,r.client||'—'),
+      h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+      h('td',{style:{textAlign:'right',fontWeight:'700'}},r.nb_palette!=null?String(r.nb_palette):'—'),
+      h('td',null,_expePalEuropeStatutBadge(statut)),
+      h('td',null,dateInp),
+      h('td',{style:{minWidth:'140px'}},noteInp),
+      h('td',{className:'expe-pal-eur-acts-cell'},
+        h('div',{className:'expe-pal-eur-acts'},
+          statut!=='retournee' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
+            title:'Marquer comme retournée (date du jour)',
+            onClick:()=>expeChangePaletteEuropeStatut(r.id,'retournee',expeParisDayISO())
+          },iconEl('check-circle',14)) : null,
+          statut!=='perdue' ? h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+            title:'Marquer comme perdue',
+            onClick:()=>{
+              if(!confirm('Marquer cette palette comme perdue ?')) return;
+              expeChangePaletteEuropeStatut(r.id,'perdue', null);
+            }
+          },iconEl('x',14)) : null,
+          statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
+            title:'Réinitialiser le statut (en attente)',
+            onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
+          },iconEl('rotate-ccw',13)) : null
+        )
+      )
+    );
+  }) : [h('tr',null,h('td',{colSpan:10,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
+    S.expePalettesEuropeLoading?'Chargement…':'Aucun départ palette Europe pour ces filtres'))];
+
+  // Bloc Suivi : filtre + tableau détaillé
+  const suiviBlock = h('div',{className:'card'},
+    h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+      h('h3',{className:'expe-mobile-hide-head'},'Départs détaillés'),
+      h('div',{style:{display:'flex',gap:'10px',alignItems:'center',marginLeft:'auto',flexWrap:'wrap'}},
+        statutSel,
+        searchInp,
+        S.expePalettesEuropeClientFilter ? h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',padding:'4px 10px'},
+          onClick:()=>{S.expePalettesEuropeClientFilter=''; void loadExpePalettesEurope();}
+        },'× Filtre : '+S.expePalettesEuropeClientFilter) : null
+      )
+    ),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std expe-departs-table'},
+        h('thead',null,head),
+        h('tbody',null,...bodyRows)
+      )
+    )
+  );
+
+  // Bloc Récap : cards par client
+  const recapBlock = h('div',{className:'card'},
+    h('div',{className:'card-header'},
+      h('h3',{className:'expe-mobile-hide-head'},'Récap par client'),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)',marginLeft:'auto'}},
+        recap.length+' client'+(recap.length>1?'s':'')+' avec palette Europe')
+    ),
+    h('div',{style:{padding:'14px 18px'}}, recapCards)
+  );
+
+  return h('div',null,
+    subNav,
+    totauxBlock,
+    subTab==='recap' ? recapBlock : suiviBlock
+  );
+}
+
+function renderExpeSuiviDeparts(){
+  const btnBarStyle={display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'};
+  const btnPairStyle={
+    minWidth:'160px',
+    padding:'10px 16px',
+    fontSize:'13px',
+    borderRadius:'10px',
+    fontWeight:'800',
+    whiteSpace:'nowrap',
+    display:'inline-flex',
+    alignItems:'center',
+    justifyContent:'center',
+    gap:'8px',
+    lineHeight:1
+  };
+  const topBar=h('div',{className:'card',style:{marginBottom:'12px'}},
+    h('div',{className:'card-header',style:{display:'flex',justifyContent:'flex-start',alignItems:'center',gap:'12px',flexWrap:'wrap'}},
+      h('h3',{className:'expe-mobile-hide-head'},'Départs programmés'),
+      expeCanWrite()?h('div',{style:btnBarStyle},
+        h('button',{className:'btn',type:'button',style:btnPairStyle,onClick:()=>expeOpenDepartModal(null,'new')},iconEl('plus',14),' Ajouter')
+      ):null
+    )
+  );
+  const rows=S.expeDepartList||[];
+  const head=h('tr',null,
+    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Type pal.','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
+  );
+  function formatDateFr(iso){
+    if(!iso||iso.length<10)return iso||'—';
+    const d=new Date(iso+'T00:00:00');
+    const jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+    const mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()]+' '+d.getFullYear();
+  }
+  let prevDate=null;
+  const bodyRows=[];
+  rows.forEach(r=>{
+    const dateEnl=(r.date_enlevement||'').slice(0,10);
+    if(dateEnl!==prevDate){
+      bodyRows.push(
+        h('tr',{className:'expe-day-sep-row'},
+          h('td',{colSpan:14,className:'expe-day-sep-cell'},
+            h('span',{className:'expe-day-sep-label'},formatDateFr(dateEnl))
+          )
+        )
+      );
+      prevDate=dateEnl;
+    }
+    bodyRows.push(h('tr',null,
+      h('td',null,dateEnl),
+      h('td',null,r.affreteurs||'—'),
+      h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
+      h('td',null,r.client||'—'),
+      h('td',{style:{maxWidth:'140px',fontSize:'12px'}},r.code_postal_destination||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+      h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
+      h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
+      h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
+      h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+      expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
+        expeDepartActsGrid([
+          r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+            title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
+            onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(14)):null,
+          (r.code_postal_destination&&(r.poids_total_kg||r.nb_palette))?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
+            title:'Comparer les tarifs des transporteurs pour ce départ',
+            onClick:()=>ouvrirComparateurDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeCompareIcon(14)):null,
+          h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
+            onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+          h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
+            onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+          h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ',onClick:async()=>{
+            if(!confirm('Supprimer ce départ ?')) return;
+            try{
+              await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+              toast('Départ supprimé');
+              await loadExpeDepartJour();
+            }catch(e){toast(e.message||'Suppression impossible','error');}
+          }},iconEl('trash',14))
+        ],h('button',{className:'btn expe-dep-valider-btn',type:'button',
+          title:'Valider ce départ et l\'archiver dans l\'historique',
+          onClick:()=>expeValiderDepart(r.id)},'Valider'))
+      ):h('td',null,'—')
+    ));
+  });
+  const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  const listCard=h('div',{className:'card'},
+    h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
+    h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
+  );
+  return h('div',null,topBar,listCard);
+}
+
+function renderExpeHistoriqueDeparts(){
+  const qInp=h('input',{
+    id:'expe-hist-search',
+    type:'search',
+    placeholder:'Réf. SIFA, client, ARC, BL, type palette, transporteur…',
+    value:S.expeDepartHistQ||'',
+    style:{width:'100%',maxWidth:'560px',padding:'10px 12px',borderRadius:'8px',border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',marginBottom:'12px'},
+    onInput:e=>{
+      // Ne pas déclencher un render à chaque caractère (sinon perte de focus).
+      S.expeDepartHistQ = e.target.value;
+      scheduleExpeHistSearch();
+    }
+  });
+  const rows=S.expeDepartHist||[];
+  const total=S.expeDepartHistTotal||0;
+  const page=S.expeDepartHistPage||1;
+  const pages=S.expeDepartHistPages||1;
+  const limit=50;
+  const from=total===0?0:(page-1)*limit+1;
+  const to=Math.min(page*limit,total);
+  const head=h('tr',null,
+    ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Type pal.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
+  );
+  const body=rows.length?rows.map(r=>h('tr',null,
+    h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'}},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
+    h('td',null,(r.date_enlevement||'').slice(0,10)),
+    h('td',null,r.client||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
+    h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
+    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
+    h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
+    h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
+    h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+    expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
+      expeDepartActsGrid([
+        h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
+          onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
+        h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
+          onClick:()=>expeOpenDepartModal(r,'edit')},iconEl('edit',14)),
+        h('button',{className:'btn-danger expe-dep-ab',type:'button',title:'Supprimer définitivement ce départ de l\'historique',onClick:async()=>{
+          if(!confirm('Supprimer ce départ ?')) return;
+          try{
+            await api('/api/expe/departs/'+r.id,{method:'DELETE'});
+            toast('Départ supprimé');
+            await loadExpeDepartHistorique();
+          }catch(e){toast(e.message||'Suppression impossible','error');}
+        }},iconEl('trash',14))
+      ],
+      h('button',{className:'btn expe-dep-invalider-btn',type:'button',
+        title:'Annuler la validation et remettre ce départ dans le suivi du jour',
+        onClick:()=>void expeInvaliderDepart(r.id)},'Invalider'))
+    ):h('td',null,'—')
+  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+  const pager=h('div',{className:'expe-hist-pager'},
+    h('span',{className:'page-info'},
+      total===0?'Aucun résultat':(from+'–'+to+' / '+total.toLocaleString('fr')+(pages>1?' · page '+page+'/'+pages:''))
+    ),
+    h('button',{type:'button',className:'page-btn',disabled:page<=1,onClick:()=>expeHistChangePage(-1)},'‹ Précédent'),
+    h('button',{type:'button',className:'page-btn',disabled:page>=pages,onClick:()=>expeHistChangePage(1)},'Suivant ›')
+  );
+  return h('div',null,
+    h('div',{className:'card',style:{marginBottom:'12px',padding:'14px 18px'}},
+      h('h3',{style:{fontSize:'14px',fontWeight:'700',marginBottom:'8px'}},'Recherche'),
+      h('div',{className:'expe-help',style:{marginBottom:'8px'}},'Mots séparés par des espaces : tous doivent être trouvés (ref., client, ARC, BL, etc.). Insensible à la casse. Résultats paginés par 50.'),
+      qInp
+    ),
+    h('div',{className:'card'},
+      h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Historique des départs validés')),
+      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-hist-table'},h('thead',null,head),h('tbody',null,...body))),
+      pager
+    )
+  );
+}
+
+function renderExpeSuiviDepartsWithSubtabs(){
+  const sub=S.expeDepartSubTab||'jour';
+  const tabs=[
+    {key:'jour',label:'Départs programmés',icon:'clipboard'},
+    {key:'historique',label:'Historique',icon:'folder'},
+  ];
+  const subNav=h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
+    ...tabs.map(t=>h('button',{
+      type:'button',
+      className:'nav-tab'+(sub===t.key?' active':''),
+      onClick:()=>set({expeDepartSubTab:t.key})
+    },iconEl(t.icon,14),' ',t.label))
+  );
+  const body=sub==='historique'?renderExpeHistoriqueDeparts():renderExpeSuiviDeparts();
+  // Modal monté au niveau parent : reste accessible quel que soit le sous-onglet
+  // (sinon, modifier une ligne depuis l'Historique forçait à revenir sur "Départs du jour").
+  return h('div',null,subNav,body,renderExpeDepartModal());
+}
+
+function renderExpe(){
+  const isLight=document.body.classList.contains('light');
+  if(S.expeTab==='historique_departs'){
+    S.expeTab='suivi_departs';
+    S.expeDepartSubTab='historique';
+  }
+  if(S.expeTab==='dashboard')S.expeTab='suivi_departs';
+  const tab=S.expeTab||'suivi_departs';
+  const sub=S.expeDepartSubTab||'jour';
+  const loadKey=tab==='suivi_departs'?tab+'_'+sub:tab;
+  if(loadKey!==_expeLastRenderedInnerTab){
+    _expeLastRenderedInnerTab=loadKey;
+    if(tab==='suivi_departs'){
+      if(!T.list.length&&!T.loading)void loadTransporteurs();
+      if(sub==='jour')void loadExpeDepartJour();
+      else void loadExpeDepartHistorique();
+    }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='prospects'){void chargerProspects();}
+    else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
+    else if(tab==='palettes_europe'){void loadExpePalettesEurope();}
+  }
+
+  const sidebar=h('nav',{className:'sidebar'},
+    h('div',{className:'logo'},
+      h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
+      h('div',{className:'logo-sub'},'by SIFA')
+    ),
+    // Sections collapsibles
+    (()=>{
+      const SECTIONS = [
+        { key:'ops', label:'Opérations', items:[
+          {tab:'suivi_departs',  ico:'clipboard', label:'Départs'},
+          {tab:'palettes_europe',ico:'pallet',    label:'Palettes Europe'},
+        ]},
+        { key:'prep', label:'Préparation envoi', items:[
+          {tab:'comparateur',ico:'sliders',   label:'Comparateur tarifs'},
+          {tab:'devis',      ico:'mail',      label:'Devis transporteurs'},
+          {tab:'poids',      ico:'calculator',label:'Calcul poids'},
+        ]},
+        { key:'ref', label:'Référentiel', items:[
+          {tab:'transporteurs',ico:'truck',label:'Transporteurs'},
+          {tab:'prospects',    ico:'users',label:'Prospects'},
+        ]},
+      ];
+      const lsKey = (k)=>'mysifa.expe.section.'+k;
+      const isCollapsed = (k)=>{
+        try{ return localStorage.getItem(lsKey(k)) === 'collapsed'; }catch(e){ return false; }
+      };
+      const toggleSection = (k)=>{
+        try{
+          const cur = isCollapsed(k);
+          localStorage.setItem(lsKey(k), cur?'expanded':'collapsed');
+        }catch(e){}
+        render();
+      };
+      const wrap = h('div',{className:'expe-sidebar-sections'});
+      SECTIONS.forEach(sec=>{
+        const collapsed = isCollapsed(sec.key);
+        const hasActive = sec.items.some(it=>it.tab===tab);
+        const header = h('button',{
+          type:'button',
+          className:'expe-sec-header'+(collapsed?' collapsed':'')+(hasActive?' has-active':''),
+          onClick:()=>toggleSection(sec.key),
+          'aria-expanded': String(!collapsed)
+        },
+          h('span',{className:'expe-sec-chev'},iconEl(collapsed?'chevron-right':'chevron-down',12)),
+          h('span',{className:'expe-sec-label'},sec.label)
+        );
+        wrap.appendChild(header);
+        if(!collapsed){
+          const body = h('div',{className:'expe-sec-body'});
+          sec.items.forEach(it=>{
+            body.appendChild(
+              h('button',{
+                className:'nav-btn'+(tab===it.tab?' active':''),
+                onClick:()=>set({expeTab:it.tab})
+              }, iconEl(it.ico,15), '  ', it.label)
+            );
+          });
+          wrap.appendChild(body);
+        }
+      });
+      return wrap;
+    })(),
+    renderExpePlanningNav(),
+    h('div',{className:'sidebar-bottom'},
+      h('button',{className:'nav-btn back-mysifa',onClick:()=>{window.location.href='/'}},
+        '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      ),
+      sidebarUserChip(S.user),
+      (()=>{
+        const b=h('button',{className:'support-btn',title:'Contacter le support',onClick:()=>set({contactOpen:true})});
+        const ico=h('span',{className:'support-ico'});
+        try{ico.innerHTML=(window.MySifaSupport&&typeof window.MySifaSupport.iconSvg==='function')?window.MySifaSupport.iconSvg():'';}catch(e){ico.innerHTML='';}
+        b.appendChild(ico);b.appendChild(h('span',null,'Contacter le support'));return b;
+      })(),
+      h('button',{className:'theme-btn',onClick:()=>{MySifaTheme.toggleMode();render();}},
+        h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
+        h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
+      ),
+      h('button',{className:'logout-btn',onClick:doLogout},iconEl('log-out',14),' Déconnexion')
+    )
+  );
+  const topbar=h('div',{className:'mobile-topbar'},
+    h('button',{type:'button',className:'mobile-menu-btn',onClick:toggleSidebar,'aria-label':'Menu'},iconEl('menu',20)),
+    h('div',null,
+      h('div',{className:'mobile-topbar-title'},'MyExpé'),
+      h('div',{className:'mobile-topbar-sub'},
+        tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
+        tab==='palettes_europe'?'Suivi des palettes Europe consignées':
+        tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
+    ),
+    h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
+  );
+
+  const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
+    tab==='palettes_europe'?renderExpePalettesEurope():
+    tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
+    tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
+    renderExpeComparateur();
+  // Motion : cascade d'entree au changement d'onglet uniquement. On pose
+  // data-page-enter sur la .container (topbar, h1, sous-titre, contenu
+  // cascadent ensemble) — effet plus visible que sur le seul wrapper du tab.
+  const _moExpeKey=tab+'|'+(tab==='suivi_departs'?sub:'');
+  const _moExpeEnter=(window._moExpeLastKey!==_moExpeKey);
+  window._moExpeLastKey=_moExpeKey;
+  // 2e niveau : data-page-enter sur le contenu du tab — les sous-onglets et
+  // les cartes internes cascadent en parallele de la cascade .container.
+  if(_moExpeEnter && content && content.nodeType===1){
+    try{ content.setAttribute('data-page-enter',''); }catch(_){}
+  }
+  const contentWrap=content;
+
+  return h('div',null,
+    S.sidebarOpen?h('div',{className:'sidebar-overlay',onClick:closeSidebar}):null,
+    h('div',{className:'app'},
+      sidebar,
+      h('main',{className:'main'},
+        h('div',Object.assign({className:'container'},_moExpeEnter?{'data-page-enter':''}:{},(tab==='suivi_departs'||tab==='palettes_europe')?{style:{maxWidth:'1600px'}}:{}),
+          topbar,
+          h('h1',null,'MyExpé'),
+          !expeCanWrite()?h('div',{className:'readonly-notice',style:{marginBottom:'12px'}},iconEl('eye',13),' Lecture seule — consultation des départs, transporteurs et délais'):null,
+          h('div',{className:'subtitle'},
+            tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
+              :'Enregistrement des enlèvements et validation vers l\'historique')
+            :tab==='palettes_europe'?'Suivi des palettes Europe consignées — quels clients, combien, et combien sont revenues'
+            :tab==='comparateur'?'Comparaison des transporteurs selon les grilles tarifaires actives en base'
+            :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
+            :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'
+            :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
+            :'Référentiel transporteurs, zones et tarifs'),
+          contentWrap
+        )
+      )
+    ),
+    renderExpeTranspPanel(),
+    renderExpeTransporteurModal(),
+    renderExpeDevisModal(),
+    S.expeShowContacts?renderExpeContactModal():null
+  );
+}
+"""

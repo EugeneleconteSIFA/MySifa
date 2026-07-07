@@ -3183,8 +3183,18 @@ async def create_saisie_stock(request: Request):
         if code in _STOCK_CODES_PF:
             type_mvt = _STOCK_CODES_PF[code]
             produit_id = body.get("produit_id")
+            produit_ref_raw = (body.get("produit_reference") or "").strip()
+            if not produit_id and produit_ref_raw:
+                # Resolution reference -> id (recherche exacte, case-insensitive)
+                row_p = conn.execute(
+                    "SELECT id FROM produits WHERE LOWER(TRIM(reference)) = LOWER(TRIM(?)) LIMIT 1",
+                    (produit_ref_raw,),
+                ).fetchone()
+                if not row_p:
+                    raise HTTPException(404, f"Produit introuvable : {produit_ref_raw}")
+                produit_id = int(row_p["id"])
             if not produit_id:
-                raise HTTPException(400, "produit_id obligatoire pour EP/SP")
+                raise HTTPException(400, "produit_id ou produit_reference obligatoire pour EP/SP")
             try:
                 produit_id = int(produit_id)
             except (TypeError, ValueError):
@@ -3265,8 +3275,17 @@ async def create_saisie_stock(request: Request):
         # ── EM / SM : matieres premieres via mp_mouvements ────────────────────
         type_mvt = _STOCK_CODES_MP[code]
         matiere_id = body.get("matiere_id")
+        matiere_ref_raw = (body.get("matiere_reference") or "").strip()
+        if not matiere_id and matiere_ref_raw:
+            row_m = conn.execute(
+                "SELECT id FROM matieres_premieres WHERE LOWER(TRIM(reference)) = LOWER(TRIM(?)) AND actif=1 LIMIT 1",
+                (matiere_ref_raw,),
+            ).fetchone()
+            if not row_m:
+                raise HTTPException(404, f"Matiere introuvable : {matiere_ref_raw}")
+            matiere_id = int(row_m["id"])
         if not matiere_id:
-            raise HTTPException(400, "matiere_id obligatoire pour EM/SM")
+            raise HTTPException(400, "matiere_id ou matiere_reference obligatoire pour EM/SM")
         try:
             matiere_id = int(matiere_id)
         except (TypeError, ValueError):
