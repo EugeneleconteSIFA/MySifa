@@ -75,6 +75,7 @@ from app.web.qualite_page import router as qualite_page_router
 from app.routers.pwa import router as pwa_router
 from app.routers.push import router as push_router
 from app.web.maintenance_page import router as maintenance_page_router
+from app.routers.maintenance_tasks import router as maintenance_tasks_router
 
 
 @asynccontextmanager
@@ -344,6 +345,7 @@ app.include_router(qualite_page_router)
 app.include_router(pwa_router)
 app.include_router(push_router)
 app.include_router(maintenance_page_router)
+app.include_router(maintenance_tasks_router)
 
 
 @app.get("/healthz", include_in_schema=False)

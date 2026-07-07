@@ -1,24 +1,65 @@
 """MySifa — Page Maintenance
 Route : /maintenance
-Accès strict : superadmin + utilisateur d'identifiant `loic.gognau`
+
+Contrôle d'accès (depuis phase multi-rôle) :
+- Admin (accès complet) : superadmin, direction, administration.
+- Opérateur (vue "Mes tâches") : rôle `fabrication`, uniquement quand le flag
+  global `MAINTENANCE_OPEN_BETA` est activé dans .env. Sert à ouvrir
+  progressivement le module aux opérateurs sur v1 (staging) avant la promotion
+  en prod, sans exposer l'interface encore incomplète à toute l'usine.
+- Whitelist historique `MAINTENANCE_ALLOWED_IDENTS` conservée en secours : un
+  ident listé conserve l'accès complet (rôle "admin") même si son rôle n'est
+  pas dans la liste admin. Utile pour donner un accès ponctuel sans changer
+  le rôle en base.
+
+La distinction admin/opérateur pilotera l'UI dans la branche
+`feature/maintenance-roles-ui` (sidebar réduite, vue liste des tâches,
+formulaire de saisie). Sur cette branche db-only, l'UI reste identique et
+tout accès autorisé voit la vue admin actuelle.
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from typing import Optional
 
-from app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_user, effective_role
 from app.web.access_denied import access_denied_response
-from config import APP_VERSION
+from config import (
+    APP_VERSION,
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION,
+    ROLE_FABRICATION,
+    MAINTENANCE_OPEN_BETA,
+)
 
 MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
 
+_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
+
+
+def _get_maintenance_role(user: dict) -> Optional[str]:
+    """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
+
+    - 'admin'    : superadmin, direction, administration, ou ident whitelisté.
+    - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
+    - None       : pas d'accès (déclencher access_denied_response).
+    """
+    if not user:
+        return None
+    ident = str(user.get("identifiant") or "").strip().lower()
+    if ident in MAINTENANCE_ALLOWED_IDENTS:
+        return "admin"
+    role = effective_role(user)
+    if role in _MAINTENANCE_ADMIN_ROLES:
+        return "admin"
+    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
+        return "operator"
+    return None
+
 
 def _has_maintenance_access(user: dict) -> bool:
-    if not user:
-        return False
-    if user.get("role") == "superadmin":
-        return True
-    ident = str(user.get("identifiant") or "").strip().lower()
-    return ident in MAINTENANCE_ALLOWED_IDENTS
+    """Compat : True dès que l'user a un rôle maintenance quelconque."""
+    return _get_maintenance_role(user) is not None
 
 
 router = APIRouter()

@@ -5565,6 +5565,72 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 149, "maintenance_docs_table")
 
+    # v151 — Tâches de maintenance assignées : une ligne = une occurrence
+    # concrète d'une opération de maintenance (contrôle ou intervention) à
+    # réaliser sur une machine, à une date donnée, par un opérateur donné.
+    # L'admin maintenance (Loïc) crée ces tâches depuis la vue Planning et les
+    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`, si le flag
+    # MAINTENANCE_OPEN_BETA est actif) les voient dans leur vue « Mes tâches »
+    # et les complètent en fin de journée (durée réelle, pièces changées,
+    # observations, photos, statut final).
+    #
+    # `source` distingue les tâches planifiées à l'avance (`planifie`, cas
+    # standard) des interventions non planifiées déclarées à la volée par un
+    # opérateur (`non_planifie`, ex. panne machine survenue en cours de session).
+    #
+    # `statut` suit le cycle de vie : a_faire → en_cours → termine (ou reporte
+    # si l'opérateur ne peut pas la faire aujourd'hui).
+    #
+    # FK sur `maintenance_codes(code)` sans ON DELETE CASCADE : si un code est
+    # supprimé côté paramètres, la contrainte empêchera la suppression tant que
+    # des tâches y font référence (à condition que PRAGMA foreign_keys=ON), ce
+    # qui protège l'historique. À terme on ajoutera plutôt un flag `archived`
+    # sur maintenance_codes pour désactiver un code sans casser l'historique.
+    #
+    # `operator_id` est nullable : permet de créer une tâche non encore
+    # assignée dans le planning (poche à distribuer).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=151 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date_prevue TEXT NOT NULL,
+                code TEXT NOT NULL,
+                machine TEXT NOT NULL,
+                operator_id INTEGER,
+                statut TEXT NOT NULL DEFAULT 'a_faire',
+                source TEXT NOT NULL DEFAULT 'planifie',
+                duree_reelle_min INTEGER,
+                pieces_changees TEXT,
+                observations TEXT,
+                photos_json TEXT,
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                done_at TEXT,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+                FOREIGN KEY (operator_id) REFERENCES users(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_op_date "
+            "ON maintenance_tasks(operator_id, date_prevue)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_date_machine "
+            "ON maintenance_tasks(date_prevue, machine)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_code "
+            "ON maintenance_tasks(code)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_statut "
+            "ON maintenance_tasks(statut)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 151, "maintenance_tasks_table")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
