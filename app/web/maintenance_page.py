@@ -937,6 +937,14 @@ body[data-maint-role="operator"] .content{display:none !important}
               </select>
             </div>
             <div class="filter-group">
+              <label for="filt-controles-conformite">Conformité</label>
+              <select id="filt-controles-conformite" class="filter-input" onchange="renderCtrl()">
+                <option value="">Toutes les réponses</option>
+                <option value="nc">Non-conformes uniquement</option>
+                <option value="ok">Conformes uniquement</option>
+              </select>
+            </div>
+            <div class="filter-group">
               <label for="filt-controles-date-from">Du</label>
               <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du">
             </div>
@@ -4411,15 +4419,16 @@ function sortCtrl(field){
 function getCtrlFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
   return {
-    type:     v('filt-controles-type'),
-    operateur:v('filt-controles-operateur'),
-    machine:  v('filt-controles-machine'),
-    dateFrom: v('filt-controles-date-from'),
-    dateTo:   v('filt-controles-date-to'),
+    type:      v('filt-controles-type'),
+    operateur: v('filt-controles-operateur'),
+    machine:   v('filt-controles-machine'),
+    dateFrom:  v('filt-controles-date-from'),
+    dateTo:    v('filt-controles-date-to'),
+    conformite:v('filt-controles-conformite'),
   };
 }
 function resetCtrlFilters(){
-  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+  ['type','operateur','machine','date-from','date-to','conformite'].forEach(k => {
     const el = document.getElementById('filt-controles-' + k);
     if(el) el.value = '';
   });
@@ -4754,11 +4763,14 @@ function _ackHasNonConformite(c){
     const it = meta.checklist_items[i];
     if(!it || it.type === 'value') continue;
     const ncSet = Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : [];
-    if(!ncSet.length) continue;
+    const otherIsNc = !!it.other_is_nc;
     const r = resp[String(i)];
     if(!Array.isArray(r)) continue;
     for(const sel of r){
-      if(ncSet.indexOf(String(sel || '').trim()) !== -1) return true;
+      const s = String(sel || '').trim();
+      if(ncSet.indexOf(s) !== -1) return true;
+      // "Autre" traité comme NC si l'admin l'a explicitement demandé
+      if(otherIsNc && s === 'Autre') return true;
     }
   }
   return false;
@@ -4788,6 +4800,11 @@ function renderCtrl(){
       const d = (c.date_saisie || '').slice(0,10);
       if(f.dateFrom && d < f.dateFrom) return false;
       if(f.dateTo && d > f.dateTo) return false;
+    }
+    if(f.conformite){
+      const isNc = _ackHasNonConformite(c);
+      if(f.conformite === 'nc' && !isNc) return false;
+      if(f.conformite === 'ok' && isNc)  return false;
     }
     if(!_matchPointFilters(c)) return false;
     return true;

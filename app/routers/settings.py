@@ -1765,6 +1765,11 @@ def _validate_alert_params(params: dict) -> dict:
         # réponses configurées, et peut compléter avec une explication libre
         # (stockée dans responses["<idx>_other"] lors de l'ack).
         allow_other = bool(it.get("allow_other", False))
+        # other_is_nc : si true (uniquement pertinent quand allow_other), la
+        # sélection de "Autre" par l'opérateur marque la ligne comme non
+        # conforme dans l'historique, au même titre qu'une entrée de
+        # nc_responses.
+        other_is_nc = bool(it.get("other_is_nc", False)) and allow_other
         # nc_responses : sous-ensemble des réponses proposées qui, lorsqu'elles
         # sont cochées par l'opérateur, marquent la ligne d'ack comme "non
         # conforme" dans l'historique. Défini librement par l'admin lors de la
@@ -1784,6 +1789,7 @@ def _validate_alert_params(params: dict) -> dict:
         clean_items.append({"type": "choice", "label": label,
                             "responses": clean_responses, "multi": multi,
                             "allow_other": allow_other,
+                            "other_is_nc": other_is_nc,
                             "nc_responses": clean_nc})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
@@ -3026,6 +3032,7 @@ def maintenance_alert_acks_list(request: Request):
                             entry["responses"] = it.get("responses") or []
                             entry["multi"] = bool(it.get("multi", True))
                             entry["allow_other"] = bool(it.get("allow_other", False))
+                            entry["other_is_nc"] = bool(it.get("other_is_nc", False))
                             entry["nc_responses"] = it.get("nc_responses") or []
                         clean.append(entry)
             alerts_meta[str(mr["id"])] = {"checklist_items": clean}

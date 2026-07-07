@@ -3893,6 +3893,7 @@ function _alertDefaults(existing) {
       responses: responses.length ? responses : ['Conforme'],
       multi: (it && it.multi === false) ? false : true,
       allow_other: !!(it && it.allow_other),
+      other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
     };
   });
@@ -4073,10 +4074,27 @@ function _afChecklistCardBody(item) {
     + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
     + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
     + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
+    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' onchange="_afOnOtherToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
     +   '<span>Ajouter une réponse <strong style="color:var(--text)">« Autre »</strong> avec zone d\'explication optionnelle</span>'
     + '</label>'
+    + '<label class="af-cl-other-nc-lbl" style="display:' + ((item && item.allow_other) ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:4px;margin-left:22px;cursor:pointer;font-size:12px;color:var(--text2)">'
+    +   '<input type="checkbox" class="af-cl-other-nc"' + ((item && item.other_is_nc) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>Traiter <strong style="color:var(--text)">« Autre »</strong> comme une <strong style="color:var(--danger)">non-conformité</strong></span>'
+    + '</label>'
     + '</div>';
+}
+
+function _afOnOtherToggle(cb){
+  const body = cb.closest('.af-cl-body');
+  if(!body) return;
+  const ncLbl = body.querySelector('.af-cl-other-nc-lbl');
+  if(!ncLbl) return;
+  if(cb.checked){ ncLbl.style.display = 'flex'; }
+  else {
+    ncLbl.style.display = 'none';
+    const inp = ncLbl.querySelector('.af-cl-other-nc');
+    if(inp) inp.checked = false;
+  }
 }
 
 function _afChecklistCard(item) {
@@ -4301,7 +4319,8 @@ function _afReadParams() {
       const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, nc_responses: ncResponses });
+      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
