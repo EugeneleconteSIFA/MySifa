@@ -2661,43 +2661,47 @@ EXPE_MAIN_CSS = r"""
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
 .expe-dep-actions-td{max-width:none!important;overflow:visible;text-overflow:clip;white-space:normal;vertical-align:middle}
 
-/* Tableau départs (suivi + historique) : compact pour afficher toutes les colonnes
-   sans scroll horizontal, avec ellipsis sur les libellés longs. */
-.expe-departs-table,.expe-hist-table{width:100%;font-size:12px;table-layout:auto}
+/* Tableau départs (suivi + historique) : largeur forcée à 100% du conteneur via
+   table-layout:fixed + colgroup en %. Les cellules trop longues sont tronquées
+   (ellipsis) avec tooltip natif (title), sauf colonnes texte principales qui
+   peuvent s'enrouler sur 2 lignes. Objectif : plus jamais de scroll horizontal. */
+.expe-departs-tbl-wrap{overflow-x:auto;overflow-y:visible}
+.expe-departs-tbl-wrap>table{width:100%;table-layout:fixed}
+.expe-departs-table,.expe-hist-table{width:100%;font-size:12px;table-layout:fixed}
 .expe-departs-table th,.expe-departs-table td,
-.expe-hist-table th,.expe-hist-table td{padding:8px 8px}
-.expe-departs-table th,.expe-hist-table th{padding:10px 8px;font-size:10px;letter-spacing:.3px}
-.expe-departs-table td,.expe-hist-table td{overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;max-width:180px}
-.expe-departs-table td.expe-dep-actions-td,
-.expe-hist-table td.expe-dep-actions-td{max-width:none;overflow:visible;white-space:normal}
-/* Colonnes texte long : autorise wrap + word-break si nécessaire */
+.expe-hist-table th,.expe-hist-table td{padding:8px 6px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.expe-departs-table th,.expe-hist-table th{padding:10px 6px;font-size:10px;letter-spacing:.3px}
+/* Colonnes texte principales : autorise wrap sur 2 lignes plutôt que d'ellipser */
 .expe-departs-table td:nth-child(4),   /* Client (suivi) */
 .expe-departs-table td:nth-child(8),   /* Cde transp. (suivi) */
 .expe-departs-table td:nth-child(10),  /* Type pal. (suivi) */
 .expe-hist-table td:nth-child(3),      /* Client (histo) */
 .expe-hist-table td:nth-child(6),      /* Cde transp. (histo) */
 .expe-hist-table td:nth-child(9)       /* Type pal. (histo) */
-{white-space:normal;word-break:break-word;overflow-wrap:anywhere;max-width:160px}
-/* Colonnes numériques et dates : jamais tronquées */
-.expe-departs-table td:nth-child(1),   /* Date enl. */
-.expe-departs-table td:nth-child(11),  /* Pal. */
-.expe-departs-table td:nth-child(12),  /* Poids */
-.expe-departs-table td:nth-child(13),  /* Liv. prév. */
-.expe-hist-table td:nth-child(1),      /* Validé le */
-.expe-hist-table td:nth-child(2),      /* Date enl. */
-.expe-hist-table td:nth-child(10),     /* Pal. */
-.expe-hist-table td:nth-child(11),     /* Poids */
-.expe-hist-table td:nth-child(12)      /* Liv. prév. */
-{white-space:nowrap;max-width:none}
-/* Chip / badge des colonnes typées */
-.expe-departs-table td:nth-child(3),.expe-hist-table td:nth-child(8){max-width:none}
-/* Marge accrue en dessous 1280 : on garde le container scrollable au cas où */
-@media(max-width:1280px){
-  .expe-departs-table th,.expe-departs-table td,
-  .expe-hist-table th,.expe-hist-table td{padding:6px 6px}
+{white-space:normal;word-break:break-word;overflow-wrap:anywhere;overflow:hidden}
+/* Colonne actions : jamais tronquée (les boutons doivent rester cliquables) */
+.expe-departs-table td.expe-dep-actions-td,
+.expe-hist-table td.expe-dep-actions-td{overflow:visible;white-space:normal;padding:6px 6px}
+/* Compact sur écrans étroits */
+@media(max-width:1400px){
   .expe-departs-table,.expe-hist-table{font-size:11.5px}
+  .expe-departs-table th,.expe-departs-table td,
+  .expe-hist-table th,.expe-hist-table td{padding:6px 4px}
+  .expe-departs-table th,.expe-hist-table th{padding:8px 4px;font-size:9.5px}
 }
+/* Boutons d'action compactés (colonne actions = 12% du tableau seulement) */
+.expe-departs-table .expe-dep-acts,.expe-hist-table .expe-dep-acts{gap:3px}
+.expe-departs-table .expe-dep-acts .btn-ghost,
+.expe-departs-table .expe-dep-acts .btn-danger,
+.expe-hist-table .expe-dep-acts .btn-ghost,
+.expe-hist-table .expe-dep-acts .btn-danger{width:26px;height:26px;border-radius:5px}
+.expe-departs-table .expe-dep-valider-btn,
+.expe-departs-table .expe-dep-invalider-btn,
+.expe-hist-table .expe-dep-valider-btn,
+.expe-hist-table .expe-dep-invalider-btn{padding:6px 8px;font-size:10.5px}
+.expe-departs-table .expe-dep-actions-cell,
+.expe-hist-table .expe-dep-actions-cell{gap:6px;flex-wrap:wrap}
 .expe-day-sep-row td.expe-day-sep-cell {
   padding: 28px 14px 12px !important;
   background: var(--bg) !important;
@@ -4052,16 +4056,16 @@ function renderExpeSuiviDeparts(){
       prevDate=dateEnl;
     }
     bodyRows.push(h('tr',null,
-      h('td',null,dateEnl),
-      h('td',null,r.affreteurs||'—'),
-      h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-      h('td',null,r.client||'—'),
-      h('td',{style:{maxWidth:'140px',fontSize:'12px'}},r.code_postal_destination||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
-      h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
+      h('td',{title:dateEnl},dateEnl),
+      h('td',{title:r.affreteurs||''},r.affreteurs||'—'),
+      h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
+      h('td',{title:r.client||''},r.client||'—'),
+      h('td',{style:{fontSize:'12px'},title:r.code_postal_destination||''},r.code_postal_destination||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),
+      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_bl||''},r.no_bl||'—'),
+      h('td',{style:{fontSize:'12px'},title:expePaletteTypeLabel(r)||''},expePaletteTypeLabel(r)),
       h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
       h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
       h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
@@ -4092,9 +4096,17 @@ function renderExpeSuiviDeparts(){
     ));
   });
   const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  // Colgroup : force la répartition des largeurs (table-layout:fixed). Toutes en % pour
+  // s'adapter à la largeur du conteneur sans jamais dépasser.
+  const departsCols=[
+    ['date','8%'],['affr','5%'],['transp','9%'],['client','12%'],['dest','6%'],
+    ['refsifa','7%'],['arc','7%'],['cde','9%'],['bl','7%'],['type','9%'],
+    ['pal','4%'],['poids','5%'],['liv','7%'],['acts','12%']
+  ];
+  const colgroup=h('colgroup',null,...departsCols.map(([c,w])=>h('col',{className:'expe-col-'+c,style:{width:w}})));
   const listCard=h('div',{className:'card'},
     h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Départs programmés (en attente de validation)')),
-    h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-departs-table'},h('thead',null,head),h('tbody',null,...body)))
+    h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-departs-table'},colgroup,h('thead',null,head),h('tbody',null,...body)))
   );
   return h('div',null,topBar,listCard);
 }
@@ -4123,15 +4135,15 @@ function renderExpeHistoriqueDeparts(){
     ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Type pal.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
   );
   const body=rows.length?rows.map(r=>h('tr',null,
-    h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'}},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
-    h('td',null,(r.date_enlevement||'').slice(0,10)),
-    h('td',null,r.client||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.ref_sifa||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.arc||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_cde_transport||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},r.no_bl||'—'),
-    h('td',null,(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-    h('td',{style:{fontSize:'12px',maxWidth:'120px'}},expePaletteTypeLabel(r)),
+    h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'},title:(r.validated_at||'')},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
+    h('td',{title:(r.date_enlevement||'').slice(0,10)},(r.date_enlevement||'').slice(0,10)),
+    h('td',{title:r.client||''},r.client||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),
+    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_bl||''},r.no_bl||'—'),
+    h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
+    h('td',{style:{fontSize:'12px'},title:expePaletteTypeLabel(r)||''},expePaletteTypeLabel(r)),
     h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
     h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
     h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
@@ -4170,7 +4182,23 @@ function renderExpeHistoriqueDeparts(){
     ),
     h('div',{className:'card'},
       h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Historique des départs validés')),
-      h('div',{style:{overflowX:'auto'}},h('table',{className:'table-std expe-hist-table'},h('thead',null,head),h('tbody',null,...body))),
+      h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-hist-table'},
+        h('colgroup',null,
+          h('col',{style:{width:'9%'}}),  // Validé le
+          h('col',{style:{width:'8%'}}),  // Date enl.
+          h('col',{style:{width:'13%'}}), // Client
+          h('col',{style:{width:'7%'}}),  // Réf SIFA
+          h('col',{style:{width:'7%'}}),  // ARC
+          h('col',{style:{width:'9%'}}),  // Cde transp.
+          h('col',{style:{width:'7%'}}),  // N° BL
+          h('col',{style:{width:'9%'}}),  // Transp.
+          h('col',{style:{width:'8%'}}),  // Type pal.
+          h('col',{style:{width:'4%'}}),  // Pal.
+          h('col',{style:{width:'5%'}}),  // Poids
+          h('col',{style:{width:'7%'}}),  // Liv. prév.
+          h('col',{style:{width:'7%'}})   // Actions
+        ),
+        h('thead',null,head),h('tbody',null,...body))),
       pager
     )
   );

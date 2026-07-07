@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import html as html_module
 import json
+import os
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,6 +26,7 @@ from services.prod_machine_filter import norm_machine_canonical
 from app.routers.historique import compute_sanity_score_v2
 from config import (
     APP_VERSION,
+    BASE_DIR,
     CODE_DEBUT_DOS,
     CODE_FIN_DOS,
     ROLE_ADMINISTRATION,
@@ -36,6 +38,19 @@ from config import (
     ROLE_LOGISTIQUE,
     ROLE_SUPERADMIN,
 )
+
+# Codes 'arret' du referentiel operations.json — utilises pour calculer le
+# temps d'arret par dossier via LEAD SQL. Chargement au niveau module,
+# fallback minimal si le fichier manque.
+try:
+    with open(os.path.join(BASE_DIR, "operations.json"), encoding="utf-8") as _fop:
+        _OPS_JSON = json.load(_fop)
+    ARRET_CODES: List[str] = sorted(
+        code for code, info in _OPS_JSON.items()
+        if isinstance(info, dict) and (info.get("category") or "").lower() == "arret"
+    )
+except Exception:
+    ARRET_CODES = ["50"]  # fallback minimal si le fichier manque
 
 # ─────────────────────────── constantes ───────────────────────────
 
@@ -54,7 +69,7 @@ ROLE_SECTIONS: Dict[str, List[str]] = {
     ROLE_ADMINISTRATION: ["summary", "prod_by_machine",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_FABRICATION:    ["summary_light", "prod_by_machine",
+    ROLE_FABRICATION:    ["summary_light", "prod_by_machine", "dossiers_fab_detail",
                           "sanity_global", "sanity_by_operateur", "repiquage", "alerts_fab"],
     ROLE_LOGISTIQUE:     ["summary_light", "stock_freshness", "stock_from_prod", "expes", "alerts_log"],
     ROLE_COMPTABILITE:   ["summary_light", "stock_freshness", "expes"],
@@ -521,6 +536,172 @@ def _dossiers_scores(conn, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 # ─────────────────────────── agrégation par semaine ───────────────────────────
 
+def _dossiers_fab_detail(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
+    """Detail par dossier pour la vue Fabrication.
+
+    Pour chaque no_dossier ayant au moins une op 89 dans [wstart, wend], calcule :
+      - metrage (delta compteur MAX-MIN sur op 89, ou valeur unique si < seuil)
+      - vitesse_m_min = metrage / tps_prod_mn
+      - tps_calage_mn (LEAD sur op 02)
+      - tps_prod_mn (LEAD sur op 03/88)
+      - tps_arret_mn (LEAD sur toutes les op categorie 'arret')
+      - nb_palettes_z1 = SUM(mouvement_palettes.nombre) pour les entrees Z1 du dossier
+
+    Exclut Repiquage (pas de vitesse/metrage pertinent).
+    Trie par metrage decroissant. Retour vide si rien.
+    """
+    _COMPTEUR_THRESHOLD = 1_000_000.0
+
+    # Etape 1 : dossiers avec op 89 dans la semaine + agregation m_reel + machine
+    rows89 = conn.execute(
+        """SELECT no_dossier, machine, client, metrage_reel, date_operation
+             FROM production_data
+            WHERE operation_code = ?
+              AND date_operation >= ? AND date_operation <= ?""",
+        (CODE_FIN_DOS, wstart, wend),
+    ).fetchall()
+
+    by_dossier: Dict[str, Dict[str, Any]] = {}
+    for r in rows89:
+        no_d = r["no_dossier"] or ""
+        if not no_d:
+            continue
+        try:
+            m_val = float(r["metrage_reel"] or 0)
+        except (TypeError, ValueError):
+            m_val = 0.0
+        m_machine = norm_machine_canonical(r["machine"] or "") or (r["machine"] or "—")
+        entry = by_dossier.setdefault(no_d, {
+            "m_values": [],
+            "machine": m_machine,
+            "client": r["client"] or "",
+            "date_fin": None,
+        })
+        if m_val > 0:
+            entry["m_values"].append(m_val)
+        d_op = str(r["date_operation"] or "")
+        if not entry.get("date_fin") or d_op > entry["date_fin"]:
+            entry["date_fin"] = d_op
+            entry["machine"] = m_machine
+            if r["client"]:
+                entry["client"] = r["client"]
+
+    if not by_dossier:
+        return []
+
+    # Placeholders pour la clause IN sur les codes d'arret
+    arret_placeholders = ",".join("?" * len(ARRET_CODES)) if ARRET_CODES else "''"
+
+    out: List[Dict[str, Any]] = []
+    for no_d, entry in by_dossier.items():
+        machine = entry.get("machine") or "—"
+        # Exclusion Repiquage
+        if machine == "Repiquage":
+            continue
+
+        m_vals = entry.get("m_values") or []
+        if len(m_vals) >= 2:
+            metrage = max(m_vals) - min(m_vals)
+        elif len(m_vals) == 1:
+            val = m_vals[0]
+            metrage = val if val < _COMPTEUR_THRESHOLD else 0.0
+        else:
+            metrage = 0.0
+
+        # Temps calage (LEAD sur op 02)
+        try:
+            tps_calage = float(conn.execute(
+                """SELECT COALESCE(SUM(
+                        CASE WHEN operation_code='02'
+                        THEN (julianday(lead_date) - julianday(date_operation)) * 1440
+                        ELSE 0 END
+                    ), 0) AS tps
+                     FROM (
+                        SELECT date_operation, operation_code,
+                               LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
+                          FROM production_data
+                         WHERE no_dossier = ?
+                     ) WHERE operation_code='02'""",
+                (no_d,),
+            ).fetchone()["tps"] or 0)
+        except Exception:
+            tps_calage = 0.0
+
+        # Temps production (LEAD sur op 03/88)
+        try:
+            tps_prod = float(conn.execute(
+                """SELECT COALESCE(SUM(
+                        CASE WHEN operation_code IN ('03','88')
+                        THEN (julianday(lead_date) - julianday(date_operation)) * 1440
+                        ELSE 0 END
+                    ), 0) AS tps
+                     FROM (
+                        SELECT date_operation, operation_code,
+                               LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
+                          FROM production_data
+                         WHERE no_dossier = ?
+                     ) WHERE operation_code IN ('03','88')""",
+                (no_d,),
+            ).fetchone()["tps"] or 0)
+        except Exception:
+            tps_prod = 0.0
+
+        # Temps arret (LEAD sur toutes les op categorie 'arret')
+        tps_arret = 0.0
+        if ARRET_CODES:
+            try:
+                sql_arret = (
+                    f"""SELECT COALESCE(SUM(
+                            CASE WHEN operation_code IN ({arret_placeholders})
+                            THEN (julianday(lead_date) - julianday(date_operation)) * 1440
+                            ELSE 0 END
+                        ), 0) AS tps
+                         FROM (
+                            SELECT date_operation, operation_code,
+                                   LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
+                              FROM production_data
+                             WHERE no_dossier = ?
+                         ) WHERE operation_code IN ({arret_placeholders})"""
+                )
+                tps_arret = float(conn.execute(
+                    sql_arret,
+                    (*ARRET_CODES, no_d, *ARRET_CODES),
+                ).fetchone()["tps"] or 0)
+            except Exception:
+                tps_arret = 0.0
+
+        # Nombre de palettes entrees en Z1 pour ce dossier (cumule, non filtre semaine)
+        try:
+            nb_pal = int(conn.execute(
+                """SELECT COALESCE(SUM(mp.nombre), 0) AS nb
+                     FROM mouvement_palettes mp
+                     JOIN mouvements_stock ms ON mp.mouvement_id = ms.id
+                    WHERE ms.no_dossier = ?
+                      AND UPPER(COALESCE(ms.emplacement,'')) = 'Z1'
+                      AND ms.type_mouvement = 'entree'""",
+                (no_d,),
+            ).fetchone()["nb"] or 0)
+        except Exception:
+            nb_pal = 0
+
+        vitesse = (metrage / tps_prod) if (metrage > 0 and tps_prod > 0) else 0.0
+
+        out.append({
+            "no_dossier": no_d,
+            "client": entry.get("client") or "",
+            "machine": machine,
+            "metrage": float(metrage),
+            "vitesse_m_min": float(vitesse),
+            "tps_calage_mn": float(tps_calage),
+            "tps_prod_mn": float(tps_prod),
+            "tps_arret_mn": float(tps_arret),
+            "nb_palettes_z1": int(nb_pal),
+        })
+
+    out.sort(key=lambda x: -x["metrage"])
+    return out
+
+
 def _kpis_semaine(conn, year: int, week: int) -> Dict[str, Any]:
     """Retourne les KPI bruts d'une semaine ISO donnée.
 
@@ -634,6 +815,9 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
                 "sanity_mention": sanity_par_m.get(m, {}).get("mention", ""),
                 "sanity_color": sanity_par_m.get(m, {}).get("color", "muted"),
             })
+
+        # ────── Detail par dossier (vue Fabrication)
+        dossiers_fab_detail = _dossiers_fab_detail(conn, wstart, wend)
 
         # ────── Top / flop dossiers (score 3-pts)
         scored = _dossiers_scores(conn, rows_no_repi)
@@ -929,6 +1113,7 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "summary": summary,
         "prod_by_machine": prod_by_machine,
+        "dossiers_fab_detail": dossiers_fab_detail,
         "top_dossiers": top_dossiers,
         "flop_dossiers": flop_dossiers,
         "sanity_global": {
@@ -1095,6 +1280,83 @@ def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
 
     grid = f'<div style="display:flex;flex-wrap:wrap;gap:12px">{"".join(cards)}</div>'
     return _section_title("Production par machine", email) + grid
+
+
+def _render_dossiers_fab_detail(rows_data: List[Dict[str, Any]], email: bool) -> str:
+    """Detail par dossier — vue Fabrication uniquement.
+
+    Une carte par dossier avec 5 metriques : vitesse, calage, production, arret,
+    palettes Z1. Trie par metrage decroissant en amont.
+    """
+    if not rows_data:
+        return ""
+    text = _color("text", email)
+    muted = _color("muted", email)
+    warn = _color("warn", email)
+    border = _color("border", email)
+    card_bg = _color("card", email)
+
+    def _fmt_prod(mn: float) -> str:
+        if mn <= 0:
+            return "—"
+        if mn >= 60:
+            h = int(mn // 60)
+            m = int(round(mn - h * 60))
+            return f"{h}h {m:02d}min"
+        return f"{_fnum(mn, 0)} min"
+
+    def _metric(label: str, value_html: str, color: str = None) -> str:
+        col = color or text
+        return (
+            f'<div style="flex:1;min-width:100px">'
+            f'<div style="font-size:10px;color:{muted};text-transform:uppercase;'
+            f'letter-spacing:.3px;font-weight:600">{_esc(label)}</div>'
+            f'<div style="font-size:14px;color:{col};font-weight:700;margin-top:2px">{value_html}</div>'
+            f'</div>'
+        )
+
+    cards: List[str] = []
+    for r in rows_data:
+        no_d = r.get("no_dossier") or "—"
+        client = r.get("client") or ""
+        machine = r.get("machine") or "—"
+        vitesse = float(r.get("vitesse_m_min", 0) or 0)
+        tps_calage = float(r.get("tps_calage_mn", 0) or 0)
+        tps_prod = float(r.get("tps_prod_mn", 0) or 0)
+        tps_arret = float(r.get("tps_arret_mn", 0) or 0)
+        nb_pal = int(r.get("nb_palettes_z1", 0) or 0)
+
+        vitesse_txt = f"{_fnum(vitesse, 1)} m/min" if vitesse > 0 else "—"
+        calage_txt = f"{_fnum(tps_calage, 0)} min" if tps_calage > 0 else "—"
+        prod_txt = _fmt_prod(tps_prod)
+        arret_txt = f"{_fnum(tps_arret, 0)} min" if tps_arret > 0 else "—"
+        arret_color = warn if tps_arret > 0 else text
+        pal_txt = _esc(str(nb_pal))
+
+        client_html = (
+            f'<span style="color:{muted};font-weight:400"> · {_esc(client)}</span>' if client else ""
+        )
+
+        cards.append(
+            f'<div style="border:1px solid {border};border-radius:10px;padding:12px 14px;'
+            f'margin-bottom:8px;background:{card_bg}">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+            f'<div style="font-size:14px;font-weight:700;color:{text}">'
+            f'{_esc(no_d)}{client_html}</div>'
+            f'<div style="font-size:11px;color:{muted}">{_esc(machine)}</div>'
+            f'</div>'
+            f'<div style="display:flex;flex-wrap:wrap;gap:16px">'
+            f'{_metric("Vitesse", vitesse_txt)}'
+            f'{_metric("Calage", calage_txt)}'
+            f'{_metric("Production", prod_txt)}'
+            f'{_metric("Arret", arret_txt, color=arret_color)}'
+            f'{_metric("Palettes Z1", pal_txt)}'
+            f'</div>'
+            f'</div>'
+        )
+
+    body = "".join(cards)
+    return _section_title("Detail par dossier", email) + _card_wrap(body, email)
 
 
 def _render_dossiers_table(rows_data: List[Dict[str, Any]], title: str, email: bool) -> str:
@@ -1431,6 +1693,8 @@ def render_report_html(data: Dict[str, Any], role: str,
             return _render_summary(data, email, light=True)
         if sec == "prod_by_machine":
             return _render_prod_by_machine(data, email)
+        if sec == "dossiers_fab_detail":
+            return _render_dossiers_fab_detail(data.get("dossiers_fab_detail", []), email)
         if sec == "top_dossiers":
             return _render_dossiers_table(data.get("top_dossiers", []), "Top dossiers de la semaine", email)
         if sec == "flop_dossiers":
