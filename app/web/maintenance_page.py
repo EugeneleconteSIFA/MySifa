@@ -7,11 +7,6 @@ Contrôle d'accès multi-rôle :
   global MAINTENANCE_OPEN_BETA est activé dans .env. Sert à ouvrir
   progressivement le module aux opérateurs sur v1 (staging) avant la promotion
   en prod, sans exposer l'interface encore incomplète à toute l'usine.
-- Whitelist historique MAINTENANCE_ALLOWED_IDENTS conservée en secours : un
-  ident listé conserve l'accès complet (rôle "admin") même si son rôle n'est
-  pas dans la liste admin. Utile pour donner un accès ponctuel sans changer
-  le rôle en base.
-
 Le rôle effectif (admin / operator) est injecté dans le tag racine via
 l'attribut data-maint-role, ce qui permet au CSS et au JS de la page de
 basculer l'affichage entre les vues admin et opérateur sans deux templates
@@ -32,23 +27,24 @@ from config import (
     MAINTENANCE_OPEN_BETA,
 )
 
-MAINTENANCE_ALLOWED_IDENTS = {"loic.gognau"}
-
 _MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
 
 
 def _get_maintenance_role(user: dict) -> Optional[str]:
     """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
 
-    - 'admin'    : superadmin, direction, administration, ou ident whitelisté.
+    - 'admin'    : superadmin, direction, administration.
     - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
     - None       : pas d'accès (déclencher access_denied_response).
+
+    Utilise `effective_role()` pour respecter l'impersonation : un superadmin
+    qui simule un rôle `fabrication` doit voir la vue opérateur, pas celle
+    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée —
+    elle court-circuitait l'impersonation en renvoyant 'admin' même quand
+    le rôle simulé était différent.
     """
     if not user:
         return None
-    ident = str(user.get("identifiant") or "").strip().lower()
-    if ident in MAINTENANCE_ALLOWED_IDENTS:
-        return "admin"
     role = effective_role(user)
     if role in _MAINTENANCE_ADMIN_ROLES:
         return "admin"
