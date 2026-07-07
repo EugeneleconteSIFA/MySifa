@@ -276,6 +276,53 @@ def _normalize_emails(value: Any) -> list[str]:
     return out
 
 
+def _normalize_tels(value: Any) -> list[dict]:
+    """Accepte list[{numero, service}], list[str], str JSON, str libre.
+    Renvoie une liste [{numero:str, service:str}, ...] dédupliquée sur (numero, service)."""
+    if value is None:
+        return []
+    raw_items: list[Any] = []
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return []
+        if s.startswith("["):
+            try:
+                arr = json.loads(s)
+                if isinstance(arr, list):
+                    raw_items = arr
+            except (json.JSONDecodeError, ValueError):
+                raw_items = []
+        if not raw_items:
+            for chunk in re.split(r"[,;\n\r\t]+", s):
+                v = chunk.strip()
+                if v:
+                    raw_items.append(v)
+    elif isinstance(value, (list, tuple)):
+        raw_items = list(value)
+    out: list[dict] = []
+    seen: set[tuple] = set()
+    for item in raw_items:
+        numero = ""
+        service = ""
+        if isinstance(item, dict):
+            numero = str(item.get("numero") or item.get("tel") or "").strip()
+            service = str(item.get("service") or item.get("label") or "").strip()
+        else:
+            numero = str(item or "").strip()
+        if not numero:
+            continue
+        # Limite raisonnable
+        numero = numero[:40]
+        service = service[:80]
+        key = (numero, service.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"numero": numero, "service": service})
+    return out
+
+
 def _normalize_portail(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -300,6 +347,16 @@ def _serialize_transporteur_row(row: Any) -> dict:
             d["contact_emails"] = _normalize_emails(raw_emails)
     else:
         d["contact_emails"] = []
+    # Téléphones : liste normalisée [{numero, service}]
+    raw_tels = d.get("contact_tels")
+    if isinstance(raw_tels, str) and raw_tels.strip():
+        d["contact_tels"] = _normalize_tels(raw_tels)
+    elif isinstance(raw_tels, list):
+        d["contact_tels"] = _normalize_tels(raw_tels)
+    else:
+        # Fallback : reconstruit depuis contact_tel legacy
+        legacy = d.get("contact_tel")
+        d["contact_tels"] = _normalize_tels(legacy) if legacy else []
     return d
 
 
@@ -1033,23 +1090,28 @@ def create_transporteur(request: Request, body: dict = Body(...)):
     portail = _normalize_portail(body.get("contact_portail_url"))
     # contact_email legacy = première adresse mail, sinon URL portail (back-compat lecture seule)
     legacy_email = emails[0] if emails else portail
+    # Téléphones : liste [{numero, service}]. Fallback sur contact_tel string si présent.
+    tels = _normalize_tels(body.get("contact_tels", body.get("contact_tel")))
+    # contact_tel legacy = 1er numéro (back-compat lecture seule)
+    legacy_tel = tels[0]["numero"] if tels else _f(body, "contact_tel")
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO expe_transporteurs (
                 nom, taxe_carburant_pct, contact_nom, contact_email, contact_tel,
-                contact_portail_url, contact_emails,
+                contact_portail_url, contact_emails, contact_tels,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
                 palette_max, poids_max_kg, accepte_poids, accepte_palette,
                 couleur, actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 nom,
                 taxe,
                 _f(body, "contact_nom"),
                 legacy_email,
-                _f(body, "contact_tel"),
+                legacy_tel,
                 portail,
                 json.dumps(emails, ensure_ascii=False),
+                json.dumps(tels, ensure_ascii=False),
                 _int_flag(body, "zone_france", 1),
                 _int_flag(body, "zone_france_hors_paris", 0),
                 _int_flag(body, "zone_affretement", 0),
@@ -1098,10 +1160,26 @@ def update_transporteur(
         sets.append("taxe_carburant_pct=?")
         args.append(0.0 if taxe is None else taxe)
 
-    for k in ("contact_nom", "contact_tel", "couleur"):
+    for k in ("contact_nom", "couleur"):
         if k in body:
             sets.append(f"{k}=?")
             args.append(_f(body, k))
+
+    # Téléphones : liste [{numero, service}] — recalcule aussi contact_tel legacy
+    new_tels: Optional[list[dict]] = None
+    if "contact_tels" in body:
+        new_tels = _normalize_tels(body.get("contact_tels"))
+        sets.append("contact_tels=?")
+        args.append(json.dumps(new_tels, ensure_ascii=False))
+    elif "contact_tel" in body:
+        # Compat ancien client : string simple -> liste normalisée
+        new_tels = _normalize_tels(body.get("contact_tel"))
+        sets.append("contact_tels=?")
+        args.append(json.dumps(new_tels, ensure_ascii=False))
+
+    if new_tels is not None:
+        sets.append("contact_tel=?")
+        args.append(new_tels[0]["numero"] if new_tels else None)
 
     # Portail (URL séparée du / des emails)
     if "contact_portail_url" in body:

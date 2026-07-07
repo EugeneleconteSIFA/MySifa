@@ -5565,6 +5565,225 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 149, "maintenance_docs_table")
 
+    # v151 - Coffre RH : matricule sur users (matching bulletins par nom fichier)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=151 LIMIT 1").fetchone():
+        cols_u = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "matricule" not in cols_u:
+            conn.execute("ALTER TABLE users ADD COLUMN matricule TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_users_matricule ON users(matricule)")
+        conn.commit()
+        _record_schema_migration(conn, 151, "users_matricule")
+
+    # v152 - Coffre RH : table documents_rh (bulletins de paie, contrats, attestations)
+    # Stockage fichiers sur disque sous data/uploads/coffre_rh/{user_id}/, metadata en base.
+    # Chaque doc a un type, une annee, un mois, un hash SHA256 pour detecter les modifs.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=152 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS documents_rh (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employe_user_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                annee INTEGER,
+                mois INTEGER,
+                libelle TEXT,
+                fichier_path TEXT NOT NULL,
+                fichier_nom TEXT,
+                taille_bytes INTEGER,
+                hash_sha256 TEXT,
+                uploaded_by_user_id INTEGER,
+                uploaded_by_nom TEXT,
+                uploaded_at TEXT NOT NULL,
+                distribue_at TEXT,
+                consulte_at TEXT,
+                visible_salarie INTEGER DEFAULT 1,
+                deleted_at TEXT,
+                deleted_by_nom TEXT,
+                FOREIGN KEY (employe_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_user ON documents_rh(employe_user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_type ON documents_rh(type)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_periode ON documents_rh(annee, mois)")
+        conn.commit()
+        _record_schema_migration(conn, 152, "documents_rh_table")
+
+    # v153 - Coffre RH : table notes_de_frais (workflow salarie -> compta)
+    # Statuts : brouillon, soumise, validee, payee, refusee.
+    # Categorisation libre (champ texte). Justificatif optionnel.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=153 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS notes_de_frais (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                employe_user_id INTEGER NOT NULL,
+                date_frais TEXT NOT NULL,
+                categorie TEXT,
+                montant_ttc REAL NOT NULL DEFAULT 0,
+                montant_tva REAL,
+                description TEXT,
+                justificatif_path TEXT,
+                justificatif_nom TEXT,
+                statut TEXT NOT NULL DEFAULT 'brouillon',
+                created_at TEXT NOT NULL,
+                soumise_at TEXT,
+                validee_at TEXT,
+                validee_by_user_id INTEGER,
+                validee_by_nom TEXT,
+                payee_at TEXT,
+                payee_by_user_id INTEGER,
+                payee_by_nom TEXT,
+                motif_refus TEXT,
+                note_interne TEXT,
+                deleted_at TEXT,
+                FOREIGN KEY (employe_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ndf_user ON notes_de_frais(employe_user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ndf_statut ON notes_de_frais(statut)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ndf_date ON notes_de_frais(date_frais)")
+        conn.commit()
+        _record_schema_migration(conn, 153, "notes_de_frais_table")
+
+    # v154 - Coffre RH : journal d'acces (RGPD - trace consultation/download/print).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=154 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS documents_rh_access_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL,
+                user_id INTEGER,
+                user_nom TEXT,
+                action TEXT NOT NULL,
+                ip TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (document_id) REFERENCES documents_rh(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_log_doc ON documents_rh_access_log(document_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_docrh_log_user ON documents_rh_access_log(user_id)")
+        conn.commit()
+        _record_schema_migration(conn, 154, "documents_rh_access_log_table")
+
+    # v155 — Tâches de maintenance assignées : une ligne = une occurrence
+    # concrète d'une opération de maintenance (contrôle ou intervention) à
+    # réaliser sur une machine, à une date donnée, par un opérateur donné.
+    # L'admin maintenance (Loïc) crée ces tâches depuis la vue Planning et les
+    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`, si le flag
+    # MAINTENANCE_OPEN_BETA est actif) les voient dans leur vue « Mes tâches »
+    # et les complètent en fin de journée (durée réelle, pièces changées,
+    # observations, photos, statut final).
+    #
+    # `source` distingue les tâches planifiées à l'avance (`planifie`, cas
+    # standard) des interventions non planifiées déclarées à la volée par un
+    # opérateur (`non_planifie`, ex. panne machine survenue en cours de session).
+    #
+    # `statut` suit le cycle de vie : a_faire → en_cours → termine (ou reporte
+    # si l'opérateur ne peut pas la faire aujourd'hui).
+    #
+    # FK sur `maintenance_codes(code)` sans ON DELETE CASCADE : si un code est
+    # supprimé côté paramètres, la contrainte empêchera la suppression tant que
+    # des tâches y font référence (à condition que PRAGMA foreign_keys=ON), ce
+    # qui protège l'historique. À terme on ajoutera plutôt un flag `archived`
+    # sur maintenance_codes pour désactiver un code sans casser l'historique.
+    #
+    # `operator_id` est nullable : permet de créer une tâche non encore
+    # assignée dans le planning (poche à distribuer).
+    #
+    # Numéro v155 (et pas v151 comme initialement prévu) car les slots 151-154
+    # ont été pris par les migrations RH (users_matricule, documents_rh_table,
+    # notes_de_frais_table, documents_rh_access_log_table) mergées entre-temps.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=155 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date_prevue TEXT NOT NULL,
+                code TEXT NOT NULL,
+                machine TEXT NOT NULL,
+                operator_id INTEGER,
+                statut TEXT NOT NULL DEFAULT 'a_faire',
+                source TEXT NOT NULL DEFAULT 'planifie',
+                duree_reelle_min INTEGER,
+                pieces_changees TEXT,
+                observations TEXT,
+                photos_json TEXT,
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                done_at TEXT,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+                FOREIGN KEY (operator_id) REFERENCES users(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_op_date "
+            "ON maintenance_tasks(operator_id, date_prevue)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_date_machine "
+            "ON maintenance_tasks(date_prevue, machine)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_code "
+            "ON maintenance_tasks(code)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_tasks_statut "
+            "ON maintenance_tasks(statut)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 155, "maintenance_tasks_table")
+
+    # v156 — MyExpé : transporteurs avec numéros de téléphone multiples (numéro + service).
+    # Ajoute contact_tels TEXT (JSON list de {numero, service}). Backfill depuis
+    # contact_tel legacy : soit une string simple, soit plusieurs séparées par , ; ou saut de ligne.
+    # Numéro v156 (initialement prévue en v155, renumérotée au merge staging pour ne pas
+    # entrer en collision avec maintenance_tasks_table de Loïc, mergée le même jour).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=156 LIMIT 1").fetchone():
+        import json as _json
+        import re as _re
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
+        if "contact_tels" not in cols:
+            conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN contact_tels TEXT")
+        # Backfill : contact_tel legacy -> contact_tels JSON
+        rows = conn.execute(
+            "SELECT id, contact_tel, contact_tels FROM expe_transporteurs"
+        ).fetchall()
+        for r in rows:
+            has_tels = bool((r["contact_tels"] or "").strip())
+            if has_tels:
+                continue
+            old = (r["contact_tel"] or "").strip()
+            if not old:
+                conn.execute(
+                    "UPDATE expe_transporteurs SET contact_tels=? WHERE id=?",
+                    ("[]", r["id"]),
+                )
+                continue
+            parts = []
+            for chunk in _re.split(r"[,;\n\r\t]+", old):
+                v = chunk.strip()
+                if v:
+                    parts.append({"numero": v, "service": ""})
+            conn.execute(
+                "UPDATE expe_transporteurs SET contact_tels=? WHERE id=?",
+                (_json.dumps(parts, ensure_ascii=False), r["id"]),
+            )
+        conn.commit()
+        _record_schema_migration(conn, 156, "expe_transporteurs_contact_tels")
+
+    # v157 — Créneaux horaires sur les tâches de maintenance : ajoute
+    # heure_debut / heure_fin nullable à maintenance_tasks. Les tâches créées
+    # depuis le calendrier admin (vues mois/semaine/jour) auront des créneaux
+    # explicites ; les tâches libres créées par un opérateur en cours de
+    # session laissent ces champs vides.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=157 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_tasks)").fetchall()}
+        if "heure_debut" not in cols:
+            conn.execute("ALTER TABLE maintenance_tasks ADD COLUMN heure_debut TEXT")
+        if "heure_fin" not in cols:
+            conn.execute("ALTER TABLE maintenance_tasks ADD COLUMN heure_fin TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 157, "maintenance_tasks_time_slots")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
