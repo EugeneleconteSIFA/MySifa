@@ -626,11 +626,16 @@ body.light .toast.info{background:#fff;color:var(--text)}
    masquent ce qui n'est pas pertinent pour le rôle courant. */
 body[data-maint-role="admin"] .op-only{display:none !important}
 body[data-maint-role="operator"] .adm-only{display:none !important}
+/* Bascule du contenu principal : admin voit .content, opérateur voit
+   .op-main. Deux conteneurs distincts pour éviter toute interaction
+   parasite entre les vues admin et les vues opérateur. */
+body[data-maint-role="admin"] .op-main{display:none !important}
+body[data-maint-role="operator"] .content{display:none !important}
 
-/* Force l'alignement en haut de contenu pour les vues opérateur — sinon
-   certaines instances chrome/edge appliquent un justify-content mystérieux
-   qui centre verticalement les enfants d'un flex column vide. */
-.view.op-only{justify-content:flex-start;align-items:stretch}
+/* Conteneur opérateur : padding + colonne, prend toute la hauteur restante. */
+.op-main{padding:28px 32px;max-width:1280px;width:100%;flex:1;display:flex;flex-direction:column;overflow-y:auto}
+.op-page{display:none;flex-direction:column;flex:1}
+.op-page.active{display:flex}
 
 /* ── UI opérateur : conteneur actions dans .page-header ─────────── */
 .op-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -1195,8 +1200,11 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
         </div><!-- /ops-subview-liste -->
       </div>
     </div>
+
+    <!-- Conteneur opérateur (visible uniquement quand data-maint-role="operator") -->
+    <div class="op-main">
       <!-- View opérateur : Mes tâches -->
-      <div class="view op-only" id="view-op-tasks">
+      <div class="op-page op-only active" id="view-op-tasks">
         <div class="page-header">
           <div>
             <div class="page-title">Mes tâches</div>
@@ -1219,7 +1227,7 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
       </div>
 
       <!-- View opérateur : Planning avec 2 sous-onglets -->
-      <div class="view op-only" id="view-op-planning" style="display:none">
+      <div class="op-page op-only" id="view-op-planning">
         <div class="page-header">
           <div>
             <div class="page-title">Planning</div>
@@ -1239,6 +1247,7 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
         <div class="op-tab-content" id="op-plan-personnel"></div>
         <div class="op-tab-content" id="op-plan-general" style="display:none"></div>
       </div>
+    </div>
   </main>
 </div>
 
@@ -1593,9 +1602,14 @@ function setCtrlSubtab(name){
 
 function switchView(name){
   if(!VIEW_META[name]) return;
+  // Vues admin (.view) : bascule via inline display comme historiquement.
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
-  const target = document.getElementById('view-' + name);
-  if(target) target.style.display = 'flex';
+  const admTarget = document.getElementById('view-' + name);
+  if(admTarget && admTarget.classList.contains('view')) admTarget.style.display = 'flex';
+  // Vues opérateur (.op-page) : bascule via classe .active (CSS gère display).
+  document.querySelectorAll('.op-page').forEach(p => p.classList.remove('active'));
+  const opTarget = document.getElementById('view-' + name);
+  if(opTarget && opTarget.classList.contains('op-page')) opTarget.classList.add('active');
   document.querySelectorAll('.nav-btn[data-view]').forEach(b => {
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
