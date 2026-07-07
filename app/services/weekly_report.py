@@ -192,9 +192,6 @@ def _prod_par_machine_dossier_by_dossier(
       dossiers      = nb dossiers valides
       detail_dossiers = liste [{no_dossier, metrage, duree_h}, ...]
     """
-    # ── (1) Un couple (machine, metrage) par dossier depuis les op 89
-    #         de la semaine. Si un dossier a plusieurs op 89, on somme les
-    #         metrages > 0 et on garde la dernière machine rencontrée.
     by_dossier: Dict[str, Dict[str, Any]] = {}
     for r in rows:
         if str(r.get("operation_code") or "") != CODE_FIN_DOS:
@@ -215,7 +212,6 @@ def _prod_par_machine_dossier_by_dossier(
             entry["date_fin"] = d_op
             entry["machine"] = m_machine
 
-    # ── (2) Durée dossier via LEAD SQL (op 03/88), même logique que rentabilite.py
     result: Dict[str, Dict[str, Any]] = {}
     for no_d, entry in by_dossier.items():
         metrage = float(entry.get("metrage") or 0)
@@ -238,7 +234,6 @@ def _prod_par_machine_dossier_by_dossier(
         except Exception:
             duree_mn = 0.0
 
-        # Dossier valide : metrage > 0 ET duree > 0
         if metrage <= 0 or duree_mn <= 0:
             continue
 
@@ -256,11 +251,11 @@ def _prod_par_machine_dossier_by_dossier(
             "duree_h": duree_mn / 60.0,
         })
 
-    # ── (3) Vitesse moyenne par machine
     for m, agg in result.items():
         agg["vitesse_m_h"] = (agg["metrage"] / agg["duree_h"]) if agg["duree_h"] > 0 else 0.0
 
     return result
+
 
 def _dossiers_termines(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Dossiers avec op 89 dans la semaine."""
@@ -496,19 +491,19 @@ def _dossiers_scores(conn, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _kpis_semaine(conn, year: int, week: int) -> Dict[str, Any]:
     """Retourne les KPI bruts d'une semaine ISO donnée.
 
-    Cohérence : les KPI globaux (heures_prod, metrage_total) proviennent de la
-    même agrégation dossier-par-dossier utilisée pour la vue "par machine",
+    Cohérence : heures_prod et metrage_total proviennent de la même
+    agrégation dossier-par-dossier utilisée pour la vue "par machine",
     afin que la somme des machines égale les KPI globaux.
     """
     wstart, wend = _week_str_bounds(year, week)
     rows = _saisies_semaine(conn, wstart, wend)
 
-    # Agrégation dossier-par-dossier (base commune KPI globaux + prod par machine)
+    # Agrégation dossier-par-dossier (base commune KPI + prod par machine)
     prod_par_m = _prod_par_machine_dossier_by_dossier(conn, rows, wstart, wend)
     heures_prod = sum(a["duree_h"] for a in prod_par_m.values())
     metrage_total = sum(a["metrage"] for a in prod_par_m.values())
 
-    # Dossiers terminés (nb op 89 distinct dossier — brut, indépendant validité)
+    # Dossiers terminés (nb op 89 distinct dossier)
     doss_termines = set()
     for r in rows:
         if str(r.get("operation_code") or "") == CODE_FIN_DOS:
@@ -543,6 +538,7 @@ def _kpis_semaine(conn, year: int, week: int) -> Dict[str, Any]:
         "mouv_mp": int(mouv_mp or 0),
         "mouv_pf": int(mouv_pf or 0),
     }
+
 
 def _avg4(vals: List[float]) -> float:
     valid = [v for v in vals if v is not None]
@@ -582,8 +578,6 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
 
         # ────── Prod par machine (agrégation dossier-par-dossier)
         prod_par_m = _prod_par_machine_dossier_by_dossier(conn, rows_no_repi, wstart, wend)
-        # sanity par machine (calculé sur toutes les saisies de la machine, pas
-        # seulement les dossiers avec op 89 — c'est un indicateur d'hygiène)
         sanity_par_m: Dict[str, Dict[str, Any]] = {}
         by_m: Dict[str, List[Dict[str, Any]]] = {}
         for r in rows_no_repi:
@@ -592,8 +586,7 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         for m, sub in by_m.items():
             sanity_par_m[m] = compute_sanity_score_v2(sub)
 
-        machines_present = sorted(set(list(prod_par_m.keys())
-                                      + list(sanity_par_m.keys())))
+        machines_present = sorted(set(list(prod_par_m.keys()) + list(sanity_par_m.keys())))
         prod_by_machine = []
         for m in machines_present:
             agg = prod_par_m.get(m, {})
@@ -625,9 +618,8 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         sanity_by_operateur = []
         for op, sub in by_op.items():
             s = compute_sanity_score_v2(sub)
-            # activité en h = Σ des durées des dossiers valides (op 89) travaillés
-            # par cet opérateur. Approximation robuste : on compte les dossiers
-            # dont il a fait la fin (op 89) et on somme leurs durées via LEAD.
+            # activité en h = somme des durées des dossiers valides (op 89)
+            # travaillés par cet opérateur, agrégation dossier-par-dossier.
             _h_agg = _prod_par_machine_dossier_by_dossier(conn, sub, wstart, wend)
             h = sum(a["duree_h"] for a in _h_agg.values())
             sanity_by_operateur.append({
@@ -1019,8 +1011,8 @@ def _render_summary(data: Dict[str, Any], email: bool, light: bool = False) -> s
 
 
 def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
-    """Grille de mini-cards, une par machine — pas de tableau."""
     rows_data = data.get("prod_by_machine", [])
+    """Grille de mini-cards, une par machine — pas de tableau."""
     if not rows_data:
         return ""
     text = _color("text", email)
@@ -1035,7 +1027,6 @@ def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
         vitesse = float(r.get("vitesse_moy", 0) or 0)
         dossiers = int(r.get("dossiers", 0) or 0)
 
-        # Machine sans dossier valide → "—" au lieu de 0 vide
         heures_txt = f'{_fnum(heures, 1)} h' if heures > 0 else "—"
         metrage_txt = f'{_fnum(metrage, 0)} m' if metrage > 0 else "—"
         vitesse_txt = f'{_fnum(vitesse, 0)} m/h' if vitesse > 0 else "—"
@@ -1067,13 +1058,12 @@ def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
             f'</div>'
         )
 
-    grid = (
-        f'<div style="display:flex;flex-wrap:wrap;gap:12px">{"".join(cards)}</div>'
-    )
+    grid = f'<div style="display:flex;flex-wrap:wrap;gap:12px">{"".join(cards)}</div>'
     return _section_title("Production par machine", email) + grid
 
+
 def _render_dossiers_table(rows_data: List[Dict[str, Any]], title: str, email: bool) -> str:
-    """Liste compacte, une ligne par dossier (pas de <table>). Max 5 lignes."""
+    """Liste compacte, une ligne par dossier. Pas de tableau. Max 5 lignes."""
     if not rows_data:
         return ""
     text = _color("text", email)
@@ -1107,6 +1097,7 @@ def _render_dossiers_table(rows_data: List[Dict[str, Any]], title: str, email: b
     body = "".join(items)
     return _section_title(title, email) + _card_wrap(body, email)
 
+
 def _render_sanity_global(data: Dict[str, Any], email: bool) -> str:
     sg = data.get("sanity_global", {})
     text = _color("text", email)
@@ -1120,7 +1111,7 @@ def _render_sanity_global(data: Dict[str, Any], email: bool) -> str:
 
 
 def _render_sanity_operateurs(data: Dict[str, Any], email: bool) -> str:
-    """Grille de chips opérateur — pas de tableau, pas de score numérique."""
+    """Grille de chips opérateur — pas de tableau, score numérique masqué."""
     ops = data.get("sanity_by_operateur", [])
     if not ops:
         return ""
@@ -1128,7 +1119,6 @@ def _render_sanity_operateurs(data: Dict[str, Any], email: bool) -> str:
     muted = _color("muted", email)
     border = _color("border", email)
 
-    # Tri par activité décroissante
     ops_sorted = sorted(ops, key=lambda o: -float(o.get("activite_h", 0) or 0))
 
     chips = []
@@ -1147,6 +1137,7 @@ def _render_sanity_operateurs(data: Dict[str, Any], email: bool) -> str:
     grid = f'<div style="display:flex;flex-wrap:wrap;gap:8px">{"".join(chips)}</div>'
     return _section_title("Sanity par opérateur", email) + _card_wrap(grid, email)
 
+
 def _render_stock_freshness(data: Dict[str, Any], email: bool) -> str:
     """4 mini-KPIs (entrées/sorties MP + PF) + liste compacte des refs stagnantes."""
     sf = data.get("stock_freshness", {})
@@ -1156,7 +1147,6 @@ def _render_stock_freshness(data: Dict[str, Any], email: bool) -> str:
     card_bg = _color("card", email)
     warn = _color("warn", email)
 
-    # Agrégation MP entrées/sorties globales (somme par catégorie)
     mp_entrees = 0
     mp_sorties = 0
     for c in sf.get("mp_by_categorie", []) or []:
@@ -1184,7 +1174,6 @@ def _render_stock_freshness(data: Dict[str, Any], email: bool) -> str:
         f'</div>'
     )
 
-    # Liste compacte refs stagnantes (max 8)
     refs = sf.get("refs_stagnantes", []) or []
     stag_html = ""
     if refs:
@@ -1209,16 +1198,16 @@ def _render_stock_freshness(data: Dict[str, Any], email: bool) -> str:
 
     return _section_title("Fraîcheur des stocks", email) + _card_wrap(kpis_html + stag_html, email)
 
-def _render_stock_from_prod(data: Dict[str, Any], email: bool) -> str:
-    """Section cohérence prod → stock — visible et actionnable.
 
-    Structure : ligne principale + alerte warn si des dossiers terminés n'ont
-    pas d'entrée stock dans les 48 h après la fin. Message de succès sinon.
+def _render_stock_from_prod(data: Dict[str, Any], email: bool) -> str:
+    """Cohérence prod → stock — section visible et actionnable.
+
+    Ligne principale + alerte warn si des dossiers terminés n'ont pas d'entrée
+    stock dans les 48 h après la fin. Message de succès sinon.
     """
     sp = data.get("stock_from_prod", {})
     text = _color("text", email)
     muted = _color("muted", email)
-    border = _color("border", email)
     warn = _color("warn", email)
     ok = _color("ok", email)
 
@@ -1264,6 +1253,7 @@ def _render_stock_from_prod(data: Dict[str, Any], email: bool) -> str:
 
     return _section_title("Cohérence prod → stock", email) + _card_wrap(body, email)
 
+
 def _render_repiquage(data: Dict[str, Any], email: bool) -> str:
     r = data.get("repiquage", {})
     text = _color("text", email)
@@ -1291,7 +1281,6 @@ def _render_expes(data: Dict[str, Any], email: bool) -> str:
     border = _color("border", email)
     warn = _color("warn", email)
 
-    # KPIs — inchangés (déjà visuels)
     kpis = (
         f'<div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:12px">'
         f'<div><div style="font-size:11px;color:{muted};text-transform:uppercase">Départs</div>'
@@ -1303,7 +1292,6 @@ def _render_expes(data: Dict[str, Any], email: bool) -> str:
         f'</div>'
     )
 
-    # Chips transporteurs
     chips_html = ""
     transps = ex.get("by_transporteur", []) or []
     if transps:
@@ -1321,7 +1309,6 @@ def _render_expes(data: Dict[str, Any], email: bool) -> str:
             f'{"".join(chips)}</div>'
         )
 
-    # Alerte retards
     retards = ex.get("retards", []) or []
     retards_html = ""
     if retards:
@@ -1346,6 +1333,7 @@ def _render_expes(data: Dict[str, Any], email: bool) -> str:
         )
 
     return _section_title("Expéditions", email) + _card_wrap(kpis + chips_html + retards_html, email)
+
 
 def _render_alerts(data: Dict[str, Any], email: bool, scope: str = "all") -> str:
     """scope='all'|'fab'|'log' — chaque catégorie devient une liste compacte avec cadre coloré."""

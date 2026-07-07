@@ -139,6 +139,26 @@ EXPE_TRANSPORTEURS_CSS = r"""
   background:transparent !important;color:var(--text2) !important;border-radius:10px;display:inline-flex;
   align-items:center;gap:6px;cursor:pointer}
 .expe-trp-email-add:hover{border-color:var(--accent) !important;color:var(--accent) !important}
+/* Téléphones multiples : numéro + service */
+.expe-trp-tel-svc-inline{color:var(--muted);font-size:11px;font-weight:500;margin-left:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expe-trp-tels-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.expe-trp-tel-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(140px,1.2fr) 36px;gap:6px;align-items:center}
+.expe-trp-tel-row input{padding:12px 16px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;color:var(--text);font-size:14px;font-family:inherit;outline:none;min-width:0}
+.expe-trp-tel-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent)}
+.expe-trp-tel-rm{flex-shrink:0;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);background:var(--card);color:var(--muted);border-radius:10px;cursor:pointer;
+  transition:border-color .15s,color .15s}
+.expe-trp-tel-rm:hover{border-color:var(--danger);color:var(--danger)}
+.expe-trp-tel-add{font-size:12px;padding:6px 12px !important;border:1px dashed var(--border) !important;
+  background:transparent !important;color:var(--text2) !important;border-radius:10px;display:inline-flex;
+  align-items:center;gap:6px;cursor:pointer}
+.expe-trp-tel-add:hover{border-color:var(--accent) !important;color:var(--accent) !important}
+@media(max-width:520px){
+  .expe-trp-tel-row{grid-template-columns:1fr 36px;grid-template-rows:auto auto;gap:6px}
+  .expe-trp-tel-row .expe-trp-tel-svc{grid-column:1/2}
+  .expe-trp-tel-rm{grid-row:1/3;grid-column:2/3;height:auto;align-self:stretch}
+}
 @media(max-width:640px){
   .expe-trp-panel{width:100%}
   .expe-trp-head{padding:12px 14px}
@@ -396,6 +416,43 @@ function expeTrpReadPortail(tr){
   return '';
 }
 
+// Lit la liste de téléphones [{numero, service}] depuis un transporteur.
+// Supporte : Array déjà normalisé, string JSON, string séparée par , ; ou saut de ligne.
+// Fallback : contact_tel legacy en single-entry.
+function expeTrpReadTels(tr){
+  if(!tr)return [];
+  const norm=arr=>{
+    const out=[];
+    const seen=new Set();
+    (arr||[]).forEach(item=>{
+      let numero='';let service='';
+      if(item&&typeof item==='object'){
+        numero=String(item.numero||item.tel||'').trim();
+        service=String(item.service||item.label||'').trim();
+      }else{
+        numero=String(item||'').trim();
+      }
+      if(!numero)return;
+      const key=numero+'|'+service.toLowerCase();
+      if(seen.has(key))return;
+      seen.add(key);
+      out.push({numero:numero,service:service});
+    });
+    return out;
+  };
+  if(Array.isArray(tr.contact_tels))return norm(tr.contact_tels);
+  if(typeof tr.contact_tels==='string'&&tr.contact_tels.trim()){
+    const s=tr.contact_tels.trim();
+    if(s.startsWith('[')){
+      try{const arr=JSON.parse(s);if(Array.isArray(arr))return norm(arr);}catch(e){}
+    }
+    return norm(s.split(/[,;\n\r\t]+/));
+  }
+  const legacy=(tr.contact_tel||'').trim();
+  if(legacy)return norm(legacy.split(/[,;\n\r\t]+/));
+  return [];
+}
+
 function openTransporteurModal(id){
   const isEdit=id!=null&&id!=='';
   if(isEdit){
@@ -403,12 +460,14 @@ function openTransporteurModal(id){
     if(!tr){showToast('Transporteur introuvable','danger');return;}
     T.editId=tr.id;
     const emails=expeTrpReadEmails(tr);
+    const tels=expeTrpReadTels(tr);
     T.form={
       nom:tr.nom||'',
       taxe_carburant_pct:tr.taxe_carburant_pct!=null?String(tr.taxe_carburant_pct):'0',
       contact_nom:tr.contact_nom||'',
       contact_portail_url:expeTrpReadPortail(tr),
       contact_emails:emails.length?emails:[''],
+      contact_tels:tels.length?tels:[{numero:'',service:''}],
       contact_tel:tr.contact_tel||'',
       zone_france:!!Number(tr.zone_france),
       zone_france_hors_paris:!!Number(tr.zone_france_hors_paris),
@@ -423,7 +482,7 @@ function openTransporteurModal(id){
     T.editId=null;
     T.form={
       nom:'',taxe_carburant_pct:'0',contact_nom:'',
-      contact_portail_url:'',contact_emails:[''],contact_tel:'',
+      contact_portail_url:'',contact_emails:[''],contact_tels:[{numero:'',service:''}],contact_tel:'',
       zone_france:true,zone_france_hors_paris:false,zone_affretement:false,zone_messagerie:false,
       actif:true,tarif_filename:'',tarif_url:'',couleur:''
     };
@@ -675,13 +734,16 @@ function expeTrpBodyFromForm(){
   const emails=(T.form.contact_emails||[])
     .map(e=>(e||'').trim())
     .filter(e=>e&&e.includes('@'));
+  const tels=(T.form.contact_tels||[])
+    .map(t=>({numero:((t&&t.numero)||'').trim(),service:((t&&t.service)||'').trim()}))
+    .filter(t=>t.numero);
   return {
     nom:(T.form.nom||'').trim(),
     taxe_carburant_pct:(T.form.taxe_carburant_pct||'').trim()||'0',
     contact_nom:(T.form.contact_nom||'').trim()||null,
     contact_portail_url:(T.form.contact_portail_url||'').trim()||null,
     contact_emails:emails,
-    contact_tel:(T.form.contact_tel||'').trim()||null,
+    contact_tels:tels,
     zone_france:T.form.zone_france?1:0,
     zone_france_hors_paris:T.form.zone_france_hors_paris?1:0,
     zone_affretement:T.form.zone_affretement?1:0,
@@ -837,7 +899,8 @@ function expeTrpContactCell(tr){
   const emails=expeTrpReadEmails(tr);
   const portail=expeTrpReadPortail(tr);
   const nom=(tr.contact_nom||'').trim();
-  const tel=(tr.contact_tel||'').trim();
+  const tels=expeTrpReadTels(tr);
+  const tel=tels.length?tels[0].numero:'';
   if(!portail&&!nom&&!tel&&!emails.length)return h('span',{style:{color:'var(--muted)'}},'—');
 
   const cell=h('div',{className:'expe-trp-contact-col'});
@@ -857,16 +920,33 @@ function expeTrpContactCell(tr){
       iconEl('user',12),h('span',{className:'lbl'},escHtml(nom))));
   }
 
-  // 3. Téléphone formaté
-  if(tel){
-    const formatted=expeFormatPhoneFR(tel);
-    const href=expeTelHref(tel);
-    const telKids=[expeTrpIconPhone(12),h('span',{className:'lbl tel'},escHtml(formatted))];
+  // 3. Téléphones formatés — 1er numéro + badge +N si plusieurs, tooltip = liste complète
+  if(tels.length){
+    const fmtList=tels.map(t=>{
+      const f=expeFormatPhoneFR(t.numero);
+      return t.service?(f+' — '+t.service):f;
+    });
+    const first=tels[0];
+    const firstFmt=expeFormatPhoneFR(first.numero);
+    const firstSvc=first.service||'';
+    const more=tels.length-1;
+    const tipText=fmtList.join('\n');
+    const href=expeTelHref(first.numero);
+    const telKids=[
+      expeTrpIconPhone(12),
+      h('span',{className:'lbl tel'},escHtml(firstFmt))
+    ];
+    if(firstSvc){
+      telKids.push(h('span',{className:'expe-trp-tel-svc-inline'},' · '+escHtml(firstSvc)));
+    }
+    if(more>0){
+      telKids.push(h('span',{className:'expe-trp-emails-badge',title:tipText},'+'+more));
+    }
     if(href){
       cell.appendChild(h('a',{className:'expe-trp-contact-line tel-link',href:href,
-        title:formatted,onClick:e=>e.stopPropagation()},...telKids));
+        title:tipText,onClick:e=>e.stopPropagation()},...telKids));
     }else{
-      cell.appendChild(h('div',{className:'expe-trp-contact-line',title:formatted},...telKids));
+      cell.appendChild(h('div',{className:'expe-trp-contact-line',title:tipText},...telKids));
     }
   }
 
@@ -899,11 +979,17 @@ function expeTrpContactCell(tr){
     if(tel){
       const href=expeTelHref(tel);
       if(href){
-        acts.appendChild(h('a',{className:'expe-trp-act',href:href,title:'Appeler',
+        acts.appendChild(h('a',{className:'expe-trp-act',href:href,title:'Appeler '+expeFormatPhoneFR(tel),
           onClick:e=>e.stopPropagation()},expeTrpIconPhone(12)));
       }
-      acts.appendChild(h('button',{type:'button',className:'expe-trp-act',title:'Copier le téléphone',
-        onClick:e=>{e.stopPropagation();expeTrpCopyText(expeFormatPhoneFR(tel),'Téléphone copié');}},
+      const copyText=tels.map(t=>{
+        const f=expeFormatPhoneFR(t.numero);
+        return t.service?(f+' ('+t.service+')'):f;
+      }).join(', ');
+      const copyTitle=tels.length>1?'Copier les téléphones':'Copier le téléphone';
+      const copyToast=tels.length>1?'Téléphones copiés':'Téléphone copié';
+      acts.appendChild(h('button',{type:'button',className:'expe-trp-act',title:copyTitle,
+        onClick:e=>{e.stopPropagation();expeTrpCopyText(copyText,copyToast);}},
         iconEl('copy',12)));
     }
     cell.appendChild(acts);
@@ -1114,12 +1200,61 @@ function renderExpeTransporteurModal(){
       addEmailBtn
     );
 
+    // Liste de téléphones dynamique : [{numero, service}]
+    if(!Array.isArray(T.form.contact_tels)){
+      // Migration legacy : si l'ancien champ contact_tel existe (string), on l'utilise
+      const legacy=(T.form.contact_tel||'').trim();
+      T.form.contact_tels=legacy?[{numero:legacy,service:''}]:[{numero:'',service:''}];
+    }
+    if(!T.form.contact_tels.length)T.form.contact_tels=[{numero:'',service:''}];
+    const telsList=h('div',{className:'expe-trp-tels-list'});
+    T.form.contact_tels.forEach((entry,idx)=>{
+      const numVal=(entry&&entry.numero)||'';
+      const svcVal=(entry&&entry.service)||'';
+      const numInp=h('input',{type:'tel',value:numVal,placeholder:'06.68.69.18.03',className:'expe-trp-tel-num'});
+      numInp.addEventListener('input',e=>{
+        const arr=(T.form.contact_tels||[]).slice();
+        const cur=Object.assign({},arr[idx]||{});
+        cur.numero=e.target.value;
+        arr[idx]=cur;
+        T.form.contact_tels=arr;
+      });
+      const svcInp=h('input',{type:'text',value:svcVal,placeholder:'Service ou nom (facultatif)',className:'expe-trp-tel-svc'});
+      svcInp.addEventListener('input',e=>{
+        const arr=(T.form.contact_tels||[]).slice();
+        const cur=Object.assign({},arr[idx]||{});
+        cur.service=e.target.value;
+        arr[idx]=cur;
+        T.form.contact_tels=arr;
+      });
+      const removeTelBtn=h('button',{type:'button',className:'expe-trp-tel-rm',title:'Retirer ce numéro',
+        onClick:()=>{
+          const arr=(T.form.contact_tels||[]).slice();
+          arr.splice(idx,1);
+          T.form.contact_tels=arr.length?arr:[{numero:'',service:''}];
+          render();
+        }},iconEl('x',12));
+      telsList.appendChild(h('div',{className:'expe-trp-tel-row'},numInp,svcInp,removeTelBtn));
+    });
+    const addTelBtn=h('button',{type:'button',className:'btn btn-ghost expe-trp-tel-add',
+      onClick:()=>{
+        const arr=(T.form.contact_tels||[]).slice();
+        arr.push({numero:'',service:''});
+        T.form.contact_tels=arr;
+        render();
+      }},iconEl('plus',12),' Ajouter un numéro');
+    const telsField=h('div',{className:'expe-trp-field'},
+      h('label',null,'Téléphones'),
+      telsList,
+      addTelBtn
+    );
+
     const contact=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Contact'),
       mkText('Nom du contact','contact_nom'),
       portailRow,
       emailsField,
-      mkText('Téléphone','contact_tel',{type:'tel'})
+      telsField
     );
     const zones=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Zones desservies'),

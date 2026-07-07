@@ -52,6 +52,8 @@ REPORTS_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<script src="/static/mysifa_theme.js"></script>
+<script>try{ if(window.MySifaTheme){ MySifaTheme.initFromStorage(); } }catch(e){}</script>
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--ok:#34d399;--success:#34d399;--warn:#fbbf24;--danger:#f87171;}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--success:#059669;--warn:#d97706;--danger:#dc2626;}
@@ -84,7 +86,7 @@ h1{font-size:22px;margin:0 0 6px}
 .toolbar label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .toolbar input,.toolbar select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit}
 .toolbar input:focus,.toolbar select:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-.btn{background:var(--accent);color:#0a0e17;border:none;border-radius:10px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.btn{background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn:hover{filter:brightness(1.06)}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
@@ -103,7 +105,7 @@ h1{font-size:22px;margin:0 0 6px}
 #toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:10px;color:#fff;font-size:13px;font-weight:600;z-index:9999;display:none;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 #toast.success{background:var(--ok)}
 #toast.danger{background:var(--danger)}
-#toast.info{background:var(--accent);color:#0a0e17}
+#toast.info{background:var(--accent);color:var(--bg)}
 .modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center}
 .modal-ov.open{display:flex}
 .modal-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;width:min(480px,92vw)}
@@ -369,10 +371,12 @@ if (CAN_SWITCH){
 }
 
 document.getElementById('theme-btn').onclick = () => {
-  document.body.classList.toggle('light');
-  try { localStorage.setItem('mysifa_theme', document.body.classList.contains('light') ? 'light' : 'dark'); } catch(e){}
+  try {
+    if (window.MySifaTheme) { MySifaTheme.toggleMode(); }
+    else { document.body.classList.toggle('light'); }
+  } catch(e) { document.body.classList.toggle('light'); }
 };
-if (localStorage.getItem('mysifa_theme') === 'light') document.body.classList.add('light');
+try { if (window.MySifaTheme) MySifaTheme.initFromStorage(); } catch(e){}
 
 document.getElementById('logout-btn').onclick = async () => {
   try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch(e){}
@@ -381,7 +385,7 @@ document.getElementById('logout-btn').onclick = async () => {
 
 document.getElementById('sb-ov').onclick = () => document.body.classList.remove('sb-open');
 
-// User chip
+// User chip + synchronisation du thème/palette depuis les préférences serveur
 (async () => {
   try {
     const r = await fetch('/api/auth/me', { credentials: 'include' });
@@ -389,6 +393,8 @@ document.getElementById('sb-ov').onclick = () => document.body.classList.remove(
     const u = await r.json();
     const chip = document.getElementById('sb-user-chip');
     chip.innerHTML = `<div class="uc-name">${u.nom || u.email || 'Utilisateur'}</div><div class="uc-role">${u.role || ''}</div>`;
+    // Applique la palette / le mode enregistrés côté serveur (theme_prefs) si disponibles
+    try { if (window.MySifaTheme) MySifaTheme.mergeFromUser(u); } catch(e){}
   } catch(e){}
 })();
 
