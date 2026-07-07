@@ -134,6 +134,15 @@ tr:hover td{background:var(--accent-bg)}
 .filters select{padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;font-family:inherit;outline:none}
 .filters select:focus{border-color:var(--accent)}
 
+.preview-back{position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:500;display:flex;flex-direction:column;padding:0}
+.preview-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--border);gap:12px;flex-shrink:0}
+.preview-title{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preview-actions{display:flex;gap:8px;flex-shrink:0;align-items:center}
+.preview-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px;background:#0a0e17}
+.preview-body iframe{width:100%;height:100%;border:none;background:#fff;border-radius:8px}
+.preview-body img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.preview-body .preview-unknown{color:var(--muted);font-size:13px;text-align:center;padding:30px}
+@media(max-width:640px){.preview-header{padding:10px 12px}.preview-title{font-size:12px}.preview-body{padding:8px}}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:480px;width:100%;max-height:90vh;overflow:auto}
 .modal h3{margin:0 0 16px;font-size:16px;font-weight:700}
@@ -273,6 +282,45 @@ function fmtDate(s){if(!s)return '';const d=new Date(s.substr(0,10));return isNa
 function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type==='err'?'err':'ok');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);}
 async function api(url,opts){opts=opts||{};opts.credentials='include';const r=await fetch(url,opts);if(!r.ok){let m='Erreur';try{const j=await r.json();m=j.detail||j.message||m;}catch(e){}throw new Error(m);}return r.json();}
 
+// ── Prévisualisation documents (PDF / image) ──
+const PREVIEW_IMG_RE=/\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i;
+function previewDocument(url, filename){
+  const back=document.createElement('div');
+  back.className='preview-back';
+  const isImg=PREVIEW_IMG_RE.test(filename||'');
+  const sep=url.indexOf('?')>=0?'&':'?';
+  const inlineUrl=url+sep+'inline=1';
+  const safeName=esc(filename||'Document');
+  const safeUrl=esc(url);
+  const safeInline=esc(inlineUrl);
+  back.innerHTML=`
+    <div class="preview-header">
+      <div class="preview-title">${safeName}</div>
+      <div class="preview-actions">
+        <a class="btn ghost small" href="${safeUrl}" target="_blank" rel="noopener">Télécharger</a>
+        <button type="button" class="btn ghost small" id="preview-close">Fermer</button>
+      </div>
+    </div>
+    <div class="preview-body">
+      ${isImg
+        ? `<img src="${safeInline}" alt="${safeName}">`
+        : `<iframe src="${safeInline}" title="Aperçu"></iframe>`}
+    </div>`;
+  document.body.appendChild(back);
+  const close=()=>{back.remove();document.removeEventListener('keydown',onKey);};
+  const onKey=(e)=>{if(e.key==='Escape')close();};
+  document.addEventListener('keydown',onKey);
+  back.querySelector('#preview-close').onclick=close;
+  back.addEventListener('click',(e)=>{if(e.target===back)close();});
+}
+// Délégation globale : tout élément avec data-preview-url déclenche l'aperçu.
+document.addEventListener('click',(e)=>{
+  const el=e.target.closest('[data-preview-url]');
+  if(!el)return;
+  e.preventDefault();
+  previewDocument(el.dataset.previewUrl, el.dataset.previewName||'');
+});
+
 function getPrefs(){return window.MySifaTheme?MySifaTheme.loadPrefs():{palette:'mysifa',style:'defaut',mode:'dark',bgAnim:true};}
 function syncThemeBtn(){
   const isLight=getPrefs().mode==='light';
@@ -335,7 +383,7 @@ function renderBulletins(){
       <div class="year-title">${esc(y)}</div>
       <div class="doc-list">
         ${byYear[y].map(d=>`
-          <a class="doc-item" href="/api/coffre/documents/${d.id}/download" target="_blank" rel="noopener">
+          <a class="doc-item" href="/api/coffre/documents/${d.id}/download" data-preview-url="/api/coffre/documents/${d.id}/download" data-preview-name="${esc((MOIS_LABELS[d.mois]||d.libelle||'Bulletin')+' '+(d.annee||'')+'.pdf')}">
             <div class="doc-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             </div>
@@ -358,7 +406,7 @@ async function loadDocs(){
     const c=document.getElementById('doc-container');
     if(!docs.length){c.innerHTML='<div class="empty">Aucun autre document.</div>';return;}
     c.innerHTML='<div class="doc-list">'+docs.map(d=>`
-      <a class="doc-item" href="/api/coffre/documents/${d.id}/download" target="_blank" rel="noopener">
+      <a class="doc-item" href="/api/coffre/documents/${d.id}/download" data-preview-url="/api/coffre/documents/${d.id}/download" data-preview-name="${esc((d.libelle||DOC_TYPE_LABELS[d.type]||d.type)+'.pdf')}">
         <div class="doc-icon">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
@@ -389,7 +437,7 @@ async function loadNdf(){
           <td style="text-align:right" class="montant">${fmtMontant(n.montant_ttc)}</td>
           <td><span class="statut ${esc(n.statut)}">${esc(n.statut)}</span></td>
           <td style="text-align:right;white-space:nowrap">
-            ${n.justificatif_nom?`<a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" target="_blank" rel="noopener">Voir</a>`:''}
+            ${n.justificatif_nom?`<a class="btn ghost small" href="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-url="/api/coffre/notes-frais/${n.id}/justificatif" data-preview-name="${esc(n.justificatif_nom||'Justificatif')}">Voir</a>`:''}
             ${n.statut==='brouillon'?`
               <button class="btn small" onclick="submitNdf(${n.id})">Soumettre</button>
               <button class="btn ghost small" onclick="deleteNdf(${n.id})">×</button>
