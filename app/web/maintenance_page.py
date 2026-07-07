@@ -623,6 +623,71 @@ body.light .toast.info{background:#fff;color:var(--text)}
 .ctrl-point-filters-inputs .pf-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .ctrl-point-filters-inputs .pf-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;min-width:80px}
 .ctrl-point-filters-inputs .pf-num{width:60px}
+
+/* ── Mode multi-rôle (admin / opérateur) ─────────────────────────────
+   La page rend la même structure DOM pour tous ; le body porte
+   data-maint-role="admin" ou "operator" et les règles ci-dessous
+   masquent ce qui n'est pas pertinent pour le rôle courant. */
+body[data-maint-role="admin"] .op-only{display:none !important}
+body[data-maint-role="operator"] .adm-only{display:none !important}
+
+/* ── UI opérateur : Mes tâches ───────────────────────────────────── */
+.op-hdr{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:18px}
+.op-hdr h2{font-size:20px;font-weight:700;color:var(--text);margin:0}
+.op-hdr .op-hdr-sub{font-size:13px;color:var(--muted)}
+.op-hdr-actions{margin-left:auto;display:flex;gap:10px}
+.op-date-picker{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 14px}
+.op-date-picker input[type="date"]{background:transparent;border:none;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;outline:none}
+.op-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.op-btn:hover{border-color:var(--accent);color:var(--accent)}
+.op-btn-primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.op-btn-primary:hover{filter:brightness(1.08);color:var(--accent-fg)}
+
+.op-tasks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.op-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s;position:relative;display:flex;flex-direction:column;gap:10px}
+.op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.op-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-code{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.4px;font-family:monospace}
+.op-cat{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
+.op-cat-interventions{background:rgba(167,139,250,.16);color:#8b5cf6}
+.op-cat-suivi{background:rgba(251,191,36,.16);color:#f59e0b}
+.op-card-title{font-size:14px;font-weight:600;color:var(--text);line-height:1.4}
+.op-card-meta{display:flex;flex-wrap:wrap;gap:10px 16px;font-size:12px;color:var(--text2)}
+.op-card-meta span{display:inline-flex;align-items:center;gap:5px}
+.op-card-meta strong{color:var(--text);font-weight:600}
+.op-status{position:absolute;top:14px;right:14px;font-size:10px;font-weight:800;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.5px}
+.op-status-a_faire{background:rgba(148,163,184,.16);color:var(--muted)}
+.op-status-en_cours{background:rgba(251,191,36,.16);color:#f59e0b}
+.op-status-termine{background:rgba(52,211,153,.16);color:#10b981}
+.op-status-reporte{background:rgba(248,113,113,.16);color:var(--danger)}
+.op-badge-source{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,.14);color:#f59e0b;text-transform:uppercase;letter-spacing:.4px}
+
+.op-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
+.op-empty h3{font-size:18px;color:var(--text2);margin-bottom:8px;font-weight:600}
+
+/* ── Vue Planning opérateur : tableau read-only ──────────────────── */
+.op-plan-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
+.op-plan-table thead th{background:var(--bg);text-align:left;padding:12px 14px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.op-plan-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2)}
+.op-plan-table tbody tr:last-child td{border-bottom:none}
+.op-plan-table tbody tr.mine{background:var(--accent-bg)}
+.op-plan-table tbody tr.mine td{color:var(--text)}
+
+/* ── Modal saisie / création (partagé opérateur & admin) ─────────── */
+.op-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.op-modal-overlay.active{display:flex}
+.op-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:22px}
+.op-modal-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
+.op-modal-sub{font-size:12px;color:var(--muted);margin-bottom:18px}
+.op-modal .op-form-row{margin-bottom:14px}
+.op-modal label{display:block;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.op-modal input, .op-modal select, .op-modal textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:14px;transition:border-color .15s}
+.op-modal input:focus, .op-modal select:focus, .op-modal textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.op-modal textarea{resize:vertical;min-height:80px;font-family:inherit}
+.op-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.op-modal-context{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--text2)}
+.op-modal-context strong{color:var(--text);font-weight:700}
 </style>
 </head>
 <body data-maint-role="__MAINT_ROLE__">
@@ -634,21 +699,33 @@ body.light .toast.info{background:#fff;color:var(--text)}
       <div class="logo-brand">My<span>Maintenance</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
-    <button type="button" class="nav-btn active" data-view="maintenance" onclick="switchView('maintenance')">
+    <button type="button" class="nav-btn adm-only active" data-view="maintenance" onclick="switchView('maintenance')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
     </button>
-    <button type="button" class="nav-btn" data-view="planning" onclick="switchView('planning')">
+    <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Planning
     </button>
-    <button type="button" class="nav-btn" data-view="controles" onclick="switchView('controles')">
+    <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Contrôles
     </button>
-    <button type="button" class="nav-btn" data-view="operations" onclick="switchView('operations')">
+    <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
       Opérations de maintenance
+    </button>
+    <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Mes tâches
+    </button>
+    <button type="button" class="nav-btn op-only" data-view="op-planning" onclick="switchView('op-planning')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Planning
+    </button>
+    <button type="button" class="nav-btn op-only" onclick="opOpenNewModal()" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px;color:var(--accent)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nouvelle intervention
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
@@ -682,7 +759,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
 
     <div class="content">
       <!-- View : Maintenance -->
-      <div class="view" id="view-maintenance">
+      <div class="view adm-only" id="view-maintenance">
         <div class="page-header">
           <div>
             <div class="page-title">My<span>Maintenance</span></div>
@@ -712,7 +789,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
       </div>
 
       <!-- View : Planning -->
-      <div class="view" id="view-planning" style="display:none">
+      <div class="view adm-only" id="view-planning" style="display:none">
         <div class="page-header">
           <div>
             <div class="page-title">Planning</div>
@@ -726,7 +803,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
               <span id="cal-month-label">—</span>
             </div>
             <div class="cal-controls">
-              <div class="cal-view-tabs">
+              <button type="button" class="op-btn op-btn-primary adm-only" style="margin-right:12px" onclick="admOpenCreateTask()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Créer une tâche</button><div class="cal-view-tabs">
                 <button type="button" class="cal-view-tab" data-cal-view="month" onclick="setCalView('month')">Mois</button>
                 <button type="button" class="cal-view-tab active" data-cal-view="week" onclick="setCalView('week')">Semaine</button>
                 <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
@@ -794,7 +871,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
       </div>
 
       <!-- View : Contrôles -->
-      <div class="view" id="view-controles" style="display:none">
+      <div class="view adm-only" id="view-controles" style="display:none">
         <div class="page-header">
           <div>
             <div class="page-title">Contrôles</div>
@@ -955,7 +1032,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
       </div>
 
       <!-- View : Opérations de maintenance -->
-      <div class="view" id="view-operations" style="display:none">
+      <div class="view adm-only" id="view-operations" style="display:none">
         <div class="page-header">
           <div>
             <div class="page-title">Opérations de maintenance</div>
@@ -1111,6 +1188,43 @@ body.light .toast.info{background:#fff;color:var(--text)}
         </div><!-- /ops-subview-liste -->
       </div>
     </div>
+      <!-- View opérateur : Mes tâches -->
+      <div class="view op-only" id="view-op-tasks" style="display:flex;flex-direction:column">
+        <div class="op-hdr">
+          <div>
+            <h2>Mes tâches</h2>
+            <div class="op-hdr-sub" id="op-tasks-count">—</div>
+          </div>
+          <div class="op-hdr-actions">
+            <div class="op-date-picker">
+              <label style="margin:0" for="op-tasks-date">Date</label>
+              <input type="date" id="op-tasks-date" onchange="opLoadTasks()">
+            </div>
+            <button type="button" class="op-btn op-btn-primary" onclick="opOpenNewModal()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nouvelle intervention
+            </button>
+          </div>
+        </div>
+        <div id="op-tasks-list"></div>
+      </div>
+
+      <!-- View opérateur : Planning read-only -->
+      <div class="view op-only" id="view-op-planning" style="display:none;flex-direction:column">
+        <div class="op-hdr">
+          <div>
+            <h2>Planning de la journée</h2>
+            <div class="op-hdr-sub">Vue globale — mes tâches sont surlignées</div>
+          </div>
+          <div class="op-hdr-actions">
+            <div class="op-date-picker">
+              <label style="margin:0" for="op-plan-date">Date</label>
+              <input type="date" id="op-plan-date" onchange="opLoadPlanning()">
+            </div>
+          </div>
+        </div>
+        <div id="op-planning-list"></div>
+      </div>
   </main>
 </div>
 
@@ -1425,7 +1539,9 @@ const VIEW_META = {
   maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
   planning:    { title: 'Planning',    sub: 'Calendrier de maintenance' },
   controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
-  operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' }
+  operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' },
+  'op-tasks':    { title: 'Mes tâches', sub: 'Tâches assignées du jour' },
+  'op-planning': { title: 'Planning',    sub: 'Vue globale de la journée' }
 };
 // Sous-onglet actif dans la vue Opérations ('historique' | 'liste').
 // Mémorisé en localStorage pour retrouver l'onglet d'avant à la prochaine visite.
@@ -1473,6 +1589,13 @@ function switchView(name){
     // Toujours afficher la vue Semaine en arrivant dans Planning
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
+  }
+  // Vues opérateur : recharge la liste à l'arrivée.
+  if(name === 'op-tasks' && typeof opLoadTasks === 'function'){
+    opLoadTasks();
+  }
+  if(name === 'op-planning' && typeof opLoadPlanning === 'function'){
+    opLoadPlanning();
   }
   // À l'arrivée sur la vue Opérations, restaure le dernier sous-onglet utilisé.
   if(name === 'operations'){
@@ -4892,5 +5015,375 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/mysifa_alert_runtime.js"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
+
+<!-- Modal saisie tâche (opérateur : ouvre au clic sur une carte) -->
+<div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Saisie de la tâche</div>
+    <div class="op-modal-sub" id="op-modal-saisie-sub">Renseigne les informations à la fin ou pendant l'intervention.</div>
+    <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
+    <div class="op-form-row">
+      <label for="op-fld-statut">Statut *</label>
+      <select id="op-fld-statut">
+        <option value="a_faire">À faire</option>
+        <option value="en_cours">En cours</option>
+        <option value="termine">Terminé</option>
+        <option value="reporte">Reporté</option>
+      </select>
+    </div>
+    <div class="op-form-row">
+      <label for="op-fld-duree">Durée réelle (minutes)</label>
+      <input type="number" id="op-fld-duree" min="0" step="1" placeholder="ex. 25">
+    </div>
+    <div class="op-form-row">
+      <label for="op-fld-pieces">Pièces changées</label>
+      <input type="text" id="op-fld-pieces" placeholder="ex. Filtre à air, joint torique">
+    </div>
+    <div class="op-form-row">
+      <label for="op-fld-obs">Observations</label>
+      <textarea id="op-fld-obs" placeholder="Remarques, anomalies, prochaine étape…"></textarea>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="op-btn" onclick="opCloseSaisie()">Annuler</button>
+      <button type="button" class="op-btn op-btn-primary" onclick="opSubmitSaisie()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouvelle intervention (opérateur : source=non_planifie) -->
+<div class="op-modal-overlay" id="op-modal-new" onclick="if(event.target===this) opCloseNewModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Nouvelle intervention</div>
+    <div class="op-modal-sub">Déclare une intervention non planifiée survenue en cours de session.</div>
+    <div class="op-form-row">
+      <label for="op-new-code">Code opération *</label>
+      <select id="op-new-code"></select>
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-machine">Machine *</label>
+      <select id="op-new-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="op-btn" onclick="opCloseNewModal()">Annuler</button>
+      <button type="button" class="op-btn op-btn-primary" onclick="opSubmitNew()">Créer et remplir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal admin : créer une tâche assignée -->
+<div class="op-modal-overlay" id="adm-modal-create-task" onclick="if(event.target===this) admCloseCreateTask()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Créer une tâche de maintenance</div>
+    <div class="op-modal-sub">Assigne une opération de maintenance à un opérateur pour une date donnée.</div>
+    <div class="op-form-row">
+      <label for="adm-new-date">Date prévue *</label>
+      <input type="date" id="adm-new-date">
+    </div>
+    <div class="op-form-row">
+      <label for="adm-new-code">Code opération *</label>
+      <select id="adm-new-code"></select>
+    </div>
+    <div class="op-form-row">
+      <label for="adm-new-machine">Machine *</label>
+      <select id="adm-new-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-form-row">
+      <label for="adm-new-operator">Opérateur assigné</label>
+      <select id="adm-new-operator">
+        <option value="">— Non assigné —</option>
+      </select>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="op-btn" onclick="admCloseCreateTask()">Annuler</button>
+      <button type="button" class="op-btn op-btn-primary" onclick="admSubmitCreateTask()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── JS multi-rôle : Mes tâches / Planning / Nouvelle intervention / Admin create ──
+   Chargé dans tous les cas, mais les fonctions ne sont utiles qu'au bon rôle.
+   L'état des tâches côté page est stocké dans MAINT_STATE. */
+'use strict';
+
+const MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+const MAINT_STATE = {
+  tasks: [],
+  codes: [],
+  operators: [],
+  saisieTaskId: null,
+};
+
+function _fmtDateISO(d){
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
+function _statutLabel(s){
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+}
+
+async function opFetchCodes(){
+  if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
+  const r = await fetch('/api/maintenance/tasks/codes');
+  const d = await r.json();
+  MAINT_STATE.codes = d.codes || [];
+  return MAINT_STATE.codes;
+}
+
+async function admFetchOperators(){
+  if(MAINT_STATE.operators.length) return MAINT_STATE.operators;
+  const r = await fetch('/api/maintenance/tasks/operators');
+  const d = await r.json();
+  MAINT_STATE.operators = d.operators || [];
+  return MAINT_STATE.operators;
+}
+
+/* ── Vue Mes tâches ──────────────────────────────────────────────── */
+
+async function opLoadTasks(){
+  if(MAINT_ROLE !== 'operator') return;
+  const dateInput = document.getElementById('op-tasks-date');
+  const d = dateInput.value || _fmtDateISO(new Date());
+  if(!dateInput.value) dateInput.value = d;
+  const r = await fetch('/api/maintenance/tasks?date=' + encodeURIComponent(d));
+  const data = await r.json();
+  MAINT_STATE.tasks = data.tasks || [];
+  opRenderTasks();
+}
+
+function opRenderTasks(){
+  const list = document.getElementById('op-tasks-list');
+  const cnt = document.getElementById('op-tasks-count');
+  if(!list) return;
+  const tasks = MAINT_STATE.tasks;
+  if(cnt) cnt.textContent = tasks.length + (tasks.length > 1 ? ' tâches' : ' tâche');
+  if(tasks.length === 0){
+    list.innerHTML = '<div class="op-empty"><h3>Aucune tâche pour cette date</h3>Tu peux déclarer une intervention non planifiée avec le bouton ci-dessus.</div>';
+    return;
+  }
+  const html = '<div class="op-tasks-grid">' + tasks.map(t => {
+    const cat = t.code_categorie || 'autre';
+    const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[cat] || cat;
+    const src = (t.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+    return `
+      <div class="op-card" onclick="opOpenSaisie(${t.id})">
+        <div class="op-status op-status-${t.statut}">${_statutLabel(t.statut)}</div>
+        <div class="op-card-head">
+          <span class="op-code">${t.code}</span>
+          <span class="op-cat ${_catClass(cat)}">${catLbl}</span>
+          ${src}
+        </div>
+        <div class="op-card-title">${t.code_label || '(libellé indisponible)'}</div>
+        <div class="op-card-meta">
+          <span>Machine : <strong>${t.machine}</strong></span>
+          ${t.duree_reelle_min ? '<span>Durée : <strong>'+t.duree_reelle_min+' min</strong></span>' : ''}
+        </div>
+      </div>`;
+  }).join('') + '</div>';
+  list.innerHTML = html;
+}
+
+/* ── Modal saisie ────────────────────────────────────────────────── */
+
+function opOpenSaisie(taskId){
+  const t = MAINT_STATE.tasks.find(x => x.id === taskId);
+  if(!t) return;
+  MAINT_STATE.saisieTaskId = taskId;
+  const ctx = document.getElementById('op-modal-saisie-ctx');
+  ctx.innerHTML = `
+    <span><strong>Code :</strong> ${t.code}</span>
+    <span><strong>Opération :</strong> ${t.code_label || '—'}</span>
+    <span><strong>Machine :</strong> ${t.machine}</span>
+    <span><strong>Date :</strong> ${t.date_prevue}</span>`;
+  document.getElementById('op-fld-statut').value = t.statut || 'a_faire';
+  document.getElementById('op-fld-duree').value = t.duree_reelle_min || '';
+  document.getElementById('op-fld-pieces').value = t.pieces_changees || '';
+  document.getElementById('op-fld-obs').value = t.observations || '';
+  document.getElementById('op-modal-saisie').classList.add('active');
+}
+
+function opCloseSaisie(){
+  MAINT_STATE.saisieTaskId = null;
+  document.getElementById('op-modal-saisie').classList.remove('active');
+}
+
+async function opSubmitSaisie(){
+  const id = MAINT_STATE.saisieTaskId;
+  if(!id) return;
+  const body = {
+    statut: document.getElementById('op-fld-statut').value,
+    duree_reelle_min: parseInt(document.getElementById('op-fld-duree').value, 10) || null,
+    pieces_changees: document.getElementById('op-fld-pieces').value.trim() || null,
+    observations: document.getElementById('op-fld-obs').value.trim() || null,
+  };
+  const r = await fetch('/api/maintenance/tasks/' + id, {
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  if(typeof showToast === 'function') showToast('Saisie enregistrée.', 'success');
+  opCloseSaisie();
+  opLoadTasks();
+}
+
+/* ── Modal nouvelle intervention (opérateur) ──────────────────────── */
+
+async function opOpenNewModal(){
+  await opFetchCodes();
+  const sel = document.getElementById('op-new-code');
+  sel.innerHTML = MAINT_STATE.codes.map(c =>
+    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+  ).join('');
+  document.getElementById('op-modal-new').classList.add('active');
+}
+
+function opCloseNewModal(){
+  document.getElementById('op-modal-new').classList.remove('active');
+}
+
+async function opSubmitNew(){
+  const code = document.getElementById('op-new-code').value;
+  const machine = document.getElementById('op-new-machine').value;
+  if(!code || !machine){
+    alert('Code et machine obligatoires.');
+    return;
+  }
+  const body = {
+    date_prevue: _fmtDateISO(new Date()),
+    code, machine,
+    source: 'non_planifie',
+  };
+  const r = await fetch('/api/maintenance/tasks', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  const data = await r.json();
+  if(typeof showToast === 'function') showToast('Intervention déclarée.', 'success');
+  opCloseNewModal();
+  // Recharge et ouvre directement la saisie sur la nouvelle tâche.
+  const dateInput = document.getElementById('op-tasks-date');
+  if(dateInput) dateInput.value = body.date_prevue;
+  await opLoadTasks();
+  if(data.task && data.task.id) opOpenSaisie(data.task.id);
+}
+
+/* ── Vue Planning opérateur (read-only) ──────────────────────────── */
+
+async function opLoadPlanning(){
+  if(MAINT_ROLE !== 'operator') return;
+  const dateInput = document.getElementById('op-plan-date');
+  const d = dateInput.value || _fmtDateISO(new Date());
+  if(!dateInput.value) dateInput.value = d;
+  const r = await fetch('/api/maintenance/tasks?date=' + encodeURIComponent(d));
+  const data = await r.json();
+  const rows = data.tasks || [];
+  const list = document.getElementById('op-planning-list');
+  if(!list) return;
+  if(rows.length === 0){
+    list.innerHTML = '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
+    return;
+  }
+  const meId = (S && S.me) ? S.me.id : null;
+  const table = `<table class="op-plan-table">
+    <thead><tr><th>Code</th><th>Opération</th><th>Machine</th><th>Opérateur</th><th>Statut</th></tr></thead>
+    <tbody>${rows.map(t => {
+      const mine = (t.operator_id === meId);
+      return `<tr class="${mine ? 'mine' : ''}">
+        <td><span class="op-code">${t.code}</span></td>
+        <td>${t.code_label || '—'}</td>
+        <td><strong>${t.machine}</strong></td>
+        <td>${t.operator_nom || '<em style="color:var(--muted)">Non assigné</em>'}</td>
+        <td><span class="op-status op-status-${t.statut}" style="position:static">${_statutLabel(t.statut)}</span></td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+  list.innerHTML = table;
+}
+
+/* ── Modal admin : créer une tâche assignée ──────────────────────── */
+
+async function admOpenCreateTask(){
+  await Promise.all([opFetchCodes(), admFetchOperators()]);
+  const cSel = document.getElementById('adm-new-code');
+  cSel.innerHTML = MAINT_STATE.codes.map(c =>
+    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+  ).join('');
+  const oSel = document.getElementById('adm-new-operator');
+  oSel.innerHTML = '<option value="">— Non assigné —</option>' + MAINT_STATE.operators.map(u =>
+    `<option value="${u.id}">${u.nom}</option>`
+  ).join('');
+  const d = document.getElementById('adm-new-date');
+  if(!d.value) d.value = _fmtDateISO(new Date());
+  document.getElementById('adm-modal-create-task').classList.add('active');
+}
+
+function admCloseCreateTask(){
+  document.getElementById('adm-modal-create-task').classList.remove('active');
+}
+
+async function admSubmitCreateTask(){
+  const body = {
+    date_prevue: document.getElementById('adm-new-date').value,
+    code: document.getElementById('adm-new-code').value,
+    machine: document.getElementById('adm-new-machine').value,
+    operator_id: parseInt(document.getElementById('adm-new-operator').value, 10) || null,
+    source: 'planifie',
+  };
+  if(!body.date_prevue || !body.code || !body.machine){
+    alert('Date, code et machine obligatoires.');
+    return;
+  }
+  const r = await fetch('/api/maintenance/tasks', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  if(typeof showToast === 'function') showToast('Tâche créée.', 'success');
+  admCloseCreateTask();
+}
+
+/* ── Initialisation au chargement selon le rôle ──────────────────── */
+
+(function initMaintRole(){
+  if(MAINT_ROLE === 'operator'){
+    // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
+    const dateInput = document.getElementById('op-tasks-date');
+    if(dateInput) dateInput.value = _fmtDateISO(new Date());
+    const planInput = document.getElementById('op-plan-date');
+    if(planInput) planInput.value = _fmtDateISO(new Date());
+    opLoadTasks();
+    // Pré-charge le planning en tâche de fond.
+    opLoadPlanning();
+  }
+})();
+</script>
+
 </body>
 </html>"""
