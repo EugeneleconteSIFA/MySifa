@@ -16,7 +16,7 @@ from services.auth_service import get_current_user
 
 router = APIRouter()
 
-_MONITORING_ROLES = frozenset({"superadmin", "direction", "administration"})
+_MONITORING_ROLES = frozenset({"superadmin", "direction", "administration", "administration_ventes", "administration_technique"})
 _PARIS = ZoneInfo("Europe/Paris")
 
 # Alias normalisés (minuscules, espaces unifiés) — correspondance exacte ou préfixe

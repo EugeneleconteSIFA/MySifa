@@ -3101,7 +3101,7 @@ def supprimer_prospect(request: Request, prospect_id: int):
 
 # ─── Délais carte France ───────────────────────────────────────────
 
-_DELAIS_EDIT_ROLES = {"superadmin", "direction", "administration", "expedition"}
+_DELAIS_EDIT_ROLES = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique", "expedition"}
 
 
 def _delai_jours_from_texte(delai_texte: str) -> int:

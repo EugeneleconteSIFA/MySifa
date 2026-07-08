@@ -9,7 +9,7 @@ from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
 from config import APP_VERSION
 
-ROLES_QUALITE = {"superadmin", "direction", "administration"}
+ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
 
 router = APIRouter()
@@ -188,6 +188,38 @@ body.light .table-wrap tbody tr:hover td{background:rgba(0,0,0,.02)}
 .badge-grav-majeure{background:rgba(251,191,36,.16);color:var(--warn)}
 .badge-grav-critique{background:rgba(248,113,113,.18);color:var(--danger)}
 .badge-type{background:var(--accent-bg);color:var(--accent);font-weight:600}
+
+/* ── Prise en connaissance NC (v163) ─────────────────────────────── */
+.list-with-legend{display:flex;gap:16px;align-items:flex-start}
+.list-with-legend .table-wrap{flex:1;min-width:0}
+.ack-legend{flex:0 0 240px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;position:sticky;top:16px;font-size:12px}
+.ack-legend-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.ack-legend-item{display:flex;align-items:center;gap:10px;padding:6px 0;color:var(--text2)}
+.ack-legend-item + .ack-legend-item{border-top:1px solid var(--border)}
+.ack-legend-dot{width:12px;height:12px;border-radius:50%;flex:0 0 12px;border:2px solid currentColor;background:currentColor}
+.ack-legend-label{flex:1;font-size:12px;font-weight:600;color:var(--text)}
+.ack-legend-count{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace}
+.ack-legend-hint{margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);line-height:1.5}
+.ack-legend-me{margin-top:10px;padding:8px 10px;border-radius:8px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:600;line-height:1.4}
+.ack-dots{display:inline-flex;gap:4px;align-items:center}
+.ack-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid currentColor;background:transparent;position:relative;cursor:default;transition:transform .12s}
+.ack-dot.done{background:currentColor}
+.ack-dot.done::after{content:"";position:absolute;left:3px;top:5px;width:6px;height:2.5px;border-left:1.5px solid var(--card);border-bottom:1.5px solid var(--card);transform:rotate(-45deg)}
+body.light .ack-dot.done::after{border-left-color:#fff;border-bottom-color:#fff}
+.ack-dot:hover{transform:scale(1.15)}
+/* Carte "Prise en connaissance" dans la fiche détail */
+.ack-card-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.ack-card-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);flex:1 1 240px;min-width:220px}
+.ack-card-item .ack-dot{width:16px;height:16px}
+.ack-card-item .ack-card-info{flex:1;min-width:0;line-height:1.3}
+.ack-card-item .ack-card-label{font-size:12px;font-weight:700;color:var(--text)}
+.ack-card-item .ack-card-sub{font-size:10.5px;color:var(--muted);margin-top:2px}
+.ack-card-item.mine{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.ack-card-actions{margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+@media (max-width: 900px){
+  .list-with-legend{flex-direction:column}
+  .ack-legend{width:100%;position:static;flex:0 0 auto}
+}
 .unread-dot{display:inline-block;width:8px;height:8px;border-radius:999px;background:var(--accent);margin-right:6px;vertical-align:middle;box-shadow:0 0 0 2px rgba(34,211,238,.25)}
 .unread-pill{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--btn-fg);font-size:10px;font-weight:800;border-radius:999px;padding:1px 7px;min-width:18px;margin-left:6px}
 
@@ -585,6 +617,11 @@ const S = {
   refEditQaId: null,         // ID de la question en cours d'édition inline
   isQualiteAdmin: __IS_QUALITE_ADMIN__,
   isQualiteReadonly: __IS_QUALITE_READONLY__,
+  // ── Prise en connaissance NC (v163) ─────────────────────────
+  // ackServices : liste [{key,label,color}] issue de GET /api/qualite/services
+  // myAckService : clé du service NC du user courant (ou null s'il n'en a pas)
+  ackServices: [],
+  myAckService: null,
 };
 
 const STATUTS = [
@@ -709,6 +746,16 @@ async function loadNCs(){
     if(S.view==='list') renderList();
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
+async function loadAckServices(){
+  try{
+    const r=await api('/api/qualite/services');
+    if(!r.ok) return;
+    const d=await r.json();
+    S.ackServices=Array.isArray(d.services)?d.services:[];
+    S.myAckService=d.my_service||null;
+  }catch(e){}
+}
+
 async function loadCanaux(){
   try{
     const r=await api('/api/qualite/canaux');
@@ -775,6 +822,53 @@ function setView(v){
   closeSidebar();
 }
 
+function ackDotsHtml(nc){
+  // Rend 5 pastilles alignées : contour couleur si non vue, plein + coche si vue.
+  // Tooltip natif = "Service — pris en connaissance par X le JJ/MM/AAAA HH:MM" ou "Non vu".
+  if(!S.ackServices||!S.ackServices.length) return '';
+  const acks=nc.service_acks||{};
+  const parts=S.ackServices.map(function(s){
+    const a=acks[s.key];
+    const done=!!a;
+    const title=done
+      ? (s.label+' — pris en connaissance par '+(a.user_nom||'?')+' le '+fmtDateTime(a.ack_at))
+      : (s.label+' — non vu');
+    return '<span class="ack-dot'+(done?' done':'')+'" style="color:'+s.color+'" title="'+escAttr(title)+'"></span>';
+  }).join('');
+  return '<div class="ack-dots">'+parts+'</div>';
+}
+
+function ackLegendHtml(){
+  // Panneau latéral droit du tableau NC : légende + compteurs par service.
+  if(!S.ackServices||!S.ackServices.length) return '';
+  const total=S.ncs.length;
+  const counts={};
+  S.ackServices.forEach(function(s){counts[s.key]=0;});
+  S.ncs.forEach(function(n){
+    const acks=n.service_acks||{};
+    S.ackServices.forEach(function(s){if(acks[s.key])counts[s.key]++;});
+  });
+  const items=S.ackServices.map(function(s){
+    return ''
+      +'<div class="ack-legend-item">'
+      +  '<span class="ack-legend-dot" style="color:'+s.color+'"></span>'
+      +  '<span class="ack-legend-label">'+escHtml(s.label)+'</span>'
+      +  '<span class="ack-legend-count">'+counts[s.key]+'/'+total+'</span>'
+      +'</div>';
+  }).join('');
+  const meLbl=S.myAckService
+    ? 'Vous êtes rattaché au service : '+escHtml((S.ackServices.find(function(x){return x.key===S.myAckService;})||{}).label||S.myAckService)
+    : '';
+  const meBlock=meLbl?('<div class="ack-legend-me">'+meLbl+'</div>'):'';
+  return ''
+    +'<aside class="ack-legend">'
+    +  '<div class="ack-legend-title">Prise en connaissance</div>'
+    +  items
+    +  meBlock
+    +  '<div class="ack-legend-hint">Chaque service marque la NC comme lue depuis la fiche. La modification de champs sensibles (description, gravité, actions) réinitialise les pastilles.</div>'
+    +'</aside>';
+}
+
 function filteredNCs(){
   let list=S.ncs;
   if(S.filterStatut!=='all') list=list.filter(n=>n.statut===S.filterStatut);
@@ -824,15 +918,19 @@ function renderList(){
         <td>${typeBadge(n.type_nc)}</td>
         <td>${gravBadge(n.gravite)}</td>
         <td>${statutBadge(n.statut)}</td>
+        <td>${ackDotsHtml(n)}</td>
         <td><span style="color:var(--text2);font-size:12px">${escHtml(n.pilote_nom||'—')}</span></td>
         <td><span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--text2)">${escHtml(fmtDate(n.date_nc))}</span></td>
         <td style="color:var(--muted);font-size:11px;white-space:nowrap">${escHtml(relTime(n.updated_at))}${unreadBadge}</td>
       </tr>`;
     }).join('');
-    body=`<div class="table-wrap"><table>
-      <thead><tr><th>N°</th><th>Titre / Client</th><th>Type</th><th>Gravité</th><th>Statut</th><th>Pilote</th><th>Date NC</th><th>Activité</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`;
+    body=`<div class="list-with-legend">
+      <div class="table-wrap"><table>
+        <thead><tr><th>N°</th><th>Titre / Client</th><th>Type</th><th>Gravité</th><th>Statut</th><th>Prise en connaissance</th><th>Pilote</th><th>Date NC</th><th>Activité</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      ${ackLegendHtml()}
+    </div>`;
   }
 
   document.getElementById('content').innerHTML=`
@@ -1094,6 +1192,8 @@ function renderFicheTab(n){
       </div>
     </div>
 
+    ${ackCardHtml(n)}
+
     <div class="card">
       <div class="card-title">Validations</div>
       <div class="valid-grid">
@@ -1102,6 +1202,83 @@ function renderFicheTab(n){
       </div>
     </div>
   `;
+}
+
+function ackCardHtml(n){
+  // Carte affichée dans la fiche détail : une box par service avec l'état d'ack,
+  // et un bouton d'action pour le service du user courant.
+  if(!S.ackServices||!S.ackServices.length) return '';
+  const acks=n.service_acks||{};
+  const items=S.ackServices.map(function(s){
+    const a=acks[s.key];
+    const done=!!a;
+    const isMine=S.myAckService===s.key;
+    const sub=done
+      ? (escHtml(a.user_nom||'?')+' · '+escHtml(fmtDateTime(a.ack_at)))
+      : 'En attente';
+    return ''
+      +'<div class="ack-card-item'+(isMine?' mine':'')+'">'
+      +  '<span class="ack-dot'+(done?' done':'')+'" style="color:'+s.color+'"></span>'
+      +  '<div class="ack-card-info">'
+      +    '<div class="ack-card-label">'+escHtml(s.label)+'</div>'
+      +    '<div class="ack-card-sub">'+sub+'</div>'
+      +  '</div>'
+      +'</div>';
+  }).join('');
+  let actions='';
+  if(S.myAckService){
+    const mine=acks[S.myAckService];
+    if(mine){
+      actions=''
+        +'<div class="ack-card-actions">'
+        +  '<span style="font-size:12px;color:var(--ok);font-weight:600">✓ Vous avez pris connaissance de cette NC le '+escHtml(fmtDateTime(mine.ack_at))+'</span>'
+        +  '<button type="button" class="btn btn-ghost btn-sm" onclick="unackCurrentNC()">Retirer</button>'
+        +'</div>';
+    } else {
+      actions=''
+        +'<div class="ack-card-actions">'
+        +  '<button type="button" class="btn btn-accent btn-sm" onclick="ackCurrentNC()">Marquer comme lu</button>'
+        +  '<span style="font-size:11px;color:var(--muted)">au nom de votre service</span>'
+        +'</div>';
+    }
+  } else {
+    actions='<div class="ack-card-actions"><span style="font-size:11px;color:var(--muted)">Votre rôle n\'est pas rattaché à un service de prise en connaissance.</span></div>';
+  }
+  return ''
+    +'<div class="card">'
+    +  '<div class="card-title">Prise en connaissance par service</div>'
+    +  '<div class="ack-card-row">'+items+'</div>'
+    +  actions
+    +'</div>';
+}
+
+async function ackCurrentNC(){
+  if(!S.current) return;
+  try{
+    const r=await api('/api/qualite/nc/'+S.current.id+'/ack',{method:'POST'});
+    if(!r.ok){showToast('Erreur lors de la prise en connaissance','danger');return;}
+    const d=await r.json();
+    S.current=d;
+    // Mettre à jour la ligne correspondante dans la liste locale
+    const ix=S.ncs.findIndex(function(x){return x.id===d.id;});
+    if(ix>=0) S.ncs[ix]=d;
+    renderDetail();
+    showToast('Prise en connaissance enregistrée.','success');
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+async function unackCurrentNC(){
+  if(!S.current) return;
+  try{
+    const r=await api('/api/qualite/nc/'+S.current.id+'/ack',{method:'DELETE'});
+    if(!r.ok){showToast('Erreur','danger');return;}
+    const d=await r.json();
+    S.current=d;
+    const ix=S.ncs.findIndex(function(x){return x.id===d.id;});
+    if(ix>=0) S.ncs[ix]=d;
+    renderDetail();
+    showToast('Prise en connaissance retirée.','info');
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 
 function validBox(label, name, at, kind, canSign){
@@ -2320,7 +2497,7 @@ async function init(){
     document.body.classList.add('qualite-readonly');
   }
   await loadUsers();
-  await Promise.all([loadNCs(),loadCanaux(),loadUnread(),loadRefMeta()]);
+  await Promise.all([loadNCs(),loadCanaux(),loadUnread(),loadRefMeta(),loadAckServices()]);
   // Précharger les candidats auditeurs (utile dès l'ouverture de la modal création audit)
   if(typeof loadAuditeursCandidats==='function') loadAuditeursCandidats();
   setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);

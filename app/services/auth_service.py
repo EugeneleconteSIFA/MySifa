@@ -14,6 +14,7 @@ from config import (
     SESSION_HOURS,
     COOKIE_NAME,
     ROLES_ADMIN,
+    ROLES_ADMINISTRATION_ALL,
     ROLES_PRICING,
     ACCESS_OVERRIDABLE_APPS,
     ROLE_SUPERADMIN,
@@ -25,8 +26,9 @@ from config import (
     default_app_access_for_role,
 )
 
-# MyCalendrier — accès page (pas de rôle rh en base)
-CALENDRIER_PAGE_ROLES = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION})
+# MyCalendrier — accès page (pas de rôle rh en base). Inclut le rôle legacy
+# `administration` + les deux nouveaux rôles issus du split (v163).
+CALENDRIER_PAGE_ROLES = frozenset({ROLE_SUPERADMIN, ROLE_DIRECTION} | ROLES_ADMINISTRATION_ALL)
 
 # ─── Impersonation (superadmin uniquement) ────────────────────────
 # Cookie posé par POST /api/impersonate, retiré par DELETE /api/impersonate.
@@ -139,7 +141,7 @@ def get_user_by_token(token: str) -> Optional[dict]:
     now = datetime.now().isoformat()
     with get_db() as conn:
         row = conn.execute(
-            """SELECT u.id, u.email, u.identifiant, u.nom, u.role, u.operateur_lie, u.machine_id, u.actif, u.access_overrides
+            """SELECT u.id, u.email, u.identifiant, u.nom, u.role, u.operateur_lie, u.machine_id, u.actif, u.access_overrides, u.nc_service_override
                FROM sessions s JOIN users u ON s.user_id=u.id
                WHERE s.token=? AND s.expires_at>? AND u.actif=1""",
             (token, now)

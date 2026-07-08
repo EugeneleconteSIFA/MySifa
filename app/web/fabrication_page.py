@@ -1782,7 +1782,7 @@ const OF_FIELD_LABELS = {
 
 function canAccessOfTab(){
   const r = S.user && S.user.role;
-  return r==='superadmin' || r==='direction' || r==='administration';
+  return (r==='superadmin' || r==='direction' || r==='administration' || r==='administration_ventes' || r==='administration_technique');
 }
 
 function ofStatutLabel(lie){
@@ -3408,7 +3408,7 @@ function renderMain(){
       'Arrêt en cours depuis '+since+' — '+((S.lastSaisie&&S.lastSaisie.operation)||'')
     );
   }
-  const isAdminUserMain = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUserMain = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const canAdminView = !!isAdminUserMain;
   const isAdminView = canAdminView && S.saisieViewMode==='admin';
   if(S.operateur && !S.machine && !isAdminUserMain){
@@ -3655,7 +3655,7 @@ async function openTracabiliteModal(noDossier){
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
   // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
-  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
   if(isAdminView){
     const adminTabBtns = [
@@ -5052,7 +5052,7 @@ function renderRepiquageMain(){
 
 function renderRepiquageGrid(){
   const dossiers = S.repiquageDossiers || [];
-  const isAdminUserMain = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUserMain = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const hasMachine = !!(S.user && S.user.machine_id) || !!(isAdminUserMain && S.adminMachineId);
 
   let alert = null;
@@ -5304,7 +5304,7 @@ function renderRepiquageDossierView(){
     borderRadius:'10px', display:'flex', flexDirection:'column', gap:'4px',
     flex:'1 1 200px', minWidth:'200px',
   };
-  const _isAdminCp = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const _isAdminCp = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const _adjustBtn = (scope) => _isAdminCp ? h('button',{
     title:'Ajuster manuellement',
     style:{
@@ -5533,7 +5533,7 @@ function renderRepiquageHistoriqueView(){
   const e = S.repiquageEtat || {};
   const dossierInfo = e.dossier || {};
   const client = (dossierInfo.client||'').trim();
-  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const fmtNum = n => Number(n||0).toLocaleString('fr-FR');
   const fmtDateLong = iso => {
     if(!iso) return '—';
@@ -5634,7 +5634,7 @@ function renderRepiquageDiscussionView(){
   const ref = S.repiquageDossierActif || '—';
   const e = S.repiquageEtat || {};
   const dossierInfo = e.dossier || {};
-  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const currentUserId = S.user?.id;
   const headBanner = renderRepiquageHeadBanner(ref, dossierInfo, e.etiquettes_par_carton);
   const tabsRow = renderRepiquageTabs();
@@ -5782,7 +5782,7 @@ function renderRepiquageDiscussionView(){
 
 /* Composants reutilises entre la vue saisie et la vue historique */
 function renderRepiquageTabs(){
-  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const tabBtn = (key, label) => h('button',{
     style:{
       border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit',
@@ -5895,7 +5895,7 @@ function renderRepiquageAttentionModal(){
 
 /* ── Repiquage : modal "Modifier paramétrage" ───────────────── */
 function renderRepiquageEditParamModal(){
-  const isAdminUser = S.user && (S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='direction');
+  const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const inp = h('input',{
     type:'number', min:'1', step:'1', placeholder:'Ex : 240',
     style:{
@@ -6121,7 +6121,7 @@ async function init(){
   render();
 
   // Charger la liste des machines (nécessaire pour le sélecteur admin)
-  const isAdm = user.role==='superadmin'||user.role==='administration'||user.role==='direction';
+  const isAdm = (user.role==='superadmin'||user.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||user.role==='administration_ventes'||user.role==='administration_technique'||user.role==='direction');
   if(isAdm && !user.machine_id){
     await loadMachines();
   }

@@ -18,7 +18,7 @@ from app.core.database import get_db
 from app.services.auth_service import get_current_user
 from config import UPLOAD_DIR
 
-ROLES_BAT = {"superadmin", "direction", "administration"}
+ROLES_BAT = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_BAT_VIEW = ROLES_BAT | {"commercial"}
 BAT_STATUTS = {"a_faire", "en_attente", "valide"}
 BAT_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "bat")

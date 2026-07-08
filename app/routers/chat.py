@@ -219,12 +219,12 @@ _DEFAULT_CHANNELS = [
     (
         "fabrication",
         "Équipe fabrication",
-        ["fabrication", "direction", "administration", "superadmin"],
+        ["fabrication", "direction", "administration", "administration_ventes", "administration_technique", "superadmin"],
     ),
     (
         "logistique",
         "Équipe logistique",
-        ["logistique", "direction", "administration", "superadmin"],
+        ["logistique", "direction", "administration", "administration_ventes", "administration_technique", "superadmin"],
     ),
 ]
 
@@ -596,7 +596,7 @@ def join_channel(channel_id: int, request: Request):
 
 
 def _can_manage_channel(user: dict, ch) -> bool:
-    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    is_admin = user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
     return is_admin or ch["created_by"] == user["id"]
 
 
@@ -1024,7 +1024,7 @@ def pinned_messages(channel_id: int, request: Request):
 def pin_message(channel_id: int, msg_id: int, request: Request):
     """Épingler un message. Réservé admins ou créateur du canal."""
     user = _require(request)
-    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    is_admin = user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
     with get_db() as conn:
         ch = conn.execute(
             "SELECT created_by FROM chat_channels WHERE id=? AND archived_at IS NULL LIMIT 1",
@@ -1052,7 +1052,7 @@ def pin_message(channel_id: int, msg_id: int, request: Request):
 def unpin_message(channel_id: int, msg_id: int, request: Request):
     """Retirer l'épingle d'un message."""
     user = _require(request)
-    is_admin = user.get("role") in {"superadmin", "direction", "administration"}
+    is_admin = user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
     with get_db() as conn:
         ch = conn.execute(
             "SELECT created_by FROM chat_channels WHERE id=? LIMIT 1",

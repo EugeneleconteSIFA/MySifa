@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from app.core.database import get_db
 from app.services.auth_service import get_current_user
 
-ROLES_PAIE = {"superadmin", "direction", "administration", "comptabilite"}
+ROLES_PAIE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique", "comptabilite"}
 
 router = APIRouter()
 

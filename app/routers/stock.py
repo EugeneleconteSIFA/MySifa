@@ -118,7 +118,7 @@ def _mp_is_laizee(categorie: str) -> bool:
 
 
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
-_STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
+_STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration", "administration_ventes", "administration_technique"})
 _STOCK_VALORISATION_USD_ROLES = frozenset({"superadmin", "direction"})
 
 
@@ -1437,7 +1437,7 @@ class _EmplacementPlanAdd(BaseModel):
 def add_emplacement_plan(payload: _EmplacementPlanAdd, request: Request):
     """Ajoute un emplacement au plan. Réservé direction / administration / superadmin."""
     user = require_stock(request)
-    if user.get("role") not in {"superadmin", "direction", "administration"}:
+    if user.get("role") not in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}:
         raise HTTPException(403, "Ajout d'emplacement réservé aux administrateurs.")
     code = payload.code.strip().upper()
     if not code:

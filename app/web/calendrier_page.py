@@ -490,7 +490,7 @@ const CAL_IDS_ADMIN=['conges','anniversaires','feries','paie','expeditions','per
 const CAL_IDS_BASIC=['conges','feries','perso'];
 function calIdsForRole(role){
   if(role==='superadmin'||role==='direction')return CAL_IDS_FULL;
-  if(role==='administration')return CAL_IDS_ADMIN;
+  if((role==='administration'||role==='administration_ventes'||role==='administration_technique'))return CAL_IDS_ADMIN;
   return CAL_IDS_BASIC;
 }
 function accessibleCalDefs(){

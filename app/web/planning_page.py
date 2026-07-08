@@ -36,7 +36,7 @@ def planning_page(request: Request, machine: Optional[int] = None):
     ssr_mid = str(machine) if machine is not None else "0"
     of_admin_js = (
         "true"
-        if user.get("role") in {"superadmin", "direction", "administration"}
+        if user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
         else "false"
     )
     html = (

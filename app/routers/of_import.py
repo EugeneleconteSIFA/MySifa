@@ -22,7 +22,7 @@ router = APIRouter()
 
 _PARIS = ZoneInfo("Europe/Paris")
 OF_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "of")
-OF_ALLOWED_ROLES = frozenset({"superadmin", "direction", "administration"})
+OF_ALLOWED_ROLES = frozenset({"superadmin", "direction", "administration", "administration_ventes", "administration_technique"})
 
 OF_REAL_FIELDS = frozenset({
     "laize", "qte_adhesif_g", "qte_adhesif_kg", "qte_au_mille",

@@ -1449,7 +1449,7 @@ def planning_summary(request: Request):
         "planning_entries_total": int(total),
         "per_machine": [dict(r) for r in rows],
     }
-    if user.get("role") in {"direction", "administration"}:
+    if user.get("role") in {"direction", "administration", "administration_ventes", "administration_technique"}:
         out["db_path"] = DB_PATH
     return out
 
