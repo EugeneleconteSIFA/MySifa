@@ -415,7 +415,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-item-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
 .tmpl-item-desc{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tmpl-item-count{flex-shrink:0;font-size:11px;color:var(--text2);font-weight:600;padding:3px 9px;border-radius:6px;background:var(--bg)}
-.tmpl-item-actions{display:flex;gap:6px;flex-shrink:0}
+.tmpl-item-actions{display:flex;gap:4px;flex-shrink:0}
+.tmpl-item-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;transition:all .12s;font-family:inherit}
+.tmpl-item-btn:hover{background:var(--bg);border-color:var(--border)}
+.tmpl-item-btn.edit:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.tmpl-item-btn.del:hover{color:var(--danger);border-color:var(--danger);background:rgba(248,113,113,.10)}
+.tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
 /* Sélecteur de modèle dans le modal Nouveau créneau */
 .case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -6136,13 +6141,11 @@ function renderTemplatesList(){
       </div>
       <div class="tmpl-item-count">${t.ops_count} op.</div>
       <div class="tmpl-item-actions">
-        <button type="button" class="case-action-btn edit" onclick="openTemplateEditor(${escAttr(t.id)})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Modifier
+        <button type="button" class="tmpl-item-btn edit" onclick="openTemplateEditor(${escAttr(t.id)})" title="Modifier" aria-label="Modifier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button type="button" class="case-action-btn del" onclick="confirmDeleteTemplate(${escAttr(t.id)})">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
-          Supprimer
+        <button type="button" class="tmpl-item-btn del" onclick="confirmDeleteTemplate(${escAttr(t.id)})" title="Supprimer" aria-label="Supprimer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
         </button>
       </div>
     </div>`).join('');
