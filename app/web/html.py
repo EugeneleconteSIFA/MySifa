@@ -2182,7 +2182,7 @@ const fDSecs=d=>{
 };
 const opName=s=>{if(!s)return'';const p=s.split(' - ');return p.length>1?p.slice(1).join(' - '):s;};
 const fMin=m=>{if(!m&&m!==0)return'-';const hh=Math.floor(m/60),mm=Math.round(m%60);return hh>0?hh+'h '+String(mm).padStart(2,'0')+'min':mm+'min';};
-const isAdmin=u=>u&&((u.role==='direction'||u.(role==='administration'||role==='administration_ventes'||role==='administration_technique')||u.role==='administration_ventes'||u.role==='administration_technique'||u.role==='superadmin'));
+const isAdmin=u=>u&&((u.role==='direction'||u.role==='administration'||u.role==='administration_ventes'||u.role==='administration_technique'||u.role==='superadmin'));
 const canViewAllProd=u=>u&&(isAdmin(u)||u.role==='commercial'||u.role==='expedition');
 const isComptaPlanning=u=>u&&(u.role==='comptabilite'||u.role==='logistique');
 const canPlanningNav=u=>!!(u&&u.app_access&&u.app_access.planning);
