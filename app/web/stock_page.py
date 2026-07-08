@@ -476,7 +476,15 @@ body.light .action-btn.empl-inv-btn:hover{border-color:#7c3aed}
 .mvt-qte-pf-sortie{color:var(--pf-sortie);font-family:monospace;font-weight:700}
 .mvt-qte-inventaire{color:var(--c2);font-family:monospace;font-weight:700}
 .mvt-line2{font-size:11px;color:var(--muted);margin-top:2px}
+.mvt-solde{display:inline-flex;align-items:baseline;gap:6px;margin-top:6px;padding:3px 9px;
+  font-size:11px;line-height:1.3;background:color-mix(in srgb,var(--accent) 8%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border));border-radius:6px}
+.mvt-solde-label{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600;font-size:10px}
+.mvt-solde-value{color:var(--text);font-weight:800;font-family:monospace}
 .mvt-note{font-size:11px;color:var(--text2);margin-top:2px;font-style:italic}
+.hist-solde-avant{color:var(--muted)}
+.hist-solde-arrow{color:var(--muted);margin:0 4px}
+.hist-solde-apres{color:var(--text);font-weight:800;font-family:monospace}
 
 /* ── Stats dashboard ── */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
@@ -5190,10 +5198,13 @@ function buildMpMvtHistory(mouvements, matiere) {
                 fD(m.created_at),
                 empl ? el('span', null, ' · ' + empl) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
-                (m.quantite_apres != null)
-                  ? el('span', null, ' · Stock ' + mpStockLine(m.quantite_apres, mpCat))
-                  : null,
               ),
+              (m.quantite_apres != null)
+                ? el('div', { cls: 'mvt-solde' },
+                    el('span', { cls: 'mvt-solde-label' }, 'Solde'),
+                    el('span', { cls: 'mvt-solde-value' }, mpStockLine(m.quantite_apres, mpCat)),
+                  )
+                : null,
               noteParts.length
                 ? el('div', { cls: 'mvt-note' }, noteParts.join(' · '))
                 : null,
@@ -10381,7 +10392,11 @@ function buildHistoriqueTableRow(m) {
     el('td', { cls: 'hist-empl' }, stockHistEmplLinks(m.emplacement)),
     el('td', { cls: 'hist-unite' }, histUniteLabel(m)),
     el('td', null, el('span', { cls: qteCls }, qte)),
-    el('td', { cls: 'hist-muted hist-col-optional' }, avant + ' → ' + apres),
+    el('td', { cls: 'hist-col-optional' },
+      el('span', { cls: 'hist-solde-avant' }, avant),
+      el('span', { cls: 'hist-solde-arrow' }, '→'),
+      el('span', { cls: 'hist-solde-apres' }, apres),
+    ),
     el('td', { cls: 'hist-note-cell hist-muted hist-col-optional', title: blNote }, truncStr(blNote, 40) || '—'),
     el('td', { cls: 'hist-op hist-col-optional' }, op),
   );
@@ -10400,8 +10415,12 @@ function buildHistoriqueCard(m) {
     el('dd', null, histUniteLabel(m)),
     el('dt', null, 'Quantité'),
     el('dd', null, el('span', { cls: qteCls }, qte)),
-    el('dt', null, 'Stock'),
-    el('dd', null, avant + ' → ' + apres),
+    el('dt', null, 'Solde'),
+    el('dd', null,
+      el('span', { cls: 'hist-solde-avant' }, avant),
+      el('span', { cls: 'hist-solde-arrow' }, '→'),
+      el('span', { cls: 'hist-solde-apres' }, apres),
+    ),
   );
   if (op) stats.append(el('dt', null, 'Opérateur'), el('dd', null, op));
   return el('div', { cls: 'hist-card' },
@@ -10473,7 +10492,7 @@ function buildHistorique() {
     el('th', null, 'Emplacement'),
     el('th', null, 'Unité'),
     el('th', null, 'Quantité'),
-    el('th', { cls: 'hist-col-optional' }, 'Avant → Après'),
+    el('th', { cls: 'hist-col-optional' }, 'Solde (avant → après)'),
     el('th', { cls: 'hist-col-optional' }, 'Ref BL / Note'),
     el('th', { cls: 'hist-col-optional' }, 'Opérateur'),
   ));
