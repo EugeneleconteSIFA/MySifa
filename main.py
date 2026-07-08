@@ -55,6 +55,7 @@ from app.web.messages_page import router as messages_page_router
 from app.routers.calendrier import router as calendrier_api_router
 from app.web.calendrier_page import router as calendrier_page_router
 from app.routers.ai import router as ai_router
+from app.routers.translate import router as translate_router
 from app.routers.chat import router as chat_router
 from app.routers.alerts import router as alerts_router
 from app.routers.postit import router as postit_router
@@ -333,6 +334,7 @@ app.include_router(messages_page_router)
 app.include_router(calendrier_api_router)
 app.include_router(calendrier_page_router)
 app.include_router(ai_router)
+app.include_router(translate_router)
 app.include_router(chat_router)
 app.include_router(alerts_router)
 app.include_router(postit_router)

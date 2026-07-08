@@ -557,6 +557,118 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
   .portal-logout .theme-ico,
   .portal-logout svg{width:16px;height:16px;flex-shrink:0}
 }
+/* ── MyTraduction (DeepL) — bouton corner + modal ─────────────────── */
+.portal-deepl-corner{position:relative}
+.portal-deepl-corner:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+body.light .portal-deepl-corner:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.portal-deepl-corner svg{color:var(--muted)}
+.portal-deepl-corner:hover svg{color:var(--accent)}
+body.light .portal-deepl-corner svg{color:var(--muted)}
+.portal-deepl-corner:hover svg{color:var(--accent)}
+.mytraduction-overlay{
+  position:fixed;inset:0;background:rgba(10,14,23,.72);z-index:9998;
+  display:flex;align-items:center;justify-content:center;padding:24px;
+  animation:mytFadeIn .18s ease
+}
+body.light .mytraduction-overlay{background:rgba(15,23,42,.55)}
+@keyframes mytFadeIn{from{opacity:0}to{opacity:1}}
+.mytraduction-modal{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  width:100%;max-width:960px;max-height:90vh;display:flex;flex-direction:column;
+  box-shadow:0 30px 80px rgba(0,0,0,.55);
+  animation:mytSlideUp .22s ease
+}
+body.light .mytraduction-modal{box-shadow:0 20px 60px rgba(15,23,42,.20)}
+@keyframes mytSlideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.mytraduction-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 22px;border-bottom:1px solid var(--border)
+}
+.mytraduction-title{display:flex;align-items:center;gap:12px}
+.mytraduction-title-brand{font-size:17px;font-weight:700;color:var(--text)}
+.mytraduction-title-tag{
+  font-size:11px;font-weight:600;color:#0f2b46;background:rgba(15,43,70,.10);
+  padding:3px 8px;border-radius:6px;letter-spacing:.5px
+}
+body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
+.mytraduction-close{
+  background:transparent;border:0;color:var(--muted);cursor:pointer;
+  padding:6px;border-radius:8px;transition:all .15s
+}
+.mytraduction-close:hover{background:var(--bg);color:var(--text)}
+.mytraduction-lang-row{
+  display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;
+  padding:14px 22px;border-bottom:1px solid var(--border)
+}
+.mytraduction-lang-picker{
+  display:flex;align-items:center;gap:8px
+}
+.mytraduction-lang-picker select{
+  flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;color:var(--text);font-size:13px;cursor:pointer
+}
+.mytraduction-lang-picker select:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
+}
+.mytraduction-swap-btn{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--text2);transition:all .15s
+}
+.mytraduction-swap-btn:hover{border-color:var(--accent);color:var(--accent);transform:rotate(180deg)}
+.mytraduction-body{
+  display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:18px 22px;
+  overflow-y:auto;flex:1;min-height:280px
+}
+.mytraduction-pane{display:flex;flex-direction:column;gap:8px;min-width:0}
+.mytraduction-pane-label{
+  font-size:11px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px
+}
+.mytraduction-pane-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.mytraduction-pane-header{display:flex;align-items:center;gap:8px}
+.mytraduction-icon-btn{
+  background:transparent;border:0;color:var(--muted);cursor:pointer;
+  padding:4px 6px;border-radius:6px;font-size:11px;
+  display:inline-flex;align-items:center;gap:4px;transition:all .15s
+}
+.mytraduction-icon-btn:hover{background:var(--bg);color:var(--text)}
+.mytraduction-icon-btn:disabled{opacity:.4;cursor:not-allowed}
+.mytraduction-textarea{
+  width:100%;box-sizing:border-box;flex:1;min-height:220px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:12px 14px;color:var(--text);font-size:14px;font-family:inherit;
+  line-height:1.5;resize:vertical
+}
+.mytraduction-textarea:focus{
+  outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)
+}
+.mytraduction-textarea:read-only{background:var(--card)}
+.mytraduction-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  padding:14px 22px;border-top:1px solid var(--border);flex-wrap:wrap
+}
+.mytraduction-usage{
+  font-size:11px;color:var(--muted);display:flex;align-items:center;gap:10px
+}
+.mytraduction-usage-cached{color:var(--success);font-weight:600}
+.mytraduction-btn{
+  background:var(--accent);color:#000;border:0;border-radius:10px;
+  padding:10px 22px;font-weight:700;font-size:13px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;transition:filter .15s
+}
+.mytraduction-btn:hover{filter:brightness(1.05)}
+.mytraduction-btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.mytraduction-btn.loading{pointer-events:none;opacity:.7}
+@media(max-width:720px){
+  .mytraduction-overlay{padding:0}
+  .mytraduction-modal{max-height:100vh;border-radius:0;max-width:100%}
+  .mytraduction-body{grid-template-columns:1fr;gap:12px}
+  .mytraduction-lang-row{grid-template-columns:1fr;gap:8px}
+  .mytraduction-swap-btn{margin:0 auto;transform:rotate(90deg)}
+  .mytraduction-swap-btn:hover{transform:rotate(270deg)}
+}
+
 """
 
 PORTAL_MAIN_JS = r"""
@@ -567,6 +679,275 @@ function portalProfileRingEl(pct){
   if(ring)ring.classList.add('portal-prof-ring');
   return ring;
 }
+
+// ── MyTraduction (DeepL) — modal accessible depuis le portail ────
+window._myTraductionState = window._myTraductionState || {
+  langs: null, loading: false, keyHandler: null
+};
+
+async function _mytLoadLangs(){
+  if(window._myTraductionState.langs) return window._myTraductionState.langs;
+  try{
+    const r = await fetch('/api/translate/langs', {credentials:'include'});
+    if(!r.ok) throw new Error('Chargement langues impossible');
+    const d = await r.json();
+    window._myTraductionState.langs = d.langs || [];
+    return window._myTraductionState.langs;
+  }catch(e){
+    window._myTraductionState.langs = [
+      {code:'FR',label:'Français'},{code:'EN',label:'Anglais'},
+      {code:'DE',label:'Allemand'},{code:'ES',label:'Espagnol'},
+      {code:'IT',label:'Italien'},{code:'NL',label:'Néerlandais'}
+    ];
+    return window._myTraductionState.langs;
+  }
+}
+
+async function _mytFetchUsage(){
+  try{
+    const r = await fetch('/api/translate/usage', {credentials:'include'});
+    if(!r.ok) return null;
+    return await r.json();
+  }catch(e){ return null; }
+}
+
+function _mytFormatUsage(u){
+  if(!u) return '';
+  const parts = [];
+  if(u.deepl_limit && u.deepl_used != null){
+    const pct = Math.round((u.deepl_used / u.deepl_limit) * 100);
+    parts.push(`Quota DeepL : ${u.deepl_used.toLocaleString('fr-FR')} / ${u.deepl_limit.toLocaleString('fr-FR')} car. (${pct}%)`);
+  }
+  if(u.cache_hits > 0){
+    parts.push(`<span class="mytraduction-usage-cached">${u.cache_hits} depuis cache ce mois</span>`);
+  }
+  return parts.join(' · ');
+}
+
+async function openMyTraduction(){
+  if(document.querySelector('.mytraduction-overlay')) return;
+  const langs = await _mytLoadLangs();
+
+  const langOptions = (selected) => langs.map(l =>
+    `<option value="${l.code}"${l.code===selected?' selected':''}>${l.label} (${l.code})</option>`
+  ).join('');
+
+  const saved = (function(){
+    try{ return JSON.parse(localStorage.getItem('mytraduction_prefs')||'{}'); }catch(e){ return {}; }
+  })();
+  const defaultSource = saved.source || 'auto';
+  const defaultTarget = saved.target || 'EN';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'mytraduction-overlay';
+  overlay.innerHTML = `
+    <div class="mytraduction-modal" role="dialog" aria-modal="true" aria-label="MyTraduction — DeepL">
+      <div class="mytraduction-header">
+        <div class="mytraduction-title">
+          <span class="mytraduction-title-brand">MyTraduction</span>
+          <span class="mytraduction-title-tag">powered by DeepL</span>
+        </div>
+        <button type="button" class="mytraduction-close" aria-label="Fermer" title="Fermer (Échap)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="mytraduction-lang-row">
+        <div class="mytraduction-lang-picker">
+          <select id="myt-source" aria-label="Langue source">
+            <option value="auto"${defaultSource==='auto'?' selected':''}>Détection auto</option>
+            ${langOptions(defaultSource)}
+          </select>
+        </div>
+        <button type="button" class="mytraduction-swap-btn" id="myt-swap" title="Inverser les langues">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+        </button>
+        <div class="mytraduction-lang-picker">
+          <select id="myt-target" aria-label="Langue cible">
+            ${langOptions(defaultTarget)}
+          </select>
+        </div>
+      </div>
+      <div class="mytraduction-body">
+        <div class="mytraduction-pane">
+          <div class="mytraduction-pane-header">
+            <span class="mytraduction-pane-label">Texte source</span>
+            <div class="mytraduction-pane-actions">
+              <button type="button" class="mytraduction-icon-btn" id="myt-paste" title="Coller depuis le presse-papier">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                Coller
+              </button>
+              <button type="button" class="mytraduction-icon-btn" id="myt-clear" title="Effacer">
+                Effacer
+              </button>
+            </div>
+          </div>
+          <textarea id="myt-input" class="mytraduction-textarea" placeholder="Collez ou écrivez votre texte ici…"></textarea>
+        </div>
+        <div class="mytraduction-pane">
+          <div class="mytraduction-pane-header">
+            <span class="mytraduction-pane-label">Traduction</span>
+            <div class="mytraduction-pane-actions">
+              <button type="button" class="mytraduction-icon-btn" id="myt-copy" title="Copier la traduction" disabled>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                Copier
+              </button>
+            </div>
+          </div>
+          <textarea id="myt-output" class="mytraduction-textarea" readonly placeholder="La traduction apparaîtra ici…"></textarea>
+        </div>
+      </div>
+      <div class="mytraduction-footer">
+        <div class="mytraduction-usage" id="myt-usage">Chargement usage…</div>
+        <button type="button" class="mytraduction-btn" id="myt-translate">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"></path><path d="M4 14l6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="M22 22l-5-10-5 10"></path><path d="M14 18h6"></path></svg>
+          Traduire
+        </button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const $ = (id) => document.getElementById(id);
+  const input = $('myt-input');
+  const output = $('myt-output');
+  const btnTranslate = $('myt-translate');
+  const btnCopy = $('myt-copy');
+  const btnClose = overlay.querySelector('.mytraduction-close');
+  const btnPaste = $('myt-paste');
+  const btnClear = $('myt-clear');
+  const btnSwap = $('myt-swap');
+  const selSource = $('myt-source');
+  const selTarget = $('myt-target');
+  const usageEl = $('myt-usage');
+
+  setTimeout(() => input.focus(), 50);
+
+  _mytFetchUsage().then(u => {
+    usageEl.innerHTML = _mytFormatUsage(u) || 'Prêt à traduire.';
+  });
+
+  const closeModal = () => {
+    overlay.remove();
+    if(window._myTraductionState.keyHandler){
+      document.removeEventListener('keydown', window._myTraductionState.keyHandler);
+      window._myTraductionState.keyHandler = null;
+    }
+  };
+
+  window._myTraductionState.keyHandler = (e) => {
+    if(e.key === 'Escape'){ closeModal(); }
+    else if((e.ctrlKey||e.metaKey) && e.key === 'Enter'){
+      e.preventDefault(); btnTranslate.click();
+    }
+  };
+  document.addEventListener('keydown', window._myTraductionState.keyHandler);
+
+  overlay.addEventListener('click', (e) => {
+    if(e.target === overlay) closeModal();
+  });
+  btnClose.addEventListener('click', closeModal);
+
+  btnClear.addEventListener('click', () => {
+    input.value = ''; output.value = ''; btnCopy.disabled = true; input.focus();
+  });
+
+  btnPaste.addEventListener('click', async () => {
+    try{
+      const txt = await navigator.clipboard.readText();
+      input.value = txt; input.focus();
+    }catch(e){
+      if(typeof showToast==='function') showToast('Presse-papier inaccessible.','info');
+    }
+  });
+
+  btnSwap.addEventListener('click', () => {
+    const s = selSource.value;
+    const t = selTarget.value;
+    if(s === 'auto'){
+      if(typeof showToast==='function') showToast('Détection auto activée — sélectionnez une langue source pour inverser.','info');
+      return;
+    }
+    selSource.value = t;
+    selTarget.value = s;
+    if(output.value){
+      input.value = output.value;
+      output.value = '';
+      btnCopy.disabled = true;
+    }
+  });
+
+  btnCopy.addEventListener('click', async () => {
+    if(!output.value) return;
+    try{
+      await navigator.clipboard.writeText(output.value);
+      if(typeof showToast==='function') showToast('Traduction copiée.','success');
+    }catch(e){
+      if(typeof showToast==='function') showToast('Copie impossible.','danger');
+    }
+  });
+
+  const persistPrefs = () => {
+    try{
+      localStorage.setItem('mytraduction_prefs', JSON.stringify({
+        source: selSource.value, target: selTarget.value
+      }));
+    }catch(e){}
+  };
+
+  btnTranslate.addEventListener('click', async () => {
+    const text = (input.value||'').trim();
+    if(!text){
+      if(typeof showToast==='function') showToast('Saisissez un texte à traduire.','info');
+      input.focus(); return;
+    }
+    if(selSource.value === selTarget.value){
+      if(typeof showToast==='function') showToast('Langue source et cible identiques.','info');
+      return;
+    }
+    persistPrefs();
+    btnTranslate.classList.add('loading');
+    btnTranslate.disabled = true;
+    output.value = 'Traduction en cours…';
+    btnCopy.disabled = true;
+    try{
+      const body = {
+        text,
+        target_lang: selTarget.value,
+        source_lang: selSource.value === 'auto' ? null : selSource.value,
+        formality: 'default'
+      };
+      const r = await fetch('/api/translate', {
+        method:'POST',
+        credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      const data = await r.json();
+      if(!r.ok){
+        output.value = '';
+        const msg = (data && data.detail) || 'Erreur de traduction.';
+        if(typeof showToast==='function') showToast(msg,'danger');
+        return;
+      }
+      output.value = data.translated || '';
+      btnCopy.disabled = !output.value;
+      if(data.cached){
+        if(typeof showToast==='function') showToast('Traduction chargée depuis le cache.','info');
+      }
+      _mytFetchUsage().then(u => {
+        usageEl.innerHTML = _mytFormatUsage(u) || 'Prêt à traduire.';
+      });
+    }catch(e){
+      output.value = '';
+      if(typeof showToast==='function') showToast('Réseau indisponible.','danger');
+    }finally{
+      btnTranslate.classList.remove('loading');
+      btnTranslate.disabled = false;
+    }
+  });
+}
+
+
 
 function portalOrderTileSpecs(specs, order){
   const byId=new Map(specs.map(s=>[s.id,s]));
@@ -1204,7 +1585,17 @@ function renderPortal(){
         'aria-label':'Base de données',
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
-      },iconEl('database',24)):null
+      },iconEl('database',24)):null,
+      (function(){
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='portal-settings-corner portal-deepl-corner';
+        btn.setAttribute('aria-label','MyTraduction (DeepL)');
+        btn.title='Traduire — DeepL';
+        btn.innerHTML='<span style="display:inline-flex;align-items:center;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg></span>';
+        btn.onclick=()=>{if(typeof openMyTraduction==='function')openMyTraduction();};
+        return btn;
+      })()
     ),
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
