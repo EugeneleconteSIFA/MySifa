@@ -988,35 +988,4 @@ async function submitPdfDelete(){
 
   // Rôle lecture seule : masquer les boutons d'écriture définis en HTML statique.
   if(IS_READONLY){
-    const _hide=(id)=>{const el=document.getElementById(id); if(el) el.style.display='none';};
-    _hide('btn-new-bat');
-    _hide('btn-pdf-add');
-  }
-
-  loadMe();
-  loadEntries();
-
-  document.addEventListener('keydown', e=>{
-    if(e.key==='Escape'){
-      closeCreateModal();closeUploadModal();closeEditModal();closeStatutModal();closeDelModal();
-      closePdfPicker();closePdfDelModal();
-    }
-  });
-})();
-</script>
-<script>window.__MYSIFA_APP__='bat';</script>
-<script src="/static/mysifa_dock.js"></script>
-<script src="/static/mysifa_cmdk.js"></script>
-<script>
-if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
-  window.MySifaDock.bootPageWidgets();
-}
-</script>
-<script src="/static/chat_mentions.js"></script>
-<script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js"></script>
-<script src="/static/support_widget.js"></script>
-<script src="/static/mysifa_impersonate.js"></script>
-</body>
-</html>"""
-
+    const 

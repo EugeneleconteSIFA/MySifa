@@ -1572,7 +1572,7 @@ function renderPortal(){
         (S.msgUnread>0)?h('span',{className:'portal-corner-badge'},S.msgUnread>9?'9+':String(S.msgUnread)):null,
         iconEl('mail',24)
       ):null,
-      (isSuper||urole==='direction'||u(role==='administration'||role==='administration_ventes'||role==='administration_technique'))?h('button',{
+      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Calendrier',

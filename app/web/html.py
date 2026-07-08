@@ -1724,7 +1724,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/mysifa_humeur.js"></script>
-<script src="/static/chat_widget_v2.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/motion.js" defer></script>

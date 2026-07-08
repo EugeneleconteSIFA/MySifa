@@ -203,7 +203,8 @@
         }
       });
       inp.addEventListener('input', function () {
-        if (typeof resizeCwInput === 'function') resizeCwInput(this);
+        if (CW && typeof CW.resizeCwInput === 'function') CW.resizeCwInput(this);
+        else if (typeof resizeCwInput === 'function') resizeCwInput(this);
         const val = this.value;
         const cur = this.selectionStart;
         const before = val.substring(0, cur);
