@@ -4231,6 +4231,9 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             (showEmplOnLine2 ? el('span',null,' · ') : null),
             (showEmplOnLine2 ? stockHistEmplLinks(m.emplacement) : null),
             (actor ? el('span',null,' · '+actor) : null),
+            (m.quantite_apres != null)
+              ? el('span',null,' · Solde '+fU(m.quantite_apres, unit))
+              : null,
           ),
           m.note?el('div',{cls:'mvt-note'},m.note):null
         )
@@ -5191,7 +5194,7 @@ function buildMpMvtHistory(mouvements, matiere) {
                 empl ? el('span', null, ' · ' + empl) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
                 (m.quantite_apres != null)
-                  ? el('span', null, ' · Stock ' + mpStockLine(m.quantite_apres, mpCat))
+                  ? el('span', null, ' · Solde ' + mpStockLine(m.quantite_apres, mpCat))
                   : null,
               ),
               noteParts.length
@@ -5760,7 +5763,8 @@ function buildProduitsFinisTab() {
               el('span', { cls: 'pf-mvt-qte' }, fU(m.quantite, m.unite)),
             ),
             el('div', { cls: 'pf-mvt-sub' },
-              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
+              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement)
+              + (m.quantite_apres != null ? ' · Solde ' + fU(m.quantite_apres, m.unite) : ''),
             ),
           ),
           el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
@@ -6355,6 +6359,7 @@ async function openPfDetailModal(reference) {
         el('th', null, 'Type'),
         el('th', null, 'Qté'),
         el('th', null, 'Empl.'),
+        el('th', null, 'Solde'),
         el('th', null, 'OF'),
         el('th', null, 'Utilisateur'),
       ));
@@ -6363,11 +6368,13 @@ async function openPfDetailModal(reference) {
       hist.forEach(raw => {
         const m = normalizePfMvt(raw);
         const t = m.type === 'entree' ? 'Entrée' : (m.type === 'sortie' ? 'Sortie' : (m.type || '—'));
+        const solde = m.quantite_apres != null ? fU(m.quantite_apres, m.unite || d.unite) : '—';
         tbody.appendChild(el('tr', null,
           el('td', null, fDateTime(m.date_mouvement)),
           el('td', null, t),
           el('td', null, fU(m.quantite, m.unite)),
           el('td', null, m.emplacement || '—'),
+          el('td', null, solde),
           el('td', null, m.no_of || '—'),
           el('td', null, m.user_login || '—'),
         ));
@@ -7107,6 +7114,9 @@ function buildNegoceMvtHistory(mouvements, unite) {
                 fD(m.date_mouvement),
                 empl ? el('span', null, ' · ' + (stockEmplLabel(empl) || empl)) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
+                (m.quantite_apres != null)
+                  ? el('span', null, ' · Solde ' + fU(m.quantite_apres, m.unite || unite))
+                  : null,
               ),
               note ? el('div', { cls: 'mvt-note' }, note) : null,
             ),
