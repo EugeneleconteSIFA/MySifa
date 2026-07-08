@@ -3332,14 +3332,22 @@ function _renderWearPartRings(ratios){
 // avec l'ancien retour de _findSuiviCodeForWearPart.
 function _findWearPartCode(pieceId, pos){
   const list = OPS_TYPES_STATE.list || [];
+  const single = _wearPartIsSingle(pieceId);
   for(const t of list){
     if(t.categorie !== 'interventions') continue;
     const lbl = (t.nom || '').toLowerCase();
-    if(!lbl.includes(pos)) continue;
-    const hasContre = (lbl.indexOf('contre') !== -1);
-    const isMatch = (pieceId === 'contre_couteaux')
-      ? (hasContre && lbl.indexOf('couteaux') !== -1)
-      : (!hasContre && lbl.indexOf('couteaux') !== -1);
+    let isMatch = false;
+    if(single){
+      // Pièces sans position : matching par mot-clé principal
+      if(pieceId === 'cutters')            isMatch = lbl.indexOf('cutter')   !== -1;
+      else if(pieceId === 'couteaux_landberg') isMatch = lbl.indexOf('landberg') !== -1;
+    } else {
+      if(!lbl.includes(pos)) continue;
+      const hasContre = (lbl.indexOf('contre') !== -1);
+      isMatch = (pieceId === 'contre_couteaux')
+        ? (hasContre && lbl.indexOf('couteaux') !== -1)
+        : (!hasContre && lbl.indexOf('couteaux') !== -1 && lbl.indexOf('landberg') === -1);
+    }
     if(isMatch){
       return {
         code: t.id,
@@ -3477,15 +3485,19 @@ async function loadWearPartLastDates(machine){
   // locale, navigateur) pour chaque combinaison pièce x position. Envoie ces
   // dates au backend qui retourne le métrage machine à chaque date.
   if(typeof loadOps === 'function') loadOps();
-  const pieceIds = ['couteaux','contre_couteaux'];
-  const positions = ['bande','rive'];
   const dates = {};
-  pieceIds.forEach(pid => {
-    positions.forEach(pos => {
-      const k = pid + '_' + pos;
-      const c = _findWearPartCode(pid, pos);
+  WEARPART_PIECES.forEach(p => {
+    if(p.no_position){
+      const k = p.id + '_single';
+      const c = _findWearPartCode(p.id, 'single');
       dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
-    });
+    } else {
+      ['bande','rive'].forEach(pos => {
+        const k = p.id + '_' + pos;
+        const c = _findWearPartCode(p.id, pos);
+        dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
+      });
+    }
   });
   // Clé de cache : machine + dates concaténées. Si rien n'a changé → skip fetch.
   const cacheKey = machine + ':' + JSON.stringify(dates);
@@ -3569,7 +3581,17 @@ const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
 const WEARPART_PIECES = [
   { id: 'couteaux',         label: 'Couteaux' },
   { id: 'contre_couteaux',  label: 'Contre-couteaux' },
+  { id: 'cutters',          label: 'Cutters',           no_position: true },
+  { id: 'couteaux_landberg',label: 'Couteaux Landberg', no_position: true },
 ];
+// Retourne le descripteur d'une pièce d'usure par id (utile pour tester no_position)
+function _wearPartDef(pieceId){
+  return WEARPART_PIECES.find(p => p.id === pieceId) || null;
+}
+function _wearPartIsSingle(pieceId){
+  const d = _wearPartDef(pieceId);
+  return !!(d && d.no_position);
+}
 
 function _loadWearPartMap(){
   try{
@@ -3581,6 +3603,7 @@ function _saveWearPartMap(m){
   try{ localStorage.setItem(WEARPART_KEY, JSON.stringify(m || {})); }catch(e){}
 }
 function getWearPartPos(pieceId, machine){
+  if(_wearPartIsSingle(pieceId)) return 'single';
   const m = _loadWearPartMap();
   return (m[pieceId] && m[pieceId][machine]) || 'bande';
 }
@@ -3691,13 +3714,16 @@ function _renderWearPartsGroup(machine){
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
     };
+    const tabsHtml = p.no_position
+      ? ''
+      : ('<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
+           _b('Bande', 'bande') +
+           _b('Rive', 'rive') +
+         '</div>');
     return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
-        '<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
-          _b('Bande', 'bande') +
-          _b('Rive', 'rive') +
-        '</div>' +
+        tabsHtml +
       '</div>' +
       (function(){
         // Layout :
@@ -3834,9 +3860,10 @@ function renderMaintCards(){
   // exclure des sections par intervalle ci-dessous (sinon les changements
   // couteaux/contre-couteaux apparaîtraient deux fois).
   const wearPartCodeIds = new Set();
-  ['couteaux','contre_couteaux'].forEach(pid => {
-    ['bande','rive'].forEach(pos => {
-      const c = _findWearPartCode(pid, pos);
+  WEARPART_PIECES.forEach(p => {
+    const positions = p.no_position ? ['single'] : ['bande','rive'];
+    positions.forEach(pos => {
+      const c = _findWearPartCode(p.id, pos);
       if(c && c.code) wearPartCodeIds.add(String(c.code));
     });
   });
