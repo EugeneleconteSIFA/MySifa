@@ -380,7 +380,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <script>
 'use strict';
 

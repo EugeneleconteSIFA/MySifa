@@ -381,7 +381,7 @@ body.light .cal-allday-row{background:#f8fafc}
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -1665,39 +1665,3 @@ window.addEventListener('resize',()=>{
     renderToggles();
     applyViewChrome(S.view);
     ME=await api('/api/auth/me');
-    if(!ME){
-      location.href='/?next=/calendrier';
-      return;
-    }
-    window.__MYSIFA_UID__=ME.id;
-    window.__MYSIFA_NOM__=ME.nom||'';
-    window.__MYSIFA_ROLE__=ME.role||'';
-    window.__MYSIFA_USER__={nom:ME.nom||'',role:ME.role||''};
-    if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
-    else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
-    if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function'){
-      window.MySifaDock.bootPageWidgets();
-    }else if(typeof initAiChatWidget==='function'){
-      initAiChatWidget();
-      if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
-    }
-    if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
-    else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
-    renderToggles();
-    const chip=document.getElementById('sb-user-chip');
-    if(chip&&window.MySifaUserChip){
-      const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
-      MySifaUserChip.fill(chip,ME,{roleLabels:ROLE_LABELS,editIconHtml:editIco});
-    }
-    syncThemeBtn();
-    bindCalendarBodyClicks();
-    await fetchEvents();
-  }catch(e){
-    if(e.message!=='auth')showToast(e.message||'Initialisation impossible','danger');
-  }
-})();
-</script>
-<script src="/static/mysifa_impersonate.js"></script>
-</body>
-</html>
-"""
