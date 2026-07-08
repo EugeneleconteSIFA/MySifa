@@ -1689,7 +1689,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/chat_widget_v2.js?v=7"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -15978,4 +15978,333 @@ function renderSidebarItems(items) {
   if (!S.navCollapsed) S.navCollapsed = new Set();
   const nodes = [];
   let currentGroup = null;
-  const CHV = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.
+  const CHV = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+
+  items.forEach(item => {
+    if (item.kind === 'sep') {
+      currentGroup = item.label;
+      const collapsed = S.navCollapsed.has(currentGroup);
+      const sepEl = document.createElement('div');
+      sepEl.className = 'nav-section-label' + (collapsed ? ' ngl-collapsed' : '');
+      sepEl.innerHTML = '<span>' + item.label + '</span><span class="ngl-chevron">' + CHV + '</span>';
+      sepEl.addEventListener('click', () => {
+        const isNowCollapsed = S.navCollapsed.has(item.label);
+        if (isNowCollapsed) S.navCollapsed.delete(item.label); else S.navCollapsed.add(item.label);
+        sepEl.classList.toggle('ngl-collapsed', !isNowCollapsed);
+        let sib = sepEl.nextElementSibling;
+        while (sib && !sib.classList.contains('nav-section-label')) {
+          sib.style.display = !isNowCollapsed ? 'none' : '';
+          sib = sib.nextElementSibling;
+        }
+      });
+      nodes.push(sepEl);
+    } else {
+      const btn = renderSidebarNavBtn(item);
+      if (currentGroup && S.navCollapsed.has(currentGroup)) btn.style.display = 'none';
+      nodes.push(btn);
+    }
+  });
+  return nodes;
+}
+
+function buildStockTabPlaceholder(title) {
+  return el('div', { cls: 'content' },
+    el('div', { cls: 'card' },
+      el('div', { cls: 'card-title' }, title),
+      el('div', { cls: 'card-empty' }, 'Contenu à venir.')
+    )
+  );
+}
+
+function render() {
+  // La modale "contact support" est montée sur <body> : il faut la synchroniser
+  // avec l'état à chaque rendu pour éviter un overlay "figé" (ex: reste sur "Envoi…").
+  try{
+    document.querySelectorAll('.contact-modal-overlay').forEach(n=>n.remove());
+    document.querySelectorAll('.unit-modal-overlay').forEach(n=>n.remove());
+    document.querySelectorAll('.ref-import-modal-overlay').forEach(n=>n.remove());
+  }catch(e){}
+
+  const root = document.getElementById('root');
+  root.innerHTML = '';
+
+  const overlay = el('div', { cls:'sidebar-overlay', on:{ click: closeSidebar } });
+  root.appendChild(overlay);
+
+  const layout = el('div', { cls:'app-layout' });
+  const isLight = document.body.classList.contains('light');
+  const sidebar = el('div', { cls:'sidebar' },
+    el('div', { cls:'sidebar-logo' },
+      el('div', { cls:'logo-brand' }, 'My', el('span',null,'Stock')),
+      el('div', { cls:'logo-sub' }, 'by SIFA')
+    ),
+    el('div', { cls:'sidebar-nav' },
+      ...renderSidebarItems(buildSidebarNavStructure())
+    ),
+    el('div', { cls:'sidebar-bottom' },
+      el('button', { cls:'nav-btn back-mysifa', on:{ click:()=>{ window.location.href='/'; } } },
+        '← Retour ',
+        el('span', { cls:'wm' }, 'My', el('span', null, 'Sifa'))
+      ),
+      S.user ? (window.MySifaUserChip
+        ? MySifaUserChip.element(S.user, el, iconEl, { title:'Modifier mon profil' })
+        : el('div', { cls:'user-chip', style:{ cursor:'pointer' }, attrs:{ title:'Modifier mon profil' }, on:{ click:()=>{ window.location.href='/profil'; } } },
+            el('div', { cls:'uc-name' }, S.user.nom||''),
+            el('div', { cls:'uc-role' }, ROLE_LABELS[S.user.role] || S.user.role || ''),
+            el('div', { cls:'uc-profil' }, iconEl('edit',10), ' Mon profil')
+          )
+      ) : null,
+      (() => {
+        if(!S.user) return null;
+        const b=el('button',{cls:'support-btn',type:'button',on:{click:()=>{S.contactOpen=true; render();}}});
+        const ico=el('span',{cls:'support-ico'}); ico.innerHTML=window.MySifaSupport?.iconSvg?.()||'';
+        b.append(ico, el('span',null,'Contacter le support'));
+        return b;
+      })(),
+      el('button', { cls:'theme-btn', on:{ click:()=>{ if(window.MySifaTheme)MySifaTheme.toggleMode(); render(); } } },
+        el('span', { cls:'theme-ico' }, iconEl(isLight ? 'sun' : 'moon', 16)),
+        el('span', { cls:'theme-label' }, isLight ? 'Mode clair' : 'Mode sombre')
+      ),      el('button', { cls:'logout-btn', on:{ click: async ()=>{ await api('/api/auth/logout',{method:'POST'}); window.location.href='/'; } } }, iconEl('log-out',14), ' Déconnexion'),
+      el('div', { cls:'version' }, 'MyStock v2.1')
+    )
+  );
+
+  const main = el('div', { cls:'main-area' },
+    el('div', { cls:'mobile-topbar' },
+      el('button', { cls:'mobile-menu-btn', on:{ click:toggleSidebar }, attrs:{ 'aria-label':'Menu', type:'button' } },
+        el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('menu',20))
+      ),
+      el('div', null,
+        el('div', { cls:'mobile-topbar-title' }, stockMobileTabTitle()),
+        el('div', { cls:'mobile-topbar-sub' }, 'Inventaire, mouvements et emplacements')
+      ),
+      el('button', { cls:'mobile-print-btn'+(S.tab==='traca'?' active':''), on:{ click:()=>goToTab('traca') }, attrs:{ 'aria-label':'Étiquettes traça', type:'button', title:'Étiquettes traçabilité' } },
+        el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('printer',20))
+      ),
+      el('button', { cls:'mobile-home-btn', on:{ click:()=>window.location.href='/' }, attrs:{ 'aria-label':'Accueil', type:'button' } },
+        el('span', { attrs:{ style:'display: inline-flex; align-items: center; flex-shrink: 0;' } }, iconEl('home',20))
+      )
+    ),
+    S.tracaOnly ? null : buildSearchBar(),
+    el('div', { cls:'scroll-area', id:'scroll-area' })
+  );
+
+  layout.append(sidebar, main);
+  root.appendChild(layout);
+
+  document.title = STOCK_TAB_DOC_TITLES[S.tab] || 'MyStock — MySifa';
+
+  if(S.contactOpen){
+    const ov = el('div', { cls:'contact-modal-overlay', on:{ click:(e)=>{ if(e.target===ov){ S.contactOpen=false; render(); } } } });
+    const box = el('div', { cls:'contact-modal' });
+    box.appendChild(el('button',{cls:'contact-close',type:'button',on:{click:()=>{S.contactOpen=false; render();}}},'×'));
+    box.appendChild(el('h3',null,'Contacter le support'));
+
+    const subj = el('input',{type:'text',placeholder:'Objet (facultatif)'});
+    subj.value = S.contactSubject || '';
+    subj.addEventListener('input', ()=>{ S.contactSubject = subj.value; });
+    box.appendChild(el('label',null,'Objet'));
+    box.appendChild(subj);
+
+    const msg = el('textarea',{placeholder:'Message *'});
+    msg.value = S.contactMessage || '';
+    msg.addEventListener('input', ()=>{ S.contactMessage = msg.value; });
+    box.appendChild(el('label',null,'Message'));
+    box.appendChild(msg);
+
+    const actions = el('div',{cls:'contact-actions'});
+    actions.appendChild(el('button',{cls:'btn-cancel',type:'button',on:{click:()=>{S.contactOpen=false; render();}}},'Annuler'));
+    const send = el('button',{cls:'btn',type:'button'}, S.contactSending ? 'Envoi…' : 'Envoyer');
+    send.disabled = !!S.contactSending;
+    send.addEventListener('click', async ()=>{
+      if(S.contactSending) return;
+      const message = String(S.contactMessage||'').trim();
+      const subject = String(S.contactSubject||'').trim();
+      if(!message){ showToast('Message obligatoire','error'); return; }
+      S.contactSending = true; render();
+      try{
+        await api('/api/messages/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message})});
+        showToast('Message envoyé au support','success');
+        S.contactOpen=false; S.contactSending=false; S.contactSubject=''; S.contactMessage='';
+        render();
+      }catch(e){
+        S.contactSending=false; render();
+        showToast('Envoi impossible','error');
+      }
+    });
+    actions.appendChild(send);
+    box.appendChild(actions);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+
+  if(S.unitModalOpen){
+    const ov=el('div',{cls:'unit-modal-overlay contact-modal-overlay',on:{click:(e)=>{ if(e.target===ov){ S.unitModalOpen=false; render(); } }}});
+    const box=el('div',{cls:'contact-modal'});
+    box.appendChild(el('button',{cls:'contact-close',type:'button',on:{click:()=>{S.unitModalOpen=false; render();}}},'×'));
+    box.appendChild(el('h3',null,'Créer une unité de vente'));
+
+    const lab=el('input',{type:'text',placeholder:'Libellé (ex. 500 cartons)'});
+    lab.value=S.unitNewLabel||'';
+    lab.addEventListener('input',()=>{S.unitNewLabel=lab.value;});
+    box.appendChild(el('label',null,'Libellé *'));
+    box.appendChild(lab);
+
+    // Base: même UX que "Unité de vente" (champ + suggestions), sans option "Autre"
+    const baseWrap = el('div', { cls: 'empl-combo-wrap' });
+    const baseInp = el('input', { cls:'field-input', type:'text', id:'stock-page-unit-base-input',
+      placeholder:'Base * (cartons, bobines, étiquettes, palettes)', autocomplete:'off', style:{direction:'ltr'} });
+    const baseList = el('div', { cls:'empl-suggestions', id:'stock-page-unit-base-suggestions', style:{ display:'none' } });
+    baseInp.value = String(S.unitNewBase || 'cartons');
+    baseInp.addEventListener('input', ()=>{ S.unitNewBase = baseInp.value; });
+    baseInp.addEventListener('focus', ()=>{ baseList.style.display='block'; refreshUnitBaseDropdown(); });
+    baseInp.addEventListener('blur', ()=>{ setTimeout(()=>{ baseList.style.display='none'; }, 200); });
+    baseWrap.appendChild(baseInp);
+    baseWrap.appendChild(baseList);
+    box.appendChild(el('label',null,'Base *'));
+    box.appendChild(baseWrap);
+
+    function refreshUnitBaseDropdown(){
+      const q = String(baseInp.value||'').trim().toLowerCase();
+      baseList.innerHTML='';
+      let filtered = q ? STOCK_UNITS_BASE.filter(x=>String(x).toLowerCase().includes(q)) : STOCK_UNITS_BASE.slice();
+      filtered.slice(0, 24).forEach(lbl=>{
+        const row=document.createElement('div');
+        row.className='unit-suggest-item';
+        row.textContent=lbl;
+        row.addEventListener('mousedown', e=>{ e.preventDefault(); baseInp.value=lbl; S.unitNewBase=lbl; baseList.style.display='none'; });
+        baseList.appendChild(row);
+      });
+    }
+
+    const qty=el('input',{type:'text',inputmode:'numeric',placeholder:'Quantité (ex. 500)'});
+    qty.value=String(S.unitNewQty||'');
+    qty.addEventListener('input',()=>{S.unitNewQty=qty.value;});
+    box.appendChild(el('label',null,'Quantité *'));
+    box.appendChild(qty);
+
+    const actions=el('div',{cls:'contact-actions'});
+    actions.appendChild(el('button',{cls:'btn-cancel',type:'button',on:{click:()=>{S.unitModalOpen=false; render();}}},'Annuler'));
+    const create=el('button',{cls:'btn',type:'button'},'Créer');
+    create.addEventListener('click',()=>{
+      const l=String(S.unitNewLabel||'').trim();
+      const b=String(S.unitNewBase||'cartons').trim().toLowerCase();
+      const q=Number(String(S.unitNewQty||'').trim().replace(',','.'));
+      const r=addPageCustomUnit(l,b,q);
+      if(!r.ok){ showToast(r.reason||'Erreur','error'); return; }
+      // affecte dans le champ unité si présent
+      try{
+        const inp=document.getElementById(ADD_PF_FIELD_IDS.unitInput);
+        if(inp) inp.value=l;
+      }catch(e){}
+      S.unitModalOpen=false;
+      render();
+      showToast('Unité ajoutée : '+l,'success');
+    });
+    actions.appendChild(create);
+    box.appendChild(actions);
+
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+
+  if (S.importRefsOpen) renderImportRefsModal();
+
+  renderContent();
+
+  if (S.addPfModalOpen && !document.getElementById('dash-add-pf-overlay')) {
+    renderDashboardAddPfModal();
+  }
+
+  // Calculette flottante (montée une seule fois, persiste entre les rendus)
+  window._calc_mount && window._calc_mount();
+  if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
+}
+
+async function init() {
+  document.body.classList.add('has-topbar','mysifa-app-stock');
+  const user = await api('/api/auth/me').catch(()=>null);
+  if (user && window.MySifaTheme) MySifaTheme.mergeFromUser(user);
+  if (!user) { window.location.href='/'; return; }
+  S.user = user;
+  window.S = S;
+  window.__MYSIFA_UID__=user.id;
+  window.__MYSIFA_NOM__=user.nom||'';
+  window.__MYSIFA_ROLE__=user.role||'';
+  window.__MYSIFA_USER__={nom:user.nom||'',role:user.role||''};
+  if(window._CW&&typeof window._CW.ensureReady==='function')await window._CW.ensureReady();
+  else if(window._CW&&typeof window._CW.syncUser==='function')window._CW.syncUser();
+  if(window.MySifaDock&&typeof window.MySifaDock.bootPageWidgets==='function')window.MySifaDock.bootPageWidgets();
+  else if(typeof initAiChatWidget==='function')initAiChatWidget();
+  S.stockReadOnly = (user.role === 'commercial');
+  S.tracaOnly = false;
+  // Fabrication : accès limité aux sections Matières premières + Outils, lecture seule
+  S.fabStockMode = (user.role === 'fabrication');
+  // Charger les fournisseurs FSC
+  await loadFournisseursFSC();
+  // Charger le référentiel des laizes (utilisé dans modal matière + valorisation)
+  await loadLaizesReferentiel();
+  // Compteur matières incomplètes (frontal/glassine/complexe)
+  loadMatieresIncompleteCount();
+  // Charger la liste complète des emplacements depuis la base de données
+  await fetchEmplacementsFromDB();
+  // Onglet initial via URL param ?tab=...
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTab = urlParams.get('tab');
+  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
+    S.tab = urlTab;
+  }
+  // Deep-link sur une matière ou un produit (ouvre directement le détail)
+  const urlMatiereId = parseInt(urlParams.get('matiere') || '', 10);
+  const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
+  const urlProduitRef = (urlParams.get('ref') || '').trim();
+  if (urlMatiereId > 0 && !S.tracaOnly) {
+    S.tab = 'matieres';
+  } else if ((urlProduitId > 0 || urlProduitRef) && !S.tracaOnly) {
+    S.tab = 'produits-finis';
+  }
+  if (S.tab === 'monitoring' && S.user
+      && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+    S.tab = 'dashboard';
+  }
+  if (S.tab === 'valorisation' && S.user
+      && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+    S.tab = 'dashboard';
+  }
+  // Forcer onglet initial selon le mode d'accès restreint
+  if (S.tracaOnly) S.tab = 'traca';
+  if (S.fabStockMode) {
+    if (!['production','matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
+  }
+  render();
+  if (S.tab === 'traca') { /* rien à charger */ }
+  else if (S.tab === 'reception') { await loadRecepHistory(); }
+  else if (S.tab === 'inventaire') { await loadInventaireList(); }
+  else if (S.tab === 'matieres') { await loadMatieres(); }
+  else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
+  else if (S.tab === 'negoce') { await loadNegoce(); }
+  else if (S.tab === 'historique') { await loadHistorique(); }
+  else if (S.tab === 'monitoring') { await loadMonitoring(); }
+  else if (S.tab === 'valorisation') { await loadValorisation(); }
+  else if (S.tab === 'referentiel') { await loadDashboard(); }
+  else if (S.tab === 'plan-entrepot') { await loadPlanEntrepot(); }
+  else if (S.tab === 'production') { await loadProduction(); }
+  else { await loadDashboard(); }
+  // Deep-link : ouvrir la matière ou le produit demandé après le chargement
+  if (urlMatiereId > 0 && !S.tracaOnly) {
+    try { await loadMatiere(urlMatiereId); } catch (e) { /* silencieux */ }
+  } else if (urlProduitId > 0 && !S.tracaOnly) {
+    try { await loadProduit(urlProduitId); } catch (e) { /* silencieux */ }
+  } else if (urlProduitRef && !S.tracaOnly) {
+    try { await openPfProduitPage(urlProduitRef, null); } catch (e) { /* silencieux */ }
+  }
+  // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
+  if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
+}
+
+init();
+</script>
+</body>
+</html>"""
+
+STOCK_HTML = STOCK_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)

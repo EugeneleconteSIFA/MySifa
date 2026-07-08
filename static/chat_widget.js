@@ -3388,7 +3388,6 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
   CW.escCW = escCW;
   CW.fmtTime = fmtTime;
   CW.checkChatUpdates = checkChatUpdates;
-  CW.resizeCwInput = resizeCwInput;
 
   boot();
   window._CW = CW;
