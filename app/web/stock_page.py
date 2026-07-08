@@ -7616,6 +7616,27 @@ function appendMatiereRefEditFields(parent, item) {
     laizePricesGrid,
     laizePricesEmpty,
   );
+  // Bloc « fournisseurs par laize »
+  const laizeFournisseursGrid = el('div', {
+    style: 'display:flex;flex-direction:column;gap:8px;margin-top:6px',
+  });
+  const laizeFournisseursEmpty = el('div', { cls: 'mp-hint',
+    style: 'font-size:12px;color:var(--muted);font-style:italic' },
+    'Coche au moins une laize pour lui associer des fournisseurs.');
+  const laizeFournisseursField = el('div', { cls: 'mp-field' },
+    el('label', null, 'Fournisseurs par laize'),
+    laizeFournisseursGrid,
+    laizeFournisseursEmpty,
+  );
+  // État : { laize_id: Set<fournisseur_id> } — pré-rempli depuis item.stock_par_laize
+  const laizeFournisseursIds = {};
+  (item.stock_par_laize || []).forEach(spl => {
+    if (spl && Array.isArray(spl.fournisseurs)) {
+      laizeFournisseursIds[spl.laize_id] = new Set(spl.fournisseurs.map(f => f.id));
+    }
+  });
+  // Cache local des fournisseurs disponibles (chargé async)
+  let _fournisseursCache = Array.isArray(S.mpFournisseurs) ? S.mpFournisseurs : null;
   // Vue laize (compact, comme avant : flex-wrap horizontal)
   const laizeChecks = el('div', { cls: 'mp-laize-grid',
     style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
@@ -7639,6 +7660,7 @@ function appendMatiereRefEditFields(parent, item) {
         laizePriceValues[k] = (elInp.value || '').trim();
       });
       renderLaizePrices();
+      renderLaizeFournisseurs();
     });
     laizeChecks.appendChild(lbl);
   });
@@ -7673,6 +7695,78 @@ function appendMatiereRefEditFields(parent, item) {
       laizePricesGrid.appendChild(row);
     });
   }
+  // Rendu du bloc fournisseurs par laize
+  function renderLaizeFournisseurs() {
+    laizeFournisseursGrid.innerHTML = '';
+    const selected = Object.entries(laizeMetaById)
+      .filter(([, meta]) => meta.checkbox.checked)
+      .map(([id, meta]) => ({ id: parseInt(id, 10), label: meta.label }));
+    if (!selected.length) {
+      laizeFournisseursEmpty.style.display = '';
+      laizeFournisseursEmpty.textContent = 'Coche au moins une laize pour lui associer des fournisseurs.';
+      return;
+    }
+    laizeFournisseursEmpty.style.display = 'none';
+    const fournisseurs = _fournisseursCache;
+    if (fournisseurs == null) {
+      laizeFournisseursGrid.appendChild(el('div', { cls: 'mp-hint',
+        style: 'font-size:12px;color:var(--muted);font-style:italic' },
+        'Chargement des fournisseurs…'));
+      return;
+    }
+    if (!fournisseurs.length) {
+      laizeFournisseursGrid.appendChild(el('div', { cls: 'mp-hint',
+        style: 'font-size:12px;color:var(--muted);font-style:italic' },
+        'Aucun fournisseur enregistré. Ajoute-les dans /settings > Fournisseurs.'));
+      return;
+    }
+    selected.forEach(({ id: lid, label }) => {
+      if (!laizeFournisseursIds[lid]) laizeFournisseursIds[lid] = new Set();
+      const chosen = laizeFournisseursIds[lid];
+      const chipsWrap = el('div', {
+        style: 'display:flex;flex-wrap:wrap;gap:6px;flex:1',
+      });
+      fournisseurs.forEach(f => {
+        const active = chosen.has(f.id);
+        const chip = el('button', {
+          type: 'button',
+          style: 'padding:4px 10px;border-radius:6px;border:1px solid ' +
+            (active ? 'var(--accent)' : 'var(--border)') + ';background:' +
+            (active ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);' +
+            'font-size:12px;font-weight:600;cursor:pointer;line-height:1;' +
+            'display:inline-flex;align-items:center;gap:4px;font-family:inherit',
+        }, f.nom + (f.has_fsc ? ' · FSC' : ''));
+        chip.addEventListener('click', () => {
+          if (chosen.has(f.id)) chosen.delete(f.id);
+          else chosen.add(f.id);
+          renderLaizeFournisseurs();
+        });
+        chipsWrap.appendChild(chip);
+      });
+      const row = el('div', {
+        style: 'display:flex;align-items:flex-start;gap:10px',
+      },
+        el('div', {
+          style: 'min-width:80px;font-size:12px;font-weight:700;color:var(--text);' +
+            'padding:6px 10px;border:1px solid var(--accent);background:var(--accent-bg);' +
+            'border-radius:6px;text-align:center;flex-shrink:0',
+        }, label),
+        chipsWrap,
+      );
+      laizeFournisseursGrid.appendChild(row);
+    });
+  }
+  // Recharge async si pas encore en cache
+  if (_fournisseursCache == null) {
+    api('/api/stock/fournisseurs').then(list => {
+      _fournisseursCache = Array.isArray(list) ? list : [];
+      S.mpFournisseurs = _fournisseursCache;
+      renderLaizeFournisseurs();
+    }).catch(() => {
+      _fournisseursCache = [];
+      renderLaizeFournisseurs();
+    });
+  }
   // Bascule affichage prix unique vs prix par laize
   function applyPrixMode() {
     const parLaize = prixModeLaiInp.checked;
@@ -7687,12 +7781,14 @@ function appendMatiereRefEditFields(parent, item) {
     prixModeField,
     prixM2Field,
     laizePricesField,
+    laizeFournisseursField,
     el('div', { cls: 'mp-field' },
       el('label', null, 'Laizes disponibles'),
       laizeChecks,
     ),
   );
   applyPrixMode();
+  renderLaizeFournisseurs();
   // Bloc conditionnement (carton / adhésif / mandrin) — unités par palette
   const hasCond = mpHasConditionnement(item.categorie);
   const uppWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } });
@@ -7723,7 +7819,7 @@ function appendMatiereRefEditFields(parent, item) {
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -7767,6 +7863,19 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
           laize_prices: laizePrices,
         }),
       });
+      // Sync des fournisseurs par laize
+      if (fields.laizeFournisseursIds) {
+        for (const lid of selectedLaizeIds) {
+          const setIds = fields.laizeFournisseursIds[lid] || new Set();
+          try {
+            await api('/api/stock/matieres/' + item.id + '/laizes/' + lid + '/fournisseurs', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fournisseur_ids: Array.from(setIds) }),
+            });
+          } catch (e) { /* silencieux */ }
+        }
+      }
       await loadMatieresIncompleteCount();
     }
     if (fields.hasSousSection) {
