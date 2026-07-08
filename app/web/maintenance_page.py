@@ -1665,15 +1665,20 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
-    // À l'arrivée sur Planning : refetch la liste depuis l'API puis rerender.
-    // Sinon, si le fetch initial du boot n'a pas encore résolu (ou a été
-    // fait alors que le container était display:none, ce qui casse le
-    // lane-packing), le calendrier reste vide jusqu'à la prochaine
-    // opération d'écriture qui force un refresh.
+    // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
+    // (cas où le fetch initial a déjà résolu au boot).
+    if(typeof setCalView === 'function') setCalView('week');
+    else renderCal();
+    // Étape 2 : refetch et rerend une seconde fois. Le fetch initial peut
+    // avoir résolu avant que le container Planning ne soit visible, ce qui
+    // fait rater le positionnement absolute des events.
     (async () => {
       await refreshPlanning();
-      if(typeof setCalView === 'function') setCalView('week');
-      else renderCal();
+      renderCal();
+      // Étape 3 : filet de sécurité — rerender après stabilisation du
+      // layout, pour couvrir les navigateurs qui calculent les
+      // dimensions tardivement.
+      setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
     })();
   }
   // Vues opérateur : recharge la liste à l'arrivée.
