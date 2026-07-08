@@ -651,6 +651,23 @@ body[data-maint-role="operator"] .content{display:none !important}
 .btn.op-btn-accent:hover{filter:brightness(1.08);border-color:var(--accent);color:var(--accent-fg)}
 .btn.op-btn-accent .btn-ico{color:var(--accent-fg)}
 
+/* ── Vue Mes tâches : 2 colonnes Aujourd'hui / À venir ──────────── */
+.op-two-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:flex-start}
+@media(max-width:900px){.op-two-cols{grid-template-columns:1fr}}
+.op-col{background:transparent}
+.op-col-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.op-col-head h3{font-size:15px;font-weight:700;color:var(--text);margin:0;flex:1}
+.op-col-count{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;color:var(--text2);min-width:24px;text-align:center}
+.op-col-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.op-col-today .op-col-head h3{color:var(--accent)}
+.op-col-today .op-col-count{background:var(--accent-bg);color:var(--accent);border-color:transparent}
+.op-col-cards{display:flex;flex-direction:column;gap:12px}
+.op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
+.op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
+
+/* Bouton "Commencer la session" sur les cartes du jour */
+.op-card-cta{width:100%;justify-content:center;margin-top:12px}
+
 /* ── Cartes de tâches ───────────────────────────────────────────── */
 .op-tasks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .op-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s;position:relative;display:flex;flex-direction:column;gap:10px}
@@ -1216,18 +1233,14 @@ body[data-maint-role="operator"] .content{display:none !important}
 
     <!-- Conteneur opérateur (visible uniquement quand data-maint-role="operator") -->
     <div class="op-main">
-      <!-- View opérateur : Mes tâches -->
+      <!-- View opérateur : Mes tâches, en 2 colonnes (Aujourd'hui / À venir) -->
       <div class="op-page op-only active" id="view-op-tasks">
         <div class="page-header">
           <div>
             <div class="page-title">Mes tâches</div>
-            <div class="page-subtitle" id="op-tasks-count">0 tâche</div>
+            <div class="page-subtitle" id="op-tasks-count">—</div>
           </div>
           <div class="op-actions">
-            <div class="op-date-picker">
-              <label for="op-tasks-date">Date</label>
-              <input type="date" id="op-tasks-date" onchange="opLoadTasks()">
-            </div>
             <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
               <span class="btn-ico">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1236,7 +1249,23 @@ body[data-maint-role="operator"] .content{display:none !important}
             </button>
           </div>
         </div>
-        <div id="op-tasks-list"></div>
+        <div class="op-two-cols">
+          <section class="op-col op-col-today">
+            <div class="op-col-head">
+              <span class="op-col-dot"></span>
+              <h3>Aujourd'hui</h3>
+              <span class="op-col-count" id="op-count-today">0</span>
+            </div>
+            <div id="op-cards-today"></div>
+          </section>
+          <section class="op-col op-col-upcoming">
+            <div class="op-col-head">
+              <h3>À venir</h3>
+              <span class="op-col-count" id="op-count-upcoming">0</span>
+            </div>
+            <div id="op-cards-upcoming"></div>
+          </section>
+        </div>
       </div>
 
       <!-- View opérateur : Planning avec 2 sous-onglets -->
@@ -5406,14 +5435,14 @@ async function admFetchOperators(){
 
 async function opLoadTasks(){
   if(MAINT_ROLE !== 'operator') return;
-  const dateInput = document.getElementById('op-tasks-date');
-  const d = dateInput.value || _fmtDateISO(new Date());
-  if(!dateInput.value) dateInput.value = d;
-  const r = await fetch('/api/maintenance/my-tasks?date=' + encodeURIComponent(d), { credentials:'include' });
+  // Charge tous mes créneaux à partir d'aujourd'hui, sur ~60 jours.
+  const today = new Date();
+  const in60 = new Date(); in60.setDate(today.getDate() + 60);
+  const url = '/api/maintenance/my-tasks?date_from=' + _fmtDateISO(today) +
+              '&date_to=' + _fmtDateISO(in60);
+  const r = await fetch(url, { credentials:'include' });
   if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
   const data = await r.json();
-  // /my-tasks renvoie { events:[{id, machine, date_prevue, heure_debut, heure_fin,
-  //   ops:[{id, code, code_label, code_categorie, statut, ...}], operators:[...]}]}
   MAINT_STATE.tasks = data.events || [];
   opRenderTasks();
 }
@@ -5422,54 +5451,92 @@ function _countRemainingOps(ev){
   return (ev.ops || []).filter(o => o.statut !== 'termine').length;
 }
 
+function _renderOpCard(ev, opts){
+  opts = opts || {};
+  const isToday = !!opts.isToday;
+  const time = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
+    : '<em style="color:var(--muted);font-style:normal">Sans créneau horaire</em>';
+  const remaining = _countRemainingOps(ev);
+  const totalOps = (ev.ops || []).length;
+  const doneAll = (remaining === 0 && totalOps > 0);
+  const opsPreview = (ev.ops || []).slice(0, 3).map(o => `
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px">
+      <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
+      <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
+      <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+    </div>`).join('');
+  const more = totalOps > 3 ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${totalOps-3} autre${totalOps-3 > 1 ? 's' : ''}</div>` : '';
+  const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const summary = doneAll
+    ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
+    : (remaining < totalOps
+        ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+        : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
+  const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
+  const cta = isToday
+    ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
+         <span class="btn-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+         ${doneAll ? 'Voir la session' : 'Commencer la session'}
+       </button>`
+    : '';
+  const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
+  return `
+    <div class="op-card" ${clickHandler}>
+      <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
+      <div class="op-card-head">
+        <strong style="font-size:15px;color:var(--text)">${ev.machine}</strong>
+        ${src}
+      </div>
+      ${dateLine}
+      <div style="font-size:12px;color:var(--text2)">${time}</div>
+      <div>${opsPreview}${more}</div>
+      ${cta}
+    </div>`;
+}
+
+function _fmtDateFrShort(iso){
+  if(!iso) return '';
+  try{
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return iso;
+    const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    return d.toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'short'});
+  }catch(e){ return iso; }
+}
+
 function opRenderTasks(){
-  const list = document.getElementById('op-tasks-list');
-  const cnt = document.getElementById('op-tasks-count');
-  if(!list) return;
-  const events = MAINT_STATE.tasks;
-  if(cnt){
+  const listT = document.getElementById('op-cards-today');
+  const listU = document.getElementById('op-cards-upcoming');
+  const cntT = document.getElementById('op-count-today');
+  const cntU = document.getElementById('op-count-upcoming');
+  const summary = document.getElementById('op-tasks-count');
+  if(!listT || !listU) return;
+
+  const today = _fmtDateISO(new Date());
+  const events = MAINT_STATE.tasks || [];
+  const evToday = events.filter(ev => ev.date_prevue === today);
+  const evUpcoming = events.filter(ev => ev.date_prevue > today)
+    .sort((a,b) => (a.date_prevue + (a.heure_debut||'')).localeCompare(b.date_prevue + (b.heure_debut||'')));
+
+  if(cntT) cntT.textContent = evToday.length;
+  if(cntU) cntU.textContent = evUpcoming.length;
+  if(summary){
     const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
-    cnt.textContent = events.length + (events.length > 1 ? ' créneaux' : ' créneau')
+    summary.textContent = events.length + (events.length > 1 ? ' créneaux à venir' : ' créneau à venir')
       + ' — ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
   }
-  if(events.length === 0){
-    list.innerHTML = '<div class="op-empty"><h3>Aucune tâche pour cette date</h3>Tu peux déclarer une intervention non planifiée avec le bouton ci-dessus.</div>';
-    return;
+
+  if(!evToday.length){
+    listT.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau aujourd\'hui</strong>Rien de programmé pour toi. Tu peux déclarer une intervention non planifiée si nécessaire.</div>';
+  } else {
+    listT.innerHTML = '<div class="op-col-cards">' + evToday.map(ev => _renderOpCard(ev, {isToday:true})).join('') + '</div>';
   }
-  const html = '<div class="op-tasks-grid">' + events.map(ev => {
-    const time = (ev.heure_debut && ev.heure_fin)
-      ? (ev.heure_debut + ' – ' + ev.heure_fin)
-      : '<em style="color:var(--muted);font-style:normal">Sans créneau horaire</em>';
-    const remaining = _countRemainingOps(ev);
-    const totalOps = (ev.ops || []).length;
-    const doneAll = (remaining === 0 && totalOps > 0);
-    const opsPreview = (ev.ops || []).slice(0, 3).map(o => {
-      const catCls = 'op-cat ' + _catClass(o.code_categorie || 'autre');
-      return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px">
-        <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
-        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
-        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
-      </div>`;
-    }).join('');
-    const more = totalOps > 3 ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${totalOps-3} autre${totalOps-3 > 1 ? 's' : ''}</div>` : '';
-    const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
-    const summary = doneAll
-      ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
-      : (remaining < totalOps
-          ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
-          : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
-    return `
-      <div class="op-card" onclick="opOpenSaisie(${ev.id})">
-        <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
-        <div class="op-card-head">
-          <strong style="font-size:15px;color:var(--text)">${ev.machine}</strong>
-          ${src}
-        </div>
-        <div style="font-size:12px;color:var(--text2)">${time}</div>
-        <div>${opsPreview}${more}</div>
-      </div>`;
-  }).join('') + '</div>';
-  list.innerHTML = html;
+  if(!evUpcoming.length){
+    listU.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau à venir</strong>Ta liste est à jour.</div>';
+  } else {
+    listU.innerHTML = '<div class="op-col-cards">' + evUpcoming.map(ev => _renderOpCard(ev, {isToday:false})).join('') + '</div>';
+  }
 }
 
 /* ── Modal saisie ────────────────────────────────────────────────── */
@@ -5676,13 +5743,9 @@ function opSetPlanTab(name){
 
 (function initMaintRole(){
   if(MAINT_ROLE === 'operator'){
-    // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
-    const dateInput = document.getElementById('op-tasks-date');
-    if(dateInput) dateInput.value = _fmtDateISO(new Date());
     const planInput = document.getElementById('op-plan-date');
     if(planInput) planInput.value = _fmtDateISO(new Date());
     opLoadTasks();
-    // Pré-charge le planning en tâche de fond.
     opLoadPlanning();
   }
 })();
