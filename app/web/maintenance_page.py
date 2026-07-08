@@ -5521,4 +5521,979 @@ function updateThemeBtn(){
   const lbl=document.getElementById('theme-label');
   if(ico){
     ico.innerHTML=l
-      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.6
+      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      :'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
+  if(lbl) lbl.textContent=l?'Mode clair':'Mode sombre';
+}
+
+async function doLogout(){
+  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
+  location.href='/';
+}
+
+async function loadMe(){
+  try{
+    const r=await fetch('/api/auth/me',{credentials:'include'});
+    if(!r.ok) return;
+    const d=await r.json();
+    S.me=d&&d.user?d.user:d;
+    const chip=document.getElementById('user-chip');
+    if(chip&&S.me){
+      const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
+      chip.innerHTML='<div class="uc-name">'+escHtml(S.me.nom||'')+'</div><div class="uc-role">'+escHtml(roles[S.me.role]||S.me.role||'')+'</div>';
+    }
+  }catch(e){}
+}
+
+(function init(){
+  try{
+    const t=localStorage.getItem('mysifa_theme');
+    if(t==='light') document.body.classList.add('light');
+    else document.body.classList.remove('light');
+    updateThemeBtn();
+  }catch(e){}
+  loadMe();
+  loadOps();
+  // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
+  loadOpsTypes().then(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }).catch(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  });
+  loadCtrl();
+  updateExtraToggleUI();
+  loadCtrlAcks();
+  loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
+  loadPlanning();
+  renderOps();
+  renderCtrl();
+  try{
+    const h = (location.hash || '').replace('#','').trim();
+    const target = (h === 'historique') ? 'controles' : h;
+    if(target && VIEW_META[target]) switchView(target);
+  }catch(e){}
+})();
+</script>
+<script>window.__MYSIFA_APP__='maintenance';</script>
+<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
+<script>
+if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
+  window.MySifaDock.bootPageWidgets();
+}
+</script>
+<script src="/static/chat_mentions.js"></script>
+<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/mysifa_alert_runtime.js"></script>
+<script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_impersonate.js"></script>
+
+<!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
+     Liste toutes les ops du créneau, chacune avec son propre bouton
+     "Enregistrer cette opération" — le statut/saisie est partagé au groupe. -->
+<div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
+    <div class="op-modal-title">Saisie du créneau</div>
+    <div class="op-modal-sub">Renseigne chaque opération individuellement. Les mises à jour sont partagées avec le groupe assigné au créneau.</div>
+    <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
+    <div id="op-modal-saisie-ops"></div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseSaisie()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouvelle intervention (opérateur : source=non_planifie) -->
+<div class="op-modal-overlay" id="op-modal-new" onclick="if(event.target===this) opCloseNewModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Nouvelle intervention</div>
+    <div class="op-modal-sub">Déclare une intervention non planifiée survenue en cours de session.</div>
+    <div class="op-form-row">
+      <label for="op-new-code">Code opération *</label>
+      <select id="op-new-code"></select>
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-machine">Machine *</label>
+      <select id="op-new-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseNewModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="opSubmitNew()">Créer et remplir</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+/* ── JS multi-rôle : Mes tâches / Planning / Nouvelle intervention / Admin create ──
+   Chargé dans tous les cas, mais les fonctions ne sont utiles qu'au bon rôle.
+   L'état des tâches côté page est stocké dans MAINT_STATE. */
+'use strict';
+
+const MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+const MAINT_STATE = {
+  tasks: [],
+  codes: [],
+  operators: [],
+  saisieTaskId: null,
+};
+
+function _fmtDateISO(d){
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
+function _statutLabel(s){
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+}
+
+async function opFetchCodes(){
+  if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
+  const r = await fetch('/api/maintenance/codes', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.codes = []; return []; }
+  const d = await r.json();
+  // /api/maintenance/codes renvoie { items:[{code, label, categorie, niveau, periodique, ...}] }
+  MAINT_STATE.codes = (d.items || d.codes || []).map(c => ({
+    code: c.code, label: c.label, categorie: c.categorie,
+    niveau: c.niveau, periodique: !!c.periodique,
+    intervalle: c.intervalle || '',
+  }));
+  return MAINT_STATE.codes;
+}
+
+async function admFetchOperators(){
+  if(MAINT_STATE.operators.length) return MAINT_STATE.operators;
+  const r = await fetch('/api/maintenance/operators', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.operators = []; return []; }
+  const d = await r.json();
+  MAINT_STATE.operators = d.operators || [];
+  return MAINT_STATE.operators;
+}
+
+/* ── Vue Mes tâches ──────────────────────────────────────────────── */
+
+async function opLoadTasks(){
+  if(MAINT_ROLE !== 'operator') return;
+  // Utilise le MÊME endpoint que le planning (/api/maintenance/events) et
+  // filtre côté client par appartenance au groupe : garantit la cohérence
+  // absolue entre « Mes tâches » et « Planning personnel ».
+  const today = new Date();
+  const in60 = new Date(); in60.setDate(today.getDate() + 60);
+  const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
+              '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
+  const r = await fetch(url, { credentials:'include', cache: 'no-store' });
+  if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
+  const data = await r.json();
+  const meId = (S && S.me) ? S.me.id : null;
+  const events = data.events || [];
+  MAINT_STATE.tasks = meId
+    ? events.filter(ev => (ev.operators || []).some(o => o.id === meId))
+    : [];
+  opRenderTasks();
+}
+
+function _countRemainingOps(ev){
+  return (ev.ops || []).filter(o => o.statut !== 'termine').length;
+}
+
+// Regroupe les ops d'un event par machine. Une op sans machine tombe dans un
+// groupe "Sans machine". Une op multi-machines apparaît dans chaque groupe.
+function _groupOpsByMachine(ev){
+  const groups = new Map();
+  const order = [];
+  const ops = (ev && ev.ops) ? ev.ops : [];
+  for(const o of ops){
+    let machines = Array.isArray(o.machines) ? o.machines.slice() : [];
+    if(!machines.length){
+      machines = ev.machine ? [ev.machine] : ['Sans machine'];
+    }
+    for(const m of machines){
+      if(!groups.has(m)){ groups.set(m, []); order.push(m); }
+      groups.get(m).push(o);
+    }
+  }
+  return order.map(m => ({ machine: m, ops: groups.get(m) }));
+}
+
+function _renderOpCard(ev, opts){
+  opts = opts || {};
+  const isToday = !!opts.isToday;
+  const time = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
+    : '<em style="color:var(--muted);font-style:normal">Sans créneau horaire</em>';
+  const remaining = _countRemainingOps(ev);
+  const totalOps = (ev.ops || []).length;
+  const doneAll = (remaining === 0 && totalOps > 0);
+  // Regroupe les ops par machine dans la preview.
+  // - Vue Aujourd'hui : on affiche tout (c'est la vue prioritaire).
+  // - Vue À venir : on limite à ~5 lignes pour compacter les cards.
+  const groups = _groupOpsByMachine(ev);
+  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
+  const previewLines = [];
+  let printedGroups = 0;
+  let printedTruncated = false;
+  const MAX_LINES = isToday ? Infinity : 5;
+  for(const g of groups){
+    // Chaque groupe doit tenir en au moins 2 lignes (1 header + 1 op) pour
+    // éviter un header orphelin. Si le budget restant est < 2, on stoppe.
+    if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
+    previewLines.push(`<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:6px">${escHtml(g.machine)}</div>`);
+    let opsInThisGroup = 0;
+    for(const o of g.ops){
+      if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px">
+        <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
+        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
+        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+      </div>`);
+      opsInThisGroup++;
+    }
+    // Compte le groupe comme "affiché" seulement si au moins 1 op a été rendue.
+    if(opsInThisGroup > 0) printedGroups++;
+    else{
+      // Retire le header orphelin qu'on venait de pousser.
+      previewLines.pop();
+      printedTruncated = true;
+    }
+  }
+  const opsPreview = previewLines.join('');
+  const remainingGroups = groups.length - printedGroups;
+  const more = (remainingGroups > 0 || printedTruncated) && remainingGroups > 0
+    ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingGroups} autre machine${remainingGroups > 1 ? 's' : ''}</div>`
+    : '';
+  const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const summary = doneAll
+    ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
+    : (remaining < totalOps
+        ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+        : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
+  const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
+  const cta = isToday
+    ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
+         <span class="btn-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+         ${doneAll ? 'Voir la session' : 'Commencer la session'}
+       </button>`
+    : '';
+  const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
+  return `
+    <div class="op-card" ${clickHandler}>
+      <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
+      <div class="op-card-head">
+        <strong style="font-size:15px;color:var(--text)">${escHtml(machinesLabel)}</strong>
+        ${src}
+      </div>
+      ${dateLine}
+      <div style="font-size:12px;color:var(--text2)">${time}</div>
+      <div>${opsPreview}${more}</div>
+      ${cta}
+    </div>`;
+}
+
+function _fmtDateFrShort(iso){
+  if(!iso) return '';
+  try{
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return iso;
+    const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    return d.toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'short'});
+  }catch(e){ return iso; }
+}
+
+function opRenderTasks(){
+  const listT = document.getElementById('op-cards-today');
+  const listU = document.getElementById('op-cards-upcoming');
+  const cntT = document.getElementById('op-count-today');
+  const cntU = document.getElementById('op-count-upcoming');
+  const summary = document.getElementById('op-tasks-count');
+  if(!listT || !listU) return;
+
+  const today = _fmtDateISO(new Date());
+  const events = MAINT_STATE.tasks || [];
+  const evToday = events.filter(ev => ev.date_prevue === today);
+  const evUpcoming = events.filter(ev => ev.date_prevue > today)
+    .sort((a,b) => (a.date_prevue + (a.heure_debut||'')).localeCompare(b.date_prevue + (b.heure_debut||'')));
+
+  if(cntT) cntT.textContent = evToday.length;
+  if(cntU) cntU.textContent = evUpcoming.length;
+  if(summary){
+    const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
+    summary.textContent = events.length + (events.length > 1 ? ' créneaux à venir' : ' créneau à venir')
+      + ' — ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
+  }
+
+  if(!evToday.length){
+    listT.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau aujourd\'hui</strong>Rien de programmé pour toi. Tu peux déclarer une intervention non planifiée si nécessaire.</div>';
+  } else {
+    listT.innerHTML = '<div class="op-col-cards">' + evToday.map(ev => _renderOpCard(ev, {isToday:true})).join('') + '</div>';
+  }
+  if(!evUpcoming.length){
+    listU.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau à venir</strong>Ta liste est à jour.</div>';
+  } else {
+    listU.innerHTML = '<div class="op-col-cards">' + evUpcoming.map(ev => _renderOpCard(ev, {isToday:false})).join('') + '</div>';
+  }
+}
+
+/* ── Modal saisie ────────────────────────────────────────────────── */
+
+function opOpenSaisie(eventId){
+  const ev = MAINT_STATE.tasks.find(x => x.id === eventId);
+  if(!ev) return;
+  MAINT_STATE.saisieTaskId = eventId;
+  const ctx = document.getElementById('op-modal-saisie-ctx');
+  const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans créneau horaire';
+  const groups = _groupOpsByMachine(ev);
+  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
+  ctx.innerHTML = `
+    <span><strong>Machine${groups.length > 1 ? 's' : ''} :</strong> ${escHtml(machinesLabel)}</span>
+    <span><strong>Date :</strong> ${ev.date_prevue}</span>
+    <span><strong>Créneau :</strong> ${time}</span>
+    ${ev.source === 'non_planifie' ? '<span class="op-badge-source">Non planifiée</span>' : ''}`;
+  const wrap = document.getElementById('op-modal-saisie-ops');
+  if(wrap){
+    if(!groups.length){
+      wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Aucune opération.</div>';
+    } else {
+      // Un bloc par machine. Une op assignée à N machines apparaît dans N blocs
+      // mais la saisie reste unique côté DB (opSubmitOpSaisie utilise op.id).
+      wrap.innerHTML = groups.map(g => {
+        const opsHtml = g.ops.map(op => {
+          const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          return `
+            <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+                <span class="op-code">${op.code}</span>
+                <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
+                <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
+              </div>
+              <div class="op-form-row"><label>Statut</label>
+                <select data-fld="statut">
+                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
+                  <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
+                  <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
+                  <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
+                </select>
+              </div>
+              <div class="op-form-row"><label>Durée réelle (min)</label>
+                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
+              </div>
+              <div class="op-form-row"><label>Pièces changées</label>
+                <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
+              </div>
+              <div class="op-form-row"><label>Observations</label>
+                <textarea data-fld="observations">${op.observations || ''}</textarea>
+              </div>
+              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">Enregistrer cette opération</button>
+            </div>`;
+        }).join('');
+        return `<div class="op-machine-group">
+          <div class="op-machine-group-head"><span class="op-machine-dot"></span>${escHtml(g.machine)} · ${g.ops.length} opération${g.ops.length > 1 ? 's' : ''}</div>
+          ${opsHtml}
+        </div>`;
+      }).join('');
+    }
+  }
+  document.getElementById('op-modal-saisie').classList.add('active');
+}
+
+function opCloseSaisie(){
+  MAINT_STATE.saisieTaskId = null;
+  document.getElementById('op-modal-saisie').classList.remove('active');
+}
+
+async function opSubmitOpSaisie(eventId, opId, btnEl){
+  // Une op multi-machines apparaît dans plusieurs blocs de saisie. On cible
+  // le bloc contenant le bouton cliqué (pas juste le premier).
+  const item = (btnEl && btnEl.closest && btnEl.closest('.op-saisie-item'))
+    || document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
+  if(!item) return;
+  const val = (fld) => (item.querySelector(`[data-fld="${fld}"]`) || {}).value;
+  const body = {
+    statut: val('statut'),
+    duree_reelle_min: parseInt(val('duree_reelle_min'), 10) || null,
+    pieces_changees: (val('pieces_changees') || '').trim() || null,
+    observations: (val('observations') || '').trim() || null,
+  };
+  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
+    method:'PATCH', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  if(typeof showToast === 'function') showToast('Saisie enregistrée.', 'success');
+  await opLoadTasks();
+  // Re-render du modal avec les données à jour
+  opOpenSaisie(eventId);
+}
+
+// Ancien nom conservé pour compat (rien ne l'appelle en direct désormais).
+async function opSubmitSaisie(){
+  // No-op : la saisie se fait op par op via opSubmitOpSaisie.
+}
+
+/* ── Modal nouvelle intervention (opérateur) ──────────────────────── */
+
+async function opOpenNewModal(){
+  await opFetchCodes();
+  const sel = document.getElementById('op-new-code');
+  sel.innerHTML = MAINT_STATE.codes.map(c =>
+    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+  ).join('');
+  document.getElementById('op-modal-new').classList.add('active');
+}
+
+function opCloseNewModal(){
+  document.getElementById('op-modal-new').classList.remove('active');
+}
+
+async function opSubmitNew(){
+  const code = document.getElementById('op-new-code').value;
+  const machine = document.getElementById('op-new-machine').value;
+  if(!code || !machine){
+    alert('Code et machine obligatoires.');
+    return;
+  }
+  const body = {
+    machine,
+    date_prevue: _fmtDateISO(new Date()),
+    source: 'non_planifie',
+    ops: [code],
+    operators: [],  // Le serveur forcera l'user courant.
+  };
+  const r = await fetch('/api/maintenance/events', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  const data = await r.json();
+  if(typeof showToast === 'function') showToast('Intervention déclarée.', 'success');
+  opCloseNewModal();
+  const dateInput = document.getElementById('op-tasks-date');
+  if(dateInput) dateInput.value = body.date_prevue;
+  await opLoadTasks();
+  if(data.event && data.event.id) opOpenSaisie(data.event.id);
+}
+
+/* ── Vue Planning opérateur (read-only) ──────────────────────────── */
+
+function _opRenderPlanTable(events, meId){
+  // Aplati les events → 1 ligne par (event, op, machine). Une op multi-machines
+  // produit une ligne par machine.
+  if(events.length === 0){
+    return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
+  }
+  const rows = [];
+  for(const ev of events){
+    const mine = (ev.operators || []).some(o => o.id === meId);
+    const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assigné</em>';
+    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : '—';
+    for(const op of (ev.ops || [])){
+      let machines = Array.isArray(op.machines) && op.machines.length
+        ? op.machines
+        : (ev.machine ? [ev.machine] : ['—']);
+      for(const m of machines){
+        rows.push({ mine, ev, op, operatorsStr, time, machine: m });
+      }
+    }
+  }
+  return `<table class="op-plan-table">
+    <thead><tr><th>Créneau</th><th>Machine</th><th>Code</th><th>Opération</th><th>Groupe</th><th>Statut</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.mine ? 'mine' : ''}">
+      <td>${r.time}</td>
+      <td><strong>${escHtml(r.machine)}</strong></td>
+      <td><span class="op-code">${r.op.code}</span></td>
+      <td>${r.op.code_label || '—'}</td>
+      <td style="font-size:12px">${r.operatorsStr}</td>
+      <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function opLoadPlanning(){
+  if(MAINT_ROLE !== 'operator') return;
+  const dateInput = document.getElementById('op-plan-date');
+  const d = dateInput.value || _fmtDateISO(new Date());
+  if(!dateInput.value) dateInput.value = d;
+  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
+                       '&date_to=' + encodeURIComponent(d) + '&_=' + Date.now(),
+                       { credentials:'include', cache: 'no-store' });
+  if(!r.ok){
+    const persoEl = document.getElementById('op-plan-personnel');
+    const genEl = document.getElementById('op-plan-general');
+    if(persoEl) persoEl.innerHTML = _opRenderPlanTable([], null);
+    if(genEl) genEl.innerHTML = _opRenderPlanTable([], null);
+    return;
+  }
+  const data = await r.json();
+  const events = data.events || [];
+  const meId = (S && S.me) ? S.me.id : null;
+  // Onglet Personnel : events où je suis dans le groupe.
+  const perso = events.filter(ev => (ev.operators || []).some(o => o.id === meId));
+  const persoEl = document.getElementById('op-plan-personnel');
+  if(persoEl) persoEl.innerHTML = _opRenderPlanTable(perso, meId);
+  // Onglet Général : tous.
+  const genEl = document.getElementById('op-plan-general');
+  if(genEl) genEl.innerHTML = _opRenderPlanTable(events, meId);
+}
+
+function opSetPlanTab(name){
+  document.querySelectorAll('[data-op-plan-tab]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-op-plan-tab') === name);
+  });
+  const perso = document.getElementById('op-plan-personnel');
+  const gen = document.getElementById('op-plan-general');
+  if(perso) perso.style.display = (name === 'personnel') ? '' : 'none';
+  if(gen) gen.style.display = (name === 'general') ? '' : 'none';
+}
+
+
+/* ── Templates de session (v163) ─────────────────────────────────── */
+
+const TEMPLATES_STATE = { list: null };  // null = pas encore chargé
+
+async function loadTemplates(force){
+  if(!force && TEMPLATES_STATE.list !== null) return TEMPLATES_STATE.list;
+  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; return []; }
+  try{
+    const r = await fetch('/api/maintenance/templates?_=' + Date.now(),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ TEMPLATES_STATE.list = []; return []; }
+    const d = await r.json();
+    TEMPLATES_STATE.list = d.templates || [];
+  }catch(e){ TEMPLATES_STATE.list = []; }
+  return TEMPLATES_STATE.list;
+}
+
+function refreshCaseTemplatePicker(selectedId){
+  const sel = document.getElementById('case-mod-template');
+  if(!sel) return;
+  const list = TEMPLATES_STATE.list || [];
+  const cur = selectedId != null ? String(selectedId) : (sel.value || '');
+  sel.innerHTML = '<option value="">Sans modèle (créneau vierge)</option>' +
+    list.map(t =>
+      '<option value="' + escAttr(t.id) + '"' + (String(t.id) === cur ? ' selected' : '') + '>' +
+        escHtml(t.name) + ' (' + t.ops_count + ' op.)' +
+      '</option>'
+    ).join('');
+}
+
+async function applyCaseTemplate(templateId){
+  if(!templateId){
+    // « Sans modèle » : on ne touche pas aux ops déjà présentes
+    if(_PENDING_CASE) _PENDING_CASE.template_id = null;
+    return;
+  }
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                          '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ showToast('Modèle introuvable.', 'danger'); return; }
+    const d = await r.json();
+    const tmpl = d.template;
+    if(!tmpl){ showToast('Modèle vide.', 'danger'); return; }
+    // Remplace les ops actuelles par celles du modèle
+    _CASE_OPS = (tmpl.ops || []).map(o => ({
+      _op_id: null,
+      opTypeId: o.code,
+      opName: o.code_label || o.code,
+      opNiveau: null,
+      opFreq: '',
+      machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    }));
+    // Réinjecte les infos richement depuis OPS_TYPES_STATE (niveau, freq)
+    for(const co of _CASE_OPS){
+      const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
+      if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+    }
+    if(_PENDING_CASE) _PENDING_CASE.template_id = tmpl.id;
+    renderCaseOpsList();
+    showToast('Modèle « ' + tmpl.name + ' » appliqué.', 'info');
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Modal « Gérer les modèles » ──────────────────────────────────── */
+
+async function openTemplatesModal(){
+  await loadTemplates(true);
+  const m = document.getElementById('templates-modal');
+  if(!m) return;
+  renderTemplatesList();
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTemplatesModal(){
+  const m = document.getElementById('templates-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+}
+
+function renderTemplatesList(){
+  const list = document.getElementById('tmpl-list');
+  if(!list) return;
+  const items = TEMPLATES_STATE.list || [];
+  if(!items.length){
+    list.innerHTML = '<div class="tmpl-empty">Aucun modèle pour l\'instant.<br>Clique sur « Nouveau modèle » pour en créer un.</div>';
+    return;
+  }
+  list.innerHTML = items.map(t => `
+    <div class="tmpl-item" data-tmpl-id="${escAttr(t.id)}">
+      <div class="tmpl-item-main">
+        <div class="tmpl-item-name">${escHtml(t.name)}</div>
+        <div class="tmpl-item-desc">${escHtml(t.description || '—')}</div>
+      </div>
+      <div class="tmpl-item-count">${t.ops_count} op.</div>
+      <div class="tmpl-item-actions">
+        <button type="button" class="tmpl-item-btn edit" onclick="openTemplateEditor(${escAttr(t.id)})" title="Modifier" aria-label="Modifier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button type="button" class="tmpl-item-btn del" onclick="confirmDeleteTemplate(${escAttr(t.id)})" title="Supprimer" aria-label="Supprimer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function confirmDeleteTemplate(templateId){
+  const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
+  if(!t) return;
+  const msg = `Supprimer le modèle « ${t.name} » ?\n\nATTENTION : cela supprime aussi tous les créneaux futurs (à partir d'aujourd'hui) créés depuis ce modèle. Les créneaux passés seront conservés (mais détachés du modèle).`;
+  if(!confirm(msg)) return;
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId),
+                          { method:'DELETE', credentials:'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Suppression refusée');
+    }
+    const d = await r.json();
+    const n = d.deleted_future_events || 0;
+    showToast('Modèle supprimé' + (n ? ` — ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    await refreshPlanning(); renderCal();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Éditeur de modèle (création + édition) ──────────────────────── */
+
+let _TMPL_EDIT_ID = null;
+let _TMPL_OPS = [];
+
+async function openTemplateEditor(templateId){
+  _TMPL_EDIT_ID = templateId || null;
+  _TMPL_OPS = [];
+  const m = document.getElementById('tmpl-editor-modal');
+  const nameEl = document.getElementById('tmpl-ed-name');
+  const descEl = document.getElementById('tmpl-ed-desc');
+  const ttlEl = document.getElementById('tmpl-ed-title');
+  const lblEl = document.getElementById('tmpl-ed-submit-label');
+  const warnEl = document.getElementById('tmpl-ed-warning');
+  if(nameEl) nameEl.value = '';
+  if(descEl) descEl.value = '';
+  if(warnEl){ warnEl.style.display = 'none'; warnEl.innerHTML = ''; }
+  if(templateId){
+    try{
+      const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                            '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+      if(!r.ok) throw new Error('Modèle introuvable');
+      const d = await r.json();
+      const t = d.template;
+      if(nameEl) nameEl.value = t.name || '';
+      if(descEl) descEl.value = t.description || '';
+      _TMPL_OPS = (t.ops || []).map(o => {
+        const meta = OPS_TYPES_STATE.list.find(x => x.id === o.code);
+        return {
+          opTypeId: o.code,
+          opName: (meta && meta.nom) || o.code_label || o.code,
+          opNiveau: (meta && meta.niveau) || null,
+          opFreq: (meta && meta.frequence) || '',
+          machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+        };
+      });
+      if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
+      if(lblEl) lblEl.textContent = 'Enregistrer';
+      // Avertissement resync
+      if(warnEl){
+        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modèle écrasera automatiquement les opérations des créneaux futurs qui en dépendent (les horaires, opérateurs et statuts sont préservés).';
+        warnEl.style.display = 'block';
+      }
+    }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }
+  } else {
+    if(ttlEl) ttlEl.textContent = 'Nouveau modèle';
+    if(lblEl) lblEl.textContent = 'Créer';
+  }
+  renderTmplOpsList();
+  if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { nameEl?.focus(); }, 60);
+}
+
+function closeTemplateEditor(){
+  const m = document.getElementById('tmpl-editor-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+  _TMPL_EDIT_ID = null;
+  _TMPL_OPS = [];
+}
+
+function addTmplOp(){
+  if(!OPS_TYPES_STATE.list.length){
+    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
+    return;
+  }
+  _TMPL_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
+  renderTmplOpsList();
+}
+
+function updateTmplOp(idx, opTypeId){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(op){
+    _TMPL_OPS[idx] = {
+      opTypeId: op.id, opName: op.nom, opNiveau: op.niveau || null, opFreq: op.frequence || '',
+      machines: Array.isArray(cur.machines) ? cur.machines.slice() : [],
+    };
+  } else {
+    _TMPL_OPS[idx] = { opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: Array.isArray(cur.machines) ? cur.machines.slice() : [] };
+  }
+}
+
+function toggleTmplOpMachine(idx, machine){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const list = Array.isArray(cur.machines) ? cur.machines : [];
+  const pos = list.indexOf(machine);
+  if(pos >= 0) list.splice(pos, 1); else list.push(machine);
+  cur.machines = list;
+  renderTmplOpsList();
+}
+
+function removeTmplOp(idx){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  _TMPL_OPS.splice(idx, 1);
+  renderTmplOpsList();
+}
+
+function renderTmplOpsList(){
+  const list = document.getElementById('tmpl-ed-ops-list');
+  if(!list) return;
+  if(!_TMPL_OPS.length){
+    list.innerHTML = '<div class="case-ops-empty">Aucune opération. Cliquez sur « Ajouter une opération » pour construire le modèle.</div>';
+    return;
+  }
+  list.innerHTML = _TMPL_OPS.map((op, idx) => {
+    const options = '<option value="">Sélectionner une opération…</option>' +
+      OPS_TYPES_STATE.list.map(t =>
+        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+        '</option>'
+      ).join('');
+    const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
+    const chips = CASE_MACHINES_LIST.map(m => {
+      const active = machSet.has(m);
+      return '<button type="button" class="case-mach-chip' + (active ? ' active' : '') + '" onclick="toggleTmplOpMachine(' + idx + ', \'' + escAttr(m) + '\')" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        escHtml(m) + '</button>';
+    }).join('');
+    return '<div class="case-ops-row" data-idx="' + idx + '">' +
+      '<div class="case-ops-row-top">' +
+        '<select class="ops-select" onchange="updateTmplOp(' + idx + ', this.value)">' + options + '</select>' +
+        '<button type="button" class="case-ops-row-del" onclick="removeTmplOp(' + idx + ')" title="Retirer" aria-label="Retirer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="case-ops-machines">' +
+        '<span class="case-ops-machines-label">Machine(s)</span>' +
+        chips +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function submitTemplateEditor(e){
+  e.preventDefault();
+  const name = (document.getElementById('tmpl-ed-name')?.value || '').trim();
+  const desc = (document.getElementById('tmpl-ed-desc')?.value || '').trim();
+  if(!name){ showToast('Nom requis.', 'danger'); return; }
+  const ops = _TMPL_OPS.filter(o => o.opTypeId).map(o => ({
+    code: o.opTypeId,
+    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+  }));
+  if(!ops.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  const missing = ops.find(o => !o.machines.length);
+  if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
+  try{
+    let r;
+    if(_TMPL_EDIT_ID){
+      r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    } else {
+      r = await fetch('/api/maintenance/templates', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    }
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Enregistrement refusé');
+    }
+    const d = await r.json();
+    const resynced = d.resynced_events || 0;
+    showToast(_TMPL_EDIT_ID
+      ? ('Modèle enregistré' + (resynced ? ` — ${resynced} créneau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisé${resynced > 1 ? 's' : ''}.` : '.'))
+      : 'Modèle créé.', 'info');
+    closeTemplateEditor();
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    if(resynced > 0){ await refreshPlanning(); renderCal(); }
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Bouton flottant « + » du calendrier ─────────────────────────── */
+
+function toggleCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const willOpen = !m.classList.contains('open');
+  if(willOpen){
+    loadTemplates().then(() => renderCalFabMenu());
+  }
+  m.classList.toggle('open');
+}
+
+function closeCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(m) m.classList.remove('open');
+}
+
+function renderCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const list = TEMPLATES_STATE.list || [];
+  const tmplItems = list.length
+    ? list.map(t => `
+        <button type="button" class="cal-fab-menu-item" onclick="startFromTemplate(${escAttr(t.id)})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+          <span>${escHtml(t.name)} <span style="color:var(--muted);font-weight:500">· ${t.ops_count} op.</span></span>
+        </button>`).join('')
+    : '<div class="cal-fab-menu-hint">Aucun modèle disponible</div>';
+  m.innerHTML = `
+    <button type="button" class="cal-fab-menu-item" onclick="startBlankCreneau()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Créneau vierge</span>
+    </button>
+    <div class="cal-fab-menu-sep"></div>
+    <div class="cal-fab-menu-hint">Depuis un modèle</div>
+    ${tmplItems}
+    <div class="cal-fab-menu-sep"></div>
+    <button type="button" class="cal-fab-menu-item" onclick="closeCalFabMenu();openTemplatesModal();">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+      <span>Gérer les modèles…</span>
+    </button>`;
+}
+
+function _defaultIsoAndHour(){
+  return { iso: _fmtDateISO(new Date()), h: 8 };
+}
+
+function startBlankCreneau(){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  openCaseModal({ iso, defaultHour: h });
+}
+
+async function startFromTemplate(templateId){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  await openCaseModal({ iso, defaultHour: h });
+  await applyCaseTemplate(templateId);
+  const sel = document.getElementById('case-mod-template');
+  if(sel) sel.value = String(templateId);
+}
+
+
+// Ferme le menu FAB au clic en dehors
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('cal-fab-menu');
+  if(!menu || !menu.classList.contains('open')) return;
+  if(e.target.closest('.cal-fab') || e.target.closest('.cal-fab-menu')) return;
+  menu.classList.remove('open');
+});
+
+// v163+ : pour l'opérateur, on déplace le calendrier admin dans l'onglet
+// « Planning général » et on masque le date-picker + tabs redondants.
+function _mountOperatorGeneralCalendar(){
+  if(MAINT_ROLE !== 'operator') return;
+  const src = document.querySelector('#view-planning .cal-sec');
+  const dst = document.getElementById('op-plan-general');
+  if(!src || !dst) return;
+  if(dst.querySelector('.cal-sec')) return;  // déjà monté
+  // Vide le contenu par défaut (le tableau read-only), puis injecte
+  dst.innerHTML = '';
+  dst.appendChild(src);
+  // Masque le date-picker haut de page (le calendrier a sa propre nav)
+  const datePicker = document.querySelector('#view-op-planning .op-date-picker');
+  if(datePicker) datePicker.style.display = 'none';
+}
+
+// Wrapper autour de opSetPlanTab pour déclencher le rendu du calendrier
+// à l'arrivée sur l'onglet Général.
+const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
+function opSetPlanTabWithCal(name){
+  if(_origOpSetPlanTab) _origOpSetPlanTab(name);
+  if(name === 'general' && MAINT_ROLE === 'operator'){
+    _mountOperatorGeneralCalendar();
+    // Force un refresh des données puis rerender
+    refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+  }
+}
+// Remplace l'implémentation exposée sur window (utilisée par onclick)
+window.opSetPlanTab = opSetPlanTabWithCal;
+
+(function initMaintRole(){
+  // Ajoute un attribut sur <body> pour le ciblage CSS role-based
+  document.body.setAttribute('data-maint-role', MAINT_ROLE || 'operator');
+  if(MAINT_ROLE === 'operator'){
+    // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
+    const dateInput = document.getElementById('op-tasks-date');
+    if(dateInput) dateInput.value = _fmtDateISO(new Date());
+    const planInput = document.getElementById('op-plan-date');
+    if(planInput) planInput.value = _fmtDateISO(new Date());
+    opLoadTasks();
+    // Pré-charge le planning en tâche de fond.
+    opLoadPlanning();
+    // Monte le calendrier admin dans l'onglet Général (lazy — au 1er clic
+    // sur l'onglet, mais on prépare le DOM tôt pour un feedback instant).
+    _mountOperatorGeneralCalendar();
+  }
+})();
+</script>
+
+</body>
+</html>"""
