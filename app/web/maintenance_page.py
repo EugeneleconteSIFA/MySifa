@@ -2314,6 +2314,15 @@ function openPlanningDetailsModal(events){
           escHtml(ev.start) + ' – ' + escHtml(ev.end) +
         '</div>' +
       '</div>' +
+      // Bloc opérateurs (nouveau : groupe assigné au créneau — partagé).
+      '<div class="plan-det-case-ops-label">Opérateurs assignés (' +
+        (Array.isArray(ev.operators) ? ev.operators.length : 0) + ')</div>' +
+      '<div style="margin-top:6px;margin-bottom:6px">' +
+        ((Array.isArray(ev.operators) && ev.operators.length)
+          ? ev.operators.map(op => '<span style="display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;margin:0 6px 6px 0">' + escHtml(op.nom || '—') + '</span>').join('')
+          : '<span style="color:var(--muted);font-style:italic;font-size:12px">Aucun opérateur assigné pour l\'instant.</span>'
+        ) +
+      '</div>' +
       '<div class="plan-det-case-ops-label">Opérations à effectuer (' + ops.length + ')</div>' +
       '<div class="plan-det-case-ops-list">' + opsHtml + '</div>' +
       '<div class="plan-det-case-actions">' +
@@ -2443,7 +2452,6 @@ function removeCaseOperator(id){
 
 let _CASE_OPS = [];
 async function openCaseModal(opts){
-  await _loadOperatorsCatalog();
   _CASE_OPERATORS = [];
   if(opts && opts.editId){
     const ev = PLANNING_STATE.list.find(e => e.id === opts.editId);
@@ -2451,8 +2459,13 @@ async function openCaseModal(opts){
       _CASE_OPERATORS = ev.operators.map(o => ({ id: o.id, nom: o.nom }));
     }
   }
-  renderCaseOperators();
-  return _openCaseModalInner(opts);
+  // Ouvre le modal immédiatement pour ne pas laisser l'utilisateur devant
+  // un écran vide en cas de latence sur /api/maintenance/operators.
+  const result = _openCaseModalInner(opts);
+  renderCaseOperators();  // affiche déjà les opérateurs pré-remplis
+  // Charge le catalogue en arrière-plan puis rerender le picker.
+  _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
+  return result;
 }
 function _openCaseModalInner(opts){
   opts = opts || {};
