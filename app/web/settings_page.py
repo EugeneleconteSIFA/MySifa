@@ -359,6 +359,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim-btn:hover{filter:brightness(1.05)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
+.af-cl-nc-lbl:has(input:checked){border-color:var(--danger);background:rgba(248,113,113,0.10);color:var(--danger)}
 .ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
@@ -535,7 +536,6 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
           <input type="text" id="cu-ident" placeholder="Identifiant (auto si vide)" autocomplete="off">
           <input type="email" id="cu-email" placeholder="Email" autocomplete="off">
           <input type="password" id="cu-pwd" placeholder="Mot de passe (8+)" autocomplete="new-password">
-          <input type="text" id="cu-mat" placeholder="Matricule (paie, optionnel)" autocomplete="off">
           <select id="cu-role"></select>
           <select id="cu-op"><option value="">— Opérateur lié —</option></select>
           <select id="cu-mac"><option value="">— Machine (fabrication) —</option></select>
@@ -2254,19 +2254,17 @@ document.getElementById('cu-go').onclick = async () => {
   const password = document.getElementById('cu-pwd').value;
   const role = document.getElementById('cu-role').value;
   const operateur_lie = document.getElementById('cu-op').value || null;
-  const matricule = document.getElementById('cu-mat').value.trim() || null;
   const mid = document.getElementById('cu-mac').value;
   const machine_id = mid ? Number(mid) : null;
   if (!nom || !email || !password || !role) return toast('Champs requis', true);
   try {
     await api('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, identifiant, email, password, role, operateur_lie, matricule, machine_id }) });
+      body: JSON.stringify({ nom, identifiant, email, password, role, operateur_lie, machine_id }) });
     toast('Utilisateur créé');
     document.getElementById('cu-nom').value = '';
     document.getElementById('cu-ident').value = '';
     document.getElementById('cu-email').value = '';
     document.getElementById('cu-pwd').value = '';
-    document.getElementById('cu-mat').value = '';
     await loadUsers();
     await loadMatrix();
   } catch (e) { toast(e.message, true); }
@@ -2317,7 +2315,6 @@ async function openEdit(id) {
     '<label class="sub">Identifiant</label><input id="ed-ident" value="' + esc(u.identifiant || '') + '" style="margin-bottom:10px" placeholder="auto si vide">' +
     '<label class="sub">Email</label><input id="ed-email" type="email" value="' + esc(u.email) + '" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' +
     '<label class="sub">Téléphone</label><input id="ed-tel" value="' + esc(u.telephone || '') + '" style="margin-bottom:10px" placeholder="">' +
-    '<label class="sub">Matricule (paie)</label><input id="ed-mat" value="' + esc(u.matricule || '') + '" style="margin-bottom:10px" placeholder="ex. 12345">' +
     '<label class="sub">Adresse</label><input id="ed-adr" value="' + esc(u.adresse || '') + '" style="margin-bottom:10px" placeholder="">' +
     '<label class="sub">Date de naissance</label><input id="ed-birth" type="date" value="' + esc(u.date_naissance || '') + '" style="margin-bottom:10px">' +
     '<label class="sub">Rôle</label><select id="ed-role" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' + roleOpts + '</select>' +
@@ -2348,7 +2345,6 @@ async function openEdit(id) {
       identifiant: dlg.querySelector('#ed-ident').value.trim(),
       email: dlg.querySelector('#ed-email').value.trim(),
       telephone: dlg.querySelector('#ed-tel').value.trim(),
-      matricule: dlg.querySelector('#ed-mat').value.trim(),
       adresse: dlg.querySelector('#ed-adr').value.trim(),
       date_naissance: dlg.querySelector('#ed-birth').value.trim(),
       role: dlg.querySelector('#ed-role').value,
@@ -3888,12 +3884,17 @@ function _alertDefaults(existing) {
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
+    const ncResp = (it && Array.isArray(it.nc_responses))
+      ? it.nc_responses.filter(r => typeof r === 'string' && r.trim())
+      : [];
     return {
       type: 'choice',
       label: (it && it.label) || '',
       responses: responses.length ? responses : ['Conforme'],
       multi: (it && it.multi === false) ? false : true,
       allow_other: !!(it && it.allow_other),
+      other_is_nc: !!(it && it.other_is_nc),
+      nc_responses: ncResp,
     };
   });
   return {
@@ -4029,10 +4030,15 @@ function _renderAlertFormFields(params, opts) {
     + '</div>';
 }
 
-function _afResponseRow(value) {
+function _afResponseRow(value, isNc) {
   const safeVal = (value || '').replace(/"/g, '&quot;');
+  const ncChecked = isNc ? ' checked' : '';
   return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
     + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
+    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
+    +   '<input type="checkbox" class="af-cl-resp-nc"' + ncChecked + ' style="width:12px;height:12px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>NC</span>'
+    + '</label>'
     + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
     + '</div>';
 }
@@ -4054,7 +4060,8 @@ function _afChecklistCardBody(item) {
   }
   // type "choice"
   const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
-  const responsesHtml = responses.map(_afResponseRow).join('');
+  const ncList = (item && Array.isArray(item.nc_responses)) ? item.nc_responses.map(String) : [];
+  const responsesHtml = responses.map((r) => _afResponseRow(r, ncList.indexOf(String(r)) !== -1)).join('');
   const multi = (item && item.multi === false) ? false : true;
   return '<div class="af-cl-body" data-type="choice">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
@@ -4067,10 +4074,27 @@ function _afChecklistCardBody(item) {
     + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
     + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
     + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
+    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' onchange="_afOnOtherToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
     +   '<span>Ajouter une réponse <strong style="color:var(--text)">« Autre »</strong> avec zone d\'explication optionnelle</span>'
     + '</label>'
+    + '<label class="af-cl-other-nc-lbl" style="display:' + ((item && item.allow_other) ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:4px;margin-left:22px;cursor:pointer;font-size:12px;color:var(--text2)">'
+    +   '<input type="checkbox" class="af-cl-other-nc"' + ((item && item.other_is_nc) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>Traiter <strong style="color:var(--text)">« Autre »</strong> comme une <strong style="color:var(--danger)">non-conformité</strong></span>'
+    + '</label>'
     + '</div>';
+}
+
+function _afOnOtherToggle(cb){
+  const body = cb.closest('.af-cl-body');
+  if(!body) return;
+  const ncLbl = body.querySelector('.af-cl-other-nc-lbl');
+  if(!ncLbl) return;
+  if(cb.checked){ ncLbl.style.display = 'flex'; }
+  else {
+    ncLbl.style.display = 'none';
+    const inp = ncLbl.querySelector('.af-cl-other-nc');
+    if(inp) inp.checked = false;
+  }
 }
 
 function _afChecklistCard(item) {
@@ -4284,15 +4308,19 @@ function _afReadParams() {
         return;
       }
       const responses = [];
-      card.querySelectorAll('.af-cl-resp-input').forEach(inp => {
-        const r = (inp.value || '').trim();
-        if (r) responses.push(r);
+      const ncResponses = [];
+      card.querySelectorAll('.af-cl-resp-row').forEach(row => {
+        const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
+        if (!r) return;
+        responses.push(r);
+        if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
       });
       if (!responses.length) return;
       const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther });
+      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)

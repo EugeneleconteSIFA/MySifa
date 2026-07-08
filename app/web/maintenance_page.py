@@ -117,6 +117,11 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 
 /* ── Colonne Dossier dans l'historique des contrôles ── */
 .col-dossier{white-space:nowrap}
+.col-nodos{white-space:nowrap}
+.ctrl-row-nc td{background:rgba(248,113,113,0.06);border-top:1px solid rgba(248,113,113,0.18);border-bottom:1px solid rgba(248,113,113,0.18)}
+.ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
+.ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
+.ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
 tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ctrl-dossier-empty{color:var(--muted);font-size:12px}
@@ -932,6 +937,14 @@ body[data-maint-role="operator"] .content{display:none !important}
               </select>
             </div>
             <div class="filter-group">
+              <label for="filt-controles-conformite">Conformité</label>
+              <select id="filt-controles-conformite" class="filter-input" onchange="renderCtrl()">
+                <option value="">Toutes les réponses</option>
+                <option value="nc">Non-conformes uniquement</option>
+                <option value="ok">Conformes uniquement</option>
+              </select>
+            </div>
+            <div class="filter-group">
               <label for="filt-controles-date-from">Du</label>
               <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du">
             </div>
@@ -1536,6 +1549,15 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
           <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
+        <div class="case-ops-section">
+          <div class="case-ops-head">
+            <label class="ops-field-label">Opérateurs assignés</label>
+            <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:220px" onchange="addCaseOperatorFromPicker(this)">
+              <option value="">Ajouter un opérateur…</option>
+            </select>
+          </div>
+          <div class="case-ops-list" id="case-mod-operators-list"></div>
+        </div>
       </div>
       <div class="modal-foot">
         <button type="button" class="modal-btn-ghost" onclick="closeCaseModal()">Annuler</button>
@@ -1706,35 +1728,74 @@ function _opTypePalette(opTypeId){
   return CAL_EVENT_PALETTE[Math.abs(hash) % CAL_EVENT_PALETTE.length];
 }
 // État des opérations planifiées (drag & drop sur la vue Semaine).
-const PLANNING_STORAGE_KEY = 'mysifa_maint_planning_v1';
-const PLANNING_STATE = { list: [] };
-function loadPlanning(){
+// Depuis Commit B2, le calendrier est branché sur l'API /api/maintenance/events
+// (au lieu du localStorage). Chaque event contient N ops et M opérateurs assignés.
+// loadPlanning() lance le fetch en tâche de fond puis re-render : les callers
+// peuvent rester synchrones. Pour un rafraîchissement AVANT rendu, utiliser
+// refreshPlanning() (async, à await avant renderCal).
+const PLANNING_STATE = { list: [], _lastLoad: 0 };
+
+function _apiEventToClient(ev){
+  // Convertit un event {id, machine, date_prevue, heure_debut, heure_fin,
+  // ops:[{id, code, code_label, ...}], operators:[{id, nom}]} vers la
+  // structure attendue par renderCalMonth/Week/Day (héritée du localStorage).
+  const opsClient = (ev.ops || []).map(o => {
+    const t = (typeof OPS_TYPES_STATE !== 'undefined' && OPS_TYPES_STATE && Array.isArray(OPS_TYPES_STATE.list))
+      ? OPS_TYPES_STATE.list.find(x => x.id === o.code) : null;
+    return {
+      _op_id: o.id,
+      opTypeId: o.code,
+      opName: (t && t.nom) || o.code_label || o.code,
+      opNiveau: (t && t.niveau) || null,
+      opFreq: (t && t.frequence) || '',
+      statut: o.statut,
+      duree_reelle_min: o.duree_reelle_min,
+      pieces_changees: o.pieces_changees,
+      observations: o.observations,
+      done_at: o.done_at,
+      done_by: o.done_by,
+      updated_by: o.updated_by,
+    };
+  });
+  return {
+    id: ev.id,
+    machine: ev.machine,
+    date: ev.date_prevue,
+    start: ev.heure_debut || '',
+    end: ev.heure_fin || '',
+    operations: opsClient,
+    operators: ev.operators || [],
+    source: ev.source,
+    created_at: ev.created_at,
+    updated_at: ev.updated_at,
+  };
+}
+
+async function refreshPlanning(){
   try{
-    const raw = localStorage.getItem(PLANNING_STORAGE_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    PLANNING_STATE.list = (Array.isArray(arr) ? arr : []).map(ev => {
-      if(ev && ev.operations && Array.isArray(ev.operations)) return ev;
-      // Migration : ancien format single-op (opTypeId/opName/...) → nouveau format multi-op
-      const op = {
-        opTypeId: (ev && ev.opTypeId) || '',
-        opName:   (ev && ev.opName)   || '',
-        opNiveau: (ev && ev.opNiveau) || null,
-        opFreq:   (ev && ev.opFreq)   || '',
-      };
-      return {
-        id: ev.id || (Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8)),
-        machine: ev.machine || '',
-        date: ev.date,
-        start: ev.start,
-        end: ev.end,
-        operations: op.opTypeId ? [op] : [],
-        created_at: ev.created_at || new Date().toISOString(),
-      };
-    });
+    // Charge une fenêtre large autour de la date pivot : ±90 jours.
+    const pivot = (CAL_STATE && CAL_STATE.date) ? new Date(CAL_STATE.date) : new Date();
+    const from = new Date(pivot); from.setDate(pivot.getDate() - 90);
+    const to   = new Date(pivot); to.setDate(pivot.getDate() + 90);
+    const url = '/api/maintenance/events?date_from=' + _fmtDateISO(from) +
+                '&date_to=' + _fmtDateISO(to);
+    const r = await fetch(url, { credentials: 'include' });
+    if(!r.ok){ PLANNING_STATE.list = []; return; }
+    const d = await r.json();
+    PLANNING_STATE.list = (d.events || []).map(_apiEventToClient);
+    PLANNING_STATE._lastLoad = Date.now();
   }catch(e){ PLANNING_STATE.list = []; }
 }
+
+function loadPlanning(){
+  // Sync façade : lance un refresh async en arrière-plan puis re-render à
+  // l'arrivée. Les callers historiques ne changent pas de comportement.
+  refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+}
+
 function savePlanning(){
-  try{ localStorage.setItem(PLANNING_STORAGE_KEY, JSON.stringify(PLANNING_STATE.list)); }catch(e){}
+  // No-op : toute écriture passe désormais par l'API (POST/PATCH/DELETE).
+  // Cette fonction est conservée pour ne pas casser les callers historiques.
 }
 const CAL_WDAYS_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const CAL_WDAYS_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
@@ -2201,9 +2262,12 @@ function _hmToMins(s){
   if(!m) return null;
   return parseInt(m[1],10)*60 + parseInt(m[2],10);
 }
-function deletePlanningEvent(id){
-  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
-  savePlanning();
+async function deletePlanningEvent(id){
+  try{
+    await fetch('/api/maintenance/events/' + encodeURIComponent(id),
+                { method: 'DELETE', credentials: 'include' });
+  }catch(e){}
+  await refreshPlanning();
   renderCal();
 }
 
@@ -2273,18 +2337,24 @@ function closePlanningDetailsModal(){
   document.body.style.overflow = '';
   _PLAN_DET_CASE_ID = null;
 }
-function deletePlanningEvent(id){
-  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
-  savePlanning();
+async function deletePlanningEvent(id){
+  try{
+    await fetch('/api/maintenance/events/' + encodeURIComponent(id),
+                { method: 'DELETE', credentials: 'include' });
+  }catch(e){}
+  await refreshPlanning();
   renderCal();
 }
-function confirmDeleteCase(id){
+async function confirmDeleteCase(id){
   const ev = PLANNING_STATE.list.find(e => e.id === id);
   if(!ev) return;
   const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
   if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
-  PLANNING_STATE.list = PLANNING_STATE.list.filter(e => e.id !== id);
-  savePlanning();
+  try{
+    await fetch('/api/maintenance/events/' + encodeURIComponent(id),
+                { method: 'DELETE', credentials: 'include' });
+  }catch(e){ showToast('Erreur suppression.', 'danger'); return; }
+  await refreshPlanning();
   closePlanningDetailsModal();
   renderCal();
   showToast('Créneau supprimé.', 'info');
@@ -2322,8 +2392,69 @@ function onCalCellClick(e){
 
 // ── Modale Créneau (création + édition) ──────────────────────────────
 let _PENDING_CASE = null;
+let _CASE_OPERATORS = [];  // [{id, nom}] : opérateurs assignés au créneau en cours d'édition
+let _OPERATORS_CATALOG = null;  // cache : [{id, nom, ...}]
+
+async function _loadOperatorsCatalog(){
+  if(_OPERATORS_CATALOG) return _OPERATORS_CATALOG;
+  try{
+    const r = await fetch('/api/maintenance/operators', { credentials:'include' });
+    if(!r.ok){ _OPERATORS_CATALOG = []; return _OPERATORS_CATALOG; }
+    const d = await r.json();
+    _OPERATORS_CATALOG = d.operators || [];
+  }catch(e){ _OPERATORS_CATALOG = []; }
+  return _OPERATORS_CATALOG;
+}
+
+function renderCaseOperators(){
+  const list = document.getElementById('case-mod-operators-list');
+  const picker = document.getElementById('case-mod-operator-picker');
+  if(list){
+    if(!_CASE_OPERATORS.length){
+      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun opérateur assigné pour l\'instant.</div>';
+    } else {
+      list.innerHTML = _CASE_OPERATORS.map(op =>
+        `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">×</button></div>`
+      ).join('');
+    }
+  }
+  if(picker){
+    const assigned = new Set(_CASE_OPERATORS.map(o => o.id));
+    const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
+    picker.innerHTML = '<option value="">Ajouter un opérateur…</option>' +
+      available.map(u => `<option value="${u.id}">${u.nom}</option>`).join('');
+  }
+}
+
+function addCaseOperatorFromPicker(sel){
+  const id = parseInt(sel.value, 10);
+  if(!id) return;
+  const user = (_OPERATORS_CATALOG || []).find(u => u.id === id);
+  if(!user) return;
+  if(_CASE_OPERATORS.find(o => o.id === id)) return;
+  _CASE_OPERATORS.push({ id: user.id, nom: user.nom });
+  renderCaseOperators();
+}
+
+function removeCaseOperator(id){
+  _CASE_OPERATORS = _CASE_OPERATORS.filter(o => o.id !== id);
+  renderCaseOperators();
+}
+
 let _CASE_OPS = [];
-function openCaseModal(opts){
+async function openCaseModal(opts){
+  await _loadOperatorsCatalog();
+  _CASE_OPERATORS = [];
+  if(opts && opts.editId){
+    const ev = PLANNING_STATE.list.find(e => e.id === opts.editId);
+    if(ev && Array.isArray(ev.operators)){
+      _CASE_OPERATORS = ev.operators.map(o => ({ id: o.id, nom: o.nom }));
+    }
+  }
+  renderCaseOperators();
+  return _openCaseModalInner(opts);
+}
+function _openCaseModalInner(opts){
   opts = opts || {};
   if(!opts.iso){ showToast('Date manquante.', 'danger'); return; }
   _PENDING_CASE = { editId: opts.editId || null, iso: opts.iso };
@@ -2415,7 +2546,7 @@ function renderCaseOpsList(){
     '</div>';
   }).join('');
 }
-function submitCaseModal(e){
+async function submitCaseModal(e){
   e.preventDefault();
   if(!_PENDING_CASE){ closeCaseModal(); return; }
   const machine = (document.getElementById('case-mod-machine')?.value || '').trim();
@@ -2426,38 +2557,96 @@ function submitCaseModal(e){
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
-  const validOps = _CASE_OPS.filter(o => o.opTypeId);
-  if(!validOps.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
-  // Synchroniser les noms/niveaux/fréquences depuis le catalogue courant
-  const synced = validOps.map(o => {
-    const t = OPS_TYPES_STATE.list.find(x => x.id === o.opTypeId);
-    if(!t) return o;
-    return { opTypeId: t.id, opName: t.nom, opNiveau: t.niveau || null, opFreq: t.frequence || '' };
-  });
+  const opCodes = _CASE_OPS.filter(o => o.opTypeId).map(o => o.opTypeId);
+  if(!opCodes.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  const operatorIds = (_CASE_OPERATORS || []).map(o => o.id);
+
   const editId = _PENDING_CASE.editId;
-  if(editId){
-    const idx = PLANNING_STATE.list.findIndex(x => x.id === editId);
-    if(idx === -1){ showToast('Créneau introuvable.', 'danger'); closeCaseModal(); return; }
-    PLANNING_STATE.list[idx] = Object.assign({}, PLANNING_STATE.list[idx], {
-      machine, start, end,
-      operations: synced,
-      updated_at: new Date().toISOString(),
-    });
-    showToast('Créneau mis à jour.', 'info');
-  } else {
-    PLANNING_STATE.list.push({
-      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-      machine,
-      date: _PENDING_CASE.iso,
-      start, end,
-      operations: synced,
-      created_at: new Date().toISOString(),
-    });
-    showToast('Créneau créé.', 'info');
+  try{
+    if(editId){
+      // PATCH metadata + sync ops + sync operators.
+      const rMeta = await fetch('/api/maintenance/events/' + encodeURIComponent(editId), {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ machine, date_prevue: _PENDING_CASE.iso, heure_debut: start, heure_fin: end }),
+      });
+      if(!rMeta.ok){ throw new Error('Meta update failed'); }
+      await _syncEventOpsAndOperators(editId, opCodes, operatorIds);
+      showToast('Créneau mis à jour.', 'info');
+    } else {
+      const rNew = await fetch('/api/maintenance/events', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          machine, date_prevue: _PENDING_CASE.iso,
+          heure_debut: start, heure_fin: end, source: 'planifie',
+          ops: opCodes, operators: operatorIds,
+        }),
+      });
+      if(!rNew.ok){
+        const err = await rNew.json().catch(()=>({}));
+        throw new Error(err.detail || 'Création refusée');
+      }
+      showToast('Créneau créé.', 'info');
+    }
+  }catch(err){
+    showToast('Erreur : ' + (err.message || err), 'danger');
+    return;
   }
-  savePlanning();
   closeCaseModal();
+  await refreshPlanning();
   renderCal();
+}
+
+async function _syncEventOpsAndOperators(eventId, wantedCodes, wantedOperatorIds){
+  // Récupère l'état actuel de l'event pour comparer.
+  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials:'include' });
+  if(!r.ok) return;
+  const d = await r.json();
+  const ev = d.event || {};
+  const currentOps = ev.ops || [];
+  const wantedCodesSet = new Set(wantedCodes);
+  const currentCodesSet = new Set(currentOps.map(o => o.code));
+
+  // Ops à ajouter (dans wanted mais pas dans current).
+  for(const code of wantedCodes){
+    if(!currentCodesSet.has(code)){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ code }),
+      });
+    }
+  }
+  // Ops à supprimer (dans current mais pas dans wanted).
+  for(const op of currentOps){
+    if(!wantedCodesSet.has(op.code)){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
+        method:'DELETE', credentials:'include',
+      });
+    }
+  }
+
+  // Operators
+  const currentOperators = ev.operators || [];
+  const wantedOpIdsSet = new Set(wantedOperatorIds.map(Number));
+  const currentOpIdsSet = new Set(currentOperators.map(o => o.id));
+  for(const oid of wantedOperatorIds){
+    if(!currentOpIdsSet.has(oid)){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/operators', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ operator_id: oid }),
+      });
+    }
+  }
+  for(const op of currentOperators){
+    if(!wantedOpIdsSet.has(op.id)){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/operators/' + op.id, {
+        method:'DELETE', credentials:'include',
+      });
+    }
+  }
 }
 
 
@@ -4230,15 +4419,16 @@ function sortCtrl(field){
 function getCtrlFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
   return {
-    type:     v('filt-controles-type'),
-    operateur:v('filt-controles-operateur'),
-    machine:  v('filt-controles-machine'),
-    dateFrom: v('filt-controles-date-from'),
-    dateTo:   v('filt-controles-date-to'),
+    type:      v('filt-controles-type'),
+    operateur: v('filt-controles-operateur'),
+    machine:   v('filt-controles-machine'),
+    dateFrom:  v('filt-controles-date-from'),
+    dateTo:    v('filt-controles-date-to'),
+    conformite:v('filt-controles-conformite'),
   };
 }
 function resetCtrlFilters(){
-  ['type','operateur','machine','date-from','date-to'].forEach(k => {
+  ['type','operateur','machine','date-from','date-to','conformite'].forEach(k => {
     const el = document.getElementById('filt-controles-' + k);
     if(el) el.value = '';
   });
@@ -4559,6 +4749,33 @@ function closeAckDetail(){
   if(el) el.remove();
 }
 
+// Détecte une non-conformité : au moins une réponse choice de l'ack figure
+// dans la liste nc_responses définie par l'admin lors de la création de
+// l'alerte. Les items de type "value" et les clés "_other" (précision de la
+// case Autre) ne sont pas évalués — l'admin cible explicitement quelles
+// réponses signalent un problème.
+function _ackHasNonConformite(c){
+  if(!c || c._source !== 'alert') return false;
+  const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)];
+  if(!meta || !Array.isArray(meta.checklist_items)) return false;
+  const resp = c._responses || {};
+  for(let i = 0; i < meta.checklist_items.length; i++){
+    const it = meta.checklist_items[i];
+    if(!it || it.type === 'value') continue;
+    const ncSet = Array.isArray(it.nc_responses) ? it.nc_responses.map(String) : [];
+    const otherIsNc = !!it.other_is_nc;
+    const r = resp[String(i)];
+    if(!Array.isArray(r)) continue;
+    for(const sel of r){
+      const s = String(sel || '').trim();
+      if(ncSet.indexOf(s) !== -1) return true;
+      // "Autre" traité comme NC si l'admin l'a explicitement demandé
+      if(otherIsNc && s === 'Autre') return true;
+    }
+  }
+  return false;
+}
+
 function renderCtrl(){
   refreshCtrlFiltersOptions();
   updateCtrlDatePresetChips();
@@ -4583,6 +4800,11 @@ function renderCtrl(){
       const d = (c.date_saisie || '').slice(0,10);
       if(f.dateFrom && d < f.dateFrom) return false;
       if(f.dateTo && d > f.dateTo) return false;
+    }
+    if(f.conformite){
+      const isNc = _ackHasNonConformite(c);
+      if(f.conformite === 'nc' && !isNc) return false;
+      if(f.conformite === 'ok' && isNc)  return false;
     }
     if(!_matchPointFilters(c)) return false;
     return true;
@@ -4632,6 +4854,7 @@ function renderCtrl(){
       h += '<th>' + escHtml(col.label || '') + unitSuffix + '</th>';
     }
     if(showExtra){
+      h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
       h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
       h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
       h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
@@ -4641,7 +4864,7 @@ function renderCtrl(){
     thead.innerHTML = h;
   }
 
-  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 3 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
+  const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
@@ -4673,9 +4896,13 @@ function renderCtrl(){
         cells += '<td>' + escHtml(val) + '</td>';
       }
       if(showExtra){
-        // Dossier : pill accent si renseigné, tiret sinon. Double-clic sur la
-        // ligne (ondblclick existant) ouvre le modal qui affiche la fiche
-        // technique complète du dossier.
+        // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
+        const _nd = c._no_dossier || '';
+        const _ndCell = (c._source === 'alert' && _nd)
+          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_nd) + '</span>'
+          : '<span class="ctrl-dossier-empty">—</span>';
+        cells += '<td class="col-nodos">' + _ndCell + '</td>';
+        // Colonnes produit (fiche technique associée)
         const _di = c._dossier_info || null;
         const _refP = _di ? (_di.ref_produit || _di.ref_produit_norm || '') : '';
         const _adh  = _di ? (_di.adhesif || '') : '';
@@ -4705,10 +4932,13 @@ function renderCtrl(){
         '</button>';
       }
       cells += '<td class="col-actions">' + actionHtml + '</td>';
+      const isNc = _ackHasNonConformite(c);
+      const trClass = isNc ? ' class="ctrl-row-nc"' : '';
+      const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
       const dblAttr = (c._source === 'alert')
-        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer" title="Double-clic pour voir le détail"'
+        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le détail"')
         : '';
-      return '<tr' + dblAttr + '>' + cells + '</tr>';
+      return '<tr' + trClass + dblAttr + ncTitle + '>' + cells + '</tr>';
     });
     tbody.innerHTML = rows.join('');
   }
@@ -5044,36 +5274,17 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 
-<!-- Modal saisie tâche (opérateur : ouvre au clic sur une carte) -->
+<!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
+     Liste toutes les ops du créneau, chacune avec son propre bouton
+     "Enregistrer cette opération" — le statut/saisie est partagé au groupe. -->
 <div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
-  <div class="op-modal" role="dialog" aria-modal="true">
-    <div class="op-modal-title">Saisie de la tâche</div>
-    <div class="op-modal-sub" id="op-modal-saisie-sub">Renseigne les informations à la fin ou pendant l'intervention.</div>
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
+    <div class="op-modal-title">Saisie du créneau</div>
+    <div class="op-modal-sub">Renseigne chaque opération individuellement. Les mises à jour sont partagées avec le groupe assigné au créneau.</div>
     <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
-    <div class="op-form-row">
-      <label for="op-fld-statut">Statut *</label>
-      <select id="op-fld-statut">
-        <option value="a_faire">À faire</option>
-        <option value="en_cours">En cours</option>
-        <option value="termine">Terminé</option>
-        <option value="reporte">Reporté</option>
-      </select>
-    </div>
-    <div class="op-form-row">
-      <label for="op-fld-duree">Durée réelle (minutes)</label>
-      <input type="number" id="op-fld-duree" min="0" step="1" placeholder="ex. 25">
-    </div>
-    <div class="op-form-row">
-      <label for="op-fld-pieces">Pièces changées</label>
-      <input type="text" id="op-fld-pieces" placeholder="ex. Filtre à air, joint torique">
-    </div>
-    <div class="op-form-row">
-      <label for="op-fld-obs">Observations</label>
-      <textarea id="op-fld-obs" placeholder="Remarques, anomalies, prochaine étape…"></textarea>
-    </div>
+    <div id="op-modal-saisie-ops"></div>
     <div class="op-modal-actions">
-      <button type="button" class="btn" onclick="opCloseSaisie()">Annuler</button>
-      <button type="button" class="btn op-btn-accent" onclick="opSubmitSaisie()">Enregistrer</button>
+      <button type="button" class="btn" onclick="opCloseSaisie()">Fermer</button>
     </div>
   </div>
 </div>
@@ -5103,40 +5314,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
-<!-- Modal admin : créer une tâche assignée -->
-<div class="op-modal-overlay" id="adm-modal-create-task" onclick="if(event.target===this) admCloseCreateTask()">
-  <div class="op-modal" role="dialog" aria-modal="true">
-    <div class="op-modal-title">Créer une tâche de maintenance</div>
-    <div class="op-modal-sub">Assigne une opération de maintenance à un opérateur pour une date donnée.</div>
-    <div class="op-form-row">
-      <label for="adm-new-date">Date prévue *</label>
-      <input type="date" id="adm-new-date">
-    </div>
-    <div class="op-form-row">
-      <label for="adm-new-code">Code opération *</label>
-      <select id="adm-new-code"></select>
-    </div>
-    <div class="op-form-row">
-      <label for="adm-new-machine">Machine *</label>
-      <select id="adm-new-machine">
-        <option value="Cohésio 1">Cohésio 1</option>
-        <option value="Cohésio 2">Cohésio 2</option>
-        <option value="DSI">DSI</option>
-        <option value="Repiquage">Repiquage</option>
-      </select>
-    </div>
-    <div class="op-form-row">
-      <label for="adm-new-operator">Opérateur assigné</label>
-      <select id="adm-new-operator">
-        <option value="">— Non assigné —</option>
-      </select>
-    </div>
-    <div class="op-modal-actions">
-      <button type="button" class="btn" onclick="admCloseCreateTask()">Annuler</button>
-      <button type="button" class="btn op-btn-accent" onclick="admSubmitCreateTask()">Créer</button>
-    </div>
-  </div>
-</div>
+
 
 <script>
 /* ── JS multi-rôle : Mes tâches / Planning / Nouvelle intervention / Admin create ──
@@ -5163,15 +5341,22 @@ function _statutLabel(s){
 
 async function opFetchCodes(){
   if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
-  const r = await fetch('/api/maintenance/tasks/codes');
+  const r = await fetch('/api/maintenance/codes', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.codes = []; return []; }
   const d = await r.json();
-  MAINT_STATE.codes = d.codes || [];
+  // /api/maintenance/codes renvoie { items:[{code, label, categorie, niveau, periodique, ...}] }
+  MAINT_STATE.codes = (d.items || d.codes || []).map(c => ({
+    code: c.code, label: c.label, categorie: c.categorie,
+    niveau: c.niveau, periodique: !!c.periodique,
+    intervalle: c.intervalle || '',
+  }));
   return MAINT_STATE.codes;
 }
 
 async function admFetchOperators(){
   if(MAINT_STATE.operators.length) return MAINT_STATE.operators;
-  const r = await fetch('/api/maintenance/tasks/operators');
+  const r = await fetch('/api/maintenance/operators', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.operators = []; return []; }
   const d = await r.json();
   MAINT_STATE.operators = d.operators || [];
   return MAINT_STATE.operators;
@@ -5184,39 +5369,64 @@ async function opLoadTasks(){
   const dateInput = document.getElementById('op-tasks-date');
   const d = dateInput.value || _fmtDateISO(new Date());
   if(!dateInput.value) dateInput.value = d;
-  const r = await fetch('/api/maintenance/tasks?date=' + encodeURIComponent(d));
+  const r = await fetch('/api/maintenance/my-tasks?date=' + encodeURIComponent(d), { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
   const data = await r.json();
-  MAINT_STATE.tasks = data.tasks || [];
+  // /my-tasks renvoie { events:[{id, machine, date_prevue, heure_debut, heure_fin,
+  //   ops:[{id, code, code_label, code_categorie, statut, ...}], operators:[...]}]}
+  MAINT_STATE.tasks = data.events || [];
   opRenderTasks();
+}
+
+function _countRemainingOps(ev){
+  return (ev.ops || []).filter(o => o.statut !== 'termine').length;
 }
 
 function opRenderTasks(){
   const list = document.getElementById('op-tasks-list');
   const cnt = document.getElementById('op-tasks-count');
   if(!list) return;
-  const tasks = MAINT_STATE.tasks;
-  if(cnt) cnt.textContent = tasks.length + (tasks.length > 1 ? ' tâches assignées' : ' tâche assignée');
-  if(tasks.length === 0){
+  const events = MAINT_STATE.tasks;
+  if(cnt){
+    const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
+    cnt.textContent = events.length + (events.length > 1 ? ' créneaux' : ' créneau')
+      + ' — ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
+  }
+  if(events.length === 0){
     list.innerHTML = '<div class="op-empty"><h3>Aucune tâche pour cette date</h3>Tu peux déclarer une intervention non planifiée avec le bouton ci-dessus.</div>';
     return;
   }
-  const html = '<div class="op-tasks-grid">' + tasks.map(t => {
-    const cat = t.code_categorie || 'autre';
-    const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[cat] || cat;
-    const src = (t.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const html = '<div class="op-tasks-grid">' + events.map(ev => {
+    const time = (ev.heure_debut && ev.heure_fin)
+      ? (ev.heure_debut + ' – ' + ev.heure_fin)
+      : '<em style="color:var(--muted);font-style:normal">Sans créneau horaire</em>';
+    const remaining = _countRemainingOps(ev);
+    const totalOps = (ev.ops || []).length;
+    const doneAll = (remaining === 0 && totalOps > 0);
+    const opsPreview = (ev.ops || []).slice(0, 3).map(o => {
+      const catCls = 'op-cat ' + _catClass(o.code_categorie || 'autre');
+      return `<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px">
+        <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
+        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
+        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+      </div>`;
+    }).join('');
+    const more = totalOps > 3 ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${totalOps-3} autre${totalOps-3 > 1 ? 's' : ''}</div>` : '';
+    const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+    const summary = doneAll
+      ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
+      : (remaining < totalOps
+          ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+          : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
     return `
-      <div class="op-card" onclick="opOpenSaisie(${t.id})">
-        <div class="op-status op-status-${t.statut}">${_statutLabel(t.statut)}</div>
+      <div class="op-card" onclick="opOpenSaisie(${ev.id})">
+        <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
         <div class="op-card-head">
-          <span class="op-code">${t.code}</span>
-          <span class="op-cat ${_catClass(cat)}">${catLbl}</span>
+          <strong style="font-size:15px;color:var(--text)">${ev.machine}</strong>
           ${src}
         </div>
-        <div class="op-card-title">${t.code_label || '(libellé indisponible)'}</div>
-        <div class="op-card-meta">
-          <span>Machine : <strong>${t.machine}</strong></span>
-          ${t.duree_reelle_min ? '<span>Durée : <strong>'+t.duree_reelle_min+' min</strong></span>' : ''}
-        </div>
+        <div style="font-size:12px;color:var(--text2)">${time}</div>
+        <div>${opsPreview}${more}</div>
       </div>`;
   }).join('') + '</div>';
   list.innerHTML = html;
@@ -5224,20 +5434,49 @@ function opRenderTasks(){
 
 /* ── Modal saisie ────────────────────────────────────────────────── */
 
-function opOpenSaisie(taskId){
-  const t = MAINT_STATE.tasks.find(x => x.id === taskId);
-  if(!t) return;
-  MAINT_STATE.saisieTaskId = taskId;
+function opOpenSaisie(eventId){
+  const ev = MAINT_STATE.tasks.find(x => x.id === eventId);
+  if(!ev) return;
+  MAINT_STATE.saisieTaskId = eventId;
   const ctx = document.getElementById('op-modal-saisie-ctx');
+  const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans créneau horaire';
   ctx.innerHTML = `
-    <span><strong>Code :</strong> ${t.code}</span>
-    <span><strong>Opération :</strong> ${t.code_label || '—'}</span>
-    <span><strong>Machine :</strong> ${t.machine}</span>
-    <span><strong>Date :</strong> ${t.date_prevue}</span>`;
-  document.getElementById('op-fld-statut').value = t.statut || 'a_faire';
-  document.getElementById('op-fld-duree').value = t.duree_reelle_min || '';
-  document.getElementById('op-fld-pieces').value = t.pieces_changees || '';
-  document.getElementById('op-fld-obs').value = t.observations || '';
+    <span><strong>Machine :</strong> ${ev.machine}</span>
+    <span><strong>Date :</strong> ${ev.date_prevue}</span>
+    <span><strong>Créneau :</strong> ${time}</span>
+    ${ev.source === 'non_planifie' ? '<span class="op-badge-source">Non planifiée</span>' : ''}`;
+  const wrap = document.getElementById('op-modal-saisie-ops');
+  if(wrap){
+    wrap.innerHTML = (ev.ops || []).map((op, idx) => {
+      const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+      return `
+        <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <span class="op-code">${op.code}</span>
+            <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
+            <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
+          </div>
+          <div class="op-form-row"><label>Statut</label>
+            <select data-fld="statut">
+              <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
+              <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
+              <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
+              <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
+            </select>
+          </div>
+          <div class="op-form-row"><label>Durée réelle (min)</label>
+            <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
+          </div>
+          <div class="op-form-row"><label>Pièces changées</label>
+            <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
+          </div>
+          <div class="op-form-row"><label>Observations</label>
+            <textarea data-fld="observations">${op.observations || ''}</textarea>
+          </div>
+          <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id})">Enregistrer cette opération</button>
+        </div>`;
+    }).join('') || '<div style="text-align:center;color:var(--muted);padding:20px">Aucune opération.</div>';
+  }
   document.getElementById('op-modal-saisie').classList.add('active');
 }
 
@@ -5246,17 +5485,18 @@ function opCloseSaisie(){
   document.getElementById('op-modal-saisie').classList.remove('active');
 }
 
-async function opSubmitSaisie(){
-  const id = MAINT_STATE.saisieTaskId;
-  if(!id) return;
+async function opSubmitOpSaisie(eventId, opId){
+  const item = document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
+  if(!item) return;
+  const val = (fld) => (item.querySelector(`[data-fld="${fld}"]`) || {}).value;
   const body = {
-    statut: document.getElementById('op-fld-statut').value,
-    duree_reelle_min: parseInt(document.getElementById('op-fld-duree').value, 10) || null,
-    pieces_changees: document.getElementById('op-fld-pieces').value.trim() || null,
-    observations: document.getElementById('op-fld-obs').value.trim() || null,
+    statut: val('statut'),
+    duree_reelle_min: parseInt(val('duree_reelle_min'), 10) || null,
+    pieces_changees: (val('pieces_changees') || '').trim() || null,
+    observations: (val('observations') || '').trim() || null,
   };
-  const r = await fetch('/api/maintenance/tasks/' + id, {
-    method:'PATCH',
+  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
+    method:'PATCH', credentials:'include',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(body),
   });
@@ -5266,8 +5506,14 @@ async function opSubmitSaisie(){
     return;
   }
   if(typeof showToast === 'function') showToast('Saisie enregistrée.', 'success');
-  opCloseSaisie();
-  opLoadTasks();
+  await opLoadTasks();
+  // Re-render du modal avec les données à jour
+  opOpenSaisie(eventId);
+}
+
+// Ancien nom conservé pour compat (rien ne l'appelle en direct désormais).
+async function opSubmitSaisie(){
+  // No-op : la saisie se fait op par op via opSubmitOpSaisie.
 }
 
 /* ── Modal nouvelle intervention (opérateur) ──────────────────────── */
@@ -5293,12 +5539,14 @@ async function opSubmitNew(){
     return;
   }
   const body = {
+    machine,
     date_prevue: _fmtDateISO(new Date()),
-    code, machine,
     source: 'non_planifie',
+    ops: [code],
+    operators: [],  // Le serveur forcera l'user courant.
   };
-  const r = await fetch('/api/maintenance/tasks', {
-    method:'POST',
+  const r = await fetch('/api/maintenance/events', {
+    method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify(body),
   });
@@ -5310,31 +5558,41 @@ async function opSubmitNew(){
   const data = await r.json();
   if(typeof showToast === 'function') showToast('Intervention déclarée.', 'success');
   opCloseNewModal();
-  // Recharge et ouvre directement la saisie sur la nouvelle tâche.
   const dateInput = document.getElementById('op-tasks-date');
   if(dateInput) dateInput.value = body.date_prevue;
   await opLoadTasks();
-  if(data.task && data.task.id) opOpenSaisie(data.task.id);
+  if(data.event && data.event.id) opOpenSaisie(data.event.id);
 }
 
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
-function _opRenderPlanTable(rows, meId){
-  if(rows.length === 0){
+function _opRenderPlanTable(events, meId){
+  // Aplati les events → 1 ligne par (event, op). Marque comme "mine" les
+  // events où je suis dans le groupe d'opérateurs.
+  if(events.length === 0){
     return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
   }
+  const rows = [];
+  for(const ev of events){
+    const mine = (ev.operators || []).some(o => o.id === meId);
+    const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assigné</em>';
+    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : '—';
+    for(const op of (ev.ops || [])){
+      rows.push({
+        mine, ev, op, operatorsStr, time,
+      });
+    }
+  }
   return `<table class="op-plan-table">
-    <thead><tr><th>Code</th><th>Opération</th><th>Machine</th><th>Opérateur</th><th>Statut</th></tr></thead>
-    <tbody>${rows.map(t => {
-      const mine = (t.operator_id === meId);
-      return `<tr class="${mine ? 'mine' : ''}">
-        <td><span class="op-code">${t.code}</span></td>
-        <td>${t.code_label || '—'}</td>
-        <td><strong>${t.machine}</strong></td>
-        <td>${t.operator_nom || '<em style="color:var(--muted)">Non assigné</em>'}</td>
-        <td><span class="op-status op-status-${t.statut}" style="position:static">${_statutLabel(t.statut)}</span></td>
-      </tr>`;
-    }).join('')}</tbody>
+    <thead><tr><th>Créneau</th><th>Machine</th><th>Code</th><th>Opération</th><th>Groupe</th><th>Statut</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.mine ? 'mine' : ''}">
+      <td>${r.time}</td>
+      <td><strong>${r.ev.machine}</strong></td>
+      <td><span class="op-code">${r.op.code}</span></td>
+      <td>${r.op.code_label || '—'}</td>
+      <td style="font-size:12px">${r.operatorsStr}</td>
+      <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
+    </tr>`).join('')}</tbody>
   </table>`;
 }
 
@@ -5343,17 +5601,25 @@ async function opLoadPlanning(){
   const dateInput = document.getElementById('op-plan-date');
   const d = dateInput.value || _fmtDateISO(new Date());
   if(!dateInput.value) dateInput.value = d;
-  const r = await fetch('/api/maintenance/tasks?date=' + encodeURIComponent(d));
+  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
+                       '&date_to=' + encodeURIComponent(d), { credentials:'include' });
+  if(!r.ok){
+    const persoEl = document.getElementById('op-plan-personnel');
+    const genEl = document.getElementById('op-plan-general');
+    if(persoEl) persoEl.innerHTML = _opRenderPlanTable([], null);
+    if(genEl) genEl.innerHTML = _opRenderPlanTable([], null);
+    return;
+  }
   const data = await r.json();
-  const rows = data.tasks || [];
+  const events = data.events || [];
   const meId = (S && S.me) ? S.me.id : null;
-  // Onglet Personnel : uniquement mes tâches assignées.
-  const personnel = rows.filter(t => t.operator_id === meId);
+  // Onglet Personnel : events où je suis dans le groupe.
+  const perso = events.filter(ev => (ev.operators || []).some(o => o.id === meId));
   const persoEl = document.getElementById('op-plan-personnel');
-  if(persoEl) persoEl.innerHTML = _opRenderPlanTable(personnel, meId);
-  // Onglet Général : toutes les tâches (y compris les miennes, surlignées).
+  if(persoEl) persoEl.innerHTML = _opRenderPlanTable(perso, meId);
+  // Onglet Général : tous.
   const genEl = document.getElementById('op-plan-general');
-  if(genEl) genEl.innerHTML = _opRenderPlanTable(rows, meId);
+  if(genEl) genEl.innerHTML = _opRenderPlanTable(events, meId);
 }
 
 function opSetPlanTab(name){
@@ -5364,53 +5630,6 @@ function opSetPlanTab(name){
   const gen = document.getElementById('op-plan-general');
   if(perso) perso.style.display = (name === 'personnel') ? '' : 'none';
   if(gen) gen.style.display = (name === 'general') ? '' : 'none';
-}
-
-/* ── Modal admin : créer une tâche assignée ──────────────────────── */
-
-async function admOpenCreateTask(){
-  await Promise.all([opFetchCodes(), admFetchOperators()]);
-  const cSel = document.getElementById('adm-new-code');
-  cSel.innerHTML = MAINT_STATE.codes.map(c =>
-    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
-  ).join('');
-  const oSel = document.getElementById('adm-new-operator');
-  oSel.innerHTML = '<option value="">— Non assigné —</option>' + MAINT_STATE.operators.map(u =>
-    `<option value="${u.id}">${u.nom}</option>`
-  ).join('');
-  const d = document.getElementById('adm-new-date');
-  if(!d.value) d.value = _fmtDateISO(new Date());
-  document.getElementById('adm-modal-create-task').classList.add('active');
-}
-
-function admCloseCreateTask(){
-  document.getElementById('adm-modal-create-task').classList.remove('active');
-}
-
-async function admSubmitCreateTask(){
-  const body = {
-    date_prevue: document.getElementById('adm-new-date').value,
-    code: document.getElementById('adm-new-code').value,
-    machine: document.getElementById('adm-new-machine').value,
-    operator_id: parseInt(document.getElementById('adm-new-operator').value, 10) || null,
-    source: 'planifie',
-  };
-  if(!body.date_prevue || !body.code || !body.machine){
-    alert('Date, code et machine obligatoires.');
-    return;
-  }
-  const r = await fetch('/api/maintenance/tasks', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body),
-  });
-  if(!r.ok){
-    const err = await r.json().catch(()=>({}));
-    alert('Erreur : ' + (err.detail || r.status));
-    return;
-  }
-  if(typeof showToast === 'function') showToast('Tâche créée.', 'success');
-  admCloseCreateTask();
 }
 
 /* ── Initialisation au chargement selon le rôle ──────────────────── */

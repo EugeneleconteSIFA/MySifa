@@ -5784,6 +5784,307 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 157, "maintenance_tasks_time_slots")
 
+    # v158 — Refonte du modèle Maintenance : passe d'un modèle plat
+    # (1 maintenance_tasks = 1 op + 1 opérateur) à un modèle 3-tables plus
+    # riche :
+    #   maintenance_events           : le créneau (machine, date, heures, source)
+    #   maintenance_event_ops        : les N opérations d'un créneau (statut/saisie
+    #                                  partagés par tout le groupe)
+    #   maintenance_event_operators  : les M opérateurs assignés au créneau
+    #
+    # `updated_by` sur maintenance_event_ops assure la traçabilité : on sait
+    # quel membre du groupe a rempli / modifié quoi.
+    #
+    # La table `maintenance_tasks` (v155 + v157) devient obsolète et est
+    # supprimée : les rares tâches déjà créées en dev sont jetées.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=158 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine TEXT NOT NULL,
+                date_prevue TEXT NOT NULL,
+                heure_debut TEXT,
+                heure_fin TEXT,
+                source TEXT NOT NULL DEFAULT 'planifie',
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_events_date_machine "
+            "ON maintenance_events(date_prevue, machine)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_events_source "
+            "ON maintenance_events(source)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_event_ops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                statut TEXT NOT NULL DEFAULT 'a_faire',
+                duree_reelle_min INTEGER,
+                pieces_changees TEXT,
+                observations TEXT,
+                photos_json TEXT,
+                done_at TEXT,
+                done_by INTEGER,
+                updated_by INTEGER,
+                updated_at TEXT,
+                FOREIGN KEY (event_id) REFERENCES maintenance_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+                FOREIGN KEY (done_by) REFERENCES users(id),
+                FOREIGN KEY (updated_by) REFERENCES users(id),
+                UNIQUE (event_id, code)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_ops_event "
+            "ON maintenance_event_ops(event_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_ops_code "
+            "ON maintenance_event_ops(code)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_ops_statut "
+            "ON maintenance_event_ops(statut)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_event_operators (
+                event_id INTEGER NOT NULL,
+                operator_id INTEGER NOT NULL,
+                PRIMARY KEY (event_id, operator_id),
+                FOREIGN KEY (event_id) REFERENCES maintenance_events(id) ON DELETE CASCADE,
+                FOREIGN KEY (operator_id) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_event_operators_op "
+            "ON maintenance_event_operators(operator_id)"
+        )
+        # Suppression de l'ancienne table maintenance_tasks (v155 / v157).
+        conn.execute("DROP TABLE IF EXISTS maintenance_tasks")
+        conn.commit()
+        _record_schema_migration(conn, 158, "maintenance_events_refonte")
+    # v159 — Module MyLearning : e-learning avec habilitation progressive.
+    # 7 tables couvrant catalogue formations, modules vidéo YouTube,
+    # quiz de validation, mapping formation → permissions, progression
+    # utilisateur, habilitations obtenues et parcours d'accueil par rôle.
+    # Voir app/core/permissions.py pour la liste des permission_code.
+    #
+    # Note importante : les ON DELETE CASCADE ci-dessous sont inactifs
+    # tant que get_db() n'active pas PRAGMA foreign_keys=ON (cf. étape 3
+    # admin CRUD : la suppression d'une formation devra explicitement
+    # supprimer les modules, quiz, permissions, progression et habilitations
+    # associés en Python, ou activer foreign_keys ponctuellement).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=159 LIMIT 1").fetchone():
+        conn.executescript("""
+            -- Catalogue des parcours de formation. Un parcours = un poste.
+            CREATE TABLE IF NOT EXISTS formations (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                code         TEXT UNIQUE NOT NULL,       -- ex: 'operateur_cohesio'
+                titre        TEXT NOT NULL,
+                description  TEXT,
+                role_cible   TEXT,                        -- rôle métier libre (ex: 'Opérateur Cohésio')
+                ordre        INTEGER DEFAULT 100,
+                actif        INTEGER DEFAULT 1,
+                cree_le      TEXT NOT NULL,
+                maj_le       TEXT
+            );
+
+            -- Modules d'un parcours (chapitres vidéo).
+            CREATE TABLE IF NOT EXISTS formation_modules (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                formation_id INTEGER NOT NULL,
+                ordre        INTEGER DEFAULT 100,
+                titre        TEXT NOT NULL,
+                description  TEXT,
+                youtube_id   TEXT NOT NULL,               -- ID de la vidéo YouTube (ex: 'dQw4w9WgXcQ')
+                duree_sec    INTEGER DEFAULT 0,
+                actif        INTEGER DEFAULT 1,
+                cree_le      TEXT NOT NULL,
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_formation_modules_formation
+                ON formation_modules(formation_id, ordre);
+
+            -- Questions du quiz de fin de module. choix_json est un tableau
+            -- JSON de chaînes (ex: ["Choix A","Choix B","Choix C","Choix D"]).
+            CREATE TABLE IF NOT EXISTS formation_quiz (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id      INTEGER NOT NULL,
+                ordre          INTEGER DEFAULT 100,
+                question       TEXT NOT NULL,
+                choix_json     TEXT NOT NULL,             -- JSON array
+                bonne_reponse  INTEGER NOT NULL,          -- index 0-based dans choix_json
+                explication    TEXT,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_formation_quiz_module
+                ON formation_quiz(module_id, ordre);
+
+            -- Mapping formation → permissions débloquées à la validation.
+            -- Une formation peut débloquer plusieurs permissions (ex: le
+            -- parcours "Opérateur Cohésio" donne prod.saisie_operateur ET
+            -- prod.suppression_saisie).
+            CREATE TABLE IF NOT EXISTS formation_permissions (
+                formation_id     INTEGER NOT NULL,
+                permission_code  TEXT NOT NULL,
+                PRIMARY KEY (formation_id, permission_code),
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+
+            -- Progression utilisateur module par module.
+            -- pct_vu : 0-100 (%). quiz_score : 0-100 (%) ou NULL si pas de quiz.
+            -- valide_le : timestamp ISO si module validé (visionnage + quiz OK).
+            CREATE TABLE IF NOT EXISTS user_progression (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                module_id  INTEGER NOT NULL,
+                pct_vu     INTEGER DEFAULT 0,
+                quiz_score INTEGER,
+                valide_le  TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, module_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_progression_user
+                ON user_progression(user_id);
+
+            -- Cache dénormalisé des habilitations (permissions obtenues).
+            -- Alimenté quand tous les modules d'une formation sont validés.
+            -- Utilisé pour des lookup O(1) au moment du guard require_habilitation.
+            CREATE TABLE IF NOT EXISTS user_habilitations (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id         INTEGER NOT NULL,
+                permission_code TEXT NOT NULL,
+                formation_id    INTEGER NOT NULL,
+                obtenu_le       TEXT NOT NULL,
+                UNIQUE(user_id, permission_code),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_habilitations_user
+                ON user_habilitations(user_id, permission_code);
+
+            -- Parcours d'accueil obligatoire par rôle.
+            -- À la création d'un compte, le rôle détermine 1..N parcours
+            -- à valider avant d'accéder pleinement à l'app.
+            CREATE TABLE IF NOT EXISTS role_parcours_defaut (
+                role         TEXT NOT NULL,
+                formation_id INTEGER NOT NULL,
+                PRIMARY KEY (role, formation_id),
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 159, "mylearning_module")
+
+    # v160 — MyLearning step 2 : refonte du schéma modules pour supporter
+    # plusieurs vidéos par module + séparation stricte tracking vidéo vs
+    # validation module.
+    #
+    # Changements par rapport à v159 :
+    #   - formation_modules perd `youtube_id` et `duree_sec` (ces champs
+    #     appartiennent désormais à formation_videos, N vidéos par module).
+    #   - Nouvelle table `formation_videos` (module_id, ordre, titre,
+    #     youtube_id, duree_sec).
+    #   - `user_progression` (v159) devient obsolète — remplacée par :
+    #       * user_video_progression : pct_vu par vidéo (granulaire)
+    #       * user_module_validation : quiz_score + valide_le par module
+    #
+    # Comme aucun contenu MyLearning n'a été créé entre v159 et v160
+    # (l'écran admin n'existait pas encore à l'étape 1), le DROP + CREATE
+    # est safe : aucune donnée perdue en prod comme en staging.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=160 LIMIT 1").fetchone():
+        conn.executescript("""
+            -- Purge des tables v159 qui changent de structure.
+            DROP TABLE IF EXISTS formation_quiz;
+            DROP TABLE IF EXISTS user_progression;
+            DROP TABLE IF EXISTS formation_modules;
+
+            -- Nouveau formation_modules (sans youtube_id / duree_sec).
+            CREATE TABLE formation_modules (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                formation_id INTEGER NOT NULL,
+                ordre        INTEGER DEFAULT 100,
+                titre        TEXT NOT NULL,
+                description  TEXT,
+                actif        INTEGER DEFAULT 1,
+                cree_le      TEXT NOT NULL,
+                FOREIGN KEY (formation_id) REFERENCES formations(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_formation_modules_formation_v2
+                ON formation_modules(formation_id, ordre);
+
+            -- Vidéos d'un module (N vidéos possibles, ordonnées).
+            CREATE TABLE formation_videos (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id   INTEGER NOT NULL,
+                ordre       INTEGER DEFAULT 100,
+                titre       TEXT NOT NULL,
+                youtube_id  TEXT NOT NULL,               -- 11 caractères YouTube
+                duree_sec   INTEGER DEFAULT 0,
+                cree_le     TEXT NOT NULL,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_formation_videos_module
+                ON formation_videos(module_id, ordre);
+
+            -- Quiz : questions QCM 4 choix, 1 bonne réponse.
+            -- Contrainte métier (côté API) : au moins 1 question par module.
+            CREATE TABLE formation_quiz (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                module_id      INTEGER NOT NULL,
+                ordre          INTEGER DEFAULT 100,
+                question       TEXT NOT NULL,
+                choix_json     TEXT NOT NULL,             -- JSON array (généralement 4 choix)
+                bonne_reponse  INTEGER NOT NULL,          -- index 0-based dans choix_json
+                explication    TEXT,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_formation_quiz_module_v2
+                ON formation_quiz(module_id, ordre);
+
+            -- Progression utilisateur au niveau vidéo (granulaire).
+            CREATE TABLE user_video_progression (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                video_id   INTEGER NOT NULL,
+                pct_vu     INTEGER DEFAULT 0,             -- 0-100
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, video_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (video_id) REFERENCES formation_videos(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_user_video_prog_user
+                ON user_video_progression(user_id);
+
+            -- Validation d'un module (quiz réussi + toutes vidéos vues).
+            -- quiz_score : 0-100 (% de bonnes réponses).
+            -- valide_le : timestamp ISO si module validé, NULL sinon.
+            CREATE TABLE user_module_validation (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                module_id  INTEGER NOT NULL,
+                quiz_score INTEGER,
+                valide_le  TEXT,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, module_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
+            );
+            CREATE INDEX idx_user_module_valid_user
+                ON user_module_validation(user_id);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 160, "mylearning_videos_split")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
