@@ -5708,28 +5708,41 @@ function _renderOpCard(ev, opts){
   const remaining = _countRemainingOps(ev);
   const totalOps = (ev.ops || []).length;
   const doneAll = (remaining === 0 && totalOps > 0);
-  // Regroupe les ops par machine dans la preview (max 4 lignes total).
+  // Regroupe les ops par machine dans la preview.
+  // - Vue Aujourd'hui : on affiche tout (c'est la vue prioritaire).
+  // - Vue À venir : on limite à ~5 lignes pour compacter les cards.
   const groups = _groupOpsByMachine(ev);
   const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
   const previewLines = [];
   let printedGroups = 0;
-  const MAX_LINES = 4;
+  let printedTruncated = false;
+  const MAX_LINES = isToday ? Infinity : 5;
   for(const g of groups){
-    if(previewLines.length >= MAX_LINES) break;
+    // Chaque groupe doit tenir en au moins 2 lignes (1 header + 1 op) pour
+    // éviter un header orphelin. Si le budget restant est < 2, on stoppe.
+    if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
     previewLines.push(`<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:6px">${escHtml(g.machine)}</div>`);
+    let opsInThisGroup = 0;
     for(const o of g.ops){
-      if(previewLines.length >= MAX_LINES) break;
+      if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
         <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
       </div>`);
+      opsInThisGroup++;
     }
-    printedGroups++;
+    // Compte le groupe comme "affiché" seulement si au moins 1 op a été rendue.
+    if(opsInThisGroup > 0) printedGroups++;
+    else{
+      // Retire le header orphelin qu'on venait de pousser.
+      previewLines.pop();
+      printedTruncated = true;
+    }
   }
   const opsPreview = previewLines.join('');
   const remainingGroups = groups.length - printedGroups;
-  const more = remainingGroups > 0
+  const more = (remainingGroups > 0 || printedTruncated) && remainingGroups > 0
     ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingGroups} autre machine${remainingGroups > 1 ? 's' : ''}</div>`
     : '';
   const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
@@ -6376,12 +6389,11 @@ function renderCalFabMenu(){
     ${tmplItems}
     <div class="cal-fab-menu-sep"></div>
     <button type="button" class="cal-fab-menu-item" onclick="closeCalFabMenu();openTemplatesModal();">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>
       <span>Gérer les modèles…</span>
     </button>`;
 }
 
-// Suggère une date/heure par défaut : aujourd'hui à 8h
 function _defaultIsoAndHour(){
   return { iso: _fmtDateISO(new Date()), h: 8 };
 }
@@ -6395,16 +6407,12 @@ function startBlankCreneau(){
 async function startFromTemplate(templateId){
   closeCalFabMenu();
   const { iso, h } = _defaultIsoAndHour();
-  // Ouvre le modal vierge, puis applique le template (qui pré-remplit les ops)
   await openCaseModal({ iso, defaultHour: h });
   await applyCaseTemplate(templateId);
-  // Sélectionne le bon élément dans le picker
   const sel = document.getElementById('case-mod-template');
   if(sel) sel.value = String(templateId);
 }
 
-
-/* ── Initialisation au chargement selon le rôle ──────────────────── */
 
 // Ferme le menu FAB au clic en dehors
 document.addEventListener('click', (e) => {
