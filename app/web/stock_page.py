@@ -5292,6 +5292,7 @@ function buildMatiereDetail() {
       tbl.appendChild(el('thead', null,
         el('tr', null,
           el('th', { style: 'text-align:left;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Laize'),
+          el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Métrage'),
           el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Stock'),
           el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Valorisation'),
         )
@@ -5306,11 +5307,14 @@ function buildMatiereDetail() {
           : prix_m2_matiere;
         const valoBobine = (parseFloat(spl.valeur_mm || 0) / 1000) * metres * prix_m2;
         const valo = valoBobine * parseFloat(spl.quantite || 0);
+        const metrageTotal = metres * parseFloat(spl.quantite || 0);
         tbody.appendChild(el('tr', { style: 'border-bottom:1px solid var(--border)' },
           el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' },
             (spl.label || (spl.valeur_mm + ' mm')) + (prixParLaize && prix_m2 > 0
               ? ' · ' + prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²'
               : '')),
+          el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (metrageTotal > 0 ? 'var(--text)' : 'var(--muted)') },
+            metrageTotal > 0 ? Math.round(metrageTotal).toLocaleString('fr-FR') + ' m' : '—'),
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums' },
             fN(spl.quantite) + ' bob.'),
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (valo > 0 ? 'var(--text)' : 'var(--muted)') },
