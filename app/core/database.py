@@ -6144,6 +6144,54 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 162, "maintenance_event_ops_machines_csv")
 
+    # v163 — Maintenance : modèles de session (« templates »).
+    # Un modèle = un ensemble prédéfini d'opérations avec leurs machines,
+    # qu'un admin peut instancier rapidement en tant que créneau. Les modifs
+    # d'un modèle resynchronisent les créneaux futurs qui en dépendent
+    # (écrasement des ops locales).
+    #
+    # `maintenance_events.template_id` (nullable) trace la provenance d'un
+    # créneau et pilote la resync. Sur suppression d'un modèle, ON DELETE
+    # CASCADE côté events est INACTIF (foreign_keys pas activées globalement) :
+    # la cascade est faite côté application dans le router.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=163 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_template_ops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                machines_csv TEXT,
+                FOREIGN KEY (template_id) REFERENCES maintenance_templates(id) ON DELETE CASCADE,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+                UNIQUE (template_id, code)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_template_ops_template "
+            "ON maintenance_template_ops(template_id)"
+        )
+        # Colonne template_id sur les créneaux (nullable = créneau autonome).
+        cols_ev = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+        if "template_id" not in cols_ev:
+            conn.execute("ALTER TABLE maintenance_events ADD COLUMN template_id INTEGER")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_events_template "
+            "ON maintenance_events(template_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 163, "maintenance_templates")
+
     # v166 — Qualité : split rôle administration + traçabilité de prise en connaissance des NC par service.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=166 LIMIT 1").fetchone():
         conn.execute(
@@ -6226,7 +6274,7 @@ def parse_french_number(val):
     s = str(val).strip()
     if not s:
         return 0
-    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
+    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
     try:
         return float(s)
     except ValueError:
@@ -6258,7 +6306,7 @@ def parse_file(file_bytes, filename):
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if ext == "csv":
         for encoding in ["utf-8", "latin-1", "cp1252"]:
-            for sep in [";", ",", "	"]:
+            for sep in [";", ",", "\t"]:
                 try:
                     df = pd.read_csv(io.BytesIO(file_bytes), encoding=encoding, sep=sep, dtype=str)
                     if len(df.columns) > 3:
