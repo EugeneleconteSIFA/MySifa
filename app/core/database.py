@@ -6144,6 +6144,58 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 162, "maintenance_event_ops_machines_csv")
 
+    # v163 — Qualité : split rôle administration + traçabilité de prise en connaissance des NC par service.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=163 LIMIT 1").fetchone():
+        conn.execute(
+            "UPDATE users SET role='administration_ventes' WHERE role='administration'"
+        )
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "nc_service_override" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN nc_service_override TEXT")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nc_service_acknowledgments (
+                nc_id INTEGER NOT NULL REFERENCES nc_dossiers(id) ON DELETE CASCADE,
+                service TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                ack_at TEXT NOT NULL,
+                PRIMARY KEY (nc_id, service)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nc_ack_service ON nc_service_acknowledgments(service)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 163, "qualite_split_admin_role_and_nc_ack")
+
+    # v164 — Fournisseurs : flag has_fsc (les existants restent certifiés)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=164 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "has_fsc" not in cols:
+            try:
+                conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN has_fsc INTEGER NOT NULL DEFAULT 1")
+            except Exception:
+                pass
+        conn.commit()
+        _record_schema_migration(conn, 164, "fournisseurs_has_fsc_flag")
+
+    # v165 — Liaison fournisseurs ↔ (matière première, laize)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=165 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS matiere_laize_fournisseurs (
+                matiere_id     INTEGER NOT NULL,
+                laize_id       INTEGER NOT NULL,
+                fournisseur_id INTEGER NOT NULL,
+                created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (matiere_id, laize_id, fournisseur_id),
+                FOREIGN KEY (matiere_id)     REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                FOREIGN KEY (fournisseur_id) REFERENCES fournisseurs_fsc(id)    ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mlf_matiere ON matiere_laize_fournisseurs(matiere_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mlf_fournisseur ON matiere_laize_fournisseurs(fournisseur_id)")
+        conn.commit()
+        _record_schema_migration(conn, 165, "matiere_laize_fournisseurs_link")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
