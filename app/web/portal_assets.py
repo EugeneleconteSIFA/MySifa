@@ -559,10 +559,12 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 }
 /* ── MyTraduction (DeepL) — bouton corner + modal ─────────────────── */
 .portal-deepl-corner{position:relative}
-.portal-deepl-corner:hover{border-color:#0f2b46;background:rgba(15,43,70,.08);color:#0f2b46}
-body.light .portal-deepl-corner:hover{border-color:#0f2b46;background:rgba(15,43,70,.06)}
-.portal-deepl-corner svg{color:#0f2b46}
-body.light .portal-deepl-corner svg{color:#0f2b46}
+.portal-deepl-corner:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+body.light .portal-deepl-corner:hover{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.portal-deepl-corner svg{color:var(--muted)}
+.portal-deepl-corner:hover svg{color:var(--accent)}
+body.light .portal-deepl-corner svg{color:var(--muted)}
+.portal-deepl-corner:hover svg{color:var(--accent)}
 .mytraduction-overlay{
   position:fixed;inset:0;background:rgba(10,14,23,.72);z-index:9998;
   display:flex;align-items:center;justify-content:center;padding:24px;
@@ -1549,16 +1551,6 @@ function renderPortal(){
         title:profTitle,
         onClick:()=>{window.location.href='/profil';}
       },profRingBadge,profHumeurBadge,iconEl('user',24)),
-      (function(){
-        const btn=document.createElement('button');
-        btn.type='button';
-        btn.className='portal-settings-corner portal-deepl-corner';
-        btn.setAttribute('aria-label','MyTraduction (DeepL)');
-        btn.title='Traduire — DeepL';
-        btn.innerHTML='<span style="display:inline-flex;align-items:center;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg></span>';
-        btn.onclick=()=>{if(typeof openMyTraduction==='function')openMyTraduction();};
-        return btn;
-      })(),
       (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',
@@ -1593,7 +1585,17 @@ function renderPortal(){
         'aria-label':'Base de données',
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
-      },iconEl('database',24)):null
+      },iconEl('database',24)):null,
+      (function(){
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='portal-settings-corner portal-deepl-corner';
+        btn.setAttribute('aria-label','MyTraduction (DeepL)');
+        btn.title='Traduire — DeepL';
+        btn.innerHTML='<span style="display:inline-flex;align-items:center;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg></span>';
+        btn.onclick=()=>{if(typeof openMyTraduction==='function')openMyTraduction();};
+        return btn;
+      })()
     ),
     h('div',{className:'portal-logo'},
       h('div',{className:'brand'},'My',h('span',null,'Sifa')),
