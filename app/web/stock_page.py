@@ -476,11 +476,9 @@ body.light .action-btn.empl-inv-btn:hover{border-color:#7c3aed}
 .mvt-qte-pf-sortie{color:var(--pf-sortie);font-family:monospace;font-weight:700}
 .mvt-qte-inventaire{color:var(--c2);font-family:monospace;font-weight:700}
 .mvt-line2{font-size:11px;color:var(--muted);margin-top:2px}
-.mvt-solde{display:inline-flex;align-items:baseline;gap:6px;margin-top:6px;padding:3px 9px;
-  font-size:11px;line-height:1.3;background:color-mix(in srgb,var(--accent) 8%,transparent);
-  border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border));border-radius:6px}
-.mvt-solde-label{color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600;font-size:10px}
-.mvt-solde-value{color:var(--text);font-weight:800;font-family:monospace}
+.mvt-line1{align-items:flex-start}
+.mvt-line1-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.mvt-solde{font-size:11px;color:var(--muted);font-family:monospace;font-weight:500;line-height:1;white-space:nowrap}
 .mvt-note{font-size:11px;color:var(--text2);margin-top:2px;font-style:italic}
 .hist-solde-avant{color:var(--muted)}
 .hist-solde-arrow{color:var(--muted);margin:0 4px}
@@ -5195,19 +5193,18 @@ function buildMpMvtHistory(mouvements, matiere) {
             el('div', { cls: 'mvt-body' },
               el('div', { cls: 'mvt-line1' },
                 el('span', null, MVT_TYPE_LABELS[t] || t),
-                el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
+                el('div', { cls: 'mvt-line1-right' },
+                  el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
+                  (m.quantite_apres != null)
+                    ? el('span', { cls: 'mvt-solde' }, 'Solde ' + mpStockLine(m.quantite_apres, mpCat))
+                    : null,
+                ),
               ),
               el('div', { cls: 'mvt-line2' },
                 fD(m.created_at),
                 empl ? el('span', null, ' · ' + empl) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
               ),
-              (m.quantite_apres != null)
-                ? el('div', { cls: 'mvt-solde' },
-                    el('span', { cls: 'mvt-solde-label' }, 'Solde'),
-                    el('span', { cls: 'mvt-solde-value' }, mpStockLine(m.quantite_apres, mpCat)),
-                  )
-                : null,
               noteParts.length
                 ? el('div', { cls: 'mvt-note' }, noteParts.join(' · '))
                 : null,
