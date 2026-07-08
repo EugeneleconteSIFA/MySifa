@@ -3449,7 +3449,8 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
 # ── Produits finis (onglet dédié — source : produits / mouvements_stock) ──
 _PF_MVT_SQL = f"""
     SELECT m.id, p.id AS produit_id, p.reference, p.designation, m.type_mouvement AS type,
-           m.quantite, p.unite, m.emplacement, m.note AS commentaire,
+           m.quantite, m.quantite_avant, m.quantite_apres,
+           p.unite, m.emplacement, m.note AS commentaire,
            COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom, m.created_by) AS user_login,
            m.created_at AS date_mouvement
     FROM mouvements_stock m
