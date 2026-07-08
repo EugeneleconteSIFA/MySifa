@@ -701,6 +701,23 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-main{padding:28px 32px;max-width:1280px;width:100%;flex:1;display:flex;flex-direction:column;overflow-y:auto}
 .op-page{display:none;flex-direction:column;flex:1}
 .op-page.active{display:flex}
+/* Vue Saisie plein écran (v163+) */
+.op-saisie-head{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+.op-saisie-back{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .12s}
+.op-saisie-back:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.op-saisie-ctx{display:flex;flex-wrap:wrap;gap:10px;padding:14px 18px;background:var(--card);border:1px solid var(--border);border-radius:12px;margin-bottom:18px;font-size:13px;color:var(--text2)}
+.op-saisie-ctx span{padding:4px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--border);font-weight:600}
+.op-saisie-ctx strong{color:var(--text);font-weight:700;margin-right:4px}
+.op-saisie-body{display:flex;flex-direction:column;gap:20px;max-width:900px;margin:0 auto;width:100%}
+.op-saisie-body .op-machine-group{margin-top:0}
+.op-saisie-body .op-machine-group-head{padding:10px 14px;font-size:13px}
+.op-saisie-body .op-saisie-item{border:1px solid var(--border);border-radius:12px;padding:18px 22px;background:var(--card)}
+.op-saisie-body .op-form-row{margin-top:12px}
+.op-saisie-body .op-form-row label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);display:block;margin-bottom:6px}
+.op-saisie-body .op-form-row select,
+.op-saisie-body .op-form-row input,
+.op-saisie-body .op-form-row textarea{width:100%;font-size:14px;padding:10px 14px}
+.op-saisie-body .op-form-row textarea{min-height:80px;resize:vertical}
 
 /* ── UI opérateur : conteneur actions dans .page-header ─────────── */
 .op-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -1355,6 +1372,22 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="op-tab-content" id="op-plan-personnel"></div>
         <div class="op-tab-content" id="op-plan-general" style="display:none"></div>
       </div>
+
+      <!-- View opérateur : Saisie plein écran d'une session -->
+      <div class="op-page op-only" id="view-op-saisie">
+        <div class="page-header op-saisie-head">
+          <button type="button" class="op-saisie-back" onclick="opCloseSaisie()" aria-label="Retour à Mes tâches">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span>Retour à Mes tâches</span>
+          </button>
+          <div>
+            <div class="page-title">Session de maintenance</div>
+            <div class="page-subtitle">Renseigne chaque opération individuellement — les mises à jour sont partagées avec le groupe</div>
+          </div>
+        </div>
+        <div class="op-saisie-ctx" id="op-saisie-ctx"></div>
+        <div class="op-saisie-body" id="op-saisie-ops"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -1747,7 +1780,8 @@ const VIEW_META = {
   controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' },
   'op-tasks':    { title: 'Mes tâches', sub: 'Tâches assignées du jour' },
-  'op-planning': { title: 'Planning',    sub: 'Vue globale de la journée' }
+  'op-planning': { title: 'Planning',    sub: 'Vue globale de la journée' },
+  'op-saisie':   { title: 'Session de maintenance', sub: 'Saisie de la session en cours' }
 };
 // Sous-onglet actif dans la vue Opérations ('historique' | 'liste').
 // Mémorisé en localStorage pour retrouver l'onglet d'avant à la prochaine visite.
@@ -5849,7 +5883,8 @@ function opOpenSaisie(eventId){
   const ev = MAINT_STATE.tasks.find(x => x.id === eventId);
   if(!ev) return;
   MAINT_STATE.saisieTaskId = eventId;
-  const ctx = document.getElementById('op-modal-saisie-ctx');
+  const ctx = document.getElementById('op-saisie-ctx');
+  if(!ctx) return;
   const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans créneau horaire';
   const groups = _groupOpsByMachine(ev);
   const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
@@ -5858,7 +5893,7 @@ function opOpenSaisie(eventId){
     <span><strong>Date :</strong> ${ev.date_prevue}</span>
     <span><strong>Créneau :</strong> ${time}</span>
     ${ev.source === 'non_planifie' ? '<span class="op-badge-source">Non planifiée</span>' : ''}`;
-  const wrap = document.getElementById('op-modal-saisie-ops');
+  const wrap = document.getElementById('op-saisie-ops');
   if(wrap){
     if(!groups.length){
       wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Aucune opération.</div>';
@@ -5902,12 +5937,15 @@ function opOpenSaisie(eventId){
       }).join('');
     }
   }
-  document.getElementById('op-modal-saisie').classList.add('active');
+  switchView('op-saisie');
+  // Scroll top pour bien voir le début de la session
+  const main = document.querySelector('main');
+  if(main) main.scrollTop = 0;
 }
 
 function opCloseSaisie(){
   MAINT_STATE.saisieTaskId = null;
-  document.getElementById('op-modal-saisie').classList.remove('active');
+  switchView('op-tasks');
 }
 
 async function opSubmitOpSaisie(eventId, opId, btnEl){
@@ -6453,43 +6491,32 @@ function _mountOperatorGeneralCalendar(){
   const src = document.querySelector('#view-planning .cal-sec');
   const dst = document.getElementById('op-plan-general');
   if(!src || !dst) return;
-  if(dst.querySelector('.cal-sec')) return;  // déjà monté
-  // Vide le contenu par défaut (le tableau read-only), puis injecte
+  if(dst.querySelector('.cal-sec')) return;
   dst.innerHTML = '';
   dst.appendChild(src);
-  // Masque le date-picker haut de page (le calendrier a sa propre nav)
   const datePicker = document.querySelector('#view-op-planning .op-date-picker');
   if(datePicker) datePicker.style.display = 'none';
 }
 
-// Wrapper autour de opSetPlanTab pour déclencher le rendu du calendrier
-// à l'arrivée sur l'onglet Général.
 const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
 function opSetPlanTabWithCal(name){
   if(_origOpSetPlanTab) _origOpSetPlanTab(name);
   if(name === 'general' && MAINT_ROLE === 'operator'){
     _mountOperatorGeneralCalendar();
-    // Force un refresh des données puis rerender
     refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   }
 }
-// Remplace l'implémentation exposée sur window (utilisée par onclick)
 window.opSetPlanTab = opSetPlanTabWithCal;
 
 (function initMaintRole(){
-  // Ajoute un attribut sur <body> pour le ciblage CSS role-based
   document.body.setAttribute('data-maint-role', MAINT_ROLE || 'operator');
   if(MAINT_ROLE === 'operator'){
-    // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
     const dateInput = document.getElementById('op-tasks-date');
     if(dateInput) dateInput.value = _fmtDateISO(new Date());
     const planInput = document.getElementById('op-plan-date');
     if(planInput) planInput.value = _fmtDateISO(new Date());
     opLoadTasks();
-    // Pré-charge le planning en tâche de fond.
     opLoadPlanning();
-    // Monte le calendrier admin dans l'onglet Général (lazy — au 1er clic
-    // sur l'onglet, mais on prépare le DOM tôt pour un feedback instant).
     _mountOperatorGeneralCalendar();
   }
 })();
