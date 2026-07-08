@@ -401,6 +401,38 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 /* Détails créneau : badges machine par op */
 .plan-det-case-op-mach-wrap{display:inline-flex;flex-wrap:wrap;gap:4px}
 .plan-det-case-op-mach{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700}
+.cal-sec{position:relative}
+/* Badge « depuis un modèle » sur un créneau */
+.tmpl-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;background:var(--warn);color:#0a0e17;font-size:11px;font-weight:800;letter-spacing:.2px}
+.tmpl-badge svg{flex-shrink:0}
+/* Modal Templates : liste + éditeur */
+.tmpl-modal-card{max-width:720px;width:94vw}
+.tmpl-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.tmpl-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;padding:2px}
+.tmpl-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);transition:border-color .12s}
+.tmpl-item:hover{border-color:var(--accent)}
+.tmpl-item-main{flex:1;min-width:0}
+.tmpl-item-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
+.tmpl-item-desc{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tmpl-item-count{flex-shrink:0;font-size:11px;color:var(--text2);font-weight:600;padding:3px 9px;border-radius:6px;background:var(--bg)}
+.tmpl-item-actions{display:flex;gap:6px;flex-shrink:0}
+.tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
+/* Sélecteur de modèle dans le modal Nouveau créneau */
+.case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.case-tmpl-picker-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);flex-shrink:0}
+.case-tmpl-picker select{flex:1;min-width:180px}
+.case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
+.case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* Bouton flottant « + » sur le calendrier */
+.cal-fab{position:absolute;right:16px;bottom:16px;z-index:10;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);border:none;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,filter .12s}
+.cal-fab:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.cal-fab svg{width:24px;height:24px}
+.cal-fab-menu{position:absolute;right:16px;bottom:82px;z-index:11;min-width:260px;max-width:340px;padding:8px;border-radius:12px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.35);display:none}
+.cal-fab-menu.open{display:block}
+.cal-fab-menu-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;width:100%;text-align:left}
+.cal-fab-menu-item:hover{background:var(--bg)}
+.cal-fab-menu-sep{height:1px;background:var(--border);margin:6px 0}
+.cal-fab-menu-hint{font-size:11px;color:var(--muted);padding:4px 12px 8px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
 /* Détails créneau */
 .plan-det-case-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-top:14px}
 .plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
@@ -875,6 +907,12 @@ body[data-maint-role="operator"] .content{display:none !important}
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
+
+          <!-- FAB + menu de création (vierge / depuis modèle) — v163 -->
+          <button type="button" class="cal-fab" onclick="toggleCalFabMenu()" aria-label="Créer un créneau" title="Créer un créneau">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="cal-fab-menu" id="cal-fab-menu" role="menu" aria-hidden="true"></div>
           <div class="cal-legend">
             <span class="cal-legend-item"><span class="cal-legend-dot today"></span> Aujourd'hui</span>
             <span class="cal-legend-item"><span class="cal-legend-dot off"></span> Hors mois</span>
@@ -1559,6 +1597,13 @@ body[data-maint-role="operator"] .content{display:none !important}
     </div>
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
+        <div class="case-tmpl-picker" id="case-tmpl-picker-wrap">
+          <span class="case-tmpl-picker-label">Modèle</span>
+          <select id="case-mod-template" class="ops-select" onchange="applyCaseTemplate(this.value)">
+            <option value="">Sans modèle (créneau vierge)</option>
+          </select>
+          <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer les modèles</button>
+        </div>
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>Date : <strong id="case-mod-date">—</strong></span>
@@ -1598,6 +1643,75 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           <span id="case-mod-submit-label">Créer</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Gérer les modèles de session -->
+<div class="modal-overlay" id="templates-modal" onclick="if(event.target===this) closeTemplatesModal()" aria-hidden="true">
+  <div class="modal-card tmpl-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-mod-title">
+    <div class="modal-head">
+      <div class="modal-title" id="tmpl-mod-title">Modèles de session</div>
+      <button type="button" class="modal-close" onclick="closeTemplatesModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="tmpl-toolbar">
+        <div style="font-size:12px;color:var(--muted)">Un modèle = ensemble prédéfini d'opérations + machines. Applique-le en un clic depuis « Nouveau créneau ».</div>
+        <button type="button" class="case-ops-add-btn" onclick="openTemplateEditor(null)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nouveau modèle
+        </button>
+      </div>
+      <div class="tmpl-list" id="tmpl-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="modal-btn-ghost" onclick="closeTemplatesModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal : Éditer un modèle (création / édition) -->
+<div class="modal-overlay" id="tmpl-editor-modal" onclick="if(event.target===this) closeTemplateEditor()" aria-hidden="true">
+  <div class="modal-card case-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-ed-title">
+    <div class="modal-head">
+      <div class="modal-title" id="tmpl-ed-title">Nouveau modèle</div>
+      <button type="button" class="modal-close" onclick="closeTemplateEditor()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="tmpl-ed-form" onsubmit="submitTemplateEditor(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="tmpl-ed-name">Nom<span class="req">*</span></label>
+            <input type="text" id="tmpl-ed-name" class="ops-input" required maxlength="80" placeholder="Ex. Nettoyage complet">
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="tmpl-ed-desc">Description</label>
+            <input type="text" id="tmpl-ed-desc" class="ops-input" maxlength="200" placeholder="Ex. Vidange bacs + graissage roulements">
+          </div>
+        </div>
+        <div class="case-ops-section">
+          <div class="case-ops-head">
+            <label class="ops-field-label">Opérations du modèle<span class="req">*</span></label>
+            <button type="button" class="case-ops-add-btn" onclick="addTmplOp()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Ajouter une opération
+            </button>
+          </div>
+          <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
+        </div>
+        <div id="tmpl-ed-warning" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(251,191,36,.12);border:1px solid var(--warn);color:var(--warn);font-size:12px;line-height:1.5"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeTemplateEditor()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="tmpl-ed-submit-label">Créer</span>
         </button>
       </div>
     </form>
@@ -1815,12 +1929,18 @@ function _apiEventToClient(ev){
     operations: opsClient,
     operators: ev.operators || [],
     source: ev.source,
+    template_id: ev.template_id || null,
     created_at: ev.created_at,
     updated_at: ev.updated_at,
   };
 }
 
 async function refreshPlanning(){
+  // Pré-charge les templates en tâche de fond (pour le badge « depuis modèle »).
+  if(MAINT_ROLE === 'admin' && TEMPLATES_STATE.list === null){
+    loadTemplates().catch(() => {});
+  }
+
   try{
     // Charge une fenêtre large autour de la date pivot : ±90 jours.
     const pivot = (CAL_STATE && CAL_STATE.date) ? new Date(CAL_STATE.date) : new Date();
@@ -2362,8 +2482,19 @@ function openPlanningDetailsModal(events){
           '</div>';
         }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
+    // Badge template si le créneau vient d'un modèle
+    let tmplBadge = '';
+    if(ev.template_id){
+      const tmpl = (TEMPLATES_STATE.list || []).find(t => t.id === ev.template_id);
+      const label = tmpl ? tmpl.name : ('#' + ev.template_id);
+      tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
+        'Depuis modèle : ' + escHtml(label) +
+      '</span>';
+    }
     listEl.innerHTML =
       '<div class="plan-det-case-head">' +
+        (tmplBadge ? '<div style="width:100%;margin-bottom:6px">' + tmplBadge + '</div>' : '') +
         '<div class="plan-det-case-machine">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
           escHtml(machinesLabel) +
@@ -2511,11 +2642,13 @@ function removeCaseOperator(id){
 let _CASE_OPS = [];
 async function openCaseModal(opts){
   _CASE_OPERATORS = [];
+  let preselectedTemplateId = null;
   if(opts && opts.editId){
     const ev = PLANNING_STATE.list.find(e => String(e.id) === String(opts.editId));
     if(ev && Array.isArray(ev.operators)){
       _CASE_OPERATORS = ev.operators.map(o => ({ id: o.id, nom: o.nom }));
     }
+    if(ev && ev.template_id) preselectedTemplateId = ev.template_id;
   }
   // Ouvre le modal immédiatement pour ne pas laisser l'utilisateur devant
   // un écran vide en cas de latence sur /api/maintenance/operators.
@@ -2523,6 +2656,9 @@ async function openCaseModal(opts){
   renderCaseOperators();  // affiche déjà les opérateurs pré-remplis
   // Charge le catalogue en arrière-plan puis rerender le picker.
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
+  // Charge les templates puis pré-sélectionne si le créneau en est issu
+  loadTemplates().then(() => refreshCaseTemplatePicker(preselectedTemplateId)).catch(() => {});
+  if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
   return result;
 }
 function _openCaseModalInner(opts){
@@ -2693,6 +2829,7 @@ async function submitCaseModal(e){
           date_prevue: _PENDING_CASE.iso,
           heure_debut: start, heure_fin: end, source: 'planifie',
           ops: wantedOps, operators: operatorIds,
+          template_id: _PENDING_CASE.template_id || null,
         }),
       });
       if(!rNew.ok){
@@ -5888,7 +6025,394 @@ function opSetPlanTab(name){
   if(gen) gen.style.display = (name === 'general') ? '' : 'none';
 }
 
+
+/* ── Templates de session (v163) ─────────────────────────────────── */
+
+const TEMPLATES_STATE = { list: null };  // null = pas encore chargé
+
+async function loadTemplates(force){
+  if(!force && TEMPLATES_STATE.list !== null) return TEMPLATES_STATE.list;
+  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; return []; }
+  try{
+    const r = await fetch('/api/maintenance/templates?_=' + Date.now(),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ TEMPLATES_STATE.list = []; return []; }
+    const d = await r.json();
+    TEMPLATES_STATE.list = d.templates || [];
+  }catch(e){ TEMPLATES_STATE.list = []; }
+  return TEMPLATES_STATE.list;
+}
+
+function refreshCaseTemplatePicker(selectedId){
+  const sel = document.getElementById('case-mod-template');
+  if(!sel) return;
+  const list = TEMPLATES_STATE.list || [];
+  const cur = selectedId != null ? String(selectedId) : (sel.value || '');
+  sel.innerHTML = '<option value="">Sans modèle (créneau vierge)</option>' +
+    list.map(t =>
+      '<option value="' + escAttr(t.id) + '"' + (String(t.id) === cur ? ' selected' : '') + '>' +
+        escHtml(t.name) + ' (' + t.ops_count + ' op.)' +
+      '</option>'
+    ).join('');
+}
+
+async function applyCaseTemplate(templateId){
+  if(!templateId){
+    // « Sans modèle » : on ne touche pas aux ops déjà présentes
+    if(_PENDING_CASE) _PENDING_CASE.template_id = null;
+    return;
+  }
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                          '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ showToast('Modèle introuvable.', 'danger'); return; }
+    const d = await r.json();
+    const tmpl = d.template;
+    if(!tmpl){ showToast('Modèle vide.', 'danger'); return; }
+    // Remplace les ops actuelles par celles du modèle
+    _CASE_OPS = (tmpl.ops || []).map(o => ({
+      _op_id: null,
+      opTypeId: o.code,
+      opName: o.code_label || o.code,
+      opNiveau: null,
+      opFreq: '',
+      machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    }));
+    // Réinjecte les infos richement depuis OPS_TYPES_STATE (niveau, freq)
+    for(const co of _CASE_OPS){
+      const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
+      if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+    }
+    if(_PENDING_CASE) _PENDING_CASE.template_id = tmpl.id;
+    renderCaseOpsList();
+    showToast('Modèle « ' + tmpl.name + ' » appliqué.', 'info');
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Modal « Gérer les modèles » ──────────────────────────────────── */
+
+async function openTemplatesModal(){
+  await loadTemplates(true);
+  const m = document.getElementById('templates-modal');
+  if(!m) return;
+  renderTemplatesList();
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTemplatesModal(){
+  const m = document.getElementById('templates-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+}
+
+function renderTemplatesList(){
+  const list = document.getElementById('tmpl-list');
+  if(!list) return;
+  const items = TEMPLATES_STATE.list || [];
+  if(!items.length){
+    list.innerHTML = '<div class="tmpl-empty">Aucun modèle pour l\'instant.<br>Clique sur « Nouveau modèle » pour en créer un.</div>';
+    return;
+  }
+  list.innerHTML = items.map(t => `
+    <div class="tmpl-item" data-tmpl-id="${escAttr(t.id)}">
+      <div class="tmpl-item-main">
+        <div class="tmpl-item-name">${escHtml(t.name)}</div>
+        <div class="tmpl-item-desc">${escHtml(t.description || '—')}</div>
+      </div>
+      <div class="tmpl-item-count">${t.ops_count} op.</div>
+      <div class="tmpl-item-actions">
+        <button type="button" class="case-action-btn edit" onclick="openTemplateEditor(${escAttr(t.id)})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Modifier
+        </button>
+        <button type="button" class="case-action-btn del" onclick="confirmDeleteTemplate(${escAttr(t.id)})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+          Supprimer
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function confirmDeleteTemplate(templateId){
+  const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
+  if(!t) return;
+  const msg = `Supprimer le modèle « ${t.name} » ?\n\nATTENTION : cela supprime aussi tous les créneaux futurs (à partir d'aujourd'hui) créés depuis ce modèle. Les créneaux passés seront conservés (mais détachés du modèle).`;
+  if(!confirm(msg)) return;
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId),
+                          { method:'DELETE', credentials:'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Suppression refusée');
+    }
+    const d = await r.json();
+    const n = d.deleted_future_events || 0;
+    showToast('Modèle supprimé' + (n ? ` — ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    await refreshPlanning(); renderCal();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Éditeur de modèle (création + édition) ──────────────────────── */
+
+let _TMPL_EDIT_ID = null;
+let _TMPL_OPS = [];
+
+async function openTemplateEditor(templateId){
+  _TMPL_EDIT_ID = templateId || null;
+  _TMPL_OPS = [];
+  const m = document.getElementById('tmpl-editor-modal');
+  const nameEl = document.getElementById('tmpl-ed-name');
+  const descEl = document.getElementById('tmpl-ed-desc');
+  const ttlEl = document.getElementById('tmpl-ed-title');
+  const lblEl = document.getElementById('tmpl-ed-submit-label');
+  const warnEl = document.getElementById('tmpl-ed-warning');
+  if(nameEl) nameEl.value = '';
+  if(descEl) descEl.value = '';
+  if(warnEl){ warnEl.style.display = 'none'; warnEl.innerHTML = ''; }
+  if(templateId){
+    try{
+      const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                            '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+      if(!r.ok) throw new Error('Modèle introuvable');
+      const d = await r.json();
+      const t = d.template;
+      if(nameEl) nameEl.value = t.name || '';
+      if(descEl) descEl.value = t.description || '';
+      _TMPL_OPS = (t.ops || []).map(o => {
+        const meta = OPS_TYPES_STATE.list.find(x => x.id === o.code);
+        return {
+          opTypeId: o.code,
+          opName: (meta && meta.nom) || o.code_label || o.code,
+          opNiveau: (meta && meta.niveau) || null,
+          opFreq: (meta && meta.frequence) || '',
+          machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+        };
+      });
+      if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
+      if(lblEl) lblEl.textContent = 'Enregistrer';
+      // Avertissement resync
+      if(warnEl){
+        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modèle écrasera automatiquement les opérations des créneaux futurs qui en dépendent (les horaires, opérateurs et statuts sont préservés).';
+        warnEl.style.display = 'block';
+      }
+    }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }
+  } else {
+    if(ttlEl) ttlEl.textContent = 'Nouveau modèle';
+    if(lblEl) lblEl.textContent = 'Créer';
+  }
+  renderTmplOpsList();
+  if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { nameEl?.focus(); }, 60);
+}
+
+function closeTemplateEditor(){
+  const m = document.getElementById('tmpl-editor-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+  _TMPL_EDIT_ID = null;
+  _TMPL_OPS = [];
+}
+
+function addTmplOp(){
+  if(!OPS_TYPES_STATE.list.length){
+    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
+    return;
+  }
+  _TMPL_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
+  renderTmplOpsList();
+}
+
+function updateTmplOp(idx, opTypeId){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(op){
+    _TMPL_OPS[idx] = {
+      opTypeId: op.id, opName: op.nom, opNiveau: op.niveau || null, opFreq: op.frequence || '',
+      machines: Array.isArray(cur.machines) ? cur.machines.slice() : [],
+    };
+  } else {
+    _TMPL_OPS[idx] = { opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: Array.isArray(cur.machines) ? cur.machines.slice() : [] };
+  }
+}
+
+function toggleTmplOpMachine(idx, machine){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const list = Array.isArray(cur.machines) ? cur.machines : [];
+  const pos = list.indexOf(machine);
+  if(pos >= 0) list.splice(pos, 1); else list.push(machine);
+  cur.machines = list;
+  renderTmplOpsList();
+}
+
+function removeTmplOp(idx){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  _TMPL_OPS.splice(idx, 1);
+  renderTmplOpsList();
+}
+
+function renderTmplOpsList(){
+  const list = document.getElementById('tmpl-ed-ops-list');
+  if(!list) return;
+  if(!_TMPL_OPS.length){
+    list.innerHTML = '<div class="case-ops-empty">Aucune opération. Cliquez sur « Ajouter une opération » pour construire le modèle.</div>';
+    return;
+  }
+  list.innerHTML = _TMPL_OPS.map((op, idx) => {
+    const options = '<option value="">Sélectionner une opération…</option>' +
+      OPS_TYPES_STATE.list.map(t =>
+        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+        '</option>'
+      ).join('');
+    const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
+    const chips = CASE_MACHINES_LIST.map(m => {
+      const active = machSet.has(m);
+      return '<button type="button" class="case-mach-chip' + (active ? ' active' : '') + '" onclick="toggleTmplOpMachine(' + idx + ', \'' + escAttr(m) + '\')" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        escHtml(m) + '</button>';
+    }).join('');
+    return '<div class="case-ops-row" data-idx="' + idx + '">' +
+      '<div class="case-ops-row-top">' +
+        '<select class="ops-select" onchange="updateTmplOp(' + idx + ', this.value)">' + options + '</select>' +
+        '<button type="button" class="case-ops-row-del" onclick="removeTmplOp(' + idx + ')" title="Retirer" aria-label="Retirer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="case-ops-machines">' +
+        '<span class="case-ops-machines-label">Machine(s)</span>' +
+        chips +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function submitTemplateEditor(e){
+  e.preventDefault();
+  const name = (document.getElementById('tmpl-ed-name')?.value || '').trim();
+  const desc = (document.getElementById('tmpl-ed-desc')?.value || '').trim();
+  if(!name){ showToast('Nom requis.', 'danger'); return; }
+  const ops = _TMPL_OPS.filter(o => o.opTypeId).map(o => ({
+    code: o.opTypeId,
+    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+  }));
+  if(!ops.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  const missing = ops.find(o => !o.machines.length);
+  if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
+  try{
+    let r;
+    if(_TMPL_EDIT_ID){
+      r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    } else {
+      r = await fetch('/api/maintenance/templates', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    }
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Enregistrement refusé');
+    }
+    const d = await r.json();
+    const resynced = d.resynced_events || 0;
+    showToast(_TMPL_EDIT_ID
+      ? ('Modèle enregistré' + (resynced ? ` — ${resynced} créneau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisé${resynced > 1 ? 's' : ''}.` : '.'))
+      : 'Modèle créé.', 'info');
+    closeTemplateEditor();
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    if(resynced > 0){ await refreshPlanning(); renderCal(); }
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Bouton flottant « + » du calendrier ─────────────────────────── */
+
+function toggleCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const willOpen = !m.classList.contains('open');
+  if(willOpen){
+    loadTemplates().then(() => renderCalFabMenu());
+  }
+  m.classList.toggle('open');
+}
+
+function closeCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(m) m.classList.remove('open');
+}
+
+function renderCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const list = TEMPLATES_STATE.list || [];
+  const tmplItems = list.length
+    ? list.map(t => `
+        <button type="button" class="cal-fab-menu-item" onclick="startFromTemplate(${escAttr(t.id)})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+          <span>${escHtml(t.name)} <span style="color:var(--muted);font-weight:500">· ${t.ops_count} op.</span></span>
+        </button>`).join('')
+    : '<div class="cal-fab-menu-hint">Aucun modèle disponible</div>';
+  m.innerHTML = `
+    <button type="button" class="cal-fab-menu-item" onclick="startBlankCreneau()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Créneau vierge</span>
+    </button>
+    <div class="cal-fab-menu-sep"></div>
+    <div class="cal-fab-menu-hint">Depuis un modèle</div>
+    ${tmplItems}
+    <div class="cal-fab-menu-sep"></div>
+    <button type="button" class="cal-fab-menu-item" onclick="closeCalFabMenu();openTemplatesModal();">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>Gérer les modèles…</span>
+    </button>`;
+}
+
+// Suggère une date/heure par défaut : aujourd'hui à 8h
+function _defaultIsoAndHour(){
+  return { iso: _fmtDateISO(new Date()), h: 8 };
+}
+
+function startBlankCreneau(){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  openCaseModal({ iso, defaultHour: h });
+}
+
+async function startFromTemplate(templateId){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  // Ouvre le modal vierge, puis applique le template (qui pré-remplit les ops)
+  await openCaseModal({ iso, defaultHour: h });
+  await applyCaseTemplate(templateId);
+  // Sélectionne le bon élément dans le picker
+  const sel = document.getElementById('case-mod-template');
+  if(sel) sel.value = String(templateId);
+}
+
+
 /* ── Initialisation au chargement selon le rôle ──────────────────── */
+
+// Ferme le menu FAB au clic en dehors
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('cal-fab-menu');
+  if(!menu || !menu.classList.contains('open')) return;
+  if(e.target.closest('.cal-fab') || e.target.closest('.cal-fab-menu')) return;
+  menu.classList.remove('open');
+});
 
 (function initMaintRole(){
   if(MAINT_ROLE === 'operator'){
