@@ -14,7 +14,7 @@ from typing import Optional
 from datetime import datetime
 from contextlib import contextmanager
 import threading
-from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, SUPERADMIN_EMAIL, classify_operation, MIGRATIONS_DISABLED, ENV_NAME
+from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, ROLE_DIRECTION, SUPERADMIN_EMAIL, classify_operation, MIGRATIONS_DISABLED, ENV_NAME
 from app.services.emplacements_plan import reload_emplacements_plan, sync_emplacements_plan_to_db
 
 # Baselinage des migrations SQL déjà regroupées dans _migrate (historique).
@@ -2612,8 +2612,6 @@ def _migrate(conn):
 
     # v81 — Coûts matières : accès réservé Direction et super admin (retrait Administration)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=81 LIMIT 1").fetchone():
-        from config import ROLE_DIRECTION, ROLE_SUPERADMIN
-
         allowed_roles = {ROLE_DIRECTION, ROLE_SUPERADMIN}
         for row in conn.execute("SELECT id, role, access_overrides FROM users").fetchall():
             if row["role"] in allowed_roles:
@@ -6084,6 +6082,45 @@ Ressources :
         """)
         conn.commit()
         _record_schema_migration(conn, 160, "mylearning_videos_split")
+
+    # ─── v161 — MyTraduction : cache des traductions DeepL ─────────
+    #
+    # Table de cache pour éviter de repayer 2× la même traduction (quota
+    # DeepL Free = 500k car/mois). Clé = hash(text + source_lang + target_lang
+    # + formality). Les entrées ne sont jamais purgées automatiquement — un
+    # même texte donne toujours la même traduction, autant garder le cache.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=161 LIMIT 1").fetchone():
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS translations_cache (
+                hash         TEXT PRIMARY KEY,
+                source_lang  TEXT,
+                target_lang  TEXT NOT NULL,
+                formality    TEXT,
+                translated   TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                hit_count    INTEGER NOT NULL DEFAULT 1
+            );
+            CREATE INDEX IF NOT EXISTS idx_translations_cache_created
+                ON translations_cache(created_at);
+
+            -- Log d'utilisation par utilisateur (pour compteur mensuel + stats)
+            CREATE TABLE IF NOT EXISTS translations_usage (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER,
+                chars_count  INTEGER NOT NULL,
+                cached       INTEGER NOT NULL DEFAULT 0,
+                source_lang  TEXT,
+                target_lang  TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_translations_usage_created
+                ON translations_usage(created_at);
+            CREATE INDEX IF NOT EXISTS idx_translations_usage_user
+                ON translations_usage(user_id, created_at);
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 161, "mytraduction_cache")
 
 def create_default_admin():
     import bcrypt
