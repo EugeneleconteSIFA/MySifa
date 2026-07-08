@@ -2130,6 +2130,9 @@ function renderUsersList(){
       '<div style="display:flex;align-items:center;gap:10px">' +
         profileRingHtml(profPct) +
         '<div><strong>' + esc(u.nom) + '</strong> <span class="' + pillCls + '">' + esc(roleLabels[u.role] || u.role) + '</span>' +
+        (u.nc_service_override === 'encadrement_atelier'
+          ? ' <span class="pill pill--encadrement_atelier" title="Service NC : chef d\'équipe atelier / responsable technique">Chef d\'équipe atelier / Resp. tech.</span>'
+          : '') +
         (act ? '' : ' <span class="pill pill--inactive">Inactif</span>') +
         '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + (meta ? (' · ' + meta) : '') + '</div></div>' +
         '<button type="button" class="btn btn-sec copy-user-btn" data-copy="' + u.id + '" title="Copier les identifiants" style="padding:6px 8px">' +
