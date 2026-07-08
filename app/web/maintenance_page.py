@@ -428,6 +428,14 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .case-tmpl-picker select{flex:1;min-width:180px}
 .case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
 .case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* Mode opérateur : masque tous les éléments d'édition dans le calendrier */
+body[data-maint-role="operator"] .cal-fab,
+body[data-maint-role="operator"] .cal-fab-menu,
+body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
+body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* Surligne les créneaux où l'opérateur est dans le groupe */
+body[data-maint-role="operator"] .cal-event.is-mine{outline:2px solid var(--warn);outline-offset:-2px}
+body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
 /* Bouton flottant « + » sur le calendrier */
 .cal-fab{position:absolute;right:16px;bottom:16px;z-index:10;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);border:none;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,filter .12s}
 .cal-fab:hover{filter:brightness(1.08);transform:translateY(-1px)}
@@ -2310,6 +2318,11 @@ function _makeEventBlock(item){
   div.style.color = palette.fg;
   if(height < 50) div.setAttribute('data-mini', '1');
   div.setAttribute('data-event-id', ev.id);
+  // Marque les créneaux où l'opérateur courant est dans le groupe
+  if(MAINT_ROLE === 'operator' && S && S.me){
+    const mine = (ev.operators || []).some(o => o.id === S.me.id);
+    if(mine) div.classList.add('is-mine');
+  }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // Lignes affichables selon hauteur disponible
@@ -2580,6 +2593,8 @@ function editCase(id){
 function onCalCellClick(e){
   // Ignore clicks on existing events (their own click handler ouvre les détails)
   if(e.target.closest('.cal-event')) return;
+  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
+  if(MAINT_ROLE === 'operator') return;
   const col = e.currentTarget;
   if(!col) return;
   const iso = col.getAttribute('data-date');
@@ -5669,15 +5684,21 @@ async function admFetchOperators(){
 
 async function opLoadTasks(){
   if(MAINT_ROLE !== 'operator') return;
-  // Charge tous mes créneaux à partir d'aujourd'hui, sur ~60 jours.
+  // Utilise le MÊME endpoint que le planning (/api/maintenance/events) et
+  // filtre côté client par appartenance au groupe : garantit la cohérence
+  // absolue entre « Mes tâches » et « Planning personnel ».
   const today = new Date();
   const in60 = new Date(); in60.setDate(today.getDate() + 60);
-  const url = '/api/maintenance/my-tasks?date_from=' + _fmtDateISO(today) +
+  const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
               '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
   const r = await fetch(url, { credentials:'include', cache: 'no-store' });
   if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
   const data = await r.json();
-  MAINT_STATE.tasks = data.events || [];
+  const meId = (S && S.me) ? S.me.id : null;
+  const events = data.events || [];
+  MAINT_STATE.tasks = meId
+    ? events.filter(ev => (ev.operators || []).some(o => o.id === meId))
+    : [];
   opRenderTasks();
 }
 
@@ -6425,7 +6446,39 @@ document.addEventListener('click', (e) => {
   menu.classList.remove('open');
 });
 
+// v163+ : pour l'opérateur, on déplace le calendrier admin dans l'onglet
+// « Planning général » et on masque le date-picker + tabs redondants.
+function _mountOperatorGeneralCalendar(){
+  if(MAINT_ROLE !== 'operator') return;
+  const src = document.querySelector('#view-planning .cal-sec');
+  const dst = document.getElementById('op-plan-general');
+  if(!src || !dst) return;
+  if(dst.querySelector('.cal-sec')) return;  // déjà monté
+  // Vide le contenu par défaut (le tableau read-only), puis injecte
+  dst.innerHTML = '';
+  dst.appendChild(src);
+  // Masque le date-picker haut de page (le calendrier a sa propre nav)
+  const datePicker = document.querySelector('#view-op-planning .op-date-picker');
+  if(datePicker) datePicker.style.display = 'none';
+}
+
+// Wrapper autour de opSetPlanTab pour déclencher le rendu du calendrier
+// à l'arrivée sur l'onglet Général.
+const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
+function opSetPlanTabWithCal(name){
+  if(_origOpSetPlanTab) _origOpSetPlanTab(name);
+  if(name === 'general' && MAINT_ROLE === 'operator'){
+    _mountOperatorGeneralCalendar();
+    // Force un refresh des données puis rerender
+    refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+  }
+}
+// Remplace l'implémentation exposée sur window (utilisée par onclick)
+window.opSetPlanTab = opSetPlanTabWithCal;
+
 (function initMaintRole(){
+  // Ajoute un attribut sur <body> pour le ciblage CSS role-based
+  document.body.setAttribute('data-maint-role', MAINT_ROLE || 'operator');
   if(MAINT_ROLE === 'operator'){
     // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
     const dateInput = document.getElementById('op-tasks-date');
@@ -6435,6 +6488,9 @@ document.addEventListener('click', (e) => {
     opLoadTasks();
     // Pré-charge le planning en tâche de fond.
     opLoadPlanning();
+    // Monte le calendrier admin dans l'onglet Général (lazy — au 1er clic
+    // sur l'onglet, mais on prépare le DOM tôt pour un feedback instant).
+    _mountOperatorGeneralCalendar();
   }
 })();
 </script>
