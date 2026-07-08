@@ -1665,9 +1665,16 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
-    // Toujours afficher la vue Semaine en arrivant dans Planning
-    if(typeof setCalView === 'function') setCalView('week');
-    else renderCal();
+    // À l'arrivée sur Planning : refetch la liste depuis l'API puis rerender.
+    // Sinon, si le fetch initial du boot n'a pas encore résolu (ou a été
+    // fait alors que le container était display:none, ce qui casse le
+    // lane-packing), le calendrier reste vide jusqu'à la prochaine
+    // opération d'écriture qui force un refresh.
+    (async () => {
+      await refreshPlanning();
+      if(typeof setCalView === 'function') setCalView('week');
+      else renderCal();
+    })();
   }
   // Vues opérateur : recharge la liste à l'arrivée.
   if(name === 'op-tasks' && typeof opLoadTasks === 'function'){
