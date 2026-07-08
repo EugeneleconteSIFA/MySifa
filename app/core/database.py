@@ -6122,6 +6122,28 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 161, "mytraduction_cache")
 
+    # v162 — Maintenance : opérations multi-machines dans un même créneau.
+    # Un créneau (maintenance_events) peut désormais contenir des opérations
+    # rattachées à des machines différentes. Chaque opération stocke sa/ses
+    # machines dans `maintenance_event_ops.machines_csv` (CSV, séparateur " · ").
+    # `maintenance_events.machine` reste renseigné en résumé (CSV) pour la
+    # rétrocompatibilité (palette calendrier, filtres, non_planifie).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=162 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
+        if "machines_csv" not in cols:
+            conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN machines_csv TEXT")
+        # Backfill : pour chaque op existante sans machines_csv, on hérite de
+        # la machine de son event (comportement d'avant la refonte).
+        conn.execute("""
+            UPDATE maintenance_event_ops
+            SET machines_csv = (
+                SELECT machine FROM maintenance_events WHERE id = maintenance_event_ops.event_id
+            )
+            WHERE machines_csv IS NULL OR machines_csv = ''
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 162, "maintenance_event_ops_machines_csv")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
