@@ -217,10 +217,14 @@ body.light .empl-allee-letter{background:rgba(8,145,178,.12)}
 .empl-rangee-pills{display:flex;flex-wrap:nowrap;gap:4px}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.pill--administration_ventes{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.pill--administration_technique{border-color:rgba(99,102,241,.38);color:#818cf8;background:rgba(99,102,241,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
 .pill--logistique{border-color:rgba(96,165,250,.35);color:#60a5fa;background:rgba(96,165,250,.12)}
 .pill--comptabilite{border-color:rgba(251,191,36,.38);color:#fbbf24;background:rgba(251,191,36,.12)}
-.pill--expedition{border-color:rgba(248,113,113,.38);color:var(--danger);background:rgba(248,113,113,.12)}
+.pill--expedition{border-color:rgba(249,115,22,.38);color:#fb923c;background:rgba(249,115,22,.12)}
+.pill--commercial{border-color:rgba(202,138,4,.38);color:#eab308;background:rgba(202,138,4,.12)}
+.pill--encadrement_atelier{border-color:rgba(20,184,166,.38);color:#2dd4bf;background:rgba(20,184,166,.12)}
 .pill--superadmin{border-color:rgba(34,211,238,.45);color:var(--accent);background:rgba(34,211,238,.14)}
 .pill--inactive{border-color:rgba(148,163,184,.35);color:var(--muted);background:rgba(148,163,184,.10)}
 .users-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}

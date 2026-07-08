@@ -17,6 +17,8 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_FABRICATION,
     ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_DIRECTION,
     ROLE_LOGISTIQUE,
     ROLE_COMPTABILITE,
@@ -125,6 +127,8 @@ def access_matrix(request: Request):
     role_labels = {
         ROLE_DIRECTION: "Direction",
         ROLE_ADMINISTRATION: "Administration",
+        ROLE_ADMINISTRATION_VENTES: "Administration des ventes",
+        ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
         ROLE_FABRICATION: "Fabrication",
         ROLE_LOGISTIQUE: "Logistique",
         ROLE_COMPTABILITE: "Comptabilité",
