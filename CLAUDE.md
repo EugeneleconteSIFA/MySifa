@@ -494,3 +494,40 @@ PYEOF
 Une troncature passe les vérifs Python `ast` si elle coupe entre deux blocs,
 donc **toujours** afficher `tail -5 <path>` pour confirmer que le fichier se
 termine bien par ce qu'on attend.
+
+### git : la troncature frappe aussi les commandes git côté Windows
+
+Observé (juillet 2026, split rôle admin + ack NC) : le même drive Windows tronque
+les fichiers écrits par **git** lui-même. Concrètement, pendant un `git merge`,
+`git checkout <sha> -- <path>`, `git pull`, etc., un fichier > ~5 000 lignes
+peut se retrouver coupé au milieu — marqueurs de conflit `<<<<<<<` sans jamais
+de `=======` ni `>>>>>>>`, ou fichier légitime tronqué à ~6 100 lignes au lieu
+de 6 300. Le fichier tronqué casse ensuite l'AST Python, le merge reste bloqué,
+et re-taper `git checkout` retronque à nouveau.
+
+**Quand ça arrive** :
+1. Ne pas insister avec Windows — chaque tentative `git checkout` / `git reset`
+   retronque le même fichier.
+2. **Basculer côté VM Linux** (shell sandbox) : les écritures via `cat > <path>`
+   ou Python `open(p,'w').write(...)` sur le mount ne subissent pas la troncature.
+3. Pattern qui marche : extraire le vrai contenu depuis les objets git
+   (`git show <sha>:<path> > /tmp/…`) → manipuler dans `/tmp` → écrire dans le
+   workspace via `cat /tmp/foo.py > <path>` → vérifier avec `wc -l` et
+   `python3 -c "import ast; ast.parse(...)"`.
+4. Le `.git/index.lock` qui reste après un `git merge --abort` interrompu
+   ne peut pas être supprimé depuis Linux (Operation not permitted sur le
+   mount) : demander à l'utilisateur de le supprimer depuis PowerShell avec
+   `Remove-Item .git\index.lock -Force`.
+
+**Conflits de numérotation de migration** :
+- Toujours vérifier `origin/staging` avant de choisir un numéro de migration
+  (`git fetch origin && git show origin/staging:app/core/database.py | grep -n "_record_schema_migration(conn, 1[6-9][0-9]"`).
+- Si conflit détecté (deux branches ont utilisé le même numéro), renuméroter
+  la nôtre côté staging local **avant** de merger `origin/staging`, pas après.
+
+**PowerShell vs bash** :
+- Les blocs bash du CLAUDE.md (`if [[ ]]`, `&& \`, `if/then/fi`) ne fonctionnent
+  PAS en PowerShell — le terminal d'Eugène. Pour les scripts multi-étapes en
+  interactif, envelopper dans `& { … }` avec `if ($LASTEXITCODE -ne 0) { return }`
+  après chaque commande. Le `return` sort du scriptblock sans fermer la fenêtre
+  (contrairement à `exit 1`).
