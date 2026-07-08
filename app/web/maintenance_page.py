@@ -3734,9 +3734,9 @@ function _renderWearPartsGroup(machine){
         //     intérieur ambre = métrage. Couleurs assorties aux sections.
         const _refVal = (v) => v
           ? '<span class="val">' + escHtml(v) + '</span>'
-          : (suiviCode
+          : (wpCode
               ? '<span class="val muted">à compléter</span>'
-              : '<span class="val muted">aucun code Suivi</span>'
+              : '<span class="val muted">aucun code intervention</span>'
             );
         // Section TEMPS
         let lastSub = '';
