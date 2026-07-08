@@ -1807,8 +1807,8 @@ async function refreshPlanning(){
     const from = new Date(pivot); from.setDate(pivot.getDate() - 90);
     const to   = new Date(pivot); to.setDate(pivot.getDate() + 90);
     const url = '/api/maintenance/events?date_from=' + _fmtDateISO(from) +
-                '&date_to=' + _fmtDateISO(to);
-    const r = await fetch(url, { credentials: 'include' });
+                '&date_to=' + _fmtDateISO(to) + '&_=' + Date.now();
+    const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
     if(!r.ok){ PLANNING_STATE.list = []; return; }
     const d = await r.json();
     PLANNING_STATE.list = (d.events || []).map(_apiEventToClient);
@@ -2384,8 +2384,8 @@ async function deletePlanningEvent(id){
   renderCal();
 }
 async function confirmDeleteCase(id){
-  const ev = PLANNING_STATE.list.find(e => e.id === id);
-  if(!ev) return;
+  const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
+  if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
   const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
   if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
   try{
@@ -2398,8 +2398,8 @@ async function confirmDeleteCase(id){
   showToast('Créneau supprimé.', 'info');
 }
 function editCase(id){
-  const ev = PLANNING_STATE.list.find(e => e.id === id);
-  if(!ev) return;
+  const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
+  if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
   closePlanningDetailsModal();
   openCaseModal({
     editId: ev.id,
@@ -2483,7 +2483,7 @@ let _CASE_OPS = [];
 async function openCaseModal(opts){
   _CASE_OPERATORS = [];
   if(opts && opts.editId){
-    const ev = PLANNING_STATE.list.find(e => e.id === opts.editId);
+    const ev = PLANNING_STATE.list.find(e => String(e.id) === String(opts.editId));
     if(ev && Array.isArray(ev.operators)){
       _CASE_OPERATORS = ev.operators.map(o => ({ id: o.id, nom: o.nom }));
     }
@@ -2642,7 +2642,8 @@ async function submitCaseModal(e){
 
 async function _syncEventOpsAndOperators(eventId, wantedCodes, wantedOperatorIds){
   // Récupère l'état actuel de l'event pour comparer.
-  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials:'include' });
+  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '?_=' + Date.now(),
+                       { credentials:'include', cache: 'no-store' });
   if(!r.ok) return;
   const d = await r.json();
   const ev = d.event || {};
@@ -5439,8 +5440,8 @@ async function opLoadTasks(){
   const today = new Date();
   const in60 = new Date(); in60.setDate(today.getDate() + 60);
   const url = '/api/maintenance/my-tasks?date_from=' + _fmtDateISO(today) +
-              '&date_to=' + _fmtDateISO(in60);
-  const r = await fetch(url, { credentials:'include' });
+              '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
+  const r = await fetch(url, { credentials:'include', cache: 'no-store' });
   if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
   const data = await r.json();
   MAINT_STATE.tasks = data.events || [];
@@ -5709,7 +5710,8 @@ async function opLoadPlanning(){
   const d = dateInput.value || _fmtDateISO(new Date());
   if(!dateInput.value) dateInput.value = d;
   const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
-                       '&date_to=' + encodeURIComponent(d), { credentials:'include' });
+                       '&date_to=' + encodeURIComponent(d) + '&_=' + Date.now(),
+                       { credentials:'include', cache: 'no-store' });
   if(!r.ok){
     const persoEl = document.getElementById('op-plan-personnel');
     const genEl = document.getElementById('op-plan-general');
