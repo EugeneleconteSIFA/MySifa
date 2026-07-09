@@ -2844,7 +2844,10 @@ def maintenance_alerts_active(request: Request):
                         (int(r["id"]), user_machine),
                     ).fetchone()
                     last_ack_at_str = last_ack["m"] if last_ack else None
-                    q = ("SELECT 1 FROM production_data "
+                    # On récupère aussi no_dossier (au lieu d'un simple SELECT 1)
+                    # pour pouvoir filtrer par conditionnement si l'alerte a été
+                    # configurée en ce sens.
+                    q = ("SELECT no_dossier FROM production_data "
                          "WHERE machine=? AND operation_code=? "
                          "  AND (operateur=? OR operateur=?)")
                     p = [user_machine, op_code, operateur, user_nom or operateur]
@@ -2854,9 +2857,41 @@ def maintenance_alerts_active(request: Request):
                     else:
                         q += " AND date_operation >= ?"
                         p.append(now_paris.strftime("%Y-%m-%dT00:00:00"))
-                    q += " LIMIT 1"
+                    q += " ORDER BY date_operation DESC LIMIT 1"
                     recent = conn.execute(q, tuple(p)).fetchone()
                     should_show = recent is not None
+                    # Filtre par conditionnement (bobine / plis) — v163+
+                    # Options : 'any' (défaut), 'bobine_only', 'plis_only'.
+                    # Politique choisie : si aucune info de conditionnement dans
+                    # la fiche technique, l'alerte reste silencieuse (stricte).
+                    if should_show:
+                        filter_cond = str(trig.get("filter_conditionnement") or "any").strip()
+                        if filter_cond in ("bobine_only", "plis_only"):
+                            no_dossier = recent["no_dossier"] if recent else None
+                            is_bobine = False
+                            has_info = False
+                            if no_dossier:
+                                cond_row = conn.execute(
+                                    """SELECT ft.conditionnement_norm, ft.conditionnement
+                                       FROM planning_entries pe
+                                       LEFT JOIN fiches_techniques ft
+                                              ON ft.ref_produit_norm = pe.ref_produit_norm
+                                       WHERE pe.no_dossier = ?
+                                       ORDER BY pe.id DESC LIMIT 1""",
+                                    (no_dossier,),
+                                ).fetchone()
+                                if cond_row:
+                                    cn = (cond_row["conditionnement_norm"] or "").lower()
+                                    cr = (cond_row["conditionnement"] or "").lower()
+                                    if cn or cr:
+                                        has_info = True
+                                        is_bobine = ("bobine" in cn) or ("bobine" in cr)
+                            if not has_info:
+                                should_show = False
+                            elif filter_cond == "bobine_only" and not is_bobine:
+                                should_show = False
+                            elif filter_cond == "plis_only" and is_bobine:
+                                should_show = False
             # type manual / calendar : non implémenté en v1
             if should_show:
                 items.append({
