@@ -2885,6 +2885,7 @@ def maintenance_alerts_active(request: Request):
                             is_bobine = False
                             has_info = False
                             if no_dossier:
+                                # NB: dans planning_entries la colonne dossier est `reference`
                                 cond_row = conn.execute(
                                     """SELECT ft.conditionnement_norm, ft.conditionnement,
                                               ft.mandrin_dia, ft.mandrin_longueur,
@@ -2893,7 +2894,7 @@ def maintenance_alerts_active(request: Request):
                                        FROM planning_entries pe
                                        LEFT JOIN fiches_techniques ft
                                               ON ft.ref_produit_norm = pe.ref_produit_norm
-                                       WHERE pe.no_dossier = ?
+                                       WHERE pe.reference = ?
                                        ORDER BY pe.id DESC LIMIT 1""",
                                     (no_dossier,),
                                 ).fetchone()
@@ -3266,14 +3267,7 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
 
 @router.get("/api/maintenance/wearparts/last")
 def maintenance_wearparts_last(request: Request, machine: str = ""):
-    """Dernières opérations 'changement couteaux/contre-couteaux bande/rive' pour
-    une machine donnée. Source : table production_data (alimentée par MyProd).
-    Retourne : pour chaque combinaison, la date du dernier changement, le métrage
-    machine à ce moment-là, et le métrage parcouru depuis (= dernier_metrage
-    machine - metrage_at_change).
-    Lecture seule, accessible à tout utilisateur connecté.
-    Distingue 'contre-couteaux' de 'couteaux' via NOT LIKE.
-    """
+    """Dernières opérations couteaux pour une machine."""
     get_current_user(request)
     machine = (machine or "").strip()
     if not machine:
@@ -3285,7 +3279,7 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
         ("contre_couteaux_bande",  "%contre%couteaux%bande%", None),
         ("contre_couteaux_rive",   "%contre%couteaux%rive%",  None),
     ]
-    items: dict[str, dict] = {}
+    items = {}
     with get_db() as conn:
         m_row = conn.execute(
             "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
@@ -3293,10 +3287,7 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
         ).fetchone()
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, pat, exclude in queries:
-            sql = (
-                "SELECT date_operation FROM production_data "
-                "WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
-            )
+            sql = "SELECT date_operation FROM production_data WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
             params = [machine, pat]
             if exclude:
                 sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
@@ -3308,39 +3299,27 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
                 continue
             change_date = row["date_operation"]
             m_at_row = conn.execute(
-                """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
-                   FROM production_data
-                   WHERE machine=? AND operation_code IN ('01','89')
-                     AND date_operation <= ?
-                     AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL)
-                   ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
+                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
+                "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
+                "ORDER BY date_operation DESC, id DESC LIMIT 1",
                 (machine, change_date),
             ).fetchone()
             m_at_change = m_at_row["m"] if m_at_row else None
             metrage_since = None
             if current_metrage is not None and m_at_change is not None:
                 try:
-                    diff = float(current_metrage) - float(m_at_change)
-                    metrage_since = max(0.0, diff)
+                    metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
                 except (TypeError, ValueError):
                     metrage_since = None
-            items[key] = {
-                "last_date": change_date,
-                "metrage_at_change": m_at_change,
-                "metrage_since": metrage_since,
-            }
+            items[key] = {"last_date": change_date, "metrage_at_change": m_at_change, "metrage_since": metrage_since}
     dates = {k: v["last_date"] for k, v in items.items()}
-    return {
-        "machine": machine,
-        "current_metrage": current_metrage,
-        "dates": dates,
-        "items": items,
-    }
+    return {"machine": machine, "current_metrage": current_metrage, "dates": dates, "items": items}
 
 
 @router.post("/api/maintenance/wearparts/info")
 async def maintenance_wearparts_info(request: Request):
-    """Métrage machine + métrage parcouru depuis une date donnée, par pièce."""
+    """Métrage machine et parcouru depuis une date par pièce."""
     get_current_user(request)
     body = await request.json()
     machine = (body.get("machine") or "").strip()
@@ -3350,7 +3329,7 @@ async def maintenance_wearparts_info(request: Request):
     if not isinstance(raw_dates, dict):
         raise HTTPException(422, "dates doit etre un objet.")
     from database import get_db
-    items: dict[str, dict] = {}
+    items = {}
     with get_db() as conn:
         m_row = conn.execute(
             "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
@@ -3363,12 +3342,10 @@ async def maintenance_wearparts_info(request: Request):
                 continue
             change_date = str(change_date)
             m_at_row = conn.execute(
-                """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
-                   FROM production_data
-                   WHERE machine=? AND operation_code IN ('01','89')
-                     AND date_operation <= ?
-                     AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL)
-                   ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
+                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
+                "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
+                "ORDER BY date_operation DESC, id DESC LIMIT 1",
                 (machine, change_date),
             ).fetchone()
             m_at_change = m_at_row["m"] if m_at_row else None
@@ -3378,9 +3355,5 @@ async def maintenance_wearparts_info(request: Request):
                     metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
                 except (TypeError, ValueError):
                     metrage_since = None
-            items[key] = {
-                "last_date": change_date,
-                "metrage_at_change": m_at_change,
-                "metrage_since": metrage_since,
-            }
+            items[key] = {"last_date": change_date, "metrage_at_change": m_at_change, "metrage_since": metrage_since}
     return {"machine": machine, "current_metrage": current_metrage, "items": items}
