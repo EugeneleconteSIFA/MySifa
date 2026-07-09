@@ -2814,6 +2814,37 @@ async def patch_reception(reception_id: int, request: Request):
     return {"success": True, "id": reception_id}
 
 
+@router.delete("/api/stock/receptions/{reception_id}")
+def delete_reception(reception_id: int, request: Request):
+    """Supprime une réception + ses items (irréversible)."""
+    user = require_stock_write(request)
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id, lot_numero, nb_bobines, fournisseur, fsc_type_claim FROM stock_receptions WHERE id=?",
+            (reception_id,),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Réception introuvable")
+        exd = dict(ex)
+        conn.execute("DELETE FROM stock_reception_items WHERE reception_id=?", (reception_id,))
+        conn.execute("DELETE FROM stock_receptions WHERE id=?", (reception_id,))
+        conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="stock",
+        objet=f"Réception bobines #{reception_id}",
+        detail={
+            "lot_numero": exd.get("lot_numero"),
+            "nb_bobines": exd.get("nb_bobines"),
+            "fournisseur": exd.get("fournisseur"),
+            "fsc_type_claim": exd.get("fsc_type_claim"),
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "id": reception_id}
+
+
 # ── Référentiel produits (référence + unité de vente) ─────────────
 
 _REF_HEADER_KEYS = frozenset({
