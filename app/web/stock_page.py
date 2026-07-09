@@ -101,41 +101,28 @@ input,select{font-family:inherit}
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-/* Badge compteur — flotte par-dessus le texte avec des bords "nuage" (gradient flou).
-   Le cœur du badge reste net, les bords se diffusent progressivement pour laisser
-   deviner le texte du bouton par transparence dégradée. */
+/* Badge compteur — flotte par-dessus le texte avec un halo "cloud" fait de plusieurs
+   box-shadow teintées couleur sidebar (var(--card)) qui s'estompent progressivement.
+   Le halo, extérieur au badge, ne cache pas son contenu et donne un dégradé de
+   masquage du texte du bouton en dessous — comme un brouillard. */
 .nav-btn-has-overlay{position:relative}
 .nav-badge-overlay{
   position:absolute;right:8px;top:50%;transform:translateY(-50%);
   padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:800;
   background:#fb923c;color:#fff;line-height:1.15;letter-spacing:.2px;
-  z-index:2;pointer-events:none;flex-shrink:0;isolation:isolate;
-  transition:background .15s;
+  z-index:2;pointer-events:none;flex-shrink:0;
+  transition:background .15s,box-shadow .15s;
+  box-shadow:
+    0 0 3px 2px color-mix(in srgb,var(--card) 88%,transparent),
+    0 0 8px 4px color-mix(in srgb,var(--card) 55%,transparent),
+    0 0 16px 7px color-mix(in srgb,var(--card) 25%,transparent);
 }
-/* Halo "cloud" : pseudo-élément derrière le badge, teinté couleur sidebar (var(--card))
-   avec dégradé de transparence. Le halo ne colore pas, il *masque* le texte du bouton
-   sous le badge comme un brouillard, en s'estompant progressivement vers l'extérieur. */
-.nav-badge-overlay::before{
-  content:'';position:absolute;inset:-8px;border-radius:999px;
-  background:radial-gradient(
-    ellipse at center,
-    var(--card) 30%,
-    color-mix(in srgb,var(--card) 70%,transparent) 52%,
-    color-mix(in srgb,var(--card) 38%,transparent) 72%,
-    color-mix(in srgb,var(--card) 14%,transparent) 88%,
-    transparent 100%);
-  filter:blur(3.5px);z-index:-1;
-}
-.nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{background:#f97316}
-/* Sur hover/active la sidebar prend --accent-bg, on adapte le halo pour rester cohérent. */
-.nav-btn:hover .nav-badge-overlay::before,.nav-btn.active .nav-badge-overlay::before{
-  background:radial-gradient(
-    ellipse at center,
-    color-mix(in srgb,var(--card) 92%,var(--accent) 8%) 30%,
-    color-mix(in srgb,var(--card) 60%,transparent) 52%,
-    color-mix(in srgb,var(--card) 30%,transparent) 72%,
-    color-mix(in srgb,var(--card) 10%,transparent) 88%,
-    transparent 100%);
+.nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{
+  background:#f97316;
+  box-shadow:
+    0 0 3px 2px color-mix(in srgb,var(--accent-bg) 90%,var(--card) 10%),
+    0 0 8px 4px color-mix(in srgb,var(--accent-bg) 55%,transparent),
+    0 0 16px 7px color-mix(in srgb,var(--accent-bg) 25%,transparent);
 }
 body.light .nav-badge-overlay{background:#ea580c}
 .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
@@ -1740,6 +1727,8 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .btn-recep:active{transform:translateY(0)}
 .btn-recep:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none}
 .btn-recep-primary{background:var(--accent);color:#0a0e17}
+body.light .btn-recep-primary{color:#ffffff}
+body.light .btn-recep-primary svg{stroke:#ffffff}
 .btn-recep-success{background:var(--success);color:#0a0e17}
 .btn-recep-danger{background:var(--danger);color:#fff}
 .btn-recep-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
@@ -1770,7 +1759,9 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .recep-print-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4);animation:recepPrintSheetIn .38s cubic-bezier(.34,1.32,.42,1.03) both}
 .recep-print-success{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;background:rgba(52,211,153,.18);color:var(--success);margin-right:10px;flex-shrink:0;animation:recepPrintSuccessPulse .45s cubic-bezier(.34,1.32,.42,1.03) both;animation-delay:.08s}
 .recep-print-head{display:flex;align-items:center;margin-bottom:6px}
-.recep-print-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px}
+.recep-print-title{font-size:16px;font-weight:800;color:var(--success);margin-bottom:4px}
+body.light .recep-print-title{color:#059669}
+.recep-print-subtitle{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-top:2px}
 .recep-print-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
 .recep-print-preview{background:#fff;color:#0a0e17;border-radius:10px;padding:16px;margin:10px 0;font-family:Arial,sans-serif}
 .recep-print-preview .plabel{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;font-weight:600}
@@ -13824,6 +13815,7 @@ function recepShowPrintModal(lot) {
       successBadge,
       el('div', null,
         el('div', { cls: 'recep-print-title' }, 'Réception validée'),
+        el('div', { cls: 'recep-print-subtitle' }, 'Identification bobine'),
         el('div', { cls: 'recep-print-sub' }, 'Préparez les étiquettes à coller sur les bobines.'),
       ),
     ),
@@ -13891,10 +13883,15 @@ function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
   const fournTxt = esc(lot.fournisseur || '—');
   const claimTxt = esc(claimLabel || '—');
   const lotTxt = esc(lot.lot_numero || '');
+  const isFsc = (lot.fsc_type_claim || 'non_fsc') !== 'non_fsc';
+  const fscBannerCls = isFsc ? 'fsc-banner is-fsc' : 'fsc-banner non-fsc';
+  const fscBannerTxt = isFsc ? 'MATIÈRE FSC' : 'MATIÈRE NON FSC';
   let labels = '';
   for (let i = 0; i < nbEtiquettes; i++) {
     labels += `
       <div class="label">
+        <div class="head-band">Identification bobine</div>
+        <div class="${fscBannerCls}">${fscBannerTxt}</div>
         <div class="row">
           <div class="cell"><div class="lab">Réf. produit</div><div class="val">${refTxt}</div></div>
           <div class="cell"><div class="lab">Fournisseur</div><div class="val">${fournTxt}</div></div>
@@ -13908,15 +13905,21 @@ function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
       </div>`;
   }
   const w = _printWin('Étiquettes lot ' + lotTxt, '105mm 74mm',
-    `.label{width:105mm;height:74mm;padding:4mm 5mm;display:flex;flex-direction:column;gap:2mm;
+    `.label{width:105mm;height:74mm;padding:3mm 5mm;display:flex;flex-direction:column;gap:1.5mm;
             page-break-after:always;page-break-inside:avoid;border-bottom:1px dashed transparent}
+     .head-band{font-size:9pt;font-weight:800;text-transform:uppercase;letter-spacing:1.5pt;
+                color:#333;text-align:center;padding:1.5mm 0;border-bottom:1px solid #ccc;margin-bottom:1mm}
+     .fsc-banner{font-size:14pt;font-weight:900;text-align:center;padding:2mm 4mm;border-radius:4mm;
+                 letter-spacing:1pt;margin-bottom:1.5mm;border:2px solid;line-height:1.1}
+     .fsc-banner.is-fsc{background:#e6f4ea;color:#0f7c3a;border-color:#0f7c3a}
+     .fsc-banner.non-fsc{background:#f4e6e6;color:#8b1e1e;border-color:#8b1e1e}
      .row{display:flex;gap:5mm}
      .cell{flex:1;min-width:0}
      .lab{font-size:8pt;text-transform:uppercase;letter-spacing:.5pt;color:#666;font-weight:600}
      .val{font-size:12pt;font-weight:700;color:#000;line-height:1.15;word-break:break-word}
      .val.lot{font-family:'Courier New',monospace;font-size:11pt}
-     .bar{display:flex;justify-content:center;margin-top:2mm}
-     .bar svg{max-width:95mm;height:14mm}
+     .bar{display:flex;justify-content:center;margin-top:1mm}
+     .bar svg{max-width:95mm;height:12mm}
      .brand{text-align:right;font-size:9pt;font-weight:800;color:#333;letter-spacing:1.5pt;margin-top:auto}`,
     `${labels}
      <script src="${JSBARCODE_CDN}"><\/script>
