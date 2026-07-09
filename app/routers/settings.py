@@ -2886,7 +2886,10 @@ def maintenance_alerts_active(request: Request):
                             has_info = False
                             if no_dossier:
                                 cond_row = conn.execute(
-                                    """SELECT ft.conditionnement_norm, ft.conditionnement
+                                    """SELECT ft.conditionnement_norm, ft.conditionnement,
+                                              ft.mandrin_dia, ft.mandrin_longueur,
+                                              ft.enroulement, ft.nb_etiq_bobin,
+                                              ft.nb_bobines_carton
                                        FROM planning_entries pe
                                        LEFT JOIN fiches_techniques ft
                                               ON ft.ref_produit_norm = pe.ref_produit_norm
@@ -2895,11 +2898,38 @@ def maintenance_alerts_active(request: Request):
                                     (no_dossier,),
                                 ).fetchone()
                                 if cond_row:
+                                    # Détection « bobine » — critère combiné :
+                                    #  1) champs spécifiques bobine renseignés
+                                    #     (mandrin, enroulement, étiq/bobine…) OR
+                                    #  2) mot "bobine" dans conditionnement/norm.
                                     cn = (cond_row["conditionnement_norm"] or "").lower()
                                     cr = (cond_row["conditionnement"] or "").lower()
-                                    if cn or cr:
+                                    mandrin_dia = (cond_row["mandrin_dia"] or "").strip()
+                                    enroulement = (cond_row["enroulement"] or "").strip()
+                                    try:
+                                        mandrin_long = float(cond_row["mandrin_longueur"] or 0)
+                                    except (TypeError, ValueError):
+                                        mandrin_long = 0.0
+                                    try:
+                                        nb_etiq = int(cond_row["nb_etiq_bobin"] or 0)
+                                    except (TypeError, ValueError):
+                                        nb_etiq = 0
+                                    try:
+                                        nb_bob = int(cond_row["nb_bobines_carton"] or 0)
+                                    except (TypeError, ValueError):
+                                        nb_bob = 0
+                                    has_bobine_fields = bool(
+                                        mandrin_dia or enroulement
+                                        or mandrin_long > 0
+                                        or nb_etiq > 0
+                                        or nb_bob > 0
+                                    )
+                                    has_text_hint = ("bobine" in cn) or ("bobine" in cr)
+                                    # Info dispo si au moins un signal (fields
+                                    # spécifiques OU texte de conditionnement).
+                                    if has_bobine_fields or cn or cr:
                                         has_info = True
-                                        is_bobine = ("bobine" in cn) or ("bobine" in cr)
+                                        is_bobine = has_bobine_fields or has_text_hint
                             if not has_info:
                                 should_show = False
                             elif filter_cond == "bobine_only" and not is_bobine:
