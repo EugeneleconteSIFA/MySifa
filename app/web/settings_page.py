@@ -4028,7 +4028,16 @@ function _renderAlertFormFields(params, opts) {
     +     '</div>'
     +     '<div data-trigger-for="event">'
     +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
-    +       '<select id="af-trigger-event" class="alert-field-input">' + eventOpts + '</select>'
+    +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
+    +       '<div id="af-trigger-filter-cond-wrap" style="margin-top:10px;' + ((d.trigger.event === 'dossier_start' || d.trigger.event === 'dossier_end') ? '' : 'display:none;') + '">'
+    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Filtre produit</label>'
+    +         '<select id="af-trigger-filter-cond" class="alert-field-input">'
+    +           '<option value="any"'         + (d.trigger.filter_conditionnement === 'bobine_only' || d.trigger.filter_conditionnement === 'plis_only' ? '' : ' selected') + '>Tous les dossiers</option>'
+    +           '<option value="bobine_only"' + (d.trigger.filter_conditionnement === 'bobine_only' ? ' selected' : '') + '>Bobines uniquement</option>'
+    +           '<option value="plis_only"'   + (d.trigger.filter_conditionnement === 'plis_only'   ? ' selected' : '') + '>Plis uniquement</option>'
+    +         '</select>'
+    +         '<div class="alert-field-help">L\'alerte ne se déclenche que si la fiche technique du produit indique ce conditionnement. Si aucune info n\'est renseignée dans la fiche, l\'alerte reste silencieuse.</div>'
+    +       '</div>'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -4225,6 +4234,15 @@ function _afOnChecklistToggle() {
   }
 }
 
+// v163+ : n'affiche le filtre « produit » (bobine/plis) que pour les
+// événements dossier_start / dossier_end (les autres événements n'ont pas
+// de dossier associé).
+function _afOnTriggerEventChange() {
+  const ev = document.getElementById('af-trigger-event')?.value || '';
+  const wrap = document.getElementById('af-trigger-filter-cond-wrap');
+  if (wrap) wrap.style.display = (ev === 'dossier_start' || ev === 'dossier_end') ? '' : 'none';
+}
+
 function _afRowClick(ev, inputId) {
   // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
   // sur l'input pour éviter le double toggle (l'input gère son propre click).
@@ -4330,6 +4348,17 @@ function _afReadParams() {
     trig.days = days;
   } else if (t === 'event') {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
+    // Filtre produit (bobine/plis) — uniquement pour événements dossier_*
+    if (trig.event === 'dossier_start' || trig.event === 'dossier_end') {
+      const fc = document.getElementById('af-trigger-filter-cond')?.value || 'any';
+      if (fc === 'bobine_only' || fc === 'plis_only') {
+        trig.filter_conditionnement = fc;
+      } else {
+        delete trig.filter_conditionnement;
+      }
+    } else {
+      delete trig.filter_conditionnement;
+    }
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
