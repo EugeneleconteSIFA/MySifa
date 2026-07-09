@@ -101,6 +101,49 @@ input,select{font-family:inherit}
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+/* Badge compteur — flotte par-dessus le texte avec des bords "nuage" (gradient flou).
+   Le cœur du badge reste net, les bords se diffusent progressivement pour laisser
+   deviner le texte du bouton par transparence dégradée. */
+.nav-btn-has-overlay{position:relative}
+.nav-badge-overlay{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:800;
+  background:#fb923c;color:#fff;line-height:1.15;letter-spacing:.2px;
+  z-index:2;pointer-events:none;flex-shrink:0;isolation:isolate;
+  transition:background .15s;
+}
+/* Halo "cloud" : pseudo-élément derrière, gradient radial + blur → bords flous */
+.nav-badge-overlay::before{
+  content:'';position:absolute;inset:-8px;border-radius:999px;
+  background:radial-gradient(
+    ellipse at center,
+    rgba(251,146,60,.88) 30%,
+    rgba(251,146,60,.55) 52%,
+    rgba(251,146,60,.28) 72%,
+    rgba(251,146,60,.10) 88%,
+    transparent 100%);
+  filter:blur(3.5px);z-index:-1;
+}
+.nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{background:#f97316}
+.nav-btn:hover .nav-badge-overlay::before,.nav-btn.active .nav-badge-overlay::before{
+  background:radial-gradient(
+    ellipse at center,
+    rgba(249,115,22,.95) 30%,
+    rgba(249,115,22,.6) 52%,
+    rgba(249,115,22,.32) 72%,
+    rgba(249,115,22,.12) 88%,
+    transparent 100%);
+}
+body.light .nav-badge-overlay{background:#ea580c}
+body.light .nav-badge-overlay::before{
+  background:radial-gradient(
+    ellipse at center,
+    rgba(234,88,12,.85) 30%,
+    rgba(234,88,12,.5) 52%,
+    rgba(234,88,12,.24) 72%,
+    rgba(234,88,12,.08) 88%,
+    transparent 100%);
+}
 .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
   font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
 .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
@@ -1650,6 +1693,22 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 .recep-hist-note{font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recep-hist-four{font-size:11px;color:var(--accent);font-weight:600;flex-shrink:0;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recep-hist-user{font-size:11px;color:var(--muted);flex-shrink:0}
+.recep-hist-del{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;
+  border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;
+  transition:all .12s;padding:0;font-family:inherit;margin-left:4px}
+.recep-hist-del:hover{background:rgba(248,113,113,.14);color:var(--danger);border-color:rgba(248,113,113,.35)}
+.recep-hist-del:active{transform:scale(.94)}
+/* Sélecteur FSC dans l'édition inline — aligné sur les autres inputs MySifa */
+.recep-hist-detail .form-sel{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+  padding:9px 34px 9px 12px;font-size:13px;color:var(--text);font-family:inherit;
+  outline:none;transition:border-color .15s,box-shadow .15s;cursor:pointer;
+  -webkit-appearance:none;appearance:none;
+  background-repeat:no-repeat;background-position:right 12px center;background-size:12px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 8 10 12 14 8'/></svg>");
+}
+.recep-hist-detail .form-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .recep-hist-detail .form-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 /* Fournisseur search */
 .recep-fourn-wrap{margin-top:8px}
 .recep-fourn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
@@ -5271,14 +5330,18 @@ function buildMpMvtHistory(mouvements, matiere) {
             noteParts.push('Prix ' + parseFloat(m.prix_eur_m2).toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²');
           }
           if (m.note) noteParts.push(m.note);
+          // Pour un inventaire : la valeur pertinente est la QUANTITÉ COMPTÉE (= quantite_apres),
+          // pas l'écart. Le solde étant identique à la quantité comptée, on le masque pour éviter la redondance.
+          const displayQty = (t === 'inventaire' && m.quantite_apres != null) ? m.quantite_apres : m.quantite;
+          const showSolde = m.quantite_apres != null && t !== 'inventaire';
           return el('div', { cls: 'mvt-row' },
             el('div', { cls: 'mvt-icon ' + t }, icons[t] || '·'),
             el('div', { cls: 'mvt-body' },
               el('div', { cls: 'mvt-line1' },
                 el('span', null, MVT_TYPE_LABELS[t] || t),
                 el('div', { cls: 'mvt-line1-right' },
-                  el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
-                  (m.quantite_apres != null)
+                  el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(displayQty, mpCat)),
+                  showSolde
                     ? el('span', { cls: 'mvt-solde' }, 'Solde ' + mpStockLine(m.quantite_apres, mpCat))
                     : null,
                 ),
@@ -8481,18 +8544,23 @@ function renderModalInventaireMatiere(data) {
       ecartCell,
     );
     tbody.appendChild(tr);
-    // Ligne commentaire (colspan=4)
-    const commInp = el('input', {
-      attrs: { type: 'text', placeholder: 'Commentaire (optionnel)…' },
-      style: {
-        width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
-        borderRadius: '6px', padding: '6px 8px', color: 'var(--text)', fontSize: '12px',
-      },
-    });
+    // Ligne commentaire par matière/laize (optionnel) — sert à noter la raison d'un écart,
+    // les circonstances du comptage, ou toute annotation utile pour le suivi
+    const commInp = document.createElement('input');
+    commInp.type = 'text';
+    commInp.placeholder = 'Commentaire (optionnel) — ex : casse constatée, retour production…';
+    commInp.style.cssText = 'width:100%;background:var(--bg);border:1px solid var(--border);'
+      + 'border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;'
+      + 'font-family:inherit;outline:none;transition:border-color .15s;box-sizing:border-box';
     commInp.addEventListener('input', e => { st[k].commentaire = e.target.value; });
-    const trC = el('tr', null,
-      el('td', { attrs: { colspan: '4' }, style: { padding: '0 8px 10px 8px' } }, commInp)
-    );
+    commInp.addEventListener('focus', () => { commInp.style.borderColor = '#8b5cf6'; });
+    commInp.addEventListener('blur', () => { commInp.style.borderColor = 'var(--border)'; });
+    const tdComm = document.createElement('td');
+    tdComm.setAttribute('colspan', '4');
+    tdComm.style.cssText = 'padding:0 8px 10px 8px';
+    tdComm.appendChild(commInp);
+    const trC = document.createElement('tr');
+    trC.appendChild(tdComm);
     tbody.appendChild(trC);
   });
   table.appendChild(tbody);
@@ -13858,7 +13926,23 @@ function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
      .brand{text-align:right;font-size:9pt;font-weight:800;color:#333;letter-spacing:1.5pt;margin-top:auto}`,
     `${labels}
      <script src="${JSBARCODE_CDN}"><\/script>
-     <script>window.onload=function(){for(var i=0;i<${nbEtiquettes};i++){try{JsBarcode('#bc-'+i,'${lotTxt}',{format:'CODE128',displayValue:true,fontSize:10,margin:0,height:36});}catch(e){}}window.focus();window.print();}<\/script>`);
+     <script>
+       // Génération synchrone : le CDN JsBarcode est un script bloquant, donc chargé
+       // au moment où ce bloc s'exécute. On NE peut PAS utiliser window.onload ici
+       // car _printWin ajoute son propre window.onload = window.print() après notre
+       // body, ce qui écraserait notre handler. En restant inline, on garantit que
+       // les barcodes sont dessinés AVANT que window.print() ne soit déclenché.
+       (function(){
+         for (var i = 0; i < ${nbEtiquettes}; i++) {
+           try {
+             JsBarcode('#bc-' + i, '${lotTxt}', {
+               format: 'CODE128', displayValue: true, fontSize: 10,
+               margin: 0, height: 36
+             });
+           } catch (e) {}
+         }
+       })();
+     <\/script>`);
   if (w) w.document.close();
 }
 
@@ -14168,6 +14252,29 @@ function buildReceptionHistorique() {
         el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
+      if (!S.stockReadOnly) {
+        const delBtn = el('button', {
+          cls: 'recep-hist-del',
+          attrs: { title: 'Supprimer la réception', 'aria-label': 'Supprimer la réception' },
+          on: {
+            click: async (e) => {
+              e.stopPropagation();
+              const nb = lot.nb_bobines || 0;
+              const label = lot.lot_numero || ('réception #' + lot.id);
+              if (!confirm('Supprimer définitivement ' + label + ' (' + nb + ' bobine' + (nb !== 1 ? 's' : '') + ') ?\n\nCette action est irréversible.')) return;
+              try {
+                await api('/api/stock/receptions/' + lot.id, { method: 'DELETE' });
+                showToast('Réception supprimée.', 'success');
+                if (S.recepExpandedId === lot.id) S.recepExpandedId = null;
+                await loadRecepHistory();
+              } catch (err) {
+                showToast('Erreur : ' + (err.message || 'suppression impossible'), 'error');
+              }
+            },
+          },
+        }, iconEl('trash', 15));
+        rowChildren.push(delBtn);
+      }
       const row = el('div', { cls: 'recep-hist-row', on: { click: () => {
         S.recepExpandedId = isOpen ? null : lot.id;
         renderContent();
@@ -16729,7 +16836,7 @@ function buildSidebarNavStructure() {
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
   );
   if (!S.stockReadOnly) {
-    items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
+    items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire produit' });
   }
   if (S.user && ['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'].includes(S.user.role)) {
     items.push({ kind: 'sep', label: 'Contrôle' });
@@ -16747,15 +16854,18 @@ function buildSidebarNavStructure() {
 
 function renderSidebarNavBtn(n) {
   const children = [iconEl(n.icon, 16), el('span', null, ' ' + n.label)];
+  let badge = null;
   if (n.tab === 'inventaire' && S.invAlertCount) {
-    const badge = document.createElement('span');
-    badge.style.cssText = 'margin-left:auto;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#fb923c;color:#fff;flex-shrink:0';
+    badge = document.createElement('span');
+    badge.className = 'nav-badge nav-badge-overlay';
     badge.textContent = S.invAlertCount;
-    children.push(badge);
   }
-  return el('button', { cls: 'nav-btn' + (S.tab === n.tab ? ' active' : ''), 'data-tab': n.tab, on: { click: () => goToTab(n.tab) } },
-    ...children
-  );
+  if (badge) children.push(badge);
+  return el('button', {
+    cls: 'nav-btn' + (badge ? ' nav-btn-has-overlay' : '') + (S.tab === n.tab ? ' active' : ''),
+    'data-tab': n.tab,
+    on: { click: () => goToTab(n.tab) },
+  }, ...children);
 }
 
 function renderSidebarItems(items) {
