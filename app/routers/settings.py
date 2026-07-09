@@ -1661,6 +1661,14 @@ def _validate_alert_params(params: dict) -> dict:
         if ev not in _ALERT_TRIGGER_EVENTS:
             raise HTTPException(422, f"event inconnu : {ev!r}.")
         trig["event"] = ev
+        # v163+ : filtre produit (bobine/plis) — appliqué uniquement pour
+        # les événements liés à un dossier. Silencieusement ignoré pour
+        # les autres événements (machine_change, login…).
+        if ev in ("dossier_start", "dossier_end"):
+            fc = (trig_in.get("filter_conditionnement") or "").strip()
+            if fc in ("bobine_only", "plis_only"):
+                trig["filter_conditionnement"] = fc
+            # 'any' ou absent : on n'écrit rien (comportement par défaut).
     # type=manual : pas de params supplémentaires
     out["trigger"] = trig
 
@@ -3291,7 +3299,7 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
             if current_metrage is not None and m_at_change is not None:
                 try:
                     diff = float(current_metrage) - float(m_at_change)
-                    metrage_since = max(0.0, diff)  # clamp si compteur remis à zéro
+                    metrage_since = max(0.0, diff)
                 except (TypeError, ValueError):
                     metrage_since = None
             items[key] = {
@@ -3299,13 +3307,9 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
                 "metrage_at_change": m_at_change,
                 "metrage_since": metrage_since,
             }
-    # Rétro-compat : on garde l'ancien champ "dates" pour les clients qui ne
-    # lisent que ça (ne devrait être personne en pratique).
-    dates = {k: v["last_date"] for k, v in items.items()}
     return {
         "machine": machine,
         "current_metrage": current_metrage,
-        "dates": dates,
         "items": items,
     }
 
