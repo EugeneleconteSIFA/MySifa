@@ -2839,7 +2839,10 @@ def maintenance_alerts_active(request: Request):
                 # Trigger evenementiel : l'alerte s'affiche quand un evenement
                 # metier correspondant s'est produit APRES le dernier ack de
                 # cette alerte sur cette machine. Bypass du gap : l'alerte
-                # suit strictement les actions de l'operateur.
+                # suit strictement les actions saisies sur la MACHINE (pas sur
+                # l'user connecté — le super admin, le responsable et l'opérateur
+                # de nuit peuvent tous ouvrir /maintenance et l'alerte doit
+                # se comporter identiquement).
                 # Evenements supportes :
                 #   dossier_end   -> saisie operation_code = '89' (fin prod)
                 #   dossier_start -> saisie operation_code = '01' (debut prod)
@@ -2849,20 +2852,19 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
-                if op_code and user_machine and operateur:
+                if op_code and user_machine:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",
                         (int(r["id"]), user_machine),
                     ).fetchone()
                     last_ack_at_str = last_ack["m"] if last_ack else None
-                    # On récupère aussi no_dossier (au lieu d'un simple SELECT 1)
-                    # pour pouvoir filtrer par conditionnement si l'alerte a été
-                    # configurée en ce sens.
+                    # Cherche la saisie correspondante sur la machine (peu importe
+                    # qui a saisi) depuis le dernier ack.
                     q = ("SELECT no_dossier FROM production_data "
                          "WHERE machine=? AND operation_code=? "
-                         "  AND (operateur=? OR operateur=?)")
-                    p = [user_machine, op_code, operateur, user_nom or operateur]
+                         "  AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''")
+                    p = [user_machine, op_code]
                     if last_ack_at_str:
                         q += " AND date_operation > ?"
                         p.append(last_ack_at_str)
@@ -2941,31 +2943,25 @@ def maintenance_alerts_active(request: Request):
             if should_show:
                 # v163+ : fallback no_dossier pour toutes les alertes qui n'ont
                 # pas encore de trigger_no_dossier (typiquement les périodiques).
-                # On cherche le dossier « en cours » : dernier 01 (début) sur la
-                # machine de l'opérateur, non suivi d'un 89 (fin) postérieur.
-                # Ça donne le dossier sur lequel l'opérateur travaille au moment
-                # de l'ack, et évite le bug de l'historique vide.
-                if not trigger_no_dossier and user_machine and operateur:
-                    last_01 = conn.execute(
-                        """SELECT no_dossier, date_operation FROM production_data
-                           WHERE machine=? AND operation_code='01'
-                             AND (operateur=? OR operateur=?)
+                # On prend le dernier no_dossier touché aujourd'hui sur la MACHINE
+                # (peu importe qui a saisi et peu importe 01/89). Sémantique
+                # « atelier » : le dossier courant est celui qui tourne sur la
+                # machine, pas celui du user connecté (qui peut être super admin,
+                # responsable, opérateur en pause, etc.). Couvre :
+                #   - dossier en cours (01 sans 89)
+                #   - dossier juste terminé (89 récent)
+                #   - transition 89 -> 01 du suivant
+                if not trigger_no_dossier and user_machine:
+                    last_touched = conn.execute(
+                        """SELECT no_dossier FROM production_data
+                           WHERE machine=?
                              AND date_operation >= ?
+                             AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                            ORDER BY date_operation DESC LIMIT 1""",
-                        (user_machine, operateur, user_nom or operateur,
-                         now_paris.strftime("%Y-%m-%dT00:00:00")),
+                        (user_machine, now_paris.strftime("%Y-%m-%dT00:00:00")),
                     ).fetchone()
-                    if last_01 and last_01["no_dossier"]:
-                        # Vérifie qu'aucun 89 postérieur n'a clos ce dossier
-                        closed = conn.execute(
-                            """SELECT 1 FROM production_data
-                               WHERE machine=? AND operation_code='89'
-                                 AND no_dossier=? AND date_operation > ?
-                               LIMIT 1""",
-                            (user_machine, last_01["no_dossier"], last_01["date_operation"]),
-                        ).fetchone()
-                        if not closed:
-                            trigger_no_dossier = str(last_01["no_dossier"]).strip()
+                    if last_touched and last_touched["no_dossier"]:
+                        trigger_no_dossier = str(last_touched["no_dossier"]).strip()
                 items.append({
                     "id": int(r["id"]),
                     "nom": r["nom"],
@@ -3268,6 +3264,25 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
             raise HTTPException(404, "Alerte introuvable.")
         # Machine de l'opérateur (ou vide pour superadmin sans machine)
         machine = _machine_name_from_user(conn, user) or ""
+        # v163+ : fallback serveur robuste — si le client n'a pas transmis de
+        # no_dossier (super admin sans opérateur lié, opérateur qui n'a pas
+        # /prod ouvert, etc.), on cherche le dernier dossier touché sur cette
+        # machine dans les 30 dernières minutes avant l'ack. C'est la sémantique
+        # « atelier » : l'ack est daté à un instant T, on regarde ce qui se
+        # passait sur cette machine juste avant.
+        if not no_dossier and machine:
+            window_start = (datetime.now(ZoneInfo("Europe/Paris"))
+                            - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S")
+            recent_dos = conn.execute(
+                """SELECT no_dossier FROM production_data
+                   WHERE machine=?
+                     AND date_operation >= ?
+                     AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+                   ORDER BY date_operation DESC LIMIT 1""",
+                (machine, window_start),
+            ).fetchone()
+            if recent_dos and recent_dos["no_dossier"]:
+                no_dossier = str(recent_dos["no_dossier"]).strip()
         try:
             responses_json = _json_alerts.dumps(responses, ensure_ascii=False)
         except (TypeError, ValueError):

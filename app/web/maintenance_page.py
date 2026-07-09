@@ -433,9 +433,19 @@ body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
 body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
 body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* Les cases vides du calendrier ne réagissent plus visuellement au hover */
+body[data-maint-role="operator"] .cal-wv-day-col{cursor:default}
+body[data-maint-role="operator"] .cal-wv-day-col:hover{background:transparent !important}
+body[data-maint-role="operator"] .cal-cell{cursor:default}
+body[data-maint-role="operator"] .cal-cell:hover{background:inherit !important}
+/* Bandeau "lecture seule" au-dessus du calendrier dans l'onglet Général */
+.op-cal-readonly-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border-radius:10px;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.35);color:var(--warn);font-size:12.5px;font-weight:600;letter-spacing:.2px}
+.op-cal-readonly-banner svg{flex-shrink:0}
+body.light .op-cal-readonly-banner{background:rgba(217,119,6,.10);color:#b45309;border-color:rgba(217,119,6,.35)}
 /* Surligne les créneaux où l'opérateur est dans le groupe */
 body[data-maint-role="operator"] .cal-event.is-mine{outline:2px solid var(--warn);outline-offset:-2px}
 body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
+body[data-maint-role="operator"] .cal-event{cursor:pointer}
 /* Bouton flottant « + » sur le calendrier */
 .cal-fab{position:absolute;right:16px;bottom:16px;z-index:10;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);border:none;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,filter .12s}
 .cal-fab:hover{filter:brightness(1.08);transform:translateY(-1px)}
@@ -711,19 +721,34 @@ body[data-maint-role="operator"] .content{display:none !important}
 .btn.op-btn-accent:hover{filter:brightness(1.08);border-color:var(--accent);color:var(--accent-fg)}
 .btn.op-btn-accent .btn-ico{color:var(--accent-fg)}
 
-/* ── Vue Mes tâches : 2 colonnes Aujourd'hui / À venir ──────────── */
-.op-two-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:flex-start}
-@media(max-width:900px){.op-two-cols{grid-template-columns:1fr}}
-.op-col{background:transparent}
-.op-col-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
-.op-col-head h3{font-size:15px;font-weight:700;color:var(--text);margin:0;flex:1}
-.op-col-count{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;color:var(--text2);min-width:24px;text-align:center}
-.op-col-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
-.op-col-today .op-col-head h3{color:var(--accent)}
-.op-col-today .op-col-count{background:var(--accent-bg);color:var(--accent);border-color:transparent}
+/* ── Vue Mes tâches : 2 onglets Aujourd'hui / À venir ──────────── */
+.op-tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:5px;margin-bottom:18px}
+.op-tab{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 16px;border-radius:9px;background:transparent;border:none;color:var(--text2);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;transition:background .15s,color .15s;letter-spacing:.2px}
+.op-tab:hover{color:var(--text)}
+.op-tab.active{background:var(--accent-bg);color:var(--accent)}
+.op-tab-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.op-tab.active .op-tab-dot{box-shadow:0 0 0 4px rgba(34,211,238,.2)}
+.op-tab-count{background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;color:var(--text2);min-width:26px;text-align:center}
+.op-tab.active .op-tab-count{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.op-tab-panel{display:none;flex:1}
+.op-tab-panel.active{display:block}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
+/* Regroupement par machine dans un panel */
+.op-machine-block{margin-bottom:22px}
+.op-machine-block:last-child{margin-bottom:0}
+.op-machine-block-head{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg) 0%,transparent 100%);border-left:3px solid var(--accent);color:var(--text);font-size:13px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.op-machine-block-head .op-machine-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.op-machine-block-head .op-machine-badge{margin-left:auto;background:var(--bg);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:none;letter-spacing:0}
+.op-machine-block-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+/* Actions Modifier / Supprimer sur la carte (opérateur propriétaire) */
+.op-card-actions{position:absolute;bottom:14px;right:14px;display:inline-flex;gap:6px}
+.op-card.owned-by-me{padding-bottom:52px}
+.op-card-action-btn{width:32px;height:32px;padding:0;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
+.op-card-action-btn:hover{color:var(--text);border-color:var(--accent)}
+.op-card-action-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+.op-card-badge-mine{display:inline-block;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;background:rgba(34,211,238,.18);color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-left:4px}
 
 /* Bouton "Commencer la session" sur les cartes du jour */
 .op-card-cta{width:100%;justify-content:center;margin-top:12px}
@@ -1299,7 +1324,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 
     <!-- Conteneur opérateur (visible uniquement quand data-maint-role="operator") -->
     <div class="op-main">
-      <!-- View opérateur : Mes tâches, en 2 colonnes (Aujourd'hui / À venir) -->
+      <!-- View opérateur : Mes tâches, en 2 onglets (Aujourd'hui / À venir) -->
       <div class="op-page op-only active" id="view-op-tasks">
         <div class="page-header">
           <div>
@@ -1315,22 +1340,22 @@ body[data-maint-role="operator"] .content{display:none !important}
             </button>
           </div>
         </div>
-        <div class="op-two-cols">
-          <section class="op-col op-col-today">
-            <div class="op-col-head">
-              <span class="op-col-dot"></span>
-              <h3>Aujourd'hui</h3>
-              <span class="op-col-count" id="op-count-today">0</span>
-            </div>
-            <div id="op-cards-today"></div>
-          </section>
-          <section class="op-col op-col-upcoming">
-            <div class="op-col-head">
-              <h3>À venir</h3>
-              <span class="op-col-count" id="op-count-upcoming">0</span>
-            </div>
-            <div id="op-cards-upcoming"></div>
-          </section>
+        <div class="op-tabs" role="tablist">
+          <button type="button" class="op-tab active" data-op-tab="today" onclick="opSetTab('today')">
+            <span class="op-tab-dot"></span>
+            <span>Aujourd'hui</span>
+            <span class="op-tab-count" id="op-count-today">0</span>
+          </button>
+          <button type="button" class="op-tab" data-op-tab="upcoming" onclick="opSetTab('upcoming')">
+            <span>À venir</span>
+            <span class="op-tab-count" id="op-count-upcoming">0</span>
+          </button>
+        </div>
+        <div class="op-tab-panel active" id="op-panel-today">
+          <div id="op-cards-today"></div>
+        </div>
+        <div class="op-tab-panel" id="op-panel-upcoming">
+          <div id="op-cards-upcoming"></div>
         </div>
       </div>
 
@@ -1339,7 +1364,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="page-header">
           <div>
             <div class="page-title">Planning</div>
-            <div class="page-subtitle">Vue de la journée — mes tâches sont surlignées</div>
+            <div class="page-subtitle">Personnel : mes tâches du jour · Général : calendrier atelier complet</div>
           </div>
           <div class="op-actions">
             <div class="op-date-picker">
@@ -2119,6 +2144,8 @@ function renderCalMonth(){
 function onCalMonthCellClick(e){
   // Si le clic vient d'une chip-événement, son propre handler gère
   if(e.target.closest('.cal-day-event')) return;
+  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
+  if(MAINT_ROLE === 'operator') return;
   const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
   const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
   if(!iso) return;
@@ -5607,11 +5634,11 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
-<!-- Modal nouvelle intervention (opérateur : source=non_planifie) -->
+<!-- Modal nouvelle intervention / édition (opérateur : source=non_planifie) -->
 <div class="op-modal-overlay" id="op-modal-new" onclick="if(event.target===this) opCloseNewModal()">
   <div class="op-modal" role="dialog" aria-modal="true">
-    <div class="op-modal-title">Nouvelle intervention</div>
-    <div class="op-modal-sub">Déclare une intervention non planifiée survenue en cours de session.</div>
+    <div class="op-modal-title" id="op-modal-new-title">Nouvelle intervention</div>
+    <div class="op-modal-sub" id="op-modal-new-sub">Déclare une intervention non planifiée survenue en cours de session.</div>
     <div class="op-form-row">
       <label for="op-new-code">Code opération *</label>
       <select id="op-new-code"></select>
@@ -5627,7 +5654,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
     </div>
     <div class="op-modal-actions">
       <button type="button" class="btn" onclick="opCloseNewModal()">Annuler</button>
-      <button type="button" class="btn op-btn-accent" onclick="opSubmitNew()">Créer et remplir</button>
+      <button type="button" class="btn op-btn-accent" id="op-modal-new-submit" onclick="opSubmitNew()">Créer et remplir</button>
     </div>
   </div>
 </div>
@@ -5734,44 +5761,31 @@ function _renderOpCard(ev, opts){
   const remaining = _countRemainingOps(ev);
   const totalOps = (ev.ops || []).length;
   const doneAll = (remaining === 0 && totalOps > 0);
-  // Regroupe les ops par machine dans la preview.
-  // - Vue Aujourd'hui : on affiche tout (c'est la vue prioritaire).
-  // - Vue À venir : on limite à ~5 lignes pour compacter les cards.
   const groups = _groupOpsByMachine(ev);
-  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
   const previewLines = [];
   let printedGroups = 0;
   let printedTruncated = false;
   const MAX_LINES = isToday ? Infinity : 5;
   for(const g of groups){
-    // Chaque groupe doit tenir en au moins 2 lignes (1 header + 1 op) pour
-    // éviter un header orphelin. Si le budget restant est < 2, on stoppe.
     if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
-    previewLines.push(`<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:6px">${escHtml(g.machine)}</div>`);
     let opsInThisGroup = 0;
     for(const o of g.ops){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
-      previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px">
+      previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
         <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
       </div>`);
       opsInThisGroup++;
     }
-    // Compte le groupe comme "affiché" seulement si au moins 1 op a été rendue.
     if(opsInThisGroup > 0) printedGroups++;
-    else{
-      // Retire le header orphelin qu'on venait de pousser.
-      previewLines.pop();
-      printedTruncated = true;
-    }
   }
   const opsPreview = previewLines.join('');
-  const remainingGroups = groups.length - printedGroups;
-  const more = (remainingGroups > 0 || printedTruncated) && remainingGroups > 0
-    ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingGroups} autre machine${remainingGroups > 1 ? 's' : ''}</div>`
+  const remainingOps = totalOps - printedGroups >= 0 ? Math.max(0, totalOps - previewLines.length) : 0;
+  const more = (printedTruncated && remainingOps > 0)
+    ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingOps} autre${remainingOps > 1 ? 's' : ''} opération${remainingOps > 1 ? 's' : ''}</div>`
     : '';
-  const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const srcBadge = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
   const summary = doneAll
     ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
     : (remaining < totalOps
@@ -5784,18 +5798,33 @@ function _renderOpCard(ev, opts){
          ${doneAll ? 'Voir la session' : 'Commencer la session'}
        </button>`
     : '';
+  // Actions Modifier / Supprimer si l'opérateur est le créateur d'une non_planifie
+  const meId = (S && S.me) ? S.me.id : null;
+  const isMine = (ev.source === 'non_planifie' && meId != null && ev.created_by === meId);
+  const mineBadge = isMine ? '<span class="op-card-badge-mine">Mienne</span>' : '';
+  const actions = isMine
+    ? `<div class="op-card-actions">
+         <button type="button" class="op-card-action-btn" title="Modifier" onclick="event.stopPropagation();opOpenEditModal(${ev.id})">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+         </button>
+         <button type="button" class="op-card-action-btn danger" title="Supprimer" onclick="event.stopPropagation();opDeleteEvent(${ev.id})">
+           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+         </button>
+       </div>`
+    : '';
   const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
   return `
-    <div class="op-card" ${clickHandler}>
+    <div class="op-card ${isMine ? 'owned-by-me' : ''}" ${clickHandler}>
       <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
       <div class="op-card-head">
-        <strong style="font-size:15px;color:var(--text)">${escHtml(machinesLabel)}</strong>
-        ${src}
+        <strong style="font-size:15px;color:var(--text)">${escHtml(ev.machine || '—')}</strong>
+        ${srcBadge}${mineBadge}
       </div>
       ${dateLine}
       <div style="font-size:12px;color:var(--text2)">${time}</div>
       <div>${opsPreview}${more}</div>
       ${cta}
+      ${actions}
     </div>`;
 }
 
@@ -5807,6 +5836,44 @@ function _fmtDateFrShort(iso){
     const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
     return d.toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'short'});
   }catch(e){ return iso; }
+}
+
+// Ordre canonique des machines pour l'affichage groupé.
+const _MACHINE_ORDER = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
+
+function _groupEventsByMachine(events){
+  // Retourne [{machine, events:[...]}, ...] avec l'ordre canonique puis
+  // "autres" machines par ordre alphabétique. Un event à machine vide
+  // tombe dans "Sans machine".
+  const buckets = new Map();
+  for(const ev of events){
+    const m = (ev.machine || '').trim() || 'Sans machine';
+    if(!buckets.has(m)) buckets.set(m, []);
+    buckets.get(m).push(ev);
+  }
+  const seen = new Set();
+  const out = [];
+  for(const m of _MACHINE_ORDER){
+    if(buckets.has(m)){ out.push({machine:m, events:buckets.get(m)}); seen.add(m); }
+  }
+  const rest = Array.from(buckets.keys()).filter(m => !seen.has(m)).sort();
+  for(const m of rest){ out.push({machine:m, events:buckets.get(m)}); }
+  return out;
+}
+
+function _renderMachineGroups(events, isToday){
+  const groups = _groupEventsByMachine(events);
+  return groups.map(g => {
+    const cards = g.events.map(ev => _renderOpCard(ev, {isToday})).join('');
+    return `<div class="op-machine-block">
+      <div class="op-machine-block-head">
+        <span class="op-machine-dot"></span>
+        <span>${escHtml(g.machine)}</span>
+        <span class="op-machine-badge">${g.events.length} tâche${g.events.length > 1 ? 's' : ''}</span>
+      </div>
+      <div class="op-machine-block-cards">${cards}</div>
+    </div>`;
+  }).join('');
 }
 
 function opRenderTasks(){
@@ -5827,20 +5894,30 @@ function opRenderTasks(){
   if(cntU) cntU.textContent = evUpcoming.length;
   if(summary){
     const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
-    summary.textContent = events.length + (events.length > 1 ? ' créneaux à venir' : ' créneau à venir')
+    summary.textContent = events.length + (events.length > 1 ? ' créneaux' : ' créneau')
       + ' — ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
   }
 
   if(!evToday.length){
     listT.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau aujourd\'hui</strong>Rien de programmé pour toi. Tu peux déclarer une intervention non planifiée si nécessaire.</div>';
   } else {
-    listT.innerHTML = '<div class="op-col-cards">' + evToday.map(ev => _renderOpCard(ev, {isToday:true})).join('') + '</div>';
+    listT.innerHTML = _renderMachineGroups(evToday, true);
   }
   if(!evUpcoming.length){
     listU.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau à venir</strong>Ta liste est à jour.</div>';
   } else {
-    listU.innerHTML = '<div class="op-col-cards">' + evUpcoming.map(ev => _renderOpCard(ev, {isToday:false})).join('') + '</div>';
+    listU.innerHTML = _renderMachineGroups(evUpcoming, false);
   }
+}
+
+function opSetTab(name){
+  document.querySelectorAll('[data-op-tab]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-op-tab') === name);
+  });
+  const panelT = document.getElementById('op-panel-today');
+  const panelU = document.getElementById('op-panel-upcoming');
+  if(panelT) panelT.classList.toggle('active', name === 'today');
+  if(panelU) panelU.classList.toggle('active', name === 'upcoming');
 }
 
 /* ── Modal saisie ────────────────────────────────────────────────── */
@@ -5946,16 +6023,51 @@ async function opSubmitSaisie(){
 
 /* ── Modal nouvelle intervention (opérateur) ──────────────────────── */
 
+// État du modal : null = création, sinon id de l'event en cours d'édition
+MAINT_STATE.editingEventId = null;
+
 async function opOpenNewModal(){
   await opFetchCodes();
+  MAINT_STATE.editingEventId = null;
   const sel = document.getElementById('op-new-code');
   sel.innerHTML = MAINT_STATE.codes.map(c =>
     `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
   ).join('');
+  document.getElementById('op-modal-new-title').textContent = 'Nouvelle intervention';
+  document.getElementById('op-modal-new-sub').textContent = 'Déclare une intervention non planifiée survenue en cours de session.';
+  document.getElementById('op-modal-new-submit').textContent = 'Créer et remplir';
+  document.getElementById('op-new-code').value = MAINT_STATE.codes.length ? MAINT_STATE.codes[0].code : '';
+  document.getElementById('op-new-machine').value = 'Cohésio 1';
+  document.getElementById('op-modal-new').classList.add('active');
+}
+
+async function opOpenEditModal(eventId){
+  const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
+  if(!ev){ alert('Créneau introuvable.'); return; }
+  const meId = (S && S.me) ? S.me.id : null;
+  if(ev.source !== 'non_planifie' || ev.created_by !== meId){
+    alert('Vous ne pouvez modifier que vos propres interventions non planifiées.');
+    return;
+  }
+  await opFetchCodes();
+  MAINT_STATE.editingEventId = eventId;
+  const sel = document.getElementById('op-new-code');
+  sel.innerHTML = MAINT_STATE.codes.map(c =>
+    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+  ).join('');
+  // Pré-remplit avec les valeurs actuelles
+  const currentCode = (ev.ops && ev.ops[0]) ? ev.ops[0].code : '';
+  if(currentCode) sel.value = currentCode;
+  const machineSel = document.getElementById('op-new-machine');
+  if(ev.machine) machineSel.value = ev.machine;
+  document.getElementById('op-modal-new-title').textContent = 'Modifier l\'intervention';
+  document.getElementById('op-modal-new-sub').textContent = 'Ajuste le code opération ou la machine.';
+  document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
   document.getElementById('op-modal-new').classList.add('active');
 }
 
 function opCloseNewModal(){
+  MAINT_STATE.editingEventId = null;
   document.getElementById('op-modal-new').classList.remove('active');
 }
 
@@ -5963,9 +6075,59 @@ async function opSubmitNew(){
   const code = document.getElementById('op-new-code').value;
   const machine = document.getElementById('op-new-machine').value;
   if(!code || !machine){
-    alert('Code et machine obligatoires.');
+    if(typeof showToast === 'function') showToast('Code et machine obligatoires.', 'danger');
+    else alert('Code et machine obligatoires.');
     return;
   }
+  const editingId = MAINT_STATE.editingEventId;
+  if(editingId != null){
+    // ─── Mode édition : PATCH machine si changée, remplace op si code changé
+    const ev = (MAINT_STATE.tasks || []).find(x => x.id === editingId);
+    if(!ev){ opCloseNewModal(); return; }
+    try{
+      if((ev.machine || '') !== machine){
+        const r1 = await fetch('/api/maintenance/events/' + editingId, {
+          method:'PATCH', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({machine}),
+        });
+        if(!r1.ok){
+          const err = await r1.json().catch(()=>({}));
+          throw new Error(err.detail || r1.status);
+        }
+      }
+      const currentCode = (ev.ops && ev.ops[0]) ? ev.ops[0].code : '';
+      const currentOpId = (ev.ops && ev.ops[0]) ? ev.ops[0].id : null;
+      if(currentCode !== code){
+        if(currentOpId != null){
+          const rDel = await fetch('/api/maintenance/events/' + editingId + '/ops/' + currentOpId, {
+            method:'DELETE', credentials:'include',
+          });
+          if(!rDel.ok){
+            const err = await rDel.json().catch(()=>({}));
+            throw new Error(err.detail || rDel.status);
+          }
+        }
+        const rAdd = await fetch('/api/maintenance/events/' + editingId + '/ops', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({code, machines:[machine]}),
+        });
+        if(!rAdd.ok){
+          const err = await rAdd.json().catch(()=>({}));
+          throw new Error(err.detail || rAdd.status);
+        }
+      }
+      if(typeof showToast === 'function') showToast('Intervention mise à jour.', 'success');
+      opCloseNewModal();
+      await opLoadTasks();
+    }catch(e){
+      if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+      else alert('Erreur : ' + e.message);
+    }
+    return;
+  }
+  // ─── Mode création
   const body = {
     machine,
     date_prevue: _fmtDateISO(new Date()),
@@ -5980,7 +6142,8 @@ async function opSubmitNew(){
   });
   if(!r.ok){
     const err = await r.json().catch(()=>({}));
-    alert('Erreur : ' + (err.detail || r.status));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
   const data = await r.json();
@@ -5990,6 +6153,28 @@ async function opSubmitNew(){
   if(dateInput) dateInput.value = body.date_prevue;
   await opLoadTasks();
   if(data.event && data.event.id) opOpenSaisie(data.event.id);
+}
+
+async function opDeleteEvent(eventId){
+  const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
+  if(!ev){ return; }
+  const meId = (S && S.me) ? S.me.id : null;
+  if(ev.source !== 'non_planifie' || ev.created_by !== meId){
+    if(typeof showToast === 'function') showToast('Vous ne pouvez supprimer que vos propres interventions non planifiées.', 'danger');
+    return;
+  }
+  if(!confirm('Supprimer cette intervention ? Cette action est définitive.')) return;
+  const r = await fetch('/api/maintenance/events/' + eventId, {
+    method:'DELETE', credentials:'include',
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  if(typeof showToast === 'function') showToast('Intervention supprimée.', 'success');
+  await opLoadTasks();
 }
 
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
@@ -6448,28 +6633,41 @@ document.addEventListener('click', (e) => {
 
 // v163+ : pour l'opérateur, on déplace le calendrier admin dans l'onglet
 // « Planning général » et on masque le date-picker + tabs redondants.
+// Le calendrier reste 100% fonctionnel en navigation (mois/sem/jour, prev/next,
+// clic sur créneau existant pour voir les détails) mais tous les points
+// d'écriture sont neutralisés (voir onCalCellClick, onCalMonthCellClick,
+// et .plan-det-case-actions masqué en CSS).
 function _mountOperatorGeneralCalendar(){
   if(MAINT_ROLE !== 'operator') return;
   const src = document.querySelector('#view-planning .cal-sec');
   const dst = document.getElementById('op-plan-general');
   if(!src || !dst) return;
-  if(dst.querySelector('.cal-sec')) return;  // déjà monté
-  // Vide le contenu par défaut (le tableau read-only), puis injecte
-  dst.innerHTML = '';
-  dst.appendChild(src);
+  if(!dst.querySelector('.cal-sec')){
+    // 1er mount : vide le tableau read-only par défaut, injecte la calendrier
+    dst.innerHTML = '';
+    // Bandeau discret "lecture seule" au-dessus du calendrier
+    const banner = document.createElement('div');
+    banner.className = 'op-cal-readonly-banner';
+    banner.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+      '<span>Planning atelier (lecture seule) — clique sur un créneau pour voir le détail.</span>';
+    dst.appendChild(banner);
+    dst.appendChild(src);
+  }
   // Masque le date-picker haut de page (le calendrier a sa propre nav)
   const datePicker = document.querySelector('#view-op-planning .op-date-picker');
   if(datePicker) datePicker.style.display = 'none';
 }
 
 // Wrapper autour de opSetPlanTab pour déclencher le rendu du calendrier
-// à l'arrivée sur l'onglet Général.
+// à l'arrivée sur l'onglet Général — refresh systématique (pas seulement
+// au premier clic) pour que la vue reflète les changements admin en direct.
 const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
 function opSetPlanTabWithCal(name){
   if(_origOpSetPlanTab) _origOpSetPlanTab(name);
   if(name === 'general' && MAINT_ROLE === 'operator'){
     _mountOperatorGeneralCalendar();
-    // Force un refresh des données puis rerender
     refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   }
 }
