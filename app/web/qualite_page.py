@@ -1060,7 +1060,7 @@ function renderFicheTab(n){
   const services=Array.isArray(n.services_impliques)?n.services_impliques:[];
   const userOpts=S.users.map(u=>`<option value="${u.id}"${n.pilote_id==u.id?' selected':''}>${escHtml(u.nom)}</option>`).join('');
   const emetteurOpts=S.users.map(u=>`<option value="${u.id}"${n.emetteur_id==u.id?' selected':''}>${escHtml(u.nom)}</option>`).join('');
-  const meIsAdmin = S.me && ['administration','direction','superadmin'].includes(S.me.role);
+  const meIsAdmin = S.me && ['administration','administration_ventes','administration_technique','direction','superadmin'].includes(S.me.role);
   return `
     <div class="card">
       <div class="card-title">Identification</div>

@@ -6,6 +6,8 @@ import html as html_mod
 _ROLE_LABELS = {
     "direction": "Direction",
     "administration": "Administration",
+    "administration_ventes": "Administration des ventes",
+    "administration_technique": "Administration technique",
     "fabrication": "Fabrication",
     "logistique": "Logistique",
     "comptabilite": "Comptabilité",

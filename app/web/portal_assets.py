@@ -1165,20 +1165,20 @@ function renderPortal(){
   const aa = S.user && S.user.app_access ? S.user.app_access : null;
   const urole = S.user && S.user.role ? S.user.role : '';
   const isSuper = urole === 'superadmin';
-  const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','logistique','expedition','commercial'].includes(urole)));
-  const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','expedition','commercial'].includes(urole)));
-  const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
-  const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition','logistique','commercial'].includes(urole)));
+  const isStock = aa ? !!aa.stock : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','logistique','expedition','commercial'].includes(urole)));
+  const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','expedition','commercial'].includes(urole)));
+  const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
+  const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','expedition','logistique','commercial'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique','expedition'].includes(urole));
   const isCom = urole==='commercial';
-  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','expedition','comptabilite'].includes(urole)));
+  const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
-  const isPaie = isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole));
+  const isPaie = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole));
   const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
   const isAo = isSuper || urole === 'direction';
-  const isBAT = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
-  const isQualite = isSuper || !!(urole && ['direction','administration','commercial'].includes(urole));
+  const isBAT = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
+  const isQualite = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
   // Rapport hebdo : intégré comme 4e onglet dans MyProd → Production (pas de tuile portail séparée).
   const isCoffreRH = isSuper || urole === 'comptabilite';
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';

@@ -1267,7 +1267,7 @@ async function loadMe(){
     const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
     const email = String(d.email||'').trim().toLowerCase();
     S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride || email==='mlesaffre@sifa.pro');
-    S.isReadOnlyAdmin = (['administration','comptabilite'].includes(d.role)) && !S.isEditor;
+    S.isReadOnlyAdmin = (['administration','administration_ventes','administration_technique','comptabilite'].includes(d.role)) && !S.isEditor;
   }}
   catch(e){}
 }

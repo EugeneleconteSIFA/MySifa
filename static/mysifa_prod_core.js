@@ -454,7 +454,7 @@
   };
 
   // ── 9. Rôles ───────────────────────────────────────────────────────
-  const isAdmin = u => u && (u.role === 'direction' || u.role === 'administration' || u.role === 'superadmin');
+  const isAdmin = u => u && (u.role === 'direction' || u.role === 'administration' || u.role === 'administration_ventes' || u.role === 'administration_technique' || u.role === 'superadmin');
   const canViewAllProd = u => u && (isAdmin(u) || u.role === 'commercial' || u.role === 'expedition');
   const isComptaPlanning = u => u && (u.role === 'comptabilite' || u.role === 'logistique');
   const canPlanningNav = u => !!(u && u.app_access && u.app_access.planning);
@@ -5892,7 +5892,7 @@ function renderWeeklyReport(){
   const weekVal = (wr.year && wr.week)
     ? (wr.year + '-W' + String(wr.week).padStart(2,'0'))
     : '';
-  const roles = ['superadmin','direction','administration','fabrication','logistique','comptabilite','expedition','commercial'];
+  const roles = ['superadmin','direction','administration','administration_ventes','administration_technique','fabrication','logistique','comptabilite','expedition','commercial'];
   const changeWeek = async (e)=>{
     const v = (e && e.target && e.target.value) || '';
     const m = /^(\d{4})-W(\d{1,2})$/.exec(v);

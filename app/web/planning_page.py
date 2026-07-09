@@ -36,7 +36,7 @@ def planning_page(request: Request, machine: Optional[int] = None):
     ssr_mid = str(machine) if machine is not None else "0"
     of_admin_js = (
         "true"
-        if user.get("role") in {"superadmin", "direction", "administration"}
+        if user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
         else "false"
     )
     html = (
@@ -1650,7 +1650,7 @@ function fracToTimeInput(f){
 }
 function isHHMM(s){return /^\d{2}:\d{2}$/.test(String(s||"").trim());}
 
-function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="superadmin");}
+function isAdmin(u){return u&&(u.role==="direction"||u.role==="administration"||u.role==="administration_ventes"||u.role==="administration_technique"||u.role==="superadmin");}
 function canAccessOfTab(){return isAdmin(ME);}
 function isComptaUser(u){return !!(u&&u.role==="comptabilite");}
 function canPlanningNav(u){return !!(u&&u.app_access&&u.app_access.planning);}

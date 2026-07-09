@@ -5,7 +5,7 @@
 (function () {
   'use strict';
 
-  const ADMIN = new Set(['superadmin', 'direction', 'administration']);
+  const ADMIN = new Set(['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique']);
   const NOTIF_KEY = 'mysifa_notif_asked_v1';
 
   let channelMembers = [];

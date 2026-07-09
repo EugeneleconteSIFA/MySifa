@@ -172,6 +172,8 @@ h1{font-size:22px;margin:0 0 6px}
             <option value="superadmin">superadmin</option>
             <option value="direction">direction</option>
             <option value="administration">administration</option>
+            <option value="administration_ventes">administration des ventes</option>
+            <option value="administration_technique">administration technique</option>
             <option value="fabrication">fabrication</option>
             <option value="logistique">logistique</option>
             <option value="comptabilite">comptabilite</option>

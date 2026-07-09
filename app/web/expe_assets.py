@@ -275,7 +275,7 @@ function escAttr(t){
 
 function expeCanWrite(){
   const r=(S.user&&S.user.role)||(typeof window.__USER_ROLE__==='string'?window.__USER_ROLE__:'')||'';
-  return r==='superadmin'||r==='direction'||r==='administration'||r==='expedition';
+  return r==='superadmin'||r==='direction'||r==='administration'||r==='administration_ventes'||r==='administration_technique'||r==='expedition';
 }
 
 function expeTrpIconPhone(size){
