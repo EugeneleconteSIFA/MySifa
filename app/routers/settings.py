@@ -1712,6 +1712,18 @@ def _validate_alert_params(params: dict) -> dict:
         btn = btn[:40]
     out["validation"] = {"button_label": btn}
 
+    # v164+ : bouton "Fermer l'alerte" configurable. Permet à l'opérateur
+    # d'esquiver une alerte non pertinente sans polluer l'historique. Aucune
+    # trace : simple dismiss silencieux qui débloque juste le prochain trigger.
+    dismiss_in = params.get("dismiss_button") or {}
+    if isinstance(dismiss_in, dict):
+        d_enabled = bool(dismiss_in.get("enabled"))
+        d_label = (dismiss_in.get("label") or "Fermer l'alerte").strip() or "Fermer l'alerte"
+        if len(d_label) > 40:
+            d_label = d_label[:40]
+        if d_enabled:
+            out["dismiss_button"] = {"enabled": True, "label": d_label}
+
     # checklist (questionnaire) : liste de points de contrôle que l'opérateur
     # cochera lors de la validation. Items = chaînes libres (ex. "Découpe nette",
     # "Colle conforme"). L'opérateur peut valider même partiellement rempli
@@ -2989,6 +3001,7 @@ def maintenance_alert_acks_list(request: Request):
     if machine_filter:
         where.append("a.machine = ?")
         params_sql.append(machine_filter)
+    where.append("a.dismissed = 0")
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     from database import get_db
     with get_db() as conn:
@@ -3294,6 +3307,55 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
                objet=str(alert_id),
                detail=f"machine={machine} dossier={no_dossier} comment_len={len(comment)}")
     return {"ok": True, "ack_at": now_paris}
+
+
+@router.post("/api/maintenance/alerts/{alert_id}/dismiss")
+async def maintenance_alerts_dismiss(alert_id: int, request: Request):
+    """Fermeture silencieuse d'une alerte par l'opérateur.
+
+    v164 : contrairement à /ack, cet endpoint :
+    - N'insère rien de visible dans l'historique des contrôles (dismissed=1)
+    - N'est pas tracé dans les audit_logs
+    - Ne stocke aucune réponse/commentaire
+    - Mais bloque quand même l'alerte jusqu'au prochain trigger (89) via la
+      colonne dismissed qui reste comptée dans MAX(ack_at) côté logique event.
+
+    L'opérateur peut esquiver une alerte non pertinente sans polluer la qualité.
+    Le bouton n'apparaît que si params.dismiss_button.enabled=True.
+    """
+    user = get_current_user(request)
+    from database import get_db
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, params FROM maintenance_alerts WHERE id=?", (alert_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Alerte introuvable.")
+        # Vérifie que le bouton dismiss est bien activé pour cette alerte
+        try:
+            params = _json_alerts.loads(row["params"] or "{}")
+        except (ValueError, TypeError):
+            params = {}
+        dismiss = params.get("dismiss_button") or {}
+        if not (isinstance(dismiss, dict) and dismiss.get("enabled")):
+            raise HTTPException(403, "Fermeture non autorisée pour cette alerte.")
+        machine = _machine_name_from_user(conn, user) or ""
+        conn.execute(
+            """INSERT INTO maintenance_alert_acks
+               (alert_id, user_id, user_nom, machine, no_dossier,
+                ack_at, responses, comment, dismissed)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (alert_id, user.get("id"), user.get("nom") or user.get("email") or "",
+             machine, "", now_paris, "{}", ""),
+        )
+        conn.execute(
+            "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
+            (now_paris, now_paris, alert_id),
+        )
+        conn.commit()
+    # Pas de log_action volontairement — l'esquive doit être invisible.
+    return {"ok": True, "dismissed": True}
 
 
 @router.get("/api/maintenance/wearparts/last")

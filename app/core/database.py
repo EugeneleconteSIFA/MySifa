@@ -6192,6 +6192,23 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 163, "maintenance_templates")
 
+    # v164 — Alertes maintenance : bouton "Fermer l'alerte" configurable.
+    # Ajoute une colonne `dismissed` (0/1) sur maintenance_alert_acks. Les
+    # rows dismissed=1 sont invisibles dans l'historique des contrôles mais
+    # servent à débloquer la logique event (l'alerte ne re-fire qu'au prochain
+    # 89). Aucun log_action, aucune trace visible → l'opérateur peut esquiver
+    # une alerte non pertinente sans polluer la qualité.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=164 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_acks)").fetchall()}
+        if "dismissed" not in cols:
+            conn.execute("ALTER TABLE maintenance_alert_acks ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_acks_dismissed "
+            "ON maintenance_alert_acks(dismissed, ack_at DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 164, "maintenance_alert_acks_dismissed")
+
     # v166 — Qualité : split rôle administration + traçabilité de prise en connaissance des NC par service.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=166 LIMIT 1").fetchone():
         conn.execute(

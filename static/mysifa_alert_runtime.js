@@ -550,6 +550,9 @@
       + '<textarea class="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
       + '<div class="ta-sim-actions">'
       +   '<button type="button" class="ta-sim-btn ta-validate">' + _esc(alert.validation.button_label) + '</button>'
+      +   (alert.params && alert.params.dismiss_button && alert.params.dismiss_button.enabled
+          ? '<button type="button" class="ta-sim-btn ta-dismiss" style="background:#f97316;color:#fff;border-color:#f97316">' + _esc(alert.params.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
+          : '')
       + '</div>'
       + '</div>';
     wrap.innerHTML = html;
@@ -605,6 +608,28 @@
       });
     };
     wrap.querySelector('.ta-validate').addEventListener('click', onValidate);
+
+    // v164 : bouton dismiss (fermeture silencieuse, aucune trace)
+    const dismissBtn = wrap.querySelector('.ta-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', async () => {
+        try {
+          const r = await fetch('/api/maintenance/alerts/' + alert.id + '/dismiss', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          });
+          if (!r.ok) {
+            _toast('Fermeture refusée.', true);
+            return;
+          }
+          closeWithSuccess();
+        } catch (e) {
+          _toast('Erreur réseau — réessaie', true);
+        }
+      });
+    }
   }
 
   async function _poll() {
@@ -642,5 +667,8 @@
       _pollTimer = null;
     },
     refresh: function() { return _poll(); },
+  };
+})();
+ return _poll(); },
   };
 })();
