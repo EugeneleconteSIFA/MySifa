@@ -1,16 +1,16 @@
-"""MySifa — Page Maintenance
+"""MySifa â€” Page Maintenance
 Route : /maintenance
 
-Contrôle d'accès multi-rôle :
-- Admin (accès complet) : superadmin, direction, administration.
-- Opérateur (vue « Mes tâches ») : rôle fabrication, uniquement quand le flag
-  global MAINTENANCE_OPEN_BETA est activé dans .env. Sert à ouvrir
-  progressivement le module aux opérateurs sur v1 (staging) avant la promotion
-  en prod, sans exposer l'interface encore incomplète à toute l'usine.
-Le rôle effectif (admin / operator) est injecté dans le tag racine via
+ContrÃ´le d'accÃ¨s multi-rÃ´le :
+- Admin (accÃ¨s complet) : superadmin, direction, administration.
+- OpÃ©rateur (vue Â« Mes tÃ¢ches Â») : rÃ´le fabrication, uniquement quand le flag
+  global MAINTENANCE_OPEN_BETA est activÃ© dans .env. Sert Ã  ouvrir
+  progressivement le module aux opÃ©rateurs sur v1 (staging) avant la promotion
+  en prod, sans exposer l'interface encore incomplÃ¨te Ã  toute l'usine.
+Le rÃ´le effectif (admin / operator) est injectÃ© dans le tag racine via
 l'attribut data-maint-role, ce qui permet au CSS et au JS de la page de
-basculer l'affichage entre les vues admin et opérateur sans deux templates
-séparés.
+basculer l'affichage entre les vues admin et opÃ©rateur sans deux templates
+sÃ©parÃ©s.
 """
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -31,17 +31,17 @@ _MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION
 
 
 def _get_maintenance_role(user: dict) -> Optional[str]:
-    """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
+    """Retourne 'admin', 'operator' ou None selon le rÃ´le effectif de l'user.
 
     - 'admin'    : superadmin, direction, administration.
     - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
-    - None       : pas d'accès (déclencher access_denied_response).
+    - None       : pas d'accÃ¨s (dÃ©clencher access_denied_response).
 
     Utilise `effective_role()` pour respecter l'impersonation : un superadmin
-    qui simule un rôle `fabrication` doit voir la vue opérateur, pas celle
-    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée —
-    elle court-circuitait l'impersonation en renvoyant 'admin' même quand
-    le rôle simulé était différent.
+    qui simule un rÃ´le `fabrication` doit voir la vue opÃ©rateur, pas celle
+    d'admin. C'est pour Ã§a que l'ancienne whitelist d'idents a Ã©tÃ© retirÃ©e â€”
+    elle court-circuitait l'impersonation en renvoyant 'admin' mÃªme quand
+    le rÃ´le simulÃ© Ã©tait diffÃ©rent.
     """
     if not user:
         return None
@@ -54,7 +54,7 @@ def _get_maintenance_role(user: dict) -> Optional[str]:
 
 
 def _has_maintenance_access(user: dict) -> bool:
-    """Compat : True dès que l'user a un rôle maintenance quelconque."""
+    """Compat : True dÃ¨s que l'user a un rÃ´le maintenance quelconque."""
     return _get_maintenance_role(user) is not None
 
 
@@ -93,7 +93,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0a0e17">
-<title>Maintenance — MySifa</title>
+<title>Maintenance â€” MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
@@ -107,7 +107,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
-/* ── Toggle Colonnes produit dans l'historique des contrôles ── */
+/* â”€â”€ Toggle Colonnes produit dans l'historique des contrÃ´les â”€â”€ */
 .ctrl-extra-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s;user-select:none}
 .ctrl-extra-toggle:hover{border-color:var(--accent);color:var(--text)}
 .ctrl-extra-toggle-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .15s}
@@ -115,17 +115,17 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .ctrl-extra-toggle-on .ctrl-extra-toggle-dot{background:var(--accent)}
 .ctrl-extra-toggle-state{font-weight:700;letter-spacing:.4px}
 
-/* ── Colonne Dossier dans l'historique des contrôles ── */
+/* â”€â”€ Colonne Dossier dans l'historique des contrÃ´les â”€â”€ */
 .col-dossier{white-space:nowrap}
 .col-nodos{white-space:nowrap}
 .ctrl-row-nc td{background:rgba(248,113,113,0.06);border-top:1px solid rgba(248,113,113,0.18);border-bottom:1px solid rgba(248,113,113,0.18)}
 .ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
 .ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
-.ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
+.ctrl-row-nc td:first-child::before{content:"âš  ";color:var(--danger);font-weight:900;margin-right:4px}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
 tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ctrl-dossier-empty{color:var(--muted);font-size:12px}
-/* ── Contexte dossier + fiche technique dans le détail d'un contrôle ── */
+/* â”€â”€ Contexte dossier + fiche technique dans le dÃ©tail d'un contrÃ´le â”€â”€ */
 .ack-di-wrap{margin-top:6px}
 .ack-di-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
 .ack-di-badge{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px}
@@ -220,7 +220,7 @@ body.sb-open .sidebar-overlay{display:block}
 
 .view{display:flex;flex-direction:column;flex:1}
 
-/* Filtres en bandeau — style aligné sur MyProd / Production */
+/* Filtres en bandeau â€” style alignÃ© sur MyProd / Production */
 .filters-panel{margin-bottom:18px}
 .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -242,7 +242,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 @media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
 
-/* ── Calendrier Planning (style MyProd) ──────────────────────────────── */
+/* â”€â”€ Calendrier Planning (style MyProd) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cal-sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:28px}
 .cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
 .cal-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:var(--text);letter-spacing:.2px;text-transform:capitalize;font-family:"SFMono-Regular",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
@@ -301,7 +301,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
   .cal-wday{font-size:10px;padding:6px 0}
 }
 
-/* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
+/* â”€â”€ Vue Semaine (emploi du temps) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cal-week-view{overflow-x:auto}
 .cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:max-content}
@@ -341,7 +341,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-niveau="1"]{background:#22d3ee;color:#062430}
 .cal-event[data-niveau="2"]{background:#fbbf24;color:#3b2300}
 .cal-event[data-niveau="3"]{background:#f87171;color:#3b0a0a}
-/* Bloc fusionné (plusieurs opérations chevauchantes sur la même case) */
+/* Bloc fusionnÃ© (plusieurs opÃ©rations chevauchantes sur la mÃªme case) */
 .cal-event.cal-event-merged{background:linear-gradient(180deg,var(--accent-bg) 0%,rgba(255,255,255,0) 100%),var(--card);color:var(--text);border:2px solid var(--accent);border-radius:10px;box-shadow:0 4px 14px rgba(0,0,0,.18);padding:8px 10px 10px;overflow:hidden;display:flex;flex-direction:column;gap:8px}
 .cal-event-merged-head{display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;font-weight:800;color:var(--accent-fg,#fff);background:var(--accent);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;padding:4px 9px;border-radius:6px;letter-spacing:.3px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,.15)}
 .cal-event-list{display:flex;flex-direction:column;gap:5px;overflow:auto;flex:1;min-height:0;padding-right:2px}
@@ -369,12 +369,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .cal-week-view.cal-wv-mode-day .cal-event-op{font-size:13.5px}
 .cal-week-view.cal-wv-mode-day .cal-wv-daydate{font-size:20px}
 .cal-week-view.cal-wv-mode-day .cal-wv-dayname{font-size:13px}
-/* Hauteur d'heure plus aérée en vue Jour */
+/* Hauteur d'heure plus aÃ©rÃ©e en vue Jour */
 .cal-week-view.cal-wv-mode-day .cal-wv-time,
 .cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:72px}
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
-/* Modale Créneau : section liste d'opérations */
+/* Modale CrÃ©neau : section liste d'opÃ©rations */
 .case-modal-card{max-width:640px;width:92vw}
 .case-ops-section{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
 .case-ops-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
@@ -393,19 +393,19 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .case-mach-chip:hover{border-color:var(--accent);color:var(--text)}
 .case-mach-chip.active{border-color:var(--accent);background:var(--accent);color:var(--accent-fg,#fff)}
 .case-mach-chip.active:hover{filter:brightness(1.06)}
-/* Vue opérateur : en-tête de groupe machine */
+/* Vue opÃ©rateur : en-tÃªte de groupe machine */
 .op-machine-group{margin-top:16px}
 .op-machine-group:first-child{margin-top:0}
 .op-machine-group-head{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:8px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
 .op-machine-group-head .op-machine-dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
-/* Détails créneau : badges machine par op */
+/* DÃ©tails crÃ©neau : badges machine par op */
 .plan-det-case-op-mach-wrap{display:inline-flex;flex-wrap:wrap;gap:4px}
 .plan-det-case-op-mach{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700}
 .cal-sec{position:relative}
-/* Badge « depuis un modèle » sur un créneau */
+/* Badge Â« depuis un modÃ¨le Â» sur un crÃ©neau */
 .tmpl-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;background:var(--warn);color:#0a0e17;font-size:11px;font-weight:800;letter-spacing:.2px}
 .tmpl-badge svg{flex-shrink:0}
-/* Modal Templates : liste + éditeur */
+/* Modal Templates : liste + Ã©diteur */
 .tmpl-modal-card{max-width:720px;width:94vw}
 .tmpl-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .tmpl-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;padding:2px}
@@ -422,21 +422,21 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-item-btn.del:hover{color:var(--danger);border-color:var(--danger);background:rgba(248,113,113,.10)}
 .tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
-/* Sélecteur de modèle dans le modal Nouveau créneau */
+/* SÃ©lecteur de modÃ¨le dans le modal Nouveau crÃ©neau */
 .case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .case-tmpl-picker-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);flex-shrink:0}
 .case-tmpl-picker select{flex:1;min-width:180px}
 .case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
 .case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
-/* Mode opérateur : masque tous les éléments d'édition dans le calendrier */
+/* Mode opÃ©rateur : masque tous les Ã©lÃ©ments d'Ã©dition dans le calendrier */
 body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
 body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
 body[data-maint-role="operator"] .cal-wv-hint{display:none}
-/* Surligne les créneaux où l'opérateur est dans le groupe */
+/* Surligne les crÃ©neaux oÃ¹ l'opÃ©rateur est dans le groupe */
 body[data-maint-role="operator"] .cal-event.is-mine{outline:2px solid var(--warn);outline-offset:-2px}
 body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
-/* Bouton flottant « + » sur le calendrier */
+/* Bouton flottant Â« + Â» sur le calendrier */
 .cal-fab{position:absolute;right:16px;bottom:16px;z-index:10;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);border:none;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,filter .12s}
 .cal-fab:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .cal-fab svg{width:24px;height:24px}
@@ -446,7 +446,7 @@ body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
 .cal-fab-menu-item:hover{background:var(--bg)}
 .cal-fab-menu-sep{height:1px;background:var(--border);margin:6px 0}
 .cal-fab-menu-hint{font-size:11px;color:var(--muted);padding:4px 12px 8px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
-/* Détails créneau */
+/* DÃ©tails crÃ©neau */
 .plan-det-case-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-top:14px}
 .plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
 .plan-det-case-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:13px;color:var(--text)}
@@ -464,14 +464,14 @@ body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
 .plan-det-case-actions .case-action-btn.edit:hover{background:var(--accent);color:var(--accent-fg,#fff)}
 .plan-det-case-actions .case-action-btn.del{border-color:var(--danger);color:var(--danger)}
 .plan-det-case-actions .case-action-btn.del:hover{background:var(--danger);color:#fff}
-/* Indicateur survol des colonnes (clic crée un créneau) */
+/* Indicateur survol des colonnes (clic crÃ©e un crÃ©neau) */
 .cal-wv-day-col{cursor:copy}
 .cal-wv-day-col:hover .cal-wv-hour-row:hover{background:rgba(34,211,238,.08)}
 .cal-wv-day-col.cal-wv-clickable-hint .cal-wv-hour-row:hover{background:var(--accent-bg)}
 /* Listes du catalogue : retirer indices de drag (clic only) */
 .js-cat-tbody tr{cursor:default}
 .cal-event-item-machine{font-weight:600;color:var(--accent);opacity:.95;white-space:nowrap}
-/* Modale Détails */
+/* Modale DÃ©tails */
 .plan-det-list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
 .plan-det-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);transition:border-color .15s,box-shadow .15s}
 .plan-det-row:hover{border-color:var(--accent)}
@@ -618,7 +618,7 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .ops-table th[data-sort],.ops-table th[data-sort-cat],.ops-table th[data-sort-ctrl],.ops-table th[data-sort-ctrl-cat]{cursor:pointer;transition:color .15s}
 .ops-table th[data-sort]:hover,.ops-table th[data-sort-cat]:hover,.ops-table th[data-sort-ctrl]:hover,.ops-table th[data-sort-ctrl-cat]:hover{color:var(--accent)}
 .ops-table th[data-sort].active,.ops-table th[data-sort-cat].active,.ops-table th[data-sort-ctrl].active,.ops-table th[data-sort-ctrl-cat].active{color:var(--accent)}
-/* Colonne Dernière intervention */
+/* Colonne DerniÃ¨re intervention */
 .ops-table .col-last-intervention{min-width:170px;white-space:nowrap}
 .last-intervention-wrap{display:flex;flex-direction:column;gap:4px}
 .last-intervention-input{padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;width:148px;transition:border-color .12s,box-shadow .12s}
@@ -685,24 +685,24 @@ body.light .toast.info{background:#fff;color:var(--text)}
 .ctrl-point-filters-inputs .pf-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;min-width:80px}
 .ctrl-point-filters-inputs .pf-num{width:60px}
 
-/* ── Mode multi-rôle (admin / opérateur) ─────────────────────────────
-   La page rend la même structure DOM pour tous ; le body porte
-   data-maint-role="admin" ou "operator" et les règles ci-dessous
-   masquent ce qui n'est pas pertinent pour le rôle courant. */
+/* â”€â”€ Mode multi-rÃ´le (admin / opÃ©rateur) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+   La page rend la mÃªme structure DOM pour tous ; le body porte
+   data-maint-role="admin" ou "operator" et les rÃ¨gles ci-dessous
+   masquent ce qui n'est pas pertinent pour le rÃ´le courant. */
 body[data-maint-role="admin"] .op-only{display:none !important}
 body[data-maint-role="operator"] .adm-only{display:none !important}
-/* Bascule du contenu principal : admin voit .content, opérateur voit
-   .op-main. Deux conteneurs distincts pour éviter toute interaction
-   parasite entre les vues admin et les vues opérateur. */
+/* Bascule du contenu principal : admin voit .content, opÃ©rateur voit
+   .op-main. Deux conteneurs distincts pour Ã©viter toute interaction
+   parasite entre les vues admin et les vues opÃ©rateur. */
 body[data-maint-role="admin"] .op-main{display:none !important}
 body[data-maint-role="operator"] .content{display:none !important}
 
-/* Conteneur opérateur : padding + colonne, prend toute la hauteur restante. */
+/* Conteneur opÃ©rateur : padding + colonne, prend toute la hauteur restante. */
 .op-main{padding:28px 32px;max-width:1280px;width:100%;flex:1;display:flex;flex-direction:column;overflow-y:auto}
 .op-page{display:none;flex-direction:column;flex:1}
 .op-page.active{display:flex}
 
-/* ── UI opérateur : conteneur actions dans .page-header ─────────── */
+/* â”€â”€ UI opÃ©rateur : conteneur actions dans .page-header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .op-date-picker{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:6px 12px;min-height:38px}
 .op-date-picker label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:0}
@@ -711,7 +711,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 .btn.op-btn-accent:hover{filter:brightness(1.08);border-color:var(--accent);color:var(--accent-fg)}
 .btn.op-btn-accent .btn-ico{color:var(--accent-fg)}
 
-/* ── Vue Mes tâches : 2 colonnes Aujourd'hui / À venir ──────────── */
+/* â”€â”€ Vue Mes tÃ¢ches : 2 colonnes Aujourd'hui / Ã€ venir â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-two-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:flex-start}
 @media(max-width:900px){.op-two-cols{grid-template-columns:1fr}}
 .op-col{background:transparent}
@@ -728,7 +728,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 /* Bouton "Commencer la session" sur les cartes du jour */
 .op-card-cta{width:100%;justify-content:center;margin-top:12px}
 
-/* ── Cartes de tâches ───────────────────────────────────────────── */
+/* â”€â”€ Cartes de tÃ¢ches â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-tasks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .op-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s;position:relative;display:flex;flex-direction:column;gap:10px}
 .op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
@@ -749,18 +749,18 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-status-reporte{background:rgba(248,113,113,.16);color:var(--danger)}
 .op-badge-source{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,.14);color:#f59e0b;text-transform:uppercase;letter-spacing:.4px}
 
-/* ── État vide (aucune tâche) ───────────────────────────────────── */
+/* â”€â”€ Ã‰tat vide (aucune tÃ¢che) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
 .op-empty h3{font-size:18px;color:var(--text2);margin:0 0 8px 0;font-weight:600}
 
-/* ── Sous-onglets (Planning personnel / Planning général) ──────── */
+/* â”€â”€ Sous-onglets (Planning personnel / Planning gÃ©nÃ©ral) â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-subtabs{display:inline-flex;gap:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px}
 .op-subtab{padding:8px 16px;border-radius:8px;background:transparent;border:none;color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
 .op-subtab:hover{color:var(--text)}
 .op-subtab.active{background:var(--accent-bg);color:var(--accent)}
 .op-tab-content{flex:1}
 
-/* ── Vue Planning opérateur : tableau read-only ──────────────────── */
+/* â”€â”€ Vue Planning opÃ©rateur : tableau read-only â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-plan-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
 .op-plan-table thead th{background:var(--bg);text-align:left;padding:12px 14px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
 .op-plan-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2)}
@@ -768,7 +768,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-plan-table tbody tr.mine{background:var(--accent-bg)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
 
-/* ── Modal saisie / création (partagé opérateur & admin) ─────────── */
+/* â”€â”€ Modal saisie / crÃ©ation (partagÃ© opÃ©rateur & admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .op-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:20px}
 .op-modal-overlay.active{display:flex}
 .op-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:22px}
@@ -803,15 +803,15 @@ body[data-maint-role="operator"] .content{display:none !important}
     </button>
     <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Contrôles
+      ContrÃ´les
     </button>
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
-      Opérations de maintenance
+      OpÃ©rations de maintenance
     </button>
     <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Mes tâches
+      Mes tÃ¢ches
     </button>
     <button type="button" class="nav-btn op-only" data-view="op-planning" onclick="switchView('op-planning')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -823,7 +823,7 @@ body[data-maint-role="operator"] .content{display:none !important}
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
-        <span class="mysifa-back-preamble">← Retour </span>
+        <span class="mysifa-back-preamble">â† Retour </span>
         <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
       </button>
       <div class="user-chip" id="user-chip" onclick="location.href='/profil'"></div>
@@ -833,7 +833,7 @@ body[data-maint-role="operator"] .content{display:none !important}
       </button>
       <button type="button" class="logout-btn" onclick="doLogout()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Déconnexion
+        DÃ©connexion
       </button>
       <div class="version">__V_LABEL__</div>
     </div>
@@ -846,9 +846,9 @@ body[data-maint-role="operator"] .content{display:none !important}
       </button>
       <div>
         <div class="mobile-topbar-title">Maintenance</div>
-        <div class="mobile-topbar-sub">En cours de développement</div>
+        <div class="mobile-topbar-sub">En cours de dÃ©veloppement</div>
       </div>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'">⌂</button>
+      <button type="button" class="mobile-home-btn" onclick="location.href='/'">âŒ‚</button>
     </div>
 
     <div class="content">
@@ -861,24 +861,24 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
         </div>
 
-        <!-- Sélecteur de machine pour la vue Maintenance.
-             Détermine quelles cartes "code maintenance périodique" s'affichent
-             (Cohésio 1 ou Cohésio 2). Les cartes sont vides pour l'instant et
-             seront alimentées par les saisies opérations/contrôles. -->
+        <!-- SÃ©lecteur de machine pour la vue Maintenance.
+             DÃ©termine quelles cartes "code maintenance pÃ©riodique" s'affichent
+             (CohÃ©sio 1 ou CohÃ©sio 2). Les cartes sont vides pour l'instant et
+             seront alimentÃ©es par les saisies opÃ©rations/contrÃ´les. -->
         <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
           <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1</button>
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2</button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="CohÃ©sio 1" onclick="setMaintMachine('CohÃ©sio 1')">CohÃ©sio 1</button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="CohÃ©sio 2" onclick="setMaintMachine('CohÃ©sio 2')">CohÃ©sio 2</button>
           </div>
-          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
+          <span style="font-size:12px;color:var(--muted)">Gestion des codes : ParamÃ¨tres â†’ Maintenance</span>
         </div>
 
-        <!-- Cartes des opérations de maintenance périodiques.
-             Une carte par code DB avec périodique=OUI, groupées par intervalle
-             (Hebdomadaire, Mensuel, Trimestriel...). La grille est régénérée
-             automatiquement quand les codes changent dans Paramètres → Maintenance,
-             ou quand une nouvelle saisie d'opération / contrôle est enregistrée. -->
+        <!-- Cartes des opÃ©rations de maintenance pÃ©riodiques.
+             Une carte par code DB avec pÃ©riodique=OUI, groupÃ©es par intervalle
+             (Hebdomadaire, Mensuel, Trimestriel...). La grille est rÃ©gÃ©nÃ©rÃ©e
+             automatiquement quand les codes changent dans ParamÃ¨tres â†’ Maintenance,
+             ou quand une nouvelle saisie d'opÃ©ration / contrÃ´le est enregistrÃ©e. -->
         <div id="maint-cards-grid"></div>
       </div>
 
@@ -894,7 +894,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <section class="cal-sec">
           <div class="cal-hdr">
             <div class="cal-title">
-              <span id="cal-month-label">—</span>
+              <span id="cal-month-label">â€”</span>
             </div>
             <div class="cal-controls">
               <div class="cal-view-tabs">
@@ -903,9 +903,9 @@ body[data-maint-role="operator"] .content{display:none !important}
                 <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
               </div>
               <div class="cal-nav">
-                <button type="button" onclick="calPrev()" aria-label="Précédent">◀</button>
+                <button type="button" onclick="calPrev()" aria-label="PrÃ©cÃ©dent">â—€</button>
                 <button type="button" class="today" onclick="calToday()">Aujourd'hui</button>
-                <button type="button" onclick="calNext()" aria-label="Suivant">▶</button>
+                <button type="button" onclick="calNext()" aria-label="Suivant">â–¶</button>
               </div>
             </div>
           </div>
@@ -916,13 +916,13 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
           <!-- Vue Semaine (emploi du temps) -->
           <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
-            <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
+            <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour crÃ©er un crÃ©neau de maintenance.</div>
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
 
-          <!-- FAB + menu de création (vierge / depuis modèle) — v163 -->
-          <button type="button" class="cal-fab" onclick="toggleCalFabMenu()" aria-label="Créer un créneau" title="Créer un créneau">
+          <!-- FAB + menu de crÃ©ation (vierge / depuis modÃ¨le) â€” v163 -->
+          <button type="button" class="cal-fab" onclick="toggleCalFabMenu()" aria-label="CrÃ©er un crÃ©neau" title="CrÃ©er un crÃ©neau">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
           <div class="cal-fab-menu" id="cal-fab-menu" role="menu" aria-hidden="true"></div>
@@ -933,34 +933,34 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
         </section>
 
-        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
+        <!-- Liste d'opÃ©rations de maintenance (catalogue) â€” copie synchronisÃ©e avec l'onglet OpÃ©rations -->
+        <!-- Source : table maintenance_codes (ParamÃ¨tres â†’ Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
+            <div class="ops-list-title">Liste d'opÃ©rations de maintenance</div>
             <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count">0 opération</div>
+              <div class="ops-list-count js-cat-count">0 opÃ©ration</div>
               <div style="display:flex;align-items:center;gap:6px">
                 <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
                 <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+                  <option value="CohÃ©sio 2">CohÃ©sio 2</option>
                   <option value="DSI">DSI</option>
                   <option value="Repiquage">Repiquage</option>
                 </select>
               </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : ParamÃ¨tres â†’ Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">CatÃ©gorie<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">DerniÃ¨re intervention<span class="sort-ico">â†•</span></th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -970,12 +970,12 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div>
       </div>
 
-      <!-- View : Contrôles -->
+      <!-- View : ContrÃ´les -->
       <div class="view adm-only" id="view-controles" style="display:none">
         <div class="page-header">
           <div>
-            <div class="page-title">Contrôles</div>
-            <div class="page-subtitle">Saisie et suivi des contrôles de maintenance</div>
+            <div class="page-title">ContrÃ´les</div>
+            <div class="page-subtitle">Saisie et suivi des contrÃ´les de maintenance</div>
           </div>
         </div>
 
@@ -983,46 +983,46 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="ops-subtabs" role="tablist">
           <button type="button" class="ops-subtab active" data-ctrl-subtab="historique" onclick="setCtrlSubtab('historique')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-            Historique des contrôles
+            Historique des contrÃ´les
           </button>
           <button type="button" class="ops-subtab" data-ctrl-subtab="liste" onclick="setCtrlSubtab('liste')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            Liste des contrôles
+            Liste des contrÃ´les
           </button>
         </div>
 
         <!-- Sous-onglet : Historique -->
         <div class="ctrl-subview" id="ctrl-subview-historique">
 
-        <!-- Filtres Historique des contrôles -->
+        <!-- Filtres Historique des contrÃ´les -->
         <div class="filters-panel">
           <div class="filters">
             <div class="filter-group">
-              <label for="filt-controles-type">Type de contrôle</label>
+              <label for="filt-controles-type">Type de contrÃ´le</label>
               <select id="filt-controles-type" class="filter-input" onchange="resetPointFilters(); renderCtrl()">
                 <option value="">Tous les types</option>
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-controles-operateur">Opérateur</label>
+              <label for="filt-controles-operateur">OpÃ©rateur</label>
               <select id="filt-controles-operateur" class="filter-input">
-                <option value="">Tous les opérateurs</option>
+                <option value="">Tous les opÃ©rateurs</option>
               </select>
             </div>
             <div class="filter-group">
               <label for="filt-controles-machine">Machine</label>
               <select id="filt-controles-machine" class="filter-input">
                 <option value="">Toutes les machines</option>
-                <option value="Cohésio 1">Cohésio 1</option>
-                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+                <option value="CohÃ©sio 2">CohÃ©sio 2</option>
                 <option value="DSI">DSI</option>
                 <option value="Repiquage">Repiquage</option>
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-controles-conformite">Conformité</label>
+              <label for="filt-controles-conformite">ConformitÃ©</label>
               <select id="filt-controles-conformite" class="filter-input" onchange="renderCtrl()">
-                <option value="">Toutes les réponses</option>
+                <option value="">Toutes les rÃ©ponses</option>
                 <option value="nc">Non-conformes uniquement</option>
                 <option value="ok">Conformes uniquement</option>
               </select>
@@ -1038,7 +1038,7 @@ body[data-maint-role="operator"] .content{display:none !important}
             <button type="button" class="filters-apply-btn" onclick="renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
-            <span class="filters-date-presets-label">Période :</span>
+            <span class="filters-date-presets-label">PÃ©riode :</span>
             <button type="button" class="date-preset-chip" data-preset="today" onclick="applyCtrlDatePreset('today')">Aujourd'hui</button>
             <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyCtrlDatePreset('yesterday')">Hier</button>
             <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyCtrlDatePreset('last7')">7 derniers jours</button>
@@ -1047,33 +1047,33 @@ body[data-maint-role="operator"] .content{display:none !important}
             <button type="button" class="date-preset-chip" data-preset="prevMonth" onclick="applyCtrlDatePreset('prevMonth')">Mois dernier</button>
           </div>
           <div id="ctrl-point-filters-row" class="ctrl-point-filters-row" style="display:none">
-            <span class="filters-date-presets-label">Réponses :</span>
+            <span class="filters-date-presets-label">RÃ©ponses :</span>
             <div id="ctrl-point-filters-inputs" class="ctrl-point-filters-inputs"></div>
-            <button type="button" class="date-preset-chip" onclick="resetPointFilters()">Réinitialiser</button>
+            <button type="button" class="date-preset-chip" onclick="resetPointFilters()">RÃ©initialiser</button>
           </div>
         </div>
 
-        <!-- Historique des contrôles -->
+        <!-- Historique des contrÃ´les -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Historique des contrôles</div>
+            <div class="ops-list-title">Historique des contrÃ´les</div>
             <div class="ops-list-head-right">
-              <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
+              <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (rÃ©fÃ©rence produit, adhÃ©sif, glassine)">
                 <span class="ctrl-extra-toggle-label">Colonnes produit</span>
                 <span class="ctrl-extra-toggle-dot" id="ctrl-extra-toggle-dot"></span>
                 <span class="ctrl-extra-toggle-state" id="ctrl-extra-toggle-state">OFF</span>
               </button>
-              <div class="ops-list-count" id="ctrl-count">0 contrôle</div>
+              <div class="ops-list-count" id="ctrl-count">0 contrÃ´le</div>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-ctrl="date_saisie" onclick="sortCtrl('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
-                  <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">↕</span></th>
-                  <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">↕</span></th>
-                  <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="date_saisie" onclick="sortCtrl('date_saisie')">Date saisie<span class="sort-ico">â†•</span></th>
+                  <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">â†•</span></th>
+                  <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">OpÃ©rateur<span class="sort-ico">â†•</span></th>
+                  <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">â†•</span></th>
                   <th>Commentaires</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -1096,38 +1096,38 @@ body[data-maint-role="operator"] .content{display:none !important}
             <line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
           <div>
-            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
+            Ce tableau est <strong>en lecture seule</strong> et prÃ©sentÃ© Ã  titre indicatif.
             Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres → Maintenance</strong>.
+            <strong>ParamÃ¨tres â†’ Maintenance</strong>.
           </div>
         </div>
 
-        <!-- Liste de contrôles (catalogue) -->
+        <!-- Liste de contrÃ´les (catalogue) -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Liste de contrôles</div>
+            <div class="ops-list-title">Liste de contrÃ´les</div>
             <div class="ops-list-head-right">
-              <div class="ops-list-count" id="ctrl-cat-count">0 contrôle</div>
+              <div class="ops-list-count" id="ctrl-cat-count">0 contrÃ´le</div>
               <div style="display:flex;align-items:center;gap:6px">
                 <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
                 <select class="ops-select js-ctrl-cat-machine" onchange="setCtrlCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+                  <option value="CohÃ©sio 2">CohÃ©sio 2</option>
                   <option value="DSI">DSI</option>
                   <option value="Repiquage">Repiquage</option>
                 </select>
               </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : ParamÃ¨tres â†’ Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">â†•</span></th>
+                  <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">DerniÃ¨re intervention<span class="sort-ico">â†•</span></th>
                   <th>Documents</th>
-                  <th>Détail</th>
+                  <th>DÃ©tail</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -1139,12 +1139,12 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div><!-- /ctrl-subview-liste -->
       </div>
 
-      <!-- View : Opérations de maintenance -->
+      <!-- View : OpÃ©rations de maintenance -->
       <div class="view adm-only" id="view-operations" style="display:none">
         <div class="page-header">
           <div>
-            <div class="page-title">Opérations de maintenance</div>
-            <div class="page-subtitle">Saisie et suivi des opérations effectuées</div>
+            <div class="page-title">OpÃ©rations de maintenance</div>
+            <div class="page-subtitle">Saisie et suivi des opÃ©rations effectuÃ©es</div>
           </div>
         </div>
 
@@ -1152,38 +1152,38 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="ops-subtabs" role="tablist">
           <button type="button" class="ops-subtab active" data-ops-subtab="historique" onclick="setOpsSubtab('historique')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-            Historique des opérations
+            Historique des opÃ©rations
           </button>
           <button type="button" class="ops-subtab" data-ops-subtab="liste" onclick="setOpsSubtab('liste')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            Liste des opérations
+            Liste des opÃ©rations
           </button>
         </div>
 
         <!-- Sous-onglet : Historique -->
         <div class="ops-subview" id="ops-subview-historique">
 
-        <!-- Filtres Historique des opérations -->
+        <!-- Filtres Historique des opÃ©rations -->
         <div class="filters-panel">
           <div class="filters">
             <div class="filter-group">
-              <label for="filt-operations-type">Type d'opération</label>
+              <label for="filt-operations-type">Type d'opÃ©ration</label>
               <select id="filt-operations-type" class="filter-input">
                 <option value="">Tous les types</option>
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-operations-operateur">Opérateur</label>
+              <label for="filt-operations-operateur">OpÃ©rateur</label>
               <select id="filt-operations-operateur" class="filter-input">
-                <option value="">Tous les opérateurs</option>
+                <option value="">Tous les opÃ©rateurs</option>
               </select>
             </div>
             <div class="filter-group">
               <label for="filt-operations-machine">Machine</label>
               <select id="filt-operations-machine" class="filter-input">
                 <option value="">Toutes les machines</option>
-                <option value="Cohésio 1">Cohésio 1</option>
-                <option value="Cohésio 2">Cohésio 2</option>
+                <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+                <option value="CohÃ©sio 2">CohÃ©sio 2</option>
                 <option value="DSI">DSI</option>
                 <option value="Repiquage">Repiquage</option>
               </select>
@@ -1199,7 +1199,7 @@ body[data-maint-role="operator"] .content{display:none !important}
             <button type="button" class="filters-apply-btn" onclick="renderOps()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ops-date-presets">
-            <span class="filters-date-presets-label">Période :</span>
+            <span class="filters-date-presets-label">PÃ©riode :</span>
             <button type="button" class="date-preset-chip" data-preset="today" onclick="applyOpsDatePreset('today')">Aujourd'hui</button>
             <button type="button" class="date-preset-chip" data-preset="yesterday" onclick="applyOpsDatePreset('yesterday')">Hier</button>
             <button type="button" class="date-preset-chip" data-preset="last7" onclick="applyOpsDatePreset('last7')">7 derniers jours</button>
@@ -1209,12 +1209,12 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
         </div>
 
-        <!-- Historique des opérations -->
+        <!-- Historique des opÃ©rations -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Historique des opérations</div>
+            <div class="ops-list-title">Historique des opÃ©rations</div>
             <div class="ops-list-head-right">
-              <div class="ops-list-count" id="ops-count">0 opération</div>
+              <div class="ops-list-count" id="ops-count">0 opÃ©ration</div>
               <button type="button" class="ops-btn-add" onclick="openOpsModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Nouvelle saisie
@@ -1225,10 +1225,10 @@ body[data-maint-role="operator"] .content{display:none !important}
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort="date_saisie" onclick="sortOps('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
-                  <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">↕</span></th>
-                  <th data-sort="operateur" onclick="sortOps('operateur')">Opérateur<span class="sort-ico">↕</span></th>
-                  <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
+                  <th data-sort="date_saisie" onclick="sortOps('date_saisie')">Date saisie<span class="sort-ico">â†•</span></th>
+                  <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">â†•</span></th>
+                  <th data-sort="operateur" onclick="sortOps('operateur')">OpÃ©rateur<span class="sort-ico">â†•</span></th>
+                  <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">â†•</span></th>
                   <th>Commentaires</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -1251,40 +1251,40 @@ body[data-maint-role="operator"] .content{display:none !important}
             <line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
           <div>
-            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
+            Ce tableau est <strong>en lecture seule</strong> et prÃ©sentÃ© Ã  titre indicatif.
             Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres → Maintenance</strong>.
+            <strong>ParamÃ¨tres â†’ Maintenance</strong>.
           </div>
         </div>
 
-        <!-- Liste d'opérations de maintenance (catalogue) -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
+        <!-- Liste d'opÃ©rations de maintenance (catalogue) -->
+        <!-- Source : table maintenance_codes (ParamÃ¨tres â†’ Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
+            <div class="ops-list-title">Liste d'opÃ©rations de maintenance</div>
             <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
+              <div class="ops-list-count js-cat-count" id="cat-count">0 opÃ©ration</div>
               <div style="display:flex;align-items:center;gap:6px">
                 <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
                 <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+                  <option value="CohÃ©sio 2">CohÃ©sio 2</option>
                   <option value="DSI">DSI</option>
                   <option value="Repiquage">Repiquage</option>
                 </select>
               </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : ParamÃ¨tres â†’ Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">CatÃ©gorie<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">â†•</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">DerniÃ¨re intervention<span class="sort-ico">â†•</span></th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -1297,14 +1297,14 @@ body[data-maint-role="operator"] .content{display:none !important}
       </div>
     </div>
 
-    <!-- Conteneur opérateur (visible uniquement quand data-maint-role="operator") -->
+    <!-- Conteneur opÃ©rateur (visible uniquement quand data-maint-role="operator") -->
     <div class="op-main">
-      <!-- View opérateur : Mes tâches, en 2 colonnes (Aujourd'hui / À venir) -->
+      <!-- View opÃ©rateur : Mes tÃ¢ches, en 2 colonnes (Aujourd'hui / Ã€ venir) -->
       <div class="op-page op-only active" id="view-op-tasks">
         <div class="page-header">
           <div>
-            <div class="page-title">Mes tâches</div>
-            <div class="page-subtitle" id="op-tasks-count">—</div>
+            <div class="page-title">Mes tÃ¢ches</div>
+            <div class="page-subtitle" id="op-tasks-count">â€”</div>
           </div>
           <div class="op-actions">
             <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
@@ -1326,7 +1326,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           </section>
           <section class="op-col op-col-upcoming">
             <div class="op-col-head">
-              <h3>À venir</h3>
+              <h3>Ã€ venir</h3>
               <span class="op-col-count" id="op-count-upcoming">0</span>
             </div>
             <div id="op-cards-upcoming"></div>
@@ -1334,12 +1334,12 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div>
       </div>
 
-      <!-- View opérateur : Planning avec 2 sous-onglets -->
+      <!-- View opÃ©rateur : Planning avec 2 sous-onglets -->
       <div class="op-page op-only" id="view-op-planning">
         <div class="page-header">
           <div>
             <div class="page-title">Planning</div>
-            <div class="page-subtitle">Vue de la journée — mes tâches sont surlignées</div>
+            <div class="page-subtitle">Vue de la journÃ©e â€” mes tÃ¢ches sont surlignÃ©es</div>
           </div>
           <div class="op-actions">
             <div class="op-date-picker">
@@ -1350,7 +1350,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div>
         <div class="op-subtabs" role="tablist">
           <button type="button" class="op-subtab active" data-op-plan-tab="personnel" onclick="opSetPlanTab('personnel')">Planning personnel</button>
-          <button type="button" class="op-subtab" data-op-plan-tab="general" onclick="opSetPlanTab('general')">Planning général</button>
+          <button type="button" class="op-subtab" data-op-plan-tab="general" onclick="opSetPlanTab('general')">Planning gÃ©nÃ©ral</button>
         </div>
         <div class="op-tab-content" id="op-plan-personnel"></div>
         <div class="op-tab-content" id="op-plan-general" style="display:none"></div>
@@ -1359,11 +1359,11 @@ body[data-maint-role="operator"] .content{display:none !important}
   </main>
 </div>
 
-<!-- Modal : Nouvelle opération -->
+<!-- Modal : Nouvelle opÃ©ration -->
 <div class="modal-overlay" id="ops-modal" onclick="if(event.target===this) closeOpsModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ops-modal-title">
     <div class="modal-head">
-      <div class="modal-title" id="ops-modal-title">Nouvelle opération</div>
+      <div class="modal-title" id="ops-modal-title">Nouvelle opÃ©ration</div>
       <button type="button" class="modal-close" onclick="closeOpsModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1372,35 +1372,35 @@ body[data-maint-role="operator"] .content{display:none !important}
       <div class="modal-body">
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span>Saisi par : <strong id="ops-saisi-par-name">…</strong></span>
+          <span>Saisi par : <strong id="ops-saisi-par-name">â€¦</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field">
             <label class="ops-field-label" for="ops-machine">Machine<span class="req">*</span></label>
             <select id="ops-machine" class="ops-select" required>
-              <option value="">Sélectionner…</option>
-              <option value="Cohésio 1">Cohésio 1</option>
-              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="">SÃ©lectionnerâ€¦</option>
+              <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+              <option value="CohÃ©sio 2">CohÃ©sio 2</option>
               <option value="DSI">DSI</option>
               <option value="Repiquage">Repiquage</option>
             </select>
           </div>
           <div class="ops-field">
-            <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
+            <label class="ops-field-label" for="ops-type">Type d'opÃ©ration<span class="req">*</span></label>
             <select id="ops-type" class="ops-select" required>
-              <option value="">Aucun type défini…</option>
+              <option value="">Aucun type dÃ©finiâ€¦</option>
             </select>
             <div class="ops-field-hint" id="ops-type-hint" style="display:none">
-              Aucun type défini. Ajoutez-en dans « Liste d'opérations de maintenance ».
+              Aucun type dÃ©fini. Ajoutez-en dans Â« Liste d'opÃ©rations de maintenance Â».
             </div>
           </div>
           <div class="ops-field">
-            <label class="ops-field-label" for="ops-date">Date d'opération<span class="req">*</span></label>
+            <label class="ops-field-label" for="ops-date">Date d'opÃ©ration<span class="req">*</span></label>
             <input type="datetime-local" id="ops-date" class="ops-select" required>
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ops-comment">Commentaires</label>
-            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées…"></textarea>
+            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durÃ©e, piÃ¨ces remplacÃ©esâ€¦"></textarea>
           </div>
         </div>
       </div>
@@ -1408,18 +1408,18 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="button" class="modal-btn-ghost" onclick="closeOpsModal()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Enregistrer l'opération
+          Enregistrer l'opÃ©ration
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Modal : Catalogue opérations -->
+<!-- Modal : Catalogue opÃ©rations -->
 <div class="modal-overlay" id="cat-modal" onclick="if(event.target===this) closeCatModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="cat-modal-title">
     <div class="modal-head">
-      <div class="modal-title" id="cat-modal-title">Ajouter une opération à la liste</div>
+      <div class="modal-title" id="cat-modal-title">Ajouter une opÃ©ration Ã  la liste</div>
       <button type="button" class="modal-close" onclick="closeCatModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1428,25 +1428,25 @@ body[data-maint-role="operator"] .content{display:none !important}
       <div class="modal-body">
         <div class="ops-form-grid">
           <div class="ops-field">
-            <label class="ops-field-label" for="cat-nom">Nom de l'opération<span class="req">*</span></label>
+            <label class="ops-field-label" for="cat-nom">Nom de l'opÃ©ration<span class="req">*</span></label>
             <input type="text" id="cat-nom" class="ops-input" placeholder="Ex : Vidange hydraulique" required autocomplete="off">
           </div>
           <div class="ops-field">
             <label class="ops-field-label" for="cat-niveau">Niveau de maintenance<span class="req">*</span></label>
             <select id="cat-niveau" class="ops-select" required>
-              <option value="">Sélectionner…</option>
+              <option value="">SÃ©lectionnerâ€¦</option>
               <option value="1">Niveau 1</option>
               <option value="2">Niveau 2</option>
               <option value="3">Niveau 3</option>
             </select>
           </div>
           <div class="ops-field">
-            <label class="ops-field-label" for="cat-frequence">Fréquence conseillée<span class="req">*</span></label>
+            <label class="ops-field-label" for="cat-frequence">FrÃ©quence conseillÃ©e<span class="req">*</span></label>
             <input type="text" id="cat-frequence" class="ops-input" placeholder="Ex : Tous les 6 mois, 500h, Hebdomadaire" required autocomplete="off">
           </div>
           <div class="ops-field ops-field--full">
-            <label class="ops-field-label" for="cat-detail">Détail</label>
-            <textarea id="cat-detail" class="ops-textarea" placeholder="Description, étapes clés, points d'attention…"></textarea>
+            <label class="ops-field-label" for="cat-detail">DÃ©tail</label>
+            <textarea id="cat-detail" class="ops-textarea" placeholder="Description, Ã©tapes clÃ©s, points d'attentionâ€¦"></textarea>
           </div>
         </div>
       </div>
@@ -1454,18 +1454,18 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="button" class="modal-btn-ghost" onclick="closeCatModal()">Annuler</button>
         <button type="submit" class="ops-btn-add" id="cat-submit-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span id="cat-submit-label">Ajouter à la liste</span>
+          <span id="cat-submit-label">Ajouter Ã  la liste</span>
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Modal : Détails d'un type d'opération (info DB + notes locales modifiables) -->
+<!-- Modal : DÃ©tails d'un type d'opÃ©ration (info DB + notes locales modifiables) -->
 <div class="modal-overlay" id="ops-type-details-modal" onclick="if(event.target===this) closeOpsTypeDetailsModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ops-type-details-title">
     <div class="modal-head">
-      <div class="modal-title" id="ops-type-details-title">Détails de l'opération</div>
+      <div class="modal-title" id="ops-type-details-title">DÃ©tails de l'opÃ©ration</div>
       <button type="button" class="modal-close" onclick="closeOpsTypeDetailsModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1476,9 +1476,9 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div id="ops-type-details-info" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px 18px;font-size:13px"></div>
         <!-- Notes locales modifiables -->
         <div class="ops-field ops-field--full">
-          <label class="ops-field-label" for="ops-type-details-text">Détails / Notes</label>
-          <textarea id="ops-type-details-text" class="ops-textarea" rows="6" placeholder="Notes libres : procédure, points d'attention, pièces concernées, contacts… (non stocké en base, propre à ce navigateur)"></textarea>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Ces notes ne sont pas enregistrées en base de données — uniquement sur ce navigateur.</div>
+          <label class="ops-field-label" for="ops-type-details-text">DÃ©tails / Notes</label>
+          <textarea id="ops-type-details-text" class="ops-textarea" rows="6" placeholder="Notes libres : procÃ©dure, points d'attention, piÃ¨ces concernÃ©es, contactsâ€¦ (non stockÃ© en base, propre Ã  ce navigateur)"></textarea>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Ces notes ne sont pas enregistrÃ©es en base de donnÃ©es â€” uniquement sur ce navigateur.</div>
         </div>
       </div>
       <div class="modal-foot">
@@ -1492,11 +1492,11 @@ body[data-maint-role="operator"] .content{display:none !important}
   </div>
 </div>
 
-<!-- Modal : Nouveau contrôle -->
+<!-- Modal : Nouveau contrÃ´le -->
 <div class="modal-overlay" id="ctrl-modal" onclick="if(event.target===this) closeCtrlModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ctrl-modal-title">
     <div class="modal-head">
-      <div class="modal-title" id="ctrl-modal-title">Nouveau contrôle</div>
+      <div class="modal-title" id="ctrl-modal-title">Nouveau contrÃ´le</div>
       <button type="button" class="modal-close" onclick="closeCtrlModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1505,31 +1505,31 @@ body[data-maint-role="operator"] .content{display:none !important}
       <div class="modal-body">
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span>Saisi par : <strong id="ctrl-saisi-par-name">…</strong></span>
+          <span>Saisi par : <strong id="ctrl-saisi-par-name">â€¦</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field">
             <label class="ops-field-label" for="ctrl-machine">Machine<span class="req">*</span></label>
             <select id="ctrl-machine" class="ops-select" required>
-              <option value="">Sélectionner…</option>
-              <option value="Cohésio 1">Cohésio 1</option>
-              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="">SÃ©lectionnerâ€¦</option>
+              <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+              <option value="CohÃ©sio 2">CohÃ©sio 2</option>
               <option value="DSI">DSI</option>
               <option value="Repiquage">Repiquage</option>
             </select>
           </div>
           <div class="ops-field">
-            <label class="ops-field-label" for="ctrl-type">Type de contrôle<span class="req">*</span></label>
+            <label class="ops-field-label" for="ctrl-type">Type de contrÃ´le<span class="req">*</span></label>
             <select id="ctrl-type" class="ops-select" required>
-              <option value="">Aucun type défini…</option>
+              <option value="">Aucun type dÃ©finiâ€¦</option>
             </select>
             <div class="ops-field-hint" id="ctrl-type-hint" style="display:none">
-              Aucun type défini. Ajoutez-en dans « Liste de contrôles ».
+              Aucun type dÃ©fini. Ajoutez-en dans Â« Liste de contrÃ´les Â».
             </div>
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ctrl-comment">Commentaires</label>
-            <textarea id="ctrl-comment" class="ops-textarea" placeholder="Constatations, anomalies, mesures…"></textarea>
+            <textarea id="ctrl-comment" class="ops-textarea" placeholder="Constatations, anomalies, mesuresâ€¦"></textarea>
           </div>
         </div>
       </div>
@@ -1537,18 +1537,18 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="button" class="modal-btn-ghost" onclick="closeCtrlModal()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Enregistrer le contrôle
+          Enregistrer le contrÃ´le
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Modal : Catalogue contrôles -->
+<!-- Modal : Catalogue contrÃ´les -->
 <div class="modal-overlay" id="ctrl-cat-modal" onclick="if(event.target===this) closeCtrlCatModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ctrl-cat-modal-title">
     <div class="modal-head">
-      <div class="modal-title" id="ctrl-cat-modal-title">Ajouter un contrôle à la liste</div>
+      <div class="modal-title" id="ctrl-cat-modal-title">Ajouter un contrÃ´le Ã  la liste</div>
       <button type="button" class="modal-close" onclick="closeCtrlCatModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1557,12 +1557,12 @@ body[data-maint-role="operator"] .content{display:none !important}
       <div class="modal-body">
         <div class="ops-form-grid">
           <div class="ops-field ops-field--full">
-            <label class="ops-field-label" for="ctrl-cat-nom">Nom du contrôle<span class="req">*</span></label>
-            <input type="text" id="ctrl-cat-nom" class="ops-input" placeholder="Ex : Vérification niveau d'huile" required autocomplete="off">
+            <label class="ops-field-label" for="ctrl-cat-nom">Nom du contrÃ´le<span class="req">*</span></label>
+            <input type="text" id="ctrl-cat-nom" class="ops-input" placeholder="Ex : VÃ©rification niveau d'huile" required autocomplete="off">
           </div>
           <div class="ops-field ops-field--full">
-            <label class="ops-field-label" for="ctrl-cat-detail">Détail</label>
-            <textarea id="ctrl-cat-detail" class="ops-textarea" placeholder="Description, méthode, critères d'acceptation…"></textarea>
+            <label class="ops-field-label" for="ctrl-cat-detail">DÃ©tail</label>
+            <textarea id="ctrl-cat-detail" class="ops-textarea" placeholder="Description, mÃ©thode, critÃ¨res d'acceptationâ€¦"></textarea>
           </div>
         </div>
       </div>
@@ -1570,18 +1570,18 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="button" class="modal-btn-ghost" onclick="closeCtrlCatModal()">Annuler</button>
         <button type="submit" class="ops-btn-add" id="ctrl-cat-submit-btn">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span id="ctrl-cat-submit-label">Ajouter à la liste</span>
+          <span id="ctrl-cat-submit-label">Ajouter Ã  la liste</span>
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Modal : Détails du créneau (lecture + actions Modifier/Supprimer) -->
+<!-- Modal : DÃ©tails du crÃ©neau (lecture + actions Modifier/Supprimer) -->
 <div class="modal-overlay" id="planning-details-modal" onclick="if(event.target===this) closePlanningDetailsModal()" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="plan-det-title">
     <div class="modal-head">
-      <div class="modal-title" id="plan-det-title">Détails</div>
+      <div class="modal-title" id="plan-det-title">DÃ©tails</div>
       <button type="button" class="modal-close" onclick="closePlanningDetailsModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1589,7 +1589,7 @@ body[data-maint-role="operator"] .content{display:none !important}
     <div class="modal-body">
       <div class="ops-saisi-par">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Date : <strong id="plan-det-date">—</strong></span>
+        <span>Date : <strong id="plan-det-date">â€”</strong></span>
       </div>
       <div class="plan-det-list" id="plan-det-list"></div>
     </div>
@@ -1599,11 +1599,11 @@ body[data-maint-role="operator"] .content{display:none !important}
   </div>
 </div>
 
-<!-- Modal : Créneau de maintenance (création / édition) -->
+<!-- Modal : CrÃ©neau de maintenance (crÃ©ation / Ã©dition) -->
 <div class="modal-overlay" id="planning-case-modal" onclick="if(event.target===this) closeCaseModal()" aria-hidden="true">
   <div class="modal-card case-modal-card" role="dialog" aria-modal="true" aria-labelledby="case-mod-title">
     <div class="modal-head">
-      <div class="modal-title" id="case-mod-title">Nouveau créneau de maintenance</div>
+      <div class="modal-title" id="case-mod-title">Nouveau crÃ©neau de maintenance</div>
       <button type="button" class="modal-close" onclick="closeCaseModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1611,19 +1611,19 @@ body[data-maint-role="operator"] .content{display:none !important}
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
         <div class="case-tmpl-picker" id="case-tmpl-picker-wrap">
-          <span class="case-tmpl-picker-label">Modèle</span>
+          <span class="case-tmpl-picker-label">ModÃ¨le</span>
           <select id="case-mod-template" class="ops-select" onchange="applyCaseTemplate(this.value)">
-            <option value="">Sans modèle (créneau vierge)</option>
+            <option value="">Sans modÃ¨le (crÃ©neau vierge)</option>
           </select>
-          <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer les modèles</button>
+          <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">GÃ©rer les modÃ¨les</button>
         </div>
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Date : <strong id="case-mod-date">—</strong></span>
+          <span>Date : <strong id="case-mod-date">â€”</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field">
-            <label class="ops-field-label" for="case-mod-start">Heure de début<span class="req">*</span></label>
+            <label class="ops-field-label" for="case-mod-start">Heure de dÃ©but<span class="req">*</span></label>
             <input type="time" id="case-mod-start" class="ops-input" required>
           </div>
           <div class="ops-field">
@@ -1633,19 +1633,19 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div>
         <div class="case-ops-section">
           <div class="case-ops-head">
-            <label class="ops-field-label">Opérations à effectuer<span class="req">*</span></label>
+            <label class="ops-field-label">OpÃ©rations Ã  effectuer<span class="req">*</span></label>
             <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Ajouter une opération
+              Ajouter une opÃ©ration
             </button>
           </div>
           <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
         <div class="case-ops-section">
           <div class="case-ops-head">
-            <label class="ops-field-label">Opérateurs assignés</label>
+            <label class="ops-field-label">OpÃ©rateurs assignÃ©s</label>
             <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:220px" onchange="addCaseOperatorFromPicker(this)">
-              <option value="">Ajouter un opérateur…</option>
+              <option value="">Ajouter un opÃ©rateurâ€¦</option>
             </select>
           </div>
           <div class="case-ops-list" id="case-mod-operators-list"></div>
@@ -1655,28 +1655,28 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="button" class="modal-btn-ghost" onclick="closeCaseModal()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span id="case-mod-submit-label">Créer</span>
+          <span id="case-mod-submit-label">CrÃ©er</span>
         </button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Modal : Gérer les modèles de session -->
+<!-- Modal : GÃ©rer les modÃ¨les de session -->
 <div class="modal-overlay" id="templates-modal" onclick="if(event.target===this) closeTemplatesModal()" aria-hidden="true">
   <div class="modal-card tmpl-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-mod-title">
     <div class="modal-head">
-      <div class="modal-title" id="tmpl-mod-title">Modèles de session</div>
+      <div class="modal-title" id="tmpl-mod-title">ModÃ¨les de session</div>
       <button type="button" class="modal-close" onclick="closeTemplatesModal()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="modal-body">
       <div class="tmpl-toolbar">
-        <div style="font-size:12px;color:var(--muted)">Un modèle = ensemble prédéfini d'opérations + machines. Applique-le en un clic depuis « Nouveau créneau ».</div>
+        <div style="font-size:12px;color:var(--muted)">Un modÃ¨le = ensemble prÃ©dÃ©fini d'opÃ©rations + machines. Applique-le en un clic depuis Â« Nouveau crÃ©neau Â».</div>
         <button type="button" class="case-ops-add-btn" onclick="openTemplateEditor(null)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nouveau modèle
+          Nouveau modÃ¨le
         </button>
       </div>
       <div class="tmpl-list" id="tmpl-list"></div>
@@ -1687,11 +1687,11 @@ body[data-maint-role="operator"] .content{display:none !important}
   </div>
 </div>
 
-<!-- Modal : Éditer un modèle (création / édition) -->
+<!-- Modal : Ã‰diter un modÃ¨le (crÃ©ation / Ã©dition) -->
 <div class="modal-overlay" id="tmpl-editor-modal" onclick="if(event.target===this) closeTemplateEditor()" aria-hidden="true">
   <div class="modal-card case-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-ed-title">
     <div class="modal-head">
-      <div class="modal-title" id="tmpl-ed-title">Nouveau modèle</div>
+      <div class="modal-title" id="tmpl-ed-title">Nouveau modÃ¨le</div>
       <button type="button" class="modal-close" onclick="closeTemplateEditor()" aria-label="Fermer">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -1710,10 +1710,10 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div>
         <div class="case-ops-section">
           <div class="case-ops-head">
-            <label class="ops-field-label">Opérations du modèle<span class="req">*</span></label>
+            <label class="ops-field-label">OpÃ©rations du modÃ¨le<span class="req">*</span></label>
             <button type="button" class="case-ops-add-btn" onclick="addTmplOp()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Ajouter une opération
+              Ajouter une opÃ©ration
             </button>
           </div>
           <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
@@ -1724,7 +1724,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="button" class="modal-btn-ghost" onclick="closeTemplateEditor()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span id="tmpl-ed-submit-label">Créer</span>
+          <span id="tmpl-ed-submit-label">CrÃ©er</span>
         </button>
       </div>
     </form>
@@ -1742,15 +1742,15 @@ function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
-  maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
+  maintenance: { title: 'Maintenance', sub: 'En cours de dÃ©veloppement' },
   planning:    { title: 'Planning',    sub: 'Calendrier de maintenance' },
-  controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
-  operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' },
-  'op-tasks':    { title: 'Mes tâches', sub: 'Tâches assignées du jour' },
-  'op-planning': { title: 'Planning',    sub: 'Vue globale de la journée' }
+  controles:   { title: 'ContrÃ´les',   sub: 'Saisie et suivi des contrÃ´les' },
+  operations:  { title: 'OpÃ©rations de maintenance', sub: 'Saisie et suivi' },
+  'op-tasks':    { title: 'Mes tÃ¢ches', sub: 'TÃ¢ches assignÃ©es du jour' },
+  'op-planning': { title: 'Planning',    sub: 'Vue globale de la journÃ©e' }
 };
-// Sous-onglet actif dans la vue Opérations ('historique' | 'liste').
-// Mémorisé en localStorage pour retrouver l'onglet d'avant à la prochaine visite.
+// Sous-onglet actif dans la vue OpÃ©rations ('historique' | 'liste').
+// MÃ©morisÃ© en localStorage pour retrouver l'onglet d'avant Ã  la prochaine visite.
 const OPS_SUBTAB_KEY = 'mysifa_maint_ops_subtab_v1';
 function _getOpsSubtab(){
   try{ return localStorage.getItem(OPS_SUBTAB_KEY) || 'historique'; }
@@ -1766,7 +1766,7 @@ function setOpsSubtab(name){
   const target = document.getElementById('ops-subview-' + name);
   if(target) target.style.display = '';
 }
-// Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
+// Sous-onglet actif dans la vue ContrÃ´les ('historique' | 'liste').
 const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
 function _getCtrlSubtab(){
   try{ return localStorage.getItem(CTRL_SUBTAB_KEY) || 'historique'; }
@@ -1789,7 +1789,7 @@ function switchView(name){
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   const admTarget = document.getElementById('view-' + name);
   if(admTarget && admTarget.classList.contains('view')) admTarget.style.display = 'flex';
-  // Vues opérateur (.op-page) : bascule via classe .active (CSS gère display).
+  // Vues opÃ©rateur (.op-page) : bascule via classe .active (CSS gÃ¨re display).
   document.querySelectorAll('.op-page').forEach(p => p.classList.remove('active'));
   const opTarget = document.getElementById('view-' + name);
   if(opTarget && opTarget.classList.contains('op-page')) opTarget.classList.add('active');
@@ -1797,34 +1797,34 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
-    // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
-    // (cas où le fetch initial a déjà résolu au boot).
+    // Ã‰tape 1 : bascule sur la vue Semaine et rerend avec l'Ã©tat courant
+    // (cas oÃ¹ le fetch initial a dÃ©jÃ  rÃ©solu au boot).
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
-    // Étape 2 : refetch et rerend une seconde fois. Le fetch initial peut
-    // avoir résolu avant que le container Planning ne soit visible, ce qui
+    // Ã‰tape 2 : refetch et rerend une seconde fois. Le fetch initial peut
+    // avoir rÃ©solu avant que le container Planning ne soit visible, ce qui
     // fait rater le positionnement absolute des events.
     (async () => {
       await refreshPlanning();
       renderCal();
-      // Étape 3 : filet de sécurité — rerender après stabilisation du
+      // Ã‰tape 3 : filet de sÃ©curitÃ© â€” rerender aprÃ¨s stabilisation du
       // layout, pour couvrir les navigateurs qui calculent les
       // dimensions tardivement.
       setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
     })();
   }
-  // Vues opérateur : recharge la liste à l'arrivée.
+  // Vues opÃ©rateur : recharge la liste Ã  l'arrivÃ©e.
   if(name === 'op-tasks' && typeof opLoadTasks === 'function'){
     opLoadTasks();
   }
   if(name === 'op-planning' && typeof opLoadPlanning === 'function'){
     opLoadPlanning();
   }
-  // À l'arrivée sur la vue Opérations, restaure le dernier sous-onglet utilisé.
+  // Ã€ l'arrivÃ©e sur la vue OpÃ©rations, restaure le dernier sous-onglet utilisÃ©.
   if(name === 'operations'){
     setOpsSubtab(_getOpsSubtab());
   }
-  // Idem pour la vue Contrôles.
+  // Idem pour la vue ContrÃ´les.
   if(name === 'controles'){
     setCtrlSubtab(_getCtrlSubtab());
   }
@@ -1858,10 +1858,10 @@ function switchView(name){
 }
 
 // =========================================================================
-// Planning — calendrier mensuel + vue Semaine (style MyProd)
+// Planning â€” calendrier mensuel + vue Semaine (style MyProd)
 // =========================================================================
 const CAL_HOUR_START = 6;
-const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
+const CAL_HOUR_END   = 21;   // exclusif (affiche 6h â†’ 20h)
 const CAL_HOUR_PX    = 62;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1876,7 +1876,7 @@ const CAL_STATE = {
   weekStart: _calWeekMondayOf(new Date()),
   dayDate:   new Date(),
 };
-// Palette de couleurs unies pour différencier les types d'opérations
+// Palette de couleurs unies pour diffÃ©rencier les types d'opÃ©rations
 const CAL_EVENT_PALETTE = [
   { bg:'#0891b2', fg:'#ffffff' }, // cyan
   { bg:'#7c3aed', fg:'#ffffff' }, // violet
@@ -1900,22 +1900,22 @@ function _opTypePalette(opTypeId){
   }
   return CAL_EVENT_PALETTE[Math.abs(hash) % CAL_EVENT_PALETTE.length];
 }
-// État des opérations planifiées (drag & drop sur la vue Semaine).
-// Depuis Commit B2, le calendrier est branché sur l'API /api/maintenance/events
-// (au lieu du localStorage). Chaque event contient N ops et M opérateurs assignés.
-// loadPlanning() lance le fetch en tâche de fond puis re-render : les callers
-// peuvent rester synchrones. Pour un rafraîchissement AVANT rendu, utiliser
-// refreshPlanning() (async, à await avant renderCal).
+// Ã‰tat des opÃ©rations planifiÃ©es (drag & drop sur la vue Semaine).
+// Depuis Commit B2, le calendrier est branchÃ© sur l'API /api/maintenance/events
+// (au lieu du localStorage). Chaque event contient N ops et M opÃ©rateurs assignÃ©s.
+// loadPlanning() lance le fetch en tÃ¢che de fond puis re-render : les callers
+// peuvent rester synchrones. Pour un rafraÃ®chissement AVANT rendu, utiliser
+// refreshPlanning() (async, Ã  await avant renderCal).
 const PLANNING_STATE = { list: [], _lastLoad: 0 };
 
 function _apiEventToClient(ev){
   // Convertit un event {id, machine, date_prevue, heure_debut, heure_fin,
   // ops:[{id, code, code_label, ...}], operators:[{id, nom}]} vers la
-  // structure attendue par renderCalMonth/Week/Day (héritée du localStorage).
+  // structure attendue par renderCalMonth/Week/Day (hÃ©ritÃ©e du localStorage).
   const opsClient = (ev.ops || []).map(o => {
     const t = (typeof OPS_TYPES_STATE !== 'undefined' && OPS_TYPES_STATE && Array.isArray(OPS_TYPES_STATE.list))
       ? OPS_TYPES_STATE.list.find(x => x.id === o.code) : null;
-    // machines : la liste renvoyée par l'API (fallback géré serveur).
+    // machines : la liste renvoyÃ©e par l'API (fallback gÃ©rÃ© serveur).
     const machines = Array.isArray(o.machines) ? o.machines.slice() : [];
     return {
       _op_id: o.id,
@@ -1949,13 +1949,13 @@ function _apiEventToClient(ev){
 }
 
 async function refreshPlanning(){
-  // Pré-charge les templates en tâche de fond (pour le badge « depuis modèle »).
+  // PrÃ©-charge les templates en tÃ¢che de fond (pour le badge Â« depuis modÃ¨le Â»).
   if(MAINT_ROLE === 'admin' && TEMPLATES_STATE.list === null){
     loadTemplates().catch(() => {});
   }
 
   try{
-    // Charge une fenêtre large autour de la date pivot : ±90 jours.
+    // Charge une fenÃªtre large autour de la date pivot : Â±90 jours.
     const pivot = (CAL_STATE && CAL_STATE.date) ? new Date(CAL_STATE.date) : new Date();
     const from = new Date(pivot); from.setDate(pivot.getDate() - 90);
     const to   = new Date(pivot); to.setDate(pivot.getDate() + 90);
@@ -1970,18 +1970,18 @@ async function refreshPlanning(){
 }
 
 function loadPlanning(){
-  // Sync façade : lance un refresh async en arrière-plan puis re-render à
-  // l'arrivée. Les callers historiques ne changent pas de comportement.
+  // Sync faÃ§ade : lance un refresh async en arriÃ¨re-plan puis re-render Ã 
+  // l'arrivÃ©e. Les callers historiques ne changent pas de comportement.
   refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
 }
 
 function savePlanning(){
-  // No-op : toute écriture passe désormais par l'API (POST/PATCH/DELETE).
-  // Cette fonction est conservée pour ne pas casser les callers historiques.
+  // No-op : toute Ã©criture passe dÃ©sormais par l'API (POST/PATCH/DELETE).
+  // Cette fonction est conservÃ©e pour ne pas casser les callers historiques.
 }
 const CAL_WDAYS_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
 const CAL_WDAYS_SHORT = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
-const CAL_MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+const CAL_MONTHS = ['Janvier','FÃ©vrier','Mars','Avril','Mai','Juin','Juillet','AoÃ»t','Septembre','Octobre','Novembre','DÃ©cembre'];
 
 function setCalView(v){
   if(v !== 'month' && v !== 'week' && v !== 'day') return;
@@ -2075,16 +2075,16 @@ function renderCalMonth(){
     if(isOff) classes.push('cal-off');
     if(isWeekend) classes.push('cal-weekend');
     if(isToday) classes.push('cal-today');
-    // Récupérer les créneaux planifiés pour ce jour (triés par heure de début)
+    // RÃ©cupÃ©rer les crÃ©neaux planifiÃ©s pour ce jour (triÃ©s par heure de dÃ©but)
     const dayEvents = PLANNING_STATE.list
       .filter(ev => ev.date === iso)
       .slice()
       .sort((a,b) => (_hmToMins(a.start)||0) - (_hmToMins(b.start)||0));
-    // Teinter discrètement la case si elle contient des opérations
+    // Teinter discrÃ¨tement la case si elle contient des opÃ©rations
     let cellStyle = '';
     if(dayEvents.length > 0){
       classes.push('cal-cell-has-events');
-      // Bande latérale = couleur du premier événement (par machine)
+      // Bande latÃ©rale = couleur du premier Ã©vÃ©nement (par machine)
       const firstPalette = _machinePalette(dayEvents[0].machine);
       cellStyle = ' style="--cal-cell-accent:' + firstPalette.bg + '"';
     }
@@ -2095,13 +2095,13 @@ function renderCalMonth(){
     let chips = '';
     shown.forEach(ev => {
       const palette = _machinePalette(ev.machine);
-      const tip = (ev.machine || '') + ' · ' + ev.start + '–' + ev.end;
+      const tip = (ev.machine || '') + ' Â· ' + ev.start + 'â€“' + ev.end;
       chips += '<div class="cal-day-event" style="background:' + palette.bg + ';color:' + palette.fg + '" ' +
                'data-event-id="' + escAttr(ev.id) + '" ' +
                'onclick="onCalMonthEventClick(event,\'' + escAttr(ev.id) + '\')" ' +
                'title="' + escAttr(tip) + '">' +
                '<span class="cal-day-event-time">' + escHtml(ev.start) + '</span>' +
-               '<span class="cal-day-event-machine">' + escHtml(ev.machine || '—') + '</span>' +
+               '<span class="cal-day-event-machine">' + escHtml(ev.machine || 'â€”') + '</span>' +
                '</div>';
     });
     if(overflow > 0){
@@ -2117,7 +2117,7 @@ function renderCalMonth(){
   grid.innerHTML = cells.join('');
 }
 function onCalMonthCellClick(e){
-  // Si le clic vient d'une chip-événement, son propre handler gère
+  // Si le clic vient d'une chip-Ã©vÃ©nement, son propre handler gÃ¨re
   if(e.target.closest('.cal-day-event')) return;
   const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
   const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
@@ -2133,7 +2133,7 @@ function onCalMonthEventClick(e, id){
 function renderCalWeek(){
   const ws = CAL_STATE.weekStart;
   const we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6);
-  // Libellé
+  // LibellÃ©
   const lbl = document.getElementById('cal-month-label');
   if(lbl){
     const fmtD = d => String(d.getDate()).padStart(2,'0') + ' ' + CAL_MONTHS[d.getMonth()].toLowerCase();
@@ -2145,7 +2145,7 @@ function renderCalWeek(){
     }
     lbl.textContent = s;
   }
-  // En-tête : corner + 7 jours
+  // En-tÃªte : corner + 7 jours
   const head = document.getElementById('cal-wv-header');
   if(head){
     const todayIso = _calIsoYMD(new Date());
@@ -2185,7 +2185,7 @@ function renderCalWeek(){
     html += '</div>';
   }
   body.innerHTML = html;
-  // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
+  // Lane-packing : un bloc par opÃ©ration, placÃ© cÃ´te Ã  cÃ´te lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const iso = col.getAttribute('data-date');
     const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
@@ -2198,7 +2198,7 @@ function renderCalWeek(){
 }
 function renderCalDay(){
   const d = CAL_STATE.dayDate || new Date();
-  // Libellé
+  // LibellÃ©
   const lbl = document.getElementById('cal-month-label');
   if(lbl){
     const s = d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
@@ -2209,7 +2209,7 @@ function renderCalDay(){
   const iso = _calIsoYMD(d);
   const todayIso = _calIsoYMD(new Date());
   const isToday = (iso === todayIso);
-  // En-tête : corner + 1 jour
+  // En-tÃªte : corner + 1 jour
   const head = document.getElementById('cal-wv-header');
   if(head){
     const cls = 'cal-wv-dayhead' + (isWeekend?' weekend':'') + (isToday?' today':'');
@@ -2245,7 +2245,7 @@ function renderCalDay(){
     });
   });
 }
-// ── Lane packing (Google-Calendar style) ──────────────────────────────
+// â”€â”€ Lane packing (Google-Calendar style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function _packDayEvents(events){
   const sorted = events.slice()
     .map(ev => ({ ev, s: _hmToMins(ev.start), e: _hmToMins(ev.end) }))
@@ -2288,10 +2288,10 @@ function _packDayEvents(events){
   });
   return sorted;
 }
-// Palette par machine (couleur unie par équipement)
+// Palette par machine (couleur unie par Ã©quipement)
 const CAL_MACHINE_PALETTE = {
-  'Cohésio 1': { bg:'#0891b2', fg:'#ffffff' },
-  'Cohésio 2': { bg:'#7c3aed', fg:'#ffffff' },
+  'CohÃ©sio 1': { bg:'#0891b2', fg:'#ffffff' },
+  'CohÃ©sio 2': { bg:'#7c3aed', fg:'#ffffff' },
   'DSI':       { bg:'#ea580c', fg:'#ffffff' },
   'Repiquage': { bg:'#059669', fg:'#ffffff' },
 };
@@ -2318,7 +2318,7 @@ function _makeEventBlock(item){
   div.style.color = palette.fg;
   if(height < 50) div.setAttribute('data-mini', '1');
   div.setAttribute('data-event-id', ev.id);
-  // Marque les créneaux où l'opérateur courant est dans le groupe
+  // Marque les crÃ©neaux oÃ¹ l'opÃ©rateur courant est dans le groupe
   if(MAINT_ROLE === 'operator' && S && S.me){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
@@ -2331,11 +2331,11 @@ function _makeEventBlock(item){
   const showTime    = height >= 80;
   let inner = '';
   if(showTitle){
-    const sub = (opsCount > 0) ? ' · ' + opsCount + ' op.' : '';
-    inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
+    const sub = (opsCount > 0) ? ' Â· ' + opsCount + ' op.' : '';
+    inner += '<div class="cal-event-title">' + escHtml(ev.machine || 'â€”') + sub + '</div>';
   }
   if(showOpsList){
-    // Lignes disponibles ≈ (height - 24px titre - 12px time) / 14px
+    // Lignes disponibles â‰ˆ (height - 24px titre - 12px time) / 14px
     const lineH = 17;
     const reservedTitle = 28;
     const reservedTime = showTime ? 18 : 0;
@@ -2343,7 +2343,7 @@ function _makeEventBlock(item){
     const visible = ops.slice(0, available);
     inner += '<div class="cal-event-ops">';
     visible.forEach(op => {
-      inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
+      inner += '<div class="cal-event-op">â€¢ ' + escHtml(op.opName || 'â€”') + '</div>';
     });
     if(opsCount > visible.length){
       inner += '<div class="cal-event-op cal-event-op-more">+ ' + (opsCount - visible.length) + ' autre' + ((opsCount - visible.length) > 1 ? 's' : '') + '</div>';
@@ -2356,12 +2356,12 @@ function _makeEventBlock(item){
     inner += '<div class="cal-event-machine">' + escHtml(first.opName || '') + extra + '</div>';
   }
   if(showTime){
-    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' â€“ ' + escHtml(ev.end) + '</div>';
   }
   div.innerHTML = inner;
-  div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
-    (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
-    '\n\nCliquer pour afficher les détails';
+  div.title = (ev.machine || '') + '\n' + ev.start + ' â€“ ' + ev.end +
+    (ops.length ? '\n\n' + ops.map(o => 'â€¢ ' + (o.opName||'â€”')).join('\n') : '') +
+    '\n\nCliquer pour afficher les dÃ©tails';
   div.addEventListener('click', e => {
     e.stopPropagation();
     openPlanningDetailsModal([ev]);
@@ -2388,7 +2388,7 @@ function _clusterDayEvents(events){
     }
   });
   if(cur) clusters.push(cur);
-  // Trier les items à l'intérieur du cluster pour un affichage stable
+  // Trier les items Ã  l'intÃ©rieur du cluster pour un affichage stable
   clusters.forEach(c => {
     c.items.sort((a,b) => (_hmToMins(a.start)||0) - (_hmToMins(b.start)||0));
   });
@@ -2414,10 +2414,10 @@ function _makeClusterBlock(cluster){
   };
   if(single){
     const ev = cluster.items[0];
-    const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
-    div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
-                    '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
-    div.title = 'Cliquer pour afficher les détails';
+    const machineSuffix = ev.machine ? ' Â· ' + ev.machine : '';
+    div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || 'â€”') + machineSuffix) + '</div>' +
+                    '<div class="cal-event-time">' + escHtml(ev.start) + ' â€“ ' + escHtml(ev.end) + '</div>';
+    div.title = 'Cliquer pour afficher les dÃ©tails';
     div.addEventListener('click', e => {
       e.stopPropagation();
       openPlanningDetailsModal([ev]);
@@ -2426,16 +2426,16 @@ function _makeClusterBlock(cluster){
     let listHtml = '<div class="cal-event-list">';
     cluster.items.forEach(ev => {
       const nivCls = ev.opNiveau ? (' cal-event-item-niv-' + ev.opNiveau) : '';
-      const machine = ev.machine ? '<span class="cal-event-item-machine"> · ' + escHtml(ev.machine) + '</span>' : '';
+      const machine = ev.machine ? '<span class="cal-event-item-machine"> Â· ' + escHtml(ev.machine) + '</span>' : '';
       listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '">' +
-                  '<span class="cal-event-item-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</span>' +
-                  '<span class="cal-event-item-name">' + escHtml(ev.opName || '—') + machine + '</span>' +
+                  '<span class="cal-event-item-time">' + escHtml(ev.start) + ' â€“ ' + escHtml(ev.end) + '</span>' +
+                  '<span class="cal-event-item-name">' + escHtml(ev.opName || 'â€”') + machine + '</span>' +
                   '</div>';
     });
     listHtml += '</div>';
-    const headTxt = escHtml(fmtHM(startMin)) + ' → ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' op.';
+    const headTxt = escHtml(fmtHM(startMin)) + ' â†’ ' + escHtml(fmtHM(endMin)) + ' Â· ' + cluster.items.length + ' op.';
     div.innerHTML = '<div class="cal-event-merged-head">' + headTxt + '</div>' + listHtml;
-    div.title = 'Cliquer pour afficher les détails';
+    div.title = 'Cliquer pour afficher les dÃ©tails';
     div.style.cursor = 'pointer';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -2458,7 +2458,7 @@ async function deletePlanningEvent(id){
   renderCal();
 }
 
-// ── Modale Détails (créneau) ──────────────────────────────────────────
+// â”€â”€ Modale DÃ©tails (crÃ©neau) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _PLAN_DET_CASE_ID = null;
 function _fmtIsoDateFr(iso){
   if(!iso) return '';
@@ -2476,16 +2476,16 @@ function openPlanningDetailsModal(events){
   const titleEl = document.getElementById('plan-det-title');
   const dtEl = document.getElementById('plan-det-date');
   const listEl = document.getElementById('plan-det-list');
-  if(titleEl) titleEl.textContent = 'Détails du créneau';
+  if(titleEl) titleEl.textContent = 'DÃ©tails du crÃ©neau';
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(ev.date);
   if(listEl){
     const ops = Array.isArray(ev.operations) ? ev.operations : [];
-    // Machines couvertes par le créneau (union des machines des ops).
+    // Machines couvertes par le crÃ©neau (union des machines des ops).
     const machineUnion = [];
     ops.forEach(op => {
       (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
     });
-    const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
+    const machinesLabel = machineUnion.length ? machineUnion.join(' Â· ') : (ev.machine || 'â€”');
     const opsHtml = ops.length
       ? ops.map(op => {
           const machChips = (op.machines || []).map(m =>
@@ -2493,21 +2493,21 @@ function openPlanningDetailsModal(events){
           ).join('');
           return '<div class="plan-det-case-op">' +
             '<span class="plan-det-case-op-bullet"></span>' +
-            '<span class="plan-det-case-op-name">' + escHtml(op.opName || '—') + '</span>' +
+            '<span class="plan-det-case-op-name">' + escHtml(op.opName || 'â€”') + '</span>' +
             (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
             (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
-            (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
+            (op.opFreq ? '<span class="plan-det-case-op-freq">FrÃ©quence : ' + escHtml(op.opFreq) + '</span>' : '') +
           '</div>';
         }).join('')
-      : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
-    // Badge template si le créneau vient d'un modèle
+      : '<div class="plan-det-case-op-empty">Aucune opÃ©ration dÃ©finie.</div>';
+    // Badge template si le crÃ©neau vient d'un modÃ¨le
     let tmplBadge = '';
     if(ev.template_id){
       const tmpl = (TEMPLATES_STATE.list || []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
-      tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
+      tmplBadge = '<span class="tmpl-badge" title="CrÃ©neau liÃ© Ã  un modÃ¨le. Les modifs futures du modÃ¨le Ã©craseront ces opÃ©rations.">' +
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
-        'Depuis modèle : ' + escHtml(label) +
+        'Depuis modÃ¨le : ' + escHtml(label) +
       '</span>';
     }
     listEl.innerHTML =
@@ -2519,19 +2519,19 @@ function openPlanningDetailsModal(events){
         '</div>' +
         '<div class="plan-det-case-time">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-          escHtml(ev.start) + ' – ' + escHtml(ev.end) +
+          escHtml(ev.start) + ' â€“ ' + escHtml(ev.end) +
         '</div>' +
       '</div>' +
-      // Bloc opérateurs (nouveau : groupe assigné au créneau — partagé).
-      '<div class="plan-det-case-ops-label">Opérateurs assignés (' +
+      // Bloc opÃ©rateurs (nouveau : groupe assignÃ© au crÃ©neau â€” partagÃ©).
+      '<div class="plan-det-case-ops-label">OpÃ©rateurs assignÃ©s (' +
         (Array.isArray(ev.operators) ? ev.operators.length : 0) + ')</div>' +
       '<div style="margin-top:6px;margin-bottom:6px">' +
         ((Array.isArray(ev.operators) && ev.operators.length)
-          ? ev.operators.map(op => '<span style="display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;margin:0 6px 6px 0">' + escHtml(op.nom || '—') + '</span>').join('')
-          : '<span style="color:var(--muted);font-style:italic;font-size:12px">Aucun opérateur assigné pour l\'instant.</span>'
+          ? ev.operators.map(op => '<span style="display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;margin:0 6px 6px 0">' + escHtml(op.nom || 'â€”') + '</span>').join('')
+          : '<span style="color:var(--muted);font-style:italic;font-size:12px">Aucun opÃ©rateur assignÃ© pour l\'instant.</span>'
         ) +
       '</div>' +
-      '<div class="plan-det-case-ops-label">Opérations à effectuer (' + ops.length + ')</div>' +
+      '<div class="plan-det-case-ops-label">OpÃ©rations Ã  effectuer (' + ops.length + ')</div>' +
       '<div class="plan-det-case-ops-list">' + opsHtml + '</div>' +
       '<div class="plan-det-case-actions">' +
         '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
@@ -2564,9 +2564,9 @@ async function deletePlanningEvent(id){
 }
 async function confirmDeleteCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
-  if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
-  const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
-  if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
+  if(!ev){ showToast('CrÃ©neau introuvable.', 'danger'); return; }
+  const opsTxt = (ev.operations || []).map(o => 'â€¢ ' + (o.opName||'â€”')).join('\n');
+  if(!confirm('Supprimer ce crÃ©neau ?\n\n' + (ev.machine || '') + ' Â· ' + ev.date + '\n' + ev.start + ' â€“ ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
   try{
     await fetch('/api/maintenance/events/' + encodeURIComponent(id),
                 { method: 'DELETE', credentials: 'include' });
@@ -2574,11 +2574,11 @@ async function confirmDeleteCase(id){
   await refreshPlanning();
   closePlanningDetailsModal();
   renderCal();
-  showToast('Créneau supprimé.', 'info');
+  showToast('CrÃ©neau supprimÃ©.', 'info');
 }
 function editCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
-  if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
+  if(!ev){ showToast('CrÃ©neau introuvable.', 'danger'); return; }
   closePlanningDetailsModal();
   openCaseModal({
     editId: ev.id,
@@ -2589,11 +2589,11 @@ function editCase(id){
   });
 }
 
-// ── Clic sur calendrier → ouverture modale "Nouveau créneau" ──────────
+// â”€â”€ Clic sur calendrier â†’ ouverture modale "Nouveau crÃ©neau" â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function onCalCellClick(e){
-  // Ignore clicks on existing events (their own click handler ouvre les détails)
+  // Ignore clicks on existing events (their own click handler ouvre les dÃ©tails)
   if(e.target.closest('.cal-event')) return;
-  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
+  // Mode opÃ©rateur : lecture seule, on n'ouvre pas le modal de crÃ©ation
   if(MAINT_ROLE === 'operator') return;
   const col = e.currentTarget;
   if(!col) return;
@@ -2608,9 +2608,9 @@ function onCalCellClick(e){
   openCaseModal({ iso, defaultHour: h });
 }
 
-// ── Modale Créneau (création + édition) ──────────────────────────────
+// â”€â”€ Modale CrÃ©neau (crÃ©ation + Ã©dition) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let _PENDING_CASE = null;
-let _CASE_OPERATORS = [];  // [{id, nom}] : opérateurs assignés au créneau en cours d'édition
+let _CASE_OPERATORS = [];  // [{id, nom}] : opÃ©rateurs assignÃ©s au crÃ©neau en cours d'Ã©dition
 let _OPERATORS_CATALOG = null;  // cache : [{id, nom, ...}]
 
 async function _loadOperatorsCatalog(){
@@ -2629,17 +2629,17 @@ function renderCaseOperators(){
   const picker = document.getElementById('case-mod-operator-picker');
   if(list){
     if(!_CASE_OPERATORS.length){
-      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun opérateur assigné pour l\'instant.</div>';
+      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun opÃ©rateur assignÃ© pour l\'instant.</div>';
     } else {
       list.innerHTML = _CASE_OPERATORS.map(op =>
-        `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">×</button></div>`
+        `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">Ã—</button></div>`
       ).join('');
     }
   }
   if(picker){
     const assigned = new Set(_CASE_OPERATORS.map(o => o.id));
     const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
-    picker.innerHTML = '<option value="">Ajouter un opérateur…</option>' +
+    picker.innerHTML = '<option value="">Ajouter un opÃ©rateurâ€¦</option>' +
       available.map(u => `<option value="${u.id}">${u.nom}</option>`).join('');
   }
 }
@@ -2670,13 +2670,13 @@ async function openCaseModal(opts){
     }
     if(ev && ev.template_id) preselectedTemplateId = ev.template_id;
   }
-  // Ouvre le modal immédiatement pour ne pas laisser l'utilisateur devant
-  // un écran vide en cas de latence sur /api/maintenance/operators.
+  // Ouvre le modal immÃ©diatement pour ne pas laisser l'utilisateur devant
+  // un Ã©cran vide en cas de latence sur /api/maintenance/operators.
   const result = _openCaseModalInner(opts);
-  renderCaseOperators();  // affiche déjà les opérateurs pré-remplis
-  // Charge le catalogue en arrière-plan puis rerender le picker.
+  renderCaseOperators();  // affiche dÃ©jÃ  les opÃ©rateurs prÃ©-remplis
+  // Charge le catalogue en arriÃ¨re-plan puis rerender le picker.
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
-  // Charge les templates puis pré-sélectionne si le créneau en est issu
+  // Charge les templates puis prÃ©-sÃ©lectionne si le crÃ©neau en est issu
   loadTemplates().then(() => refreshCaseTemplatePicker(preselectedTemplateId)).catch(() => {});
   if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
   return result;
@@ -2701,8 +2701,8 @@ function _openCaseModalInner(opts){
   const ttlEl = document.getElementById('case-mod-title');
   const lblEl = document.getElementById('case-mod-submit-label');
   const isEdit = !!opts.editId;
-  if(ttlEl) ttlEl.textContent = isEdit ? 'Modifier le créneau' : 'Nouveau créneau de maintenance';
-  if(lblEl) lblEl.textContent = isEdit ? 'Enregistrer' : 'Créer';
+  if(ttlEl) ttlEl.textContent = isEdit ? 'Modifier le crÃ©neau' : 'Nouveau crÃ©neau de maintenance';
+  if(lblEl) lblEl.textContent = isEdit ? 'Enregistrer' : 'CrÃ©er';
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(opts.iso);
   const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
   if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
@@ -2721,11 +2721,11 @@ function closeCaseModal(){
   _CASE_OPS = [];
 }
 // Machines disponibles pour l'atelier (source unique pour le picker).
-const CASE_MACHINES_LIST = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
+const CASE_MACHINES_LIST = ['CohÃ©sio 1', 'CohÃ©sio 2', 'DSI', 'Repiquage'];
 
 function addCaseOp(){
   if(!OPS_TYPES_STATE.list.length){
-    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
+    showToast('Aucune opÃ©ration dans la liste. Ajoutez-en d\'abord dans "Liste d\'opÃ©rations de maintenance".', 'danger');
     return;
   }
   _CASE_OPS.push({ _op_id: null, opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
@@ -2750,7 +2750,7 @@ function updateCaseOp(idx, opTypeId){
       opName:   op.nom,
       opNiveau: op.niveau || null,
       opFreq:   op.frequence || '',
-      // On préserve les machines déjà cochées.
+      // On prÃ©serve les machines dÃ©jÃ  cochÃ©es.
       machines: Array.isArray(cur.machines) ? cur.machines.slice() : [],
     };
   } else {
@@ -2775,15 +2775,15 @@ function renderCaseOpsList(){
   const list = document.getElementById('case-mod-ops-list');
   if(!list) return;
   if(!_CASE_OPS.length){
-    list.innerHTML = '<div class="case-ops-empty">Aucune opération ajoutée. Cliquez sur « Ajouter une opération » pour piocher dans la liste.</div>';
+    list.innerHTML = '<div class="case-ops-empty">Aucune opÃ©ration ajoutÃ©e. Cliquez sur Â« Ajouter une opÃ©ration Â» pour piocher dans la liste.</div>';
     return;
   }
   list.innerHTML = _CASE_OPS.map((op, idx) => {
-    const options = '<option value="">Sélectionner une opération…</option>' +
+    const options = '<option value="">SÃ©lectionner une opÃ©rationâ€¦</option>' +
       OPS_TYPES_STATE.list.map(t =>
         '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
           escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
-          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+          (t.frequence ? ' Â· ' + escHtml(t.frequence) : '') +
         '</option>'
       ).join('');
     const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
@@ -2796,7 +2796,7 @@ function renderCaseOpsList(){
     return '<div class="case-ops-row" data-idx="' + idx + '">' +
       '<div class="case-ops-row-top">' +
         '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
-        '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
+        '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opÃ©ration" aria-label="Retirer">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
         '</button>' +
       '</div>' +
@@ -2815,16 +2815,16 @@ async function submitCaseModal(e){
   if(!start || !end){ showToast('Indiquez les heures.', 'danger'); return; }
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
-  if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
+  if(em <= sm){ showToast('L\'heure de fin doit Ãªtre aprÃ¨s l\'heure de dÃ©but.', 'danger'); return; }
   const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
     code: o.opTypeId,
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
   }));
-  if(!wantedOps.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
-  // Chaque op doit être attribuée à au moins une machine.
+  if(!wantedOps.length){ showToast('Ajoutez au moins une opÃ©ration.', 'danger'); return; }
+  // Chaque op doit Ãªtre attribuÃ©e Ã  au moins une machine.
   const missing = wantedOps.find(o => !o.machines.length);
   if(missing){
-    showToast('Attribuez au moins une machine à chaque opération.', 'danger');
+    showToast('Attribuez au moins une machine Ã  chaque opÃ©ration.', 'danger');
     return;
   }
   const operatorIds = (_CASE_OPERATORS || []).map(o => o.id);
@@ -2840,7 +2840,7 @@ async function submitCaseModal(e){
       });
       if(!rMeta.ok){ throw new Error('Meta update failed'); }
       await _syncEventOpsAndOperators(editId, wantedOps, operatorIds);
-      showToast('Créneau mis à jour.', 'info');
+      showToast('CrÃ©neau mis Ã  jour.', 'info');
     } else {
       const rNew = await fetch('/api/maintenance/events', {
         method:'POST', credentials:'include',
@@ -2854,9 +2854,9 @@ async function submitCaseModal(e){
       });
       if(!rNew.ok){
         const err = await rNew.json().catch(()=>({}));
-        throw new Error(err.detail || 'Création refusée');
+        throw new Error(err.detail || 'CrÃ©ation refusÃ©e');
       }
-      showToast('Créneau créé.', 'info');
+      showToast('CrÃ©neau crÃ©Ã©.', 'info');
     }
   }catch(err){
     showToast('Erreur : ' + (err.message || err), 'danger');
@@ -2886,7 +2886,7 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
   const wantedByCode = new Map(wantedOps.map(o => [o.code, o]));
   const currentByCode = new Map(currentOps.map(o => [o.code, o]));
 
-  // Ops à ajouter (dans wanted mais pas dans current) → POST avec machines.
+  // Ops Ã  ajouter (dans wanted mais pas dans current) â†’ POST avec machines.
   for(const w of wantedOps){
     if(!currentByCode.has(w.code)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
@@ -2896,7 +2896,7 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
       });
     }
   }
-  // Ops à supprimer (dans current mais pas dans wanted).
+  // Ops Ã  supprimer (dans current mais pas dans wanted).
   for(const op of currentOps){
     if(!wantedByCode.has(op.code)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
@@ -2904,7 +2904,7 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
       });
     }
   }
-  // Ops restées : si les machines ont changé, PATCH.
+  // Ops restÃ©es : si les machines ont changÃ©, PATCH.
   for(const op of currentOps){
     const w = wantedByCode.get(op.code);
     if(!w) continue;
@@ -2971,26 +2971,26 @@ function fmtDate(iso){
 }
 
 // --- Modales ---
-// État d'édition : id de l'opération en cours de modification, sinon null.
+// Ã‰tat d'Ã©dition : id de l'opÃ©ration en cours de modification, sinon null.
 let _opsEditingId = null;
 
 function openOpsModal(editId){
   const m = document.getElementById('ops-modal');
   if(!m) return;
   if(!OPS_TYPES_STATE.list.length){
-    showToast('Définissez d\'abord au moins un type dans « Liste d\'opérations de maintenance ».', 'danger');
+    showToast('DÃ©finissez d\'abord au moins un type dans Â« Liste d\'opÃ©rations de maintenance Â».', 'danger');
     return;
   }
   if(!currentUserName()){
-    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
+    showToast('IdentitÃ© non chargÃ©e. RÃ©essayez dans un instant.', 'danger');
     return;
   }
-  // Si on est en mode édition, récupère l'opération existante.
+  // Si on est en mode Ã©dition, rÃ©cupÃ¨re l'opÃ©ration existante.
   let editing = null;
   if(editId){
     editing = OPS_STATE.list.find(o => String(o.id) === String(editId));
     if(!editing){
-      showToast('Opération introuvable.', 'danger');
+      showToast('OpÃ©ration introuvable.', 'danger');
       return;
     }
   }
@@ -3000,19 +3000,19 @@ function openOpsModal(editId){
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
-  // Titre & label bouton selon le mode (édition vs création)
+  // Titre & label bouton selon le mode (Ã©dition vs crÃ©ation)
   const titleEl = document.getElementById('ops-modal-title');
-  if(titleEl) titleEl.textContent = editing ? 'Modifier l\'opération' : 'Nouvelle opération';
+  if(titleEl) titleEl.textContent = editing ? 'Modifier l\'opÃ©ration' : 'Nouvelle opÃ©ration';
   const submitBtn = document.querySelector('#ops-form button[type="submit"]');
   if(submitBtn){
     const labelSpan = submitBtn.querySelector('span') || submitBtn;
-    // Préserve l'icône SVG : on cible juste le texte
+    // PrÃ©serve l'icÃ´ne SVG : on cible juste le texte
     submitBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
-      (editing ? ' Enregistrer les modifications' : ' Enregistrer l\'opération');
+      (editing ? ' Enregistrer les modifications' : ' Enregistrer l\'opÃ©ration');
   }
   const nameEl = document.getElementById('ops-saisi-par-name');
   if(nameEl) nameEl.textContent = editing ? (editing.operateur || currentUserName()) : currentUserName();
-  // Pré-remplit la date (mode édition = date saisie ; mode création = maintenant)
+  // PrÃ©-remplit la date (mode Ã©dition = date saisie ; mode crÃ©ation = maintenant)
   const dateEl = document.getElementById('ops-date');
   if(dateEl){
     const pad = n => (n < 10 ? '0' + n : '' + n);
@@ -3022,7 +3022,7 @@ function openOpsModal(editId){
                    + 'T' + pad(sourceDate.getHours()) + ':' + pad(sourceDate.getMinutes());
     }
   }
-  // Pré-remplit machine / type / commentaire en mode édition
+  // PrÃ©-remplit machine / type / commentaire en mode Ã©dition
   const machineEl = document.getElementById('ops-machine');
   const typeEl = document.getElementById('ops-type');
   const commentEl = document.getElementById('ops-comment');
@@ -3065,12 +3065,12 @@ function openCatModal(idToEdit){
       document.getElementById('cat-niveau').value = String(t.niveau || '');
       document.getElementById('cat-frequence').value = t.frequence || '';
       document.getElementById('cat-detail').value = t.detail || '';
-      if(titleEl) titleEl.textContent = 'Modifier l\'opération';
+      if(titleEl) titleEl.textContent = 'Modifier l\'opÃ©ration';
       if(lblEl) lblEl.textContent = 'Enregistrer les modifications';
     }
   } else {
-    if(titleEl) titleEl.textContent = 'Ajouter une opération à la liste';
-    if(lblEl) lblEl.textContent = 'Ajouter à la liste';
+    if(titleEl) titleEl.textContent = 'Ajouter une opÃ©ration Ã  la liste';
+    if(lblEl) lblEl.textContent = 'Ajouter Ã  la liste';
   }
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
@@ -3092,11 +3092,11 @@ function openCtrlModal(){
   const m = document.getElementById('ctrl-modal');
   if(!m) return;
   if(!CTRL_TYPES_STATE.list.length){
-    showToast('Définissez d\'abord au moins un type dans « Liste de contrôles ».', 'danger');
+    showToast('DÃ©finissez d\'abord au moins un type dans Â« Liste de contrÃ´les Â».', 'danger');
     return;
   }
   if(!currentUserName()){
-    showToast('Identité non chargée. Réessayez dans un instant.', 'danger');
+    showToast('IdentitÃ© non chargÃ©e. RÃ©essayez dans un instant.', 'danger');
     return;
   }
   m.classList.add('open');
@@ -3132,12 +3132,12 @@ function openCtrlCatModal(idToEdit){
       CTRL_CAT_EDITING_ID = idToEdit;
       document.getElementById('ctrl-cat-nom').value = t.nom || '';
       document.getElementById('ctrl-cat-detail').value = t.detail || '';
-      if(titleEl) titleEl.textContent = 'Modifier le contrôle';
+      if(titleEl) titleEl.textContent = 'Modifier le contrÃ´le';
       if(lblEl) lblEl.textContent = 'Enregistrer les modifications';
     }
   } else {
-    if(titleEl) titleEl.textContent = 'Ajouter un contrôle à la liste';
-    if(lblEl) lblEl.textContent = 'Ajouter à la liste';
+    if(titleEl) titleEl.textContent = 'Ajouter un contrÃ´le Ã  la liste';
+    if(lblEl) lblEl.textContent = 'Ajouter Ã  la liste';
   }
   m.classList.add('open');
   m.setAttribute('aria-hidden', 'false');
@@ -3171,7 +3171,7 @@ document.addEventListener('keydown', function(e){
 });
 
 // =========================================================================
-// Historique des opérations
+// Historique des opÃ©rations
 // =========================================================================
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
@@ -3192,23 +3192,23 @@ function addOperation(e){
   const type = (document.getElementById('ops-type').value || '').trim();
   const commentaire = (document.getElementById('ops-comment').value || '').trim();
   const operateur = currentUserName();
-  if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
+  if(!operateur){ showToast('IdentitÃ© non chargÃ©e. RÃ©essayez dans un instant.', 'danger'); return; }
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
-  // Date d'opération : input datetime-local. Si vide ou invalide, fallback maintenant.
+  // Date d'opÃ©ration : input datetime-local. Si vide ou invalide, fallback maintenant.
   const dateInput = (document.getElementById('ops-date')?.value || '').trim();
   let dateSaisie = new Date().toISOString();
   if(dateInput){
     const parsed = new Date(dateInput);
     if(!isNaN(parsed.getTime())) dateSaisie = parsed.toISOString();
   }
-  // Mode édition : remplace l'opération existante en conservant son id et son
-  // opérateur d'origine (date_modification est ajoutée pour traçabilité locale).
-  // Mode création : push une nouvelle opération.
+  // Mode Ã©dition : remplace l'opÃ©ration existante en conservant son id et son
+  // opÃ©rateur d'origine (date_modification est ajoutÃ©e pour traÃ§abilitÃ© locale).
+  // Mode crÃ©ation : push une nouvelle opÃ©ration.
   const isEdit = !!_opsEditingId;
   if(isEdit){
     const idx = OPS_STATE.list.findIndex(o => String(o.id) === String(_opsEditingId));
     if(idx === -1){
-      showToast('Opération introuvable — peut-être supprimée entre-temps.', 'danger');
+      showToast('OpÃ©ration introuvable â€” peut-Ãªtre supprimÃ©e entre-temps.', 'danger');
       return;
     }
     const original = OPS_STATE.list[idx];
@@ -3227,18 +3227,18 @@ function addOperation(e){
   }
   saveOps();
   renderOps();
-  // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
-  // pour que la "Dernière intervention" reflète immédiatement la modification.
+  // Aligne le sÃ©lecteur du catalogue sur la machine de la saisie et re-render
+  // pour que la "DerniÃ¨re intervention" reflÃ¨te immÃ©diatement la modification.
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
   // Aligne aussi la vue Maintenance (cartes) sur la machine de la saisie.
   try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderOpsTypes === 'function') renderOpsTypes();
   if(typeof renderMaintCards === 'function') renderMaintCards();
   closeOpsModal();
-  showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
+  showToast(isEdit ? 'OpÃ©ration mise Ã  jour.' : 'OpÃ©ration enregistrÃ©e.', 'info');
 }
 function deleteOp(id){
-  if(!confirm('Supprimer cette opération ?')) return;
+  if(!confirm('Supprimer cette opÃ©ration ?')) return;
   OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== id);
   saveOps();
   renderOps();
@@ -3269,7 +3269,7 @@ function resetOpsFilters(){
   });
   renderOps();
 }
-// ── Date presets partagés ─────────────────────────────────────────────
+// â”€â”€ Date presets partagÃ©s â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function maintDatePresets(){
   const now = new Date();
   const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -3321,7 +3321,7 @@ function refreshOpsFiltersOptions(){
   if(opeSel){
     const cur = opeSel.value;
     const opes = Array.from(new Set(OPS_STATE.list.map(o => o.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
-    opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
+    opeSel.innerHTML = '<option value="">Tous les opÃ©rateurs</option>' +
       opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
     if(cur && opes.includes(cur)) opeSel.value = cur;
   }
@@ -3364,13 +3364,13 @@ function renderOps(){
     const isActive = th.getAttribute('data-sort') === sf;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+    if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? 'â†‘' : 'â†“') : 'â†•';
   });
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
-      ? 'Aucune opération ne correspond aux filtres.'
-      : 'Aucune opération enregistrée. Cliquez sur « Nouvelle saisie » pour commencer.';
+      ? 'Aucune opÃ©ration ne correspond aux filtres.'
+      : 'Aucune opÃ©ration enregistrÃ©e. Cliquez sur Â« Nouvelle saisie Â» pour commencer.';
     tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
     const rows = filtered.map(o =>
@@ -3396,33 +3396,33 @@ function renderOps(){
     const n = OPS_STATE.list.length;
     const visible = filtered.length;
     if(visible !== n){
-      count.textContent = visible + ' / ' + n + ' opération' + (n > 1 ? 's' : '');
+      count.textContent = visible + ' / ' + n + ' opÃ©ration' + (n > 1 ? 's' : '');
     } else {
-      count.textContent = n + ' opération' + (n > 1 ? 's' : '');
+      count.textContent = n + ' opÃ©ration' + (n > 1 ? 's' : '');
     }
   }
 }
 
 // =========================================================================
-// Catalogue des types d'opérations — source : Paramètres → Maintenance (DB)
-// Filtre : "Interventions" (toutes) + "Contrôles" avec periodique=OUI.
-// La "Dernière intervention" est dérivée des saisies réelles (OPS_STATE),
-// filtrées par la machine sélectionnée au-dessus du catalogue.
+// Catalogue des types d'opÃ©rations â€” source : ParamÃ¨tres â†’ Maintenance (DB)
+// Filtre : "Interventions" (toutes) + "ContrÃ´les" avec periodique=OUI.
+// La "DerniÃ¨re intervention" est dÃ©rivÃ©e des saisies rÃ©elles (OPS_STATE),
+// filtrÃ©es par la machine sÃ©lectionnÃ©e au-dessus du catalogue.
 // =========================================================================
 const OPS_CAT_MACHINE_KEY = 'mysifa_maint_ops_cat_machine_v1';
 const OPS_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
 function getOpsCatMachine(){
-  try{ return localStorage.getItem(OPS_CAT_MACHINE_KEY) || 'Cohésio 1'; }
-  catch(e){ return 'Cohésio 1'; }
+  try{ return localStorage.getItem(OPS_CAT_MACHINE_KEY) || 'CohÃ©sio 1'; }
+  catch(e){ return 'CohÃ©sio 1'; }
 }
 function setOpsCatMachine(m){
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, m || ''); }catch(e){}
-  // Synchronise tous les selects (le catalogue est dupliqué dans 2 vues)
+  // Synchronise tous les selects (le catalogue est dupliquÃ© dans 2 vues)
   document.querySelectorAll('.js-ops-cat-machine').forEach(sel => { sel.value = m; });
   renderOpsTypes();
 }
-// Retourne la date ISO la plus récente d'une saisie sur (label, machine).
+// Retourne la date ISO la plus rÃ©cente d'une saisie sur (label, machine).
 function _lastInterventionFor(label, machine, sourceList){
   if(!label || !machine || !Array.isArray(sourceList)) return null;
   let latest = null;
@@ -3435,9 +3435,9 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
-// Variante pour le catalogue "Liste de contrôles" : un contrôle peut être
-// rempli soit manuellement (CTRL_STATE.list, matché par label === type), soit
-// via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
+// Variante pour le catalogue "Liste de contrÃ´les" : un contrÃ´le peut Ãªtre
+// rempli soit manuellement (CTRL_STATE.list, matchÃ© par label === type), soit
+// via une alerte opÃ©rateur (CTRL_STATE.acks, matchÃ© par code === _maint_code).
 function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
   if(!machine) return null;
   let latest = null;
@@ -3469,10 +3469,10 @@ async function loadOpsTypes(){
     }
     const data = await res.json();
     const items = Array.isArray(data && data.items) ? data.items : [];
-    // 'suivi' (catégorie supprimée côté UI) est remappée en 'interventions'
-    // pour les codes legacy qui n'ont pas encore été corrigés en base.
+    // 'suivi' (catÃ©gorie supprimÃ©e cÃ´tÃ© UI) est remappÃ©e en 'interventions'
+    // pour les codes legacy qui n'ont pas encore Ã©tÃ© corrigÃ©s en base.
     const normCat = (c) => (c === 'interventions' || c === 'suivi') ? 'interventions' : 'controles';
-    // Liste d'opérations : Interventions (toutes) + Contrôles avec periodique=OUI.
+    // Liste d'opÃ©rations : Interventions (toutes) + ContrÃ´les avec periodique=OUI.
     OPS_TYPES_STATE.list = items
       .filter(it => {
         const cn = normCat(it.categorie);
@@ -3497,10 +3497,10 @@ async function loadOpsTypes(){
 }
 
 // Couleur d'un anneau (ou d'une barre de progression) sur l'intervalle [0,200%].
-// Dégradé multi-stops : vert -> jaune -> orange -> rouge.
-// Au-delà de 200% : rouge plein (clamp).
+// DÃ©gradÃ© multi-stops : vert -> jaune -> orange -> rouge.
+// Au-delÃ  de 200% : rouge plein (clamp).
 function _ratioColor(ratio){
-  // Stops fixés à t = 0 / 0.33 / 0.66 / 1, où t = ratio / 2 (clampé).
+  // Stops fixÃ©s Ã  t = 0 / 0.33 / 0.66 / 1, oÃ¹ t = ratio / 2 (clampÃ©).
   const stops = [
     [0.00, [ 52, 211, 153]],   // vert    #34d399
     [0.33, [250, 204,  21]],   // jaune   #facc15
@@ -3522,19 +3522,19 @@ function _ratioColor(ratio){
   const last = stops[stops.length - 1][1];
   return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
 }
-// Compteur module-level pour générer des IDs uniques de paths SVG et filtres
-// par carte (sinon les <textPath href="#..."> peuvent référencer un path d'une
-// autre carte rendue avant, et les filtres se mélangent entre eux).
+// Compteur module-level pour gÃ©nÃ©rer des IDs uniques de paths SVG et filtres
+// par carte (sinon les <textPath href="#..."> peuvent rÃ©fÃ©rencer un path d'une
+// autre carte rendue avant, et les filtres se mÃ©langent entre eux).
 let _wpRingSvgCounter = 0;
-// Génère le SVG de 2 anneaux concentriques (style Apple Watch).
-// ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
-// Étiquettes "TEMPS" / "MÉTRAGE" droites à 12h (point de départ de chaque arc)
-// et pourcentage actuel sur arc courbe à 6h. Longueur d'arc clampée à ~100%
-// (au-delà : tour supplémentaire posé par-dessus, extrémité toujours visible).
+// GÃ©nÃ¨re le SVG de 2 anneaux concentriques (style Apple Watch).
+// ratios : { temps: 0..âˆž ou null, metres: 0..âˆž ou null }
+// Ã‰tiquettes "TEMPS" / "MÃ‰TRAGE" droites Ã  12h (point de dÃ©part de chaque arc)
+// et pourcentage actuel sur arc courbe Ã  6h. Longueur d'arc clampÃ©e Ã  ~100%
+// (au-delÃ  : tour supplÃ©mentaire posÃ© par-dessus, extrÃ©mitÃ© toujours visible).
 function _renderWearPartRings(ratios){
   const size = 200, cx = 100, cy = 100, sw = 18;
   const rOuter = 86;                  // rayon anneau temps
-  const rInner = rOuter - sw - 6;     // rayon anneau métrage
+  const rInner = rOuter - sw - 6;     // rayon anneau mÃ©trage
   const _arc = (r, ratio) => {
     const circ = 2 * Math.PI * r;
     const trackBg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--border)" stroke-width="' + sw + '" opacity="0.28"/>';
@@ -3548,12 +3548,12 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour de base + court segment de stroke à la position
+    // >= 100% : tour de base + court segment de stroke Ã  la position
     // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
-    // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
-    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
+    // pour la tÃªte arrondie style natif, et drop-shadow pour l'effet 3D.
+    // Le dÃ©part Ã  12h n'est pas tracÃ© (gap dans le dasharray) â†’ pas de
     // cap visible au sommet.
-    // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
+    // Overflow plafonnÃ© Ã  0.97 pour garder le tip distinct du sommet si > 200%.
     const overflow = Math.min(0.97, ratio - 1);
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
@@ -3574,22 +3574,22 @@ function _renderWearPartRings(ratios){
       ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + tip;
   };
-  // Étiquette titre à 12h (texte droit) sur chaque anneau.
-  // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
-  // soit le fond (track gris, dégradé vert, jaune, orange ou rouge).
+  // Ã‰tiquette titre Ã  12h (texte droit) sur chaque anneau.
+  // Texte blanc, contour foncÃ© paint-order:stroke pour rester lisible quel que
+  // soit le fond (track gris, dÃ©gradÃ© vert, jaune, orange ou rouge).
   const _textStyle = 'paint-order:stroke;stroke:rgba(15,23,42,.75);stroke-width:2.5px;pointer-events:none;text-transform:uppercase';
   const _textCommonAttr = 'fill="#ffffff" font-size="9" font-weight="700" letter-spacing="0.8" font-family="system-ui,-apple-system,Segoe UI,sans-serif"';
   const _topTag = (yPos, txt) =>
     '<text x="' + cx + '" y="' + yPos + '" text-anchor="middle" dominant-baseline="central" ' +
       _textCommonAttr + ' style="' + _textStyle + '">' + txt + '</text>';
-  // % courbé sur arc inférieur (6h) — suit la courbure de l'anneau.
+  // % courbÃ© sur arc infÃ©rieur (6h) â€” suit la courbure de l'anneau.
   const uid = ++_wpRingSvgCounter;
   const idTempsBot  = 'wpr-tb-' + uid;
   const idMetresBot = 'wpr-mb-' + uid;
-  // Path = demi-cercle INFÉRIEUR de gauche à droite. En SVG (y-axe inversé),
-  // sweep-flag=0 correspond à la trajectoire qui passe par le BAS du cercle.
-  // À 6h, la tangente du path va dans le sens +x : les caractères du textPath
-  // s'élèvent alors vers le centre du cercle (lecture upright normale).
+  // Path = demi-cercle INFÃ‰RIEUR de gauche Ã  droite. En SVG (y-axe inversÃ©),
+  // sweep-flag=0 correspond Ã  la trajectoire qui passe par le BAS du cercle.
+  // Ã€ 6h, la tangente du path va dans le sens +x : les caractÃ¨res du textPath
+  // s'Ã©lÃ¨vent alors vers le centre du cercle (lecture upright normale).
   const _bottomPath = (id, r) =>
     '<path id="' + id + '" d="M ' + (cx - r) + ' ' + cy +
     ' A ' + r + ' ' + r + ' 0 0 0 ' + (cx + r) + ' ' + cy + '" fill="none"/>';
@@ -3610,14 +3610,14 @@ function _renderWearPartRings(ratios){
            _arc(rOuter, ratios.temps) +
            _arc(rInner, ratios.metres) +
            _topTag(cy - rOuter, 'Temps') +
-           _topTag(cy - rInner, 'Métrage') +
+           _topTag(cy - rInner, 'MÃ©trage') +
            _bottomLabel(idTempsBot,  ratios.temps) +
            _bottomLabel(idMetresBot, ratios.metres) +
          '</svg>';
 }
 
-// Trouve le code Intervention correspondant à une pièce d'usure (par pattern
-// sur le libellé). pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
+// Trouve le code Intervention correspondant Ã  une piÃ¨ce d'usure (par pattern
+// sur le libellÃ©). pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
 // Cherche dans OPS_TYPES_STATE.list (qui contient toutes les Interventions).
 // Normalise vers { label, intervalle, metrage_ref } pour rester compatible
 // avec l'ancien retour de _findSuiviCodeForWearPart.
@@ -3629,7 +3629,7 @@ function _findWearPartCode(pieceId, pos){
     const lbl = (t.nom || '').toLowerCase();
     let isMatch = false;
     if(single){
-      // Pièces sans position : matching par mot-clé principal
+      // PiÃ¨ces sans position : matching par mot-clÃ© principal
       if(pieceId === 'cutters')            isMatch = lbl.indexOf('cutter')   !== -1;
       else if(pieceId === 'couteaux_landberg') isMatch = lbl.indexOf('landberg') !== -1;
     } else {
@@ -3650,11 +3650,11 @@ function _findWearPartCode(pieceId, pos){
   }
   return null;
 }
-// Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
-function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
+// ConservÃ© pour compat (no-op : gÃ©rÃ© dans ParamÃ¨tres â†’ Maintenance).
+function saveOpsTypes(){ /* gÃ©rÃ© cÃ´tÃ© serveur via /api/maintenance/codes */ }
 
 // =========================================================================
-// Détails libres par code (notes locales, non stockées en base)
+// DÃ©tails libres par code (notes locales, non stockÃ©es en base)
 // =========================================================================
 const OPS_TYPES_DETAILS_KEY = 'mysifa_maint_optypes_details_v1';
 let _opsTypeDetailsEditingId = null;
@@ -3683,11 +3683,11 @@ function openOpsTypeDetailsModal(code){
   const infoEl = document.getElementById('ops-type-details-info');
   const textEl = document.getElementById('ops-type-details-text');
   if(!modal || !infoEl || !textEl) return;
-  if(titleEl) titleEl.textContent = t.nom || 'Détails de l\'opération';
-  // Bloc info DB (lecture seule) : catégorie, niveau, intervalle, dernière intervention
+  if(titleEl) titleEl.textContent = t.nom || 'DÃ©tails de l\'opÃ©ration';
+  // Bloc info DB (lecture seule) : catÃ©gorie, niveau, intervalle, derniÃ¨re intervention
   const machine = getOpsCatMachine();
   const lastDt = _lastInterventionFor(t.nom, machine, OPS_STATE.list);
-  let lastDisplay = '—';
+  let lastDisplay = 'â€”';
   if(lastDt){
     try{
       const d = new Date(lastDt);
@@ -3698,20 +3698,20 @@ function openOpsTypeDetailsModal(code){
       }
     }catch(e){}
   }
-  const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+  const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'ContrÃ´les';
   const intervalleTxt = t.periodique
-    ? (t.intervalle || 'À compléter (Paramètres → Maintenance)')
-    : '— (non périodique)';
+    ? (t.intervalle || 'Ã€ complÃ©ter (ParamÃ¨tres â†’ Maintenance)')
+    : 'â€” (non pÃ©riodique)';
   const _kv = (lbl, val) =>
     '<div><div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">' + lbl + '</div>' +
     '<div style="color:var(--text);font-weight:500">' + val + '</div></div>';
   infoEl.innerHTML = ''
     + _kv('Code', escHtml(String(t.id)))
-    + _kv('Catégorie', '<span class="op-pill ' + ((t.categorie === 'interventions') ? 'interventions' : 'controles') + '">' + escHtml(catLabel) + '</span>')
+    + _kv('CatÃ©gorie', '<span class="op-pill ' + ((t.categorie === 'interventions') ? 'interventions' : 'controles') + '">' + escHtml(catLabel) + '</span>')
     + _kv('Niveau', '<span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span>')
     + _kv('Intervalle', escHtml(intervalleTxt))
-    + _kv('Machine sélectionnée', escHtml(machine))
-    + _kv('Dernière intervention', escHtml(lastDisplay));
+    + _kv('Machine sÃ©lectionnÃ©e', escHtml(machine))
+    + _kv('DerniÃ¨re intervention', escHtml(lastDisplay));
   textEl.value = getOpsTypeDetails(code);
   modal.classList.add('open');
   modal.setAttribute('aria-hidden', 'false');
@@ -3736,18 +3736,18 @@ function saveOpsTypeDetails(e){
   if(val){ map[_opsTypeDetailsEditingId] = val; }
   else { delete map[_opsTypeDetailsEditingId]; }
   _saveOpsTypeDetailsMap(map);
-  showToast('Détails enregistrés.', 'info');
+  showToast('DÃ©tails enregistrÃ©s.', 'info');
   closeOpsTypeDetailsModal();
 }
 
 // =========================================================================
-// Vue Maintenance (accueil) : cartes par opération périodique, par machine
+// Vue Maintenance (accueil) : cartes par opÃ©ration pÃ©riodique, par machine
 // =========================================================================
 const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
 
 function getMaintMachine(){
-  try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'Cohésio 1'; }
-  catch(e){ return 'Cohésio 1'; }
+  try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'CohÃ©sio 1'; }
+  catch(e){ return 'CohÃ©sio 1'; }
 }
 function setMaintMachine(m){
   if(!m) return;
@@ -3758,11 +3758,11 @@ function setMaintMachine(m){
   WEARPART_LAST_DATES_STATE._cacheKey = null;
   renderMaintCards();
 }
-// --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
+// --- DerniÃ¨res opÃ©rations couteaux/contre-couteaux (source : MyProd) ---
 // On interroge /api/maintenance/wearparts/last qui scanne production_data
-// pour la machine sélectionnée. Réponse : { items: { "couteaux_bande": {
+// pour la machine sÃ©lectionnÃ©e. RÃ©ponse : { items: { "couteaux_bande": {
 // last_date, metrage_at_change, metrage_since }, ... }, current_metrage }.
-// Cache invalidé sur changement de machine.
+// Cache invalidÃ© sur changement de machine.
 const WEARPART_LAST_DATES_STATE = {
   machine: null,
   items: {},          // { piece_pos: { last_date, metrage_at_change, metrage_since } }
@@ -3772,9 +3772,9 @@ const WEARPART_LAST_DATES_STATE = {
 
 async function loadWearPartLastDates(machine){
   if(!machine) return;
-  // Récupère les dates des dernières saisies maintenance dans OPS_STATE (source
-  // locale, navigateur) pour chaque combinaison pièce x position. Envoie ces
-  // dates au backend qui retourne le métrage machine à chaque date.
+  // RÃ©cupÃ¨re les dates des derniÃ¨res saisies maintenance dans OPS_STATE (source
+  // locale, navigateur) pour chaque combinaison piÃ¨ce x position. Envoie ces
+  // dates au backend qui retourne le mÃ©trage machine Ã  chaque date.
   if(typeof loadOps === 'function') loadOps();
   const dates = {};
   WEARPART_PIECES.forEach(p => {
@@ -3790,7 +3790,7 @@ async function loadWearPartLastDates(machine){
       });
     }
   });
-  // Clé de cache : machine + dates concaténées. Si rien n'a changé → skip fetch.
+  // ClÃ© de cache : machine + dates concatÃ©nÃ©es. Si rien n'a changÃ© â†’ skip fetch.
   const cacheKey = machine + ':' + JSON.stringify(dates);
   if(WEARPART_LAST_DATES_STATE._cacheKey === cacheKey && !WEARPART_LAST_DATES_STATE.loading) return;
   WEARPART_LAST_DATES_STATE.loading = true;
@@ -3822,27 +3822,27 @@ function _getWearPartItem(pieceId, pos){
   const k = _getWearPartLastDateKey(pieceId, pos);
   return (WEARPART_LAST_DATES_STATE.items && WEARPART_LAST_DATES_STATE.items[k]) || null;
 }
-// Formate un nombre de mètres avec séparateurs d'espaces (style FR).
+// Formate un nombre de mÃ¨tres avec sÃ©parateurs d'espaces (style FR).
 function _fmtMetres(m){
-  if(m == null) return '—';
+  if(m == null) return 'â€”';
   const n = Math.round(Number(m));
-  if(!isFinite(n)) return '—';
+  if(!isFinite(n)) return 'â€”';
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' m';
 }
-// Parse une référence métrage en mètres. Accepte "5000", "5000 m", "5 km",
-// "1.5 km", "5000m", "10 kms", etc. Renvoie un nombre de mètres, ou null
-// si le texte n'est pas interprétable.
+// Parse une rÃ©fÃ©rence mÃ©trage en mÃ¨tres. Accepte "5000", "5000 m", "5 km",
+// "1.5 km", "5000m", "10 kms", etc. Renvoie un nombre de mÃ¨tres, ou null
+// si le texte n'est pas interprÃ©table.
 function _parseMetrageRef(text){
   if(!text) return null;
   const s = String(text).toLowerCase().trim();
   if(!s) return null;
-  const m = s.match(/([0-9]+(?:[.,][0-9]+)?)\s*(km|kms|kilom\w*|m|mt|mtr|metres?|mètres?)?/);
+  const m = s.match(/([0-9]+(?:[.,][0-9]+)?)\s*(km|kms|kilom\w*|m|mt|mtr|metres?|mÃ¨tres?)?/);
   if(!m) return null;
   const n = parseFloat(m[1].replace(',', '.'));
   if(!isFinite(n) || n <= 0) return null;
   const unit = m[2] || '';
   if(unit.startsWith('km') || unit.startsWith('kilom')) return n * 1000;
-  return n;  // par défaut : mètres
+  return n;  // par dÃ©faut : mÃ¨tres
 }
 function _daysSinceFromIso(iso){
   if(!iso) return null;
@@ -3865,9 +3865,9 @@ function _fmtDateOnly(iso){
   }catch(e){ return ''; }
 }
 
-// --- Pièces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
-// Une carte par pièce, position mémorisée par machine + par pièce.
-// État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
+// --- PiÃ¨ces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
+// Une carte par piÃ¨ce, position mÃ©morisÃ©e par machine + par piÃ¨ce.
+// Ã‰tat localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
 const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
 const WEARPART_PIECES = [
   { id: 'couteaux',         label: 'Couteaux' },
@@ -3875,7 +3875,7 @@ const WEARPART_PIECES = [
   { id: 'cutters',          label: 'Cutters',           no_position: true },
   { id: 'couteaux_landberg',label: 'Couteaux Landberg', no_position: true },
 ];
-// Retourne le descripteur d'une pièce d'usure par id (utile pour tester no_position)
+// Retourne le descripteur d'une piÃ¨ce d'usure par id (utile pour tester no_position)
 function _wearPartDef(pieceId){
   return WEARPART_PIECES.find(p => p.id === pieceId) || null;
 }
@@ -3907,7 +3907,7 @@ function setWearPartPos(pieceId, pos){
   _saveWearPartMap(m);
   renderMaintCards();
 }
-// Références d'usure (temps & métrage) — état localStorage :
+// RÃ©fÃ©rences d'usure (temps & mÃ©trage) â€” Ã©tat localStorage :
 //   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
 const WEARPART_REFS_KEY = 'mysifa_maint_wearparts_refs_v1';
 function _loadWearPartRefs(){
@@ -3934,27 +3934,27 @@ function setWearPartRef(pieceId, kind, value){
   if(!m[pieceId][machine][pos]) m[pieceId][machine][pos] = {};
   m[pieceId][machine][pos][kind] = (value || '').toString().trim();
   _saveWearPartRefs(m);
-  // Pas besoin de re-render : la valeur est déjà dans l'input. On évite ainsi
+  // Pas besoin de re-render : la valeur est dÃ©jÃ  dans l'input. On Ã©vite ainsi
   // de perdre le focus pendant que l'utilisateur tape.
 }
 
 function _renderWearPartsGroup(machine){
-  // Déclenche le fetch des dernières dates si la machine a changé
-  // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
+  // DÃ©clenche le fetch des derniÃ¨res dates si la machine a changÃ©
+  // (asynchrone : le render initial affiche "Chargementâ€¦", puis re-render au retour)
   if(WEARPART_LAST_DATES_STATE.machine !== machine){
     loadWearPartLastDates(machine);
   }
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
-    // Source des références : code Intervention en base, match par label
-    // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
+    // Source des rÃ©fÃ©rences : code Intervention en base, match par label
+    // (ex. "Changement couteaux bande" â†’ carte Couteaux + Bande).
     const wpCode = _findWearPartCode(p.id, pos);
     const refTemps   = wpCode ? (wpCode.intervalle  || '') : '';
     const refMetrage = wpCode ? (wpCode.metrage_ref || '') : '';
     // Source du dernier changement : OPS_STATE (= les saisies "Nouvelle saisie"
-    // faites dans l'app Maintenance), filtrées par label de code + machine.
-    // Le métrage parcouru depuis cette date est calculé côté serveur via le
-    // cache WEARPART_LAST_DATES_STATE (clé piece_pos).
+    // faites dans l'app Maintenance), filtrÃ©es par label de code + machine.
+    // Le mÃ©trage parcouru depuis cette date est calculÃ© cÃ´tÃ© serveur via le
+    // cache WEARPART_LAST_DATES_STATE (clÃ© piece_pos).
     const lastDate = wpCode
       ? _lastInterventionFor(wpCode.label, machine, OPS_STATE.list)
       : null;
@@ -3965,9 +3965,9 @@ function _renderWearPartsGroup(machine){
     const daysSince = _daysSinceFromIso(lastDate);
     // Pour la compat avec le bloc d'affichage plus bas (qui utilise wpItem.last_date)
     if(wpItem){ wpItem.last_date = lastDate; }
-    // Mise en exergue : déclenchée par DÉPASSEMENT DE TEMPS ou DÉPASSEMENT DE
-    // MÉTRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
-    // le dépassement, is-overdue-critical quand on est à >200%.
+    // Mise en exergue : dÃ©clenchÃ©e par DÃ‰PASSEMENT DE TEMPS ou DÃ‰PASSEMENT DE
+    // MÃ‰TRAGE (peu importe lequel) par rapport Ã  la rÃ©fÃ©rence. is-overdue dÃ¨s
+    // le dÃ©passement, is-overdue-critical quand on est Ã  >200%.
     const refDays   = _parseFrequenceDays(refTemps);
     const refMetres = _parseMetrageRef(refMetrage);
     const timeOver     = (refDays   != null && refDays   > 0 && daysSince    != null && daysSince    > refDays);
@@ -3981,14 +3981,14 @@ function _renderWearPartsGroup(machine){
     }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
-      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargementâ€¦</span>';
     } else if(daysSince == null){
-      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré dans MyProd</span>';
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistrÃ© dans MyProd</span>';
     } else {
       const lbl = daysSince === 0 ? 'Aujourd\'hui'
                 : daysSince === 1 ? 'Hier (1 jour)'
                 : daysSince + ' jours';
-      // Badge "Retard" si on dépasse la référence
+      // Badge "Retard" si on dÃ©passe la rÃ©fÃ©rence
       let retardBadge = '';
       if(refDays != null && refDays > 0 && daysSince > refDays){
         const over = daysSince - refDays;
@@ -4018,22 +4018,22 @@ function _renderWearPartsGroup(machine){
       '</div>' +
       (function(){
         // Layout :
-        //   - Gauche : 2 sections empilées TEMPS (cyan) et MÉTRAGE (ambre),
-        //     chacune avec barre verticale colorée à gauche pour identifier
+        //   - Gauche : 2 sections empilÃ©es TEMPS (cyan) et MÃ‰TRAGE (ambre),
+        //     chacune avec barre verticale colorÃ©e Ã  gauche pour identifier
         //     l'anneau correspondant.
-        //   - Droite : 2 anneaux concentriques. Extérieur cyan = temps,
-        //     intérieur ambre = métrage. Couleurs assorties aux sections.
+        //   - Droite : 2 anneaux concentriques. ExtÃ©rieur cyan = temps,
+        //     intÃ©rieur ambre = mÃ©trage. Couleurs assorties aux sections.
         const _refVal = (v) => v
           ? '<span class="val">' + escHtml(v) + '</span>'
           : (wpCode
-              ? '<span class="val muted">à compléter</span>'
+              ? '<span class="val muted">Ã  complÃ©ter</span>'
               : '<span class="val muted">aucun code intervention</span>'
             );
         // Section TEMPS
         let lastSub = '';
         let lastVal;
         if(WEARPART_LAST_DATES_STATE.machine !== machine){
-          lastVal = '<span class="val muted">Chargement…</span>';
+          lastVal = '<span class="val muted">Chargementâ€¦</span>';
         } else if(daysSince == null){
           lastVal = '<span class="val muted">jamais</span>';
         } else {
@@ -4048,12 +4048,12 @@ function _renderWearPartsGroup(machine){
           const over = daysSince - refDays;
           timeBadge = '<span class="maint-wp-badge">Retard ' + over + ' j</span>';
         }
-        // Section MÉTRAGE
+        // Section MÃ‰TRAGE
         let mVal;
         if(WEARPART_LAST_DATES_STATE.machine !== machine){
-          mVal = '<span class="val muted">Chargement…</span>';
+          mVal = '<span class="val muted">Chargementâ€¦</span>';
         } else if(!wpItem || wpItem.last_date == null){
-          mVal = '<span class="val muted">—</span>';
+          mVal = '<span class="val muted">â€”</span>';
         } else if(metrageSince == null){
           mVal = '<span class="val muted">non disponible</span>';
         } else {
@@ -4064,29 +4064,29 @@ function _renderWearPartsGroup(machine){
           const overM = metrageSince - refMetres;
           metresBadge = '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
         }
-        // Ratios pour les anneaux (null si pas de référence ou pas de donnée)
+        // Ratios pour les anneaux (null si pas de rÃ©fÃ©rence ou pas de donnÃ©e)
         const ratios = {
           temps:  (refDays   != null && refDays   > 0 && daysSince    != null) ? (daysSince    / refDays  ) : null,
           metres: (refMetres != null && refMetres > 0 && metrageSince != null) ? (metrageSince / refMetres) : null,
         };
         return '<div class="maint-wp-body">' +
           '<div class="maint-wp-info">' +
-            // Section TEMPS (anneau extérieur)
+            // Section TEMPS (anneau extÃ©rieur)
             '<div class="maint-wp-sec temps">' +
               '<div class="maint-wp-sec-head">Temps</div>' +
               '<div class="maint-wp-row">' +
-                '<span class="lbl">Référence</span>' + _refVal(refTemps) +
+                '<span class="lbl">RÃ©fÃ©rence</span>' + _refVal(refTemps) +
               '</div>' +
               '<div class="maint-wp-row">' +
-                '<span class="lbl">Dernière intervention</span>' + lastVal + lastSub +
+                '<span class="lbl">DerniÃ¨re intervention</span>' + lastVal + lastSub +
                 timeBadge +
               '</div>' +
             '</div>' +
-            // Section MÉTRAGE (anneau intérieur)
+            // Section MÃ‰TRAGE (anneau intÃ©rieur)
             '<div class="maint-wp-sec metres">' +
-              '<div class="maint-wp-sec-head">Métrage</div>' +
+              '<div class="maint-wp-sec-head">MÃ©trage</div>' +
               '<div class="maint-wp-row">' +
-                '<span class="lbl">Référence</span>' + _refVal(refMetrage) +
+                '<span class="lbl">RÃ©fÃ©rence</span>' + _refVal(refMetrage) +
               '</div>' +
               '<div class="maint-wp-row">' +
                 '<span class="lbl">Parcouru</span>' + mVal +
@@ -4103,14 +4103,14 @@ function _renderWearPartsGroup(machine){
   }).join('');
   return '<div class="maint-group">' +
            '<div class="maint-group-head">' +
-             '<h3 class="maint-group-title">Pièces d\'usure</h3>' +
-             '<span class="maint-group-count">' + WEARPART_PIECES.length + ' pièces</span>' +
+             '<h3 class="maint-group-title">PiÃ¨ces d\'usure</h3>' +
+             '<span class="maint-group-count">' + WEARPART_PIECES.length + ' piÃ¨ces</span>' +
            '</div>' +
            '<div class="maint-wearparts-stack">' + cards + '</div>' +
          '</div>';
 }
 
-// Convertit un nombre de jours en libellé standard (Hebdomadaire, Mensuel, etc.)
+// Convertit un nombre de jours en libellÃ© standard (Hebdomadaire, Mensuel, etc.)
 function _freqDaysToLabel(d){
   if(d == null) return 'Sans intervalle reconnu';
   const map = {
@@ -4135,21 +4135,21 @@ function renderMaintCards(){
   const grid = document.getElementById('maint-cards-grid');
   if(!grid) return;
   // Recharge les historiques de saisies depuis localStorage avant de calculer la
-  // dernière intervention — couvre les cas multi-onglets (saisie dans un autre
-  // onglet) et garantit qu'on lit toujours l'état le plus à jour.
+  // derniÃ¨re intervention â€” couvre les cas multi-onglets (saisie dans un autre
+  // onglet) et garantit qu'on lit toujours l'Ã©tat le plus Ã  jour.
   if(typeof loadOps === 'function') loadOps();
   if(typeof loadCtrl === 'function') loadCtrl();
-  // Met à jour l'état actif des boutons machine
+  // Met Ã  jour l'Ã©tat actif des boutons machine
   const machine = getMaintMachine();
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
-  // La section "Pièces d'usure" est toujours rendue, indépendamment des codes
-  // périodiques configurés en DB.
+  // La section "PiÃ¨ces d'usure" est toujours rendue, indÃ©pendamment des codes
+  // pÃ©riodiques configurÃ©s en DB.
   const wearPartsHtml = _renderWearPartsGroup(machine);
-  // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
+  // RÃ©cupÃ¨re les IDs des codes utilisÃ©s par les cartes PiÃ¨ces d'usure pour les
   // exclure des sections par intervalle ci-dessous (sinon les changements
-  // couteaux/contre-couteaux apparaîtraient deux fois).
+  // couteaux/contre-couteaux apparaÃ®traient deux fois).
   const wearPartCodeIds = new Set();
   WEARPART_PIECES.forEach(p => {
     const positions = p.no_position ? ['single'] : ['bande','rive'];
@@ -4158,26 +4158,26 @@ function renderMaintCards(){
       if(c && c.code) wearPartCodeIds.add(String(c.code));
     });
   });
-  // Filtre les codes avec periodique=OUI (toutes catégories confondues),
-  // en excluant ceux déjà affichés dans la section Pièces d'usure.
+  // Filtre les codes avec periodique=OUI (toutes catÃ©gories confondues),
+  // en excluant ceux dÃ©jÃ  affichÃ©s dans la section PiÃ¨ces d'usure.
   const baseItems = (OPS_TYPES_STATE.list || []).filter(it =>
     !!it.periodique && !wearPartCodeIds.has(String(it.id))
   );
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
-      '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
+      '<div class="maint-frames-empty" style="margin-top:24px">Aucune opÃ©ration pÃ©riodique configurÃ©e. Ajoutez des codes avec PÃ©riodique=OUI dans ParamÃ¨tres â†’ Maintenance.</div>';
     return;
   }
-  // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
-  // sur la machine sélectionnée, et infos de retard.
+  // Pour chaque carte, calcule : freqDays (depuis intervalle), derniÃ¨re intervention
+  // sur la machine sÃ©lectionnÃ©e, et infos de retard.
   //
   // Source des saisies : TOUJOURS OPS_STATE.
   // Les cartes affichent les codes periodique=OUI (interventions + controles).
-  // Le select de la modale Contrôles ne propose que les controles periodique=NON,
-  // donc un code controle periodique=OUI ne peut être saisi que via la modale
-  // Opérations -> il atterrit dans OPS_STATE. Si on lit CTRL_STATE pour les
-  // controles, on rate ces saisies (bug observé : cartes restant à "Jamais"
-  // alors que des entrées existent dans l'historique des opérations).
+  // Le select de la modale ContrÃ´les ne propose que les controles periodique=NON,
+  // donc un code controle periodique=OUI ne peut Ãªtre saisi que via la modale
+  // OpÃ©rations -> il atterrit dans OPS_STATE. Si on lit CTRL_STATE pour les
+  // controles, on rate ces saisies (bug observÃ© : cartes restant Ã  "Jamais"
+  // alors que des entrÃ©es existent dans l'historique des opÃ©rations).
   const enriched = baseItems.map(it => {
     const freqDays = _parseFrequenceDays(it.intervalle);
     const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
@@ -4195,7 +4195,7 @@ function renderMaintCards(){
     const overdue = (daysOverdue != null && daysOverdue > 0);
     return { it, freqDays, last, daysSince, daysOverdue, overdue };
   });
-  // Calcule le plus grand retard (toutes catégories) pour mettre en exergue
+  // Calcule le plus grand retard (toutes catÃ©gories) pour mettre en exergue
   let maxOverdue = 0;
   enriched.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
   // Groupement par intervalle (en jours). Items sans intervalle reconnu -> groupe "null".
@@ -4205,13 +4205,13 @@ function renderMaintCards(){
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(e);
   });
-  // Tri des groupes : plus petit intervalle en premier, 'unknown' à la fin
+  // Tri des groupes : plus petit intervalle en premier, 'unknown' Ã  la fin
   const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
     if(a === 'unknown') return 1;
     if(b === 'unknown') return -1;
     return a - b;
   });
-  // Tri à l'intérieur de chaque groupe : retard décroissant, puis alphabétique
+  // Tri Ã  l'intÃ©rieur de chaque groupe : retard dÃ©croissant, puis alphabÃ©tique
   groups.forEach((arr) => {
     arr.sort((a, b) => {
       const oa = a.daysOverdue || 0;
@@ -4221,22 +4221,22 @@ function renderMaintCards(){
     });
   });
   const _fmtDateTime = (iso) => {
-    if(!iso) return '—';
+    if(!iso) return 'â€”';
     try{
       const d = new Date(iso);
-      if(isNaN(d.getTime())) return '—';
+      if(isNaN(d.getTime())) return 'â€”';
       const pad = n => (n < 10 ? '0' + n : '' + n);
       return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }catch(e){ return '—'; }
+    }catch(e){ return 'â€”'; }
   };
-  // Construit le HTML : pièces d'usure d'abord, puis sections par intervalle.
+  // Construit le HTML : piÃ¨ces d'usure d'abord, puis sections par intervalle.
   let html = wearPartsHtml;
   sortedKeys.forEach(key => {
     const groupItems = groups.get(key);
     const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
     const cards = groupItems.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
-      const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+      const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'ContrÃ´les';
       let frameCls = 'maint-frame';
       if(overdue){
         frameCls += ' is-overdue';
@@ -4253,12 +4253,12 @@ function renderMaintCards(){
         if(daysOverdue > 0){
           badgeCls = 'danger';
           badgeLbl = 'Retard ' + daysOverdue + ' j';
-          detailLbl = daysSince + 'j depuis la dernière (intervalle ' + freqDays + 'j)';
+          detailLbl = daysSince + 'j depuis la derniÃ¨re (intervalle ' + freqDays + 'j)';
         } else {
           badgeCls = 'ok';
           const remaining = -daysOverdue;
-          badgeLbl = 'OK · J-' + remaining;
-          detailLbl = remaining + ' j avant prochaine échéance';
+          badgeLbl = 'OK Â· J-' + remaining;
+          detailLbl = remaining + ' j avant prochaine Ã©chÃ©ance';
         }
       } else if(daysSince != null && freqDays == null){
         badgeCls = 'unknown';
@@ -4270,12 +4270,12 @@ function renderMaintCards(){
         detailLbl = 'Intervalle ' + freqDays + ' j';
       } else {
         badgeCls = 'unknown';
-        badgeLbl = 'Aucune donnée';
+        badgeLbl = 'Aucune donnÃ©e';
       }
-      // Barre de progression : pourcentage écoulé depuis la dernière intervention
-      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur via
-      // _ratioColor (dégradé vert -> jaune -> orange -> rouge sur [0, 200%]),
-      // identique au code couleur des anneaux des pièces d'usure.
+      // Barre de progression : pourcentage Ã©coulÃ© depuis la derniÃ¨re intervention
+      // sur l'intervalle. Largeur clampÃ©e Ã  100% visuellement. Couleur via
+      // _ratioColor (dÃ©gradÃ© vert -> jaune -> orange -> rouge sur [0, 200%]),
+      // identique au code couleur des anneaux des piÃ¨ces d'usure.
       let progressHtml = '';
       if(freqDays != null && freqDays > 0 && daysSince != null){
         const ratio = daysSince / freqDays;
@@ -4283,7 +4283,7 @@ function renderMaintCards(){
         const fillStyleExtra = ';background:' + _ratioColor(ratio);
         const pctLbl = Math.round(ratio * 100) + '%';
         progressHtml =
-          '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la dernière intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
+          '<div class="maint-frame-progress" title="' + escAttr(daysSince + ' jour(s) depuis la derniÃ¨re intervention sur un intervalle de ' + freqDays + ' jour(s)') + '">' +
             '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:' + pct.toFixed(1) + '%' + fillStyleExtra + '"></div></div>' +
             '<div class="maint-frame-progress-label">' +
               '<span>' + daysSince + ' j sur ' + freqDays + ' j</span>' +
@@ -4291,12 +4291,12 @@ function renderMaintCards(){
             '</div>' +
           '</div>';
       } else if(freqDays != null && freqDays > 0 && daysSince == null){
-        // Intervalle défini mais jamais saisi : barre vide grisée
+        // Intervalle dÃ©fini mais jamais saisi : barre vide grisÃ©e
         progressHtml =
-          '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opération sur cette machine. Intervalle prévu : ' + freqDays + ' jour(s).') + '">' +
+          '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opÃ©ration sur cette machine. Intervalle prÃ©vu : ' + freqDays + ' jour(s).') + '">' +
             '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:0%"></div></div>' +
             '<div class="maint-frame-progress-label">' +
-              '<span>—</span>' +
+              '<span>â€”</span>' +
               '<span class="pct">0 / ' + freqDays + ' j</span>' +
             '</div>' +
           '</div>';
@@ -4314,7 +4314,7 @@ function renderMaintCards(){
         '</div>' +
         '<div class="maint-frame-stats" style="grid-template-columns:1fr">' +
           '<div class="maint-frame-stat">' +
-            '<span class="maint-frame-stat-label">Dernière intervention</span>' +
+            '<span class="maint-frame-stat-label">DerniÃ¨re intervention</span>' +
             lastHtml +
           '</div>' +
         '</div>' +
@@ -4328,7 +4328,7 @@ function renderMaintCards(){
     html += '<div class="maint-group">' +
               '<div class="maint-group-head">' +
                 '<h3 class="maint-group-title">' + escHtml(groupLabel) + '</h3>' +
-                '<span class="maint-group-count">' + groupItems.length + ' opération' + (groupItems.length > 1 ? 's' : '') + '</span>' +
+                '<span class="maint-group-count">' + groupItems.length + ' opÃ©ration' + (groupItems.length > 1 ? 's' : '') + '</span>' +
               '</div>' +
               '<div class="maint-frames-grid">' + cards + '</div>' +
             '</div>';
@@ -4341,12 +4341,12 @@ function submitOpsType(e){
   const niveau = parseInt(document.getElementById('cat-niveau').value, 10);
   const frequence = (document.getElementById('cat-frequence').value || '').trim();
   const detail = (document.getElementById('cat-detail').value || '').trim();
-  if(!nom || !niveau || !frequence){ showToast('Nom, niveau et fréquence sont requis.', 'danger'); return; }
-  if(niveau < 1 || niveau > 3){ showToast('Niveau doit être entre 1 et 3.', 'danger'); return; }
+  if(!nom || !niveau || !frequence){ showToast('Nom, niveau et frÃ©quence sont requis.', 'danger'); return; }
+  if(niveau < 1 || niveau > 3){ showToast('Niveau doit Ãªtre entre 1 et 3.', 'danger'); return; }
   const dup = OPS_TYPES_STATE.list.find(t =>
     (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CAT_EDITING_ID
   );
-  if(dup){ showToast('Un autre type avec ce nom existe déjà.', 'danger'); return; }
+  if(dup){ showToast('Un autre type avec ce nom existe dÃ©jÃ .', 'danger'); return; }
   let oldName = null;
   if(CAT_EDITING_ID){
     const cur = OPS_TYPES_STATE.list.find(t => t.id === CAT_EDITING_ID);
@@ -4369,7 +4369,7 @@ function submitOpsType(e){
   let renameApplied = false;
   if(oldName){
     const affected = OPS_STATE.list.filter(o => o.type === oldName).length;
-    if(affected > 0 && confirm(affected + ' opération' + (affected>1?'s':'') + ' enregistrée' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom « ' + oldName + ' ».\n\nMettre à jour ces opérations vers « ' + nom + ' » ?')){
+    if(affected > 0 && confirm(affected + ' opÃ©ration' + (affected>1?'s':'') + ' enregistrÃ©e' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom Â« ' + oldName + ' Â».\n\nMettre Ã  jour ces opÃ©rations vers Â« ' + nom + ' Â» ?')){
       OPS_STATE.list = OPS_STATE.list.map(o =>
         o.type === oldName ? Object.assign({}, o, {type: nom}) : o
       );
@@ -4380,12 +4380,12 @@ function submitOpsType(e){
   renderOpsTypes();
   if(renameApplied) renderOps();
   closeCatModal();
-  showToast(CAT_EDITING_ID ? 'Modifications enregistrées.' : 'Type ajouté à la liste.', 'info');
+  showToast(CAT_EDITING_ID ? 'Modifications enregistrÃ©es.' : 'Type ajoutÃ© Ã  la liste.', 'info');
 }
 function deleteOpsType(id){
   const t = OPS_TYPES_STATE.list.find(x => x.id === id);
   if(!t) return;
-  if(!confirm('Supprimer le type « ' + t.nom + ' » ?\n\nLes opérations déjà enregistrées avec ce nom restent inchangées.')) return;
+  if(!confirm('Supprimer le type Â« ' + t.nom + ' Â» ?\n\nLes opÃ©rations dÃ©jÃ  enregistrÃ©es avec ce nom restent inchangÃ©es.')) return;
   OPS_TYPES_STATE.list = OPS_TYPES_STATE.list.filter(x => x.id !== id);
   saveOpsTypes();
   renderOpsTypes();
@@ -4406,7 +4406,7 @@ function refreshOpsTypeSelect(){
   if(!sel) return;
   const cur = sel.value;
   if(!OPS_TYPES_STATE.list.length){
-    sel.innerHTML = '<option value="">Aucun type défini…</option>';
+    sel.innerHTML = '<option value="">Aucun type dÃ©finiâ€¦</option>';
     sel.disabled = true;
     if(hint) hint.style.display = 'block';
     return;
@@ -4414,11 +4414,11 @@ function refreshOpsTypeSelect(){
   sel.disabled = false;
   if(hint) hint.style.display = 'none';
   const sorted = OPS_TYPES_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
-  sel.innerHTML = '<option value="">Sélectionner un type…</option>' +
+  sel.innerHTML = '<option value="">SÃ©lectionner un typeâ€¦</option>' +
     sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
   if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
 }
-// ── Maintenance préventive : fréquence → jours, retard d'intervention ──
+// â”€â”€ Maintenance prÃ©ventive : frÃ©quence â†’ jours, retard d'intervention â”€â”€
 function _normalizeFreqStr(s){
   return String(s || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -4427,7 +4427,7 @@ function _normalizeFreqStr(s){
 function _parseFrequenceDays(freq){
   const s = _normalizeFreqStr(freq);
   if(!s) return null;
-  // Patterns mots-clés courants
+  // Patterns mots-clÃ©s courants
   if(/quotid|journal|daily/.test(s)) return 1;
   if(/(bi[\s-]?hebdo|14\s*j|2\s*sem)/.test(s)) return 14;
   if(/hebdo|weekly|7\s*j/.test(s)) return 7;
@@ -4437,7 +4437,7 @@ function _parseFrequenceDays(freq){
   if(/(bi[\s-]?annuel|biennal|2\s*ans?|730\s*j)/.test(s)) return 730;
   if(/(annuel|annual|yearly|365\s*j|1\s*an)/.test(s)) return 365;
   if(/mensuel|monthly|30\s*j/.test(s)) return 30;
-  // Patterns numériques explicites
+  // Patterns numÃ©riques explicites
   const m1 = s.match(/(\d+)\s*j(?:our)?/);
   if(m1) return parseInt(m1[1], 10);
   const m2 = s.match(/(\d+)\s*sem/);
@@ -4446,10 +4446,10 @@ function _parseFrequenceDays(freq){
   if(m3) return parseInt(m3[1], 10) * 30;
   const m4 = s.match(/(\d+)\s*an/);
   if(m4) return parseInt(m4[1], 10) * 365;
-  return null; // fréquence non interprétable
+  return null; // frÃ©quence non interprÃ©table
 }
 function _opOverdueInfo(opType){
-  // → { overdue: bool, daysOverdue: number|null, daysSince: number|null, freqDays: number|null }
+  // â†’ { overdue: bool, daysOverdue: number|null, daysSince: number|null, freqDays: number|null }
   const freqDays = _parseFrequenceDays(opType && opType.frequence);
   const dt = opType && opType.derniere_intervention;
   if(!dt) return { overdue:false, daysOverdue:null, daysSince:null, freqDays };
@@ -4468,9 +4468,9 @@ function _fmtDateFr(iso){
   if(!m) return iso;
   return m[3] + '/' + m[2] + '/' + m[1];
 }
-// Conservé en no-op pour rétro-compat : la "Dernière intervention" est désormais
-// dérivée automatiquement des saisies réelles (OPS_STATE / CTRL_STATE), filtrées
-// par la machine sélectionnée au-dessus de chaque catalogue.
+// ConservÃ© en no-op pour rÃ©tro-compat : la "DerniÃ¨re intervention" est dÃ©sormais
+// dÃ©rivÃ©e automatiquement des saisies rÃ©elles (OPS_STATE / CTRL_STATE), filtrÃ©es
+// par la machine sÃ©lectionnÃ©e au-dessus de chaque catalogue.
 function updateLastIntervention(id, val){ /* derive: see _lastInterventionFor */ }
 function renderOpsTypes(){
   refreshOpsTypeSelect();
@@ -4482,7 +4482,7 @@ function renderOpsTypes(){
   document.querySelectorAll('.js-ops-cat-machine').forEach(sel => {
     if(sel.value !== machine) sel.value = machine;
   });
-  // Calcule la dernière intervention par code, filtrée par machine
+  // Calcule la derniÃ¨re intervention par code, filtrÃ©e par machine
   OPS_TYPES_STATE.list.forEach(t => {
     t.derniere_intervention = _lastInterventionFor(t.nom, machine, OPS_STATE.list);
   });
@@ -4502,7 +4502,7 @@ function renderOpsTypes(){
     const isActive = th.getAttribute('data-sort-cat') === f;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+    if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? 'â†‘' : 'â†“') : 'â†•';
   });
   // Partitionner : retards d'abord (les plus en retard en premier), puis le reste selon le tri courant
   const withInfo = sorted.map(t => ({ t, info: _opOverdueInfo(t) }));
@@ -4512,22 +4512,22 @@ function renderOpsTypes(){
   const finalRows = overdueRows.concat(normalRows);
   let html;
   if(!finalRows.length){
-    html = '<tr><td colspan="6" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
+    html = '<tr><td colspan="6" class="ops-empty">Aucune opÃ©ration pÃ©riodique. Ajoutez des codes avec PÃ©riodique=OUI dans ParamÃ¨tres â†’ Maintenance.</td></tr>';
   } else {
     html = finalRows.map(({t, info}) => {
       const rowCls = info.overdue ? ' class="row-overdue"' : '';
       const dt = t.derniere_intervention || '';
       let statusHtml = '';
       if(info.overdue){
-        statusHtml = '<span class="last-intervention-status overdue" title="' + escAttr('Retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue>1?'s':'') + ' (' + info.daysSince + 'j depuis la dernière, fréquence ' + info.freqDays + 'j)') + '">⚠ Retard ' + info.daysOverdue + ' j</span>';
+        statusHtml = '<span class="last-intervention-status overdue" title="' + escAttr('Retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue>1?'s':'') + ' (' + info.daysSince + 'j depuis la derniÃ¨re, frÃ©quence ' + info.freqDays + 'j)') + '">âš  Retard ' + info.daysOverdue + ' j</span>';
       } else if(info.daysSince != null && info.freqDays != null){
         const remaining = info.freqDays - info.daysSince;
-        statusHtml = '<span class="last-intervention-status ok" title="Prochaine intervention recommandée dans ' + remaining + ' jour' + (remaining>1?'s':'') + '">✓ OK (J-' + Math.max(0, remaining) + ')</span>';
+        statusHtml = '<span class="last-intervention-status ok" title="Prochaine intervention recommandÃ©e dans ' + remaining + ' jour' + (remaining>1?'s':'') + '">âœ“ OK (J-' + Math.max(0, remaining) + ')</span>';
       } else if(!dt){
-        statusHtml = '<span class="last-intervention-status unknown">Jamais enregistré</span>';
+        statusHtml = '<span class="last-intervention-status unknown">Jamais enregistrÃ©</span>';
       }
-      // Icône SVG rouge (triangle "attention") affichée au début de la cellule
-      // Nom quand l'opération est en retard. Le tooltip détaille le nb de jours.
+      // IcÃ´ne SVG rouge (triangle "attention") affichÃ©e au dÃ©but de la cellule
+      // Nom quand l'opÃ©ration est en retard. Le tooltip dÃ©taille le nb de jours.
       const overdueIcon = info.overdue
         ? '<span class="ops-row-warn-ico" title="Intervention en retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue > 1 ? 's' : '') + '" aria-label="En retard">'
           + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">'
@@ -4536,15 +4536,15 @@ function renderOpsTypes(){
           + '<line x1="12" y1="17" x2="12.01" y2="17"/>'
           + '</svg></span>'
         : '';
-      // Badge texte "En retard" conservé en bout de ligne pour la lisibilité
+      // Badge texte "En retard" conservÃ© en bout de ligne pour la lisibilitÃ©
       const overdueBadge = info.overdue
         ? '<span class="row-overdue-badge" title="Intervention en retard">En retard ' + info.daysOverdue + ' j</span>'
         : '';
-      const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+      const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'ContrÃ´les';
       const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
-      // dt est ici une date ISO (datetime) issue de la dernière saisie sur la
-      // machine sélectionnée. On l'affiche au format JJ/MM/AAAA HH:MM.
-      let dtDisplay = '—';
+      // dt est ici une date ISO (datetime) issue de la derniÃ¨re saisie sur la
+      // machine sÃ©lectionnÃ©e. On l'affiche au format JJ/MM/AAAA HH:MM.
+      let dtDisplay = 'â€”';
       if(dt){
         try{
           const d = new Date(dt);
@@ -4555,13 +4555,13 @@ function renderOpsTypes(){
           }
         }catch(e){}
       }
-      // Intervalle de temps : vide pour les non-périodiques (Interventions one-shot)
+      // Intervalle de temps : vide pour les non-pÃ©riodiques (Interventions one-shot)
       const intervalleCell = t.periodique
-        ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
-        : '<span style="color:var(--muted)">—</span>';
-      // Ligne entière cliquable (double-clic) pour ouvrir la modale d'édition
-      // des détails (notes libres, stockées en localStorage par code).
-      return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les détails">' +
+        ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">Ã€ complÃ©ter</span>')
+        : '<span style="color:var(--muted)">â€”</span>';
+      // Ligne entiÃ¨re cliquable (double-clic) pour ouvrir la modale d'Ã©dition
+      // des dÃ©tails (notes libres, stockÃ©es en localStorage par code).
+      return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les dÃ©tails">' +
         '<td>' + overdueIcon + '<strong style="color:var(--text);vertical-align:middle">' + escHtml(t.nom) + '</strong>' + overdueBadge + '</td>' +
         '<td><span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span></td>' +
         '<td><span class="op-pill ' + catCls + '">' + escHtml(catLabel) + '</span></td>' +
@@ -4577,7 +4577,7 @@ function renderOpsTypes(){
     }).join('');
   }
   tbodies.forEach(tb => { tb.innerHTML = html; });
-  // Double-clic sur une ligne -> modale d'édition des détails (notes locales)
+  // Double-clic sur une ligne -> modale d'Ã©dition des dÃ©tails (notes locales)
   document.querySelectorAll('tr[data-ops-type-row]').forEach(tr => {
     tr.addEventListener('dblclick', () => {
       const code = tr.getAttribute('data-ops-type-row');
@@ -4585,12 +4585,12 @@ function renderOpsTypes(){
     });
   });
   const n = OPS_TYPES_STATE.list.length;
-  const lbl = n + ' opération' + (n > 1 ? 's' : '');
+  const lbl = n + ' opÃ©ration' + (n > 1 ? 's' : '');
   document.querySelectorAll('.js-cat-count').forEach(c => { c.textContent = lbl; });
 }
 
 // =========================================================================
-// Historique des contrôles
+// Historique des contrÃ´les
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
 const CTRL_EXTRA_KEY = 'mysifa_ctrl_show_extra_v1';
@@ -4638,8 +4638,8 @@ function _formatAckComment(ack){
       }
     });
   }
-  if(ack.comment){ parts.push((parts.length ? '« ' + ack.comment + ' »' : ack.comment)); }
-  return parts.join(' · ');
+  if(ack.comment){ parts.push((parts.length ? 'Â« ' + ack.comment + ' Â»' : ack.comment)); }
+  return parts.join(' Â· ');
 }
 
 async function loadCtrlAcks(){
@@ -4675,7 +4675,7 @@ function addControle(e){
   const type = (document.getElementById('ctrl-type').value || '').trim();
   const commentaire = (document.getElementById('ctrl-comment').value || '').trim();
   const operateur = currentUserName();
-  if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
+  if(!operateur){ showToast('IdentitÃ© non chargÃ©e. RÃ©essayez dans un instant.', 'danger'); return; }
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
   CTRL_STATE.list.push({
     id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
@@ -4684,26 +4684,26 @@ function addControle(e){
   });
   saveCtrl();
   renderCtrl();
-  // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
-  // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
+  // Aligne le sÃ©lecteur du catalogue sur la machine de la saisie et re-render
+  // pour que la "DerniÃ¨re intervention" reflÃ¨te immÃ©diatement la nouvelle saisie.
   try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, machine); }catch(e){}
-  // Aligne aussi la vue Maintenance (cartes) — un contrôle périodique fait partie
+  // Aligne aussi la vue Maintenance (cartes) â€” un contrÃ´le pÃ©riodique fait partie
   // des cartes de la vue principale.
   try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
   if(typeof renderMaintCards === 'function') renderMaintCards();
   closeCtrlModal();
-  showToast('Contrôle enregistré.', 'info');
+  showToast('ContrÃ´le enregistrÃ©.', 'info');
 }
 function deleteCtrl(id){
-  if(!confirm('Supprimer ce contrôle ?')) return;
+  if(!confirm('Supprimer ce contrÃ´le ?')) return;
   CTRL_STATE.list = CTRL_STATE.list.filter(c => c.id !== id);
   saveCtrl();
   renderCtrl();
 }
 
 async function deleteAck(prefixedId){
-  if(!confirm('Supprimer cette ligne d\'historique ?\n\nElle restera comptée pour le dernier acquittement de l\'alerte associée si c\'est la plus récente.')) return;
+  if(!confirm('Supprimer cette ligne d\'historique ?\n\nElle restera comptÃ©e pour le dernier acquittement de l\'alerte associÃ©e si c\'est la plus rÃ©cente.')) return;
   // Format prefixedId : "ack-{numeric_id}"
   const m = String(prefixedId).match(/^ack-(\d+)$/);
   if(!m){ showToast('Identifiant invalide.', 'danger'); return; }
@@ -4714,15 +4714,15 @@ async function deleteAck(prefixedId){
       credentials: 'same-origin',
     });
     if(!r.ok){
-      let msg = 'Suppression refusée';
+      let msg = 'Suppression refusÃ©e';
       try { const j = await r.json(); msg = j.detail || msg; } catch(e){}
       showToast(msg, 'danger');
       return;
     }
-    showToast('Ligne supprimée.', 'info');
+    showToast('Ligne supprimÃ©e.', 'info');
     await loadCtrlAcks();
   } catch(e){
-    showToast('Erreur réseau — réessaie.', 'danger');
+    showToast('Erreur rÃ©seau â€” rÃ©essaie.', 'danger');
   }
 }
 function sortCtrl(field){
@@ -4772,10 +4772,10 @@ function updateCtrlDatePresetChips(){
   });
 }
 function _displayType(entry){
-  // Nom canonique d'un contrôle pour l'UI : on préfère le label du code
-  // maintenance (stable, lisible) plutôt que le nom prefixé de l'alerte auto
-  // ("Contrôle : XX – label"). Fallback sur entry.type pour les alertes
-  // manuelles sans code lié et pour les contrôles saisis manuellement.
+  // Nom canonique d'un contrÃ´le pour l'UI : on prÃ©fÃ¨re le label du code
+  // maintenance (stable, lisible) plutÃ´t que le nom prefixÃ© de l'alerte auto
+  // ("ContrÃ´le : XX â€“ label"). Fallback sur entry.type pour les alertes
+  // manuelles sans code liÃ© et pour les contrÃ´les saisis manuellement.
   if(!entry) return '';
   if(entry._source === 'alert' && entry._maint_code){
     const codeItem = CTRL_TYPES_STATE.list.find(t => String(t.id) === String(entry._maint_code));
@@ -4790,18 +4790,18 @@ function refreshCtrlFiltersOptions(){
   if(typeSel){
     const cur = typeSel.value;
     const setTypes = new Set();
-    // Base : labels du catalogue de codes (même sans saisie encore)
+    // Base : labels du catalogue de codes (mÃªme sans saisie encore)
     CTRL_TYPES_STATE.list.forEach(t => { if(t.nom) setTypes.add(t.nom); });
-    // Ajoute : chaque entrée (manuelle ou ack) via son nom d'affichage canonique
+    // Ajoute : chaque entrÃ©e (manuelle ou ack) via son nom d'affichage canonique
     CTRL_STATE.list.forEach(c => { const n = _displayType(c); if(n) setTypes.add(n); });
     (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
-    // Ajoute : les alertes autonomes (sans linked_maint_code) même sans ack.
-    // Les alertes auto-générées à partir d'un code maintenance (préfixe
-    // "Contrôle : XX – …") ne sont PAS ajoutées ici — le label du code est
-    // déjà présent via CTRL_TYPES_STATE, ce qui créerait un doublon.
+    // Ajoute : les alertes autonomes (sans linked_maint_code) mÃªme sans ack.
+    // Les alertes auto-gÃ©nÃ©rÃ©es Ã  partir d'un code maintenance (prÃ©fixe
+    // "ContrÃ´le : XX â€“ â€¦") ne sont PAS ajoutÃ©es ici â€” le label du code est
+    // dÃ©jÃ  prÃ©sent via CTRL_TYPES_STATE, ce qui crÃ©erait un doublon.
     (CTRL_STATE.known_alerts || []).forEach(a => {
       if(!a || !a.nom) return;
-      if(a.linked_maint_code) return;  // évite le doublon avec le label du code
+      if(a.linked_maint_code) return;  // Ã©vite le doublon avec le label du code
       setTypes.add(a.nom);
     });
     const types = Array.from(setTypes).sort((a,b) => a.localeCompare(b, 'fr'));
@@ -4812,7 +4812,7 @@ function refreshCtrlFiltersOptions(){
   if(opeSel){
     const cur = opeSel.value;
     const opes = Array.from(new Set(CTRL_STATE.list.map(c => c.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
-    opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
+    opeSel.innerHTML = '<option value="">Tous les opÃ©rateurs</option>' +
       opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
     if(cur && opes.includes(cur)) opeSel.value = cur;
   }
@@ -4886,8 +4886,8 @@ function resetPointFilters(){
 }
 
 function _matchPointFilters(ackRow){
-  // ackRow n'est filtré que si _source === 'alert' avec des _responses.
-  // Les entrées manuelles passent toujours à travers (pas de réponses structurées).
+  // ackRow n'est filtrÃ© que si _source === 'alert' avec des _responses.
+  // Les entrÃ©es manuelles passent toujours Ã  travers (pas de rÃ©ponses structurÃ©es).
   if(!ackRow || ackRow._source !== 'alert') return true;
   const items = _getCurrentTypeChecklistItems();
   if(!items) return true;
@@ -4910,7 +4910,7 @@ function _matchPointFilters(ackRow){
         if(!isNaN(mx) && (isNaN(num) || num > mx)) return false;
       }
     } else {
-      // choice : la réponse cochée doit inclure la valeur filtrée
+      // choice : la rÃ©ponse cochÃ©e doit inclure la valeur filtrÃ©e
       if(filt.value != null && filt.value !== ''){
         const arr = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
         if(!arr.includes(filt.value)) return false;
@@ -4927,10 +4927,10 @@ function openAckDetail(prefixedId){
   const items = Array.isArray(meta.checklist_items) ? meta.checklist_items : [];
   const responses = ack._responses || {};
 
-  // Rendu de la checklist en mode lecture seule (cases pré-cochées / valeur saisie)
+  // Rendu de la checklist en mode lecture seule (cases prÃ©-cochÃ©es / valeur saisie)
   let checklistHtml = '';
   if(items.length){
-    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrÃ´le</label>'
       + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
       +   items.map((it, idx) => {
             const r = responses[String(idx)];
@@ -4945,15 +4945,15 @@ function openAckDetail(prefixedId){
                 + '</div>'
                 + '</div>';
             }
-            // choice : cases à cocher pré-remplies selon les réponses stockées
+            // choice : cases Ã  cocher prÃ©-remplies selon les rÃ©ponses stockÃ©es
             const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
-            // On n'a pas la liste complète des réponses possibles dans l'ack ;
-            // on n'affiche donc que les réponses réellement cochées (comme des
-            // pills sélectionnées). C'est fidèle à la donnée enregistrée.
+            // On n'a pas la liste complÃ¨te des rÃ©ponses possibles dans l'ack ;
+            // on n'affiche donc que les rÃ©ponses rÃ©ellement cochÃ©es (comme des
+            // pills sÃ©lectionnÃ©es). C'est fidÃ¨le Ã  la donnÃ©e enregistrÃ©e.
             const respHtml = selected.length
               ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>' + escHtml(s) + '</span></label>').join('')
-              : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
-            // Si "Autre" est coché et qu'une précision a été saisie, on l'affiche.
+              : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune rÃ©ponse cochÃ©e</span>';
+            // Si "Autre" est cochÃ© et qu'une prÃ©cision a Ã©tÃ© saisie, on l'affiche.
             const otherTxt = responses[String(idx) + '_other'];
             const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
               ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(otherTxt)) + '</div>'
@@ -4967,12 +4967,12 @@ function openAckDetail(prefixedId){
       + '</div>';
   }
 
-  // Contexte : date, machine, opérateur
+  // Contexte : date, machine, opÃ©rateur
   const dt = fmtDate(ack.date_saisie);
-  const contextLine = escHtml(ack.machine || '—') + ' · ' + escHtml(dt) + ' · ' + escHtml(ack.operateur || '—');
+  const contextLine = escHtml(ack.machine || 'â€”') + ' Â· ' + escHtml(dt) + ' Â· ' + escHtml(ack.operateur || 'â€”');
   const commentText = ack._raw_comment || '';
 
-  // ── Contexte dossier + fiche technique ──
+  // â”€â”€ Contexte dossier + fiche technique â”€â”€
   const dosInfo = ack._dossier_info || null;
   const noDos = ack._no_dossier || '';
   let dossierHtml = '';
@@ -4999,38 +4999,38 @@ function openAckDetail(prefixedId){
       else if(dosInfo.ref_produit_norm) clientRef.push(escHtml(dosInfo.ref_produit_norm));
       const dosSec = section('Dossier', [
         kv('Client', fmtVal(dosInfo.client)),
-        kv('Désignation', fmtVal(dosInfo.description)),
-        kv('Réf produit', clientRef.join(' ')),
-        kv('Format', (dosInfo.format_l && dosInfo.format_h) ? escHtml(String(dosInfo.format_l)) + ' × ' + escHtml(String(dosInfo.format_h)) + ' mm' : (fmtVal(dosInfo.format_l, 'mm') || fmtVal(dosInfo.format_h, 'mm'))),
+        kv('DÃ©signation', fmtVal(dosInfo.description)),
+        kv('RÃ©f produit', clientRef.join(' ')),
+        kv('Format', (dosInfo.format_l && dosInfo.format_h) ? escHtml(String(dosInfo.format_l)) + ' Ã— ' + escHtml(String(dosInfo.format_h)) + ' mm' : (fmtVal(dosInfo.format_l, 'mm') || fmtVal(dosInfo.format_h, 'mm'))),
         kv('Laize dossier', fmtVal(dosInfo.pe_laize, 'mm')),
         kv('Dos', fmtVal(dosInfo.dos_rvgi)),
       ]);
       const bobSec = section('Bobine', [
-        kv('Ø mandrin', fmtVal(dosInfo.mandrin_dia)),
+        kv('Ã˜ mandrin', fmtVal(dosInfo.mandrin_dia)),
         kv('Longueur mandrin', fmtVal(dosInfo.mandrin_longueur, 'mm')),
         kv('Enroulement', fmtVal(dosInfo.enroulement)),
-        kv('Étiquettes / bobine', fmtVal(dosInfo.nb_etiq_bobin)),
-        kv('Ø extérieur', fmtVal(dosInfo.dia_ext, 'mm')),
+        kv('Ã‰tiquettes / bobine', fmtVal(dosInfo.nb_etiq_bobin)),
+        kv('Ã˜ extÃ©rieur', fmtVal(dosInfo.dia_ext, 'mm')),
         kv('Poids', fmtVal(dosInfo.poids, 'kg')),
       ]);
-      const matSec = section('Matière', [
-        kv('Matière', fmtVal(dosInfo.matiere)),
-        kv('Adhésif', fmtVal(dosInfo.adhesif)),
+      const matSec = section('MatiÃ¨re', [
+        kv('MatiÃ¨re', fmtVal(dosInfo.matiere)),
+        kv('AdhÃ©sif', fmtVal(dosInfo.adhesif)),
         kv('Support', fmtVal(dosInfo.support)),
         kv('Glassine', fmtVal(dosInfo.glassine)),
-        kv('Épaisseur', fmtVal(dosInfo.epaisseur, 'µm')),
+        kv('Ã‰paisseur', fmtVal(dosInfo.epaisseur, 'Âµm')),
         kv('Laize fiche', fmtVal(dosInfo.ft_laize, 'mm')),
         kv('Laize optimale', fmtVal(dosInfo.laize_optimale, 'mm')),
       ]);
-      const etiSec = section('Étiquette', [
-        kv('Laize étiq.', fmtVal(dosInfo.eti_laize, 'mm')),
-        kv('Longueur étiq.', fmtVal(dosInfo.eti_longueur, 'mm')),
+      const etiSec = section('Ã‰tiquette', [
+        kv('Laize Ã©tiq.', fmtVal(dosInfo.eti_laize, 'mm')),
+        kv('Longueur Ã©tiq.', fmtVal(dosInfo.eti_longueur, 'mm')),
         kv('Rayons', fmtVal(dosInfo.eti_rayons)),
         kv('Perforations', fmtVal(dosInfo.eti_perforations)),
       ]);
       const impSec = section('Impression', [
-        kv('Anilox tête 1', fmtVal(dosInfo.tete1_anilox)),
-        kv('Composition tête 1', fmtVal(dosInfo.tete1_composition)),
+        kv('Anilox tÃªte 1', fmtVal(dosInfo.tete1_anilox)),
+        kv('Composition tÃªte 1', fmtVal(dosInfo.tete1_composition)),
       ]);
       sections = dosSec + bobSec + matSec + etiSec + impSec;
     }
@@ -5038,7 +5038,7 @@ function openAckDetail(prefixedId){
     if(sections){
       dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier &amp; fiche technique</label>' + dosHeader + sections + '</div>';
     } else {
-      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier</label>' + dosHeader + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">Aucune fiche technique associée à ce dossier.</div></div>';
+      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier</label>' + dosHeader + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">Aucune fiche technique associÃ©e Ã  ce dossier.</div></div>';
     }
   }
 
@@ -5046,7 +5046,7 @@ function openAckDetail(prefixedId){
   overlay.className = 'ta-sim ta-pl-center ta-blocking';
   overlay.id = 'ack-detail-overlay';
   overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:640px">'
-    + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
+    + '<div class="ta-sim-title">' + escHtml(ack.type || 'ContrÃ´le') + '</div>'
     + '<div class="ta-sim-sub">' + contextLine + '</div>'
     + checklistHtml
     + dossierHtml
@@ -5067,11 +5067,11 @@ function closeAckDetail(){
   if(el) el.remove();
 }
 
-// Détecte une non-conformité : au moins une réponse choice de l'ack figure
-// dans la liste nc_responses définie par l'admin lors de la création de
-// l'alerte. Les items de type "value" et les clés "_other" (précision de la
-// case Autre) ne sont pas évalués — l'admin cible explicitement quelles
-// réponses signalent un problème.
+// DÃ©tecte une non-conformitÃ© : au moins une rÃ©ponse choice de l'ack figure
+// dans la liste nc_responses dÃ©finie par l'admin lors de la crÃ©ation de
+// l'alerte. Les items de type "value" et les clÃ©s "_other" (prÃ©cision de la
+// case Autre) ne sont pas Ã©valuÃ©s â€” l'admin cible explicitement quelles
+// rÃ©ponses signalent un problÃ¨me.
 function _ackHasNonConformite(c){
   if(!c || c._source !== 'alert') return false;
   const meta = (CTRL_STATE.alerts_meta || {})[String(c._alert_id)];
@@ -5087,7 +5087,7 @@ function _ackHasNonConformite(c){
     for(const sel of r){
       const s = String(sel || '').trim();
       if(ncSet.indexOf(s) !== -1) return true;
-      // "Autre" traité comme NC si l'admin l'a explicitement demandé
+      // "Autre" traitÃ© comme NC si l'admin l'a explicitement demandÃ©
       if(otherIsNc && s === 'Autre') return true;
     }
   }
@@ -5107,7 +5107,7 @@ function renderCtrl(){
     if(to){ to.value = f.dateFrom; f.dateTo = f.dateFrom; }
   }
   // Filter
-  // Sync les filtres par point avec le type sélectionné
+  // Sync les filtres par point avec le type sÃ©lectionnÃ©
   renderPointFilters();
   const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
   let filtered = merged.filter(c => {
@@ -5137,8 +5137,8 @@ function renderCtrl(){
     if(av > bv) return  1 * dir;
     return 0;
   });
-  // Colonnes adaptatives : si un seul type est sélectionné et qu'il correspond
-  // à une alerte ayant une checklist, on affiche une colonne par point.
+  // Colonnes adaptatives : si un seul type est sÃ©lectionnÃ© et qu'il correspond
+  // Ã  une alerte ayant une checklist, on affiche une colonne par point.
   let extraCols = [];
   const singleType = f.type || '';
   if(singleType){
@@ -5156,14 +5156,14 @@ function renderCtrl(){
   const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
   if(thead){
     const sortIco = (col) => {
-      if(sf !== col) return '<span class="sort-ico">↕</span>';
-      return '<span class="sort-ico">' + (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') + '</span>';
+      if(sf !== col) return '<span class="sort-ico">â†•</span>';
+      return '<span class="sort-ico">' + (CTRL_STATE.sortDir === 'asc' ? 'â†‘' : 'â†“') + '</span>';
     };
     const activeAttr = (col) => sf === col ? ' class="active"' : '';
     let h = '';
     h += '<th data-sort-ctrl="date_saisie"' + activeAttr('date_saisie') + ' onclick="sortCtrl(\'date_saisie\')">Date saisie' + sortIco('date_saisie') + '</th>';
     h += '<th data-sort-ctrl="machine"' + activeAttr('machine') + ' onclick="sortCtrl(\'machine\')">Machine' + sortIco('machine') + '</th>';
-    h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">Opérateur' + sortIco('operateur') + '</th>';
+    h += '<th data-sort-ctrl="operateur"' + activeAttr('operateur') + ' onclick="sortCtrl(\'operateur\')">OpÃ©rateur' + sortIco('operateur') + '</th>';
     if(!singleType){
       h += '<th data-sort-ctrl="type"' + activeAttr('type') + ' onclick="sortCtrl(\'type\')">Type' + sortIco('type') + '</th>';
     }
@@ -5173,8 +5173,8 @@ function renderCtrl(){
     }
     if(showExtra){
       h += '<th data-sort-ctrl="_no_dossier"' + activeAttr('_no_dossier') + ' onclick="sortCtrl(\'_no_dossier\')">Dossier' + sortIco('_no_dossier') + '</th>';
-      h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">Référence produit' + sortIco('_ref_produit') + '</th>';
-      h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">Adhésif' + sortIco('_adhesif') + '</th>';
+      h += '<th data-sort-ctrl="_ref_produit"' + activeAttr('_ref_produit') + ' onclick="sortCtrl(\'_ref_produit\')">RÃ©fÃ©rence produit' + sortIco('_ref_produit') + '</th>';
+      h += '<th data-sort-ctrl="_adhesif"' + activeAttr('_adhesif') + ' onclick="sortCtrl(\'_adhesif\')">AdhÃ©sif' + sortIco('_adhesif') + '</th>';
       h += '<th data-sort-ctrl="_glassine"' + activeAttr('_glassine') + ' onclick="sortCtrl(\'_glassine\')">Glassine' + sortIco('_glassine') + '</th>';
     }
     h += '<th>Commentaires</th>';
@@ -5187,8 +5187,8 @@ function renderCtrl(){
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
-      ? 'Aucun contrôle ne correspond aux filtres.'
-      : 'Aucun contrôle enregistré pour cette période.';
+      ? 'Aucun contrÃ´le ne correspond aux filtres.'
+      : 'Aucun contrÃ´le enregistrÃ© pour cette pÃ©riode.';
     tbody.innerHTML = '<tr><td colspan="' + totalCols + '" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
     const rows = filtered.map(c => {
@@ -5205,35 +5205,35 @@ function renderCtrl(){
           const r = c._responses[String(i)];
           if(Array.isArray(r)){ val = r.join(', '); }
           else if(r != null && r !== ''){ val = String(r); }
-          // Si "Autre" a été coché avec une précision, on l'ajoute au texte du cell.
+          // Si "Autre" a Ã©tÃ© cochÃ© avec une prÃ©cision, on l'ajoute au texte du cell.
           const otherTxt = c._responses[String(i) + '_other'];
           if(otherTxt != null && String(otherTxt).trim() !== ''){
-            val = val ? val + ' — ' + String(otherTxt) : String(otherTxt);
+            val = val ? val + ' â€” ' + String(otherTxt) : String(otherTxt);
           }
         }
         cells += '<td>' + escHtml(val) + '</td>';
       }
       if(showExtra){
-        // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
+        // Dossier (no_dossier) : pill accent si renseignÃ©, tiret sinon.
         const _nd = c._no_dossier || '';
         const _ndCell = (c._source === 'alert' && _nd)
-          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_nd) + '</span>'
-          : '<span class="ctrl-dossier-empty">—</span>';
+          ? '<span class="ctrl-dossier-pill" onclick="event.stopPropagation();openAckDetail(\'' + escAttr(c.id) + '\')" title="Voir la fiche technique">' + escHtml(_nd) + '</span>'
+          : '<span class="ctrl-dossier-empty">â€”</span>';
         cells += '<td class="col-nodos">' + _ndCell + '</td>';
-        // Colonnes produit (fiche technique associée)
+        // Colonnes produit (fiche technique associÃ©e)
         const _di = c._dossier_info || null;
         const _refP = _di ? (_di.ref_produit || _di.ref_produit_norm || '') : '';
         const _adh  = _di ? (_di.adhesif || '') : '';
         const _gla  = _di ? (_di.glassine || '') : '';
         const _refCell = (c._source === 'alert' && _refP)
-          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_refP) + '</span>'
-          : '<span class="ctrl-dossier-empty">—</span>';
+          ? '<span class="ctrl-dossier-pill" onclick="event.stopPropagation();openAckDetail(\'' + escAttr(c.id) + '\')" title="Voir la fiche technique">' + escHtml(_refP) + '</span>'
+          : '<span class="ctrl-dossier-empty">â€”</span>';
         cells += '<td class="col-dossier">' + _refCell + '</td>';
-        cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
-        cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
+        cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">â€”</span>') + '</td>';
+        cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">â€”</span>') + '</td>';
       }
-      // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
-      // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
+      // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les rÃ©ponses formatÃ©es) ;
+      // sinon, on garde le rÃ©sumÃ© condensÃ© de _formatAckComment (utile en vue "Tous les types")
       const commentText = singleType
         ? (c._source === 'alert' ? (c._raw_comment || '') : (c.commentaire || ''))
         : (c.commentaire || '');
@@ -5252,9 +5252,9 @@ function renderCtrl(){
       cells += '<td class="col-actions">' + actionHtml + '</td>';
       const isNc = _ackHasNonConformite(c);
       const trClass = isNc ? ' class="ctrl-row-nc"' : '';
-      const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
+      const ncTitle = isNc ? ' title="Non-conformitÃ© â€” une rÃ©ponse ne correspond pas Ã  la valeur attendue"' : '';
       const dblAttr = (c._source === 'alert')
-        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le détail"')
+        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le dÃ©tail"')
         : '';
       return '<tr' + trClass + dblAttr + ncTitle + '>' + cells + '</tr>';
     });
@@ -5264,25 +5264,25 @@ function renderCtrl(){
     const n = CTRL_STATE.list.length + (CTRL_STATE.acks || []).length;
     const visible = filtered.length;
     if(visible !== n){
-      count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
+      count.textContent = visible + ' / ' + n + ' contrÃ´le' + (n > 1 ? 's' : '');
     } else {
-      count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
+      count.textContent = n + ' contrÃ´le' + (n > 1 ? 's' : '');
     }
   }
 }
 
 // =========================================================================
-// Catalogue des types de contrôles (Liste de contrôles)
+// Catalogue des types de contrÃ´les (Liste de contrÃ´les)
 // =========================================================================
-// Source : table maintenance_codes (Paramètres → Maintenance).
-// Filtre demandé : seuls les codes avec categorie="controles" et periodique=NON.
-// La "Dernière intervention" est calculée à partir de CTRL_STATE filtré par machine.
+// Source : table maintenance_codes (ParamÃ¨tres â†’ Maintenance).
+// Filtre demandÃ© : seuls les codes avec categorie="controles" et periodique=NON.
+// La "DerniÃ¨re intervention" est calculÃ©e Ã  partir de CTRL_STATE filtrÃ© par machine.
 const CTRL_CAT_MACHINE_KEY = 'mysifa_maint_ctrl_cat_machine_v1';
 const CTRL_TYPES_STATE = { sortBy: 'nom', sortDir: 'asc', list: [] };
 
 function getCtrlCatMachine(){
-  try{ return localStorage.getItem(CTRL_CAT_MACHINE_KEY) || 'Cohésio 1'; }
-  catch(e){ return 'Cohésio 1'; }
+  try{ return localStorage.getItem(CTRL_CAT_MACHINE_KEY) || 'CohÃ©sio 1'; }
+  catch(e){ return 'CohÃ©sio 1'; }
 }
 function setCtrlCatMachine(m){
   try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, m || ''); }catch(e){}
@@ -5313,8 +5313,8 @@ async function loadCtrlTypes(){
     CTRL_TYPES_STATE.list = [];
   }
 }
-// Conservé pour compat (no-op : gestion centralisée dans Paramètres → Maintenance).
-function saveCtrlTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
+// ConservÃ© pour compat (no-op : gestion centralisÃ©e dans ParamÃ¨tres â†’ Maintenance).
+function saveCtrlTypes(){ /* gÃ©rÃ© cÃ´tÃ© serveur via /api/maintenance/codes */ }
 function submitCtrlType(e){
   e.preventDefault();
   const nom = (document.getElementById('ctrl-cat-nom').value || '').trim();
@@ -5323,7 +5323,7 @@ function submitCtrlType(e){
   const dup = CTRL_TYPES_STATE.list.find(t =>
     (t.nom || '').toLowerCase() === nom.toLowerCase() && t.id !== CTRL_CAT_EDITING_ID
   );
-  if(dup){ showToast('Un autre contrôle avec ce nom existe déjà.', 'danger'); return; }
+  if(dup){ showToast('Un autre contrÃ´le avec ce nom existe dÃ©jÃ .', 'danger'); return; }
   let oldName = null;
   if(CTRL_CAT_EDITING_ID){
     const cur = CTRL_TYPES_STATE.list.find(t => t.id === CTRL_CAT_EDITING_ID);
@@ -5346,7 +5346,7 @@ function submitCtrlType(e){
   let renameApplied = false;
   if(oldName){
     const affected = CTRL_STATE.list.filter(c => c.type === oldName).length;
-    if(affected > 0 && confirm(affected + ' contrôle' + (affected>1?'s':'') + ' enregistré' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom « ' + oldName + ' ».\n\nMettre à jour ces contrôles vers « ' + nom + ' » ?')){
+    if(affected > 0 && confirm(affected + ' contrÃ´le' + (affected>1?'s':'') + ' enregistrÃ©' + (affected>1?'s':'') + ' utilise' + (affected>1?'nt':'') + ' encore le nom Â« ' + oldName + ' Â».\n\nMettre Ã  jour ces contrÃ´les vers Â« ' + nom + ' Â» ?')){
       CTRL_STATE.list = CTRL_STATE.list.map(c =>
         c.type === oldName ? Object.assign({}, c, {type: nom}) : c
       );
@@ -5357,12 +5357,12 @@ function submitCtrlType(e){
   renderCtrlTypes();
   if(renameApplied) renderCtrl();
   closeCtrlCatModal();
-  showToast(CTRL_CAT_EDITING_ID ? 'Modifications enregistrées.' : 'Contrôle ajouté à la liste.', 'info');
+  showToast(CTRL_CAT_EDITING_ID ? 'Modifications enregistrÃ©es.' : 'ContrÃ´le ajoutÃ© Ã  la liste.', 'info');
 }
 function deleteCtrlType(id){
   const t = CTRL_TYPES_STATE.list.find(x => x.id === id);
   if(!t) return;
-  if(!confirm('Supprimer le contrôle « ' + t.nom + ' » de la liste ?\n\nLes contrôles déjà enregistrés avec ce nom restent inchangés.')) return;
+  if(!confirm('Supprimer le contrÃ´le Â« ' + t.nom + ' Â» de la liste ?\n\nLes contrÃ´les dÃ©jÃ  enregistrÃ©s avec ce nom restent inchangÃ©s.')) return;
   CTRL_TYPES_STATE.list = CTRL_TYPES_STATE.list.filter(x => x.id !== id);
   saveCtrlTypes();
   renderCtrlTypes();
@@ -5383,7 +5383,7 @@ function refreshCtrlTypeSelect(){
   if(!sel) return;
   const cur = sel.value;
   if(!CTRL_TYPES_STATE.list.length){
-    sel.innerHTML = '<option value="">Aucun type défini…</option>';
+    sel.innerHTML = '<option value="">Aucun type dÃ©finiâ€¦</option>';
     sel.disabled = true;
     if(hint) hint.style.display = 'block';
     return;
@@ -5391,7 +5391,7 @@ function refreshCtrlTypeSelect(){
   sel.disabled = false;
   if(hint) hint.style.display = 'none';
   const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
-  sel.innerHTML = '<option value="">Sélectionner un type…</option>' +
+  sel.innerHTML = '<option value="">SÃ©lectionner un typeâ€¦</option>' +
     sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
   if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
 }
@@ -5405,7 +5405,7 @@ function renderCtrlTypes(){
   document.querySelectorAll('.js-ctrl-cat-machine').forEach(sel => {
     if(sel.value !== machine) sel.value = machine;
   });
-  // Calcule la dernière intervention par code, filtrée par machine
+  // Calcule la derniÃ¨re intervention par code, filtrÃ©e par machine
   CTRL_TYPES_STATE.list.forEach(t => {
     t.derniere_intervention = _lastInterventionForCtrl(t.id, t.nom, machine, CTRL_STATE.list, CTRL_STATE.acks || []);
   });
@@ -5422,13 +5422,13 @@ function renderCtrlTypes(){
     const isActive = th.getAttribute('data-sort-ctrl-cat') === f;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
+    if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? 'â†‘' : 'â†“') : 'â†•';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres → Maintenance.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucun contrÃ´le non pÃ©riodique. Ajoutez des codes avec catÃ©gorie=ContrÃ´les et PÃ©riodique=NON dans ParamÃ¨tres â†’ Maintenance.</td></tr>';
   } else {
     const rows = sorted.map(t => {
-      let dtDisplay = '—';
+      let dtDisplay = 'â€”';
       if(t.derniere_intervention){
         try{
           const d = new Date(t.derniere_intervention);
@@ -5442,7 +5442,7 @@ function renderCtrlTypes(){
       const _dc = t.docs_count || 0;
       const docsBtn = _dc
         ? '<button type="button" class="ops-row-btn maint-view-docs" data-doc-code="' + escAttr(t.id) + '" title="Voir les documents attaches">' + _dc + ' doc' + (_dc>1?'s':'') + '</button>'
-        : '<span style="color:var(--muted);font-size:12px">—</span>';
+        : '<span style="color:var(--muted);font-size:12px">â€”</span>';
       return '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span></td>' +
@@ -5455,7 +5455,7 @@ function renderCtrlTypes(){
   }
   if(count){
     const n = CTRL_TYPES_STATE.list.length;
-    count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
+    count.textContent = n + ' contrÃ´le' + (n > 1 ? 's' : '');
   }
   document.querySelectorAll('.maint-view-docs[data-doc-code]').forEach(b => {
     b.addEventListener('click', () => viewMaintDocs(b.getAttribute('data-doc-code')));
@@ -5469,9 +5469,9 @@ async function viewMaintDocs(code){
   overlay.className = 'ta-sim ta-pl-center ta-blocking';
   overlay.id = 'maint-docs-view-overlay';
   overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:520px">'
-    + '<div class="ta-sim-title">Documents · ' + escHtml(code) + '</div>'
+    + '<div class="ta-sim-title">Documents Â· ' + escHtml(code) + '</div>'
     + '<div id="maint-docs-view-list" style="display:flex;flex-direction:column;gap:6px;margin:12px 0">'
-    +   '<p style="color:var(--muted);font-size:12px">Chargement…</p>'
+    +   '<p style="color:var(--muted);font-size:12px">Chargementâ€¦</p>'
     + '</div>'
     + '<div class="ta-sim-actions">'
     +   '<button type="button" class="ta-sim-btn" onclick="closeMaintDocsView()">Fermer</button>'
@@ -5495,7 +5495,7 @@ async function viewMaintDocs(code){
       const dt = doc.uploaded_at ? escHtml(doc.uploaded_at.slice(0,16).replace('T',' ')) : '';
       return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
         +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(doc.filename) + '</div>'
-        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + '</div></div>'
+        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' Â· ' + dt : '') + '</div></div>'
         +   '<a href="/api/maintenance/docs/' + doc.id + '/download" target="_blank" rel="noopener" class="ta-sim-btn" style="text-decoration:none;padding:6px 12px;font-size:12px">Ouvrir</a>'
         + '</div>';
     }).join('');
@@ -5521,4 +5521,979 @@ function updateThemeBtn(){
   const lbl=document.getElementById('theme-label');
   if(ico){
     ico.innerHTML=l
-      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.6
+      ?'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+      :'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  }
+  if(lbl) lbl.textContent=l?'Mode clair':'Mode sombre';
+}
+
+async function doLogout(){
+  try{await fetch('/api/auth/logout',{method:'POST',credentials:'include'});}catch(e){}
+  location.href='/';
+}
+
+async function loadMe(){
+  try{
+    const r=await fetch('/api/auth/me',{credentials:'include'});
+    if(!r.ok) return;
+    const d=await r.json();
+    S.me=d&&d.user?d.user:d;
+    const chip=document.getElementById('user-chip');
+    if(chip&&S.me){
+      const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'ComptabilitÃ©',expedition:'ExpÃ©dition',commercial:'Commercial'};
+      chip.innerHTML='<div class="uc-name">'+escHtml(S.me.nom||'')+'</div><div class="uc-role">'+escHtml(roles[S.me.role]||S.me.role||'')+'</div>';
+    }
+  }catch(e){}
+}
+
+(function init(){
+  try{
+    const t=localStorage.getItem('mysifa_theme');
+    if(t==='light') document.body.classList.add('light');
+    else document.body.classList.remove('light');
+    updateThemeBtn();
+  }catch(e){}
+  loadMe();
+  loadOps();
+  // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
+  loadOpsTypes().then(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }).catch(() => {
+    renderOpsTypes();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  });
+  loadCtrl();
+  updateExtraToggleUI();
+  loadCtrlAcks();
+  loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
+  loadPlanning();
+  renderOps();
+  renderCtrl();
+  try{
+    const h = (location.hash || '').replace('#','').trim();
+    const target = (h === 'historique') ? 'controles' : h;
+    if(target && VIEW_META[target]) switchView(target);
+  }catch(e){}
+})();
+</script>
+<script>window.__MYSIFA_APP__='maintenance';</script>
+<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
+<script>
+if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
+  window.MySifaDock.bootPageWidgets();
+}
+</script>
+<script src="/static/chat_mentions.js"></script>
+<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/mysifa_alert_runtime.js"></script>
+<script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_impersonate.js"></script>
+
+<!-- Modal saisie crÃ©neau (opÃ©rateur : ouvre au clic sur une carte).
+     Liste toutes les ops du crÃ©neau, chacune avec son propre bouton
+     "Enregistrer cette opÃ©ration" â€” le statut/saisie est partagÃ© au groupe. -->
+<div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
+    <div class="op-modal-title">Saisie du crÃ©neau</div>
+    <div class="op-modal-sub">Renseigne chaque opÃ©ration individuellement. Les mises Ã  jour sont partagÃ©es avec le groupe assignÃ© au crÃ©neau.</div>
+    <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
+    <div id="op-modal-saisie-ops"></div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseSaisie()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal nouvelle intervention (opÃ©rateur : source=non_planifie) -->
+<div class="op-modal-overlay" id="op-modal-new" onclick="if(event.target===this) opCloseNewModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Nouvelle intervention</div>
+    <div class="op-modal-sub">DÃ©clare une intervention non planifiÃ©e survenue en cours de session.</div>
+    <div class="op-form-row">
+      <label for="op-new-code">Code opÃ©ration *</label>
+      <select id="op-new-code"></select>
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-machine">Machine *</label>
+      <select id="op-new-machine">
+        <option value="CohÃ©sio 1">CohÃ©sio 1</option>
+        <option value="CohÃ©sio 2">CohÃ©sio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseNewModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="opSubmitNew()">CrÃ©er et remplir</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script>
+/* â”€â”€ JS multi-rÃ´le : Mes tÃ¢ches / Planning / Nouvelle intervention / Admin create â”€â”€
+   ChargÃ© dans tous les cas, mais les fonctions ne sont utiles qu'au bon rÃ´le.
+   L'Ã©tat des tÃ¢ches cÃ´tÃ© page est stockÃ© dans MAINT_STATE. */
+'use strict';
+
+const MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+const MAINT_STATE = {
+  tasks: [],
+  codes: [],
+  operators: [],
+  saisieTaskId: null,
+};
+
+function _fmtDateISO(d){
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
+function _statutLabel(s){
+  return { a_faire:'Ã€ faire', en_cours:'En cours', termine:'TerminÃ©', reporte:'ReportÃ©' }[s] || s;
+}
+
+async function opFetchCodes(){
+  if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
+  const r = await fetch('/api/maintenance/codes', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.codes = []; return []; }
+  const d = await r.json();
+  // /api/maintenance/codes renvoie { items:[{code, label, categorie, niveau, periodique, ...}] }
+  MAINT_STATE.codes = (d.items || d.codes || []).map(c => ({
+    code: c.code, label: c.label, categorie: c.categorie,
+    niveau: c.niveau, periodique: !!c.periodique,
+    intervalle: c.intervalle || '',
+  }));
+  return MAINT_STATE.codes;
+}
+
+async function admFetchOperators(){
+  if(MAINT_STATE.operators.length) return MAINT_STATE.operators;
+  const r = await fetch('/api/maintenance/operators', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.operators = []; return []; }
+  const d = await r.json();
+  MAINT_STATE.operators = d.operators || [];
+  return MAINT_STATE.operators;
+}
+
+/* â”€â”€ Vue Mes tÃ¢ches â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+async function opLoadTasks(){
+  if(MAINT_ROLE !== 'operator') return;
+  // Utilise le MÃŠME endpoint que le planning (/api/maintenance/events) et
+  // filtre cÃ´tÃ© client par appartenance au groupe : garantit la cohÃ©rence
+  // absolue entre Â« Mes tÃ¢ches Â» et Â« Planning personnel Â».
+  const today = new Date();
+  const in60 = new Date(); in60.setDate(today.getDate() + 60);
+  const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
+              '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
+  const r = await fetch(url, { credentials:'include', cache: 'no-store' });
+  if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
+  const data = await r.json();
+  const meId = (S && S.me) ? S.me.id : null;
+  const events = data.events || [];
+  MAINT_STATE.tasks = meId
+    ? events.filter(ev => (ev.operators || []).some(o => o.id === meId))
+    : [];
+  opRenderTasks();
+}
+
+function _countRemainingOps(ev){
+  return (ev.ops || []).filter(o => o.statut !== 'termine').length;
+}
+
+// Regroupe les ops d'un event par machine. Une op sans machine tombe dans un
+// groupe "Sans machine". Une op multi-machines apparaÃ®t dans chaque groupe.
+function _groupOpsByMachine(ev){
+  const groups = new Map();
+  const order = [];
+  const ops = (ev && ev.ops) ? ev.ops : [];
+  for(const o of ops){
+    let machines = Array.isArray(o.machines) ? o.machines.slice() : [];
+    if(!machines.length){
+      machines = ev.machine ? [ev.machine] : ['Sans machine'];
+    }
+    for(const m of machines){
+      if(!groups.has(m)){ groups.set(m, []); order.push(m); }
+      groups.get(m).push(o);
+    }
+  }
+  return order.map(m => ({ machine: m, ops: groups.get(m) }));
+}
+
+function _renderOpCard(ev, opts){
+  opts = opts || {};
+  const isToday = !!opts.isToday;
+  const time = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' â€“ ' + ev.heure_fin)
+    : '<em style="color:var(--muted);font-style:normal">Sans crÃ©neau horaire</em>';
+  const remaining = _countRemainingOps(ev);
+  const totalOps = (ev.ops || []).length;
+  const doneAll = (remaining === 0 && totalOps > 0);
+  // Regroupe les ops par machine dans la preview.
+  // - Vue Aujourd'hui : on affiche tout (c'est la vue prioritaire).
+  // - Vue Ã€ venir : on limite Ã  ~5 lignes pour compacter les cards.
+  const groups = _groupOpsByMachine(ev);
+  const machinesLabel = groups.map(g => g.machine).join(' Â· ') || (ev.machine || 'â€”');
+  const previewLines = [];
+  let printedGroups = 0;
+  let printedTruncated = false;
+  const MAX_LINES = isToday ? Infinity : 5;
+  for(const g of groups){
+    // Chaque groupe doit tenir en au moins 2 lignes (1 header + 1 op) pour
+    // Ã©viter un header orphelin. Si le budget restant est < 2, on stoppe.
+    if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
+    previewLines.push(`<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:6px">${escHtml(g.machine)}</div>`);
+    let opsInThisGroup = 0;
+    for(const o of g.ops){
+      if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px">
+        <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
+        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || 'â€”'}</span>
+        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+      </div>`);
+      opsInThisGroup++;
+    }
+    // Compte le groupe comme "affichÃ©" seulement si au moins 1 op a Ã©tÃ© rendue.
+    if(opsInThisGroup > 0) printedGroups++;
+    else{
+      // Retire le header orphelin qu'on venait de pousser.
+      previewLines.pop();
+      printedTruncated = true;
+    }
+  }
+  const opsPreview = previewLines.join('');
+  const remainingGroups = groups.length - printedGroups;
+  const more = (remainingGroups > 0 || printedTruncated) && remainingGroups > 0
+    ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingGroups} autre machine${remainingGroups > 1 ? 's' : ''}</div>`
+    : '';
+  const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiÃ©e</span>' : '';
+  const summary = doneAll
+    ? '<span class="op-status op-status-termine" style="position:static">TerminÃ©</span>'
+    : (remaining < totalOps
+        ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+        : `<span class="op-status op-status-a_faire" style="position:static">Ã€ faire</span>`);
+  const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
+  const cta = isToday
+    ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
+         <span class="btn-ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></span>
+         ${doneAll ? 'Voir la session' : 'Commencer la session'}
+       </button>`
+    : '';
+  const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
+  return `
+    <div class="op-card" ${clickHandler}>
+      <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
+      <div class="op-card-head">
+        <strong style="font-size:15px;color:var(--text)">${escHtml(machinesLabel)}</strong>
+        ${src}
+      </div>
+      ${dateLine}
+      <div style="font-size:12px;color:var(--text2)">${time}</div>
+      <div>${opsPreview}${more}</div>
+      ${cta}
+    </div>`;
+}
+
+function _fmtDateFrShort(iso){
+  if(!iso) return '';
+  try{
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return iso;
+    const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    return d.toLocaleDateString('fr-FR', {weekday:'short', day:'2-digit', month:'short'});
+  }catch(e){ return iso; }
+}
+
+function opRenderTasks(){
+  const listT = document.getElementById('op-cards-today');
+  const listU = document.getElementById('op-cards-upcoming');
+  const cntT = document.getElementById('op-count-today');
+  const cntU = document.getElementById('op-count-upcoming');
+  const summary = document.getElementById('op-tasks-count');
+  if(!listT || !listU) return;
+
+  const today = _fmtDateISO(new Date());
+  const events = MAINT_STATE.tasks || [];
+  const evToday = events.filter(ev => ev.date_prevue === today);
+  const evUpcoming = events.filter(ev => ev.date_prevue > today)
+    .sort((a,b) => (a.date_prevue + (a.heure_debut||'')).localeCompare(b.date_prevue + (b.heure_debut||'')));
+
+  if(cntT) cntT.textContent = evToday.length;
+  if(cntU) cntU.textContent = evUpcoming.length;
+  if(summary){
+    const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
+    summary.textContent = events.length + (events.length > 1 ? ' crÃ©neaux Ã  venir' : ' crÃ©neau Ã  venir')
+      + ' â€” ' + nOps + (nOps > 1 ? ' opÃ©rations' : ' opÃ©ration');
+  }
+
+  if(!evToday.length){
+    listT.innerHTML = '<div class="op-col-empty"><strong>Aucun crÃ©neau aujourd\'hui</strong>Rien de programmÃ© pour toi. Tu peux dÃ©clarer une intervention non planifiÃ©e si nÃ©cessaire.</div>';
+  } else {
+    listT.innerHTML = '<div class="op-col-cards">' + evToday.map(ev => _renderOpCard(ev, {isToday:true})).join('') + '</div>';
+  }
+  if(!evUpcoming.length){
+    listU.innerHTML = '<div class="op-col-empty"><strong>Aucun crÃ©neau Ã  venir</strong>Ta liste est Ã  jour.</div>';
+  } else {
+    listU.innerHTML = '<div class="op-col-cards">' + evUpcoming.map(ev => _renderOpCard(ev, {isToday:false})).join('') + '</div>';
+  }
+}
+
+/* â”€â”€ Modal saisie â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+function opOpenSaisie(eventId){
+  const ev = MAINT_STATE.tasks.find(x => x.id === eventId);
+  if(!ev) return;
+  MAINT_STATE.saisieTaskId = eventId;
+  const ctx = document.getElementById('op-modal-saisie-ctx');
+  const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' â€“ ' + ev.heure_fin) : 'Sans crÃ©neau horaire';
+  const groups = _groupOpsByMachine(ev);
+  const machinesLabel = groups.map(g => g.machine).join(' Â· ') || (ev.machine || 'â€”');
+  ctx.innerHTML = `
+    <span><strong>Machine${groups.length > 1 ? 's' : ''} :</strong> ${escHtml(machinesLabel)}</span>
+    <span><strong>Date :</strong> ${ev.date_prevue}</span>
+    <span><strong>CrÃ©neau :</strong> ${time}</span>
+    ${ev.source === 'non_planifie' ? '<span class="op-badge-source">Non planifiÃ©e</span>' : ''}`;
+  const wrap = document.getElementById('op-modal-saisie-ops');
+  if(wrap){
+    if(!groups.length){
+      wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Aucune opÃ©ration.</div>';
+    } else {
+      // Un bloc par machine. Une op assignÃ©e Ã  N machines apparaÃ®t dans N blocs
+      // mais la saisie reste unique cÃ´tÃ© DB (opSubmitOpSaisie utilise op.id).
+      wrap.innerHTML = groups.map(g => {
+        const opsHtml = g.ops.map(op => {
+          const catLbl = { controles:'ContrÃ´le', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          return `
+            <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+                <span class="op-code">${op.code}</span>
+                <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
+                <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || 'â€”'}</strong>
+              </div>
+              <div class="op-form-row"><label>Statut</label>
+                <select data-fld="statut">
+                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>Ã€ faire</option>
+                  <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
+                  <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>TerminÃ©</option>
+                  <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>ReportÃ©</option>
+                </select>
+              </div>
+              <div class="op-form-row"><label>DurÃ©e rÃ©elle (min)</label>
+                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
+              </div>
+              <div class="op-form-row"><label>PiÃ¨ces changÃ©es</label>
+                <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
+              </div>
+              <div class="op-form-row"><label>Observations</label>
+                <textarea data-fld="observations">${op.observations || ''}</textarea>
+              </div>
+              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">Enregistrer cette opÃ©ration</button>
+            </div>`;
+        }).join('');
+        return `<div class="op-machine-group">
+          <div class="op-machine-group-head"><span class="op-machine-dot"></span>${escHtml(g.machine)} Â· ${g.ops.length} opÃ©ration${g.ops.length > 1 ? 's' : ''}</div>
+          ${opsHtml}
+        </div>`;
+      }).join('');
+    }
+  }
+  document.getElementById('op-modal-saisie').classList.add('active');
+}
+
+function opCloseSaisie(){
+  MAINT_STATE.saisieTaskId = null;
+  document.getElementById('op-modal-saisie').classList.remove('active');
+}
+
+async function opSubmitOpSaisie(eventId, opId, btnEl){
+  // Une op multi-machines apparaÃ®t dans plusieurs blocs de saisie. On cible
+  // le bloc contenant le bouton cliquÃ© (pas juste le premier).
+  const item = (btnEl && btnEl.closest && btnEl.closest('.op-saisie-item'))
+    || document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
+  if(!item) return;
+  const val = (fld) => (item.querySelector(`[data-fld="${fld}"]`) || {}).value;
+  const body = {
+    statut: val('statut'),
+    duree_reelle_min: parseInt(val('duree_reelle_min'), 10) || null,
+    pieces_changees: (val('pieces_changees') || '').trim() || null,
+    observations: (val('observations') || '').trim() || null,
+  };
+  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
+    method:'PATCH', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  if(typeof showToast === 'function') showToast('Saisie enregistrÃ©e.', 'success');
+  await opLoadTasks();
+  // Re-render du modal avec les donnÃ©es Ã  jour
+  opOpenSaisie(eventId);
+}
+
+// Ancien nom conservÃ© pour compat (rien ne l'appelle en direct dÃ©sormais).
+async function opSubmitSaisie(){
+  // No-op : la saisie se fait op par op via opSubmitOpSaisie.
+}
+
+/* â”€â”€ Modal nouvelle intervention (opÃ©rateur) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+async function opOpenNewModal(){
+  await opFetchCodes();
+  const sel = document.getElementById('op-new-code');
+  sel.innerHTML = MAINT_STATE.codes.map(c =>
+    `<option value="${c.code}">${c.code} â€” ${c.label} (${c.categorie})</option>`
+  ).join('');
+  document.getElementById('op-modal-new').classList.add('active');
+}
+
+function opCloseNewModal(){
+  document.getElementById('op-modal-new').classList.remove('active');
+}
+
+async function opSubmitNew(){
+  const code = document.getElementById('op-new-code').value;
+  const machine = document.getElementById('op-new-machine').value;
+  if(!code || !machine){
+    alert('Code et machine obligatoires.');
+    return;
+  }
+  const body = {
+    machine,
+    date_prevue: _fmtDateISO(new Date()),
+    source: 'non_planifie',
+    ops: [code],
+    operators: [],  // Le serveur forcera l'user courant.
+  };
+  const r = await fetch('/api/maintenance/events', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  const data = await r.json();
+  if(typeof showToast === 'function') showToast('Intervention dÃ©clarÃ©e.', 'success');
+  opCloseNewModal();
+  const dateInput = document.getElementById('op-tasks-date');
+  if(dateInput) dateInput.value = body.date_prevue;
+  await opLoadTasks();
+  if(data.event && data.event.id) opOpenSaisie(data.event.id);
+}
+
+/* â”€â”€ Vue Planning opÃ©rateur (read-only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+function _opRenderPlanTable(events, meId){
+  // Aplati les events â†’ 1 ligne par (event, op, machine). Une op multi-machines
+  // produit une ligne par machine.
+  if(events.length === 0){
+    return '<div class="op-empty"><h3>Aucune tÃ¢che planifiÃ©e</h3>Pour cette date.</div>';
+  }
+  const rows = [];
+  for(const ev of events){
+    const mine = (ev.operators || []).some(o => o.id === meId);
+    const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assignÃ©</em>';
+    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' â€“ ' + ev.heure_fin) : 'â€”';
+    for(const op of (ev.ops || [])){
+      let machines = Array.isArray(op.machines) && op.machines.length
+        ? op.machines
+        : (ev.machine ? [ev.machine] : ['â€”']);
+      for(const m of machines){
+        rows.push({ mine, ev, op, operatorsStr, time, machine: m });
+      }
+    }
+  }
+  return `<table class="op-plan-table">
+    <thead><tr><th>CrÃ©neau</th><th>Machine</th><th>Code</th><th>OpÃ©ration</th><th>Groupe</th><th>Statut</th></tr></thead>
+    <tbody>${rows.map(r => `<tr class="${r.mine ? 'mine' : ''}">
+      <td>${r.time}</td>
+      <td><strong>${escHtml(r.machine)}</strong></td>
+      <td><span class="op-code">${r.op.code}</span></td>
+      <td>${r.op.code_label || 'â€”'}</td>
+      <td style="font-size:12px">${r.operatorsStr}</td>
+      <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function opLoadPlanning(){
+  if(MAINT_ROLE !== 'operator') return;
+  const dateInput = document.getElementById('op-plan-date');
+  const d = dateInput.value || _fmtDateISO(new Date());
+  if(!dateInput.value) dateInput.value = d;
+  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
+                       '&date_to=' + encodeURIComponent(d) + '&_=' + Date.now(),
+                       { credentials:'include', cache: 'no-store' });
+  if(!r.ok){
+    const persoEl = document.getElementById('op-plan-personnel');
+    const genEl = document.getElementById('op-plan-general');
+    if(persoEl) persoEl.innerHTML = _opRenderPlanTable([], null);
+    if(genEl) genEl.innerHTML = _opRenderPlanTable([], null);
+    return;
+  }
+  const data = await r.json();
+  const events = data.events || [];
+  const meId = (S && S.me) ? S.me.id : null;
+  // Onglet Personnel : events oÃ¹ je suis dans le groupe.
+  const perso = events.filter(ev => (ev.operators || []).some(o => o.id === meId));
+  const persoEl = document.getElementById('op-plan-personnel');
+  if(persoEl) persoEl.innerHTML = _opRenderPlanTable(perso, meId);
+  // Onglet GÃ©nÃ©ral : tous.
+  const genEl = document.getElementById('op-plan-general');
+  if(genEl) genEl.innerHTML = _opRenderPlanTable(events, meId);
+}
+
+function opSetPlanTab(name){
+  document.querySelectorAll('[data-op-plan-tab]').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('data-op-plan-tab') === name);
+  });
+  const perso = document.getElementById('op-plan-personnel');
+  const gen = document.getElementById('op-plan-general');
+  if(perso) perso.style.display = (name === 'personnel') ? '' : 'none';
+  if(gen) gen.style.display = (name === 'general') ? '' : 'none';
+}
+
+
+/* â”€â”€ Templates de session (v163) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+const TEMPLATES_STATE = { list: null };  // null = pas encore chargÃ©
+
+async function loadTemplates(force){
+  if(!force && TEMPLATES_STATE.list !== null) return TEMPLATES_STATE.list;
+  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; return []; }
+  try{
+    const r = await fetch('/api/maintenance/templates?_=' + Date.now(),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ TEMPLATES_STATE.list = []; return []; }
+    const d = await r.json();
+    TEMPLATES_STATE.list = d.templates || [];
+  }catch(e){ TEMPLATES_STATE.list = []; }
+  return TEMPLATES_STATE.list;
+}
+
+function refreshCaseTemplatePicker(selectedId){
+  const sel = document.getElementById('case-mod-template');
+  if(!sel) return;
+  const list = TEMPLATES_STATE.list || [];
+  const cur = selectedId != null ? String(selectedId) : (sel.value || '');
+  sel.innerHTML = '<option value="">Sans modÃ¨le (crÃ©neau vierge)</option>' +
+    list.map(t =>
+      '<option value="' + escAttr(t.id) + '"' + (String(t.id) === cur ? ' selected' : '') + '>' +
+        escHtml(t.name) + ' (' + t.ops_count + ' op.)' +
+      '</option>'
+    ).join('');
+}
+
+async function applyCaseTemplate(templateId){
+  if(!templateId){
+    // Â« Sans modÃ¨le Â» : on ne touche pas aux ops dÃ©jÃ  prÃ©sentes
+    if(_PENDING_CASE) _PENDING_CASE.template_id = null;
+    return;
+  }
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                          '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ showToast('ModÃ¨le introuvable.', 'danger'); return; }
+    const d = await r.json();
+    const tmpl = d.template;
+    if(!tmpl){ showToast('ModÃ¨le vide.', 'danger'); return; }
+    // Remplace les ops actuelles par celles du modÃ¨le
+    _CASE_OPS = (tmpl.ops || []).map(o => ({
+      _op_id: null,
+      opTypeId: o.code,
+      opName: o.code_label || o.code,
+      opNiveau: null,
+      opFreq: '',
+      machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    }));
+    // RÃ©injecte les infos richement depuis OPS_TYPES_STATE (niveau, freq)
+    for(const co of _CASE_OPS){
+      const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
+      if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+    }
+    if(_PENDING_CASE) _PENDING_CASE.template_id = tmpl.id;
+    renderCaseOpsList();
+    showToast('ModÃ¨le Â« ' + tmpl.name + ' Â» appliquÃ©.', 'info');
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* â”€â”€ Modal Â« GÃ©rer les modÃ¨les Â» â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+async function openTemplatesModal(){
+  await loadTemplates(true);
+  const m = document.getElementById('templates-modal');
+  if(!m) return;
+  renderTemplatesList();
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTemplatesModal(){
+  const m = document.getElementById('templates-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+}
+
+function renderTemplatesList(){
+  const list = document.getElementById('tmpl-list');
+  if(!list) return;
+  const items = TEMPLATES_STATE.list || [];
+  if(!items.length){
+    list.innerHTML = '<div class="tmpl-empty">Aucun modÃ¨le pour l\'instant.<br>Clique sur Â« Nouveau modÃ¨le Â» pour en crÃ©er un.</div>';
+    return;
+  }
+  list.innerHTML = items.map(t => `
+    <div class="tmpl-item" data-tmpl-id="${escAttr(t.id)}">
+      <div class="tmpl-item-main">
+        <div class="tmpl-item-name">${escHtml(t.name)}</div>
+        <div class="tmpl-item-desc">${escHtml(t.description || 'â€”')}</div>
+      </div>
+      <div class="tmpl-item-count">${t.ops_count} op.</div>
+      <div class="tmpl-item-actions">
+        <button type="button" class="tmpl-item-btn edit" onclick="openTemplateEditor(${escAttr(t.id)})" title="Modifier" aria-label="Modifier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button type="button" class="tmpl-item-btn del" onclick="confirmDeleteTemplate(${escAttr(t.id)})" title="Supprimer" aria-label="Supprimer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function confirmDeleteTemplate(templateId){
+  const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
+  if(!t) return;
+  const msg = `Supprimer le modÃ¨le Â« ${t.name} Â» ?\n\nATTENTION : cela supprime aussi tous les crÃ©neaux futurs (Ã  partir d'aujourd'hui) crÃ©Ã©s depuis ce modÃ¨le. Les crÃ©neaux passÃ©s seront conservÃ©s (mais dÃ©tachÃ©s du modÃ¨le).`;
+  if(!confirm(msg)) return;
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId),
+                          { method:'DELETE', credentials:'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Suppression refusÃ©e');
+    }
+    const d = await r.json();
+    const n = d.deleted_future_events || 0;
+    showToast('ModÃ¨le supprimÃ©' + (n ? ` â€” ${n} crÃ©neau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyÃ©${n > 1 ? 's' : ''}.` : '.'), 'info');
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    await refreshPlanning(); renderCal();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* â”€â”€ Ã‰diteur de modÃ¨le (crÃ©ation + Ã©dition) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+let _TMPL_EDIT_ID = null;
+let _TMPL_OPS = [];
+
+async function openTemplateEditor(templateId){
+  _TMPL_EDIT_ID = templateId || null;
+  _TMPL_OPS = [];
+  const m = document.getElementById('tmpl-editor-modal');
+  const nameEl = document.getElementById('tmpl-ed-name');
+  const descEl = document.getElementById('tmpl-ed-desc');
+  const ttlEl = document.getElementById('tmpl-ed-title');
+  const lblEl = document.getElementById('tmpl-ed-submit-label');
+  const warnEl = document.getElementById('tmpl-ed-warning');
+  if(nameEl) nameEl.value = '';
+  if(descEl) descEl.value = '';
+  if(warnEl){ warnEl.style.display = 'none'; warnEl.innerHTML = ''; }
+  if(templateId){
+    try{
+      const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                            '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+      if(!r.ok) throw new Error('ModÃ¨le introuvable');
+      const d = await r.json();
+      const t = d.template;
+      if(nameEl) nameEl.value = t.name || '';
+      if(descEl) descEl.value = t.description || '';
+      _TMPL_OPS = (t.ops || []).map(o => {
+        const meta = OPS_TYPES_STATE.list.find(x => x.id === o.code);
+        return {
+          opTypeId: o.code,
+          opName: (meta && meta.nom) || o.code_label || o.code,
+          opNiveau: (meta && meta.niveau) || null,
+          opFreq: (meta && meta.frequence) || '',
+          machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+        };
+      });
+      if(ttlEl) ttlEl.textContent = 'Modifier le modÃ¨le';
+      if(lblEl) lblEl.textContent = 'Enregistrer';
+      // Avertissement resync
+      if(warnEl){
+        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modÃ¨le Ã©crasera automatiquement les opÃ©rations des crÃ©neaux futurs qui en dÃ©pendent (les horaires, opÃ©rateurs et statuts sont prÃ©servÃ©s).';
+        warnEl.style.display = 'block';
+      }
+    }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }
+  } else {
+    if(ttlEl) ttlEl.textContent = 'Nouveau modÃ¨le';
+    if(lblEl) lblEl.textContent = 'CrÃ©er';
+  }
+  renderTmplOpsList();
+  if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { nameEl?.focus(); }, 60);
+}
+
+function closeTemplateEditor(){
+  const m = document.getElementById('tmpl-editor-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+  _TMPL_EDIT_ID = null;
+  _TMPL_OPS = [];
+}
+
+function addTmplOp(){
+  if(!OPS_TYPES_STATE.list.length){
+    showToast('Aucune opÃ©ration dans la liste. Ajoutez-en d\'abord dans "Liste d\'opÃ©rations de maintenance".', 'danger');
+    return;
+  }
+  _TMPL_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
+  renderTmplOpsList();
+}
+
+function updateTmplOp(idx, opTypeId){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(op){
+    _TMPL_OPS[idx] = {
+      opTypeId: op.id, opName: op.nom, opNiveau: op.niveau || null, opFreq: op.frequence || '',
+      machines: Array.isArray(cur.machines) ? cur.machines.slice() : [],
+    };
+  } else {
+    _TMPL_OPS[idx] = { opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: Array.isArray(cur.machines) ? cur.machines.slice() : [] };
+  }
+}
+
+function toggleTmplOpMachine(idx, machine){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const list = Array.isArray(cur.machines) ? cur.machines : [];
+  const pos = list.indexOf(machine);
+  if(pos >= 0) list.splice(pos, 1); else list.push(machine);
+  cur.machines = list;
+  renderTmplOpsList();
+}
+
+function removeTmplOp(idx){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  _TMPL_OPS.splice(idx, 1);
+  renderTmplOpsList();
+}
+
+function renderTmplOpsList(){
+  const list = document.getElementById('tmpl-ed-ops-list');
+  if(!list) return;
+  if(!_TMPL_OPS.length){
+    list.innerHTML = '<div class="case-ops-empty">Aucune opÃ©ration. Cliquez sur Â« Ajouter une opÃ©ration Â» pour construire le modÃ¨le.</div>';
+    return;
+  }
+  list.innerHTML = _TMPL_OPS.map((op, idx) => {
+    const options = '<option value="">SÃ©lectionner une opÃ©rationâ€¦</option>' +
+      OPS_TYPES_STATE.list.map(t =>
+        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+          (t.frequence ? ' Â· ' + escHtml(t.frequence) : '') +
+        '</option>'
+      ).join('');
+    const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
+    const chips = CASE_MACHINES_LIST.map(m => {
+      const active = machSet.has(m);
+      return '<button type="button" class="case-mach-chip' + (active ? ' active' : '') + '" onclick="toggleTmplOpMachine(' + idx + ', \'' + escAttr(m) + '\')" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        escHtml(m) + '</button>';
+    }).join('');
+    return '<div class="case-ops-row" data-idx="' + idx + '">' +
+      '<div class="case-ops-row-top">' +
+        '<select class="ops-select" onchange="updateTmplOp(' + idx + ', this.value)">' + options + '</select>' +
+        '<button type="button" class="case-ops-row-del" onclick="removeTmplOp(' + idx + ')" title="Retirer" aria-label="Retirer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="case-ops-machines">' +
+        '<span class="case-ops-machines-label">Machine(s)</span>' +
+        chips +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function submitTemplateEditor(e){
+  e.preventDefault();
+  const name = (document.getElementById('tmpl-ed-name')?.value || '').trim();
+  const desc = (document.getElementById('tmpl-ed-desc')?.value || '').trim();
+  if(!name){ showToast('Nom requis.', 'danger'); return; }
+  const ops = _TMPL_OPS.filter(o => o.opTypeId).map(o => ({
+    code: o.opTypeId,
+    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+  }));
+  if(!ops.length){ showToast('Ajoutez au moins une opÃ©ration.', 'danger'); return; }
+  const missing = ops.find(o => !o.machines.length);
+  if(missing){ showToast('Attribuez au moins une machine Ã  chaque opÃ©ration.', 'danger'); return; }
+  try{
+    let r;
+    if(_TMPL_EDIT_ID){
+      r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    } else {
+      r = await fetch('/api/maintenance/templates', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    }
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Enregistrement refusÃ©');
+    }
+    const d = await r.json();
+    const resynced = d.resynced_events || 0;
+    showToast(_TMPL_EDIT_ID
+      ? ('ModÃ¨le enregistrÃ©' + (resynced ? ` â€” ${resynced} crÃ©neau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisÃ©${resynced > 1 ? 's' : ''}.` : '.'))
+      : 'ModÃ¨le crÃ©Ã©.', 'info');
+    closeTemplateEditor();
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    if(resynced > 0){ await refreshPlanning(); renderCal(); }
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* â”€â”€ Bouton flottant Â« + Â» du calendrier â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
+function toggleCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const willOpen = !m.classList.contains('open');
+  if(willOpen){
+    loadTemplates().then(() => renderCalFabMenu());
+  }
+  m.classList.toggle('open');
+}
+
+function closeCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(m) m.classList.remove('open');
+}
+
+function renderCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const list = TEMPLATES_STATE.list || [];
+  const tmplItems = list.length
+    ? list.map(t => `
+        <button type="button" class="cal-fab-menu-item" onclick="startFromTemplate(${escAttr(t.id)})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+          <span>${escHtml(t.name)} <span style="color:var(--muted);font-weight:500">Â· ${t.ops_count} op.</span></span>
+        </button>`).join('')
+    : '<div class="cal-fab-menu-hint">Aucun modÃ¨le disponible</div>';
+  m.innerHTML = `
+    <button type="button" class="cal-fab-menu-item" onclick="startBlankCreneau()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>CrÃ©neau vierge</span>
+    </button>
+    <div class="cal-fab-menu-sep"></div>
+    <div class="cal-fab-menu-hint">Depuis un modÃ¨le</div>
+    ${tmplItems}
+    <div class="cal-fab-menu-sep"></div>
+    <button type="button" class="cal-fab-menu-item" onclick="closeCalFabMenu();openTemplatesModal();">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+      <span>GÃ©rer les modÃ¨lesâ€¦</span>
+    </button>`;
+}
+
+function _defaultIsoAndHour(){
+  return { iso: _fmtDateISO(new Date()), h: 8 };
+}
+
+function startBlankCreneau(){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  openCaseModal({ iso, defaultHour: h });
+}
+
+async function startFromTemplate(templateId){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  await openCaseModal({ iso, defaultHour: h });
+  await applyCaseTemplate(templateId);
+  const sel = document.getElementById('case-mod-template');
+  if(sel) sel.value = String(templateId);
+}
+
+
+// Ferme le menu FAB au clic en dehors
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('cal-fab-menu');
+  if(!menu || !menu.classList.contains('open')) return;
+  if(e.target.closest('.cal-fab') || e.target.closest('.cal-fab-menu')) return;
+  menu.classList.remove('open');
+});
+
+// v163+ : pour l'opÃ©rateur, on dÃ©place le calendrier admin dans l'onglet
+// Â« Planning gÃ©nÃ©ral Â» et on masque le date-picker + tabs redondants.
+function _mountOperatorGeneralCalendar(){
+  if(MAINT_ROLE !== 'operator') return;
+  const src = document.querySelector('#view-planning .cal-sec');
+  const dst = document.getElementById('op-plan-general');
+  if(!src || !dst) return;
+  if(dst.querySelector('.cal-sec')) return;  // dÃ©jÃ  montÃ©
+  // Vide le contenu par dÃ©faut (le tableau read-only), puis injecte
+  dst.innerHTML = '';
+  dst.appendChild(src);
+  // Masque le date-picker haut de page (le calendrier a sa propre nav)
+  const datePicker = document.querySelector('#view-op-planning .op-date-picker');
+  if(datePicker) datePicker.style.display = 'none';
+}
+
+// Wrapper autour de opSetPlanTab pour dÃ©clencher le rendu du calendrier
+// Ã  l'arrivÃ©e sur l'onglet GÃ©nÃ©ral.
+const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
+function opSetPlanTabWithCal(name){
+  if(_origOpSetPlanTab) _origOpSetPlanTab(name);
+  if(name === 'general' && MAINT_ROLE === 'operator'){
+    _mountOperatorGeneralCalendar();
+    // Force un refresh des donnÃ©es puis rerender
+    refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+  }
+}
+// Remplace l'implÃ©mentation exposÃ©e sur window (utilisÃ©e par onclick)
+window.opSetPlanTab = opSetPlanTabWithCal;
+
+(function initMaintRole(){
+  // Ajoute un attribut sur <body> pour le ciblage CSS role-based
+  document.body.setAttribute('data-maint-role', MAINT_ROLE || 'operator');
+  if(MAINT_ROLE === 'operator'){
+    // L'opÃ©rateur arrive sur "Mes tÃ¢ches" â€” on charge la liste du jour.
+    const dateInput = document.getElementById('op-tasks-date');
+    if(dateInput) dateInput.value = _fmtDateISO(new Date());
+    const planInput = document.getElementById('op-plan-date');
+    if(planInput) planInput.value = _fmtDateISO(new Date());
+    opLoadTasks();
+    // PrÃ©-charge le planning en tÃ¢che de fond.
+    opLoadPlanning();
+    // Monte le calendrier admin dans l'onglet GÃ©nÃ©ral (lazy â€” au 1er clic
+    // sur l'onglet, mais on prÃ©pare le DOM tÃ´t pour un feedback instant).
+    _mountOperatorGeneralCalendar();
+  }
+})();
+</script>
+
+</body>
+</html>"""
