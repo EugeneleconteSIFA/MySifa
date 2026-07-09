@@ -2941,21 +2941,22 @@ def maintenance_alerts_active(request: Request):
             if should_show:
                 # v163+ : fallback no_dossier pour toutes les alertes qui n'ont
                 # pas encore de trigger_no_dossier (typiquement les périodiques).
-                # On prend le dernier no_dossier touché aujourd'hui par cet
-                # opérateur sur cette machine — peu importe 01/89, l'important
-                # est le CONTEXTE de travail au moment de l'ack. Ça couvre :
+                # On prend le dernier no_dossier touché aujourd'hui sur la MACHINE
+                # (peu importe qui a saisi et peu importe 01/89). Sémantique
+                # « atelier » : le dossier courant est celui qui tourne sur la
+                # machine, pas celui du user connecté (qui peut être super admin,
+                # responsable, opérateur en pause, etc.). Couvre :
                 #   - dossier en cours (01 sans 89)
                 #   - dossier juste terminé (89 récent)
-                #   - transition entre 2 dossiers (89 d'un, puis 01 du suivant)
-                if not trigger_no_dossier and user_machine and operateur:
+                #   - transition 89 -> 01 du suivant
+                if not trigger_no_dossier and user_machine:
                     last_touched = conn.execute(
                         """SELECT no_dossier FROM production_data
-                           WHERE machine=? AND (operateur=? OR operateur=?)
+                           WHERE machine=?
                              AND date_operation >= ?
                              AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                            ORDER BY date_operation DESC LIMIT 1""",
-                        (user_machine, operateur, user_nom or operateur,
-                         now_paris.strftime("%Y-%m-%dT00:00:00")),
+                        (user_machine, now_paris.strftime("%Y-%m-%dT00:00:00")),
                     ).fetchone()
                     if last_touched and last_touched["no_dossier"]:
                         trigger_no_dossier = str(last_touched["no_dossier"]).strip()
