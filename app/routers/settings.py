@@ -2939,6 +2939,33 @@ def maintenance_alerts_active(request: Request):
                                 should_show = False
             # type manual / calendar : non implémenté en v1
             if should_show:
+                # v163+ : fallback no_dossier pour toutes les alertes qui n'ont
+                # pas encore de trigger_no_dossier (typiquement les périodiques).
+                # On cherche le dossier « en cours » : dernier 01 (début) sur la
+                # machine de l'opérateur, non suivi d'un 89 (fin) postérieur.
+                # Ça donne le dossier sur lequel l'opérateur travaille au moment
+                # de l'ack, et évite le bug de l'historique vide.
+                if not trigger_no_dossier and user_machine and operateur:
+                    last_01 = conn.execute(
+                        """SELECT no_dossier, date_operation FROM production_data
+                           WHERE machine=? AND operation_code='01'
+                             AND (operateur=? OR operateur=?)
+                             AND date_operation >= ?
+                           ORDER BY date_operation DESC LIMIT 1""",
+                        (user_machine, operateur, user_nom or operateur,
+                         now_paris.strftime("%Y-%m-%dT00:00:00")),
+                    ).fetchone()
+                    if last_01 and last_01["no_dossier"]:
+                        # Vérifie qu'aucun 89 postérieur n'a clos ce dossier
+                        closed = conn.execute(
+                            """SELECT 1 FROM production_data
+                               WHERE machine=? AND operation_code='89'
+                                 AND no_dossier=? AND date_operation > ?
+                               LIMIT 1""",
+                            (user_machine, last_01["no_dossier"], last_01["date_operation"]),
+                        ).fetchone()
+                        if not closed:
+                            trigger_no_dossier = str(last_01["no_dossier"]).strip()
                 items.append({
                     "id": int(r["id"]),
                     "nom": r["nom"],
