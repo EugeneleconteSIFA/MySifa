@@ -3264,6 +3264,25 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
             raise HTTPException(404, "Alerte introuvable.")
         # Machine de l'opérateur (ou vide pour superadmin sans machine)
         machine = _machine_name_from_user(conn, user) or ""
+        # v163+ : fallback serveur robuste — si le client n'a pas transmis de
+        # no_dossier (super admin sans opérateur lié, opérateur qui n'a pas
+        # /prod ouvert, etc.), on cherche le dernier dossier touché sur cette
+        # machine dans les 30 dernières minutes avant l'ack. C'est la sémantique
+        # « atelier » : l'ack est daté à un instant T, on regarde ce qui se
+        # passait sur cette machine juste avant.
+        if not no_dossier and machine:
+            window_start = (datetime.now(ZoneInfo("Europe/Paris"))
+                            - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%S")
+            recent_dos = conn.execute(
+                """SELECT no_dossier FROM production_data
+                   WHERE machine=?
+                     AND date_operation >= ?
+                     AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+                   ORDER BY date_operation DESC LIMIT 1""",
+                (machine, window_start),
+            ).fetchone()
+            if recent_dos and recent_dos["no_dossier"]:
+                no_dossier = str(recent_dos["no_dossier"]).strip()
         try:
             responses_json = _json_alerts.dumps(responses, ensure_ascii=False)
         except (TypeError, ValueError):
