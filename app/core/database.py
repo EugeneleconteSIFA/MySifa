@@ -6253,6 +6253,37 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 169, "stock_receptions_lot_numero")
 
+    # v170 — Inventaire matière : sessions + intervalle configurable par matière
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=170 LIMIT 1").fetchone():
+        mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "intervalle_inventaire_jours" not in mp_cols:
+            conn.execute(
+                "ALTER TABLE matieres_premieres ADD COLUMN intervalle_inventaire_jours INTEGER DEFAULT 180"
+            )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS inventaires_matieres (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                matiere_id INTEGER NOT NULL REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                laize_id INTEGER,
+                quantite_avant REAL NOT NULL DEFAULT 0,
+                quantite_comptee REAL NOT NULL DEFAULT 0,
+                ecart REAL NOT NULL DEFAULT 0,
+                commentaire TEXT,
+                operateur_email TEXT,
+                operateur_nom TEXT,
+                date_validation TEXT NOT NULL,
+                mouvement_id INTEGER REFERENCES mp_mouvements(id) ON DELETE SET NULL
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inv_mat_matiere ON inventaires_matieres(matiere_id, date_validation DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inv_mat_laize ON inventaires_matieres(matiere_id, laize_id, date_validation DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 170, "inventaires_matieres")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
