@@ -3355,11 +3355,12 @@ async def mouvement_matiere_premiere(request: Request):
     is_fabrication_user = user.get("role") == "fabrication"
 
     def _check_emplacement_code(code: Optional[str], allow_null: bool = False) -> Optional[str]:
+        # Emplacement optionnel pour toutes les matières premières (décision produit).
+        # Le paramètre allow_null et is_fabrication_user restent pour cohérence avec les
+        # anciens call sites mais ne changent plus le comportement : un emplacement vide
+        # est toujours accepté et vaut None.
         if not code:
-            if allow_null or is_fabrication_user:
-                # Service fabrication ou matière laizée (frontal/glassine/complexe) : emplacement non requis.
-                return None
-            raise HTTPException(400, "Emplacement obligatoire.")
+            return None
         if not _is_valid_emplacement(code):
             raise HTTPException(400, f"Format emplacement invalide : {code}")
         return _normalize_emplacement(code)
