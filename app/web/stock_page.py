@@ -101,6 +101,43 @@ input,select{font-family:inherit}
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+/* Badge overlay pour compteur d'alertes — flotte par-dessus le texte du bouton */
+.nav-btn-has-overlay{position:relative}
+.nav-badge-overlay{
+  position:absolute;right:9px;top:50%;transform:translateY(-50%);
+  padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;
+  background:rgba(251,146,60,.85);color:#fff;line-height:1.15;letter-spacing:.2px;
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb,var(--card) 55%,transparent),
+    0 2px 6px rgba(251,146,60,.35),
+    0 0 14px rgba(251,146,60,.28);
+  pointer-events:none;flex-shrink:0;
+  transition:box-shadow .15s,background .15s;
+}
+.nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{
+  background:rgba(251,146,60,.95);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb,var(--card) 70%,transparent),
+    0 2px 8px rgba(251,146,60,.5),
+    0 0 18px rgba(251,146,60,.4);
+}
+body.light .nav-badge-overlay{
+  background:rgba(234,88,12,.85);
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,.75),
+    0 2px 6px rgba(234,88,12,.3),
+    0 0 14px rgba(234,88,12,.22);
+}
+body.light .nav-btn:hover .nav-badge-overlay,body.light .nav-btn.active .nav-badge-overlay{
+  background:rgba(234,88,12,.95);
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,.85),
+    0 2px 8px rgba(234,88,12,.4),
+    0 0 18px rgba(234,88,12,.32);
+}
+/* Le texte du bouton doit céder la place au badge pour rester lisible en overlay */
+.nav-btn-has-overlay > span{padding-right:34px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
   font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
 .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
@@ -1650,6 +1687,22 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 .recep-hist-note{font-size:12px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recep-hist-four{font-size:11px;color:var(--accent);font-weight:600;flex-shrink:0;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recep-hist-user{font-size:11px;color:var(--muted);flex-shrink:0}
+.recep-hist-del{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:7px;
+  border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;
+  transition:all .12s;padding:0;font-family:inherit;margin-left:4px}
+.recep-hist-del:hover{background:rgba(248,113,113,.14);color:var(--danger);border-color:rgba(248,113,113,.35)}
+.recep-hist-del:active{transform:scale(.94)}
+/* Sélecteur FSC dans l'édition inline — aligné sur les autres inputs MySifa */
+.recep-hist-detail .form-sel{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:8px;
+  padding:9px 34px 9px 12px;font-size:13px;color:var(--text);font-family:inherit;
+  outline:none;transition:border-color .15s,box-shadow .15s;cursor:pointer;
+  -webkit-appearance:none;appearance:none;
+  background-repeat:no-repeat;background-position:right 12px center;background-size:12px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23888' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 8 10 12 14 8'/></svg>");
+}
+.recep-hist-detail .form-sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .recep-hist-detail .form-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 /* Fournisseur search */
 .recep-fourn-wrap{margin-top:8px}
 .recep-fourn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
@@ -14168,6 +14221,29 @@ function buildReceptionHistorique() {
         el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
+      if (!S.stockReadOnly) {
+        const delBtn = el('button', {
+          cls: 'recep-hist-del',
+          attrs: { title: 'Supprimer la réception', 'aria-label': 'Supprimer la réception' },
+          on: {
+            click: async (e) => {
+              e.stopPropagation();
+              const nb = lot.nb_bobines || 0;
+              const label = lot.lot_numero || ('réception #' + lot.id);
+              if (!confirm('Supprimer définitivement ' + label + ' (' + nb + ' bobine' + (nb !== 1 ? 's' : '') + ') ?\n\nCette action est irréversible.')) return;
+              try {
+                await api('/api/stock/receptions/' + lot.id, { method: 'DELETE' });
+                showToast('Réception supprimée.', 'success');
+                if (S.recepExpandedId === lot.id) S.recepExpandedId = null;
+                await loadRecepHistory();
+              } catch (err) {
+                showToast('Erreur : ' + (err.message || 'suppression impossible'), 'error');
+              }
+            },
+          },
+        }, iconEl('trash', 15));
+        rowChildren.push(delBtn);
+      }
       const row = el('div', { cls: 'recep-hist-row', on: { click: () => {
         S.recepExpandedId = isOpen ? null : lot.id;
         renderContent();
@@ -16729,7 +16805,7 @@ function buildSidebarNavStructure() {
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
   );
   if (!S.stockReadOnly) {
-    items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
+    items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire produit' });
   }
   if (S.user && ['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'].includes(S.user.role)) {
     items.push({ kind: 'sep', label: 'Contrôle' });
@@ -16747,15 +16823,18 @@ function buildSidebarNavStructure() {
 
 function renderSidebarNavBtn(n) {
   const children = [iconEl(n.icon, 16), el('span', null, ' ' + n.label)];
+  let badge = null;
   if (n.tab === 'inventaire' && S.invAlertCount) {
-    const badge = document.createElement('span');
-    badge.style.cssText = 'margin-left:auto;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#fb923c;color:#fff;flex-shrink:0';
+    badge = document.createElement('span');
+    badge.className = 'nav-badge nav-badge-overlay';
     badge.textContent = S.invAlertCount;
-    children.push(badge);
   }
-  return el('button', { cls: 'nav-btn' + (S.tab === n.tab ? ' active' : ''), 'data-tab': n.tab, on: { click: () => goToTab(n.tab) } },
-    ...children
-  );
+  if (badge) children.push(badge);
+  return el('button', {
+    cls: 'nav-btn' + (badge ? ' nav-btn-has-overlay' : '') + (S.tab === n.tab ? ' active' : ''),
+    'data-tab': n.tab,
+    on: { click: () => goToTab(n.tab) },
+  }, ...children);
 }
 
 function renderSidebarItems(items) {
