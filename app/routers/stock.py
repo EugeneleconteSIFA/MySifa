@@ -2963,6 +2963,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette,
                    mp.sous_section,
+                   COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
                    COALESCE(s.quantite, 0) AS quantite
             FROM matieres_premieres mp
             LEFT JOIN mp_stock s ON s.matiere_id = mp.id
@@ -3196,6 +3197,16 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
         sv = (body.get("sous_section") or "").strip() or None
         sets.append("sous_section=?")
         params.append(sv)
+    if "intervalle_inventaire_jours" in body:
+        v = body.get("intervalle_inventaire_jours")
+        try:
+            v_int = int(v) if v not in (None, "") else None
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Intervalle inventaire invalide.") from None
+        if v_int is not None and (v_int < 1 or v_int > 3650):
+            raise HTTPException(400, "Intervalle inventaire hors bornes (1–3650 jours).")
+        sets.append("intervalle_inventaire_jours=?")
+        params.append(v_int)
 
     if not sets:
         raise HTTPException(400, "Aucun champ à mettre à jour.")
@@ -3549,6 +3560,351 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
             (matiere_id,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ── Inventaire matière (par référence, aligné sur invV2 emplacement) ─────
+_INVMAT_DEFAULT_INTERVAL_DAYS = 180
+
+
+def _invmat_status(jours_depuis: Optional[float], intervalle: int) -> str:
+    """Retourne 'vert' | 'orange' | 'rouge' selon le seuil configuré."""
+    if jours_depuis is None:
+        return "rouge"  # jamais inventoriée
+    seuil = max(1, int(intervalle or _INVMAT_DEFAULT_INTERVAL_DAYS))
+    ratio = jours_depuis / seuil
+    if ratio < 0.5:
+        return "vert"
+    if ratio < 1.0:
+        return "orange"
+    return "rouge"
+
+
+@router.get("/api/stock/matieres/inventaire")
+def matieres_inventaire_liste(request: Request):
+    """Liste des matières avec dernier inventaire, jours écoulés et statut couleur."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT mp.id, mp.reference, mp.designation, mp.categorie, mp.couleur,
+                   COALESCE(mp.intervalle_inventaire_jours, ?) AS intervalle_jours,
+                   COALESCE(s.quantite, 0) AS stock_actuel,
+                   (SELECT MAX(date_validation) FROM inventaires_matieres
+                    WHERE matiere_id = mp.id) AS derniere_date,
+                   (SELECT COUNT(*) FROM inventaires_matieres
+                    WHERE matiere_id = mp.id) AS nb_inventaires
+            FROM matieres_premieres mp
+            LEFT JOIN mp_stock s ON s.matiere_id = mp.id
+            WHERE mp.actif = 1
+            ORDER BY mp.categorie, mp.reference COLLATE NOCASE
+            """,
+            (_INVMAT_DEFAULT_INTERVAL_DAYS,),
+        ).fetchall()
+
+    now = datetime.now()
+    result = []
+    for r in rows:
+        d = dict(r)
+        derniere = d.get("derniere_date")
+        jours = None
+        if derniere:
+            try:
+                dt = datetime.fromisoformat(derniere.split(".")[0])
+                jours = (now - dt).total_seconds() / 86400.0
+            except (ValueError, TypeError):
+                jours = None
+        d["jours_depuis"] = round(jours, 1) if jours is not None else None
+        d["statut"] = _invmat_status(jours, d["intervalle_jours"])
+        d["unite"] = _mp_unite_gestion(d["categorie"])
+        d["laizee"] = _mp_is_laizee(d["categorie"])
+        result.append(d)
+    return {"items": result}
+
+
+@router.get("/api/stock/matieres/{matiere_id}/inventaire")
+def matiere_inventaire_detail(matiere_id: int, request: Request):
+    """Détail pour saisir l'inventaire d'une matière (une ligne par laize si laizée).
+
+    Retourne : matiere, intervalle_jours, dernier_inventaire, lignes (stock actuel par laize).
+    """
+    require_stock(request)
+    with get_db() as conn:
+        mp = conn.execute(
+            """SELECT id, reference, designation, categorie, couleur,
+                      COALESCE(intervalle_inventaire_jours, ?) AS intervalle_jours
+               FROM matieres_premieres WHERE id=? AND actif=1""",
+            (_INVMAT_DEFAULT_INTERVAL_DAYS, matiere_id),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matière non trouvée.")
+        mp_d = dict(mp)
+        laizee = _mp_is_laizee(mp_d["categorie"])
+        mp_d["laizee"] = laizee
+        mp_d["unite"] = _mp_unite_gestion(mp_d["categorie"])
+
+        lignes: list[dict] = []
+        if laizee:
+            rows = conn.execute(
+                """SELECT ml.laize_id, l.valeur_mm, l.label,
+                          COALESCE(sl.quantite, 0) AS quantite
+                   FROM mp_matiere_laizes ml
+                   JOIN laizes l ON l.id = ml.laize_id
+                   LEFT JOIN mp_stock_laize sl
+                     ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
+                   WHERE ml.matiere_id = ? AND COALESCE(l.actif, 1) = 1
+                   ORDER BY COALESCE(l.ordre, 999), l.valeur_mm""",
+                (matiere_id,),
+            ).fetchall()
+            for r in rows:
+                lignes.append({
+                    "laize_id": r["laize_id"],
+                    "valeur_mm": r["valeur_mm"],
+                    "label": r["label"] or (str(r["valeur_mm"]) + " mm" if r["valeur_mm"] else "—"),
+                    "stock_actuel": float(r["quantite"] or 0),
+                })
+        else:
+            stock = conn.execute(
+                "SELECT COALESCE(quantite, 0) AS quantite FROM mp_stock WHERE matiere_id=?",
+                (matiere_id,),
+            ).fetchone()
+            lignes.append({
+                "laize_id": None,
+                "valeur_mm": None,
+                "label": mp_d["reference"],
+                "stock_actuel": float(stock["quantite"]) if stock else 0.0,
+            })
+
+        derniere = conn.execute(
+            """SELECT MAX(date_validation) AS d FROM inventaires_matieres WHERE matiere_id=?""",
+            (matiere_id,),
+        ).fetchone()
+        mp_d["derniere_date"] = derniere["d"] if derniere else None
+
+    return {"matiere": mp_d, "lignes": lignes}
+
+
+@router.post("/api/stock/matieres/{matiere_id}/inventaire")
+async def matiere_inventaire_valider(matiere_id: int, request: Request):
+    """Valide l'inventaire d'une matière.
+
+    Body : { lignes: [{ laize_id, quantite_comptee, commentaire }] }.
+    Pour chaque ligne : calcule l'écart, crée un mp_mouvements type='ajustement'
+    si écart != 0 (avec note auto), met à jour mp_stock/mp_stock_laize,
+    et insère un enregistrement dans inventaires_matieres.
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    lignes_in = body.get("lignes") or []
+    if not isinstance(lignes_in, list) or not lignes_in:
+        raise HTTPException(400, "Aucune ligne d'inventaire fournie.")
+
+    created_by = user.get("id")
+    operateur_email = user.get("email")
+    operateur_nom = (user.get("nom") or "").strip() or None
+    now_dt = datetime.now()
+    now = now_dt.isoformat()
+    note_date = now_dt.strftime("%d/%m/%Y")
+
+    with get_db() as conn:
+        mp = conn.execute(
+            """SELECT id, reference, categorie FROM matieres_premieres WHERE id=? AND actif=1""",
+            (matiere_id,),
+        ).fetchone()
+        if not mp:
+            raise HTTPException(404, "Matière non trouvée.")
+        laizee = _mp_is_laizee(mp["categorie"])
+        unite = _mp_unite_gestion(mp["categorie"])
+
+        results = []
+        for idx, li in enumerate(lignes_in):
+            laize_id_raw = li.get("laize_id")
+            laize_id: Optional[int] = None
+            if laize_id_raw not in (None, ""):
+                try:
+                    laize_id = int(laize_id_raw)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"Ligne {idx + 1} : laize_id invalide.") from None
+
+            if laizee and laize_id is None:
+                raise HTTPException(400, f"Ligne {idx + 1} : laize obligatoire (matière laizée).")
+            if not laizee and laize_id is not None:
+                # Ignorer silencieusement le laize_id sur matière non laizée
+                laize_id = None
+
+            try:
+                q_comptee = float(li.get("quantite_comptee"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"Ligne {idx + 1} : quantite_comptee invalide.") from None
+            if q_comptee < 0:
+                raise HTTPException(400, f"Ligne {idx + 1} : quantité négative.")
+
+            commentaire = (li.get("commentaire") or "").strip() or None
+
+            # Stock actuel avant
+            if laizee:
+                assoc = conn.execute(
+                    "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+                    (matiere_id, laize_id),
+                ).fetchone()
+                if not assoc:
+                    raise HTTPException(400, f"Ligne {idx + 1} : laize non associée à la matière.")
+                stk_row = conn.execute(
+                    "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+                    (matiere_id, laize_id),
+                ).fetchone()
+            else:
+                stk_row = conn.execute(
+                    "SELECT quantite FROM mp_stock WHERE matiere_id=?",
+                    (matiere_id,),
+                ).fetchone()
+            q_avant = float(stk_row["quantite"]) if stk_row and stk_row["quantite"] is not None else 0.0
+            ecart = q_comptee - q_avant
+
+            mouvement_id = None
+            if abs(ecart) > 1e-9:
+                # Note auto : "Inventaire du 09/07/2026 — écart : +2 bob."
+                sign = "+" if ecart > 0 else ""
+                # Format écart : entier si round, sinon 3 décimales max
+                if abs(ecart - round(ecart)) < 1e-6:
+                    ecart_txt = f"{sign}{int(round(ecart))}"
+                else:
+                    ecart_txt = f"{sign}{ecart:.3f}"
+                note_auto = f"Inventaire du {note_date} — écart : {ecart_txt} {unite}"
+                if commentaire:
+                    note_auto += f" | {commentaire}"
+
+                # Update stock (idempotent avec INSERT OR REPLACE, aligné sur code existant)
+                if laizee:
+                    conn.execute(
+                        """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+                           VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)
+                           ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                               quantite=excluded.quantite,
+                               updated_at=excluded.updated_at,
+                               updated_by_name=excluded.updated_by_name""",
+                        (matiere_id, laize_id, q_comptee, operateur_nom),
+                    )
+                    total = conn.execute(
+                        "SELECT COALESCE(SUM(quantite), 0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+                        (matiere_id,),
+                    ).fetchone()
+                    conn.execute(
+                        """INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+                           VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)""",
+                        (matiere_id, float(total["s"] or 0), operateur_nom),
+                    )
+                else:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+                           VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)""",
+                        (matiere_id, q_comptee, operateur_nom),
+                    )
+
+                cur = conn.execute(
+                    """INSERT INTO mp_mouvements (
+                           matiere_id, type_mouvement, quantite,
+                           quantite_avant, quantite_apres,
+                           ref_bl, note, emplacement_source, emplacement_dest,
+                           created_by, created_by_name, laize_id, prix_eur_m2
+                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        matiere_id,
+                        "ajustement",
+                        abs(ecart),
+                        q_avant,
+                        q_comptee,
+                        None,
+                        note_auto,
+                        None,
+                        None,
+                        created_by,
+                        operateur_nom,
+                        laize_id,
+                        None,
+                    ),
+                )
+                mouvement_id = cur.lastrowid
+
+            # Trace inventaire (toujours, écart nul inclus)
+            conn.execute(
+                """INSERT INTO inventaires_matieres (
+                       matiere_id, laize_id, quantite_avant, quantite_comptee,
+                       ecart, commentaire, operateur_email, operateur_nom,
+                       date_validation, mouvement_id
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    matiere_id,
+                    laize_id,
+                    q_avant,
+                    q_comptee,
+                    ecart,
+                    commentaire,
+                    operateur_email,
+                    operateur_nom,
+                    now,
+                    mouvement_id,
+                ),
+            )
+            results.append({
+                "laize_id": laize_id,
+                "quantite_avant": q_avant,
+                "quantite_comptee": q_comptee,
+                "ecart": ecart,
+                "mouvement_id": mouvement_id,
+            })
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="INVENTAIRE",
+        module="stock",
+        objet=f"Matière #{matiere_id} ({mp['reference']})",
+        detail={"lignes": len(results), "total_ecart": sum(r["ecart"] for r in results)},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "matiere_id": matiere_id, "lignes": results}
+
+
+@router.get("/api/stock/matieres/{matiere_id}/inventaires")
+def matiere_inventaires_historique(matiere_id: int, request: Request, limit: int = 100):
+    """Historique des inventaires d'une matière."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT im.*, l.valeur_mm, l.label AS laize_label
+               FROM inventaires_matieres im
+               LEFT JOIN laizes l ON l.id = im.laize_id
+               WHERE im.matiere_id = ?
+               ORDER BY im.date_validation DESC
+               LIMIT ?""",
+            (matiere_id, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.patch("/api/stock/matieres/{matiere_id}/intervalle-inventaire")
+async def matiere_set_intervalle(matiere_id: int, request: Request):
+    """Ajuste l'intervalle d'inventaire (jours) d'une matière — admin matière."""
+    user = require_stock_write(request)
+    if user.get("role") not in _STOCK_MATIERES_ADMIN_ROLES:
+        raise HTTPException(403, "Réservé aux administrateurs matières.")
+    body = await request.json()
+    try:
+        jours = int(body.get("intervalle_inventaire_jours"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "intervalle_inventaire_jours invalide.") from None
+    if jours < 1 or jours > 3650:
+        raise HTTPException(400, "Intervalle hors bornes (1–3650 jours).")
+    with get_db() as conn:
+        ex = conn.execute("SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Matière non trouvée.")
+        conn.execute(
+            "UPDATE matieres_premieres SET intervalle_inventaire_jours=? WHERE id=?",
+            (jours, matiere_id),
+        )
+        conn.commit()
+    return {"success": True, "matiere_id": matiere_id, "intervalle_inventaire_jours": jours}
 
 
 # ── Produits finis (onglet dédié — source : produits / mouvements_stock) ──

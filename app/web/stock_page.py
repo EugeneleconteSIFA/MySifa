@@ -1780,6 +1780,12 @@ let S = {
   recepFournisseurOpen: false, // dropdown ouvert
   recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
   recepLastLot: null,      // dernier lot créé (pour modale impression étiquettes)
+  // Inventaire matière (par référence)
+  matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
+  matInvLoading: false,
+  matInvCategorie: '',     // filtre catégorie ('', 'frontal', 'glassine', ...)
+  matInvQuery: '',         // recherche texte
+  matInvStatut: '',        // filtre statut ('', 'vert', 'orange', 'rouge')
   // Import référentiel références / unités
   importRefsOpen: false,
   importRefsPreview: null,
@@ -2376,6 +2382,21 @@ async function loadInventaireList() {
       renderContent();
     }
   } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function loadInventaireMatieres() {
+  S.matInvLoading = true;
+  renderContent();
+  try {
+    const d = await api('/api/stock/matieres/inventaire');
+    S.matInvList = (d && Array.isArray(d.items)) ? d.items : [];
+  } catch(e) {
+    S.matInvList = [];
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.matInvLoading = false;
+    renderContent();
+  }
 }
 
 function _updateInvAlertCount() {
@@ -3399,6 +3420,7 @@ function goToTab(tab) {
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'referentiel') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
+  else if (tab === 'matieres-inventaire') loadInventaireMatieres();
   else if (tab === 'reception') loadRecepHistory();
   else if (tab === 'matieres') loadMatieres();
   else if (tab === 'produits-finis') loadProduitsFinis();
@@ -5272,8 +5294,8 @@ function buildMatiereDetail() {
       actionBtns.push(el('button', {
         cls: 'action-btn inventaire',
         type: 'button',
-        on: { click: () => openModalMouvement('ajustement', m) },
-      }, '= Ajustement'));
+        on: { click: () => openModalInventaireMatiere(m) },
+      }, '≡ Inventaire'));
     }
   }
   if (isMatieresAdmin()) {
@@ -7572,6 +7594,16 @@ function matiereRefEditPayload(item, fields) {
       payload.unites_par_palette = upp;
     }
   }
+  if (fields.intervalleInp) {
+    const raw = (fields.intervalleInp.value || '').trim();
+    if (raw !== '') {
+      const j = parseInt(raw, 10);
+      if (isNaN(j) || j < 1 || j > 3650) {
+        return { error: 'Fréquence inventaire : entier 1–3650 jours.' };
+      }
+      payload.intervalle_inventaire_jours = j;
+    }
+  }
   return { payload };
 }
 
@@ -7594,6 +7626,14 @@ function appendMatiereRefEditFields(parent, item) {
   const pppInp = el('input', { attrs: { type: 'number', min: '1', step: '1' } });
   pppInp.value = String(item.palettes_par_pile > 0 ? item.palettes_par_pile : '');
   pppWrap.append(el('label', null, 'Palettes par pile'), pppInp);
+  // Cadence inventaire (jours)
+  const intervalleInp = el('input', { attrs: { type: 'number', min: '1', max: '3650', step: '1' } });
+  intervalleInp.value = String(item.intervalle_inventaire_jours != null ? item.intervalle_inventaire_jours : 180);
+  const intervalleWrap = el('div', { cls: 'mp-field' },
+    el('label', null, 'Fréquence inventaire (jours)'),
+    intervalleInp,
+    el('div', { cls: 'mp-hint' }, 'Défaut 180 j. Sert au calcul du statut vert/orange/rouge dans l\'inventaire matière.'),
+  );
   const couleurWrap = el('div', { cls: 'mp-field', style: { display: mpIsGlassineCategory(item) ? '' : 'none' } });
   const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
   couleurInp.value = item.couleur || '';
@@ -7842,8 +7882,9 @@ function appendMatiereRefEditFields(parent, item) {
     el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
+    intervalleWrap,
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -8293,6 +8334,186 @@ function validateMpEmplacement(empl) {
   }
   return null;
 }
+
+// ── Inventaire matière (par référence) ─────────────────────────────
+function openModalInventaireMatiere(matiere) {
+  (async () => {
+    if (!matiere || !matiere.id) return;
+    let data;
+    try {
+      data = await api('/api/stock/matieres/' + matiere.id + '/inventaire');
+    } catch (e) {
+      showToast('Erreur chargement : ' + (e.message || 'inconnue'), 'error');
+      return;
+    }
+    renderModalInventaireMatiere(data);
+  })();
+}
+
+function renderModalInventaireMatiere(data) {
+  const mat = (data && data.matiere) || {};
+  const lignes = (data && data.lignes) || [];
+  const unite = mat.unite || 'u.';
+  closeMroot();
+  const mroot = document.getElementById('mroot');
+  if (!mroot) return;
+
+  // État local : { [key]: { comptee: string, commentaire: string } }
+  // key = laize_id || 'g' (global)
+  const st = {};
+  lignes.forEach(li => {
+    const k = li.laize_id != null ? String(li.laize_id) : 'g';
+    st[k] = { comptee: '', commentaire: '' };
+  });
+
+  const overlay = el('div', {
+    cls: 'mp-modal-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
+  });
+  const box = el('div', { cls: 'mp-modal', style: { maxWidth: '640px', width: '100%' } });
+  box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-ajustement' },
+    el('h3', null, 'Inventaire — ', el('span', null, mat.reference || '')),
+    el('button', {
+      cls: 'mp-modal-close',
+      type: 'button',
+      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
+      on: { click: closeMroot },
+    }, '×'),
+  ));
+  const body = el('div', { cls: 'mp-modal-mvt-body' });
+
+  // Résumé matière + info dernière date
+  const derniereTxt = mat.derniere_date
+    ? 'Dernier inventaire : ' + String(mat.derniere_date).slice(0, 10)
+    : 'Aucun inventaire enregistré';
+  body.appendChild(el('div', {
+    style: { fontSize: '12px', color: 'var(--muted)', lineHeight: '1.5', marginBottom: '10px' },
+  },
+    el('div', null, el('strong', { style: { color: 'var(--text)' } }, mat.designation || '')),
+    el('div', null, derniereTxt, ' · Cadence : ', el('strong', null, String(mat.intervalle_jours || 180)), ' j')
+  ));
+
+  // Tableau des lignes (une par laize ou une seule si non laizée)
+  const table = el('table', {
+    style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginBottom: '10px' },
+  });
+  table.appendChild(el('thead', null, el('tr', null,
+    el('th', { style: { textAlign: 'left', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, mat.laizee ? 'Laize' : 'Matière'),
+    el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Stock (' + unite + ')'),
+    el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Compté'),
+    el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Écart')
+  )));
+  const tbody = el('tbody');
+
+  function fmtEcart(v) {
+    if (v == null || isNaN(v)) return '—';
+    const sign = v > 0 ? '+' : '';
+    return sign + (Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : v.toFixed(2));
+  }
+
+  lignes.forEach(li => {
+    const k = li.laize_id != null ? String(li.laize_id) : 'g';
+    const trStyle = { borderBottom: '1px solid rgba(255,255,255,.04)' };
+    const stockCell = el('td', { style: { padding: '8px', textAlign: 'right', fontFamily: 'monospace', color: 'var(--text2)' } }, String(li.stock_actuel));
+    const ecartCell = el('td', { style: { padding: '8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: '700' } }, '—');
+    const inp = el('input', {
+      attrs: { type: 'number', step: 'any', min: '0', placeholder: '—' },
+      style: {
+        width: '90px', textAlign: 'right', background: 'var(--bg)', border: '1.5px solid var(--border)',
+        borderRadius: '6px', padding: '6px 8px', fontFamily: 'monospace', color: 'var(--text)', fontSize: '13px',
+      },
+    });
+    inp.addEventListener('input', e => {
+      st[k].comptee = e.target.value;
+      const v = parseFloat(e.target.value);
+      if (isNaN(v)) {
+        ecartCell.textContent = '—';
+        ecartCell.style.color = 'var(--muted)';
+      } else {
+        const ec = v - li.stock_actuel;
+        ecartCell.textContent = fmtEcart(ec);
+        if (Math.abs(ec) < 1e-9) { ecartCell.style.color = 'var(--muted)'; }
+        else if (ec > 0) { ecartCell.style.color = 'var(--success)'; }
+        else { ecartCell.style.color = 'var(--danger)'; }
+      }
+    });
+    const tr = el('tr', { style: trStyle },
+      el('td', { style: { padding: '8px' } }, li.label || '—'),
+      stockCell,
+      el('td', { style: { padding: '8px', textAlign: 'right' } }, inp),
+      ecartCell,
+    );
+    tbody.appendChild(tr);
+    // Ligne commentaire (colspan=4)
+    const commInp = el('input', {
+      attrs: { type: 'text', placeholder: 'Commentaire (optionnel)…' },
+      style: {
+        width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
+        borderRadius: '6px', padding: '6px 8px', color: 'var(--text)', fontSize: '12px',
+      },
+    });
+    commInp.addEventListener('input', e => { st[k].commentaire = e.target.value; });
+    const trC = el('tr', null,
+      el('td', { attrs: { colspan: '4' }, style: { padding: '0 8px 10px 8px' } }, commInp)
+    );
+    tbody.appendChild(trC);
+  });
+  table.appendChild(tbody);
+  body.appendChild(table);
+
+  // Actions
+  const actions = el('div', {
+    style: { display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '10px', flexWrap: 'wrap' },
+  },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
+    el('button', { cls: 'btn-confirm', on: { click: async () => {
+      // Construire les lignes valides (comptée renseignée)
+      const payload = [];
+      lignes.forEach(li => {
+        const k = li.laize_id != null ? String(li.laize_id) : 'g';
+        const raw = (st[k].comptee || '').trim();
+        if (raw === '') return; // Skip lignes non saisies
+        const v = parseFloat(raw);
+        if (isNaN(v) || v < 0) return;
+        payload.push({
+          laize_id: li.laize_id,
+          quantite_comptee: v,
+          commentaire: (st[k].commentaire || '').trim() || null,
+        });
+      });
+      if (!payload.length) {
+        showToast('Aucune quantité saisie', 'error');
+        return;
+      }
+      try {
+        const r = await api('/api/stock/matieres/' + mat.id + '/inventaire', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lignes: payload }),
+        });
+        if (r && r.success) {
+          const nbAjust = (r.lignes || []).filter(x => x.mouvement_id).length;
+          showToast('Inventaire validé — ' + payload.length + ' ligne(s), ' + nbAjust + ' ajustement(s)');
+          closeMroot();
+          // Recharger la matière et la vue courante
+          if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id === mat.id) {
+            await loadMatiere(mat.id);
+          }
+          await loadMatieres();
+          if (S.tab === 'matieres-inventaire') await loadInventaireMatieres();
+        }
+      } catch (e) {
+        showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+      }
+    }}}, 'Valider l\'inventaire'),
+  );
+  body.appendChild(actions);
+
+  box.appendChild(body);
+  overlay.appendChild(box);
+  mroot.appendChild(overlay);
+}
+
 
 function openModalMouvement(type, matiere) {
   (async () => {
@@ -12089,6 +12310,154 @@ function invV2BuildListItems(container, items) {
   });
 }
 
+// ── Inventaire matière (par référence) — onglet dédié ──────────────
+function buildMatieresInventaire() {
+  const rows = S.matInvList || [];
+  const q = (S.matInvQuery || '').trim().toLowerCase();
+  const cat = (S.matInvCategorie || '').toLowerCase();
+  const stat = S.matInvStatut || '';
+  const filtered = rows.filter(r => {
+    if (cat && (r.categorie || '').toLowerCase() !== cat) return false;
+    if (stat && r.statut !== stat) return false;
+    if (q) {
+      const s = ((r.reference || '') + ' ' + (r.designation || '')).toLowerCase();
+      if (!s.includes(q)) return false;
+    }
+    return true;
+  });
+  // Tri : d'abord rouge, orange, vert. Puis par jours_depuis desc (jamais inventorié en tête = plus prioritaire).
+  const statOrder = { rouge: 0, orange: 1, vert: 2 };
+  filtered.sort((a, b) => {
+    const so = (statOrder[a.statut] ?? 3) - (statOrder[b.statut] ?? 3);
+    if (so !== 0) return so;
+    const aj = a.jours_depuis == null ? Infinity : a.jours_depuis;
+    const bj = b.jours_depuis == null ? Infinity : b.jours_depuis;
+    return bj - aj;
+  });
+
+  const countByStat = { rouge: 0, orange: 0, vert: 0 };
+  rows.forEach(r => { if (countByStat[r.statut] != null) countByStat[r.statut]++; });
+
+  const searchInput = el('input', {
+    cls: 'field-input invv2-search-input',
+    attrs: { id: 'matinv-search', type: 'text', placeholder: 'Rechercher (référence, désignation…)', autocomplete: 'off' },
+  });
+  searchInput.value = S.matInvQuery || '';
+  searchInput.addEventListener('input', e => {
+    S.matInvQuery = e.target.value;
+    renderMatInvItems();
+  });
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { S.matInvQuery = ''; e.target.value = ''; renderMatInvItems(); }
+  });
+
+  const catSelect = el('select', {
+    cls: 'field-input',
+    style: { maxWidth: '200px', height: '38px' },
+    on: { change: e => { S.matInvCategorie = e.target.value; renderMatInvItems(); } },
+  });
+  [['', 'Toutes catégories'], ['frontal', 'Frontal'], ['glassine', 'Glassine'], ['complexe', 'Complexe'],
+   ['mandrin', 'Mandrin'], ['adhesif', 'Adhésif'], ['carton', 'Carton'], ['palette', 'Palette'], ['autre', 'Autre']].forEach(([v, lbl]) => {
+    catSelect.appendChild(el('option', { attrs: { value: v, selected: (S.matInvCategorie || '') === v ? 'selected' : null } }, lbl));
+  });
+
+  const statChip = (key, label, color, count) => el('button', {
+    cls: 'invv2-legend-item invv2-c-' + color + (stat === key ? ' matinv-chip-active' : ''),
+    style: {
+      cursor: 'pointer', border: stat === key ? '1.5px solid currentColor' : '1.5px solid transparent',
+      background: 'transparent', padding: '5px 12px', borderRadius: '999px',
+    },
+    on: { click: () => { S.matInvStatut = stat === key ? '' : key; renderMatInvItems(); } },
+  }, el('span', { cls: 'invv2-dot' }), label + ' (' + count + ')');
+
+  const listContainer = el('div', { cls: 'card invv2-list-card', attrs: { id: 'matinv-list-container' } });
+  buildMatInvItems(listContainer, filtered);
+
+  return el('div', { cls: 'content' },
+    el('div', { cls: 'invv2-page-header' },
+      el('div', { cls: 'invv2-page-title' }, 'Inventaire matière'),
+      el('div', { cls: 'invv2-page-sub' }, 'Matières triées de la plus ancienne inventaire à la plus récente — cadence configurable par matière'),
+    ),
+    el('div', {
+      style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px', alignItems: 'center' },
+    },
+      statChip('rouge', 'À faire', 'rouge', countByStat.rouge),
+      statChip('orange', 'Bientôt', 'orange', countByStat.orange),
+      statChip('vert', 'À jour', 'vert', countByStat.vert),
+    ),
+    el('div', {
+      style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' },
+    },
+      el('div', { cls: 'invv2-search-wrap', style: { flex: '1', minWidth: '220px' } }, searchInput),
+      catSelect,
+    ),
+    (S.matInvLoading
+      ? el('div', { cls: 'card-empty' }, 'Chargement…')
+      : listContainer),
+  );
+}
+
+function renderMatInvItems() {
+  const container = document.getElementById('matinv-list-container');
+  if (!container) return;
+  const rows = S.matInvList || [];
+  const q = (S.matInvQuery || '').trim().toLowerCase();
+  const cat = (S.matInvCategorie || '').toLowerCase();
+  const stat = S.matInvStatut || '';
+  const filtered = rows.filter(r => {
+    if (cat && (r.categorie || '').toLowerCase() !== cat) return false;
+    if (stat && r.statut !== stat) return false;
+    if (q) {
+      const s = ((r.reference || '') + ' ' + (r.designation || '')).toLowerCase();
+      if (!s.includes(q)) return false;
+    }
+    return true;
+  });
+  const statOrder = { rouge: 0, orange: 1, vert: 2 };
+  filtered.sort((a, b) => {
+    const so = (statOrder[a.statut] ?? 3) - (statOrder[b.statut] ?? 3);
+    if (so !== 0) return so;
+    const aj = a.jours_depuis == null ? Infinity : a.jours_depuis;
+    const bj = b.jours_depuis == null ? Infinity : b.jours_depuis;
+    return bj - aj;
+  });
+  container.innerHTML = '';
+  buildMatInvItems(container, filtered);
+}
+
+function buildMatInvItems(container, items) {
+  if (!items.length) {
+    const q = (S.matInvQuery || '').trim();
+    container.appendChild(el('div', { cls: 'card-empty' },
+      q ? 'Aucun résultat pour « ' + q + ' »' : 'Aucune matière à inventorier avec les filtres actuels.'
+    ));
+    return;
+  }
+  items.forEach(r => {
+    const j = r.jours_depuis;
+    const joursLabel = (j == null) ? 'Jamais' : (Math.round(j) + ' j');
+    const dLast = r.derniere_date ? String(r.derniere_date).slice(0, 10) : null;
+    const sub = j == null ? 'jamais inventoriée' : ('depuis le ' + (dLast || '—'));
+    const stockLine = 'Stock : ' + (r.stock_actuel != null ? (Math.round(r.stock_actuel * 100) / 100) : '0') + ' ' + (r.unite || 'u.');
+    container.appendChild(el('div', {
+      cls: 'invv2-empl-row invv2-c-' + (r.statut || 'rouge'),
+      on: { click: () => openModalInventaireMatiere({ id: r.id, reference: r.reference, designation: r.designation }) },
+    },
+      el('div', { cls: 'invv2-empl-main' },
+        el('div', { cls: 'invv2-empl-code' }, r.reference || ''),
+        el('div', { cls: 'invv2-empl-meta' },
+          (r.designation || '—') + ' · ' + stockLine + ' · cadence ' + (r.intervalle_jours || 180) + ' j'
+        )
+      ),
+      el('div', { cls: 'invv2-empl-right' },
+        el('div', { cls: 'invv2-jours invv2-c-' + (r.statut || 'rouge') }, joursLabel),
+        el('div', { cls: 'invv2-jours-sub' }, sub),
+      ),
+    ));
+  });
+}
+
+
 function buildInventaireEmplDetail() {
   const d = S.invV2Detail;
   if (!d) return el('div', { cls:'content' }, el('div', { cls:'card-empty' }, 'Emplacement introuvable'));
@@ -12353,6 +12722,7 @@ function renderContent() {
     content = buildMatieres();
   }
   else if (S.tab === 'inventaire') content = buildInventaire();
+  else if (S.tab === 'matieres-inventaire') content = buildMatieresInventaire();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
@@ -16269,11 +16639,16 @@ function buildSidebarNavStructure() {
     { kind: 'sep', label: 'Matières premières' },
     { kind: 'btn', tab: 'matieres', icon: 'layers', label: 'Matières premières' },
     { kind: 'btn', tab: 'reception', icon: 'inbox', label: 'Réception matière' },
+  ];
+  if (isMatieresAdmin() && !S.stockReadOnly) {
+    items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
+  }
+  items.push(
     { kind: 'sep', label: 'Produits' },
     { kind: 'btn', tab: 'produits-finis', icon: 'package', label: 'Produits finis' },
     { kind: 'btn', tab: 'negoce', icon: 'shopping-cart', label: 'Produits de négoce' },
     { kind: 'btn', tab: 'referentiel', icon: 'tag', label: 'Référentiel' },
-  ];
+  );
   if (!S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
   }
@@ -16610,6 +16985,7 @@ async function init() {
   if (S.tab === 'traca') { /* rien à charger */ }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
+  else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
   else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'negoce') { await loadNegoce(); }
