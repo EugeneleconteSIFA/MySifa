@@ -101,43 +101,49 @@ input,select{font-family:inherit}
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
   font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-/* Badge overlay pour compteur d'alertes — flotte par-dessus le texte du bouton */
+/* Badge compteur — flotte par-dessus le texte avec des bords "nuage" (gradient flou).
+   Le cœur du badge reste net, les bords se diffusent progressivement pour laisser
+   deviner le texte du bouton par transparence dégradée. */
 .nav-btn-has-overlay{position:relative}
 .nav-badge-overlay{
-  position:absolute;right:9px;top:50%;transform:translateY(-50%);
-  padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;
-  background:rgba(251,146,60,.85);color:#fff;line-height:1.15;letter-spacing:.2px;
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb,var(--card) 55%,transparent),
-    0 2px 6px rgba(251,146,60,.35),
-    0 0 14px rgba(251,146,60,.28);
-  pointer-events:none;flex-shrink:0;
-  transition:box-shadow .15s,background .15s;
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:800;
+  background:#fb923c;color:#fff;line-height:1.15;letter-spacing:.2px;
+  z-index:2;pointer-events:none;flex-shrink:0;isolation:isolate;
+  transition:background .15s;
 }
-.nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{
-  background:rgba(251,146,60,.95);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb,var(--card) 70%,transparent),
-    0 2px 8px rgba(251,146,60,.5),
-    0 0 18px rgba(251,146,60,.4);
+/* Halo "cloud" : pseudo-élément derrière, gradient radial + blur → bords flous */
+.nav-badge-overlay::before{
+  content:'';position:absolute;inset:-8px;border-radius:999px;
+  background:radial-gradient(
+    ellipse at center,
+    rgba(251,146,60,.88) 30%,
+    rgba(251,146,60,.55) 52%,
+    rgba(251,146,60,.28) 72%,
+    rgba(251,146,60,.10) 88%,
+    transparent 100%);
+  filter:blur(3.5px);z-index:-1;
 }
-body.light .nav-badge-overlay{
-  background:rgba(234,88,12,.85);
-  box-shadow:
-    0 0 0 3px rgba(255,255,255,.75),
-    0 2px 6px rgba(234,88,12,.3),
-    0 0 14px rgba(234,88,12,.22);
+.nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{background:#f97316}
+.nav-btn:hover .nav-badge-overlay::before,.nav-btn.active .nav-badge-overlay::before{
+  background:radial-gradient(
+    ellipse at center,
+    rgba(249,115,22,.95) 30%,
+    rgba(249,115,22,.6) 52%,
+    rgba(249,115,22,.32) 72%,
+    rgba(249,115,22,.12) 88%,
+    transparent 100%);
 }
-body.light .nav-btn:hover .nav-badge-overlay,body.light .nav-btn.active .nav-badge-overlay{
-  background:rgba(234,88,12,.95);
-  box-shadow:
-    0 0 0 3px rgba(255,255,255,.85),
-    0 2px 8px rgba(234,88,12,.4),
-    0 0 18px rgba(234,88,12,.32);
+body.light .nav-badge-overlay{background:#ea580c}
+body.light .nav-badge-overlay::before{
+  background:radial-gradient(
+    ellipse at center,
+    rgba(234,88,12,.85) 30%,
+    rgba(234,88,12,.5) 52%,
+    rgba(234,88,12,.24) 72%,
+    rgba(234,88,12,.08) 88%,
+    transparent 100%);
 }
-/* Le texte du bouton doit céder la place au badge pour rester lisible en overlay */
-.nav-btn-has-overlay > span{padding-right:34px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
   font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
 .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
@@ -5324,14 +5330,18 @@ function buildMpMvtHistory(mouvements, matiere) {
             noteParts.push('Prix ' + parseFloat(m.prix_eur_m2).toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²');
           }
           if (m.note) noteParts.push(m.note);
+          // Pour un inventaire : la valeur pertinente est la QUANTITÉ COMPTÉE (= quantite_apres),
+          // pas l'écart. Le solde étant identique à la quantité comptée, on le masque pour éviter la redondance.
+          const displayQty = (t === 'inventaire' && m.quantite_apres != null) ? m.quantite_apres : m.quantite;
+          const showSolde = m.quantite_apres != null && t !== 'inventaire';
           return el('div', { cls: 'mvt-row' },
             el('div', { cls: 'mvt-icon ' + t }, icons[t] || '·'),
             el('div', { cls: 'mvt-body' },
               el('div', { cls: 'mvt-line1' },
                 el('span', null, MVT_TYPE_LABELS[t] || t),
                 el('div', { cls: 'mvt-line1-right' },
-                  el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
-                  (m.quantite_apres != null)
+                  el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(displayQty, mpCat)),
+                  showSolde
                     ? el('span', { cls: 'mvt-solde' }, 'Solde ' + mpStockLine(m.quantite_apres, mpCat))
                     : null,
                 ),
@@ -8534,18 +8544,23 @@ function renderModalInventaireMatiere(data) {
       ecartCell,
     );
     tbody.appendChild(tr);
-    // Ligne commentaire (colspan=4)
-    const commInp = el('input', {
-      attrs: { type: 'text', placeholder: 'Commentaire (optionnel)…' },
-      style: {
-        width: '100%', background: 'var(--bg)', border: '1px solid var(--border)',
-        borderRadius: '6px', padding: '6px 8px', color: 'var(--text)', fontSize: '12px',
-      },
-    });
+    // Ligne commentaire par matière/laize (optionnel) — sert à noter la raison d'un écart,
+    // les circonstances du comptage, ou toute annotation utile pour le suivi
+    const commInp = document.createElement('input');
+    commInp.type = 'text';
+    commInp.placeholder = 'Commentaire (optionnel) — ex : casse constatée, retour production…';
+    commInp.style.cssText = 'width:100%;background:var(--bg);border:1px solid var(--border);'
+      + 'border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;'
+      + 'font-family:inherit;outline:none;transition:border-color .15s;box-sizing:border-box';
     commInp.addEventListener('input', e => { st[k].commentaire = e.target.value; });
-    const trC = el('tr', null,
-      el('td', { attrs: { colspan: '4' }, style: { padding: '0 8px 10px 8px' } }, commInp)
-    );
+    commInp.addEventListener('focus', () => { commInp.style.borderColor = '#8b5cf6'; });
+    commInp.addEventListener('blur', () => { commInp.style.borderColor = 'var(--border)'; });
+    const tdComm = document.createElement('td');
+    tdComm.setAttribute('colspan', '4');
+    tdComm.style.cssText = 'padding:0 8px 10px 8px';
+    tdComm.appendChild(commInp);
+    const trC = document.createElement('tr');
+    trC.appendChild(tdComm);
     tbody.appendChild(trC);
   });
   table.appendChild(tbody);
@@ -13911,7 +13926,23 @@ function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
      .brand{text-align:right;font-size:9pt;font-weight:800;color:#333;letter-spacing:1.5pt;margin-top:auto}`,
     `${labels}
      <script src="${JSBARCODE_CDN}"><\/script>
-     <script>window.onload=function(){for(var i=0;i<${nbEtiquettes};i++){try{JsBarcode('#bc-'+i,'${lotTxt}',{format:'CODE128',displayValue:true,fontSize:10,margin:0,height:36});}catch(e){}}window.focus();window.print();}<\/script>`);
+     <script>
+       // Génération synchrone : le CDN JsBarcode est un script bloquant, donc chargé
+       // au moment où ce bloc s'exécute. On NE peut PAS utiliser window.onload ici
+       // car _printWin ajoute son propre window.onload = window.print() après notre
+       // body, ce qui écraserait notre handler. En restant inline, on garantit que
+       // les barcodes sont dessinés AVANT que window.print() ne soit déclenché.
+       (function(){
+         for (var i = 0; i < ${nbEtiquettes}; i++) {
+           try {
+             JsBarcode('#bc-' + i, '${lotTxt}', {
+               format: 'CODE128', displayValue: true, fontSize: 10,
+               margin: 0, height: 36
+             });
+           } catch (e) {}
+         }
+       })();
+     <\/script>`);
   if (w) w.document.close();
 }
 
