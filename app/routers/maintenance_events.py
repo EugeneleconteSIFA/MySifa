@@ -116,6 +116,18 @@ def _require_admin(request: Request) -> dict:
     return user
 
 
+def _can_operator_manage_event(event: dict, user_id: int) -> bool:
+    """Un opérateur peut modifier/supprimer un event si :
+       - event.source == 'non_planifie'
+       - event.created_by == user_id
+    Sert de garde pour les endpoints PATCH/DELETE côté opérateur."""
+    if not event:
+        return False
+    if event.get("source") != "non_planifie":
+        return False
+    return event.get("created_by") == user_id
+
+
 def _user_in_group(conn, event_id: int, user_id: int) -> bool:
     return bool(conn.execute(
         "SELECT 1 FROM maintenance_event_operators WHERE event_id=? AND operator_id=? LIMIT 1",
@@ -444,7 +456,8 @@ def create_event(body: EventCreateBody, request: Request):
 
 @router.patch("/api/maintenance/events/{event_id}")
 def update_event(event_id: int, body: EventUpdateBody, request: Request):
-    _require_admin(request)
+    """Admin : édition libre. Opérateur : uniquement ses propres non_planifie."""
+    user, maint_role = _require_access(request)
     if body.date_prevue is not None: _validate_date(body.date_prevue)
     if body.heure_debut is not None: _validate_time(body.heure_debut)
     if body.heure_fin is not None:   _validate_time(body.heure_fin)
@@ -454,8 +467,12 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
     with get_db() as conn:
-        if not conn.execute("SELECT 1 FROM maintenance_events WHERE id=?", (event_id,)).fetchone():
+        ev = _load_event_full(conn, event_id)
+        if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if maint_role == "operator":
+            if not _can_operator_manage_event(ev, user["id"]):
+                raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",
@@ -467,10 +484,15 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
 
 @router.delete("/api/maintenance/events/{event_id}")
 def delete_event(event_id: int, request: Request):
-    _require_admin(request)
+    """Admin : suppression libre. Opérateur : uniquement ses propres non_planifie."""
+    user, maint_role = _require_access(request)
     with get_db() as conn:
-        if not conn.execute("SELECT 1 FROM maintenance_events WHERE id=?", (event_id,)).fetchone():
+        ev = _load_event_full(conn, event_id)
+        if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if maint_role == "operator":
+            if not _can_operator_manage_event(ev, user["id"]):
+                raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
         # CASCADE supprime ops et rattachements
         conn.execute("DELETE FROM maintenance_events WHERE id=?", (event_id,))
         conn.commit()
@@ -481,10 +503,15 @@ def delete_event(event_id: int, request: Request):
 
 @router.post("/api/maintenance/events/{event_id}/ops")
 def add_op(event_id: int, body: OpAddBody, request: Request):
-    _require_admin(request)
+    """Admin : ajout libre. Opérateur : uniquement sur son propre non_planifie."""
+    user, maint_role = _require_access(request)
     with get_db() as conn:
-        if not conn.execute("SELECT 1 FROM maintenance_events WHERE id=?", (event_id,)).fetchone():
+        ev_check = _load_event_full(conn, event_id)
+        if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if maint_role == "operator":
+            if not _can_operator_manage_event(ev_check, user["id"]):
+                raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
         if not conn.execute("SELECT 1 FROM maintenance_codes WHERE code=?", (body.code,)).fetchone():
             raise HTTPException(status_code=400, detail=f"code inconnu: {body.code}")
         if conn.execute("SELECT 1 FROM maintenance_event_ops WHERE event_id=? AND code=?",
@@ -555,13 +582,18 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
 
 @router.delete("/api/maintenance/events/{event_id}/ops/{op_id}")
 def delete_op(event_id: int, op_id: int, request: Request):
-    _require_admin(request)
+    """Admin : suppression libre. Opérateur : uniquement sur son propre non_planifie."""
+    user, maint_role = _require_access(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT event_id FROM maintenance_event_ops WHERE id=?", (op_id,),
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        if maint_role == "operator":
+            ev_check = _load_event_full(conn, event_id)
+            if not _can_operator_manage_event(ev_check, user["id"]):
+                raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
         conn.execute("DELETE FROM maintenance_event_ops WHERE id=?", (op_id,))
         _recompute_event_machine(conn, event_id)
         conn.commit()
