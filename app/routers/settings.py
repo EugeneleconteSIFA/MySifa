@@ -2852,19 +2852,20 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
-                if op_code and user_machine:
+                if op_code and user_machine and operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",
                         (int(r["id"]), user_machine),
                     ).fetchone()
                     last_ack_at_str = last_ack["m"] if last_ack else None
-                    # Cherche la saisie correspondante sur la machine (peu importe
-                    # qui a saisi) depuis le dernier ack.
+                    # Filtre par opérateur : seul celui qui a saisi le 89 (ou son
+                    # équivalent user_nom) voit l'alerte. Évite les faux positifs
+                    # "un autre op a fait le 89 → alerte chez tout le monde".
                     q = ("SELECT no_dossier FROM production_data "
                          "WHERE machine=? AND operation_code=? "
-                         "  AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''")
-                    p = [user_machine, op_code]
+                         "  AND (operateur=? OR operateur=?)")
+                    p = [user_machine, op_code, operateur, user_nom or operateur]
                     if last_ack_at_str:
                         q += " AND date_operation > ?"
                         p.append(last_ack_at_str)
