@@ -3679,7 +3679,7 @@ def matiere_inventaire_detail(matiere_id: int, request: Request):
                 """SELECT ml.laize_id, l.valeur_mm, l.label,
                           COALESCE(sl.quantite, 0) AS quantite
                    FROM mp_matiere_laizes ml
-                   JOIN laizes l ON l.id = ml.laize_id
+                   JOIN mp_laizes l ON l.id = ml.laize_id
                    LEFT JOIN mp_stock_laize sl
                      ON sl.matiere_id = ml.matiere_id AND sl.laize_id = ml.laize_id
                    WHERE ml.matiere_id = ? AND COALESCE(l.actif, 1) = 1
@@ -3791,20 +3791,18 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
             q_avant = float(stk_row["quantite"]) if stk_row and stk_row["quantite"] is not None else 0.0
             ecart = q_comptee - q_avant
 
-            mouvement_id = None
-            if abs(ecart) > 1e-9:
-                # Note auto : "Inventaire du 09/07/2026 — écart : +2 bob."
-                sign = "+" if ecart > 0 else ""
-                # Format écart : entier si round, sinon 3 décimales max
-                if abs(ecart - round(ecart)) < 1e-6:
-                    ecart_txt = f"{sign}{int(round(ecart))}"
-                else:
-                    ecart_txt = f"{sign}{ecart:.3f}"
-                note_auto = f"Inventaire du {note_date} — écart : {ecart_txt} {unite}"
-                if commentaire:
-                    note_auto += f" | {commentaire}"
+            # Note auto : "Inventaire du 09/07/2026 — écart : +2 bob." (ou "écart : 0 …" si RAS)
+            sign = "+" if ecart > 0 else ""
+            if abs(ecart - round(ecart)) < 1e-6:
+                ecart_txt = f"{sign}{int(round(ecart))}"
+            else:
+                ecart_txt = f"{sign}{ecart:.3f}"
+            note_auto = f"Inventaire du {note_date} — écart : {ecart_txt} {unite}"
+            if commentaire:
+                note_auto += f" | {commentaire}"
 
-                # Update stock (idempotent avec INSERT OR REPLACE, aligné sur code existant)
+            # Update stock uniquement si écart réel (évite une écriture inutile pour un inventaire à zéro)
+            if abs(ecart) > 1e-9:
                 if laizee:
                     conn.execute(
                         """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
@@ -3831,30 +3829,31 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                         (matiere_id, q_comptee, operateur_nom),
                     )
 
-                cur = conn.execute(
-                    """INSERT INTO mp_mouvements (
-                           matiere_id, type_mouvement, quantite,
-                           quantite_avant, quantite_apres,
-                           ref_bl, note, emplacement_source, emplacement_dest,
-                           created_by, created_by_name, laize_id, prix_eur_m2
-                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (
-                        matiere_id,
-                        "ajustement",
-                        abs(ecart),
-                        q_avant,
-                        q_comptee,
-                        None,
-                        note_auto,
-                        None,
-                        None,
-                        created_by,
-                        operateur_nom,
-                        laize_id,
-                        None,
-                    ),
-                )
-                mouvement_id = cur.lastrowid
+            # Trace mp_mouvements TOUJOURS (écart nul inclus) — un inventaire est un acte administratif
+            cur = conn.execute(
+                """INSERT INTO mp_mouvements (
+                       matiere_id, type_mouvement, quantite,
+                       quantite_avant, quantite_apres,
+                       ref_bl, note, emplacement_source, emplacement_dest,
+                       created_by, created_by_name, laize_id, prix_eur_m2
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    matiere_id,
+                    "ajustement",
+                    abs(ecart),
+                    q_avant,
+                    q_comptee,
+                    None,
+                    note_auto,
+                    None,
+                    None,
+                    created_by,
+                    operateur_nom,
+                    laize_id,
+                    None,
+                ),
+            )
+            mouvement_id = cur.lastrowid
 
             # Trace inventaire (toujours, écart nul inclus)
             conn.execute(
@@ -3904,7 +3903,7 @@ def matiere_inventaires_historique(matiere_id: int, request: Request, limit: int
         rows = conn.execute(
             """SELECT im.*, l.valeur_mm, l.label AS laize_label
                FROM inventaires_matieres im
-               LEFT JOIN laizes l ON l.id = im.laize_id
+               LEFT JOIN mp_laizes l ON l.id = im.laize_id
                WHERE im.matiere_id = ?
                ORDER BY im.date_validation DESC
                LIMIT ?""",
