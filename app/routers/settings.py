@@ -3279,7 +3279,6 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
     if not machine:
         raise HTTPException(422, "Param 'machine' requis.")
     from database import get_db
-    # (clé, pattern_match, pattern_exclude)
     queries = [
         ("couteaux_bande",         "%couteaux%bande%", "%contre%couteaux%bande%"),
         ("couteaux_rive",          "%couteaux%rive%",  "%contre%couteaux%rive%"),
@@ -3288,15 +3287,12 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
     ]
     items: dict[str, dict] = {}
     with get_db() as conn:
-        # Compteur de mètres COURANT de la machine (mis à jour par chaque saisie
-        # de début/fin de production code 01/89 dans MyProd).
         m_row = conn.execute(
             "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
             (machine,),
         ).fetchone()
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, pat, exclude in queries:
-            # 1) Date du dernier changement correspondant
             sql = (
                 "SELECT date_operation FROM production_data "
                 "WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
@@ -3311,10 +3307,6 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
                 items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
                 continue
             change_date = row["date_operation"]
-            # 2) Compteur machine AU MOMENT du changement : on prend le dernier
-            #    metrage_total_fin/_debut d'une saisie début/fin de prod (01 ou 89)
-            #    enregistrée à cette date ou avant. C'est la même logique que celle
-            #    qui met à jour machines.dernier_metrage côté MyProd.
             m_at_row = conn.execute(
                 """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
                    FROM production_data
@@ -3337,25 +3329,18 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
                 "metrage_at_change": m_at_change,
                 "metrage_since": metrage_since,
             }
+    dates = {k: v["last_date"] for k, v in items.items()}
     return {
         "machine": machine,
         "current_metrage": current_metrage,
+        "dates": dates,
         "items": items,
     }
 
 
 @router.post("/api/maintenance/wearparts/info")
 async def maintenance_wearparts_info(request: Request):
-    """Métrage machine + métrage parcouru depuis une date donnée, par pièce.
-    Source des dates : OPS_STATE côté frontend (= saisies "Nouvelle saisie"
-    de l'app Maintenance, stockées en localStorage). Source du métrage :
-    machines.dernier_metrage + production_data (compteur historique).
-
-    Body : { machine: str, dates: { piece_pos: ISO_or_null, ... } }
-    Renvoie : { machine, current_metrage, items: { piece_pos: {
-        last_date, metrage_at_change, metrage_since
-    } } }
-    """
+    """Métrage machine + métrage parcouru depuis une date donnée, par pièce."""
     get_current_user(request)
     body = await request.json()
     machine = (body.get("machine") or "").strip()
@@ -3374,11 +3359,7 @@ async def maintenance_wearparts_info(request: Request):
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, change_date in raw_dates.items():
             if not change_date:
-                items[key] = {
-                    "last_date": None,
-                    "metrage_at_change": None,
-                    "metrage_since": None,
-                }
+                items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
                 continue
             change_date = str(change_date)
             m_at_row = conn.execute(
@@ -3394,8 +3375,7 @@ async def maintenance_wearparts_info(request: Request):
             metrage_since = None
             if current_metrage is not None and m_at_change is not None:
                 try:
-                    diff = float(current_metrage) - float(m_at_change)
-                    metrage_since = max(0.0, diff)
+                    metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
                 except (TypeError, ValueError):
                     metrage_since = None
             items[key] = {
@@ -3403,8 +3383,4 @@ async def maintenance_wearparts_info(request: Request):
                 "metrage_at_change": m_at_change,
                 "metrage_since": metrage_since,
             }
-    return {
-        "machine": machine,
-        "current_metrage": current_metrage,
-        "items": items,
-    }
+    return {"machine": machine, "current_metrage": current_metrage, "items": items}
