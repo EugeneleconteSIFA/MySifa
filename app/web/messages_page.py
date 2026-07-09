@@ -727,7 +727,7 @@ window.__MYSIFA_NOM__ = __USER_NOM_JSON__;
 window.__MYSIFA_ROLE__ = __USER_ROLE_JSON__;
 window.__MYSIFA_AVATAR__ = __USER_AVATAR_JSON__;
 
-const ADMIN_ROLES = new Set(['superadmin','direction','administration']);
+const ADMIN_ROLES = new Set(['superadmin','direction','administration','administration_ventes','administration_technique']);
 const ROLE_LABELS = {
   direction:'Direction',administration:'Administration',fabrication:'Fabrication',
   logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',

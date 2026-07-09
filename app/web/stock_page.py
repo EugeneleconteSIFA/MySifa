@@ -5035,7 +5035,7 @@ function mpUniteAchat(cat) {
 }
 
 function isMatieresAdmin() {
-  return S.user && ['superadmin', 'direction', 'administration'].includes(S.user.role);
+  return S.user && ['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'].includes(S.user.role);
 }
 
 function closeMroot() {
@@ -10237,7 +10237,7 @@ function buildPlanEntrepot() {
   area.innerHTML = '';
 
   const codes = S.planEntrepot; // null = loading, [] = empty, [...] = data
-  const canAdd = S.user && ['superadmin','direction','administration'].includes(S.user.role);
+  const canAdd = S.user && ['superadmin','direction','administration','administration_ventes','administration_technique'].includes(S.user.role);
 
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:20px;max-width:1200px';
@@ -16056,7 +16056,7 @@ function buildSidebarNavStructure() {
   if (!S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'inventaire', icon: 'clipboard', label: 'Inventaire' });
   }
-  if (S.user && ['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+  if (S.user && ['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'].includes(S.user.role)) {
     items.push({ kind: 'sep', label: 'Contrôle' });
     items.push({ kind: 'btn', tab: 'monitoring', icon: 'clipboard', label: 'Monitoring' });
     items.push({ kind: 'btn', tab: 'valorisation', icon: 'euro', label: 'Valorisation' });
@@ -16373,11 +16373,11 @@ async function init() {
     S.tab = 'produits-finis';
   }
   if (S.tab === 'monitoring' && S.user
-      && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+      && !['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'].includes(S.user.role)) {
     S.tab = 'dashboard';
   }
   if (S.tab === 'valorisation' && S.user
-      && !['superadmin', 'direction', 'administration'].includes(S.user.role)) {
+      && !['superadmin', 'direction', 'administration', 'administration_ventes', 'administration_technique'].includes(S.user.role)) {
     S.tab = 'dashboard';
   }
   // Forcer onglet initial selon le mode d'accès restreint

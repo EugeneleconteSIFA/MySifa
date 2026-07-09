@@ -2252,7 +2252,7 @@ function downloadUsersCSV(){
 function syncCuRoleUI() {
   const r = document.getElementById('cu-role').value;
   // Cacher opérateur lié pour fabrication et les autres rôles hors production
-  const hideOp = ['fabrication', 'direction', 'administration', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
+  const hideOp = ['fabrication', 'direction', 'administration', 'administration_ventes', 'administration_technique', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
   document.getElementById('cu-op').style.display = hideOp ? 'none' : '';
   document.getElementById('cu-mac').style.display = r === 'fabrication' ? '' : 'none';
 }
@@ -2348,7 +2348,7 @@ async function openEdit(id) {
   function syncEd() {
     const r = dlg.querySelector('#ed-role').value;
     // Cacher opérateur lié pour fabrication et les autres rôles hors production
-    const hideOp = ['fabrication', 'direction', 'administration', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
+    const hideOp = ['fabrication', 'direction', 'administration', 'administration_ventes', 'administration_technique', 'logistique', 'comptabilite', 'expedition', 'superadmin'].indexOf(r) >= 0;
     dlg.querySelector('#ed-op-wrap').style.display = hideOp ? 'none' : '';
     dlg.querySelector('#ed-mac-wrap').style.display = (r === 'fabrication') ? '' : 'none';
   }
@@ -3884,7 +3884,7 @@ const _ALERT_TRIGGER_EVENTS = [
   { v: 'login',          l: 'Connexion de l\'opérateur' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
-const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'direction', 'superadmin'];
+const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
 const _ALERT_DAYS = [
   { v: 'mon', l: 'Lun' }, { v: 'tue', l: 'Mar' }, { v: 'wed', l: 'Mer' },
   { v: 'thu', l: 'Jeu' }, { v: 'fri', l: 'Ven' }, { v: 'sat', l: 'Sam' }, { v: 'sun', l: 'Dim' },

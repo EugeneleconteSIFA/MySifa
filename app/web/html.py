@@ -6341,7 +6341,7 @@ function renderWeeklyReport(){
   const weekVal = (wr.year && wr.week)
     ? (wr.year + '-W' + String(wr.week).padStart(2,'0'))
     : '';
-  const roles = ['superadmin','direction','administration','fabrication','logistique','comptabilite','expedition','commercial'];
+  const roles = ['superadmin','direction','administration','administration_ventes','administration_technique','fabrication','logistique','comptabilite','expedition','commercial'];
   const changeWeek = async (e)=>{
     const v = (e && e.target && e.target.value) || '';
     // format YYYY-Www
@@ -10396,7 +10396,7 @@ function _mnbInitials(nom){
   return (parts[0][0]+parts[parts.length-1][0]).toUpperCase();
 }
 function _mnbAiEnabled(){
-  const AI_ROLES=['superadmin','direction','administration','expedition'];
+  const AI_ROLES=['superadmin','direction','administration','administration_ventes','administration_technique','expedition'];
   const role=(S.user&&S.user.role)||'';
   return AI_ROLES.indexOf(role)>=0;
 }
