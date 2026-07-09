@@ -986,3 +986,26 @@ select.form-sel:focus{border-color:var(--accent)}
 [data-page-enter] > * {
   animation-fill-mode: backwards;
 }
+
+/* ────────────────────────────────────────────────────────────────
+   Modale traçabilité (édition des bobines matière)
+   Ces règles sont dupliquées depuis app/web/html.py — la page /prod
+   sert son template standalone et ne bénéficie pas des CSS du monolithe.
+   Sans ça, la modale ouverte via "Modifier" dans le bloc "Bobines
+   matières utilisées" apparaît dans le flux normal du document en bas
+   de page, sans overlay ni card.
+   ──────────────────────────────────────────────────────────────── */
+.contact-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9200;display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box}
+body.light .contact-modal-overlay{background:rgba(15,23,42,.42)}
+.contact-modal{width:100%;max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 18px 16px;box-shadow:0 24px 64px rgba(0,0,0,.45);position:relative;max-height:min(90vh,calc(100dvh - 36px));overflow:auto}
+.contact-modal h3{font-size:16px;font-weight:800;margin:0;padding-right:34px;color:var(--text);line-height:1.25}
+.contact-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.contact-modal-head h3{padding-right:8px;flex:1}
+.contact-close-btn{background:var(--bg);border:1px solid var(--border);cursor:pointer;color:var(--muted);font-size:18px;line-height:1;width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-family:inherit;padding:0;transition:border-color .15s,color .15s,background .15s}
+.contact-close-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.contact-modal-body{display:block;font-size:13px;color:var(--text)}
+.contact-modal-actions{display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.contact-modal .btn,.contact-modal .btn-sm,.contact-modal .btn-ghost{margin-top:0}
+.contact-modal input,.contact-modal select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
+.contact-modal input:focus,.contact-modal select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .contact-modal input:focus,body.light .contact-modal select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
