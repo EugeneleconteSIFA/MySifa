@@ -2839,7 +2839,10 @@ def maintenance_alerts_active(request: Request):
                 # Trigger evenementiel : l'alerte s'affiche quand un evenement
                 # metier correspondant s'est produit APRES le dernier ack de
                 # cette alerte sur cette machine. Bypass du gap : l'alerte
-                # suit strictement les actions de l'operateur.
+                # suit strictement les actions saisies sur la MACHINE (pas sur
+                # l'user connecté — le super admin, le responsable et l'opérateur
+                # de nuit peuvent tous ouvrir /maintenance et l'alerte doit
+                # se comporter identiquement).
                 # Evenements supportes :
                 #   dossier_end   -> saisie operation_code = '89' (fin prod)
                 #   dossier_start -> saisie operation_code = '01' (debut prod)
@@ -2849,20 +2852,19 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
-                if op_code and user_machine and operateur:
+                if op_code and user_machine:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",
                         (int(r["id"]), user_machine),
                     ).fetchone()
                     last_ack_at_str = last_ack["m"] if last_ack else None
-                    # On récupère aussi no_dossier (au lieu d'un simple SELECT 1)
-                    # pour pouvoir filtrer par conditionnement si l'alerte a été
-                    # configurée en ce sens.
+                    # Cherche la saisie correspondante sur la machine (peu importe
+                    # qui a saisi) depuis le dernier ack.
                     q = ("SELECT no_dossier FROM production_data "
                          "WHERE machine=? AND operation_code=? "
-                         "  AND (operateur=? OR operateur=?)")
-                    p = [user_machine, op_code, operateur, user_nom or operateur]
+                         "  AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''")
+                    p = [user_machine, op_code]
                     if last_ack_at_str:
                         q += " AND date_operation > ?"
                         p.append(last_ack_at_str)
