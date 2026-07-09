@@ -2807,6 +2807,10 @@ def maintenance_alerts_active(request: Request):
             trig = params.get("trigger") or {}
             ttype = trig.get("type")
             should_show = False
+            # v163+ : no_dossier du dossier qui a déclenché l'alerte (pour les
+            # events dossier_start/dossier_end). Sera renvoyé au client pour
+            # qu'il l'utilise à l'ack, garantissant la cohérence de l'historique.
+            trigger_no_dossier = ""
             if ttype == "periodic":
                 if gap_active:
                     continue
@@ -2860,6 +2864,8 @@ def maintenance_alerts_active(request: Request):
                     q += " ORDER BY date_operation DESC LIMIT 1"
                     recent = conn.execute(q, tuple(p)).fetchone()
                     should_show = recent is not None
+                    if recent and recent["no_dossier"]:
+                        trigger_no_dossier = str(recent["no_dossier"]).strip()
                     # Filtre par conditionnement (bobine / plis) — v163+
                     # Options : 'any' (défaut), 'bobine_only', 'plis_only'.
                     # Politique choisie : si aucune info de conditionnement dans
@@ -2899,6 +2905,10 @@ def maintenance_alerts_active(request: Request):
                     "nom": r["nom"],
                     "params": params,
                     "linked_maint_code": r["linked_maint_code"] or "",
+                    # no_dossier du dossier qui a déclenché l'alerte (peut être
+                    # vide pour les alertes non-événementielles ou si l'event
+                    # métier ne référence pas de dossier).
+                    "no_dossier": trigger_no_dossier,
                 })
     resp = {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
     if gap_until_str:

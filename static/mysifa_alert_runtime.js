@@ -315,10 +315,18 @@
     }
   }
 
-  async function _submitAck(alertId, wrap) {
+  async function _submitAck(alertId, wrap, alert) {
     const responses = _readResponses(wrap);
     const comment = wrap.querySelector('.ta-comment')?.value || '';
-    const no_dossier = await _currentNoDossier();
+    // v163+ : priorité au no_dossier fourni par le backend dans /alerts/active
+    // (c'est le dossier qui a déclenché l'alerte, ex. le 89 pour dossier_end).
+    // Fallback sur la détection locale si le backend n'a rien fourni
+    // (alertes non-événementielles).
+    let no_dossier = (alert && typeof alert.no_dossier === 'string')
+      ? alert.no_dossier.trim() : '';
+    if (!no_dossier) {
+      no_dossier = await _currentNoDossier();
+    }
     try {
       const r = await fetch('/api/maintenance/alerts/' + alertId + '/ack', {
         method: 'POST',
@@ -574,7 +582,7 @@
 
     const onValidate = async () => {
       if (_isComplete(wrap, alert)) {
-        const ok = await _submitAck(alert.id, wrap);
+        const ok = await _submitAck(alert.id, wrap, alert);
         if (ok) { _toast('Contrôle validé.'); closeWithSuccess(); }
         return;
       }
@@ -588,7 +596,7 @@
         + '</div>'
         + '</div>';
       actions.querySelector('.ta-confirm').addEventListener('click', async () => {
-        const ok = await _submitAck(alert.id, wrap);
+        const ok = await _submitAck(alert.id, wrap, alert);
         if (ok) { _toast('Contrôle validé.'); closeWithSuccess(); }
       });
       actions.querySelector('.ta-edit').addEventListener('click', () => {
