@@ -112,38 +112,32 @@ input,select{font-family:inherit}
   z-index:2;pointer-events:none;flex-shrink:0;isolation:isolate;
   transition:background .15s;
 }
-/* Halo "cloud" : pseudo-élément derrière, gradient radial + blur → bords flous */
+/* Halo "cloud" : pseudo-élément derrière le badge, teinté couleur sidebar (var(--card))
+   avec dégradé de transparence. Le halo ne colore pas, il *masque* le texte du bouton
+   sous le badge comme un brouillard, en s'estompant progressivement vers l'extérieur. */
 .nav-badge-overlay::before{
   content:'';position:absolute;inset:-8px;border-radius:999px;
   background:radial-gradient(
     ellipse at center,
-    rgba(251,146,60,.88) 30%,
-    rgba(251,146,60,.55) 52%,
-    rgba(251,146,60,.28) 72%,
-    rgba(251,146,60,.10) 88%,
+    var(--card) 30%,
+    color-mix(in srgb,var(--card) 70%,transparent) 52%,
+    color-mix(in srgb,var(--card) 38%,transparent) 72%,
+    color-mix(in srgb,var(--card) 14%,transparent) 88%,
     transparent 100%);
   filter:blur(3.5px);z-index:-1;
 }
 .nav-btn:hover .nav-badge-overlay,.nav-btn.active .nav-badge-overlay{background:#f97316}
+/* Sur hover/active la sidebar prend --accent-bg, on adapte le halo pour rester cohérent. */
 .nav-btn:hover .nav-badge-overlay::before,.nav-btn.active .nav-badge-overlay::before{
   background:radial-gradient(
     ellipse at center,
-    rgba(249,115,22,.95) 30%,
-    rgba(249,115,22,.6) 52%,
-    rgba(249,115,22,.32) 72%,
-    rgba(249,115,22,.12) 88%,
+    color-mix(in srgb,var(--card) 92%,var(--accent) 8%) 30%,
+    color-mix(in srgb,var(--card) 60%,transparent) 52%,
+    color-mix(in srgb,var(--card) 30%,transparent) 72%,
+    color-mix(in srgb,var(--card) 10%,transparent) 88%,
     transparent 100%);
 }
 body.light .nav-badge-overlay{background:#ea580c}
-body.light .nav-badge-overlay::before{
-  background:radial-gradient(
-    ellipse at center,
-    rgba(234,88,12,.85) 30%,
-    rgba(234,88,12,.5) 52%,
-    rgba(234,88,12,.24) 72%,
-    rgba(234,88,12,.08) 88%,
-    transparent 100%);
-}
 .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
   font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;border-radius:6px;transition:background .15s,opacity .15s}
 .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
@@ -14145,30 +14139,32 @@ function buildReceptionNouvelle() {
 
   const fscClaim = S.recepFscTypeClaim || 'fsc_mix';
   const fscTypeLbl = el('div', { cls: 'recep-fourn-label', style: { marginTop: '4px' } }, iconEl('clipboard', 13), ' Type de certification FSC');
-  const fscTypeSel = el('select', {
-    cls: 'recep-fourn-sel',
-    attrs: { id: 'fsc-type-claim' },
-    on: {
-      mousedown: () => {
-        try { dropdown.classList.remove('open'); } catch(e) {}
-        S.recepFournisseurOpen = false;
-      },
-      focus: () => {
-        try { dropdown.classList.remove('open'); } catch(e) {}
-        S.recepFournisseurOpen = false;
-      },
-      change: (e) => {
-        S.recepFscTypeClaim = e.target.value;
-        renderContent();
-      },
-    },
-  },
-    el('option', { attrs: { value: 'non_fsc', selected: fscClaim === 'non_fsc' } }, 'Non FSC'),
-    el('option', { attrs: { value: 'fsc_100', selected: fscClaim === 'fsc_100' } }, 'FSC 100%'),
-    el('option', { attrs: { value: 'fsc_mix_credit', selected: fscClaim === 'fsc_mix_credit' } }, 'FSC Mix Credit'),
-    el('option', { attrs: { value: 'fsc_mix', selected: fscClaim === 'fsc_mix' } }, 'FSC Mix'),
-    el('option', { attrs: { value: 'fsc_recycled', selected: fscClaim === 'fsc_recycled' } }, 'FSC Recycled')
-  );
+  // Construit via createElement direct : le helper el() ne déstructure pas la clé
+  // "attrs" — sans ça, les options n'auraient pas leur value posé et
+  // e.target.value renverrait le texte "Non FSC" au lieu de 'non_fsc'.
+  const fscTypeSel = document.createElement('select');
+  fscTypeSel.className = 'recep-fourn-sel';
+  fscTypeSel.id = 'fsc-type-claim';
+  [['non_fsc', 'Non FSC'], ['fsc_100', 'FSC 100%'], ['fsc_mix_credit', 'FSC Mix Credit'],
+   ['fsc_mix', 'FSC Mix'], ['fsc_recycled', 'FSC Recycled']].forEach(([v, lbl]) => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = lbl;
+    if (fscClaim === v) opt.selected = true;
+    fscTypeSel.appendChild(opt);
+  });
+  fscTypeSel.addEventListener('mousedown', () => {
+    try { dropdown.classList.remove('open'); } catch(e) {}
+    S.recepFournisseurOpen = false;
+  });
+  fscTypeSel.addEventListener('focus', () => {
+    try { dropdown.classList.remove('open'); } catch(e) {}
+    S.recepFournisseurOpen = false;
+  });
+  fscTypeSel.addEventListener('change', (e) => {
+    S.recepFscTypeClaim = e.target.value;
+    renderContent();
+  });
   fourWrap.append(fscTypeLbl, fscTypeSel);
 
   // ── Preview du numéro de lot ──
