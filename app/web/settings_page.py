@@ -4726,6 +4726,9 @@ async function previewAlert(id) {
     + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
     + '<div class="ta-sim-actions">'
     +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
+    +   (d.dismiss_button && d.dismiss_button.enabled
+        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
+        : '')
     + '</div>'
     + '</div>';
 
@@ -4804,6 +4807,15 @@ async function previewAlert(id) {
     _taRenderConfirm(actions);
   }
   document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  // v164 : bouton dismiss dans la preview
+  const taDismiss = document.getElementById('ta-dismiss');
+  if (taDismiss) {
+    taDismiss.addEventListener('click', () => {
+      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
+      close();
+      document.removeEventListener('keydown', onKey);
+    });
+  }
 }
 
 function openEditAlertModal(id) {
