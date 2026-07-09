@@ -6244,6 +6244,15 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 168, "matiere_laize_fournisseurs_link")
 
+    # v169 — Numéro de lot sur les réceptions matière
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=169 LIMIT 1").fetchone():
+        sr_cols = {r["name"] for r in conn.execute("PRAGMA table_info(stock_receptions)").fetchall()}
+        if "lot_numero" not in sr_cols:
+            conn.execute("ALTER TABLE stock_receptions ADD COLUMN lot_numero TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_receptions_lot ON stock_receptions(lot_numero)")
+        conn.commit()
+        _record_schema_migration(conn, 169, "stock_receptions_lot_numero")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
