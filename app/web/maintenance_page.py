@@ -5217,7 +5217,7 @@ function renderCtrl(){
         // Dossier (no_dossier) : pill accent si renseigné, tiret sinon.
         const _nd = c._no_dossier || '';
         const _ndCell = (c._source === 'alert' && _nd)
-          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_nd) + '</span>'
+          ? '<span class="ctrl-dossier-pill" onclick="event.stopPropagation();openAckDetail(\'' + escAttr(c.id) + '\')" title="Voir la fiche technique">' + escHtml(_nd) + '</span>'
           : '<span class="ctrl-dossier-empty">—</span>';
         cells += '<td class="col-nodos">' + _ndCell + '</td>';
         // Colonnes produit (fiche technique associée)
@@ -5226,7 +5226,7 @@ function renderCtrl(){
         const _adh  = _di ? (_di.adhesif || '') : '';
         const _gla  = _di ? (_di.glassine || '') : '';
         const _refCell = (c._source === 'alert' && _refP)
-          ? '<span class="ctrl-dossier-pill" title="Double-clic sur la ligne pour voir la fiche technique">' + escHtml(_refP) + '</span>'
+          ? '<span class="ctrl-dossier-pill" onclick="event.stopPropagation();openAckDetail(\'' + escAttr(c.id) + '\')" title="Voir la fiche technique">' + escHtml(_refP) + '</span>'
           : '<span class="ctrl-dossier-empty">—</span>';
         cells += '<td class="col-dossier">' + _refCell + '</td>';
         cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';

@@ -1661,6 +1661,14 @@ def _validate_alert_params(params: dict) -> dict:
         if ev not in _ALERT_TRIGGER_EVENTS:
             raise HTTPException(422, f"event inconnu : {ev!r}.")
         trig["event"] = ev
+        # v163+ : filtre produit (bobine/plis) — appliqué uniquement pour
+        # les événements liés à un dossier. Silencieusement ignoré pour
+        # les autres événements (machine_change, login…).
+        if ev in ("dossier_start", "dossier_end"):
+            fc = (trig_in.get("filter_conditionnement") or "").strip()
+            if fc in ("bobine_only", "plis_only"):
+                trig["filter_conditionnement"] = fc
+            # 'any' ou absent : on n'écrit rien (comportement par défaut).
     # type=manual : pas de params supplémentaires
     out["trigger"] = trig
 
@@ -2807,6 +2815,10 @@ def maintenance_alerts_active(request: Request):
             trig = params.get("trigger") or {}
             ttype = trig.get("type")
             should_show = False
+            # v163+ : no_dossier du dossier qui a déclenché l'alerte (pour les
+            # events dossier_start/dossier_end). Sera renvoyé au client pour
+            # qu'il l'utilise à l'ack, garantissant la cohérence de l'historique.
+            trigger_no_dossier = ""
             if ttype == "periodic":
                 if gap_active:
                     continue
@@ -2844,7 +2856,10 @@ def maintenance_alerts_active(request: Request):
                         (int(r["id"]), user_machine),
                     ).fetchone()
                     last_ack_at_str = last_ack["m"] if last_ack else None
-                    q = ("SELECT 1 FROM production_data "
+                    # On récupère aussi no_dossier (au lieu d'un simple SELECT 1)
+                    # pour pouvoir filtrer par conditionnement si l'alerte a été
+                    # configurée en ce sens.
+                    q = ("SELECT no_dossier FROM production_data "
                          "WHERE machine=? AND operation_code=? "
                          "  AND (operateur=? OR operateur=?)")
                     p = [user_machine, op_code, operateur, user_nom or operateur]
@@ -2854,16 +2869,112 @@ def maintenance_alerts_active(request: Request):
                     else:
                         q += " AND date_operation >= ?"
                         p.append(now_paris.strftime("%Y-%m-%dT00:00:00"))
-                    q += " LIMIT 1"
+                    q += " ORDER BY date_operation DESC LIMIT 1"
                     recent = conn.execute(q, tuple(p)).fetchone()
                     should_show = recent is not None
+                    if recent and recent["no_dossier"]:
+                        trigger_no_dossier = str(recent["no_dossier"]).strip()
+                    # Filtre par conditionnement (bobine / plis) — v163+
+                    # Options : 'any' (défaut), 'bobine_only', 'plis_only'.
+                    # Politique choisie : si aucune info de conditionnement dans
+                    # la fiche technique, l'alerte reste silencieuse (stricte).
+                    if should_show:
+                        filter_cond = str(trig.get("filter_conditionnement") or "any").strip()
+                        if filter_cond in ("bobine_only", "plis_only"):
+                            no_dossier = recent["no_dossier"] if recent else None
+                            is_bobine = False
+                            has_info = False
+                            if no_dossier:
+                                # NB: dans planning_entries la colonne dossier est `reference`
+                                cond_row = conn.execute(
+                                    """SELECT ft.conditionnement_norm, ft.conditionnement,
+                                              ft.mandrin_dia, ft.mandrin_longueur,
+                                              ft.enroulement, ft.nb_etiq_bobin,
+                                              ft.nb_bobines_carton
+                                       FROM planning_entries pe
+                                       LEFT JOIN fiches_techniques ft
+                                              ON ft.ref_produit_norm = pe.ref_produit_norm
+                                       WHERE pe.reference = ?
+                                       ORDER BY pe.id DESC LIMIT 1""",
+                                    (no_dossier,),
+                                ).fetchone()
+                                if cond_row:
+                                    # Détection « bobine » — critère combiné :
+                                    #  1) champs spécifiques bobine renseignés
+                                    #     (mandrin, enroulement, étiq/bobine…) OR
+                                    #  2) mot "bobine" dans conditionnement/norm.
+                                    cn = (cond_row["conditionnement_norm"] or "").lower()
+                                    cr = (cond_row["conditionnement"] or "").lower()
+                                    mandrin_dia = (cond_row["mandrin_dia"] or "").strip()
+                                    enroulement = (cond_row["enroulement"] or "").strip()
+                                    try:
+                                        mandrin_long = float(cond_row["mandrin_longueur"] or 0)
+                                    except (TypeError, ValueError):
+                                        mandrin_long = 0.0
+                                    try:
+                                        nb_etiq = int(cond_row["nb_etiq_bobin"] or 0)
+                                    except (TypeError, ValueError):
+                                        nb_etiq = 0
+                                    try:
+                                        nb_bob = int(cond_row["nb_bobines_carton"] or 0)
+                                    except (TypeError, ValueError):
+                                        nb_bob = 0
+                                    has_bobine_fields = bool(
+                                        mandrin_dia or enroulement
+                                        or mandrin_long > 0
+                                        or nb_etiq > 0
+                                        or nb_bob > 0
+                                    )
+                                    has_text_hint = ("bobine" in cn) or ("bobine" in cr)
+                                    # Info dispo si au moins un signal (fields
+                                    # spécifiques OU texte de conditionnement).
+                                    if has_bobine_fields or cn or cr:
+                                        has_info = True
+                                        is_bobine = has_bobine_fields or has_text_hint
+                            if not has_info:
+                                should_show = False
+                            elif filter_cond == "bobine_only" and not is_bobine:
+                                should_show = False
+                            elif filter_cond == "plis_only" and is_bobine:
+                                should_show = False
             # type manual / calendar : non implémenté en v1
             if should_show:
+                # v163+ : fallback no_dossier pour toutes les alertes qui n'ont
+                # pas encore de trigger_no_dossier (typiquement les périodiques).
+                # On cherche le dossier « en cours » : dernier 01 (début) sur la
+                # machine de l'opérateur, non suivi d'un 89 (fin) postérieur.
+                # Ça donne le dossier sur lequel l'opérateur travaille au moment
+                # de l'ack, et évite le bug de l'historique vide.
+                if not trigger_no_dossier and user_machine and operateur:
+                    last_01 = conn.execute(
+                        """SELECT no_dossier, date_operation FROM production_data
+                           WHERE machine=? AND operation_code='01'
+                             AND (operateur=? OR operateur=?)
+                             AND date_operation >= ?
+                           ORDER BY date_operation DESC LIMIT 1""",
+                        (user_machine, operateur, user_nom or operateur,
+                         now_paris.strftime("%Y-%m-%dT00:00:00")),
+                    ).fetchone()
+                    if last_01 and last_01["no_dossier"]:
+                        # Vérifie qu'aucun 89 postérieur n'a clos ce dossier
+                        closed = conn.execute(
+                            """SELECT 1 FROM production_data
+                               WHERE machine=? AND operation_code='89'
+                                 AND no_dossier=? AND date_operation > ?
+                               LIMIT 1""",
+                            (user_machine, last_01["no_dossier"], last_01["date_operation"]),
+                        ).fetchone()
+                        if not closed:
+                            trigger_no_dossier = str(last_01["no_dossier"]).strip()
                 items.append({
                     "id": int(r["id"]),
                     "nom": r["nom"],
                     "params": params,
                     "linked_maint_code": r["linked_maint_code"] or "",
+                    # no_dossier du dossier qui a déclenché l'alerte (peut être
+                    # vide pour les alertes non-événementielles ou si l'event
+                    # métier ne référence pas de dossier).
+                    "no_dossier": trigger_no_dossier,
                 })
     resp = {"items": items, "now": now_paris.strftime("%Y-%m-%dT%H:%M:%S")}
     if gap_until_str:
@@ -3183,41 +3294,27 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
 
 @router.get("/api/maintenance/wearparts/last")
 def maintenance_wearparts_last(request: Request, machine: str = ""):
-    """Dernières opérations 'changement couteaux/contre-couteaux bande/rive' pour
-    une machine donnée. Source : table production_data (alimentée par MyProd).
-    Retourne : pour chaque combinaison, la date du dernier changement, le métrage
-    machine à ce moment-là, et le métrage parcouru depuis (= dernier_metrage
-    machine - metrage_at_change).
-    Lecture seule, accessible à tout utilisateur connecté.
-    Distingue 'contre-couteaux' de 'couteaux' via NOT LIKE.
-    """
+    """Dernières opérations couteaux pour une machine."""
     get_current_user(request)
     machine = (machine or "").strip()
     if not machine:
         raise HTTPException(422, "Param 'machine' requis.")
     from database import get_db
-    # (clé, pattern_match, pattern_exclude)
     queries = [
         ("couteaux_bande",         "%couteaux%bande%", "%contre%couteaux%bande%"),
         ("couteaux_rive",          "%couteaux%rive%",  "%contre%couteaux%rive%"),
         ("contre_couteaux_bande",  "%contre%couteaux%bande%", None),
         ("contre_couteaux_rive",   "%contre%couteaux%rive%",  None),
     ]
-    items: dict[str, dict] = {}
+    items = {}
     with get_db() as conn:
-        # Compteur de mètres COURANT de la machine (mis à jour par chaque saisie
-        # de début/fin de production code 01/89 dans MyProd).
         m_row = conn.execute(
             "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
             (machine,),
         ).fetchone()
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, pat, exclude in queries:
-            # 1) Date du dernier changement correspondant
-            sql = (
-                "SELECT date_operation FROM production_data "
-                "WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
-            )
+            sql = "SELECT date_operation FROM production_data WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
             params = [machine, pat]
             if exclude:
                 sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
@@ -3228,55 +3325,28 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
                 items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
                 continue
             change_date = row["date_operation"]
-            # 2) Compteur machine AU MOMENT du changement : on prend le dernier
-            #    metrage_total_fin/_debut d'une saisie début/fin de prod (01 ou 89)
-            #    enregistrée à cette date ou avant. C'est la même logique que celle
-            #    qui met à jour machines.dernier_metrage côté MyProd.
             m_at_row = conn.execute(
-                """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
-                   FROM production_data
-                   WHERE machine=? AND operation_code IN ('01','89')
-                     AND date_operation <= ?
-                     AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL)
-                   ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
+                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
+                "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
+                "ORDER BY date_operation DESC, id DESC LIMIT 1",
                 (machine, change_date),
             ).fetchone()
             m_at_change = m_at_row["m"] if m_at_row else None
             metrage_since = None
             if current_metrage is not None and m_at_change is not None:
                 try:
-                    diff = float(current_metrage) - float(m_at_change)
-                    metrage_since = max(0.0, diff)  # clamp si compteur remis à zéro
+                    metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
                 except (TypeError, ValueError):
                     metrage_since = None
-            items[key] = {
-                "last_date": change_date,
-                "metrage_at_change": m_at_change,
-                "metrage_since": metrage_since,
-            }
-    # Rétro-compat : on garde l'ancien champ "dates" pour les clients qui ne
-    # lisent que ça (ne devrait être personne en pratique).
+            items[key] = {"last_date": change_date, "metrage_at_change": m_at_change, "metrage_since": metrage_since}
     dates = {k: v["last_date"] for k, v in items.items()}
-    return {
-        "machine": machine,
-        "current_metrage": current_metrage,
-        "dates": dates,
-        "items": items,
-    }
+    return {"machine": machine, "current_metrage": current_metrage, "dates": dates, "items": items}
 
 
 @router.post("/api/maintenance/wearparts/info")
 async def maintenance_wearparts_info(request: Request):
-    """Métrage machine + métrage parcouru depuis une date donnée, par pièce.
-    Source des dates : OPS_STATE côté frontend (= saisies "Nouvelle saisie"
-    de l'app Maintenance, stockées en localStorage). Source du métrage :
-    machines.dernier_metrage + production_data (compteur historique).
-
-    Body : { machine: str, dates: { piece_pos: ISO_or_null, ... } }
-    Renvoie : { machine, current_metrage, items: { piece_pos: {
-        last_date, metrage_at_change, metrage_since
-    } } }
-    """
+    """Métrage machine et parcouru depuis une date par pièce."""
     get_current_user(request)
     body = await request.json()
     machine = (body.get("machine") or "").strip()
@@ -3286,7 +3356,7 @@ async def maintenance_wearparts_info(request: Request):
     if not isinstance(raw_dates, dict):
         raise HTTPException(422, "dates doit etre un objet.")
     from database import get_db
-    items: dict[str, dict] = {}
+    items = {}
     with get_db() as conn:
         m_row = conn.execute(
             "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
@@ -3295,37 +3365,22 @@ async def maintenance_wearparts_info(request: Request):
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, change_date in raw_dates.items():
             if not change_date:
-                items[key] = {
-                    "last_date": None,
-                    "metrage_at_change": None,
-                    "metrage_since": None,
-                }
+                items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
                 continue
             change_date = str(change_date)
             m_at_row = conn.execute(
-                """SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m
-                   FROM production_data
-                   WHERE machine=? AND operation_code IN ('01','89')
-                     AND date_operation <= ?
-                     AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL)
-                   ORDER BY date_operation DESC, id DESC LIMIT 1""",
+                "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
+                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
+                "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
+                "ORDER BY date_operation DESC, id DESC LIMIT 1",
                 (machine, change_date),
             ).fetchone()
             m_at_change = m_at_row["m"] if m_at_row else None
             metrage_since = None
             if current_metrage is not None and m_at_change is not None:
                 try:
-                    diff = float(current_metrage) - float(m_at_change)
-                    metrage_since = max(0.0, diff)
+                    metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
                 except (TypeError, ValueError):
                     metrage_since = None
-            items[key] = {
-                "last_date": change_date,
-                "metrage_at_change": m_at_change,
-                "metrage_since": metrage_since,
-            }
-    return {
-        "machine": machine,
-        "current_metrage": current_metrage,
-        "items": items,
-    }
+            items[key] = {"last_date": change_date, "metrage_at_change": m_at_change, "metrage_since": metrage_since}
+    return {"machine": machine, "current_metrage": current_metrage, "items": items}

@@ -28,7 +28,7 @@
     expedition: 'Expédition'
   };
   var ROLES_ORDER = [
-    'fabrication', 'logistique', 'commercial', 'administration',
+    'fabrication', 'logistique', 'commercial', 'administration', 'administration_ventes', 'administration_technique',
     'direction', 'comptabilite', 'expedition'
   ];
 
