@@ -2879,21 +2879,23 @@ def maintenance_alerts_active(request: Request):
                         trigger_no_dossier = str(recent["no_dossier"]).strip()
                     # Filtre par conditionnement (bobine / plis) — v163+
                     # Options : 'any' (défaut), 'bobine_only', 'plis_only'.
-                    # Politique choisie : si aucune info de conditionnement dans
-                    # la fiche technique, l'alerte reste silencieuse (stricte).
+                    # Critères STRICTS bobine : mandrin_dia renseigné, OU
+                    # mandrin_longueur > 0, OU mot "bobine" dans le texte du
+                    # conditionnement. nb_etiq_bobin / nb_bobines_carton NE
+                    # comptent PLUS (trop de faux positifs sur templates).
+                    # Politique : si la fiche a des infos conditionnement mais
+                    # aucun indicateur bobine → alerte silencieuse (c'est du plis).
+                    # Si la fiche est vide (aucun signal) → alerte fire quand même
+                    # (mieux vaut alerter et laisser décider que rater).
                     if should_show:
                         filter_cond = str(trig.get("filter_conditionnement") or "any").strip()
                         if filter_cond in ("bobine_only", "plis_only"):
                             no_dossier = recent["no_dossier"] if recent else None
-                            is_bobine = False
-                            has_info = False
+                            is_bobine = None  # None = inconnu, on ne filtre pas
                             if no_dossier:
-                                # NB: dans planning_entries la colonne dossier est `reference`
                                 cond_row = conn.execute(
                                     """SELECT ft.conditionnement_norm, ft.conditionnement,
-                                              ft.mandrin_dia, ft.mandrin_longueur,
-                                              ft.enroulement, ft.nb_etiq_bobin,
-                                              ft.nb_bobines_carton
+                                              ft.mandrin_dia, ft.mandrin_longueur
                                        FROM planning_entries pe
                                        LEFT JOIN fiches_techniques ft
                                               ON ft.ref_produit_norm = pe.ref_produit_norm
@@ -2902,41 +2904,27 @@ def maintenance_alerts_active(request: Request):
                                     (no_dossier,),
                                 ).fetchone()
                                 if cond_row:
-                                    # Détection « bobine » — critère combiné :
-                                    #  1) champs spécifiques bobine renseignés
-                                    #     (mandrin, enroulement, étiq/bobine…) OR
-                                    #  2) mot "bobine" dans conditionnement/norm.
                                     cn = (cond_row["conditionnement_norm"] or "").lower()
                                     cr = (cond_row["conditionnement"] or "").lower()
                                     mandrin_dia = (cond_row["mandrin_dia"] or "").strip()
-                                    enroulement = (cond_row["enroulement"] or "").strip()
                                     try:
                                         mandrin_long = float(cond_row["mandrin_longueur"] or 0)
                                     except (TypeError, ValueError):
                                         mandrin_long = 0.0
-                                    try:
-                                        nb_etiq = int(cond_row["nb_etiq_bobin"] or 0)
-                                    except (TypeError, ValueError):
-                                        nb_etiq = 0
-                                    try:
-                                        nb_bob = int(cond_row["nb_bobines_carton"] or 0)
-                                    except (TypeError, ValueError):
-                                        nb_bob = 0
-                                    has_bobine_fields = bool(
-                                        mandrin_dia or enroulement
-                                        or mandrin_long > 0
-                                        or nb_etiq > 0
-                                        or nb_bob > 0
+                                    has_mandrin = bool(mandrin_dia) or (mandrin_long > 0)
+                                    has_text_bobine = ("bobine" in cn) or ("bobine" in cr)
+                                    # A-t-on la moindre info de conditionnement ?
+                                    has_any_cond_info = bool(
+                                        mandrin_dia or mandrin_long > 0 or cn or cr
                                     )
-                                    has_text_hint = ("bobine" in cn) or ("bobine" in cr)
-                                    # Info dispo si au moins un signal (fields
-                                    # spécifiques OU texte de conditionnement).
-                                    if has_bobine_fields or cn or cr:
-                                        has_info = True
-                                        is_bobine = has_bobine_fields or has_text_hint
-                            if not has_info:
+                                    if has_any_cond_info:
+                                        # Info dispo → décision ferme
+                                        is_bobine = has_mandrin or has_text_bobine
+                                    # Sinon is_bobine reste None (inconnu → fire)
+                            # Applique le filtre uniquement si is_bobine est déterminé
+                            if is_bobine is True and filter_cond == "plis_only":
                                 should_show = False
-                            elif filter_cond == "bobine_only" and not is_bobine:
+                            elif is_bobine is False and filter_cond == "bobine_only":
                                 should_show = False
                             elif filter_cond == "plis_only" and is_bobine:
                                 should_show = False
