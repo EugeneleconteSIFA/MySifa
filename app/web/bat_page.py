@@ -10,7 +10,7 @@ from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
 from config import APP_VERSION
 
-ROLES_BAT = {"superadmin", "direction", "administration"}
+ROLES_BAT = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_BAT_VIEW = ROLES_BAT | {"commercial"}
 
 router = APIRouter()
@@ -1014,7 +1014,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 </script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>

@@ -17,6 +17,8 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_FABRICATION,
     ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_DIRECTION,
     ROLE_LOGISTIQUE,
     ROLE_COMPTABILITE,
@@ -125,6 +127,8 @@ def access_matrix(request: Request):
     role_labels = {
         ROLE_DIRECTION: "Direction",
         ROLE_ADMINISTRATION: "Administration",
+        ROLE_ADMINISTRATION_VENTES: "Administration des ventes",
+        ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
         ROLE_FABRICATION: "Fabrication",
         ROLE_LOGISTIQUE: "Logistique",
         ROLE_COMPTABILITE: "Comptabilité",
@@ -392,7 +396,7 @@ def list_fournisseurs(request: Request):
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
+            """SELECT id, nom, licence, certificat, has_fsc, traca_photo_url, traca_explication, traca_exemple_code
                FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
@@ -406,13 +410,17 @@ async def create_fournisseur(request: Request):
     nom = (body.get("nom") or "").strip()
     licence = (body.get("licence") or "").strip() or None
     certificat = (body.get("certificat") or "").strip() or None
+    has_fsc = 1 if bool(body.get("has_fsc", True)) else 0
+    if not has_fsc:
+        licence = None
+        certificat = None
     if not nom:
         raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
     with get_db() as conn:
         try:
             cur = conn.execute(
-                "INSERT INTO fournisseurs_fsc (nom, licence, certificat) VALUES (?,?,?)",
-                (nom, licence, certificat),
+                "INSERT INTO fournisseurs_fsc (nom, licence, certificat, has_fsc) VALUES (?,?,?,?)",
+                (nom, licence, certificat, has_fsc),
             )
             conn.commit()
             log_action(
@@ -443,14 +451,22 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         if isinstance(certificat, str): certificat = certificat.strip() or None
         if not nom:
             raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
+        try:
+            has_fsc_prev = 1 if (ex["has_fsc"] if "has_fsc" in ex.keys() else 1) else 0
+        except Exception:
+            has_fsc_prev = 1
+        has_fsc = 1 if bool(body.get("has_fsc", has_fsc_prev)) else 0
+        if not has_fsc:
+            licence = None
+            certificat = None
         traca_explication = (body.get("traca_explication") or "").strip() or None
         traca_exemple_code = (body.get("traca_exemple_code") or "").strip() or None
         try:
             conn.execute(
-                """UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=?,
+                """UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=?, has_fsc=?,
                        traca_explication=?, traca_exemple_code=?
                    WHERE id=?""",
-                (nom, licence, certificat, traca_explication, traca_exemple_code, fournisseur_id),
+                (nom, licence, certificat, has_fsc, traca_explication, traca_exemple_code, fournisseur_id),
             )
             conn.commit()
             log_action(

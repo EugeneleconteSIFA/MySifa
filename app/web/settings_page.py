@@ -217,10 +217,14 @@ body.light .empl-allee-letter{background:rgba(8,145,178,.12)}
 .empl-rangee-pills{display:flex;flex-wrap:nowrap;gap:4px}
 .pill--direction{border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
 .pill--administration{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.pill--administration_ventes{border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.pill--administration_technique{border-color:rgba(99,102,241,.38);color:#818cf8;background:rgba(99,102,241,.12)}
 .pill--fabrication{border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
 .pill--logistique{border-color:rgba(96,165,250,.35);color:#60a5fa;background:rgba(96,165,250,.12)}
 .pill--comptabilite{border-color:rgba(251,191,36,.38);color:#fbbf24;background:rgba(251,191,36,.12)}
-.pill--expedition{border-color:rgba(248,113,113,.38);color:var(--danger);background:rgba(248,113,113,.12)}
+.pill--expedition{border-color:rgba(249,115,22,.38);color:#fb923c;background:rgba(249,115,22,.12)}
+.pill--commercial{border-color:rgba(202,138,4,.38);color:#eab308;background:rgba(202,138,4,.12)}
+.pill--encadrement_atelier{border-color:rgba(20,184,166,.38);color:#2dd4bf;background:rgba(20,184,166,.12)}
 .pill--superadmin{border-color:rgba(34,211,238,.45);color:var(--accent);background:rgba(34,211,238,.14)}
 .pill--inactive{border-color:rgba(148,163,184,.35);color:var(--muted);background:rgba(148,163,184,.10)}
 .users-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -621,6 +625,10 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <input type="text" id="cf-licence" placeholder="Code Licence FSC (ex: FSC-C004451)" autocomplete="off">
             <input type="text" id="cf-certificat" placeholder="Code Certificat FSC (ex: CU-COC-807907)" autocomplete="off">
           </div>
+          <label style="display:inline-flex;align-items:center;gap:8px;margin:8px 0 12px;font-size:13px;color:var(--text);cursor:pointer">
+            <input type="checkbox" id="cf-has-fsc" checked style="width:16px;height:16px;cursor:pointer">
+            Fournisseur certifié FSC
+          </label>
           <button type="button" class="btn" id="cf-go">Ajouter</button>
         </div>
         <div class="card">
@@ -1390,7 +1398,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -2122,6 +2130,9 @@ function renderUsersList(){
       '<div style="display:flex;align-items:center;gap:10px">' +
         profileRingHtml(profPct) +
         '<div><strong>' + esc(u.nom) + '</strong> <span class="' + pillCls + '">' + esc(roleLabels[u.role] || u.role) + '</span>' +
+        (u.nc_service_override === 'encadrement_atelier'
+          ? ' <span class="pill pill--encadrement_atelier" title="Service NC : chef d\'équipe atelier / responsable technique">Chef d\'équipe atelier / Resp. tech.</span>'
+          : '') +
         (act ? '' : ' <span class="pill pill--inactive">Inactif</span>') +
         '<div style="font-size:11px;color:var(--muted);margin-top:4px">' + esc(u.email) + (meta ? (' · ' + meta) : '') + '</div></div>' +
         '<button type="button" class="btn btn-sec copy-user-btn" data-copy="' + u.id + '" title="Copier les identifiants" style="padding:6px 8px">' +
@@ -2324,6 +2335,12 @@ async function openEdit(id) {
     '<option value="">—</option>' + machines.map(m => '<option value="' + esc(m.id) + '"' + (String(u.machine_id) === String(m.id) ? ' selected' : '') + '>' + esc(m.nom) + '</option>').join('') + '</select></div>' +
     '<label class="sub" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="ed-act" ' + (Number(u.actif) === 1 ? 'checked' : '') + '> Compte actif</label>' +
     '<label class="sub">Nouveau mot de passe (optionnel)</label><input id="ed-pwd" type="password" style="margin-bottom:10px">' +
+    '<label class="sub">Service NC (surcharge)</label>' +
+    '<select id="ed-nc-svc" style="margin-bottom:4px">' +
+    '<option value=""' + (!u.nc_service_override ? ' selected' : '') + '>— Aucune (utilise le rôle) —</option>' +
+    '<option value="encadrement_atelier"' + (u.nc_service_override === "encadrement_atelier" ? ' selected' : '') + '>Chef d\'équipe atelier / Resp. technique</option>' +
+    '</select>' +
+    '<div class="sub" style="font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.4">Rattache l\'utilisateur à un service de prise en connaissance des NC indépendamment de son rôle métier.</div>' +
     '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
     '<button type="button" class="btn btn-sec" id="ed-cancel">Annuler</button>' +
     '<button type="button" class="btn" id="ed-save">Enregistrer</button></div>';
@@ -2351,6 +2368,7 @@ async function openEdit(id) {
       operateur_lie: dlg.querySelector('#ed-op').value || null,
       machine_id: dlg.querySelector('#ed-mac').value ? Number(dlg.querySelector('#ed-mac').value) : null,
       actif: dlg.querySelector('#ed-act').checked ? 1 : 0,
+      nc_service_override: dlg.querySelector('#ed-nc-svc').value || null,
     };
     const np = dlg.querySelector('#ed-pwd').value;
     if (np) body.password = np;
@@ -2466,19 +2484,25 @@ function renderFournisseursTable() {
     wrap.innerHTML = '<p class="sub" style="padding:12px">Aucun fournisseur enregistré.</p>';
     return;
   }
-  wrap.innerHTML = '<table><thead><tr><th>Nom</th><th>Licence FSC</th><th>Certificat FSC</th><th>Code-barre traça</th><th></th></tr></thead><tbody>' +
-    fournisseursAll.map(f => '<tr>' +
+  wrap.innerHTML = '<table><thead><tr><th>Nom</th><th>FSC</th><th>Licence FSC</th><th>Certificat FSC</th><th>Code-barre traça</th><th></th></tr></thead><tbody>' +
+    fournisseursAll.map(f => {
+      const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+      const fscBadge = hasFsc
+        ? '<span style="display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--ok);font-size:11px;font-weight:700">FSC</span>'
+        : '<span style="display:inline-block;padding:2px 8px;border-radius:6px;background:var(--bg);color:var(--muted);font-size:11px;font-weight:600;border:1px solid var(--border)">— Non</span>';
+      return '<tr>' +
       '<td><strong>' + esc(f.nom) + '</strong></td>' +
-      '<td><code>' + esc(f.licence || '—') + '</code></td>' +
-      '<td><code>' + esc(f.certificat || '—') + '</code></td>' +
+      '<td>' + fscBadge + '</td>' +
+      '<td><code>' + esc(hasFsc ? (f.licence || '—') : '—') + '</code></td>' +
+      '<td><code>' + esc(hasFsc ? (f.certificat || '—') : '—') + '</code></td>' +
       '<td>' + (f.traca_photo_url || f.traca_explication || f.traca_exemple_code
         ? '<span style="color:var(--ok);font-size:12px">✓ Renseigné</span>'
         : '<span style="color:var(--muted);font-size:12px">— Non renseigné</span>') + '</td>' +
       '<td style="display:flex;gap:6px;justify-content:flex-end">' +
         '<button type="button" class="btn btn-sec" data-fedit="' + f.id + '">Modifier</button>' +
         '<button type="button" class="btn btn-sec" data-fdel="' + f.id + '" style="color:var(--danger)">Supprimer</button>' +
-      '</td></tr>'
-    ).join('') + '</tbody></table>';
+      '</td></tr>';
+    }).join('') + '</tbody></table>';
   wrap.querySelectorAll('[data-fedit]').forEach(b => b.onclick = () => openEditFournisseur(Number(b.dataset.fedit)));
   wrap.querySelectorAll('[data-fdel]').forEach(b => b.onclick = () => deleteFournisseur(Number(b.dataset.fdel)));
 }
@@ -2487,17 +2511,19 @@ document.getElementById('cf-go').onclick = async () => {
   const nom = document.getElementById('cf-nom').value.trim();
   const licence = document.getElementById('cf-licence').value.trim();
   const certificat = document.getElementById('cf-certificat').value.trim();
+  const has_fsc = !!(document.getElementById('cf-has-fsc') || {}).checked;
   if (!nom) return toast('Nom du fournisseur requis', true);
   try {
     await api('/api/fournisseurs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, licence, certificat }),
+      body: JSON.stringify({ nom, licence, certificat, has_fsc }),
     });
     toast('Fournisseur ajouté');
     document.getElementById('cf-nom').value = '';
     document.getElementById('cf-licence').value = '';
     document.getElementById('cf-certificat').value = '';
+    const cbo = document.getElementById('cf-has-fsc'); if (cbo) cbo.checked = true;
     await loadFournisseurs();
   } catch (e) { toast(e.message, true); }
 };
@@ -2509,10 +2535,16 @@ async function openEditFournisseur(id) {
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;display:flex;align-items:center;justify-content:center;padding:16px';
   const dlg = document.createElement('div');
   dlg.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:440px;width:100%;max-height:90vh;overflow:auto';
+  const hasFscInit = (f.has_fsc == null) ? true : !!f.has_fsc;
   dlg.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px">Modifier le fournisseur</h3>' +
     '<label class="sub">Nom</label><input id="ef-nom" value="' + esc(f.nom) + '" style="margin-bottom:10px">' +
+    '<label style="display:flex;align-items:center;gap:8px;margin:6px 0 12px;font-size:13px;color:var(--text);cursor:pointer">' +
+      '<input type="checkbox" id="ef-has-fsc" ' + (hasFscInit ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">' +
+      'Fournisseur certifié FSC</label>' +
+    '<div id="ef-fsc-fields" style="' + (hasFscInit ? '' : 'opacity:.4;pointer-events:none') + '">' +
     '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
     '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
+    '</div>' +
     '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
     '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Code-barre de traçabilité</p>' +
     '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Aide pour les opérateurs : quel code scanner sur les bobines de ce fournisseur.</p>' +
@@ -2595,12 +2627,22 @@ async function openEditFournisseur(id) {
     } catch (e) {}
   };
 
+  const efHasFscCbo = dlg.querySelector('#ef-has-fsc');
+  const efFscFields = dlg.querySelector('#ef-fsc-fields');
+  if (efHasFscCbo) efHasFscCbo.onchange = () => {
+    if (!efFscFields) return;
+    efFscFields.style.opacity = efHasFscCbo.checked ? '' : '.4';
+    efFscFields.style.pointerEvents = efHasFscCbo.checked ? '' : 'none';
+  };
+
   dlg.querySelector('#ef-cancel').onclick = () => backdrop.remove();
   dlg.querySelector('#ef-save').onclick = async () => {
+    const has_fsc = efHasFscCbo ? !!efHasFscCbo.checked : true;
     const body = {
       nom: dlg.querySelector('#ef-nom').value.trim(),
-      licence: dlg.querySelector('#ef-licence').value.trim(),
-      certificat: dlg.querySelector('#ef-certificat').value.trim(),
+      licence: has_fsc ? dlg.querySelector('#ef-licence').value.trim() : '',
+      certificat: has_fsc ? dlg.querySelector('#ef-certificat').value.trim() : '',
+      has_fsc,
       traca_explication: expEl.value.trim(),
       traca_exemple_code: codeEl.value.trim(),
     };
@@ -2618,6 +2660,7 @@ async function openEditFournisseur(id) {
         fi.nom = body.nom;
         fi.licence = body.licence || null;
         fi.certificat = body.certificat || null;
+        fi.has_fsc = body.has_fsc ? 1 : 0;
       }
       toast('Fournisseur mis à jour');
       backdrop.remove();

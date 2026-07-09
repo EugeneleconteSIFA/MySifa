@@ -6122,6 +6122,128 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 161, "mytraduction_cache")
 
+    # v162 — Maintenance : opérations multi-machines dans un même créneau.
+    # Un créneau (maintenance_events) peut désormais contenir des opérations
+    # rattachées à des machines différentes. Chaque opération stocke sa/ses
+    # machines dans `maintenance_event_ops.machines_csv` (CSV, séparateur " · ").
+    # `maintenance_events.machine` reste renseigné en résumé (CSV) pour la
+    # rétrocompatibilité (palette calendrier, filtres, non_planifie).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=162 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
+        if "machines_csv" not in cols:
+            conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN machines_csv TEXT")
+        # Backfill : pour chaque op existante sans machines_csv, on hérite de
+        # la machine de son event (comportement d'avant la refonte).
+        conn.execute("""
+            UPDATE maintenance_event_ops
+            SET machines_csv = (
+                SELECT machine FROM maintenance_events WHERE id = maintenance_event_ops.event_id
+            )
+            WHERE machines_csv IS NULL OR machines_csv = ''
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 162, "maintenance_event_ops_machines_csv")
+
+    # v163 — Maintenance : modèles de session (« templates »).
+    # Un modèle = un ensemble prédéfini d'opérations avec leurs machines,
+    # qu'un admin peut instancier rapidement en tant que créneau. Les modifs
+    # d'un modèle resynchronisent les créneaux futurs qui en dépendent
+    # (écrasement des ops locales).
+    #
+    # `maintenance_events.template_id` (nullable) trace la provenance d'un
+    # créneau et pilote la resync. Sur suppression d'un modèle, ON DELETE
+    # CASCADE côté events est INACTIF (foreign_keys pas activées globalement) :
+    # la cascade est faite côté application dans le router.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=163 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                created_by INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS maintenance_template_ops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                machines_csv TEXT,
+                FOREIGN KEY (template_id) REFERENCES maintenance_templates(id) ON DELETE CASCADE,
+                FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+                UNIQUE (template_id, code)
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_template_ops_template "
+            "ON maintenance_template_ops(template_id)"
+        )
+        # Colonne template_id sur les créneaux (nullable = créneau autonome).
+        cols_ev = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+        if "template_id" not in cols_ev:
+            conn.execute("ALTER TABLE maintenance_events ADD COLUMN template_id INTEGER")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_maint_events_template "
+            "ON maintenance_events(template_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 163, "maintenance_templates")
+
+    # v166 — Qualité : split rôle administration + traçabilité de prise en connaissance des NC par service.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=166 LIMIT 1").fetchone():
+        conn.execute(
+            "UPDATE users SET role='administration_ventes' WHERE role='administration'"
+        )
+        ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
+        if "nc_service_override" not in ucols:
+            conn.execute("ALTER TABLE users ADD COLUMN nc_service_override TEXT")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nc_service_acknowledgments (
+                nc_id INTEGER NOT NULL REFERENCES nc_dossiers(id) ON DELETE CASCADE,
+                service TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id),
+                ack_at TEXT NOT NULL,
+                PRIMARY KEY (nc_id, service)
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nc_ack_service ON nc_service_acknowledgments(service)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 166, "qualite_split_admin_role_and_nc_ack")
+
+    # v167 — Fournisseurs : flag has_fsc (les existants restent certifiés)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=167 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "has_fsc" not in cols:
+            try:
+                conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN has_fsc INTEGER NOT NULL DEFAULT 1")
+            except Exception:
+                pass
+        conn.commit()
+        _record_schema_migration(conn, 167, "fournisseurs_has_fsc_flag")
+
+    # v168 — Liaison fournisseurs ↔ (matière première, laize)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=168 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS matiere_laize_fournisseurs (
+                matiere_id     INTEGER NOT NULL,
+                laize_id       INTEGER NOT NULL,
+                fournisseur_id INTEGER NOT NULL,
+                created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (matiere_id, laize_id, fournisseur_id),
+                FOREIGN KEY (matiere_id)     REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                FOREIGN KEY (fournisseur_id) REFERENCES fournisseurs_fsc(id)    ON DELETE CASCADE
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mlf_matiere ON matiere_laize_fournisseurs(matiere_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mlf_fournisseur ON matiere_laize_fournisseurs(fournisseur_id)")
+        conn.commit()
+        _record_schema_migration(conn, 168, "matiere_laize_fournisseurs_link")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
@@ -6152,7 +6274,7 @@ def parse_french_number(val):
     s = str(val).strip()
     if not s:
         return 0
-    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
+    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
     try:
         return float(s)
     except ValueError:
@@ -6184,7 +6306,7 @@ def parse_file(file_bytes, filename):
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if ext == "csv":
         for encoding in ["utf-8", "latin-1", "cp1252"]:
-            for sep in [";", ",", "	"]:
+            for sep in [";", ",", "\t"]:
                 try:
                     df = pd.read_csv(io.BytesIO(file_bytes), encoding=encoding, sep=sep, dtype=str)
                     if len(df.columns) > 3:

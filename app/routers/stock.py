@@ -118,7 +118,7 @@ def _mp_is_laizee(categorie: str) -> bool:
 
 
 _MP_TYPES_MVT = frozenset({"entree", "sortie", "ajustement", "transfert"})
-_STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration"})
+_STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administration", "administration_ventes", "administration_technique"})
 _STOCK_VALORISATION_USD_ROLES = frozenset({"superadmin", "direction"})
 
 
@@ -1437,7 +1437,7 @@ class _EmplacementPlanAdd(BaseModel):
 def add_emplacement_plan(payload: _EmplacementPlanAdd, request: Request):
     """Ajoute un emplacement au plan. Réservé direction / administration / superadmin."""
     user = require_stock(request)
-    if user.get("role") not in {"superadmin", "direction", "administration"}:
+    if user.get("role") not in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}:
         raise HTTPException(403, "Ajout d'emplacement réservé aux administrateurs.")
     code = payload.code.strip().upper()
     if not code:
@@ -2896,19 +2896,38 @@ def list_matieres_premieres(request: Request, all: int = 0):
             ORDER BY l.ordre ASC, l.valeur_mm ASC
             """
         ).fetchall()
+        fourn_by_mat: dict[int, dict[int, list[dict]]] = {}
+        fourn_rows = conn.execute("""
+            SELECT mlf.matiere_id, mlf.laize_id, f.id, f.nom, COALESCE(f.has_fsc, 1) AS has_fsc,
+                   f.licence, f.certificat
+              FROM matiere_laize_fournisseurs mlf
+              JOIN fournisseurs_fsc f ON f.id = mlf.fournisseur_id
+             ORDER BY f.nom COLLATE NOCASE ASC
+        """).fetchall()
+        for fr in fourn_rows:
+            fourn_by_mat.setdefault(int(fr["matiere_id"]), {}).setdefault(int(fr["laize_id"]), []).append({
+                "id": int(fr["id"]),
+                "nom": fr["nom"],
+                "has_fsc": int(fr["has_fsc"] or 0),
+                "licence": fr["licence"],
+                "certificat": fr["certificat"],
+            })
     by_mat: dict[int, list[dict]] = {}
     for r in laize_rows:
         try:
             l_prix = float(r["laize_prix_eur_m2"]) if r["laize_prix_eur_m2"] is not None else None
         except (TypeError, ValueError):
             l_prix = None
-        by_mat.setdefault(r["matiere_id"], []).append({
-            "laize_id": r["laize_id"],
+        mat_id = r["matiere_id"]
+        laize_id = r["laize_id"]
+        by_mat.setdefault(mat_id, []).append({
+            "laize_id": laize_id,
             "valeur_mm": float(r["valeur_mm"] or 0),
             "label": r["label"],
             "actif": int(r["actif"] or 0),
             "quantite": float(r["quantite"] or 0),
             "prix_eur_m2": l_prix,
+            "fournisseurs": fourn_by_mat.get(int(mat_id), {}).get(int(laize_id), []),
         })
     out = []
     for r in rows:
@@ -3449,7 +3468,8 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
 # ── Produits finis (onglet dédié — source : produits / mouvements_stock) ──
 _PF_MVT_SQL = f"""
     SELECT m.id, p.id AS produit_id, p.reference, p.designation, m.type_mouvement AS type,
-           m.quantite, p.unite, m.emplacement, m.note AS commentaire,
+           m.quantite, m.quantite_avant, m.quantite_apres,
+           p.unite, m.emplacement, m.note AS commentaire,
            COALESCE(NULLIF(TRIM(m.created_by_name),''), u.nom, m.created_by) AS user_login,
            m.created_at AS date_mouvement
     FROM mouvements_stock m
@@ -6130,6 +6150,81 @@ async def set_matiere_laizes(matiere_id: int, request: Request):
     return {"ok": True, "laizes": laizes}
 
 
+def _mp_fournisseurs_by_laize(conn, matiere_id: int) -> dict[int, list[dict]]:
+    rows = conn.execute("""
+        SELECT mlf.laize_id, f.id, f.nom, COALESCE(f.has_fsc, 1) AS has_fsc,
+               f.licence, f.certificat
+          FROM matiere_laize_fournisseurs mlf
+          JOIN fournisseurs_fsc f ON f.id = mlf.fournisseur_id
+         WHERE mlf.matiere_id = ?
+         ORDER BY f.nom COLLATE NOCASE ASC
+    """, (matiere_id,)).fetchall()
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        out.setdefault(int(r["laize_id"]), []).append({
+            "id": int(r["id"]),
+            "nom": r["nom"],
+            "has_fsc": int(r["has_fsc"] or 0),
+            "licence": r["licence"],
+            "certificat": r["certificat"],
+        })
+    return out
+
+
+@router.get("/api/stock/fournisseurs")
+def stock_list_fournisseurs(request: Request):
+    """Liste plate des fournisseurs (accessible a tous les utilisateurs stock)."""
+    require_stock(request)
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT id, nom, COALESCE(has_fsc, 1) AS has_fsc, licence, certificat
+              FROM fournisseurs_fsc
+             ORDER BY nom COLLATE NOCASE ASC
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.put("/api/stock/matieres/{matiere_id}/laizes/{laize_id}/fournisseurs")
+async def set_matiere_laize_fournisseurs(matiere_id: int, laize_id: int, request: Request):
+    """Sync des fournisseurs lies a une (matiere, laize)."""
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    ids_raw = body.get("fournisseur_ids") or []
+    if not isinstance(ids_raw, list):
+        raise HTTPException(400, "fournisseur_ids doit etre une liste")
+    try:
+        ids = sorted({int(x) for x in ids_raw})
+    except (TypeError, ValueError):
+        raise HTTPException(400, "fournisseur_ids invalide") from None
+    with get_db() as conn:
+        link = conn.execute(
+            "SELECT 1 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+            (matiere_id, laize_id),
+        ).fetchone()
+        if not link:
+            raise HTTPException(404, "Cette laize n'est pas associee a la matiere.")
+        if ids:
+            placeholders = ",".join("?" * len(ids))
+            valid = {r["id"] for r in conn.execute(
+                f"SELECT id FROM fournisseurs_fsc WHERE id IN ({placeholders})", ids
+            ).fetchall()}
+            invalid = [i for i in ids if i not in valid]
+            if invalid:
+                raise HTTPException(400, f"Fournisseurs inconnus : {invalid}")
+        conn.execute(
+            "DELETE FROM matiere_laize_fournisseurs WHERE matiere_id=? AND laize_id=?",
+            (matiere_id, laize_id),
+        )
+        for fid in ids:
+            conn.execute(
+                "INSERT INTO matiere_laize_fournisseurs (matiere_id, laize_id, fournisseur_id) VALUES (?, ?, ?)",
+                (matiere_id, laize_id, fid),
+            )
+        conn.commit()
+        fournisseurs_by_laize = _mp_fournisseurs_by_laize(conn, matiere_id)
+    return {"ok": True, "fournisseurs": fournisseurs_by_laize.get(laize_id, [])}
+
+
 @router.get("/api/stock/matieres/{matiere_id}/laizes")
 def get_matiere_laizes(matiere_id: int, request: Request):
     require_stock(request)
@@ -6145,6 +6240,11 @@ def get_matiere_laizes(matiere_id: int, request: Request):
         if not mat:
             raise HTTPException(404, "Matière introuvable.")
         laizes = _mp_laizes_for_matiere(conn, matiere_id)
+        fourn = _mp_fournisseurs_by_laize(conn, matiere_id)
+    for l in laizes:
+        lid = l.get("laize_id")
+        if lid is not None:
+            l["fournisseurs"] = fourn.get(int(lid), [])
     return {
         "matiere_id": mat["id"],
         "categorie": mat["categorie"],

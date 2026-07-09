@@ -143,7 +143,8 @@ async def no_cache_planning(request: Request, call_next):
     """Évite cache navigateur / proxy sur le planning (données toujours lues en base)."""
     response = await call_next(request)
     p = request.url.path
-    if p.startswith("/api/planning") or p == "/planning" or p.startswith("/portail/ao/"):
+    if (p.startswith("/api/planning") or p == "/planning" or p.startswith("/portail/ao/")
+            or p.startswith("/api/maintenance/")):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
     return response

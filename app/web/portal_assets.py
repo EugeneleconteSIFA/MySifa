@@ -1169,7 +1169,7 @@ function renderPortal(){
   const isProd  = aa ? !!aa.prod : (isSuper || !!(urole && ['direction','administration','fabrication','expedition','commercial'].includes(urole)));
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','comptabilite'].includes(urole)));
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','expedition','logistique','commercial'].includes(urole)));
-  const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration'].includes(urole)));
+  const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)));
   const isPrint = isSuper || !!(urole && ['fabrication','logistique','expedition'].includes(urole));
   const isCom = urole==='commercial';
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','fabrication','logistique','expedition','comptabilite'].includes(urole)));
@@ -1182,7 +1182,7 @@ function renderPortal(){
   // Rapport hebdo : intégré comme 4e onglet dans MyProd → Production (pas de tuile portail séparée).
   const isCoffreRH = isSuper || urole === 'comptabilite';
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
-  const isMaintenance = isSuper || (urole && ['direction','administration'].includes(urole)) || (urole === 'fabrication' && window.__MAINT_OPEN_BETA__);
+  const isMaintenance = isSuper || (urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)) || (urole === 'fabrication' && window.__MAINT_OPEN_BETA__);
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
@@ -1572,7 +1572,7 @@ function renderPortal(){
         (S.msgUnread>0)?h('span',{className:'portal-corner-badge'},S.msgUnread>9?'9+':String(S.msgUnread)):null,
         iconEl('mail',24)
       ):null,
-      (isSuper||urole==='direction'||urole==='administration')?h('button',{
+      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Calendrier',

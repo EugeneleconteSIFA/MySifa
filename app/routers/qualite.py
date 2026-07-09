@@ -16,9 +16,15 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.services.auth_service import get_current_user
-from config import UPLOAD_DIR
+from config import (
+    UPLOAD_DIR,
+    NC_ACK_SERVICES,
+    NC_ACK_SERVICE_KEYS,
+    NC_ACK_RESET_FIELDS,
+    nc_service_for_role,
+)
 
-ROLES_QUALITE = {"superadmin", "direction", "administration"}
+ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_VIEW = ROLES_QUALITE | {"commercial"}
 NC_STATUTS = ("ouverte", "en_analyse", "action_corrective", "en_verification", "cloturee")
 NC_TYPES = ("interne", "client", "fournisseur", "logistique")
@@ -146,6 +152,47 @@ def _enrich_unread(conn, user_id: int, nc_dicts: List[dict]) -> List[dict]:
     return nc_dicts
 
 
+def _enrich_acks(conn, nc_dicts):
+    """Ajoute à chaque NC :
+      - `service_acks` : dict {service_key: {user_id, user_nom, ack_at}} pour chaque service
+        ayant pris connaissance de la NC.
+      - `services_ack_order` : liste ordonnée des services (5 services standards) ; utilisée
+        par le frontend pour afficher les pastilles dans le bon ordre.
+    L'ordre + libellés + couleurs viennent de config.NC_ACK_SERVICES (source de vérité).
+    """
+    if not nc_dicts:
+        return nc_dicts
+    ids = [n["id"] for n in nc_dicts]
+    ph = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"""SELECT a.nc_id, a.service, a.user_id, a.ack_at, u.nom AS user_nom
+             FROM nc_service_acknowledgments a
+             LEFT JOIN users u ON u.id = a.user_id
+             WHERE a.nc_id IN ({ph})""",
+        ids,
+    ).fetchall()
+    per_nc = {}
+    for r in rows:
+        per_nc.setdefault(r["nc_id"], {})[r["service"]] = {
+            "user_id": r["user_id"],
+            "user_nom": r["user_nom"],
+            "ack_at": r["ack_at"],
+        }
+    for n in nc_dicts:
+        n["service_acks"] = per_nc.get(n["id"], {})
+    return nc_dicts
+
+
+def _reset_acks_if_needed(conn, nc_id, changed_fields):
+    """Reset les ack de tous les services si un champ « sensible » a été modifié.
+    Les champs déclencheurs sont définis dans config.NC_ACK_RESET_FIELDS.
+    """
+    if not any(f in NC_ACK_RESET_FIELDS for f in changed_fields):
+        return 0
+    cur = conn.execute("DELETE FROM nc_service_acknowledgments WHERE nc_id=?", (nc_id,))
+    return cur.rowcount
+
+
 # ─── Liste NC ────────────────────────────────────────────────────────
 
 @router.get("/api/qualite/nc")
@@ -173,6 +220,7 @@ def list_nc(request: Request, statut: Optional[str] = None, type_nc: Optional[st
         ncs = [_row_to_dict(r) for r in rows]
         ncs = _enrich_nc(conn, ncs)
         ncs = _enrich_unread(conn, user["id"], ncs)
+        ncs = _enrich_acks(conn, ncs)
     return ncs
 
 
@@ -203,6 +251,7 @@ def get_nc(nc_id: int, request: Request):
         nc = _row_to_dict(row)
         nc = _enrich_nc(conn, [nc])[0]
         nc = _enrich_unread(conn, user["id"], [nc])[0]
+        nc = _enrich_acks(conn, [nc])[0]
     return nc
 
 
@@ -353,8 +402,78 @@ def update_nc(nc_id: int, body: NCUpdate, request: Request):
         fields.append("updated_by=?"); params.append(user["id"])
         params.append(nc_id)
         conn.execute(f"UPDATE nc_dossiers SET {', '.join(fields)} WHERE id=?", params)
+        # Reset des ack si un champ « sensible » a été modifié
+        # (titre, description, analyse causes, actions, gravité, quantité concernée).
+        _reset_acks_if_needed(conn, nc_id, set(new.keys()))
         conn.commit()
     return get_nc(nc_id, request)
+
+
+# ─── Prise de connaissance NC par service ─────────────────────────────
+
+@router.get("/api/qualite/services")
+def list_ack_services(request: Request):
+    """Retourne la liste des services d'ack + le service du user courant (si applicable).
+    Utilisé par le frontend pour construire la légende, les pastilles et savoir si le
+    user peut cliquer sur « Marquer comme lu ».
+    """
+    user = _require_qualite_view(request)
+    my_service = nc_service_for_role(user.get("role"), user.get("nc_service_override"))
+    return {
+        "services": NC_ACK_SERVICES,
+        "my_service": my_service,
+    }
+
+
+@router.post("/api/qualite/nc/{nc_id}/ack")
+def ack_nc(nc_id: int, request: Request):
+    """Le user courant marque la NC comme prise en connaissance pour SON service.
+    Un seul user par service suffit : la ligne est upsert-ée (INSERT OR REPLACE).
+    Le service du user est déterminé côté serveur (rôle + éventuel override).
+    """
+    user = _require_qualite_view(request)
+    service = nc_service_for_role(user.get("role"), user.get("nc_service_override"))
+    if not service:
+        raise HTTPException(
+            status_code=403,
+            detail="Votre rôle n'est pas associé à un service de prise en connaissance NC",
+        )
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="NC introuvable")
+        conn.execute(
+            """INSERT INTO nc_service_acknowledgments (nc_id, service, user_id, ack_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(nc_id, service) DO UPDATE
+                 SET user_id = excluded.user_id, ack_at = excluded.ack_at""",
+            (nc_id, service, user["id"], _now()),
+        )
+        conn.commit()
+    return get_nc(nc_id, request)
+
+
+@router.delete("/api/qualite/nc/{nc_id}/ack")
+def unack_nc(nc_id: int, request: Request):
+    """Le user courant retire la prise en connaissance de SON service (annule l'ack).
+    Utile si un user a cliqué par erreur. N'affecte pas les acks des autres services.
+    """
+    user = _require_qualite_view(request)
+    service = nc_service_for_role(user.get("role"), user.get("nc_service_override"))
+    if not service:
+        raise HTTPException(
+            status_code=403,
+            detail="Votre rôle n'est pas associé à un service de prise en connaissance NC",
+        )
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM nc_dossiers WHERE id=?", (nc_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="NC introuvable")
+        conn.execute(
+            "DELETE FROM nc_service_acknowledgments WHERE nc_id=? AND service=?",
+            (nc_id, service),
+        )
+        conn.commit()
+    return get_nc(nc_id, request)
+
 
 
 # ─── Validations Direction Qualité / Industrielle ────────────────────
@@ -1050,7 +1169,7 @@ def create_audit(body: AuditCreate, request: Request):
         # Vérifier que les auditeurs ont bien un rôle Qualité
         ph = ",".join("?" * len(body.auditeur_ids))
         valid = conn.execute(
-            f"SELECT id FROM users WHERE id IN ({ph}) AND actif=1 AND role IN ('superadmin','direction','administration')",
+            f"SELECT id FROM users WHERE id IN ({ph}) AND actif=1 AND role IN ('superadmin','direction','administration','administration_ventes','administration_technique')",
             body.auditeur_ids,
         ).fetchall()
         valid_ids = [v["id"] for v in valid]
@@ -1219,7 +1338,7 @@ def add_auditeur(audit_id: int, body: AuditeurAdd, request: Request):
         if not a_row:
             raise HTTPException(status_code=404, detail="Audit introuvable")
         u_row = conn.execute(
-            "SELECT id FROM users WHERE id=? AND actif=1 AND role IN ('superadmin','direction','administration')",
+            "SELECT id FROM users WHERE id=? AND actif=1 AND role IN ('superadmin','direction','administration','administration_ventes','administration_technique')",
             (body.user_id,),
         ).fetchone()
         if not u_row:
@@ -1661,7 +1780,7 @@ def list_auditeurs(request: Request):
     with get_db() as conn:
         rows = conn.execute(
             """SELECT id, nom, role FROM users
-               WHERE actif=1 AND role IN ('superadmin','direction','administration')
+               WHERE actif=1 AND role IN ('superadmin','direction','administration','administration_ventes','administration_technique')
                ORDER BY nom"""
         ).fetchall()
     return [dict(r) for r in rows]

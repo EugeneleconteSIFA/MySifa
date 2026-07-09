@@ -599,7 +599,7 @@ def list_users(request: Request):
     with get_db() as conn:
         rows = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
-                      u.matricule,u.created_at,u.last_login,u.access_overrides,
+                      u.matricule,u.created_at,u.last_login,u.access_overrides,u.nc_service_override,
                       m.nom AS machine_nom
                FROM users u
                LEFT JOIN machines m ON m.id = u.machine_id
@@ -742,6 +742,24 @@ async def update_user(user_id: int, request: Request):
         else:
             ao_sql = exd.get("access_overrides")
 
+        # nc_service_override : surcharge du service NC pour ce user.
+        # Seule la valeur actuellement admise est 'encadrement_atelier' (chef d'équipe atelier
+        # / responsable technique), ou None pour retirer la surcharge. La liste des valeurs
+        # possibles vient de config.NC_ACK_SERVICE_KEYS ; on autorise uniquement les clés qui
+        # ne correspondent pas déjà à un rôle métier (sinon confusion avec le mapping par rôle).
+        if "nc_service_override" in body:
+            raw_nso = body.get("nc_service_override")
+            if raw_nso in (None, "", "none", "aucun"):
+                nc_service_override_sql = None
+            else:
+                raw_nso = str(raw_nso).strip()
+                allowed_overrides = {"encadrement_atelier"}
+                if raw_nso not in allowed_overrides:
+                    raise HTTPException(status_code=400, detail="Service NC (surcharge) invalide")
+                nc_service_override_sql = raw_nso
+        else:
+            nc_service_override_sql = exd.get("nc_service_override")
+
         # identifiant: générer si vide (ou si absent en base) à partir du nom, puis assurer unicité.
         if not ident_in:
             ident_in = _default_identifiant_from_nom(str(nom or ""))
@@ -749,10 +767,10 @@ async def update_user(user_id: int, request: Request):
 
         conn.execute(
             """UPDATE users SET nom=?,email=?,identifiant=?,role=?,operateur_lie=?,actif=?,telephone=?,
-               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=?,matricule=? WHERE id=?""",
+               adresse=?,date_naissance=?,password_hash=?,access_overrides=?,machine_id=?,matricule=?,nc_service_override=? WHERE id=?""",
             (nom, email, ident_sql or None, role_eff, op, actif, tel,
              (adresse or None), (date_naissance or None),
-             pwd_hash, ao_sql, machine_id, matricule, user_id),
+             pwd_hash, ao_sql, machine_id, matricule, nc_service_override_sql, user_id),
         )
         conn.commit()
 

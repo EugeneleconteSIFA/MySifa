@@ -476,7 +476,13 @@ body.light .action-btn.empl-inv-btn:hover{border-color:#7c3aed}
 .mvt-qte-pf-sortie{color:var(--pf-sortie);font-family:monospace;font-weight:700}
 .mvt-qte-inventaire{color:var(--c2);font-family:monospace;font-weight:700}
 .mvt-line2{font-size:11px;color:var(--muted);margin-top:2px}
+.mvt-line1{align-items:flex-start}
+.mvt-line1-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.mvt-solde{font-size:11px;color:var(--muted);font-family:monospace;font-weight:500;line-height:1;white-space:nowrap}
 .mvt-note{font-size:11px;color:var(--text2);margin-top:2px;font-style:italic}
+.hist-solde-avant{color:var(--muted)}
+.hist-solde-arrow{color:var(--muted);margin:0 4px}
+.hist-solde-apres{color:var(--text);font-weight:800;font-family:monospace}
 
 /* ── Stats dashboard ── */
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
@@ -1683,7 +1689,7 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -4231,6 +4237,9 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             (showEmplOnLine2 ? el('span',null,' · ') : null),
             (showEmplOnLine2 ? stockHistEmplLinks(m.emplacement) : null),
             (actor ? el('span',null,' · '+actor) : null),
+            (m.quantite_apres != null)
+              ? el('span',null,' · Solde '+fU(m.quantite_apres, unit))
+              : null,
           ),
           m.note?el('div',{cls:'mvt-note'},m.note):null
         )
@@ -5184,15 +5193,17 @@ function buildMpMvtHistory(mouvements, matiere) {
             el('div', { cls: 'mvt-body' },
               el('div', { cls: 'mvt-line1' },
                 el('span', null, MVT_TYPE_LABELS[t] || t),
-                el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
+                el('div', { cls: 'mvt-line1-right' },
+                  el('span', { cls: 'mvt-qte-' + t }, signe + mpStockLine(m.quantite, mpCat)),
+                  (m.quantite_apres != null)
+                    ? el('span', { cls: 'mvt-solde' }, 'Solde ' + mpStockLine(m.quantite_apres, mpCat))
+                    : null,
+                ),
               ),
               el('div', { cls: 'mvt-line2' },
                 fD(m.created_at),
                 empl ? el('span', null, ' · ' + empl) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
-                (m.quantite_apres != null)
-                  ? el('span', null, ' · Stock ' + mpStockLine(m.quantite_apres, mpCat))
-                  : null,
               ),
               noteParts.length
                 ? el('div', { cls: 'mvt-note' }, noteParts.join(' · '))
@@ -5281,6 +5292,7 @@ function buildMatiereDetail() {
       tbl.appendChild(el('thead', null,
         el('tr', null,
           el('th', { style: 'text-align:left;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Laize'),
+          el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Métrage'),
           el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Stock'),
           el('th', { style: 'text-align:right;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)' }, 'Valorisation'),
         )
@@ -5295,11 +5307,14 @@ function buildMatiereDetail() {
           : prix_m2_matiere;
         const valoBobine = (parseFloat(spl.valeur_mm || 0) / 1000) * metres * prix_m2;
         const valo = valoBobine * parseFloat(spl.quantite || 0);
+        const metrageTotal = metres * parseFloat(spl.quantite || 0);
         tbody.appendChild(el('tr', { style: 'border-bottom:1px solid var(--border)' },
           el('td', { style: 'padding:8px 10px;font-size:13px;color:var(--text);font-weight:600' },
             (spl.label || (spl.valeur_mm + ' mm')) + (prixParLaize && prix_m2 > 0
               ? ' · ' + prix_m2.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²'
               : '')),
+          el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (metrageTotal > 0 ? 'var(--text)' : 'var(--muted)') },
+            metrageTotal > 0 ? Math.round(metrageTotal).toLocaleString('fr-FR') + ' m' : '—'),
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums' },
             fN(spl.quantite) + ' bob.'),
           el('td', { style: 'padding:8px 10px;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:' + (valo > 0 ? 'var(--text)' : 'var(--muted)') },
@@ -5760,7 +5775,8 @@ function buildProduitsFinisTab() {
               el('span', { cls: 'pf-mvt-qte' }, fU(m.quantite, m.unite)),
             ),
             el('div', { cls: 'pf-mvt-sub' },
-              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement),
+              (m.emplacement || '—') + ' · ' + pfFmtShortDateTime(m.date_mouvement)
+              + (m.quantite_apres != null ? ' · Solde ' + fU(m.quantite_apres, m.unite) : ''),
             ),
           ),
           el('div', { cls: 'pf-mvt-user' }, m.user_login || '—'),
@@ -6355,6 +6371,7 @@ async function openPfDetailModal(reference) {
         el('th', null, 'Type'),
         el('th', null, 'Qté'),
         el('th', null, 'Empl.'),
+        el('th', null, 'Solde'),
         el('th', null, 'OF'),
         el('th', null, 'Utilisateur'),
       ));
@@ -6363,11 +6380,13 @@ async function openPfDetailModal(reference) {
       hist.forEach(raw => {
         const m = normalizePfMvt(raw);
         const t = m.type === 'entree' ? 'Entrée' : (m.type === 'sortie' ? 'Sortie' : (m.type || '—'));
+        const solde = m.quantite_apres != null ? fU(m.quantite_apres, m.unite || d.unite) : '—';
         tbody.appendChild(el('tr', null,
           el('td', null, fDateTime(m.date_mouvement)),
           el('td', null, t),
           el('td', null, fU(m.quantite, m.unite)),
           el('td', null, m.emplacement || '—'),
+          el('td', null, solde),
           el('td', null, m.no_of || '—'),
           el('td', null, m.user_login || '—'),
         ));
@@ -7107,6 +7126,9 @@ function buildNegoceMvtHistory(mouvements, unite) {
                 fD(m.date_mouvement),
                 empl ? el('span', null, ' · ' + (stockEmplLabel(empl) || empl)) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
+                (m.quantite_apres != null)
+                  ? el('span', null, ' · Solde ' + fU(m.quantite_apres, m.unite || unite))
+                  : null,
               ),
               note ? el('div', { cls: 'mvt-note' }, note) : null,
             ),
@@ -7594,6 +7616,27 @@ function appendMatiereRefEditFields(parent, item) {
     laizePricesGrid,
     laizePricesEmpty,
   );
+  // Bloc « fournisseurs par laize »
+  const laizeFournisseursGrid = el('div', {
+    style: 'display:flex;flex-direction:column;gap:8px;margin-top:6px',
+  });
+  const laizeFournisseursEmpty = el('div', { cls: 'mp-hint',
+    style: 'font-size:12px;color:var(--muted);font-style:italic' },
+    'Coche au moins une laize pour lui associer des fournisseurs.');
+  const laizeFournisseursField = el('div', { cls: 'mp-field' },
+    el('label', null, 'Fournisseurs par laize'),
+    laizeFournisseursGrid,
+    laizeFournisseursEmpty,
+  );
+  // État : { laize_id: Set<fournisseur_id> } — pré-rempli depuis item.stock_par_laize
+  const laizeFournisseursIds = {};
+  (item.stock_par_laize || []).forEach(spl => {
+    if (spl && Array.isArray(spl.fournisseurs)) {
+      laizeFournisseursIds[spl.laize_id] = new Set(spl.fournisseurs.map(f => f.id));
+    }
+  });
+  // Cache local des fournisseurs disponibles (chargé async)
+  let _fournisseursCache = Array.isArray(S.mpFournisseurs) ? S.mpFournisseurs : null;
   // Vue laize (compact, comme avant : flex-wrap horizontal)
   const laizeChecks = el('div', { cls: 'mp-laize-grid',
     style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px' });
@@ -7617,6 +7660,7 @@ function appendMatiereRefEditFields(parent, item) {
         laizePriceValues[k] = (elInp.value || '').trim();
       });
       renderLaizePrices();
+      renderLaizeFournisseurs();
     });
     laizeChecks.appendChild(lbl);
   });
@@ -7651,6 +7695,78 @@ function appendMatiereRefEditFields(parent, item) {
       laizePricesGrid.appendChild(row);
     });
   }
+  // Rendu du bloc fournisseurs par laize
+  function renderLaizeFournisseurs() {
+    laizeFournisseursGrid.innerHTML = '';
+    const selected = Object.entries(laizeMetaById)
+      .filter(([, meta]) => meta.checkbox.checked)
+      .map(([id, meta]) => ({ id: parseInt(id, 10), label: meta.label }));
+    if (!selected.length) {
+      laizeFournisseursEmpty.style.display = '';
+      laizeFournisseursEmpty.textContent = 'Coche au moins une laize pour lui associer des fournisseurs.';
+      return;
+    }
+    laizeFournisseursEmpty.style.display = 'none';
+    const fournisseurs = _fournisseursCache;
+    if (fournisseurs == null) {
+      laizeFournisseursGrid.appendChild(el('div', { cls: 'mp-hint',
+        style: 'font-size:12px;color:var(--muted);font-style:italic' },
+        'Chargement des fournisseurs…'));
+      return;
+    }
+    if (!fournisseurs.length) {
+      laizeFournisseursGrid.appendChild(el('div', { cls: 'mp-hint',
+        style: 'font-size:12px;color:var(--muted);font-style:italic' },
+        'Aucun fournisseur enregistré. Ajoute-les dans /settings > Fournisseurs.'));
+      return;
+    }
+    selected.forEach(({ id: lid, label }) => {
+      if (!laizeFournisseursIds[lid]) laizeFournisseursIds[lid] = new Set();
+      const chosen = laizeFournisseursIds[lid];
+      const chipsWrap = el('div', {
+        style: 'display:flex;flex-wrap:wrap;gap:6px;flex:1',
+      });
+      fournisseurs.forEach(f => {
+        const active = chosen.has(f.id);
+        const chip = el('button', {
+          type: 'button',
+          style: 'padding:4px 10px;border-radius:6px;border:1px solid ' +
+            (active ? 'var(--accent)' : 'var(--border)') + ';background:' +
+            (active ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);' +
+            'font-size:12px;font-weight:600;cursor:pointer;line-height:1;' +
+            'display:inline-flex;align-items:center;gap:4px;font-family:inherit',
+        }, f.nom + (f.has_fsc ? ' · FSC' : ''));
+        chip.addEventListener('click', () => {
+          if (chosen.has(f.id)) chosen.delete(f.id);
+          else chosen.add(f.id);
+          renderLaizeFournisseurs();
+        });
+        chipsWrap.appendChild(chip);
+      });
+      const row = el('div', {
+        style: 'display:flex;align-items:flex-start;gap:10px',
+      },
+        el('div', {
+          style: 'min-width:80px;font-size:12px;font-weight:700;color:var(--text);' +
+            'padding:6px 10px;border:1px solid var(--accent);background:var(--accent-bg);' +
+            'border-radius:6px;text-align:center;flex-shrink:0',
+        }, label),
+        chipsWrap,
+      );
+      laizeFournisseursGrid.appendChild(row);
+    });
+  }
+  // Recharge async si pas encore en cache
+  if (_fournisseursCache == null) {
+    api('/api/stock/fournisseurs').then(list => {
+      _fournisseursCache = Array.isArray(list) ? list : [];
+      S.mpFournisseurs = _fournisseursCache;
+      renderLaizeFournisseurs();
+    }).catch(() => {
+      _fournisseursCache = [];
+      renderLaizeFournisseurs();
+    });
+  }
   // Bascule affichage prix unique vs prix par laize
   function applyPrixMode() {
     const parLaize = prixModeLaiInp.checked;
@@ -7665,12 +7781,14 @@ function appendMatiereRefEditFields(parent, item) {
     prixModeField,
     prixM2Field,
     laizePricesField,
+    laizeFournisseursField,
     el('div', { cls: 'mp-field' },
       el('label', null, 'Laizes disponibles'),
       laizeChecks,
     ),
   );
   applyPrixMode();
+  renderLaizeFournisseurs();
   // Bloc conditionnement (carton / adhésif / mandrin) — unités par palette
   const hasCond = mpHasConditionnement(item.categorie);
   const uppWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } });
@@ -7701,7 +7819,7 @@ function appendMatiereRefEditFields(parent, item) {
     laizeWrap,
     el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -7745,6 +7863,19 @@ async function submitMatiereRefEdit(item, fields, onSaved) {
           laize_prices: laizePrices,
         }),
       });
+      // Sync des fournisseurs par laize
+      if (fields.laizeFournisseursIds) {
+        for (const lid of selectedLaizeIds) {
+          const setIds = fields.laizeFournisseursIds[lid] || new Set();
+          try {
+            await api('/api/stock/matieres/' + item.id + '/laizes/' + lid + '/fournisseurs', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fournisseur_ids: Array.from(setIds) }),
+            });
+          } catch (e) { /* silencieux */ }
+        }
+      }
       await loadMatieresIncompleteCount();
     }
     if (fields.hasSousSection) {
@@ -10381,7 +10512,11 @@ function buildHistoriqueTableRow(m) {
     el('td', { cls: 'hist-empl' }, stockHistEmplLinks(m.emplacement)),
     el('td', { cls: 'hist-unite' }, histUniteLabel(m)),
     el('td', null, el('span', { cls: qteCls }, qte)),
-    el('td', { cls: 'hist-muted hist-col-optional' }, avant + ' → ' + apres),
+    el('td', { cls: 'hist-col-optional' },
+      el('span', { cls: 'hist-solde-avant' }, avant),
+      el('span', { cls: 'hist-solde-arrow' }, '→'),
+      el('span', { cls: 'hist-solde-apres' }, apres),
+    ),
     el('td', { cls: 'hist-note-cell hist-muted hist-col-optional', title: blNote }, truncStr(blNote, 40) || '—'),
     el('td', { cls: 'hist-op hist-col-optional' }, op),
   );
@@ -10400,8 +10535,12 @@ function buildHistoriqueCard(m) {
     el('dd', null, histUniteLabel(m)),
     el('dt', null, 'Quantité'),
     el('dd', null, el('span', { cls: qteCls }, qte)),
-    el('dt', null, 'Stock'),
-    el('dd', null, avant + ' → ' + apres),
+    el('dt', null, 'Solde'),
+    el('dd', null,
+      el('span', { cls: 'hist-solde-avant' }, avant),
+      el('span', { cls: 'hist-solde-arrow' }, '→'),
+      el('span', { cls: 'hist-solde-apres' }, apres),
+    ),
   );
   if (op) stats.append(el('dt', null, 'Opérateur'), el('dd', null, op));
   return el('div', { cls: 'hist-card' },
@@ -10473,7 +10612,7 @@ function buildHistorique() {
     el('th', null, 'Emplacement'),
     el('th', null, 'Unité'),
     el('th', null, 'Quantité'),
-    el('th', { cls: 'hist-col-optional' }, 'Avant → Après'),
+    el('th', { cls: 'hist-col-optional' }, 'Solde (avant → après)'),
     el('th', { cls: 'hist-col-optional' }, 'Ref BL / Note'),
     el('th', { cls: 'hist-col-optional' }, 'Opérateur'),
   ));

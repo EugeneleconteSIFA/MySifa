@@ -674,7 +674,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <div id="root" class="app">
   <div class="sidebar-overlay" id="rh-sb-overlay" onclick="closeSidebar()"></div>
   <nav class="sidebar" id="rh-sb">

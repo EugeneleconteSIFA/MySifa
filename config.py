@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 # Titre API / OpenAPI
 APP_TITLE = "MySifa"
 # Onglet navigateur & SEO (injecté dans frontend/html.py)
@@ -109,48 +109,62 @@ SESSION_HOURS = 6
 COOKIE_NAME   = "sifa_token"
 
 # ─── Rôles ────────────────────────────────────────────────────────
-# direction     : accès total (même droits qu'administration pour l'instant)
-# administration: gestion complète sauf rien de plus que direction
-# fabrication   : lecture seule sur ses propres données
-ROLE_DIRECTION      = "direction"
-ROLE_ADMINISTRATION = "administration"
-ROLE_FABRICATION    = "fabrication"
-ROLE_LOGISTIQUE     = "logistique"
-ROLE_COMPTABILITE   = "comptabilite"
-ROLE_EXPEDITION     = "expedition"
-ROLE_COMMERCIAL     = "commercial"
-ROLE_SUPERADMIN     = "superadmin"
+# direction              : accès total (même droits qu'administration pour l'instant)
+# administration_ventes  : gestion complète côté ADV (ex-rôle "administration", split juillet 2026)
+# administration_technique : mêmes droits que administration_ventes pour l'instant, entité distincte
+# fabrication            : lecture seule sur ses propres données
+ROLE_DIRECTION                = "direction"
+# Rôle historique conservé comme alias pour la compatibilité (imports, code externe).
+# En base, tous les users basculent en `administration_ventes` via la migration v163.
+# Le super admin déplace ensuite manuellement ceux qui doivent être `administration_technique`.
+ROLE_ADMINISTRATION           = "administration"
+ROLE_ADMINISTRATION_VENTES    = "administration_ventes"
+ROLE_ADMINISTRATION_TECHNIQUE = "administration_technique"
+ROLE_FABRICATION              = "fabrication"
+ROLE_LOGISTIQUE               = "logistique"
+ROLE_COMPTABILITE             = "comptabilite"
+ROLE_EXPEDITION               = "expedition"
+ROLE_COMMERCIAL               = "commercial"
+ROLE_SUPERADMIN               = "superadmin"
+
+# Sous-ensemble « famille administration » : les deux rôles issus du split partagent
+# strictement les mêmes droits sur MySifa (juillet 2026). Utiliser ce set partout où
+# le rôle `administration` était référencé auparavant, plutôt que de dupliquer.
+ROLES_ADMINISTRATION_ALL = {
+    ROLE_ADMINISTRATION,            # legacy, si un user n'a pas encore été migré
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
+}
 
 # Compte technique : seul cet email peut porter le rôle superadmin (contrôlé côté API).
 SUPERADMIN_EMAIL = "eleconte@sifa.pro"
 
 # Rôles ayant accès aux fonctions d'administration (imports, dossiers, stats, etc.)
-ROLES_ADMIN = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
-ROLES_STOCK = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_LOGISTIQUE, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_FABRICATION, ROLE_SUPERADMIN}
+ROLES_ADMIN = {ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
+ROLES_STOCK = {ROLE_DIRECTION, ROLE_LOGISTIQUE, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_FABRICATION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 
 # MyStock — zone « Au sol - à expédier » : stock prêt à expédier (code technique, affiché « Au sol - à expédier »)
 STOCK_EMPLACEMENT_AU_SOL = "Z0"
 STOCK_EMPLACEMENT_AU_SOL_LABEL = "Au sol - à expédier"
 STOCK_EMPLACEMENT_SORTIE_PROD = "Z1"
 STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
-ROLES_PROD  = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN}
+ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
-ROLES_EXPE = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN}
-ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_EXPEDITION, ROLE_SUPERADMIN}
+ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
+ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 # Tuile portail « Coûts matières » (/pricing) — Direction et super admin uniquement
 ROLES_PRICING = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PRICING_WRITE = ROLES_PRICING
 ROLES_DEVIS = ROLES_PRICING  # alias rétrocompat
 ROLES_PLANNING_VIEW = {
     ROLE_DIRECTION,
-    ROLE_ADMINISTRATION,
     ROLE_FABRICATION,
     ROLE_EXPEDITION,
     ROLE_COMMERCIAL,
     ROLE_COMPTABILITE,
     ROLE_LOGISTIQUE,
     ROLE_SUPERADMIN,
-}
+} | ROLES_ADMINISTRATION_ALL
 # MyProd : tuile portail pour la compta et la logistique, accès limité au planning production (lecture seule côté UI/API).
 ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE, ROLE_LOGISTIQUE}
 ROLES_SETTINGS = {ROLE_SUPERADMIN}
@@ -159,10 +173,13 @@ ROLES_SETTINGS = {ROLE_SUPERADMIN}
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
 
 # Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
+# Le rôle legacy `administration` n'est plus proposé : le super admin choisit désormais
+# explicitement entre `administration_ventes` et `administration_technique`.
 ASSIGNABLE_ROLES = frozenset(
     {
         ROLE_FABRICATION,
-        ROLE_ADMINISTRATION,
+        ROLE_ADMINISTRATION_VENTES,
+        ROLE_ADMINISTRATION_TECHNIQUE,
         ROLE_DIRECTION,
         ROLE_LOGISTIQUE,
         ROLE_COMPTABILITE,
@@ -172,18 +189,57 @@ ASSIGNABLE_ROLES = frozenset(
 )
 
 
-ROLES_FABRICATION_APP = {ROLE_FABRICATION, ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_SUPERADMIN}
+ROLES_FABRICATION_APP = {ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
+
+# ─── Non-conformités : services d'ack ────────────────────────────
+# Services qui doivent prendre connaissance d'une NC. Un seul user du service suffit
+# à valider pour tout le service (cf. app/routers/qualite.py). Ordre = ordre d'affichage
+# dans le tableau et la légende. Voir aussi CSS pill--{key} dans app/web/settings_page.py.
+# Le service `encadrement_atelier` n'est PAS un rôle applicatif : il est attribué via
+# le flag users.nc_service_override='encadrement_atelier' (indépendant du rôle métier).
+NC_ACK_SERVICES = [
+    {"key": "administration_ventes",    "label": "Administration des ventes",              "color": "#a78bfa"},
+    {"key": "administration_technique", "label": "Administration technique",               "color": "#6366f1"},
+    {"key": "encadrement_atelier",      "label": "Chef d'équipe atelier / Resp. technique","color": "#14b8a6"},
+    {"key": "expedition",               "label": "Expédition",                             "color": "#f97316"},
+    {"key": "commercial",               "label": "Commerciale",                            "color": "#ca8a04"},
+]
+NC_ACK_SERVICE_KEYS = frozenset(s["key"] for s in NC_ACK_SERVICES)
+
+def nc_service_for_role(role, nc_service_override=None):
+    """Retourne la clé du service NC associée à un user.
+    - Si `nc_service_override` est renseigné et fait partie des services NC connus, il gagne.
+    - Sinon, mapping direct depuis le rôle métier (aucun service pour direction / superadmin
+      / comptabilite / logistique / fabrication — ces rôles ne sont pas concernés par l'ack).
+    """
+    if nc_service_override and nc_service_override in NC_ACK_SERVICE_KEYS:
+        return nc_service_override
+    mapping = {
+        ROLE_ADMINISTRATION:           "administration_ventes",   # legacy → défaut ventes
+        ROLE_ADMINISTRATION_VENTES:    "administration_ventes",
+        ROLE_ADMINISTRATION_TECHNIQUE: "administration_technique",
+        ROLE_EXPEDITION:               "expedition",
+        ROLE_COMMERCIAL:               "commercial",
+    }
+    return mapping.get(role)
+
+# Champs de nc_dossiers dont la modification remet à zéro les acks de tous les services
+# (pertinent quand le contenu de fond change et doit être relu). Voir app/routers/qualite.py.
+NC_ACK_RESET_FIELDS = frozenset({
+    "titre", "description", "analyse_causes",
+    "action_corrective", "action_preventive",
+    "gravite", "quantite_concernee",
+})
 
 # Planning RH (Personnel)
 ROLES_PLANNING_RH_VIEW  = {
     ROLE_DIRECTION,
-    ROLE_ADMINISTRATION,
     ROLE_FABRICATION,
     ROLE_LOGISTIQUE,
     ROLE_EXPEDITION,
     ROLE_COMPTABILITE,
     ROLE_SUPERADMIN,
-}
+} | ROLES_ADMINISTRATION_ALL
 ROLES_PLANNING_RH_EDIT  = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PLANNING_RH_STAFF = {ROLE_FABRICATION, ROLE_LOGISTIQUE}
 

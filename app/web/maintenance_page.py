@@ -382,10 +382,70 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .case-ops-add-btn:hover{background:var(--accent);color:var(--accent-fg,#fff)}
 .case-ops-list{display:flex;flex-direction:column;gap:8px;max-height:280px;overflow:auto;padding:2px}
 .case-ops-empty{padding:18px 14px;border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-size:12px;text-align:center;font-style:italic;background:var(--bg)}
-.case-ops-row{display:flex;align-items:center;gap:8px}
+.case-ops-row{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.case-ops-row-top{display:flex;align-items:center;gap:8px}
 .case-ops-row .ops-select{flex:1;min-width:0}
 .case-ops-row-del{flex-shrink:0;width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid var(--border);background:var(--card);border-radius:8px;cursor:pointer;color:var(--muted);transition:all .12s}
 .case-ops-row-del:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.10)}
+.case-ops-machines{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.case-ops-machines-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-right:4px}
+.case-mach-chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:16px;border:1.5px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s;user-select:none}
+.case-mach-chip:hover{border-color:var(--accent);color:var(--text)}
+.case-mach-chip.active{border-color:var(--accent);background:var(--accent);color:var(--accent-fg,#fff)}
+.case-mach-chip.active:hover{filter:brightness(1.06)}
+/* Vue opérateur : en-tête de groupe machine */
+.op-machine-group{margin-top:16px}
+.op-machine-group:first-child{margin-top:0}
+.op-machine-group-head{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:8px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
+.op-machine-group-head .op-machine-dot{width:9px;height:9px;border-radius:50%;background:var(--accent)}
+/* Détails créneau : badges machine par op */
+.plan-det-case-op-mach-wrap{display:inline-flex;flex-wrap:wrap;gap:4px}
+.plan-det-case-op-mach{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700}
+.cal-sec{position:relative}
+/* Badge « depuis un modèle » sur un créneau */
+.tmpl-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:12px;background:var(--warn);color:#0a0e17;font-size:11px;font-weight:800;letter-spacing:.2px}
+.tmpl-badge svg{flex-shrink:0}
+/* Modal Templates : liste + éditeur */
+.tmpl-modal-card{max-width:720px;width:94vw}
+.tmpl-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.tmpl-list{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;padding:2px}
+.tmpl-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card);transition:border-color .12s}
+.tmpl-item:hover{border-color:var(--accent)}
+.tmpl-item-main{flex:1;min-width:0}
+.tmpl-item-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px}
+.tmpl-item-desc{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tmpl-item-count{flex-shrink:0;font-size:11px;color:var(--text2);font-weight:600;padding:3px 9px;border-radius:6px;background:var(--bg)}
+.tmpl-item-actions{display:flex;gap:4px;flex-shrink:0}
+.tmpl-item-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;transition:all .12s;font-family:inherit}
+.tmpl-item-btn:hover{background:var(--bg);border-color:var(--border)}
+.tmpl-item-btn.edit:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.tmpl-item-btn.del:hover{color:var(--danger);border-color:var(--danger);background:rgba(248,113,113,.10)}
+.tmpl-item-btn svg{width:15px;height:15px}
+.tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
+/* Sélecteur de modèle dans le modal Nouveau créneau */
+.case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.case-tmpl-picker-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);flex-shrink:0}
+.case-tmpl-picker select{flex:1;min-width:180px}
+.case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
+.case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* Mode opérateur : masque tous les éléments d'édition dans le calendrier */
+body[data-maint-role="operator"] .cal-fab,
+body[data-maint-role="operator"] .cal-fab-menu,
+body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
+body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* Surligne les créneaux où l'opérateur est dans le groupe */
+body[data-maint-role="operator"] .cal-event.is-mine{outline:2px solid var(--warn);outline-offset:-2px}
+body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
+/* Bouton flottant « + » sur le calendrier */
+.cal-fab{position:absolute;right:16px;bottom:16px;z-index:10;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);border:none;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,filter .12s}
+.cal-fab:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.cal-fab svg{width:24px;height:24px}
+.cal-fab-menu{position:absolute;right:16px;bottom:82px;z-index:11;min-width:260px;max-width:340px;padding:8px;border-radius:12px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.35);display:none}
+.cal-fab-menu.open{display:block}
+.cal-fab-menu-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;transition:background .12s;border:none;background:transparent;color:var(--text);font-family:inherit;font-size:13px;font-weight:600;width:100%;text-align:left}
+.cal-fab-menu-item:hover{background:var(--bg)}
+.cal-fab-menu-sep{height:1px;background:var(--border);margin:6px 0}
+.cal-fab-menu-hint{font-size:11px;color:var(--muted);padding:4px 12px 8px;text-transform:uppercase;letter-spacing:.4px;font-weight:700}
 /* Détails créneau */
 .plan-det-case-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-top:14px}
 .plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
@@ -860,6 +920,12 @@ body[data-maint-role="operator"] .content{display:none !important}
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
+
+          <!-- FAB + menu de création (vierge / depuis modèle) — v163 -->
+          <button type="button" class="cal-fab" onclick="toggleCalFabMenu()" aria-label="Créer un créneau" title="Créer un créneau">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div class="cal-fab-menu" id="cal-fab-menu" role="menu" aria-hidden="true"></div>
           <div class="cal-legend">
             <span class="cal-legend-item"><span class="cal-legend-dot today"></span> Aujourd'hui</span>
             <span class="cal-legend-item"><span class="cal-legend-dot off"></span> Hors mois</span>
@@ -1544,21 +1610,18 @@ body[data-maint-role="operator"] .content{display:none !important}
     </div>
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
+        <div class="case-tmpl-picker" id="case-tmpl-picker-wrap">
+          <span class="case-tmpl-picker-label">Modèle</span>
+          <select id="case-mod-template" class="ops-select" onchange="applyCaseTemplate(this.value)">
+            <option value="">Sans modèle (créneau vierge)</option>
+          </select>
+          <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer les modèles</button>
+        </div>
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>Date : <strong id="case-mod-date">—</strong></span>
         </div>
         <div class="ops-form-grid">
-          <div class="ops-field ops-field--full">
-            <label class="ops-field-label" for="case-mod-machine">Machine<span class="req">*</span></label>
-            <select id="case-mod-machine" class="ops-select" required>
-              <option value="">Sélectionner une machine…</option>
-              <option value="Cohésio 1">Cohésio 1</option>
-              <option value="Cohésio 2">Cohésio 2</option>
-              <option value="DSI">DSI</option>
-              <option value="Repiquage">Repiquage</option>
-            </select>
-          </div>
           <div class="ops-field">
             <label class="ops-field-label" for="case-mod-start">Heure de début<span class="req">*</span></label>
             <input type="time" id="case-mod-start" class="ops-input" required>
@@ -1593,6 +1656,75 @@ body[data-maint-role="operator"] .content{display:none !important}
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           <span id="case-mod-submit-label">Créer</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal : Gérer les modèles de session -->
+<div class="modal-overlay" id="templates-modal" onclick="if(event.target===this) closeTemplatesModal()" aria-hidden="true">
+  <div class="modal-card tmpl-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-mod-title">
+    <div class="modal-head">
+      <div class="modal-title" id="tmpl-mod-title">Modèles de session</div>
+      <button type="button" class="modal-close" onclick="closeTemplatesModal()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="tmpl-toolbar">
+        <div style="font-size:12px;color:var(--muted)">Un modèle = ensemble prédéfini d'opérations + machines. Applique-le en un clic depuis « Nouveau créneau ».</div>
+        <button type="button" class="case-ops-add-btn" onclick="openTemplateEditor(null)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nouveau modèle
+        </button>
+      </div>
+      <div class="tmpl-list" id="tmpl-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="modal-btn-ghost" onclick="closeTemplatesModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal : Éditer un modèle (création / édition) -->
+<div class="modal-overlay" id="tmpl-editor-modal" onclick="if(event.target===this) closeTemplateEditor()" aria-hidden="true">
+  <div class="modal-card case-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-ed-title">
+    <div class="modal-head">
+      <div class="modal-title" id="tmpl-ed-title">Nouveau modèle</div>
+      <button type="button" class="modal-close" onclick="closeTemplateEditor()" aria-label="Fermer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form id="tmpl-ed-form" onsubmit="submitTemplateEditor(event)">
+      <div class="modal-body">
+        <div class="ops-form-grid">
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="tmpl-ed-name">Nom<span class="req">*</span></label>
+            <input type="text" id="tmpl-ed-name" class="ops-input" required maxlength="80" placeholder="Ex. Nettoyage complet">
+          </div>
+          <div class="ops-field ops-field--full">
+            <label class="ops-field-label" for="tmpl-ed-desc">Description</label>
+            <input type="text" id="tmpl-ed-desc" class="ops-input" maxlength="200" placeholder="Ex. Vidange bacs + graissage roulements">
+          </div>
+        </div>
+        <div class="case-ops-section">
+          <div class="case-ops-head">
+            <label class="ops-field-label">Opérations du modèle<span class="req">*</span></label>
+            <button type="button" class="case-ops-add-btn" onclick="addTmplOp()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Ajouter une opération
+            </button>
+          </div>
+          <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
+        </div>
+        <div id="tmpl-ed-warning" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(251,191,36,.12);border:1px solid var(--warn);color:var(--warn);font-size:12px;line-height:1.5"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="modal-btn-ghost" onclick="closeTemplateEditor()">Annuler</button>
+        <button type="submit" class="ops-btn-add">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="tmpl-ed-submit-label">Créer</span>
         </button>
       </div>
     </form>
@@ -1665,9 +1797,21 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
-    // Toujours afficher la vue Semaine en arrivant dans Planning
+    // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
+    // (cas où le fetch initial a déjà résolu au boot).
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
+    // Étape 2 : refetch et rerend une seconde fois. Le fetch initial peut
+    // avoir résolu avant que le container Planning ne soit visible, ce qui
+    // fait rater le positionnement absolute des events.
+    (async () => {
+      await refreshPlanning();
+      renderCal();
+      // Étape 3 : filet de sécurité — rerender après stabilisation du
+      // layout, pour couvrir les navigateurs qui calculent les
+      // dimensions tardivement.
+      setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
+    })();
   }
   // Vues opérateur : recharge la liste à l'arrivée.
   if(name === 'op-tasks' && typeof opLoadTasks === 'function'){
@@ -1771,12 +1915,15 @@ function _apiEventToClient(ev){
   const opsClient = (ev.ops || []).map(o => {
     const t = (typeof OPS_TYPES_STATE !== 'undefined' && OPS_TYPES_STATE && Array.isArray(OPS_TYPES_STATE.list))
       ? OPS_TYPES_STATE.list.find(x => x.id === o.code) : null;
+    // machines : la liste renvoyée par l'API (fallback géré serveur).
+    const machines = Array.isArray(o.machines) ? o.machines.slice() : [];
     return {
       _op_id: o.id,
       opTypeId: o.code,
       opName: (t && t.nom) || o.code_label || o.code,
       opNiveau: (t && t.niveau) || null,
       opFreq: (t && t.frequence) || '',
+      machines: machines,
       statut: o.statut,
       duree_reelle_min: o.duree_reelle_min,
       pieces_changees: o.pieces_changees,
@@ -1795,20 +1942,26 @@ function _apiEventToClient(ev){
     operations: opsClient,
     operators: ev.operators || [],
     source: ev.source,
+    template_id: ev.template_id || null,
     created_at: ev.created_at,
     updated_at: ev.updated_at,
   };
 }
 
 async function refreshPlanning(){
+  // Pré-charge les templates en tâche de fond (pour le badge « depuis modèle »).
+  if(MAINT_ROLE === 'admin' && TEMPLATES_STATE.list === null){
+    loadTemplates().catch(() => {});
+  }
+
   try{
     // Charge une fenêtre large autour de la date pivot : ±90 jours.
     const pivot = (CAL_STATE && CAL_STATE.date) ? new Date(CAL_STATE.date) : new Date();
     const from = new Date(pivot); from.setDate(pivot.getDate() - 90);
     const to   = new Date(pivot); to.setDate(pivot.getDate() + 90);
     const url = '/api/maintenance/events?date_from=' + _fmtDateISO(from) +
-                '&date_to=' + _fmtDateISO(to);
-    const r = await fetch(url, { credentials: 'include' });
+                '&date_to=' + _fmtDateISO(to) + '&_=' + Date.now();
+    const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
     if(!r.ok){ PLANNING_STATE.list = []; return; }
     const d = await r.json();
     PLANNING_STATE.list = (d.events || []).map(_apiEventToClient);
@@ -2165,6 +2318,11 @@ function _makeEventBlock(item){
   div.style.color = palette.fg;
   if(height < 50) div.setAttribute('data-mini', '1');
   div.setAttribute('data-event-id', ev.id);
+  // Marque les créneaux où l'opérateur courant est dans le groupe
+  if(MAINT_ROLE === 'operator' && S && S.me){
+    const mine = (ev.operators || []).some(o => o.id === S.me.id);
+    if(mine) div.classList.add('is-mine');
+  }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // Lignes affichables selon hauteur disponible
@@ -2322,21 +2480,42 @@ function openPlanningDetailsModal(events){
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(ev.date);
   if(listEl){
     const ops = Array.isArray(ev.operations) ? ev.operations : [];
+    // Machines couvertes par le créneau (union des machines des ops).
+    const machineUnion = [];
+    ops.forEach(op => {
+      (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
+    });
+    const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
     const opsHtml = ops.length
-      ? ops.map(op =>
-          '<div class="plan-det-case-op">' +
+      ? ops.map(op => {
+          const machChips = (op.machines || []).map(m =>
+            '<span class="plan-det-case-op-mach">' + escHtml(m) + '</span>'
+          ).join('');
+          return '<div class="plan-det-case-op">' +
             '<span class="plan-det-case-op-bullet"></span>' +
             '<span class="plan-det-case-op-name">' + escHtml(op.opName || '—') + '</span>' +
             (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
+            (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
             (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
-          '</div>'
-        ).join('')
+          '</div>';
+        }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
+    // Badge template si le créneau vient d'un modèle
+    let tmplBadge = '';
+    if(ev.template_id){
+      const tmpl = (TEMPLATES_STATE.list || []).find(t => t.id === ev.template_id);
+      const label = tmpl ? tmpl.name : ('#' + ev.template_id);
+      tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
+        'Depuis modèle : ' + escHtml(label) +
+      '</span>';
+    }
     listEl.innerHTML =
       '<div class="plan-det-case-head">' +
+        (tmplBadge ? '<div style="width:100%;margin-bottom:6px">' + tmplBadge + '</div>' : '') +
         '<div class="plan-det-case-machine">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
-          escHtml(ev.machine || '—') +
+          escHtml(machinesLabel) +
         '</div>' +
         '<div class="plan-det-case-time">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
@@ -2384,8 +2563,8 @@ async function deletePlanningEvent(id){
   renderCal();
 }
 async function confirmDeleteCase(id){
-  const ev = PLANNING_STATE.list.find(e => e.id === id);
-  if(!ev) return;
+  const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
+  if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
   const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
   if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
   try{
@@ -2398,13 +2577,12 @@ async function confirmDeleteCase(id){
   showToast('Créneau supprimé.', 'info');
 }
 function editCase(id){
-  const ev = PLANNING_STATE.list.find(e => e.id === id);
-  if(!ev) return;
+  const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
+  if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
   closePlanningDetailsModal();
   openCaseModal({
     editId: ev.id,
     iso: ev.date,
-    machine: ev.machine || '',
     start: ev.start,
     end: ev.end,
     operations: ev.operations || [],
@@ -2415,6 +2593,8 @@ function editCase(id){
 function onCalCellClick(e){
   // Ignore clicks on existing events (their own click handler ouvre les détails)
   if(e.target.closest('.cal-event')) return;
+  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
+  if(MAINT_ROLE === 'operator') return;
   const col = e.currentTarget;
   if(!col) return;
   const iso = col.getAttribute('data-date');
@@ -2482,11 +2662,13 @@ function removeCaseOperator(id){
 let _CASE_OPS = [];
 async function openCaseModal(opts){
   _CASE_OPERATORS = [];
+  let preselectedTemplateId = null;
   if(opts && opts.editId){
-    const ev = PLANNING_STATE.list.find(e => e.id === opts.editId);
+    const ev = PLANNING_STATE.list.find(e => String(e.id) === String(opts.editId));
     if(ev && Array.isArray(ev.operators)){
       _CASE_OPERATORS = ev.operators.map(o => ({ id: o.id, nom: o.nom }));
     }
+    if(ev && ev.template_id) preselectedTemplateId = ev.template_id;
   }
   // Ouvre le modal immédiatement pour ne pas laisser l'utilisateur devant
   // un écran vide en cas de latence sur /api/maintenance/operators.
@@ -2494,6 +2676,9 @@ async function openCaseModal(opts){
   renderCaseOperators();  // affiche déjà les opérateurs pré-remplis
   // Charge le catalogue en arrière-plan puis rerender le picker.
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
+  // Charge les templates puis pré-sélectionne si le créneau en est issu
+  loadTemplates().then(() => refreshCaseTemplatePicker(preselectedTemplateId)).catch(() => {});
+  if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
   return result;
 }
 function _openCaseModalInner(opts){
@@ -2501,15 +2686,16 @@ function _openCaseModalInner(opts){
   if(!opts.iso){ showToast('Date manquante.', 'danger'); return; }
   _PENDING_CASE = { editId: opts.editId || null, iso: opts.iso };
   _CASE_OPS = (opts.operations || []).map(o => ({
+    _op_id:   o._op_id || null,
     opTypeId: o.opTypeId || '',
     opName:   o.opName   || '',
     opNiveau: o.opNiveau || null,
     opFreq:   o.opFreq   || '',
+    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
   }));
   const m = document.getElementById('planning-case-modal');
   if(!m) return;
   const dtEl = document.getElementById('case-mod-date');
-  const mEl  = document.getElementById('case-mod-machine');
   const sEl  = document.getElementById('case-mod-start');
   const eEl  = document.getElementById('case-mod-end');
   const ttlEl = document.getElementById('case-mod-title');
@@ -2518,7 +2704,6 @@ function _openCaseModalInner(opts){
   if(ttlEl) ttlEl.textContent = isEdit ? 'Modifier le créneau' : 'Nouveau créneau de maintenance';
   if(lblEl) lblEl.textContent = isEdit ? 'Enregistrer' : 'Créer';
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(opts.iso);
-  if(mEl) mEl.value = opts.machine || '';
   const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
   if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
   if(eEl) eEl.value = opts.end   || (String(Math.min(h+1, 23)).padStart(2,'0') + ':00');
@@ -2526,7 +2711,7 @@ function _openCaseModalInner(opts){
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => { (mEl && !mEl.value ? mEl : sEl)?.focus(); }, 60);
+  setTimeout(() => { sEl?.focus(); }, 60);
 }
 function closeCaseModal(){
   const m = document.getElementById('planning-case-modal');
@@ -2535,12 +2720,15 @@ function closeCaseModal(){
   _PENDING_CASE = null;
   _CASE_OPS = [];
 }
+// Machines disponibles pour l'atelier (source unique pour le picker).
+const CASE_MACHINES_LIST = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
+
 function addCaseOp(){
   if(!OPS_TYPES_STATE.list.length){
     showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
     return;
   }
-  _CASE_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '' });
+  _CASE_OPS.push({ _op_id: null, opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
   renderCaseOpsList();
   // Focus le dernier select
   setTimeout(() => {
@@ -2553,12 +2741,30 @@ function addCaseOp(){
 }
 function updateCaseOp(idx, opTypeId){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
   const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
   if(op){
-    _CASE_OPS[idx] = { opTypeId: op.id, opName: op.nom, opNiveau: op.niveau || null, opFreq: op.frequence || '' };
+    _CASE_OPS[idx] = {
+      _op_id:   cur._op_id || null,
+      opTypeId: op.id,
+      opName:   op.nom,
+      opNiveau: op.niveau || null,
+      opFreq:   op.frequence || '',
+      // On préserve les machines déjà cochées.
+      machines: Array.isArray(cur.machines) ? cur.machines.slice() : [],
+    };
   } else {
-    _CASE_OPS[idx] = { opTypeId: '', opName: '', opNiveau: null, opFreq: '' };
+    _CASE_OPS[idx] = { _op_id: cur._op_id || null, opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: Array.isArray(cur.machines) ? cur.machines.slice() : [] };
   }
+}
+function toggleCaseOpMachine(idx, machine){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  const list = Array.isArray(cur.machines) ? cur.machines : [];
+  const pos = list.indexOf(machine);
+  if(pos >= 0) list.splice(pos, 1); else list.push(machine);
+  cur.machines = list;
+  renderCaseOpsList();
 }
 function removeCaseOp(idx){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
@@ -2580,49 +2786,70 @@ function renderCaseOpsList(){
           (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
         '</option>'
       ).join('');
+    const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
+    const chips = CASE_MACHINES_LIST.map(m => {
+      const active = machSet.has(m);
+      return '<button type="button" class="case-mach-chip' + (active ? ' active' : '') + '" onclick="toggleCaseOpMachine(' + idx + ', \'' + escAttr(m) + '\')" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        escHtml(m) +
+      '</button>';
+    }).join('');
     return '<div class="case-ops-row" data-idx="' + idx + '">' +
-      '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
-      '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-      '</button>' +
+      '<div class="case-ops-row-top">' +
+        '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
+        '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="case-ops-machines">' +
+        '<span class="case-ops-machines-label">Machine(s)</span>' +
+        chips +
+      '</div>' +
     '</div>';
   }).join('');
 }
 async function submitCaseModal(e){
   e.preventDefault();
   if(!_PENDING_CASE){ closeCaseModal(); return; }
-  const machine = (document.getElementById('case-mod-machine')?.value || '').trim();
   const start = (document.getElementById('case-mod-start')?.value || '').trim();
   const end = (document.getElementById('case-mod-end')?.value || '').trim();
-  if(!machine){ showToast('Sélectionnez une machine.', 'danger'); return; }
   if(!start || !end){ showToast('Indiquez les heures.', 'danger'); return; }
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
-  const opCodes = _CASE_OPS.filter(o => o.opTypeId).map(o => o.opTypeId);
-  if(!opCodes.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
+    code: o.opTypeId,
+    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+  }));
+  if(!wantedOps.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  // Chaque op doit être attribuée à au moins une machine.
+  const missing = wantedOps.find(o => !o.machines.length);
+  if(missing){
+    showToast('Attribuez au moins une machine à chaque opération.', 'danger');
+    return;
+  }
   const operatorIds = (_CASE_OPERATORS || []).map(o => o.id);
 
   const editId = _PENDING_CASE.editId;
   try{
     if(editId){
-      // PATCH metadata + sync ops + sync operators.
+      // PATCH horaires + sync ops (avec machines) + sync operators.
       const rMeta = await fetch('/api/maintenance/events/' + encodeURIComponent(editId), {
         method:'PATCH', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ machine, date_prevue: _PENDING_CASE.iso, heure_debut: start, heure_fin: end }),
+        body: JSON.stringify({ date_prevue: _PENDING_CASE.iso, heure_debut: start, heure_fin: end }),
       });
       if(!rMeta.ok){ throw new Error('Meta update failed'); }
-      await _syncEventOpsAndOperators(editId, opCodes, operatorIds);
+      await _syncEventOpsAndOperators(editId, wantedOps, operatorIds);
       showToast('Créneau mis à jour.', 'info');
     } else {
       const rNew = await fetch('/api/maintenance/events', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
-          machine, date_prevue: _PENDING_CASE.iso,
+          date_prevue: _PENDING_CASE.iso,
           heure_debut: start, heure_fin: end, source: 'planifie',
-          ops: opCodes, operators: operatorIds,
+          ops: wantedOps, operators: operatorIds,
+          template_id: _PENDING_CASE.template_id || null,
         }),
       });
       if(!rNew.ok){
@@ -2640,31 +2867,53 @@ async function submitCaseModal(e){
   renderCal();
 }
 
-async function _syncEventOpsAndOperators(eventId, wantedCodes, wantedOperatorIds){
-  // Récupère l'état actuel de l'event pour comparer.
-  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials:'include' });
+function _sameMachineSet(a, b){
+  const A = (a || []).slice().sort();
+  const B = (b || []).slice().sort();
+  if(A.length !== B.length) return false;
+  for(let i = 0; i < A.length; i++){ if(A[i] !== B[i]) return false; }
+  return true;
+}
+
+async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
+  // wantedOps : [{code, machines:[...]}]
+  const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '?_=' + Date.now(),
+                       { credentials:'include', cache: 'no-store' });
   if(!r.ok) return;
   const d = await r.json();
   const ev = d.event || {};
   const currentOps = ev.ops || [];
-  const wantedCodesSet = new Set(wantedCodes);
-  const currentCodesSet = new Set(currentOps.map(o => o.code));
+  const wantedByCode = new Map(wantedOps.map(o => [o.code, o]));
+  const currentByCode = new Map(currentOps.map(o => [o.code, o]));
 
-  // Ops à ajouter (dans wanted mais pas dans current).
-  for(const code of wantedCodes){
-    if(!currentCodesSet.has(code)){
+  // Ops à ajouter (dans wanted mais pas dans current) → POST avec machines.
+  for(const w of wantedOps){
+    if(!currentByCode.has(w.code)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code: w.code, machines: w.machines }),
       });
     }
   }
   // Ops à supprimer (dans current mais pas dans wanted).
   for(const op of currentOps){
-    if(!wantedCodesSet.has(op.code)){
+    if(!wantedByCode.has(op.code)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
         method:'DELETE', credentials:'include',
+      });
+    }
+  }
+  // Ops restées : si les machines ont changé, PATCH.
+  for(const op of currentOps){
+    const w = wantedByCode.get(op.code);
+    if(!w) continue;
+    const curMach = Array.isArray(op.machines) ? op.machines : [];
+    if(!_sameMachineSet(curMach, w.machines)){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ machines: w.machines }),
       });
     }
   }
@@ -5338,7 +5587,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 </script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=7"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_alert_runtime.js"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
@@ -5435,20 +5684,45 @@ async function admFetchOperators(){
 
 async function opLoadTasks(){
   if(MAINT_ROLE !== 'operator') return;
-  // Charge tous mes créneaux à partir d'aujourd'hui, sur ~60 jours.
+  // Utilise le MÊME endpoint que le planning (/api/maintenance/events) et
+  // filtre côté client par appartenance au groupe : garantit la cohérence
+  // absolue entre « Mes tâches » et « Planning personnel ».
   const today = new Date();
   const in60 = new Date(); in60.setDate(today.getDate() + 60);
-  const url = '/api/maintenance/my-tasks?date_from=' + _fmtDateISO(today) +
-              '&date_to=' + _fmtDateISO(in60);
-  const r = await fetch(url, { credentials:'include' });
+  const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
+              '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
+  const r = await fetch(url, { credentials:'include', cache: 'no-store' });
   if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
   const data = await r.json();
-  MAINT_STATE.tasks = data.events || [];
+  const meId = (S && S.me) ? S.me.id : null;
+  const events = data.events || [];
+  MAINT_STATE.tasks = meId
+    ? events.filter(ev => (ev.operators || []).some(o => o.id === meId))
+    : [];
   opRenderTasks();
 }
 
 function _countRemainingOps(ev){
   return (ev.ops || []).filter(o => o.statut !== 'termine').length;
+}
+
+// Regroupe les ops d'un event par machine. Une op sans machine tombe dans un
+// groupe "Sans machine". Une op multi-machines apparaît dans chaque groupe.
+function _groupOpsByMachine(ev){
+  const groups = new Map();
+  const order = [];
+  const ops = (ev && ev.ops) ? ev.ops : [];
+  for(const o of ops){
+    let machines = Array.isArray(o.machines) ? o.machines.slice() : [];
+    if(!machines.length){
+      machines = ev.machine ? [ev.machine] : ['Sans machine'];
+    }
+    for(const m of machines){
+      if(!groups.has(m)){ groups.set(m, []); order.push(m); }
+      groups.get(m).push(o);
+    }
+  }
+  return order.map(m => ({ machine: m, ops: groups.get(m) }));
 }
 
 function _renderOpCard(ev, opts){
@@ -5460,13 +5734,43 @@ function _renderOpCard(ev, opts){
   const remaining = _countRemainingOps(ev);
   const totalOps = (ev.ops || []).length;
   const doneAll = (remaining === 0 && totalOps > 0);
-  const opsPreview = (ev.ops || []).slice(0, 3).map(o => `
-    <div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:4px">
-      <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
-      <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
-      <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
-    </div>`).join('');
-  const more = totalOps > 3 ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${totalOps-3} autre${totalOps-3 > 1 ? 's' : ''}</div>` : '';
+  // Regroupe les ops par machine dans la preview.
+  // - Vue Aujourd'hui : on affiche tout (c'est la vue prioritaire).
+  // - Vue À venir : on limite à ~5 lignes pour compacter les cards.
+  const groups = _groupOpsByMachine(ev);
+  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
+  const previewLines = [];
+  let printedGroups = 0;
+  let printedTruncated = false;
+  const MAX_LINES = isToday ? Infinity : 5;
+  for(const g of groups){
+    // Chaque groupe doit tenir en au moins 2 lignes (1 header + 1 op) pour
+    // éviter un header orphelin. Si le budget restant est < 2, on stoppe.
+    if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
+    previewLines.push(`<div style="font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.4px;margin-top:6px">${escHtml(g.machine)}</div>`);
+    let opsInThisGroup = 0;
+    for(const o of g.ops){
+      if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px">
+        <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
+        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
+        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+      </div>`);
+      opsInThisGroup++;
+    }
+    // Compte le groupe comme "affiché" seulement si au moins 1 op a été rendue.
+    if(opsInThisGroup > 0) printedGroups++;
+    else{
+      // Retire le header orphelin qu'on venait de pousser.
+      previewLines.pop();
+      printedTruncated = true;
+    }
+  }
+  const opsPreview = previewLines.join('');
+  const remainingGroups = groups.length - printedGroups;
+  const more = (remainingGroups > 0 || printedTruncated) && remainingGroups > 0
+    ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingGroups} autre machine${remainingGroups > 1 ? 's' : ''}</div>`
+    : '';
   const src = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
   const summary = doneAll
     ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
@@ -5485,7 +5789,7 @@ function _renderOpCard(ev, opts){
     <div class="op-card" ${clickHandler}>
       <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
       <div class="op-card-head">
-        <strong style="font-size:15px;color:var(--text)">${ev.machine}</strong>
+        <strong style="font-size:15px;color:var(--text)">${escHtml(machinesLabel)}</strong>
         ${src}
       </div>
       ${dateLine}
@@ -5547,42 +5851,56 @@ function opOpenSaisie(eventId){
   MAINT_STATE.saisieTaskId = eventId;
   const ctx = document.getElementById('op-modal-saisie-ctx');
   const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans créneau horaire';
+  const groups = _groupOpsByMachine(ev);
+  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
   ctx.innerHTML = `
-    <span><strong>Machine :</strong> ${ev.machine}</span>
+    <span><strong>Machine${groups.length > 1 ? 's' : ''} :</strong> ${escHtml(machinesLabel)}</span>
     <span><strong>Date :</strong> ${ev.date_prevue}</span>
     <span><strong>Créneau :</strong> ${time}</span>
     ${ev.source === 'non_planifie' ? '<span class="op-badge-source">Non planifiée</span>' : ''}`;
   const wrap = document.getElementById('op-modal-saisie-ops');
   if(wrap){
-    wrap.innerHTML = (ev.ops || []).map((op, idx) => {
-      const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
-      return `
-        <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:12px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-            <span class="op-code">${op.code}</span>
-            <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
-            <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
-          </div>
-          <div class="op-form-row"><label>Statut</label>
-            <select data-fld="statut">
-              <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
-              <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
-              <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
-              <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
-            </select>
-          </div>
-          <div class="op-form-row"><label>Durée réelle (min)</label>
-            <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
-          </div>
-          <div class="op-form-row"><label>Pièces changées</label>
-            <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
-          </div>
-          <div class="op-form-row"><label>Observations</label>
-            <textarea data-fld="observations">${op.observations || ''}</textarea>
-          </div>
-          <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id})">Enregistrer cette opération</button>
+    if(!groups.length){
+      wrap.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px">Aucune opération.</div>';
+    } else {
+      // Un bloc par machine. Une op assignée à N machines apparaît dans N blocs
+      // mais la saisie reste unique côté DB (opSubmitOpSaisie utilise op.id).
+      wrap.innerHTML = groups.map(g => {
+        const opsHtml = g.ops.map(op => {
+          const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          return `
+            <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+                <span class="op-code">${op.code}</span>
+                <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
+                <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
+              </div>
+              <div class="op-form-row"><label>Statut</label>
+                <select data-fld="statut">
+                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
+                  <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
+                  <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
+                  <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
+                </select>
+              </div>
+              <div class="op-form-row"><label>Durée réelle (min)</label>
+                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
+              </div>
+              <div class="op-form-row"><label>Pièces changées</label>
+                <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
+              </div>
+              <div class="op-form-row"><label>Observations</label>
+                <textarea data-fld="observations">${op.observations || ''}</textarea>
+              </div>
+              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">Enregistrer cette opération</button>
+            </div>`;
+        }).join('');
+        return `<div class="op-machine-group">
+          <div class="op-machine-group-head"><span class="op-machine-dot"></span>${escHtml(g.machine)} · ${g.ops.length} opération${g.ops.length > 1 ? 's' : ''}</div>
+          ${opsHtml}
         </div>`;
-    }).join('') || '<div style="text-align:center;color:var(--muted);padding:20px">Aucune opération.</div>';
+      }).join('');
+    }
   }
   document.getElementById('op-modal-saisie').classList.add('active');
 }
@@ -5592,8 +5910,11 @@ function opCloseSaisie(){
   document.getElementById('op-modal-saisie').classList.remove('active');
 }
 
-async function opSubmitOpSaisie(eventId, opId){
-  const item = document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
+async function opSubmitOpSaisie(eventId, opId, btnEl){
+  // Une op multi-machines apparaît dans plusieurs blocs de saisie. On cible
+  // le bloc contenant le bouton cliqué (pas juste le premier).
+  const item = (btnEl && btnEl.closest && btnEl.closest('.op-saisie-item'))
+    || document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
   if(!item) return;
   const val = (fld) => (item.querySelector(`[data-fld="${fld}"]`) || {}).value;
   const body = {
@@ -5674,8 +5995,8 @@ async function opSubmitNew(){
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
 function _opRenderPlanTable(events, meId){
-  // Aplati les events → 1 ligne par (event, op). Marque comme "mine" les
-  // events où je suis dans le groupe d'opérateurs.
+  // Aplati les events → 1 ligne par (event, op, machine). Une op multi-machines
+  // produit une ligne par machine.
   if(events.length === 0){
     return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
   }
@@ -5685,16 +6006,19 @@ function _opRenderPlanTable(events, meId){
     const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assigné</em>';
     const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : '—';
     for(const op of (ev.ops || [])){
-      rows.push({
-        mine, ev, op, operatorsStr, time,
-      });
+      let machines = Array.isArray(op.machines) && op.machines.length
+        ? op.machines
+        : (ev.machine ? [ev.machine] : ['—']);
+      for(const m of machines){
+        rows.push({ mine, ev, op, operatorsStr, time, machine: m });
+      }
     }
   }
   return `<table class="op-plan-table">
     <thead><tr><th>Créneau</th><th>Machine</th><th>Code</th><th>Opération</th><th>Groupe</th><th>Statut</th></tr></thead>
     <tbody>${rows.map(r => `<tr class="${r.mine ? 'mine' : ''}">
       <td>${r.time}</td>
-      <td><strong>${r.ev.machine}</strong></td>
+      <td><strong>${escHtml(r.machine)}</strong></td>
       <td><span class="op-code">${r.op.code}</span></td>
       <td>${r.op.code_label || '—'}</td>
       <td style="font-size:12px">${r.operatorsStr}</td>
@@ -5709,7 +6033,8 @@ async function opLoadPlanning(){
   const d = dateInput.value || _fmtDateISO(new Date());
   if(!dateInput.value) dateInput.value = d;
   const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
-                       '&date_to=' + encodeURIComponent(d), { credentials:'include' });
+                       '&date_to=' + encodeURIComponent(d) + '&_=' + Date.now(),
+                       { credentials:'include', cache: 'no-store' });
   if(!r.ok){
     const persoEl = document.getElementById('op-plan-personnel');
     const genEl = document.getElementById('op-plan-general');
@@ -5739,14 +6064,433 @@ function opSetPlanTab(name){
   if(gen) gen.style.display = (name === 'general') ? '' : 'none';
 }
 
-/* ── Initialisation au chargement selon le rôle ──────────────────── */
+
+/* ── Templates de session (v163) ─────────────────────────────────── */
+
+const TEMPLATES_STATE = { list: null };  // null = pas encore chargé
+
+async function loadTemplates(force){
+  if(!force && TEMPLATES_STATE.list !== null) return TEMPLATES_STATE.list;
+  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; return []; }
+  try{
+    const r = await fetch('/api/maintenance/templates?_=' + Date.now(),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ TEMPLATES_STATE.list = []; return []; }
+    const d = await r.json();
+    TEMPLATES_STATE.list = d.templates || [];
+  }catch(e){ TEMPLATES_STATE.list = []; }
+  return TEMPLATES_STATE.list;
+}
+
+function refreshCaseTemplatePicker(selectedId){
+  const sel = document.getElementById('case-mod-template');
+  if(!sel) return;
+  const list = TEMPLATES_STATE.list || [];
+  const cur = selectedId != null ? String(selectedId) : (sel.value || '');
+  sel.innerHTML = '<option value="">Sans modèle (créneau vierge)</option>' +
+    list.map(t =>
+      '<option value="' + escAttr(t.id) + '"' + (String(t.id) === cur ? ' selected' : '') + '>' +
+        escHtml(t.name) + ' (' + t.ops_count + ' op.)' +
+      '</option>'
+    ).join('');
+}
+
+async function applyCaseTemplate(templateId){
+  if(!templateId){
+    // « Sans modèle » : on ne touche pas aux ops déjà présentes
+    if(_PENDING_CASE) _PENDING_CASE.template_id = null;
+    return;
+  }
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                          '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ showToast('Modèle introuvable.', 'danger'); return; }
+    const d = await r.json();
+    const tmpl = d.template;
+    if(!tmpl){ showToast('Modèle vide.', 'danger'); return; }
+    // Remplace les ops actuelles par celles du modèle
+    _CASE_OPS = (tmpl.ops || []).map(o => ({
+      _op_id: null,
+      opTypeId: o.code,
+      opName: o.code_label || o.code,
+      opNiveau: null,
+      opFreq: '',
+      machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    }));
+    // Réinjecte les infos richement depuis OPS_TYPES_STATE (niveau, freq)
+    for(const co of _CASE_OPS){
+      const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
+      if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+    }
+    if(_PENDING_CASE) _PENDING_CASE.template_id = tmpl.id;
+    renderCaseOpsList();
+    showToast('Modèle « ' + tmpl.name + ' » appliqué.', 'info');
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Modal « Gérer les modèles » ──────────────────────────────────── */
+
+async function openTemplatesModal(){
+  await loadTemplates(true);
+  const m = document.getElementById('templates-modal');
+  if(!m) return;
+  renderTemplatesList();
+  m.classList.add('open');
+  m.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTemplatesModal(){
+  const m = document.getElementById('templates-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+}
+
+function renderTemplatesList(){
+  const list = document.getElementById('tmpl-list');
+  if(!list) return;
+  const items = TEMPLATES_STATE.list || [];
+  if(!items.length){
+    list.innerHTML = '<div class="tmpl-empty">Aucun modèle pour l\'instant.<br>Clique sur « Nouveau modèle » pour en créer un.</div>';
+    return;
+  }
+  list.innerHTML = items.map(t => `
+    <div class="tmpl-item" data-tmpl-id="${escAttr(t.id)}">
+      <div class="tmpl-item-main">
+        <div class="tmpl-item-name">${escHtml(t.name)}</div>
+        <div class="tmpl-item-desc">${escHtml(t.description || '—')}</div>
+      </div>
+      <div class="tmpl-item-count">${t.ops_count} op.</div>
+      <div class="tmpl-item-actions">
+        <button type="button" class="tmpl-item-btn edit" onclick="openTemplateEditor(${escAttr(t.id)})" title="Modifier" aria-label="Modifier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button type="button" class="tmpl-item-btn del" onclick="confirmDeleteTemplate(${escAttr(t.id)})" title="Supprimer" aria-label="Supprimer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function confirmDeleteTemplate(templateId){
+  const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
+  if(!t) return;
+  const msg = `Supprimer le modèle « ${t.name} » ?\n\nATTENTION : cela supprime aussi tous les créneaux futurs (à partir d'aujourd'hui) créés depuis ce modèle. Les créneaux passés seront conservés (mais détachés du modèle).`;
+  if(!confirm(msg)) return;
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId),
+                          { method:'DELETE', credentials:'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Suppression refusée');
+    }
+    const d = await r.json();
+    const n = d.deleted_future_events || 0;
+    showToast('Modèle supprimé' + (n ? ` — ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    await refreshPlanning(); renderCal();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Éditeur de modèle (création + édition) ──────────────────────── */
+
+let _TMPL_EDIT_ID = null;
+let _TMPL_OPS = [];
+
+async function openTemplateEditor(templateId){
+  _TMPL_EDIT_ID = templateId || null;
+  _TMPL_OPS = [];
+  const m = document.getElementById('tmpl-editor-modal');
+  const nameEl = document.getElementById('tmpl-ed-name');
+  const descEl = document.getElementById('tmpl-ed-desc');
+  const ttlEl = document.getElementById('tmpl-ed-title');
+  const lblEl = document.getElementById('tmpl-ed-submit-label');
+  const warnEl = document.getElementById('tmpl-ed-warning');
+  if(nameEl) nameEl.value = '';
+  if(descEl) descEl.value = '';
+  if(warnEl){ warnEl.style.display = 'none'; warnEl.innerHTML = ''; }
+  if(templateId){
+    try{
+      const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                            '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
+      if(!r.ok) throw new Error('Modèle introuvable');
+      const d = await r.json();
+      const t = d.template;
+      if(nameEl) nameEl.value = t.name || '';
+      if(descEl) descEl.value = t.description || '';
+      _TMPL_OPS = (t.ops || []).map(o => {
+        const meta = OPS_TYPES_STATE.list.find(x => x.id === o.code);
+        return {
+          opTypeId: o.code,
+          opName: (meta && meta.nom) || o.code_label || o.code,
+          opNiveau: (meta && meta.niveau) || null,
+          opFreq: (meta && meta.frequence) || '',
+          machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+        };
+      });
+      if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
+      if(lblEl) lblEl.textContent = 'Enregistrer';
+      // Avertissement resync
+      if(warnEl){
+        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modèle écrasera automatiquement les opérations des créneaux futurs qui en dépendent (les horaires, opérateurs et statuts sont préservés).';
+        warnEl.style.display = 'block';
+      }
+    }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }
+  } else {
+    if(ttlEl) ttlEl.textContent = 'Nouveau modèle';
+    if(lblEl) lblEl.textContent = 'Créer';
+  }
+  renderTmplOpsList();
+  if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => { nameEl?.focus(); }, 60);
+}
+
+function closeTemplateEditor(){
+  const m = document.getElementById('tmpl-editor-modal');
+  if(m){ m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); }
+  document.body.style.overflow = '';
+  _TMPL_EDIT_ID = null;
+  _TMPL_OPS = [];
+}
+
+function addTmplOp(){
+  if(!OPS_TYPES_STATE.list.length){
+    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
+    return;
+  }
+  _TMPL_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
+  renderTmplOpsList();
+}
+
+function updateTmplOp(idx, opTypeId){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const op = OPS_TYPES_STATE.list.find(t => t.id === opTypeId);
+  if(op){
+    _TMPL_OPS[idx] = {
+      opTypeId: op.id, opName: op.nom, opNiveau: op.niveau || null, opFreq: op.frequence || '',
+      machines: Array.isArray(cur.machines) ? cur.machines.slice() : [],
+    };
+  } else {
+    _TMPL_OPS[idx] = { opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: Array.isArray(cur.machines) ? cur.machines.slice() : [] };
+  }
+}
+
+function toggleTmplOpMachine(idx, machine){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  const cur = _TMPL_OPS[idx];
+  const list = Array.isArray(cur.machines) ? cur.machines : [];
+  const pos = list.indexOf(machine);
+  if(pos >= 0) list.splice(pos, 1); else list.push(machine);
+  cur.machines = list;
+  renderTmplOpsList();
+}
+
+function removeTmplOp(idx){
+  if(idx < 0 || idx >= _TMPL_OPS.length) return;
+  _TMPL_OPS.splice(idx, 1);
+  renderTmplOpsList();
+}
+
+function renderTmplOpsList(){
+  const list = document.getElementById('tmpl-ed-ops-list');
+  if(!list) return;
+  if(!_TMPL_OPS.length){
+    list.innerHTML = '<div class="case-ops-empty">Aucune opération. Cliquez sur « Ajouter une opération » pour construire le modèle.</div>';
+    return;
+  }
+  list.innerHTML = _TMPL_OPS.map((op, idx) => {
+    const options = '<option value="">Sélectionner une opération…</option>' +
+      OPS_TYPES_STATE.list.map(t =>
+        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+        '</option>'
+      ).join('');
+    const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
+    const chips = CASE_MACHINES_LIST.map(m => {
+      const active = machSet.has(m);
+      return '<button type="button" class="case-mach-chip' + (active ? ' active' : '') + '" onclick="toggleTmplOpMachine(' + idx + ', \'' + escAttr(m) + '\')" aria-pressed="' + (active ? 'true' : 'false') + '">' +
+        escHtml(m) + '</button>';
+    }).join('');
+    return '<div class="case-ops-row" data-idx="' + idx + '">' +
+      '<div class="case-ops-row-top">' +
+        '<select class="ops-select" onchange="updateTmplOp(' + idx + ', this.value)">' + options + '</select>' +
+        '<button type="button" class="case-ops-row-del" onclick="removeTmplOp(' + idx + ')" title="Retirer" aria-label="Retirer">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="case-ops-machines">' +
+        '<span class="case-ops-machines-label">Machine(s)</span>' +
+        chips +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function submitTemplateEditor(e){
+  e.preventDefault();
+  const name = (document.getElementById('tmpl-ed-name')?.value || '').trim();
+  const desc = (document.getElementById('tmpl-ed-desc')?.value || '').trim();
+  if(!name){ showToast('Nom requis.', 'danger'); return; }
+  const ops = _TMPL_OPS.filter(o => o.opTypeId).map(o => ({
+    code: o.opTypeId,
+    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+  }));
+  if(!ops.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  const missing = ops.find(o => !o.machines.length);
+  if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
+  try{
+    let r;
+    if(_TMPL_EDIT_ID){
+      r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    } else {
+      r = await fetch('/api/maintenance/templates', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description: desc, ops }),
+      });
+    }
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Enregistrement refusé');
+    }
+    const d = await r.json();
+    const resynced = d.resynced_events || 0;
+    showToast(_TMPL_EDIT_ID
+      ? ('Modèle enregistré' + (resynced ? ` — ${resynced} créneau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisé${resynced > 1 ? 's' : ''}.` : '.'))
+      : 'Modèle créé.', 'info');
+    closeTemplateEditor();
+    await loadTemplates(true);
+    renderTemplatesList();
+    refreshCaseTemplatePicker();
+    if(resynced > 0){ await refreshPlanning(); renderCal(); }
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+/* ── Bouton flottant « + » du calendrier ─────────────────────────── */
+
+function toggleCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const willOpen = !m.classList.contains('open');
+  if(willOpen){
+    loadTemplates().then(() => renderCalFabMenu());
+  }
+  m.classList.toggle('open');
+}
+
+function closeCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(m) m.classList.remove('open');
+}
+
+function renderCalFabMenu(){
+  const m = document.getElementById('cal-fab-menu');
+  if(!m) return;
+  const list = TEMPLATES_STATE.list || [];
+  const tmplItems = list.length
+    ? list.map(t => `
+        <button type="button" class="cal-fab-menu-item" onclick="startFromTemplate(${escAttr(t.id)})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+          <span>${escHtml(t.name)} <span style="color:var(--muted);font-weight:500">· ${t.ops_count} op.</span></span>
+        </button>`).join('')
+    : '<div class="cal-fab-menu-hint">Aucun modèle disponible</div>';
+  m.innerHTML = `
+    <button type="button" class="cal-fab-menu-item" onclick="startBlankCreneau()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Créneau vierge</span>
+    </button>
+    <div class="cal-fab-menu-sep"></div>
+    <div class="cal-fab-menu-hint">Depuis un modèle</div>
+    ${tmplItems}
+    <div class="cal-fab-menu-sep"></div>
+    <button type="button" class="cal-fab-menu-item" onclick="closeCalFabMenu();openTemplatesModal();">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+      <span>Gérer les modèles…</span>
+    </button>`;
+}
+
+function _defaultIsoAndHour(){
+  return { iso: _fmtDateISO(new Date()), h: 8 };
+}
+
+function startBlankCreneau(){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  openCaseModal({ iso, defaultHour: h });
+}
+
+async function startFromTemplate(templateId){
+  closeCalFabMenu();
+  const { iso, h } = _defaultIsoAndHour();
+  await openCaseModal({ iso, defaultHour: h });
+  await applyCaseTemplate(templateId);
+  const sel = document.getElementById('case-mod-template');
+  if(sel) sel.value = String(templateId);
+}
+
+
+// Ferme le menu FAB au clic en dehors
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('cal-fab-menu');
+  if(!menu || !menu.classList.contains('open')) return;
+  if(e.target.closest('.cal-fab') || e.target.closest('.cal-fab-menu')) return;
+  menu.classList.remove('open');
+});
+
+// v163+ : pour l'opérateur, on déplace le calendrier admin dans l'onglet
+// « Planning général » et on masque le date-picker + tabs redondants.
+function _mountOperatorGeneralCalendar(){
+  if(MAINT_ROLE !== 'operator') return;
+  const src = document.querySelector('#view-planning .cal-sec');
+  const dst = document.getElementById('op-plan-general');
+  if(!src || !dst) return;
+  if(dst.querySelector('.cal-sec')) return;  // déjà monté
+  // Vide le contenu par défaut (le tableau read-only), puis injecte
+  dst.innerHTML = '';
+  dst.appendChild(src);
+  // Masque le date-picker haut de page (le calendrier a sa propre nav)
+  const datePicker = document.querySelector('#view-op-planning .op-date-picker');
+  if(datePicker) datePicker.style.display = 'none';
+}
+
+// Wrapper autour de opSetPlanTab pour déclencher le rendu du calendrier
+// à l'arrivée sur l'onglet Général.
+const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
+function opSetPlanTabWithCal(name){
+  if(_origOpSetPlanTab) _origOpSetPlanTab(name);
+  if(name === 'general' && MAINT_ROLE === 'operator'){
+    _mountOperatorGeneralCalendar();
+    // Force un refresh des données puis rerender
+    refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+  }
+}
+// Remplace l'implémentation exposée sur window (utilisée par onclick)
+window.opSetPlanTab = opSetPlanTabWithCal;
 
 (function initMaintRole(){
+  // Ajoute un attribut sur <body> pour le ciblage CSS role-based
+  document.body.setAttribute('data-maint-role', MAINT_ROLE || 'operator');
   if(MAINT_ROLE === 'operator'){
+    // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
+    const dateInput = document.getElementById('op-tasks-date');
+    if(dateInput) dateInput.value = _fmtDateISO(new Date());
     const planInput = document.getElementById('op-plan-date');
     if(planInput) planInput.value = _fmtDateISO(new Date());
     opLoadTasks();
+    // Pré-charge le planning en tâche de fond.
     opLoadPlanning();
+    // Monte le calendrier admin dans l'onglet Général (lazy — au 1er clic
+    // sur l'onglet, mais on prépare le DOM tôt pour un feedback instant).
+    _mountOperatorGeneralCalendar();
   }
 })();
 </script>

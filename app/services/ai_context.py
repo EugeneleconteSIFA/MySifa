@@ -10,7 +10,9 @@ PARIS = zoneinfo.ZoneInfo("Europe/Paris")
 ROLE_SCOPE: dict[str, list[str]] = {
     "superadmin": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
     "direction": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
-    "administration": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
+    "administration":            ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
+    "administration_ventes":    ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
+    "administration_technique": ["production", "planning", "stock", "expe", "rh", "paie", "admin"],
     "expedition": ["production", "planning", "stock", "expe", "rh"],
 }
 
@@ -55,7 +57,7 @@ def get_tools_for_role(role: str) -> list[str]:
         return list(ALL_TOOL_NAMES)
     if role == "direction":
         return list(ALL_TOOL_NAMES)
-    if role == "administration":
+    if role in ("administration", "administration_ventes", "administration_technique"):
         return list(ACTION_TOOL_NAMES)
     if role == "expedition":
         return list(EXPEDITION_READ_TOOLS)
