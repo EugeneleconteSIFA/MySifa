@@ -433,9 +433,19 @@ body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
 body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
 body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* Les cases vides du calendrier ne réagissent plus visuellement au hover */
+body[data-maint-role="operator"] .cal-wv-day-col{cursor:default}
+body[data-maint-role="operator"] .cal-wv-day-col:hover{background:transparent !important}
+body[data-maint-role="operator"] .cal-cell{cursor:default}
+body[data-maint-role="operator"] .cal-cell:hover{background:inherit !important}
+/* Bandeau "lecture seule" au-dessus du calendrier dans l'onglet Général */
+.op-cal-readonly-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:14px;border-radius:10px;background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.35);color:var(--warn);font-size:12.5px;font-weight:600;letter-spacing:.2px}
+.op-cal-readonly-banner svg{flex-shrink:0}
+body.light .op-cal-readonly-banner{background:rgba(217,119,6,.10);color:#b45309;border-color:rgba(217,119,6,.35)}
 /* Surligne les créneaux où l'opérateur est dans le groupe */
 body[data-maint-role="operator"] .cal-event.is-mine{outline:2px solid var(--warn);outline-offset:-2px}
 body[data-maint-role="operator"] .cal-event:not(.is-mine){opacity:.55}
+body[data-maint-role="operator"] .cal-event{cursor:pointer}
 /* Bouton flottant « + » sur le calendrier */
 .cal-fab{position:absolute;right:16px;bottom:16px;z-index:10;width:56px;height:56px;border-radius:50%;background:var(--accent);color:var(--accent-fg,#fff);border:none;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,filter .12s}
 .cal-fab:hover{filter:brightness(1.08);transform:translateY(-1px)}
@@ -1354,7 +1364,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="page-header">
           <div>
             <div class="page-title">Planning</div>
-            <div class="page-subtitle">Vue de la journée — mes tâches sont surlignées</div>
+            <div class="page-subtitle">Personnel : mes tâches du jour · Général : calendrier atelier complet</div>
           </div>
           <div class="op-actions">
             <div class="op-date-picker">
@@ -2134,6 +2144,8 @@ function renderCalMonth(){
 function onCalMonthCellClick(e){
   // Si le clic vient d'une chip-événement, son propre handler gère
   if(e.target.closest('.cal-day-event')) return;
+  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
+  if(MAINT_ROLE === 'operator') return;
   const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
   const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
   if(!iso) return;
@@ -6621,28 +6633,41 @@ document.addEventListener('click', (e) => {
 
 // v163+ : pour l'opérateur, on déplace le calendrier admin dans l'onglet
 // « Planning général » et on masque le date-picker + tabs redondants.
+// Le calendrier reste 100% fonctionnel en navigation (mois/sem/jour, prev/next,
+// clic sur créneau existant pour voir les détails) mais tous les points
+// d'écriture sont neutralisés (voir onCalCellClick, onCalMonthCellClick,
+// et .plan-det-case-actions masqué en CSS).
 function _mountOperatorGeneralCalendar(){
   if(MAINT_ROLE !== 'operator') return;
   const src = document.querySelector('#view-planning .cal-sec');
   const dst = document.getElementById('op-plan-general');
   if(!src || !dst) return;
-  if(dst.querySelector('.cal-sec')) return;  // déjà monté
-  // Vide le contenu par défaut (le tableau read-only), puis injecte
-  dst.innerHTML = '';
-  dst.appendChild(src);
+  if(!dst.querySelector('.cal-sec')){
+    // 1er mount : vide le tableau read-only par défaut, injecte la calendrier
+    dst.innerHTML = '';
+    // Bandeau discret "lecture seule" au-dessus du calendrier
+    const banner = document.createElement('div');
+    banner.className = 'op-cal-readonly-banner';
+    banner.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' +
+      '<span>Planning atelier (lecture seule) — clique sur un créneau pour voir le détail.</span>';
+    dst.appendChild(banner);
+    dst.appendChild(src);
+  }
   // Masque le date-picker haut de page (le calendrier a sa propre nav)
   const datePicker = document.querySelector('#view-op-planning .op-date-picker');
   if(datePicker) datePicker.style.display = 'none';
 }
 
 // Wrapper autour de opSetPlanTab pour déclencher le rendu du calendrier
-// à l'arrivée sur l'onglet Général.
+// à l'arrivée sur l'onglet Général — refresh systématique (pas seulement
+// au premier clic) pour que la vue reflète les changements admin en direct.
 const _origOpSetPlanTab = typeof opSetPlanTab === 'function' ? opSetPlanTab : null;
 function opSetPlanTabWithCal(name){
   if(_origOpSetPlanTab) _origOpSetPlanTab(name);
   if(name === 'general' && MAINT_ROLE === 'operator'){
     _mountOperatorGeneralCalendar();
-    // Force un refresh des données puis rerender
     refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   }
 }
