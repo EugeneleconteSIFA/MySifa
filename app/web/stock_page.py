@@ -1673,6 +1673,28 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .btn-recep-muted{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .btn-recep-muted:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .recep-dup-badge{font-size:10px;padding:2px 6px;border-radius:5px;background:rgba(251,191,36,.2);color:var(--warn);font-weight:700;margin-left:6px}
+/* Sous-onglets réception */
+.recep-subtabs{display:flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:4px;width:fit-content;margin:0 auto}
+.recep-subtab{background:transparent;border:none;padding:8px 18px;border-radius:8px;color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
+.recep-subtab:hover{color:var(--text)}
+.recep-subtab.active{background:var(--accent-bg);color:var(--accent)}
+.recep-lot-preview{font-family:monospace;font-size:11px;color:var(--muted);padding:6px 10px;background:var(--bg);border:1px dashed var(--border);border-radius:6px;margin-top:6px;display:inline-block}
+.recep-lot-preview strong{color:var(--accent);font-weight:700}
+.recep-hist-lot{font-family:monospace;font-size:11px;color:var(--accent);font-weight:700;background:var(--accent-bg);padding:2px 7px;border-radius:5px;white-space:nowrap;flex-shrink:0}
+/* Modale impression étiquettes */
+.recep-print-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.recep-print-title{font-size:16px;font-weight:800;color:var(--text);margin-bottom:4px}
+.recep-print-sub{font-size:12px;color:var(--muted);margin-bottom:16px}
+.recep-print-preview{background:#fff;color:#0a0e17;border-radius:10px;padding:16px;margin:10px 0;font-family:Arial,sans-serif}
+.recep-print-preview .plabel{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#666;font-weight:600}
+.recep-print-preview .pval{font-size:14px;font-weight:700;color:#0a0e17;margin-bottom:8px}
+.recep-print-preview .plot{font-family:monospace;font-size:15px;font-weight:800;color:#0a0e17;margin:6px 0}
+.recep-print-preview .pbrand{text-align:right;font-size:10px;font-weight:800;color:#666;letter-spacing:1px;margin-top:8px}
+.recep-print-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.recep-print-field label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.recep-print-field input{background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
+.recep-print-field input:focus{border-color:var(--accent)}
+.recep-print-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -1743,6 +1765,7 @@ let S = {
   tracaPoste: null,
   tracaPrintModal: null,
   // Réception matière
+  recepSubTab: 'nouvelle', // 'nouvelle' | 'historique'
   recepItems: [],          // [{code, ts, isNew}] — tableau temporaire en cours de scan
   recepNote: '',           // note optionnelle sur la réception
   recepScanning: false,    // caméra active
@@ -1756,6 +1779,7 @@ let S = {
   recepFournisseurSearch: '', // texte de recherche fournisseur
   recepFournisseurOpen: false, // dropdown ouvert
   recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
+  recepLastLot: null,      // dernier lot créé (pour modale impression étiquettes)
   // Import référentiel références / unités
   importRefsOpen: false,
   importRefsPreview: null,
@@ -13259,17 +13283,194 @@ async function recepValider() {
       }),
     });
     if (d && d.success) {
-      showToast(d.nb_bobines + ' bobine' + (d.nb_bobines > 1 ? 's' : '') + ' enregistrée' + (d.nb_bobines > 1 ? 's' : ''));
+      const added = d.nb_bobines_ajoutees || d.nb_bobines || codes.length;
+      const merged = !!d.merged;
+      const msg = merged
+        ? added + ' bobine' + (added > 1 ? 's' : '') + ' ajoutée' + (added > 1 ? 's' : '') + ' au lot existant'
+        : added + ' bobine' + (added > 1 ? 's' : '') + ' enregistrée' + (added > 1 ? 's' : '') + ' — lot créé';
+      showToast(msg);
+      // Snapshot pour la modale d'impression
+      S.recepLastLot = {
+        lot_numero: d.lot_numero || '',
+        fournisseur: S.recepFournisseur,
+        fsc_type_claim: claim,
+        certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
+        nb_bobines_ajoutees: added,
+        nb_bobines_total: d.nb_bobines || added,
+        codes: codes.slice(),
+      };
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
       recepStopCamera();
       await loadRecepHistory();
+      // Ouvrir la modale d'impression étiquettes d'identification
+      recepShowPrintModal(S.recepLastLot);
     }
   } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
 }
 
+// ── Preview du numéro de lot (côté client, doit rester aligné avec le backend) ──
+function recepBuildLotPreview(fournisseur, fscClaim, dt) {
+  const d = dt || new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate());
+  const hourStr = pad(d.getHours());
+  const fourn = (fournisseur || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5) || 'SANS';
+  const fscMap = { fsc_100: '100', fsc_mix_credit: 'MIXC', fsc_mix: 'MIX', fsc_recycled: 'REC', non_fsc: 'NFSC' };
+  const fsc = fscMap[fscClaim] || 'NFSC';
+  return 'LOT-' + dateStr + '-' + hourStr + '-' + fourn + '-' + fsc;
+}
+
+// ── Modale impression étiquettes après validation ──
+function recepShowPrintModal(lot) {
+  if (!lot || !lot.lot_numero) return;
+  closeMroot();
+  const claimLabels = (typeof FSC_CLAIM_LABELS !== 'undefined' && FSC_CLAIM_LABELS)
+    ? FSC_CLAIM_LABELS
+    : { non_fsc: 'Non FSC', fsc_100: 'FSC 100%', fsc_mix_credit: 'FSC Mix Credit', fsc_mix: 'FSC Mix', fsc_recycled: 'FSC Recycled' };
+  const claimLabel = claimLabels[lot.fsc_type_claim] || 'Non FSC';
+
+  const state = { refProduit: '', nbEtiquettes: String(lot.nb_bobines_ajoutees || 1) };
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'recep-print-modal' },
+    el('div', { cls: 'recep-print-title' }, 'Imprimer les étiquettes d\'identification'),
+    el('div', { cls: 'recep-print-sub' }, 'Lot créé — préparez les étiquettes à coller sur les bobines réceptionnées.'),
+    (() => {
+      const preview = el('div', { cls: 'recep-print-preview' });
+      const refLine = el('div', null,
+        el('div', { cls: 'plabel' }, 'Référence produit'),
+        el('div', { cls: 'pval', attrs: { id: 'rpm-ref' } }, '—')
+      );
+      preview.append(
+        refLine,
+        el('div', null, el('div', { cls: 'plabel' }, 'Fournisseur'), el('div', { cls: 'pval' }, lot.fournisseur || '—')),
+        el('div', null, el('div', { cls: 'plabel' }, 'Statut FSC'), el('div', { cls: 'pval' }, claimLabel)),
+        el('div', null, el('div', { cls: 'plabel' }, 'Numéro de lot'), el('div', { cls: 'plot' }, lot.lot_numero)),
+        el('div', { cls: 'pbrand' }, 'SIFA')
+      );
+      return preview;
+    })(),
+    (() => {
+      const wrapField = el('div', { cls: 'recep-print-field' },
+        el('label', null, 'Référence produit (optionnel)'),
+        (() => {
+          const inp = el('input', { attrs: { type: 'text', placeholder: 'Ex : PP80-BLC-76', autocomplete: 'off' } });
+          inp.addEventListener('input', e => {
+            state.refProduit = e.target.value.trim();
+            const rpm = document.getElementById('rpm-ref');
+            if (rpm) rpm.textContent = state.refProduit || '—';
+          });
+          return inp;
+        })()
+      );
+      return wrapField;
+    })(),
+    (() => {
+      const wrapField = el('div', { cls: 'recep-print-field' },
+        el('label', null, 'Nombre d\'étiquettes à imprimer'),
+        (() => {
+          const inp = el('input', { attrs: { type: 'number', min: '1', max: '999', value: state.nbEtiquettes } });
+          inp.addEventListener('input', e => {
+            const v = parseInt(e.target.value, 10);
+            state.nbEtiquettes = (isNaN(v) || v < 1) ? '1' : String(Math.min(v, 999));
+          });
+          return inp;
+        })()
+      );
+      return wrapField;
+    })(),
+    el('div', { cls: 'recep-print-actions' },
+      el('button', { cls: 'btn-recep btn-recep-muted', on: { click: closeMroot } }, 'Fermer'),
+      el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
+        const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
+        recepPrintLabels(lot, state.refProduit, n, claimLabel);
+      }}}, iconEl('printer', 14), ' Imprimer')
+    )
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+
+function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
+  const JSBARCODE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const refTxt = esc(refProduit || '—');
+  const fournTxt = esc(lot.fournisseur || '—');
+  const claimTxt = esc(claimLabel || '—');
+  const lotTxt = esc(lot.lot_numero || '');
+  let labels = '';
+  for (let i = 0; i < nbEtiquettes; i++) {
+    labels += `
+      <div class="label">
+        <div class="row">
+          <div class="cell"><div class="lab">Réf. produit</div><div class="val">${refTxt}</div></div>
+          <div class="cell"><div class="lab">Fournisseur</div><div class="val">${fournTxt}</div></div>
+        </div>
+        <div class="row">
+          <div class="cell"><div class="lab">Statut FSC</div><div class="val">${claimTxt}</div></div>
+          <div class="cell"><div class="lab">N° de lot</div><div class="val lot">${lotTxt}</div></div>
+        </div>
+        <div class="bar"><svg id="bc-${i}"></svg></div>
+        <div class="brand">SIFA</div>
+      </div>`;
+  }
+  const w = _printWin('Étiquettes lot ' + lotTxt, '105mm 74mm',
+    `.label{width:105mm;height:74mm;padding:4mm 5mm;display:flex;flex-direction:column;gap:2mm;
+            page-break-after:always;page-break-inside:avoid;border-bottom:1px dashed transparent}
+     .row{display:flex;gap:5mm}
+     .cell{flex:1;min-width:0}
+     .lab{font-size:8pt;text-transform:uppercase;letter-spacing:.5pt;color:#666;font-weight:600}
+     .val{font-size:12pt;font-weight:700;color:#000;line-height:1.15;word-break:break-word}
+     .val.lot{font-family:'Courier New',monospace;font-size:11pt}
+     .bar{display:flex;justify-content:center;margin-top:2mm}
+     .bar svg{max-width:95mm;height:14mm}
+     .brand{text-align:right;font-size:9pt;font-weight:800;color:#333;letter-spacing:1.5pt;margin-top:auto}`,
+    `${labels}
+     <script src="${JSBARCODE_CDN}"><\/script>
+     <script>window.onload=function(){for(var i=0;i<${nbEtiquettes};i++){try{JsBarcode('#bc-'+i,'${lotTxt}',{format:'CODE128',displayValue:true,fontSize:10,margin:0,height:36});}catch(e){}}window.focus();window.print();}<\/script>`);
+  if (w) w.document.close();
+}
+
 function buildReception() {
   const wrap = el('div', { cls: 'recep-page' });
+
+  // ── Header commun ──
+  wrap.appendChild(el('div', { cls: 'recep-head-row' },
+    el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière'))
+  ));
+
+  // ── Sous-onglets Nouvelle / Historique ──
+  const sub = S.recepSubTab === 'historique' ? 'historique' : 'nouvelle';
+  const subtabs = el('div', { cls: 'recep-subtabs' },
+    el('button', {
+      cls: 'recep-subtab' + (sub === 'nouvelle' ? ' active' : ''),
+      on: { click: () => { S.recepSubTab = 'nouvelle'; renderContent(); } }
+    }, iconEl('scan', 13), ' Faire une réception'),
+    el('button', {
+      cls: 'recep-subtab' + (sub === 'historique' ? ' active' : ''),
+      on: { click: () => {
+        S.recepSubTab = 'historique';
+        recepStopCamera();
+        renderContent();
+        loadRecepHistory();
+      }}
+    }, iconEl('truck', 13), ' Historique (', String(S.recepHistory.length || 0), ')')
+  );
+  wrap.appendChild(subtabs);
+
+  if (sub === 'nouvelle') {
+    wrap.appendChild(buildReceptionNouvelle());
+  } else {
+    wrap.appendChild(buildReceptionHistorique());
+  }
+  return wrap;
+}
+
+// ── Sous-onglet : Faire une réception ─────────────────────────────
+function buildReceptionNouvelle() {
+  const block = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '20px' } });
 
   const tracaGuideBtn = el('button', {
     type: 'button',
@@ -13290,22 +13491,14 @@ function buildReception() {
       },
     },
   }, iconEl('scan', 12), ' Quel code scanner ?');
-
-  wrap.appendChild(el('div', { cls: 'recep-head-row' },
-    el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière')),
-    tracaGuideBtn
-  ));
+  block.appendChild(tracaGuideBtn);
 
   // ── Grille scanner + saisie manuelle ──
   const grid = el('div', { cls: 'recep-layout' });
 
-  // Colonne gauche : caméra
   const camCard = el('div', { cls: 'recep-card' },
     el('div', { cls: 'recep-card-title' }, iconEl('scan', 14), ' Scanner une bobine')
   );
-
-  // L'overlay caméra est géré par recepStartCamera() directement sur document.body
-  // — pas besoin d'un état S.recepScanning dans l'UI de la card
   const placeholder = el('div', { cls: 'recep-cam-placeholder' },
     iconEl('scan', 40),
     el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
@@ -13314,7 +13507,6 @@ function buildReception() {
   camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: recepStartCamera } }, iconEl('scan', 14), ' Démarrer le scan'));
   grid.appendChild(camCard);
 
-  // Colonne droite : saisie manuelle + note
   const manCard = el('div', { cls: 'recep-card' },
     el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Saisie manuelle'),
     el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' } }, 'Saisissez ou collez un code-barres puis appuyez sur Entrée'),
@@ -13344,9 +13536,9 @@ function buildReception() {
     })()
   );
   grid.appendChild(manCard);
-  wrap.appendChild(grid);
+  block.appendChild(grid);
 
-  // ── Tableau bobines scannées ──
+  // ── Tableau bobines scannées + fournisseur/FSC + preview lot ──
   const tableCard = el('div', { cls: 'recep-card' });
   const tableHead = el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' } },
     el('div', { cls: 'recep-card-title', style: { flex: '1' } }, iconEl('package', 14), ' Bobines scannées'),
@@ -13354,9 +13546,7 @@ function buildReception() {
   );
   tableCard.appendChild(tableHead);
 
-  // ── Fournisseur puis type FSC (même style champs MySifa) ──
   const fourWrap = el('div', { cls: 'recep-fourn-wrap' });
-
   const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
   fourWrap.appendChild(fourLabel);
   const fourSearchWrap = el('div', { cls: 'recep-fourn-search-wrap' });
@@ -13372,7 +13562,6 @@ function buildReception() {
   });
   const dropdown = el('div', { cls: 'recep-fourn-dropdown' });
 
-  // Helper: update dropdown content without destroying the input
   function updateFourDropdown(query) {
     dropdown.innerHTML = '';
     dropdown.classList.add('open');
@@ -13380,11 +13569,11 @@ function buildReception() {
     if (suggestions.length > 0) {
       suggestions.forEach(f => {
         const item = el('div', { cls: 'recep-fourn-item', on: { mousedown: (e) => {
-          e.preventDefault(); // évite blur avant click
+          e.preventDefault();
           S.recepFournisseur = f.nom;
           S.recepFournisseurSearch = '';
           S.recepFournisseurOpen = false;
-          renderContent(); // full re-render only on selection
+          renderContent();
         }}},
           el('span', { cls: 'recep-fourn-item-nom' }, f.nom),
           el('span', { cls: 'recep-fourn-item-cert' }, f.certificat)
@@ -13399,7 +13588,6 @@ function buildReception() {
   }
 
   if (S.recepFournisseur) {
-    // Afficher le fournisseur sélectionné + bouton pour changer
     fourInp.value = S.recepFournisseur;
     fourInp.setAttribute('readonly', 'true');
     const clearBtn = el('button', { cls: 'recep-fourn-clear', on: { click: (e) => {
@@ -13412,7 +13600,6 @@ function buildReception() {
   } else {
     fourInp.value = S.recepFournisseurSearch || '';
     fourSearchWrap.append(fourInp, dropdown);
-    // Events sur l'input — DOM patching, NO renderContent
     fourInp.addEventListener('input', (e) => {
       S.recepFournisseurSearch = e.target.value;
       S.recepFournisseurOpen = true;
@@ -13427,7 +13614,7 @@ function buildReception() {
     });
   }
   fourWrap.appendChild(fourSearchWrap);
-  // Afficher le certificat FSC si fournisseur sélectionné et claim FSC
+
   if (S.recepFournisseur && recepFscTypeRequiresCert(S.recepFscTypeClaim)) {
     const fsc = FOURNISSEURS_FSC.find(f => f.nom === S.recepFournisseur);
     const certTxt = fsc && fsc.certificat ? fsc.certificat : '—';
@@ -13452,7 +13639,6 @@ function buildReception() {
     attrs: { id: 'fsc-type-claim' },
     on: {
       mousedown: () => {
-        // Fermer le dropdown fournisseur avant l'ouverture du select (sinon il capte le clic).
         try { dropdown.classList.remove('open'); } catch(e) {}
         S.recepFournisseurOpen = false;
       },
@@ -13473,6 +13659,14 @@ function buildReception() {
     el('option', { attrs: { value: 'fsc_recycled', selected: fscClaim === 'fsc_recycled' } }, 'FSC Recycled')
   );
   fourWrap.append(fscTypeLbl, fscTypeSel);
+
+  // ── Preview du numéro de lot ──
+  if (S.recepFournisseur) {
+    const lotPrev = recepBuildLotPreview(S.recepFournisseur, fscClaim);
+    fourWrap.appendChild(el('div', { cls: 'recep-lot-preview' },
+      'N° de lot prévu : ', el('strong', null, lotPrev)
+    ));
+  }
 
   tableCard.appendChild(fourWrap);
 
@@ -13507,7 +13701,6 @@ function buildReception() {
     tableWrap.appendChild(table);
     tableCard.appendChild(tableWrap);
 
-    // Actions
     const actions = el('div', { cls: 'recep-actions', style: { marginTop: '12px' } },
       el('button', { cls: 'btn-recep btn-recep-muted', on: { click: () => {
         if (confirm('Vider la liste des ' + S.recepItems.length + ' bobines scannées ?')) { S.recepItems = []; renderContent(); }
@@ -13517,9 +13710,12 @@ function buildReception() {
     );
     tableCard.appendChild(actions);
   }
-  wrap.appendChild(tableCard);
+  block.appendChild(tableCard);
+  return block;
+}
 
-  // ── Historique ──
+// ── Sous-onglet : Historique des réceptions ───────────────────────
+function buildReceptionHistorique() {
   const hist = el('div', { cls: 'recep-hist' });
   hist.appendChild(el('div', { cls: 'recep-hist-head' }, iconEl('truck', 14), ' Historique des réceptions'));
 
@@ -13532,17 +13728,23 @@ function buildReception() {
     S.recepHistory.forEach(lot => {
       const dateStr = lot.created_at ? lot.created_at.slice(0,16).replace('T', ' ') : '—';
       const isOpen = S.recepExpandedId === lot.id;
-      const row = el('div', { cls: 'recep-hist-row', on: { click: () => {
-        S.recepExpandedId = isOpen ? null : lot.id;
-        renderContent();
-      }}},
+      const rowChildren = [
         el('span', { cls: 'recep-hist-date' }, dateStr),
         el('span', { cls: 'recep-hist-count' }, lot.nb_bobines + ' bobine' + (lot.nb_bobines !== 1 ? 's' : '')),
+      ];
+      if (lot.lot_numero) {
+        rowChildren.push(el('span', { cls: 'recep-hist-lot', attrs: { title: 'Numéro de lot' } }, lot.lot_numero));
+      }
+      rowChildren.push(
         fscClaimBadge(lot.fsc_type_claim),
         el('span', { cls: 'recep-hist-note' }, lot.note || ''),
         el('span', { cls: 'recep-hist-four' }, lot.fournisseur || ''),
         el('span', { cls: 'recep-hist-user' }, lot.created_by_name || '')
       );
+      const row = el('div', { cls: 'recep-hist-row', on: { click: () => {
+        S.recepExpandedId = isOpen ? null : lot.id;
+        renderContent();
+      }}}, ...rowChildren);
       histScroll.appendChild(row);
       if (isOpen) {
         const detail = el('div', { cls: 'recep-hist-detail', style: { padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' } });
@@ -13550,6 +13752,26 @@ function buildReception() {
           const chips = el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } });
           lot.items.forEach(code => chips.appendChild(el('span', { cls: 'recep-hist-chip' }, code)));
           detail.appendChild(chips);
+        }
+        // Bouton réimprimer les étiquettes pour ce lot
+        if (lot.lot_numero) {
+          const reprintBtn = el('button', {
+            cls: 'btn-recep btn-recep-ghost',
+            style: { alignSelf: 'flex-start' },
+            on: { click: (e) => {
+              e.stopPropagation();
+              recepShowPrintModal({
+                lot_numero: lot.lot_numero,
+                fournisseur: lot.fournisseur || '',
+                fsc_type_claim: lot.fsc_type_claim || 'non_fsc',
+                certificat_fsc: lot.certificat_fsc || '',
+                nb_bobines_ajoutees: lot.nb_bobines || 1,
+                nb_bobines_total: lot.nb_bobines || 1,
+                codes: lot.items || [],
+              });
+            }}
+          }, iconEl('printer', 14), ' Réimprimer étiquettes');
+          detail.appendChild(reprintBtn);
         }
         if (!S.stockReadOnly) {
           const editClaim = el('select', { cls: 'form-sel', style: { maxWidth: '280px' } },
@@ -13606,8 +13828,7 @@ function buildReception() {
     });
     hist.appendChild(histScroll);
   }
-  wrap.appendChild(hist);
-  return wrap;
+  return hist;
 }
 
 // ── Valorisation stock (Contrôle) ────────────────────────────────

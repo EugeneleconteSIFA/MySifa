@@ -2577,6 +2577,33 @@ def _parse_fsc_type_claim(raw: Any, default: str = "non_fsc") -> str:
     return t
 
 
+_FSC_CLAIM_SHORT = {
+    "fsc_100":        "100",
+    "fsc_mix_credit": "MIXC",
+    "fsc_mix":        "MIX",
+    "fsc_recycled":   "REC",
+    "non_fsc":        "NFSC",
+}
+
+
+def _slug_fournisseur(nom: Optional[str]) -> str:
+    """Slug court MAJUSCULE alphanum pour numéro de lot (5 chars max)."""
+    if not nom:
+        return "SANS"
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", nom).upper()
+    return cleaned[:5] if cleaned else "SANS"
+
+
+def _build_lot_numero(fournisseur: Optional[str], dt: datetime, fsc_type_claim: str) -> str:
+    """Format : LOT-YYYYMMDD-HH-FOURN-FSC."""
+    return "LOT-{d}-{h}-{f}-{c}".format(
+        d=dt.strftime("%Y%m%d"),
+        h=dt.strftime("%H"),
+        f=_slug_fournisseur(fournisseur),
+        c=_FSC_CLAIM_SHORT.get(fsc_type_claim, "NFSC"),
+    )
+
+
 @router.get("/api/stock/fournisseurs")
 def list_fournisseurs_stock(request: Request):
     """Liste des fournisseurs FSC pour la réception matière et le guide traça (lecture publique interne)."""
@@ -2613,7 +2640,13 @@ def list_receptions(request: Request, limit: int = 50):
 
 @router.post("/api/stock/receptions")
 async def create_reception(request: Request):
-    """Enregistre une réception de bobines (lot de codes-barres)."""
+    """Enregistre une réception de bobines (lot de codes-barres).
+
+    Règle de fusion : si un lot existe déjà avec exactement les mêmes
+    (fournisseur, jour, heure, type FSC), les bobines sont ajoutées à ce
+    lot au lieu d'en créer un nouveau. Le numéro de lot est déterministe :
+    LOT-YYYYMMDD-HH-FOURN-FSC.
+    """
     user = require_stock(request)
     body = await request.json()
     codes = [str(c).strip() for c in (body.get("codes") or []) if str(c).strip()]
@@ -2628,33 +2661,86 @@ async def create_reception(request: Request):
             status_code=400,
             detail="Certificat FSC requis pour une réception certifiée FSC.",
         )
-    now = datetime.now().isoformat()
+    now_dt = datetime.now()
+    now = now_dt.isoformat()
+    lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
 
     with get_db() as conn:
-        cur = conn.execute(
-            """INSERT INTO stock_receptions
-               (created_at, created_by, created_by_name, note, nb_bobines,
-                fournisseur, certificat_fsc, fsc_type_claim)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (
-                now,
-                user.get("email"),
-                user.get("nom"),
-                note,
-                len(codes),
-                fournisseur,
-                certificat_fsc,
-                fsc_type_claim,
-            ),
-        )
-        reception_id = cur.lastrowid
-        conn.executemany(
-            "INSERT INTO stock_reception_items (reception_id, code_barre, scanned_at) VALUES (?,?,?)",
-            [(reception_id, code, now) for code in codes],
-        )
-        conn.commit()
+        # Fusion : chercher un lot identique du jour/heure/fournisseur/FSC.
+        existing = conn.execute(
+            """SELECT id, nb_bobines FROM stock_receptions
+               WHERE lot_numero = ?
+               ORDER BY id DESC LIMIT 1""",
+            (lot_numero,),
+        ).fetchone()
 
-    return {"success": True, "id": reception_id, "nb_bobines": len(codes)}
+        if existing:
+            reception_id = existing["id"]
+            merged_note = _merge_note(note, conn, reception_id)
+            conn.executemany(
+                "INSERT INTO stock_reception_items (reception_id, code_barre, scanned_at) VALUES (?,?,?)",
+                [(reception_id, code, now) for code in codes],
+            )
+            conn.execute(
+                """UPDATE stock_receptions
+                   SET nb_bobines = COALESCE(nb_bobines, 0) + ?,
+                       note = COALESCE(?, note)
+                   WHERE id = ?""",
+                (len(codes), merged_note, reception_id),
+            )
+            conn.commit()
+            merged = True
+            new_total = (existing["nb_bobines"] or 0) + len(codes)
+        else:
+            cur = conn.execute(
+                """INSERT INTO stock_receptions
+                   (created_at, created_by, created_by_name, note, nb_bobines,
+                    fournisseur, certificat_fsc, fsc_type_claim, lot_numero)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (
+                    now,
+                    user.get("email"),
+                    user.get("nom"),
+                    note,
+                    len(codes),
+                    fournisseur,
+                    certificat_fsc,
+                    fsc_type_claim,
+                    lot_numero,
+                ),
+            )
+            reception_id = cur.lastrowid
+            conn.executemany(
+                "INSERT INTO stock_reception_items (reception_id, code_barre, scanned_at) VALUES (?,?,?)",
+                [(reception_id, code, now) for code in codes],
+            )
+            conn.commit()
+            merged = False
+            new_total = len(codes)
+
+    return {
+        "success": True,
+        "id": reception_id,
+        "nb_bobines": new_total,
+        "nb_bobines_ajoutees": len(codes),
+        "lot_numero": lot_numero,
+        "merged": merged,
+    }
+
+
+def _merge_note(new_note: Optional[str], conn, reception_id: int) -> Optional[str]:
+    """Concatène la nouvelle note à la note existante si distinctes."""
+    if not new_note:
+        return None
+    row = conn.execute(
+        "SELECT note FROM stock_receptions WHERE id=?", (reception_id,)
+    ).fetchone()
+    prev = (row["note"] or "").strip() if row else ""
+    if not prev:
+        return new_note
+    if new_note in prev:
+        return prev
+    return f"{prev} | {new_note}"
 
 
 @router.patch("/api/stock/receptions/{reception_id}")
