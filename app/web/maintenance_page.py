@@ -1,4 +1,4 @@
-"""MySifa �?" Page Maintenance
+"""MySifa — Page Maintenance
 Route : /maintenance
 
 Contrôle d'accès multi-rôle :
@@ -39,7 +39,7 @@ def _get_maintenance_role(user: dict) -> Optional[str]:
 
     Utilise `effective_role()` pour respecter l'impersonation : un superadmin
     qui simule un rôle `fabrication` doit voir la vue opérateur, pas celle
-    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée �?"
+    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée —
     elle court-circuitait l'impersonation en renvoyant 'admin' même quand
     le rôle simulé était différent.
     """
@@ -93,7 +93,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0a0e17">
-<title>Maintenance �?" MySifa</title>
+<title>Maintenance — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
@@ -107,7 +107,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
-/* �"?�"? Toggle Colonnes produit dans l'historique des contrôles �"?�"? */
+/* ── Toggle Colonnes produit dans l'historique des contrôles ── */
 .ctrl-extra-toggle{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s;user-select:none}
 .ctrl-extra-toggle:hover{border-color:var(--accent);color:var(--text)}
 .ctrl-extra-toggle-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .15s}
@@ -115,17 +115,17 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 .ctrl-extra-toggle-on .ctrl-extra-toggle-dot{background:var(--accent)}
 .ctrl-extra-toggle-state{font-weight:700;letter-spacing:.4px}
 
-/* �"?�"? Colonne Dossier dans l'historique des contrôles �"?�"? */
+/* ── Colonne Dossier dans l'historique des contrôles ── */
 .col-dossier{white-space:nowrap}
 .col-nodos{white-space:nowrap}
 .ctrl-row-nc td{background:rgba(248,113,113,0.06);border-top:1px solid rgba(248,113,113,0.18);border-bottom:1px solid rgba(248,113,113,0.18)}
 .ctrl-row-nc td:first-child{border-left:3px solid var(--danger)}
 .ctrl-row-nc:hover td{background:rgba(248,113,113,0.11)}
-.ctrl-row-nc td:first-child::before{content:"�s� ";color:var(--danger);font-weight:900;margin-right:4px}
+.ctrl-row-nc td:first-child::before{content:"⚠ ";color:var(--danger);font-weight:900;margin-right:4px}
 .ctrl-dossier-pill{display:inline-block;padding:2px 8px;border-radius:5px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.2px;border:1px solid transparent;transition:border-color .15s}
 tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ctrl-dossier-empty{color:var(--muted);font-size:12px}
-/* �"?�"? Contexte dossier + fiche technique dans le détail d'un contrôle �"?�"? */
+/* ── Contexte dossier + fiche technique dans le détail d'un contrôle ── */
 .ack-di-wrap{margin-top:6px}
 .ack-di-head{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
 .ack-di-badge{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;letter-spacing:.3px}
@@ -220,7 +220,7 @@ body.sb-open .sidebar-overlay{display:block}
 
 .view{display:flex;flex-direction:column;flex:1}
 
-/* Filtres en bandeau �?" style aligné sur MyProd / Production */
+/* Filtres en bandeau — style aligné sur MyProd / Production */
 .filters-panel{margin-bottom:18px}
 .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -242,7 +242,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 @media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
 
-/* �"?�"? Calendrier Planning (style MyProd) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Calendrier Planning (style MyProd) ──────────────────────────────── */
 .cal-sec{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:28px}
 .cal-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px}
 .cal-title{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:var(--text);letter-spacing:.2px;text-transform:capitalize;font-family:"SFMono-Regular",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace}
@@ -301,7 +301,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
   .cal-wday{font-size:10px;padding:6px 0}
 }
 
-/* �"?�"? Vue Semaine (emploi du temps) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 .cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:max-content}
@@ -685,7 +685,7 @@ body.light .toast.info{background:#fff;color:var(--text)}
 .ctrl-point-filters-inputs .pf-input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;font-family:inherit;min-width:80px}
 .ctrl-point-filters-inputs .pf-num{width:60px}
 
-/* �"?�"? Mode multi-rôle (admin / opérateur) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+/* ── Mode multi-rôle (admin / opérateur) ─────────────────────────────
    La page rend la même structure DOM pour tous ; le body porte
    data-maint-role="admin" ou "operator" et les règles ci-dessous
    masquent ce qui n'est pas pertinent pour le rôle courant. */
@@ -702,7 +702,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-page{display:none;flex-direction:column;flex:1}
 .op-page.active{display:flex}
 
-/* �"?�"? UI opérateur : conteneur actions dans .page-header �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── UI opérateur : conteneur actions dans .page-header ─────────── */
 .op-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .op-date-picker{display:inline-flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:6px 12px;min-height:38px}
 .op-date-picker label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin:0}
@@ -711,7 +711,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 .btn.op-btn-accent:hover{filter:brightness(1.08);border-color:var(--accent);color:var(--accent-fg)}
 .btn.op-btn-accent .btn-ico{color:var(--accent-fg)}
 
-/* �"?�"? Vue Mes tâches : 2 colonnes Aujourd'hui / �? venir �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Vue Mes tâches : 2 colonnes Aujourd'hui / À venir ──────────── */
 .op-two-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:flex-start}
 @media(max-width:900px){.op-two-cols{grid-template-columns:1fr}}
 .op-col{background:transparent}
@@ -728,7 +728,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 /* Bouton "Commencer la session" sur les cartes du jour */
 .op-card-cta{width:100%;justify-content:center;margin-top:12px}
 
-/* �"?�"? Cartes de tâches �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Cartes de tâches ───────────────────────────────────────────── */
 .op-tasks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .op-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:border-color .15s,transform .15s;position:relative;display:flex;flex-direction:column;gap:10px}
 .op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
@@ -749,18 +749,18 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-status-reporte{background:rgba(248,113,113,.16);color:var(--danger)}
 .op-badge-source{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,.14);color:#f59e0b;text-transform:uppercase;letter-spacing:.4px}
 
-/* �"?�"? �?tat vide (aucune tâche) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── État vide (aucune tâche) ───────────────────────────────────── */
 .op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
 .op-empty h3{font-size:18px;color:var(--text2);margin:0 0 8px 0;font-weight:600}
 
-/* �"?�"? Sous-onglets (Planning personnel / Planning général) �"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Sous-onglets (Planning personnel / Planning général) ──────── */
 .op-subtabs{display:inline-flex;gap:0;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:18px}
 .op-subtab{padding:8px 16px;border-radius:8px;background:transparent;border:none;color:var(--text2);font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
 .op-subtab:hover{color:var(--text)}
 .op-subtab.active{background:var(--accent-bg);color:var(--accent)}
 .op-tab-content{flex:1}
 
-/* �"?�"? Vue Planning opérateur : tableau read-only �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Vue Planning opérateur : tableau read-only ──────────────────── */
 .op-plan-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px}
 .op-plan-table thead th{background:var(--bg);text-align:left;padding:12px 14px;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
 .op-plan-table tbody td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2)}
@@ -768,7 +768,7 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-plan-table tbody tr.mine{background:var(--accent-bg)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
 
-/* �"?�"? Modal saisie / création (partagé opérateur & admin) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Modal saisie / création (partagé opérateur & admin) ─────────── */
 .op-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:20px}
 .op-modal-overlay.active{display:flex}
 .op-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow-y:auto;padding:22px}
@@ -823,7 +823,7 @@ body[data-maint-role="operator"] .content{display:none !important}
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
-        <span class="mysifa-back-preamble">�?� Retour </span>
+        <span class="mysifa-back-preamble">← Retour </span>
         <span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span>
       </button>
       <div class="user-chip" id="user-chip" onclick="location.href='/profil'"></div>
@@ -848,7 +848,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="mobile-topbar-title">Maintenance</div>
         <div class="mobile-topbar-sub">En cours de développement</div>
       </div>
-      <button type="button" class="mobile-home-btn" onclick="location.href='/'">�O,</button>
+      <button type="button" class="mobile-home-btn" onclick="location.href='/'">⌂</button>
     </div>
 
     <div class="content">
@@ -871,13 +871,13 @@ body[data-maint-role="operator"] .content{display:none !important}
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1</button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2</button>
           </div>
-          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres �?' Maintenance</span>
+          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
         </div>
 
         <!-- Cartes des opérations de maintenance périodiques.
              Une carte par code DB avec périodique=OUI, groupées par intervalle
              (Hebdomadaire, Mensuel, Trimestriel...). La grille est régénérée
-             automatiquement quand les codes changent dans Paramètres �?' Maintenance,
+             automatiquement quand les codes changent dans Paramètres → Maintenance,
              ou quand une nouvelle saisie d'opération / contrôle est enregistrée. -->
         <div id="maint-cards-grid"></div>
       </div>
@@ -894,7 +894,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <section class="cal-sec">
           <div class="cal-hdr">
             <div class="cal-title">
-              <span id="cal-month-label">�?"</span>
+              <span id="cal-month-label">—</span>
             </div>
             <div class="cal-controls">
               <div class="cal-view-tabs">
@@ -903,9 +903,9 @@ body[data-maint-role="operator"] .content{display:none !important}
                 <button type="button" class="cal-view-tab" data-cal-view="day" onclick="setCalView('day')">Jour</button>
               </div>
               <div class="cal-nav">
-                <button type="button" onclick="calPrev()" aria-label="Précédent">�-?</button>
+                <button type="button" onclick="calPrev()" aria-label="Précédent">◀</button>
                 <button type="button" class="today" onclick="calToday()">Aujourd'hui</button>
-                <button type="button" onclick="calNext()" aria-label="Suivant">�-�</button>
+                <button type="button" onclick="calNext()" aria-label="Suivant">▶</button>
               </div>
             </div>
           </div>
@@ -921,7 +921,7 @@ body[data-maint-role="operator"] .content{display:none !important}
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
 
-          <!-- FAB + menu de création (vierge / depuis modèle) �?" v163 -->
+          <!-- FAB + menu de création (vierge / depuis modèle) — v163 -->
           <button type="button" class="cal-fab" onclick="toggleCalFabMenu()" aria-label="Créer un créneau" title="Créer un créneau">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
@@ -933,8 +933,8 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
         </section>
 
-        <!-- Liste d'opérations de maintenance (catalogue) �?" copie synchronisée avec l'onglet Opérations -->
-        <!-- Source : table maintenance_codes (Paramètres �?' Maintenance), filtre periodique=OUI. -->
+        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
+        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
@@ -949,18 +949,18 @@ body[data-maint-role="operator"] .content{display:none !important}
                   <option value="Repiquage">Repiquage</option>
                 </select>
               </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres �?' Maintenance</span>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">�?.</span></th>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -1070,10 +1070,10 @@ body[data-maint-role="operator"] .content{display:none !important}
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-ctrl="date_saisie" onclick="sortCtrl('date_saisie')">Date saisie<span class="sort-ico">�?.</span></th>
-                  <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">�?.</span></th>
-                  <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">�?.</span></th>
-                  <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">�?.</span></th>
+                  <th data-sort-ctrl="date_saisie" onclick="sortCtrl('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="machine" onclick="sortCtrl('machine')">Machine<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="operateur" onclick="sortCtrl('operateur')">Opérateur<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl="type" onclick="sortCtrl('type')">Type<span class="sort-ico">↕</span></th>
                   <th>Commentaires</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -1098,7 +1098,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div>
             Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
             Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres �?' Maintenance</strong>.
+            <strong>Paramètres → Maintenance</strong>.
           </div>
         </div>
 
@@ -1117,15 +1117,15 @@ body[data-maint-role="operator"] .content{display:none !important}
                   <option value="Repiquage">Repiquage</option>
                 </select>
               </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres �?' Maintenance</span>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">�?.</span></th>
-                  <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">�?.</span></th>
+                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th>Documents</th>
                   <th>Détail</th>
                   <th aria-label="Actions"></th>
@@ -1225,10 +1225,10 @@ body[data-maint-role="operator"] .content{display:none !important}
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort="date_saisie" onclick="sortOps('date_saisie')">Date saisie<span class="sort-ico">�?.</span></th>
-                  <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">�?.</span></th>
-                  <th data-sort="operateur" onclick="sortOps('operateur')">Opérateur<span class="sort-ico">�?.</span></th>
-                  <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">�?.</span></th>
+                  <th data-sort="date_saisie" onclick="sortOps('date_saisie')">Date saisie<span class="sort-ico">↕</span></th>
+                  <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">↕</span></th>
+                  <th data-sort="operateur" onclick="sortOps('operateur')">Opérateur<span class="sort-ico">↕</span></th>
+                  <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
                   <th>Commentaires</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -1253,12 +1253,12 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div>
             Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
             Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres �?' Maintenance</strong>.
+            <strong>Paramètres → Maintenance</strong>.
           </div>
         </div>
 
         <!-- Liste d'opérations de maintenance (catalogue) -->
-        <!-- Source : table maintenance_codes (Paramètres �?' Maintenance), filtre periodique=OUI. -->
+        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
         <div class="ops-list">
           <div class="ops-list-head">
             <div class="ops-list-title">Liste d'opérations de maintenance</div>
@@ -1273,18 +1273,18 @@ body[data-maint-role="operator"] .content{display:none !important}
                   <option value="Repiquage">Repiquage</option>
                 </select>
               </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres �?' Maintenance</span>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
             </div>
           </div>
           <div class="ops-table-wrap">
             <table class="ops-table">
               <thead>
                 <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">�?.</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">�?.</span></th>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -1299,12 +1299,12 @@ body[data-maint-role="operator"] .content{display:none !important}
 
     <!-- Conteneur opérateur (visible uniquement quand data-maint-role="operator") -->
     <div class="op-main">
-      <!-- View opérateur : Mes tâches, en 2 colonnes (Aujourd'hui / �? venir) -->
+      <!-- View opérateur : Mes tâches, en 2 colonnes (Aujourd'hui / À venir) -->
       <div class="op-page op-only active" id="view-op-tasks">
         <div class="page-header">
           <div>
             <div class="page-title">Mes tâches</div>
-            <div class="page-subtitle" id="op-tasks-count">�?"</div>
+            <div class="page-subtitle" id="op-tasks-count">—</div>
           </div>
           <div class="op-actions">
             <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
@@ -1326,7 +1326,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           </section>
           <section class="op-col op-col-upcoming">
             <div class="op-col-head">
-              <h3>�? venir</h3>
+              <h3>À venir</h3>
               <span class="op-col-count" id="op-count-upcoming">0</span>
             </div>
             <div id="op-cards-upcoming"></div>
@@ -1339,7 +1339,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         <div class="page-header">
           <div>
             <div class="page-title">Planning</div>
-            <div class="page-subtitle">Vue de la journée �?" mes tâches sont surlignées</div>
+            <div class="page-subtitle">Vue de la journée — mes tâches sont surlignées</div>
           </div>
           <div class="op-actions">
             <div class="op-date-picker">
@@ -1372,13 +1372,13 @@ body[data-maint-role="operator"] .content{display:none !important}
       <div class="modal-body">
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span>Saisi par : <strong id="ops-saisi-par-name">�?�</strong></span>
+          <span>Saisi par : <strong id="ops-saisi-par-name">…</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field">
             <label class="ops-field-label" for="ops-machine">Machine<span class="req">*</span></label>
             <select id="ops-machine" class="ops-select" required>
-              <option value="">Sélectionner�?�</option>
+              <option value="">Sélectionner…</option>
               <option value="Cohésio 1">Cohésio 1</option>
               <option value="Cohésio 2">Cohésio 2</option>
               <option value="DSI">DSI</option>
@@ -1388,7 +1388,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div class="ops-field">
             <label class="ops-field-label" for="ops-type">Type d'opération<span class="req">*</span></label>
             <select id="ops-type" class="ops-select" required>
-              <option value="">Aucun type défini�?�</option>
+              <option value="">Aucun type défini…</option>
             </select>
             <div class="ops-field-hint" id="ops-type-hint" style="display:none">
               Aucun type défini. Ajoutez-en dans « Liste d'opérations de maintenance ».
@@ -1400,7 +1400,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ops-comment">Commentaires</label>
-            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées�?�"></textarea>
+            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées…"></textarea>
           </div>
         </div>
       </div>
@@ -1434,7 +1434,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div class="ops-field">
             <label class="ops-field-label" for="cat-niveau">Niveau de maintenance<span class="req">*</span></label>
             <select id="cat-niveau" class="ops-select" required>
-              <option value="">Sélectionner�?�</option>
+              <option value="">Sélectionner…</option>
               <option value="1">Niveau 1</option>
               <option value="2">Niveau 2</option>
               <option value="3">Niveau 3</option>
@@ -1446,7 +1446,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="cat-detail">Détail</label>
-            <textarea id="cat-detail" class="ops-textarea" placeholder="Description, étapes clés, points d'attention�?�"></textarea>
+            <textarea id="cat-detail" class="ops-textarea" placeholder="Description, étapes clés, points d'attention…"></textarea>
           </div>
         </div>
       </div>
@@ -1477,8 +1477,8 @@ body[data-maint-role="operator"] .content{display:none !important}
         <!-- Notes locales modifiables -->
         <div class="ops-field ops-field--full">
           <label class="ops-field-label" for="ops-type-details-text">Détails / Notes</label>
-          <textarea id="ops-type-details-text" class="ops-textarea" rows="6" placeholder="Notes libres : procédure, points d'attention, pièces concernées, contacts�?� (non stocké en base, propre à ce navigateur)"></textarea>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Ces notes ne sont pas enregistrées en base de données �?" uniquement sur ce navigateur.</div>
+          <textarea id="ops-type-details-text" class="ops-textarea" rows="6" placeholder="Notes libres : procédure, points d'attention, pièces concernées, contacts… (non stocké en base, propre à ce navigateur)"></textarea>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Ces notes ne sont pas enregistrées en base de données — uniquement sur ce navigateur.</div>
         </div>
       </div>
       <div class="modal-foot">
@@ -1505,13 +1505,13 @@ body[data-maint-role="operator"] .content{display:none !important}
       <div class="modal-body">
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <span>Saisi par : <strong id="ctrl-saisi-par-name">�?�</strong></span>
+          <span>Saisi par : <strong id="ctrl-saisi-par-name">…</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field">
             <label class="ops-field-label" for="ctrl-machine">Machine<span class="req">*</span></label>
             <select id="ctrl-machine" class="ops-select" required>
-              <option value="">Sélectionner�?�</option>
+              <option value="">Sélectionner…</option>
               <option value="Cohésio 1">Cohésio 1</option>
               <option value="Cohésio 2">Cohésio 2</option>
               <option value="DSI">DSI</option>
@@ -1521,7 +1521,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div class="ops-field">
             <label class="ops-field-label" for="ctrl-type">Type de contrôle<span class="req">*</span></label>
             <select id="ctrl-type" class="ops-select" required>
-              <option value="">Aucun type défini�?�</option>
+              <option value="">Aucun type défini…</option>
             </select>
             <div class="ops-field-hint" id="ctrl-type-hint" style="display:none">
               Aucun type défini. Ajoutez-en dans « Liste de contrôles ».
@@ -1529,7 +1529,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ctrl-comment">Commentaires</label>
-            <textarea id="ctrl-comment" class="ops-textarea" placeholder="Constatations, anomalies, mesures�?�"></textarea>
+            <textarea id="ctrl-comment" class="ops-textarea" placeholder="Constatations, anomalies, mesures…"></textarea>
           </div>
         </div>
       </div>
@@ -1562,7 +1562,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ctrl-cat-detail">Détail</label>
-            <textarea id="ctrl-cat-detail" class="ops-textarea" placeholder="Description, méthode, critères d'acceptation�?�"></textarea>
+            <textarea id="ctrl-cat-detail" class="ops-textarea" placeholder="Description, méthode, critères d'acceptation…"></textarea>
           </div>
         </div>
       </div>
@@ -1589,7 +1589,7 @@ body[data-maint-role="operator"] .content{display:none !important}
     <div class="modal-body">
       <div class="ops-saisi-par">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Date : <strong id="plan-det-date">�?"</strong></span>
+        <span>Date : <strong id="plan-det-date">—</strong></span>
       </div>
       <div class="plan-det-list" id="plan-det-list"></div>
     </div>
@@ -1619,7 +1619,7 @@ body[data-maint-role="operator"] .content{display:none !important}
         </div>
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Date : <strong id="case-mod-date">�?"</strong></span>
+          <span>Date : <strong id="case-mod-date">—</strong></span>
         </div>
         <div class="ops-form-grid">
           <div class="ops-field">
@@ -1645,7 +1645,7 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div class="case-ops-head">
             <label class="ops-field-label">Opérateurs assignés</label>
             <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:220px" onchange="addCaseOperatorFromPicker(this)">
-              <option value="">Ajouter un opérateur�?�</option>
+              <option value="">Ajouter un opérateur…</option>
             </select>
           </div>
           <div class="case-ops-list" id="case-mod-operators-list"></div>
@@ -1687,7 +1687,7 @@ body[data-maint-role="operator"] .content{display:none !important}
   </div>
 </div>
 
-<!-- Modal : �?diter un modèle (création / édition) -->
+<!-- Modal : Éditer un modèle (création / édition) -->
 <div class="modal-overlay" id="tmpl-editor-modal" onclick="if(event.target===this) closeTemplateEditor()" aria-hidden="true">
   <div class="modal-card case-modal-card" role="dialog" aria-modal="true" aria-labelledby="tmpl-ed-title">
     <div class="modal-head">
@@ -1797,17 +1797,17 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
-    // �?tape 1 : bascule sur la vue Semaine et rerend avec l'état courant
+    // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
     // (cas où le fetch initial a déjà résolu au boot).
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
-    // �?tape 2 : refetch et rerend une seconde fois. Le fetch initial peut
+    // Étape 2 : refetch et rerend une seconde fois. Le fetch initial peut
     // avoir résolu avant que le container Planning ne soit visible, ce qui
     // fait rater le positionnement absolute des events.
     (async () => {
       await refreshPlanning();
       renderCal();
-      // �?tape 3 : filet de sécurité �?" rerender après stabilisation du
+      // Étape 3 : filet de sécurité — rerender après stabilisation du
       // layout, pour couvrir les navigateurs qui calculent les
       // dimensions tardivement.
       setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
@@ -1820,7 +1820,7 @@ function switchView(name){
   if(name === 'op-planning' && typeof opLoadPlanning === 'function'){
     opLoadPlanning();
   }
-  // �? l'arrivée sur la vue Opérations, restaure le dernier sous-onglet utilisé.
+  // À l'arrivée sur la vue Opérations, restaure le dernier sous-onglet utilisé.
   if(name === 'operations'){
     setOpsSubtab(_getOpsSubtab());
   }
@@ -1858,10 +1858,10 @@ function switchView(name){
 }
 
 // =========================================================================
-// Planning �?" calendrier mensuel + vue Semaine (style MyProd)
+// Planning — calendrier mensuel + vue Semaine (style MyProd)
 // =========================================================================
 const CAL_HOUR_START = 6;
-const CAL_HOUR_END   = 21;   // exclusif (affiche 6h �?' 20h)
+const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
 const CAL_HOUR_PX    = 62;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -1900,7 +1900,7 @@ function _opTypePalette(opTypeId){
   }
   return CAL_EVENT_PALETTE[Math.abs(hash) % CAL_EVENT_PALETTE.length];
 }
-// �?tat des opérations planifiées (drag & drop sur la vue Semaine).
+// État des opérations planifiées (drag & drop sur la vue Semaine).
 // Depuis Commit B2, le calendrier est branché sur l'API /api/maintenance/events
 // (au lieu du localStorage). Chaque event contient N ops et M opérateurs assignés.
 // loadPlanning() lance le fetch en tâche de fond puis re-render : les callers
@@ -2095,13 +2095,13 @@ function renderCalMonth(){
     let chips = '';
     shown.forEach(ev => {
       const palette = _machinePalette(ev.machine);
-      const tip = (ev.machine || '') + ' · ' + ev.start + '�?"' + ev.end;
+      const tip = (ev.machine || '') + ' · ' + ev.start + '–' + ev.end;
       chips += '<div class="cal-day-event" style="background:' + palette.bg + ';color:' + palette.fg + '" ' +
                'data-event-id="' + escAttr(ev.id) + '" ' +
                'onclick="onCalMonthEventClick(event,\'' + escAttr(ev.id) + '\')" ' +
                'title="' + escAttr(tip) + '">' +
                '<span class="cal-day-event-time">' + escHtml(ev.start) + '</span>' +
-               '<span class="cal-day-event-machine">' + escHtml(ev.machine || '�?"') + '</span>' +
+               '<span class="cal-day-event-machine">' + escHtml(ev.machine || '—') + '</span>' +
                '</div>';
     });
     if(overflow > 0){
@@ -2245,7 +2245,7 @@ function renderCalDay(){
     });
   });
 }
-// �"?�"? Lane packing (Google-Calendar style) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+// ── Lane packing (Google-Calendar style) ──────────────────────────────
 function _packDayEvents(events){
   const sorted = events.slice()
     .map(ev => ({ ev, s: _hmToMins(ev.start), e: _hmToMins(ev.end) }))
@@ -2332,10 +2332,10 @@ function _makeEventBlock(item){
   let inner = '';
   if(showTitle){
     const sub = (opsCount > 0) ? ' · ' + opsCount + ' op.' : '';
-    inner += '<div class="cal-event-title">' + escHtml(ev.machine || '�?"') + sub + '</div>';
+    inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
   }
   if(showOpsList){
-    // Lignes disponibles �?^ (height - 24px titre - 12px time) / 14px
+    // Lignes disponibles ≈ (height - 24px titre - 12px time) / 14px
     const lineH = 17;
     const reservedTitle = 28;
     const reservedTime = showTime ? 18 : 0;
@@ -2343,7 +2343,7 @@ function _makeEventBlock(item){
     const visible = ops.slice(0, available);
     inner += '<div class="cal-event-ops">';
     visible.forEach(op => {
-      inner += '<div class="cal-event-op">�?� ' + escHtml(op.opName || '�?"') + '</div>';
+      inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
     });
     if(opsCount > visible.length){
       inner += '<div class="cal-event-op cal-event-op-more">+ ' + (opsCount - visible.length) + ' autre' + ((opsCount - visible.length) > 1 ? 's' : '') + '</div>';
@@ -2356,11 +2356,11 @@ function _makeEventBlock(item){
     inner += '<div class="cal-event-machine">' + escHtml(first.opName || '') + extra + '</div>';
   }
   if(showTime){
-    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' �?" ' + escHtml(ev.end) + '</div>';
+    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
   }
   div.innerHTML = inner;
-  div.title = (ev.machine || '') + '\n' + ev.start + ' �?" ' + ev.end +
-    (ops.length ? '\n\n' + ops.map(o => '�?� ' + (o.opName||'�?"')).join('\n') : '') +
+  div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
+    (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
     '\n\nCliquer pour afficher les détails';
   div.addEventListener('click', e => {
     e.stopPropagation();
@@ -2415,8 +2415,8 @@ function _makeClusterBlock(cluster){
   if(single){
     const ev = cluster.items[0];
     const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
-    div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '�?"') + machineSuffix) + '</div>' +
-                    '<div class="cal-event-time">' + escHtml(ev.start) + ' �?" ' + escHtml(ev.end) + '</div>';
+    div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
+                    '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
     div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -2428,12 +2428,12 @@ function _makeClusterBlock(cluster){
       const nivCls = ev.opNiveau ? (' cal-event-item-niv-' + ev.opNiveau) : '';
       const machine = ev.machine ? '<span class="cal-event-item-machine"> · ' + escHtml(ev.machine) + '</span>' : '';
       listHtml += '<div class="cal-event-item' + nivCls + '" data-event-id="' + escAttr(ev.id) + '">' +
-                  '<span class="cal-event-item-time">' + escHtml(ev.start) + ' �?" ' + escHtml(ev.end) + '</span>' +
-                  '<span class="cal-event-item-name">' + escHtml(ev.opName || '�?"') + machine + '</span>' +
+                  '<span class="cal-event-item-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</span>' +
+                  '<span class="cal-event-item-name">' + escHtml(ev.opName || '—') + machine + '</span>' +
                   '</div>';
     });
     listHtml += '</div>';
-    const headTxt = escHtml(fmtHM(startMin)) + ' �?' ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' op.';
+    const headTxt = escHtml(fmtHM(startMin)) + ' → ' + escHtml(fmtHM(endMin)) + ' · ' + cluster.items.length + ' op.';
     div.innerHTML = '<div class="cal-event-merged-head">' + headTxt + '</div>' + listHtml;
     div.title = 'Cliquer pour afficher les détails';
     div.style.cursor = 'pointer';
@@ -2458,7 +2458,7 @@ async function deletePlanningEvent(id){
   renderCal();
 }
 
-// �"?�"? Modale Détails (créneau) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+// ── Modale Détails (créneau) ──────────────────────────────────────────
 let _PLAN_DET_CASE_ID = null;
 function _fmtIsoDateFr(iso){
   if(!iso) return '';
@@ -2485,7 +2485,7 @@ function openPlanningDetailsModal(events){
     ops.forEach(op => {
       (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
     });
-    const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '�?"');
+    const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
     const opsHtml = ops.length
       ? ops.map(op => {
           const machChips = (op.machines || []).map(m =>
@@ -2493,7 +2493,7 @@ function openPlanningDetailsModal(events){
           ).join('');
           return '<div class="plan-det-case-op">' +
             '<span class="plan-det-case-op-bullet"></span>' +
-            '<span class="plan-det-case-op-name">' + escHtml(op.opName || '�?"') + '</span>' +
+            '<span class="plan-det-case-op-name">' + escHtml(op.opName || '—') + '</span>' +
             (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
             (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
             (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
@@ -2519,15 +2519,15 @@ function openPlanningDetailsModal(events){
         '</div>' +
         '<div class="plan-det-case-time">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-          escHtml(ev.start) + ' �?" ' + escHtml(ev.end) +
+          escHtml(ev.start) + ' – ' + escHtml(ev.end) +
         '</div>' +
       '</div>' +
-      // Bloc opérateurs (nouveau : groupe assigné au créneau �?" partagé).
+      // Bloc opérateurs (nouveau : groupe assigné au créneau — partagé).
       '<div class="plan-det-case-ops-label">Opérateurs assignés (' +
         (Array.isArray(ev.operators) ? ev.operators.length : 0) + ')</div>' +
       '<div style="margin-top:6px;margin-bottom:6px">' +
         ((Array.isArray(ev.operators) && ev.operators.length)
-          ? ev.operators.map(op => '<span style="display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;margin:0 6px 6px 0">' + escHtml(op.nom || '�?"') + '</span>').join('')
+          ? ev.operators.map(op => '<span style="display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;margin:0 6px 6px 0">' + escHtml(op.nom || '—') + '</span>').join('')
           : '<span style="color:var(--muted);font-style:italic;font-size:12px">Aucun opérateur assigné pour l\'instant.</span>'
         ) +
       '</div>' +
@@ -2565,8 +2565,8 @@ async function deletePlanningEvent(id){
 async function confirmDeleteCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
   if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
-  const opsTxt = (ev.operations || []).map(o => '�?� ' + (o.opName||'�?"')).join('\n');
-  if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' �?" ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
+  const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
+  if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
   try{
     await fetch('/api/maintenance/events/' + encodeURIComponent(id),
                 { method: 'DELETE', credentials: 'include' });
@@ -2589,7 +2589,7 @@ function editCase(id){
   });
 }
 
-// �"?�"? Clic sur calendrier �?' ouverture modale "Nouveau créneau" �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+// ── Clic sur calendrier → ouverture modale "Nouveau créneau" ──────────
 function onCalCellClick(e){
   // Ignore clicks on existing events (their own click handler ouvre les détails)
   if(e.target.closest('.cal-event')) return;
@@ -2608,7 +2608,7 @@ function onCalCellClick(e){
   openCaseModal({ iso, defaultHour: h });
 }
 
-// �"?�"? Modale Créneau (création + édition) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+// ── Modale Créneau (création + édition) ──────────────────────────────
 let _PENDING_CASE = null;
 let _CASE_OPERATORS = [];  // [{id, nom}] : opérateurs assignés au créneau en cours d'édition
 let _OPERATORS_CATALOG = null;  // cache : [{id, nom, ...}]
@@ -2632,14 +2632,14 @@ function renderCaseOperators(){
       list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun opérateur assigné pour l\'instant.</div>';
     } else {
       list.innerHTML = _CASE_OPERATORS.map(op =>
-        `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">�-</button></div>`
+        `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">×</button></div>`
       ).join('');
     }
   }
   if(picker){
     const assigned = new Set(_CASE_OPERATORS.map(o => o.id));
     const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
-    picker.innerHTML = '<option value="">Ajouter un opérateur�?�</option>' +
+    picker.innerHTML = '<option value="">Ajouter un opérateur…</option>' +
       available.map(u => `<option value="${u.id}">${u.nom}</option>`).join('');
   }
 }
@@ -2779,7 +2779,7 @@ function renderCaseOpsList(){
     return;
   }
   list.innerHTML = _CASE_OPS.map((op, idx) => {
-    const options = '<option value="">Sélectionner une opération�?�</option>' +
+    const options = '<option value="">Sélectionner une opération…</option>' +
       OPS_TYPES_STATE.list.map(t =>
         '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
           escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
@@ -2886,7 +2886,7 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
   const wantedByCode = new Map(wantedOps.map(o => [o.code, o]));
   const currentByCode = new Map(currentOps.map(o => [o.code, o]));
 
-  // Ops à ajouter (dans wanted mais pas dans current) �?' POST avec machines.
+  // Ops à ajouter (dans wanted mais pas dans current) → POST avec machines.
   for(const w of wantedOps){
     if(!currentByCode.has(w.code)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
@@ -2971,7 +2971,7 @@ function fmtDate(iso){
 }
 
 // --- Modales ---
-// �?tat d'édition : id de l'opération en cours de modification, sinon null.
+// État d'édition : id de l'opération en cours de modification, sinon null.
 let _opsEditingId = null;
 
 function openOpsModal(editId){
@@ -3208,7 +3208,7 @@ function addOperation(e){
   if(isEdit){
     const idx = OPS_STATE.list.findIndex(o => String(o.id) === String(_opsEditingId));
     if(idx === -1){
-      showToast('Opération introuvable �?" peut-être supprimée entre-temps.', 'danger');
+      showToast('Opération introuvable — peut-être supprimée entre-temps.', 'danger');
       return;
     }
     const original = OPS_STATE.list[idx];
@@ -3269,7 +3269,7 @@ function resetOpsFilters(){
   });
   renderOps();
 }
-// �"?�"? Date presets partagés �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?
+// ── Date presets partagés ─────────────────────────────────────────────
 function maintDatePresets(){
   const now = new Date();
   const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -3364,7 +3364,7 @@ function renderOps(){
     const isActive = th.getAttribute('data-sort') === sf;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '�?'' : '�?"') : '�?.';
+    if(ico) ico.textContent = isActive ? (OPS_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
@@ -3404,7 +3404,7 @@ function renderOps(){
 }
 
 // =========================================================================
-// Catalogue des types d'opérations �?" source : Paramètres �?' Maintenance (DB)
+// Catalogue des types d'opérations — source : Paramètres → Maintenance (DB)
 // Filtre : "Interventions" (toutes) + "Contrôles" avec periodique=OUI.
 // La "Dernière intervention" est dérivée des saisies réelles (OPS_STATE),
 // filtrées par la machine sélectionnée au-dessus du catalogue.
@@ -3527,8 +3527,8 @@ function _ratioColor(ratio){
 // autre carte rendue avant, et les filtres se mélangent entre eux).
 let _wpRingSvgCounter = 0;
 // Génère le SVG de 2 anneaux concentriques (style Apple Watch).
-// ratios : { temps: 0..�^z ou null, metres: 0..�^z ou null }
-// �?tiquettes "TEMPS" / "M�?TRAGE" droites à 12h (point de départ de chaque arc)
+// ratios : { temps: 0..∞ ou null, metres: 0..∞ ou null }
+// Étiquettes "TEMPS" / "MÉTRAGE" droites à 12h (point de départ de chaque arc)
 // et pourcentage actuel sur arc courbe à 6h. Longueur d'arc clampée à ~100%
 // (au-delà : tour supplémentaire posé par-dessus, extrémité toujours visible).
 function _renderWearPartRings(ratios){
@@ -3551,7 +3551,7 @@ function _renderWearPartRings(ratios){
     // >= 100% : tour de base + court segment de stroke à la position
     // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
     // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
-    // Le départ à 12h n'est pas tracé (gap dans le dasharray) �?' pas de
+    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
     // cap visible au sommet.
     // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
     const overflow = Math.min(0.97, ratio - 1);
@@ -3574,7 +3574,7 @@ function _renderWearPartRings(ratios){
       ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
     return trackBg + baseLap + tip;
   };
-  // �?tiquette titre à 12h (texte droit) sur chaque anneau.
+  // Étiquette titre à 12h (texte droit) sur chaque anneau.
   // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
   // soit le fond (track gris, dégradé vert, jaune, orange ou rouge).
   const _textStyle = 'paint-order:stroke;stroke:rgba(15,23,42,.75);stroke-width:2.5px;pointer-events:none;text-transform:uppercase';
@@ -3582,13 +3582,13 @@ function _renderWearPartRings(ratios){
   const _topTag = (yPos, txt) =>
     '<text x="' + cx + '" y="' + yPos + '" text-anchor="middle" dominant-baseline="central" ' +
       _textCommonAttr + ' style="' + _textStyle + '">' + txt + '</text>';
-  // % courbé sur arc inférieur (6h) �?" suit la courbure de l'anneau.
+  // % courbé sur arc inférieur (6h) — suit la courbure de l'anneau.
   const uid = ++_wpRingSvgCounter;
   const idTempsBot  = 'wpr-tb-' + uid;
   const idMetresBot = 'wpr-mb-' + uid;
-  // Path = demi-cercle INF�?RIEUR de gauche à droite. En SVG (y-axe inversé),
+  // Path = demi-cercle INFÉRIEUR de gauche à droite. En SVG (y-axe inversé),
   // sweep-flag=0 correspond à la trajectoire qui passe par le BAS du cercle.
-  // �? 6h, la tangente du path va dans le sens +x : les caractères du textPath
+  // À 6h, la tangente du path va dans le sens +x : les caractères du textPath
   // s'élèvent alors vers le centre du cercle (lecture upright normale).
   const _bottomPath = (id, r) =>
     '<path id="' + id + '" d="M ' + (cx - r) + ' ' + cy +
@@ -3650,7 +3650,7 @@ function _findWearPartCode(pieceId, pos){
   }
   return null;
 }
-// Conservé pour compat (no-op : géré dans Paramètres �?' Maintenance).
+// Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 
 // =========================================================================
@@ -3687,7 +3687,7 @@ function openOpsTypeDetailsModal(code){
   // Bloc info DB (lecture seule) : catégorie, niveau, intervalle, dernière intervention
   const machine = getOpsCatMachine();
   const lastDt = _lastInterventionFor(t.nom, machine, OPS_STATE.list);
-  let lastDisplay = '�?"';
+  let lastDisplay = '—';
   if(lastDt){
     try{
       const d = new Date(lastDt);
@@ -3700,8 +3700,8 @@ function openOpsTypeDetailsModal(code){
   }
   const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
   const intervalleTxt = t.periodique
-    ? (t.intervalle || '�? compléter (Paramètres �?' Maintenance)')
-    : '�?" (non périodique)';
+    ? (t.intervalle || 'À compléter (Paramètres → Maintenance)')
+    : '— (non périodique)';
   const _kv = (lbl, val) =>
     '<div><div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">' + lbl + '</div>' +
     '<div style="color:var(--text);font-weight:500">' + val + '</div></div>';
@@ -3790,7 +3790,7 @@ async function loadWearPartLastDates(machine){
       });
     }
   });
-  // Clé de cache : machine + dates concaténées. Si rien n'a changé �?' skip fetch.
+  // Clé de cache : machine + dates concaténées. Si rien n'a changé → skip fetch.
   const cacheKey = machine + ':' + JSON.stringify(dates);
   if(WEARPART_LAST_DATES_STATE._cacheKey === cacheKey && !WEARPART_LAST_DATES_STATE.loading) return;
   WEARPART_LAST_DATES_STATE.loading = true;
@@ -3824,9 +3824,9 @@ function _getWearPartItem(pieceId, pos){
 }
 // Formate un nombre de mètres avec séparateurs d'espaces (style FR).
 function _fmtMetres(m){
-  if(m == null) return '�?"';
+  if(m == null) return '—';
   const n = Math.round(Number(m));
-  if(!isFinite(n)) return '�?"';
+  if(!isFinite(n)) return '—';
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' m';
 }
 // Parse une référence métrage en mètres. Accepte "5000", "5000 m", "5 km",
@@ -3867,7 +3867,7 @@ function _fmtDateOnly(iso){
 
 // --- Pièces d'usure (Couteaux / Contre-couteaux) avec position Bande/Rive ---
 // Une carte par pièce, position mémorisée par machine + par pièce.
-// �?tat localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
+// État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
 const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
 const WEARPART_PIECES = [
   { id: 'couteaux',         label: 'Couteaux' },
@@ -3907,7 +3907,7 @@ function setWearPartPos(pieceId, pos){
   _saveWearPartMap(m);
   renderMaintCards();
 }
-// Références d'usure (temps & métrage) �?" état localStorage :
+// Références d'usure (temps & métrage) — état localStorage :
 //   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
 const WEARPART_REFS_KEY = 'mysifa_maint_wearparts_refs_v1';
 function _loadWearPartRefs(){
@@ -3940,14 +3940,14 @@ function setWearPartRef(pieceId, kind, value){
 
 function _renderWearPartsGroup(machine){
   // Déclenche le fetch des dernières dates si la machine a changé
-  // (asynchrone : le render initial affiche "Chargement�?�", puis re-render au retour)
+  // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
   if(WEARPART_LAST_DATES_STATE.machine !== machine){
     loadWearPartLastDates(machine);
   }
   const cards = WEARPART_PIECES.map(p => {
     const pos = getWearPartPos(p.id, machine);
     // Source des références : code Intervention en base, match par label
-    // (ex. "Changement couteaux bande" �?' carte Couteaux + Bande).
+    // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
     const wpCode = _findWearPartCode(p.id, pos);
     const refTemps   = wpCode ? (wpCode.intervalle  || '') : '';
     const refMetrage = wpCode ? (wpCode.metrage_ref || '') : '';
@@ -3965,8 +3965,8 @@ function _renderWearPartsGroup(machine){
     const daysSince = _daysSinceFromIso(lastDate);
     // Pour la compat avec le bloc d'affichage plus bas (qui utilise wpItem.last_date)
     if(wpItem){ wpItem.last_date = lastDate; }
-    // Mise en exergue : déclenchée par D�?PASSEMENT DE TEMPS ou D�?PASSEMENT DE
-    // M�?TRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
+    // Mise en exergue : déclenchée par DÉPASSEMENT DE TEMPS ou DÉPASSEMENT DE
+    // MÉTRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
     // le dépassement, is-overdue-critical quand on est à >200%.
     const refDays   = _parseFrequenceDays(refTemps);
     const refMetres = _parseMetrageRef(refMetrage);
@@ -3981,7 +3981,7 @@ function _renderWearPartsGroup(machine){
     }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
-      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement�?�</span>';
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
     } else if(daysSince == null){
       elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré dans MyProd</span>';
     } else {
@@ -4018,7 +4018,7 @@ function _renderWearPartsGroup(machine){
       '</div>' +
       (function(){
         // Layout :
-        //   - Gauche : 2 sections empilées TEMPS (cyan) et M�?TRAGE (ambre),
+        //   - Gauche : 2 sections empilées TEMPS (cyan) et MÉTRAGE (ambre),
         //     chacune avec barre verticale colorée à gauche pour identifier
         //     l'anneau correspondant.
         //   - Droite : 2 anneaux concentriques. Extérieur cyan = temps,
@@ -4033,7 +4033,7 @@ function _renderWearPartsGroup(machine){
         let lastSub = '';
         let lastVal;
         if(WEARPART_LAST_DATES_STATE.machine !== machine){
-          lastVal = '<span class="val muted">Chargement�?�</span>';
+          lastVal = '<span class="val muted">Chargement…</span>';
         } else if(daysSince == null){
           lastVal = '<span class="val muted">jamais</span>';
         } else {
@@ -4048,12 +4048,12 @@ function _renderWearPartsGroup(machine){
           const over = daysSince - refDays;
           timeBadge = '<span class="maint-wp-badge">Retard ' + over + ' j</span>';
         }
-        // Section M�?TRAGE
+        // Section MÉTRAGE
         let mVal;
         if(WEARPART_LAST_DATES_STATE.machine !== machine){
-          mVal = '<span class="val muted">Chargement�?�</span>';
+          mVal = '<span class="val muted">Chargement…</span>';
         } else if(!wpItem || wpItem.last_date == null){
-          mVal = '<span class="val muted">�?"</span>';
+          mVal = '<span class="val muted">—</span>';
         } else if(metrageSince == null){
           mVal = '<span class="val muted">non disponible</span>';
         } else {
@@ -4082,7 +4082,7 @@ function _renderWearPartsGroup(machine){
                 timeBadge +
               '</div>' +
             '</div>' +
-            // Section M�?TRAGE (anneau intérieur)
+            // Section MÉTRAGE (anneau intérieur)
             '<div class="maint-wp-sec metres">' +
               '<div class="maint-wp-sec-head">Métrage</div>' +
               '<div class="maint-wp-row">' +
@@ -4135,7 +4135,7 @@ function renderMaintCards(){
   const grid = document.getElementById('maint-cards-grid');
   if(!grid) return;
   // Recharge les historiques de saisies depuis localStorage avant de calculer la
-  // dernière intervention �?" couvre les cas multi-onglets (saisie dans un autre
+  // dernière intervention — couvre les cas multi-onglets (saisie dans un autre
   // onglet) et garantit qu'on lit toujours l'état le plus à jour.
   if(typeof loadOps === 'function') loadOps();
   if(typeof loadCtrl === 'function') loadCtrl();
@@ -4165,7 +4165,7 @@ function renderMaintCards(){
   );
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
-      '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres �?' Maintenance.</div>';
+      '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
   // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
@@ -4221,14 +4221,14 @@ function renderMaintCards(){
     });
   });
   const _fmtDateTime = (iso) => {
-    if(!iso) return '�?"';
+    if(!iso) return '—';
     try{
       const d = new Date(iso);
-      if(isNaN(d.getTime())) return '�?"';
+      if(isNaN(d.getTime())) return '—';
       const pad = n => (n < 10 ? '0' + n : '' + n);
       return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear() +
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-    }catch(e){ return '�?"'; }
+    }catch(e){ return '—'; }
   };
   // Construit le HTML : pièces d'usure d'abord, puis sections par intervalle.
   let html = wearPartsHtml;
@@ -4296,7 +4296,7 @@ function renderMaintCards(){
           '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opération sur cette machine. Intervalle prévu : ' + freqDays + ' jour(s).') + '">' +
             '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:0%"></div></div>' +
             '<div class="maint-frame-progress-label">' +
-              '<span>�?"</span>' +
+              '<span>—</span>' +
               '<span class="pct">0 / ' + freqDays + ' j</span>' +
             '</div>' +
           '</div>';
@@ -4406,7 +4406,7 @@ function refreshOpsTypeSelect(){
   if(!sel) return;
   const cur = sel.value;
   if(!OPS_TYPES_STATE.list.length){
-    sel.innerHTML = '<option value="">Aucun type défini�?�</option>';
+    sel.innerHTML = '<option value="">Aucun type défini…</option>';
     sel.disabled = true;
     if(hint) hint.style.display = 'block';
     return;
@@ -4414,11 +4414,11 @@ function refreshOpsTypeSelect(){
   sel.disabled = false;
   if(hint) hint.style.display = 'none';
   const sorted = OPS_TYPES_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
-  sel.innerHTML = '<option value="">Sélectionner un type�?�</option>' +
+  sel.innerHTML = '<option value="">Sélectionner un type…</option>' +
     sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
   if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
 }
-// �"?�"? Maintenance préventive : fréquence �?' jours, retard d'intervention �"?�"?
+// ── Maintenance préventive : fréquence → jours, retard d'intervention ──
 function _normalizeFreqStr(s){
   return String(s || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -4449,7 +4449,7 @@ function _parseFrequenceDays(freq){
   return null; // fréquence non interprétable
 }
 function _opOverdueInfo(opType){
-  // �?' { overdue: bool, daysOverdue: number|null, daysSince: number|null, freqDays: number|null }
+  // → { overdue: bool, daysOverdue: number|null, daysSince: number|null, freqDays: number|null }
   const freqDays = _parseFrequenceDays(opType && opType.frequence);
   const dt = opType && opType.derniere_intervention;
   if(!dt) return { overdue:false, daysOverdue:null, daysSince:null, freqDays };
@@ -4502,7 +4502,7 @@ function renderOpsTypes(){
     const isActive = th.getAttribute('data-sort-cat') === f;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '�?'' : '�?"') : '�?.';
+    if(ico) ico.textContent = isActive ? (OPS_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   // Partitionner : retards d'abord (les plus en retard en premier), puis le reste selon le tri courant
   const withInfo = sorted.map(t => ({ t, info: _opOverdueInfo(t) }));
@@ -4512,17 +4512,17 @@ function renderOpsTypes(){
   const finalRows = overdueRows.concat(normalRows);
   let html;
   if(!finalRows.length){
-    html = '<tr><td colspan="6" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres �?' Maintenance.</td></tr>';
+    html = '<tr><td colspan="6" class="ops-empty">Aucune opération périodique. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</td></tr>';
   } else {
     html = finalRows.map(({t, info}) => {
       const rowCls = info.overdue ? ' class="row-overdue"' : '';
       const dt = t.derniere_intervention || '';
       let statusHtml = '';
       if(info.overdue){
-        statusHtml = '<span class="last-intervention-status overdue" title="' + escAttr('Retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue>1?'s':'') + ' (' + info.daysSince + 'j depuis la dernière, fréquence ' + info.freqDays + 'j)') + '">�s� Retard ' + info.daysOverdue + ' j</span>';
+        statusHtml = '<span class="last-intervention-status overdue" title="' + escAttr('Retard de ' + info.daysOverdue + ' jour' + (info.daysOverdue>1?'s':'') + ' (' + info.daysSince + 'j depuis la dernière, fréquence ' + info.freqDays + 'j)') + '">⚠ Retard ' + info.daysOverdue + ' j</span>';
       } else if(info.daysSince != null && info.freqDays != null){
         const remaining = info.freqDays - info.daysSince;
-        statusHtml = '<span class="last-intervention-status ok" title="Prochaine intervention recommandée dans ' + remaining + ' jour' + (remaining>1?'s':'') + '">�o" OK (J-' + Math.max(0, remaining) + ')</span>';
+        statusHtml = '<span class="last-intervention-status ok" title="Prochaine intervention recommandée dans ' + remaining + ' jour' + (remaining>1?'s':'') + '">✓ OK (J-' + Math.max(0, remaining) + ')</span>';
       } else if(!dt){
         statusHtml = '<span class="last-intervention-status unknown">Jamais enregistré</span>';
       }
@@ -4544,7 +4544,7 @@ function renderOpsTypes(){
       const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
       // dt est ici une date ISO (datetime) issue de la dernière saisie sur la
       // machine sélectionnée. On l'affiche au format JJ/MM/AAAA HH:MM.
-      let dtDisplay = '�?"';
+      let dtDisplay = '—';
       if(dt){
         try{
           const d = new Date(dt);
@@ -4557,8 +4557,8 @@ function renderOpsTypes(){
       }
       // Intervalle de temps : vide pour les non-périodiques (Interventions one-shot)
       const intervalleCell = t.periodique
-        ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">�? compléter</span>')
-        : '<span style="color:var(--muted)">�?"</span>';
+        ? (t.intervalle ? escHtml(t.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
+        : '<span style="color:var(--muted)">—</span>';
       // Ligne entière cliquable (double-clic) pour ouvrir la modale d'édition
       // des détails (notes libres, stockées en localStorage par code).
       return '<tr' + rowCls + ' data-ops-type-row="' + escAttr(t.id) + '" style="cursor:pointer" title="Double-cliquez pour voir et modifier les détails">' +
@@ -4687,7 +4687,7 @@ function addControle(e){
   // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
   // pour que la "Dernière intervention" reflète immédiatement la nouvelle saisie.
   try{ localStorage.setItem(CTRL_CAT_MACHINE_KEY, machine); }catch(e){}
-  // Aligne aussi la vue Maintenance (cartes) �?" un contrôle périodique fait partie
+  // Aligne aussi la vue Maintenance (cartes) — un contrôle périodique fait partie
   // des cartes de la vue principale.
   try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
@@ -4722,7 +4722,7 @@ async function deleteAck(prefixedId){
     showToast('Ligne supprimée.', 'info');
     await loadCtrlAcks();
   } catch(e){
-    showToast('Erreur réseau �?" réessaie.', 'danger');
+    showToast('Erreur réseau — réessaie.', 'danger');
   }
 }
 function sortCtrl(field){
@@ -4774,7 +4774,7 @@ function updateCtrlDatePresetChips(){
 function _displayType(entry){
   // Nom canonique d'un contrôle pour l'UI : on préfère le label du code
   // maintenance (stable, lisible) plutôt que le nom prefixé de l'alerte auto
-  // ("Contrôle : XX �?" label"). Fallback sur entry.type pour les alertes
+  // ("Contrôle : XX – label"). Fallback sur entry.type pour les alertes
   // manuelles sans code lié et pour les contrôles saisis manuellement.
   if(!entry) return '';
   if(entry._source === 'alert' && entry._maint_code){
@@ -4797,7 +4797,7 @@ function refreshCtrlFiltersOptions(){
     (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
     // Ajoute : les alertes autonomes (sans linked_maint_code) même sans ack.
     // Les alertes auto-générées à partir d'un code maintenance (préfixe
-    // "Contrôle : XX �?" �?�") ne sont PAS ajoutées ici �?" le label du code est
+    // "Contrôle : XX – …") ne sont PAS ajoutées ici — le label du code est
     // déjà présent via CTRL_TYPES_STATE, ce qui créerait un doublon.
     (CTRL_STATE.known_alerts || []).forEach(a => {
       if(!a || !a.nom) return;
@@ -4969,10 +4969,10 @@ function openAckDetail(prefixedId){
 
   // Contexte : date, machine, opérateur
   const dt = fmtDate(ack.date_saisie);
-  const contextLine = escHtml(ack.machine || '�?"') + ' · ' + escHtml(dt) + ' · ' + escHtml(ack.operateur || '�?"');
+  const contextLine = escHtml(ack.machine || '—') + ' · ' + escHtml(dt) + ' · ' + escHtml(ack.operateur || '—');
   const commentText = ack._raw_comment || '';
 
-  // �"?�"? Contexte dossier + fiche technique �"?�"?
+  // ── Contexte dossier + fiche technique ──
   const dosInfo = ack._dossier_info || null;
   const noDos = ack._no_dossier || '';
   let dossierHtml = '';
@@ -5001,16 +5001,16 @@ function openAckDetail(prefixedId){
         kv('Client', fmtVal(dosInfo.client)),
         kv('Désignation', fmtVal(dosInfo.description)),
         kv('Réf produit', clientRef.join(' ')),
-        kv('Format', (dosInfo.format_l && dosInfo.format_h) ? escHtml(String(dosInfo.format_l)) + ' �- ' + escHtml(String(dosInfo.format_h)) + ' mm' : (fmtVal(dosInfo.format_l, 'mm') || fmtVal(dosInfo.format_h, 'mm'))),
+        kv('Format', (dosInfo.format_l && dosInfo.format_h) ? escHtml(String(dosInfo.format_l)) + ' × ' + escHtml(String(dosInfo.format_h)) + ' mm' : (fmtVal(dosInfo.format_l, 'mm') || fmtVal(dosInfo.format_h, 'mm'))),
         kv('Laize dossier', fmtVal(dosInfo.pe_laize, 'mm')),
         kv('Dos', fmtVal(dosInfo.dos_rvgi)),
       ]);
       const bobSec = section('Bobine', [
-        kv('�~ mandrin', fmtVal(dosInfo.mandrin_dia)),
+        kv('Ø mandrin', fmtVal(dosInfo.mandrin_dia)),
         kv('Longueur mandrin', fmtVal(dosInfo.mandrin_longueur, 'mm')),
         kv('Enroulement', fmtVal(dosInfo.enroulement)),
-        kv('�?tiquettes / bobine', fmtVal(dosInfo.nb_etiq_bobin)),
-        kv('�~ extérieur', fmtVal(dosInfo.dia_ext, 'mm')),
+        kv('Étiquettes / bobine', fmtVal(dosInfo.nb_etiq_bobin)),
+        kv('Ø extérieur', fmtVal(dosInfo.dia_ext, 'mm')),
         kv('Poids', fmtVal(dosInfo.poids, 'kg')),
       ]);
       const matSec = section('Matière', [
@@ -5018,11 +5018,11 @@ function openAckDetail(prefixedId){
         kv('Adhésif', fmtVal(dosInfo.adhesif)),
         kv('Support', fmtVal(dosInfo.support)),
         kv('Glassine', fmtVal(dosInfo.glassine)),
-        kv('�?paisseur', fmtVal(dosInfo.epaisseur, 'µm')),
+        kv('Épaisseur', fmtVal(dosInfo.epaisseur, 'µm')),
         kv('Laize fiche', fmtVal(dosInfo.ft_laize, 'mm')),
         kv('Laize optimale', fmtVal(dosInfo.laize_optimale, 'mm')),
       ]);
-      const etiSec = section('�?tiquette', [
+      const etiSec = section('Étiquette', [
         kv('Laize étiq.', fmtVal(dosInfo.eti_laize, 'mm')),
         kv('Longueur étiq.', fmtVal(dosInfo.eti_longueur, 'mm')),
         kv('Rayons', fmtVal(dosInfo.eti_rayons)),
@@ -5070,7 +5070,7 @@ function closeAckDetail(){
 // Détecte une non-conformité : au moins une réponse choice de l'ack figure
 // dans la liste nc_responses définie par l'admin lors de la création de
 // l'alerte. Les items de type "value" et les clés "_other" (précision de la
-// case Autre) ne sont pas évalués �?" l'admin cible explicitement quelles
+// case Autre) ne sont pas évalués — l'admin cible explicitement quelles
 // réponses signalent un problème.
 function _ackHasNonConformite(c){
   if(!c || c._source !== 'alert') return false;
@@ -5156,8 +5156,8 @@ function renderCtrl(){
   const thead = document.querySelector('#ctrl-subview-historique .ops-table thead tr');
   if(thead){
     const sortIco = (col) => {
-      if(sf !== col) return '<span class="sort-ico">�?.</span>';
-      return '<span class="sort-ico">' + (CTRL_STATE.sortDir === 'asc' ? '�?'' : '�?"') + '</span>';
+      if(sf !== col) return '<span class="sort-ico">↕</span>';
+      return '<span class="sort-ico">' + (CTRL_STATE.sortDir === 'asc' ? '↑' : '↓') + '</span>';
     };
     const activeAttr = (col) => sf === col ? ' class="active"' : '';
     let h = '';
@@ -5208,7 +5208,7 @@ function renderCtrl(){
           // Si "Autre" a été coché avec une précision, on l'ajoute au texte du cell.
           const otherTxt = c._responses[String(i) + '_other'];
           if(otherTxt != null && String(otherTxt).trim() !== ''){
-            val = val ? val + ' �?" ' + String(otherTxt) : String(otherTxt);
+            val = val ? val + ' — ' + String(otherTxt) : String(otherTxt);
           }
         }
         cells += '<td>' + escHtml(val) + '</td>';
@@ -5218,7 +5218,7 @@ function renderCtrl(){
         const _nd = c._no_dossier || '';
         const _ndCell = (c._source === 'alert' && _nd)
           ? '<span class="ctrl-dossier-pill" onclick="event.stopPropagation();openAckDetail(\'' + escAttr(c.id) + '\')" title="Voir la fiche technique">' + escHtml(_nd) + '</span>'
-          : '<span class="ctrl-dossier-empty">�?"</span>';
+          : '<span class="ctrl-dossier-empty">—</span>';
         cells += '<td class="col-nodos">' + _ndCell + '</td>';
         // Colonnes produit (fiche technique associée)
         const _di = c._dossier_info || null;
@@ -5227,10 +5227,10 @@ function renderCtrl(){
         const _gla  = _di ? (_di.glassine || '') : '';
         const _refCell = (c._source === 'alert' && _refP)
           ? '<span class="ctrl-dossier-pill" onclick="event.stopPropagation();openAckDetail(\'' + escAttr(c.id) + '\')" title="Voir la fiche technique">' + escHtml(_refP) + '</span>'
-          : '<span class="ctrl-dossier-empty">�?"</span>';
+          : '<span class="ctrl-dossier-empty">—</span>';
         cells += '<td class="col-dossier">' + _refCell + '</td>';
-        cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">�?"</span>') + '</td>';
-        cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">�?"</span>') + '</td>';
+        cells += '<td class="col-adhesif">' + (_adh ? escHtml(_adh) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
+        cells += '<td class="col-glassine">' + (_gla ? escHtml(_gla) : '<span class="ctrl-dossier-empty">—</span>') + '</td>';
       }
       // Commentaires : en mode single-type, on affiche seulement le vrai commentaire (pas les réponses formatées) ;
       // sinon, on garde le résumé condensé de _formatAckComment (utile en vue "Tous les types")
@@ -5252,7 +5252,7 @@ function renderCtrl(){
       cells += '<td class="col-actions">' + actionHtml + '</td>';
       const isNc = _ackHasNonConformite(c);
       const trClass = isNc ? ' class="ctrl-row-nc"' : '';
-      const ncTitle = isNc ? ' title="Non-conformité �?" une réponse ne correspond pas à la valeur attendue"' : '';
+      const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
       const dblAttr = (c._source === 'alert')
         ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le détail"')
         : '';
@@ -5274,7 +5274,7 @@ function renderCtrl(){
 // =========================================================================
 // Catalogue des types de contrôles (Liste de contrôles)
 // =========================================================================
-// Source : table maintenance_codes (Paramètres �?' Maintenance).
+// Source : table maintenance_codes (Paramètres → Maintenance).
 // Filtre demandé : seuls les codes avec categorie="controles" et periodique=NON.
 // La "Dernière intervention" est calculée à partir de CTRL_STATE filtré par machine.
 const CTRL_CAT_MACHINE_KEY = 'mysifa_maint_ctrl_cat_machine_v1';
@@ -5313,7 +5313,7 @@ async function loadCtrlTypes(){
     CTRL_TYPES_STATE.list = [];
   }
 }
-// Conservé pour compat (no-op : gestion centralisée dans Paramètres �?' Maintenance).
+// Conservé pour compat (no-op : gestion centralisée dans Paramètres → Maintenance).
 function saveCtrlTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
 function submitCtrlType(e){
   e.preventDefault();
@@ -5383,7 +5383,7 @@ function refreshCtrlTypeSelect(){
   if(!sel) return;
   const cur = sel.value;
   if(!CTRL_TYPES_STATE.list.length){
-    sel.innerHTML = '<option value="">Aucun type défini�?�</option>';
+    sel.innerHTML = '<option value="">Aucun type défini…</option>';
     sel.disabled = true;
     if(hint) hint.style.display = 'block';
     return;
@@ -5391,7 +5391,7 @@ function refreshCtrlTypeSelect(){
   sel.disabled = false;
   if(hint) hint.style.display = 'none';
   const sorted = CTRL_TYPES_STATE.list.slice().sort((a,b) => (a.nom || '').localeCompare(b.nom || '', 'fr'));
-  sel.innerHTML = '<option value="">Sélectionner un type�?�</option>' +
+  sel.innerHTML = '<option value="">Sélectionner un type…</option>' +
     sorted.map(t => '<option value="' + escAttr(t.nom) + '">' + escHtml(t.nom) + '</option>').join('');
   if(cur && sorted.some(t => t.nom === cur)) sel.value = cur;
 }
@@ -5422,13 +5422,13 @@ function renderCtrlTypes(){
     const isActive = th.getAttribute('data-sort-ctrl-cat') === f;
     th.classList.toggle('active', isActive);
     const ico = th.querySelector('.sort-ico');
-    if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '�?'' : '�?"') : '�?.';
+    if(ico) ico.textContent = isActive ? (CTRL_TYPES_STATE.sortDir === 'asc' ? '↑' : '↓') : '↕';
   });
   if(!sorted.length){
-    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres �?' Maintenance.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="ops-empty">Aucun contrôle non périodique. Ajoutez des codes avec catégorie=Contrôles et Périodique=NON dans Paramètres → Maintenance.</td></tr>';
   } else {
     const rows = sorted.map(t => {
-      let dtDisplay = '�?"';
+      let dtDisplay = '—';
       if(t.derniere_intervention){
         try{
           const d = new Date(t.derniere_intervention);
@@ -5442,7 +5442,7 @@ function renderCtrlTypes(){
       const _dc = t.docs_count || 0;
       const docsBtn = _dc
         ? '<button type="button" class="ops-row-btn maint-view-docs" data-doc-code="' + escAttr(t.id) + '" title="Voir les documents attaches">' + _dc + ' doc' + (_dc>1?'s':'') + '</button>'
-        : '<span style="color:var(--muted);font-size:12px">�?"</span>';
+        : '<span style="color:var(--muted);font-size:12px">—</span>';
       return '<tr>' +
         '<td><strong style="color:var(--text)">' + escHtml(t.nom) + '</strong></td>' +
         '<td><span style="font-size:13px;color:var(--text)">' + escHtml(dtDisplay) + '</span></td>' +
@@ -5471,7 +5471,7 @@ async function viewMaintDocs(code){
   overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:520px">'
     + '<div class="ta-sim-title">Documents · ' + escHtml(code) + '</div>'
     + '<div id="maint-docs-view-list" style="display:flex;flex-direction:column;gap:6px;margin:12px 0">'
-    +   '<p style="color:var(--muted);font-size:12px">Chargement�?�</p>'
+    +   '<p style="color:var(--muted);font-size:12px">Chargement…</p>'
     + '</div>'
     + '<div class="ta-sim-actions">'
     +   '<button type="button" class="ta-sim-btn" onclick="closeMaintDocsView()">Fermer</button>'
@@ -5594,7 +5594,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 
 <!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
      Liste toutes les ops du créneau, chacune avec son propre bouton
-     "Enregistrer cette opération" �?" le statut/saisie est partagé au groupe. -->
+     "Enregistrer cette opération" — le statut/saisie est partagé au groupe. -->
 <div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
   <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
     <div class="op-modal-title">Saisie du créneau</div>
@@ -5635,7 +5635,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 
 
 <script>
-/* �"?�"? JS multi-rôle : Mes tâches / Planning / Nouvelle intervention / Admin create �"?�"?
+/* ── JS multi-rôle : Mes tâches / Planning / Nouvelle intervention / Admin create ──
    Chargé dans tous les cas, mais les fonctions ne sont utiles qu'au bon rôle.
    L'état des tâches côté page est stocké dans MAINT_STATE. */
 'use strict';
@@ -5654,7 +5654,7 @@ function _fmtDateISO(d){
 }
 function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
 function _statutLabel(s){
-  return { a_faire:'�? faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
 }
 
 async function opFetchCodes(){
@@ -5680,11 +5680,11 @@ async function admFetchOperators(){
   return MAINT_STATE.operators;
 }
 
-/* �"?�"? Vue Mes tâches �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Vue Mes tâches ──────────────────────────────────────────────── */
 
 async function opLoadTasks(){
   if(MAINT_ROLE !== 'operator') return;
-  // Utilise le M�SME endpoint que le planning (/api/maintenance/events) et
+  // Utilise le MÊME endpoint que le planning (/api/maintenance/events) et
   // filtre côté client par appartenance au groupe : garantit la cohérence
   // absolue entre « Mes tâches » et « Planning personnel ».
   const today = new Date();
@@ -5729,16 +5729,16 @@ function _renderOpCard(ev, opts){
   opts = opts || {};
   const isToday = !!opts.isToday;
   const time = (ev.heure_debut && ev.heure_fin)
-    ? (ev.heure_debut + ' �?" ' + ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
     : '<em style="color:var(--muted);font-style:normal">Sans créneau horaire</em>';
   const remaining = _countRemainingOps(ev);
   const totalOps = (ev.ops || []).length;
   const doneAll = (remaining === 0 && totalOps > 0);
   // Regroupe les ops par machine dans la preview.
   // - Vue Aujourd'hui : on affiche tout (c'est la vue prioritaire).
-  // - Vue �? venir : on limite à ~5 lignes pour compacter les cards.
+  // - Vue À venir : on limite à ~5 lignes pour compacter les cards.
   const groups = _groupOpsByMachine(ev);
-  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '�?"');
+  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
   const previewLines = [];
   let printedGroups = 0;
   let printedTruncated = false;
@@ -5753,7 +5753,7 @@ function _renderOpCard(ev, opts){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:3px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
-        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '�?"'}</span>
+        <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
         <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
       </div>`);
       opsInThisGroup++;
@@ -5776,7 +5776,7 @@ function _renderOpCard(ev, opts){
     ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
     : (remaining < totalOps
         ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
-        : `<span class="op-status op-status-a_faire" style="position:static">�? faire</span>`);
+        : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
   const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
   const cta = isToday
     ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
@@ -5828,7 +5828,7 @@ function opRenderTasks(){
   if(summary){
     const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
     summary.textContent = events.length + (events.length > 1 ? ' créneaux à venir' : ' créneau à venir')
-      + ' �?" ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
+      + ' — ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
   }
 
   if(!evToday.length){
@@ -5843,16 +5843,16 @@ function opRenderTasks(){
   }
 }
 
-/* �"?�"? Modal saisie �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Modal saisie ────────────────────────────────────────────────── */
 
 function opOpenSaisie(eventId){
   const ev = MAINT_STATE.tasks.find(x => x.id === eventId);
   if(!ev) return;
   MAINT_STATE.saisieTaskId = eventId;
   const ctx = document.getElementById('op-modal-saisie-ctx');
-  const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' �?" ' + ev.heure_fin) : 'Sans créneau horaire';
+  const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans créneau horaire';
   const groups = _groupOpsByMachine(ev);
-  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '�?"');
+  const machinesLabel = groups.map(g => g.machine).join(' · ') || (ev.machine || '—');
   ctx.innerHTML = `
     <span><strong>Machine${groups.length > 1 ? 's' : ''} :</strong> ${escHtml(machinesLabel)}</span>
     <span><strong>Date :</strong> ${ev.date_prevue}</span>
@@ -5873,11 +5873,11 @@ function opOpenSaisie(eventId){
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
                 <span class="op-code">${op.code}</span>
                 <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
-                <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '�?"'}</strong>
+                <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
               </div>
               <div class="op-form-row"><label>Statut</label>
                 <select data-fld="statut">
-                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>�? faire</option>
+                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
                   <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
                   <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
                   <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
@@ -5944,13 +5944,13 @@ async function opSubmitSaisie(){
   // No-op : la saisie se fait op par op via opSubmitOpSaisie.
 }
 
-/* �"?�"? Modal nouvelle intervention (opérateur) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Modal nouvelle intervention (opérateur) ──────────────────────── */
 
 async function opOpenNewModal(){
   await opFetchCodes();
   const sel = document.getElementById('op-new-code');
   sel.innerHTML = MAINT_STATE.codes.map(c =>
-    `<option value="${c.code}">${c.code} �?" ${c.label} (${c.categorie})</option>`
+    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
   ).join('');
   document.getElementById('op-modal-new').classList.add('active');
 }
@@ -5992,10 +5992,10 @@ async function opSubmitNew(){
   if(data.event && data.event.id) opOpenSaisie(data.event.id);
 }
 
-/* �"?�"? Vue Planning opérateur (read-only) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
 function _opRenderPlanTable(events, meId){
-  // Aplati les events �?' 1 ligne par (event, op, machine). Une op multi-machines
+  // Aplati les events → 1 ligne par (event, op, machine). Une op multi-machines
   // produit une ligne par machine.
   if(events.length === 0){
     return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
@@ -6004,11 +6004,11 @@ function _opRenderPlanTable(events, meId){
   for(const ev of events){
     const mine = (ev.operators || []).some(o => o.id === meId);
     const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assigné</em>';
-    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' �?" ' + ev.heure_fin) : '�?"';
+    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : '—';
     for(const op of (ev.ops || [])){
       let machines = Array.isArray(op.machines) && op.machines.length
         ? op.machines
-        : (ev.machine ? [ev.machine] : ['�?"']);
+        : (ev.machine ? [ev.machine] : ['—']);
       for(const m of machines){
         rows.push({ mine, ev, op, operatorsStr, time, machine: m });
       }
@@ -6020,7 +6020,7 @@ function _opRenderPlanTable(events, meId){
       <td>${r.time}</td>
       <td><strong>${escHtml(r.machine)}</strong></td>
       <td><span class="op-code">${r.op.code}</span></td>
-      <td>${r.op.code_label || '�?"'}</td>
+      <td>${r.op.code_label || '—'}</td>
       <td style="font-size:12px">${r.operatorsStr}</td>
       <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
     </tr>`).join('')}</tbody>
@@ -6065,7 +6065,7 @@ function opSetPlanTab(name){
 }
 
 
-/* �"?�"? Templates de session (v163) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Templates de session (v163) ─────────────────────────────────── */
 
 const TEMPLATES_STATE = { list: null };  // null = pas encore chargé
 
@@ -6128,7 +6128,7 @@ async function applyCaseTemplate(templateId){
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
-/* �"?�"? Modal « Gérer les modèles » �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Modal « Gérer les modèles » ──────────────────────────────────── */
 
 async function openTemplatesModal(){
   await loadTemplates(true);
@@ -6158,7 +6158,7 @@ function renderTemplatesList(){
     <div class="tmpl-item" data-tmpl-id="${escAttr(t.id)}">
       <div class="tmpl-item-main">
         <div class="tmpl-item-name">${escHtml(t.name)}</div>
-        <div class="tmpl-item-desc">${escHtml(t.description || '�?"')}</div>
+        <div class="tmpl-item-desc">${escHtml(t.description || '—')}</div>
       </div>
       <div class="tmpl-item-count">${t.ops_count} op.</div>
       <div class="tmpl-item-actions">
@@ -6186,7 +6186,7 @@ async function confirmDeleteTemplate(templateId){
     }
     const d = await r.json();
     const n = d.deleted_future_events || 0;
-    showToast('Modèle supprimé' + (n ? ` �?" ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
+    showToast('Modèle supprimé' + (n ? ` — ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
     await loadTemplates(true);
     renderTemplatesList();
     refreshCaseTemplatePicker();
@@ -6194,7 +6194,7 @@ async function confirmDeleteTemplate(templateId){
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
-/* �"?�"? �?diteur de modèle (création + édition) �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Éditeur de modèle (création + édition) ──────────────────────── */
 
 let _TMPL_EDIT_ID = null;
 let _TMPL_OPS = [];
@@ -6303,7 +6303,7 @@ function renderTmplOpsList(){
     return;
   }
   list.innerHTML = _TMPL_OPS.map((op, idx) => {
-    const options = '<option value="">Sélectionner une opération�?�</option>' +
+    const options = '<option value="">Sélectionner une opération…</option>' +
       OPS_TYPES_STATE.list.map(t =>
         '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
           escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
@@ -6365,7 +6365,7 @@ async function submitTemplateEditor(e){
     const d = await r.json();
     const resynced = d.resynced_events || 0;
     showToast(_TMPL_EDIT_ID
-      ? ('Modèle enregistré' + (resynced ? ` �?" ${resynced} créneau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisé${resynced > 1 ? 's' : ''}.` : '.'))
+      ? ('Modèle enregistré' + (resynced ? ` — ${resynced} créneau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisé${resynced > 1 ? 's' : ''}.` : '.'))
       : 'Modèle créé.', 'info');
     closeTemplateEditor();
     await loadTemplates(true);
@@ -6375,7 +6375,7 @@ async function submitTemplateEditor(e){
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
-/* �"?�"? Bouton flottant « + » du calendrier �"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"?�"? */
+/* ── Bouton flottant « + » du calendrier ─────────────────────────── */
 
 function toggleCalFabMenu(){
   const m = document.getElementById('cal-fab-menu');
@@ -6414,7 +6414,7 @@ function renderCalFabMenu(){
     <div class="cal-fab-menu-sep"></div>
     <button type="button" class="cal-fab-menu-item" onclick="closeCalFabMenu();openTemplatesModal();">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>
-      <span>Gérer les modèles�?�</span>
+      <span>Gérer les modèles…</span>
     </button>`;
 }
 
@@ -6480,7 +6480,7 @@ window.opSetPlanTab = opSetPlanTabWithCal;
   // Ajoute un attribut sur <body> pour le ciblage CSS role-based
   document.body.setAttribute('data-maint-role', MAINT_ROLE || 'operator');
   if(MAINT_ROLE === 'operator'){
-    // L'opérateur arrive sur "Mes tâches" �?" on charge la liste du jour.
+    // L'opérateur arrive sur "Mes tâches" — on charge la liste du jour.
     const dateInput = document.getElementById('op-tasks-date');
     if(dateInput) dateInput.value = _fmtDateISO(new Date());
     const planInput = document.getElementById('op-plan-date');
@@ -6488,7 +6488,7 @@ window.opSetPlanTab = opSetPlanTabWithCal;
     opLoadTasks();
     // Pré-charge le planning en tâche de fond.
     opLoadPlanning();
-    // Monte le calendrier admin dans l'onglet Général (lazy �?" au 1er clic
+    // Monte le calendrier admin dans l'onglet Général (lazy — au 1er clic
     // sur l'onglet, mais on prépare le DOM tôt pour un feedback instant).
     _mountOperatorGeneralCalendar();
   }
