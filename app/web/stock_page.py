@@ -1726,11 +1726,18 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .btn-recep:hover{filter:brightness(1.1);transform:translateY(-1px)}
 .btn-recep:active{transform:translateY(0)}
 .btn-recep:disabled{opacity:.4;cursor:not-allowed;transform:none;filter:none}
+/* Bouton principal réception (Démarrer scan, Imprimer…) — le SVG hérite via currentColor.
+   En dark : texte foncé sur cyan clair. En light : texte blanc sur cyan foncé pour rester lisible. */
 .btn-recep-primary{background:var(--accent);color:#0a0e17}
-body.light .btn-recep-primary{color:#ffffff}
-body.light .btn-recep-primary svg{stroke:#ffffff}
+.btn-recep-primary svg{color:inherit}
+body.light .btn-recep-primary{color:#ffffff !important}
+body.light .btn-recep-primary svg{stroke:#ffffff !important;color:#ffffff !important}
 .btn-recep-success{background:var(--success);color:#0a0e17}
+.btn-recep-success svg{color:inherit}
+body.light .btn-recep-success{color:#ffffff !important}
+body.light .btn-recep-success svg{stroke:#ffffff !important;color:#ffffff !important}
 .btn-recep-danger{background:var(--danger);color:#fff}
+.btn-recep-danger svg{color:inherit}
 .btn-recep-ghost{background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.3)}
 .btn-recep-muted{background:transparent;color:var(--text2);border:1px solid var(--border)}
 .btn-recep-muted:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -8413,7 +8420,9 @@ function mpEmplacementValue(emplInp) {
 }
 
 function validateMpEmplacement(empl) {
-  if (!empl) return 'Emplacement obligatoire.';
+  // Emplacement optionnel pour toutes les matières premières : vide = OK.
+  // Si présent, on vérifie le format (grille A121, zone au sol ou sortie prod).
+  if (!empl) return null;
   if (!isStockEmplacementCode(empl)) {
     return 'Format invalide — grille (ex. A123), « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ') ou « ' + STOCK_EMPL_SORTIE_PROD_LABEL + ' » (' + STOCK_EMPL_SORTIE_PROD + ').';
   }
