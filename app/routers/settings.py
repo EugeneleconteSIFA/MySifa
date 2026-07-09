@@ -2941,31 +2941,24 @@ def maintenance_alerts_active(request: Request):
             if should_show:
                 # v163+ : fallback no_dossier pour toutes les alertes qui n'ont
                 # pas encore de trigger_no_dossier (typiquement les périodiques).
-                # On cherche le dossier « en cours » : dernier 01 (début) sur la
-                # machine de l'opérateur, non suivi d'un 89 (fin) postérieur.
-                # Ça donne le dossier sur lequel l'opérateur travaille au moment
-                # de l'ack, et évite le bug de l'historique vide.
+                # On prend le dernier no_dossier touché aujourd'hui par cet
+                # opérateur sur cette machine — peu importe 01/89, l'important
+                # est le CONTEXTE de travail au moment de l'ack. Ça couvre :
+                #   - dossier en cours (01 sans 89)
+                #   - dossier juste terminé (89 récent)
+                #   - transition entre 2 dossiers (89 d'un, puis 01 du suivant)
                 if not trigger_no_dossier and user_machine and operateur:
-                    last_01 = conn.execute(
-                        """SELECT no_dossier, date_operation FROM production_data
-                           WHERE machine=? AND operation_code='01'
-                             AND (operateur=? OR operateur=?)
+                    last_touched = conn.execute(
+                        """SELECT no_dossier FROM production_data
+                           WHERE machine=? AND (operateur=? OR operateur=?)
                              AND date_operation >= ?
+                             AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                            ORDER BY date_operation DESC LIMIT 1""",
                         (user_machine, operateur, user_nom or operateur,
                          now_paris.strftime("%Y-%m-%dT00:00:00")),
                     ).fetchone()
-                    if last_01 and last_01["no_dossier"]:
-                        # Vérifie qu'aucun 89 postérieur n'a clos ce dossier
-                        closed = conn.execute(
-                            """SELECT 1 FROM production_data
-                               WHERE machine=? AND operation_code='89'
-                                 AND no_dossier=? AND date_operation > ?
-                               LIMIT 1""",
-                            (user_machine, last_01["no_dossier"], last_01["date_operation"]),
-                        ).fetchone()
-                        if not closed:
-                            trigger_no_dossier = str(last_01["no_dossier"]).strip()
+                    if last_touched and last_touched["no_dossier"]:
+                        trigger_no_dossier = str(last_touched["no_dossier"]).strip()
                 items.append({
                     "id": int(r["id"]),
                     "nom": r["nom"],
