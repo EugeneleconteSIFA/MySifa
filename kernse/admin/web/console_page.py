@@ -61,6 +61,31 @@ def _client_card(c: Client) -> str:
             f"Détacher l'épingle</button>"
         )
 
+    # Le bouton "Promouvoir" n'a de sens que sur une instance déjà provisionnée.
+    # Sinon on affiche l'action "Provisionner l'instance" avec un starter kit.
+    if not c.deployed_ref:
+        actions_html = f"""
+        <select class="starter-kit">
+          <option value="">Aucun starter kit</option>
+          <option value="imprimerie">Starter kit — imprimerie</option>
+          <option value="usinage">Starter kit — usinage</option>
+          <option value="plasturgie">Starter kit — plasturgie</option>
+          <option value="assemblage">Starter kit — assemblage</option>
+          <option value="decoupe">Starter kit — découpe</option>
+        </select>
+        <button class="btn btn-accent" data-action="provision" data-client-id="{_esc(c.id)}">
+          Provisionner l\'instance
+        </button>
+        """
+    else:
+        actions_html = f"""
+        <input type="text" class="promote-ref" placeholder="git ref (SHA ou tag)" maxlength="40">
+        <button class="btn btn-accent" data-action="promote" data-client-id="{_esc(c.id)}">
+          Promouvoir ce client
+        </button>
+        {unpin_html}
+        """
+
     return f"""
     <article class="card client-card" data-client-id="{_esc(c.id)}">
       <header>
@@ -74,13 +99,7 @@ def _client_card(c: Client) -> str:
         <dt>Dernière promotion</dt><dd>{deployed_at}</dd>
         <dt>Contact</dt><dd>{_esc(c.contact_email)}</dd>
       </dl>
-      <footer class="card-actions">
-        <input type="text" class="promote-ref" placeholder="git ref (SHA ou tag)" maxlength="40">
-        <button class="btn btn-accent" data-action="promote" data-client-id="{_esc(c.id)}">
-          Promouvoir ce client
-        </button>
-        {unpin_html}
-      </footer>
+      <footer class="card-actions">{actions_html}</footer>
     </article>
     """
 
@@ -92,8 +111,7 @@ def _render_console(clients: list[Client], banner: str) -> str:
     eligible_mass = total - pinned - suspended
 
     cards = "\n".join(_client_card(c) for c in clients) or (
-        '<p class="empty">Aucun client actif. Créer votre premier client via l\'API '
-        '<code>POST /api/v1/clients</code>.</p>'
+        '<p class="empty">Aucun client pour l\'instant. Utilise le formulaire « Nouveau client » ci-dessus.</p>'
     )
 
     return f"""<!doctype html>
@@ -157,6 +175,12 @@ def _render_console(clients: list[Client], banner: str) -> str:
   #toast{{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:12px 18px;border-radius:10px;box-shadow:var(--shadow);opacity:0;transform:translateY(20px);transition:all .2s;pointer-events:none;max-width:400px;font-size:13px}}
   #toast.on{{opacity:1;transform:translateY(0)}}
   #toast.err{{background:var(--red)}}
+  .form-row{{display:flex;gap:10px;flex-wrap:wrap;align-items:center}}
+  .form-row input, .form-row select {{padding:9px 12px;border:1px solid var(--line);border-radius:10px;font-size:13px;background:#fff;color:var(--ink);font-family:var(--sans)}}
+  .form-row input:focus, .form-row select:focus {{outline:none;border-color:var(--orange);box-shadow:0 0 0 3px rgba(242,101,43,.15)}}
+  .err {{background:var(--red-bg);color:var(--red);padding:8px 12px;border-radius:8px;font-size:12px;margin-bottom:10px;display:none}}
+  .err.on {{display:block}}
+  select.starter-kit {{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:12px;background:#fff}}
 </style>
 </head>
 <body>
@@ -183,6 +207,37 @@ def _render_console(clients: list[Client], banner: str) -> str:
       <input type="text" id="mass-ref" placeholder="git ref (SHA court ou tag)" required maxlength="40">
       <input type="text" id="mass-notes" placeholder="notes (facultatif)" maxlength="200">
       <button type="submit" class="btn btn-accent">Promouvoir la flotte</button>
+    </form>
+  </section>
+
+  <section class="card create-client">
+    <h2 style="font-family:var(--brand);font-size:18px;margin-bottom:6px">Nouveau client</h2>
+    <p style="color:var(--ink-2);font-size:13px;margin-bottom:14px">
+      Crée l\'entrée plateforme. L\'instance physique (dossier, DB, systemd, nginx) est provisionnée dans un second temps via le bouton « Provisionner l\'instance » sur la fiche du client.
+    </p>
+    <div class="err" id="create-err"></div>
+    <form id="create-form">
+      <div class="form-row">
+        <input type="text" name="slug" placeholder="slug (ex. durand-imprimerie)"
+               required pattern="[a-z0-9](-?[a-z0-9]){{1,39}}" title="minuscules, chiffres et tirets uniquement"
+               style="flex:1;min-width:180px">
+        <input type="text" name="company_name" placeholder="Nom de l\'entreprise" required
+               style="flex:1;min-width:180px">
+      </div>
+      <div class="form-row" style="margin-top:8px">
+        <input type="text" name="subdomain" placeholder="sous-domaine (ex. durand.kernse.fr)"
+               required style="flex:1;min-width:180px">
+        <select name="plan" style="min-width:140px">
+          <option value="atelier">Plan Atelier</option>
+          <option value="usine">Plan Usine</option>
+          <option value="custom">Plan custom</option>
+        </select>
+      </div>
+      <div class="form-row" style="margin-top:8px">
+        <input type="email" name="contact_email" placeholder="Email du superadmin de l\'organisation"
+               required style="flex:1">
+        <button type="submit" class="btn btn-accent">Créer le client</button>
+      </div>
     </form>
   </section>
 
@@ -239,6 +294,26 @@ document.addEventListener('click', async (ev) => {{
     finally {{ btn.disabled = false; }}
   }}
 
+  if (action === 'provision') {{
+    const select = btn.parentElement.querySelector('.starter-kit');
+    const kit = select ? select.value : '';
+    if (!confirm(`Provisionner physiquement l\'instance ? Cela va créer le dossier, la DB, le service systemd et le vhost nginx. Ça peut prendre 30-90 secondes.`)) return;
+    btn.disabled = true; btn.textContent = 'Provisionnement...';
+    try {{
+      const res = await api(`/api/v1/provision/client/${{cid}}`, {{
+        method: 'POST',
+        body: JSON.stringify(kit ? {{starter_kit: kit}} : {{}}),
+      }});
+      if (res.ok) {{
+        toast(`Instance provisionnée : ${{res.subdomain}} → port ${{res.port}}, ref ${{res.deployed_ref}}. N\'oublie pas de faire certbot pour ce sous-domaine.`);
+        setTimeout(()=>location.reload(), 1500);
+      }} else {{
+        toast('Échec : ' + (res.error || '?'), true);
+        btn.disabled = false; btn.textContent = 'Provisionner l\'instance';
+      }}
+    }} catch (e) {{ toast(e.message, true); btn.disabled = false; btn.textContent = 'Provisionner l\'instance'; }}
+  }}
+
   if (action === 'unpin') {{
     if (!confirm('Détacher l\\'épingle ? Le client redeviendra éligible aux promotions de masse.')) return;
     btn.disabled = true;
@@ -252,6 +327,42 @@ document.addEventListener('click', async (ev) => {{
     }} catch (e) {{ toast(e.message, true); }}
     finally {{ btn.disabled = false; }}
   }}
+}});
+
+// --- Formulaire "Nouveau client" ---
+document.getElementById('create-form').addEventListener('submit', async (ev) => {{
+  ev.preventDefault();
+  const form = ev.target;
+  const btn = form.querySelector('button[type=submit]');
+  const err = document.getElementById('create-err');
+  err.classList.remove('on');
+  const data = Object.fromEntries(new FormData(form).entries());
+  btn.disabled = true; btn.textContent = 'Création...';
+  try {{
+    const res = await api('/api/v1/clients', {{
+      method: 'POST',
+      body: JSON.stringify(data),
+    }});
+    toast(`Client ${{res.slug}} créé — provisionne maintenant l\'instance depuis sa fiche.`);
+    setTimeout(()=>location.reload(), 800);
+  }} catch (e) {{
+    err.textContent = e.message;
+    err.classList.add('on');
+    btn.disabled = false; btn.textContent = 'Créer le client';
+  }}
+}});
+
+// --- Auto-fill du sous-domaine depuis le slug ---
+document.querySelector('input[name=slug]').addEventListener('input', (ev) => {{
+  const slug = (ev.target.value || '').trim();
+  const sub = document.querySelector('input[name=subdomain]');
+  if (slug && (!sub.value || sub.dataset.autofill === '1')) {{
+    sub.value = slug + '.kernse.fr';
+    sub.dataset.autofill = '1';
+  }}
+}});
+document.querySelector('input[name=subdomain]').addEventListener('input', (ev) => {{
+  ev.target.dataset.autofill = '0';
 }});
 
 document.getElementById('mass-form').addEventListener('submit', async (ev) => {{

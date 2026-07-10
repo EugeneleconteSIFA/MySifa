@@ -1,0 +1,33 @@
+# Kernse — Landing publique v2 (www.kernse.fr)
+# Fichier généré par kernse/deploy/vps/. Version-contrôlée dans le repo.
+# À déployer via : sudo cp kernse-landing-v2.service /etc/systemd/system/
+
+[Unit]
+Description=Kernse Landing v2 (www.kernse.fr)
+After=network.target
+StartLimitIntervalSec=200
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=kernse
+Group=kernse
+WorkingDirectory=/home/kernse/platform
+
+EnvironmentFile=-/home/kernse/env/kernse-landing-v2.env
+Environment="KERNSE_ENV=v2"
+Environment="KERNSE_LANDING_PORT=8101"
+
+ExecStart=/home/kernse/venv/bin/uvicorn kernse.landing.main:app --host 127.0.0.1 --port 8101 --workers 1
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/kernse
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

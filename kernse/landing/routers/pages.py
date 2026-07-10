@@ -31,12 +31,15 @@ def _ctx(request: Request, **extra) -> dict:
 
 @router.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("home.html.j2", _ctx(request))
+    # Starlette >= 0.35 : `request` doit être passé en premier argument
+    # positionnel à `TemplateResponse` (l'ancienne signature name-first
+    # est dépréciée et lève « unhashable type: 'dict' » en runtime).
+    return templates.TemplateResponse(request, "home.html.j2", _ctx(request))
 
 
 @router.get("/contact", response_class=HTMLResponse)
 def contact(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("contact.html.j2", _ctx(request))
+    return templates.TemplateResponse(request, "contact.html.j2", _ctx(request))
 
 
 @router.get("/demo")

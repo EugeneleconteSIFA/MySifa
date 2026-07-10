@@ -63,6 +63,73 @@ jamais d'import d'une app vers une autre.
 - Les instances clients ne connaissent pas la DB plateforme. Elles
   utilisent leur propre SQLite locale (`/home/kernse/instances/<slug>/app/data/production.db`).
 
+## Layout VPS — /home/kernse/ dédié
+
+Kernse tourne sur le même VPS que MySifa mais dans un espace strictement
+isolé. Un nouvel utilisateur système `kernse` est créé, distinct de
+`sifa`. Aucune duplication de code n'est faite : on clone le repo deux
+fois côté Kernse pour avoir un cycle de déploiement indépendant.
+
+```
+/home/sifa/                              # existant, intouché
+├── production-saas/                     # MySifa v2 (SIFA prod)
+└── production-saas-v1/                  # MySifa v1 (staging SIFA)
+
+/home/kernse/                            # dédié Kernse (nouvel user)
+├── platform/                            # code v2 (branche `main`)
+├── platform-v1/                         # code v1 (branche `staging`)
+├── env/                                 # env files (chmod 600)
+├── venv/                                # venv Python
+├── instances/                           # instances clients provisionnées
+│   └── <slug>/                          # une par client (clone Git + venv + DB)
+└── backups/
+    ├── platform/                        # sauvegardes DB plateforme
+    ├── clients/<slug>/                  # sauvegardes DB par client
+    └── v1-db-rotation/                  # rotation pré-resync v1
+```
+
+**Conséquence importante** — Kernse et MySifa ont maintenant des **cycles
+de déploiement indépendants** :
+
+- MySifa (SIFA) : promotion via le bouton `/settings` de v1.mysifa.com,
+  script `/home/sifa/production-saas-v1/scripts/promote_v2.sh`.
+- Kernse : promotion via `git pull` dans `/home/kernse/platform-v1/`
+  puis `/home/kernse/platform/` (ou depuis la console admin à venir).
+- Instances clients Kernse : promotion via la console
+  (`kernse/admin/services/promotion_service.py`) avec logique d'épingle.
+
+**4 services systemd Kernse** — voir `kernse/deploy/vps/systemd/` :
+
+| Service | User | WorkingDirectory | Port | Domaine |
+|---|---|---|---|---|
+| `kernse-landing-v2` | `kernse` | `/home/kernse/platform` | 8101 | www.kernse.fr |
+| `kernse-landing-v1` | `kernse` | `/home/kernse/platform-v1` | 8103 | v1.kernse.fr |
+| `kernse-admin-v2`   | `kernse` | `/home/kernse/platform` | 8102 | admin.kernse.fr |
+| `kernse-admin-v1`   | `kernse` | `/home/kernse/platform-v1` | 8104 | admin-v1.kernse.fr |
+
+**Sudoers** — l'utilisateur `kernse` a une whitelist stricte
+(`/etc/sudoers.d/kernse-admin`) qui autorise UNIQUEMENT :
+
+- `promote_client.sh` et `provision_client.sh` (chemins absolus dans
+  les 2 clones).
+- `systemctl daemon-reload`, `restart|start|stop|enable|disable
+  kernse-client-*` (uniquement les services d'instances clients).
+- `systemctl reload nginx` et `nginx -t`.
+
+Aucun autre binaire n'est autorisé — pas de shell root ni de `sudo`
+imbriqué.
+
+**Fichiers de déploiement** — versionnés dans `kernse/deploy/vps/` :
+
+- `systemd/*.service` : 4 unit files prêts à copier.
+- `nginx/*.conf` : 4 vhosts (HTTPS + HSTS + proxy).
+- `sudoers/kernse-admin` : whitelist.
+- `env/*.env.example` : templates des variables d'env.
+- `bootstrap.sh` : installation complète idempotente.
+- `README.md` : marche à suivre pas-à-pas (automatique et manuelle).
+
+Le déploiement initial se fait via `sudo bash kernse/deploy/vps/bootstrap.sh`.
+
 ## Logique de promotion — épingle par défaut
 
 Une décision structurante validée avec Eugène :

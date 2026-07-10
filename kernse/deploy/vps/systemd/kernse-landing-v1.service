@@ -1,0 +1,30 @@
+# Kernse — Landing publique v1 (v1.kernse.fr) — staging
+[Unit]
+Description=Kernse Landing v1 (v1.kernse.fr, staging)
+After=network.target
+StartLimitIntervalSec=200
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=kernse
+Group=kernse
+WorkingDirectory=/home/kernse/platform-v1
+
+EnvironmentFile=-/home/kernse/env/kernse-landing-v1.env
+Environment="KERNSE_ENV=v1"
+Environment="KERNSE_LANDING_PORT=8103"
+
+ExecStart=/home/kernse/venv/bin/uvicorn kernse.landing.main:app --host 127.0.0.1 --port 8103 --workers 1
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/kernse
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
