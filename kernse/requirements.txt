@@ -1,0 +1,26 @@
+# Kernse — dépendances des apps kernse-landing et kernse-admin.
+# Les instances clients réutilisent le requirements.txt racine (MySifa
+# métier). Ce fichier concerne UNIQUEMENT les 2 apps de la plateforme
+# Kernse (landing publique + console admin).
+#
+# Installation :
+#   python -m venv .venv
+#   .venv/bin/pip install -r kernse/requirements.txt
+
+# Web framework (partagé landing + admin).
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0
+pydantic>=2.6,<3.0
+
+# Landing (Jinja2 templates + upload form).
+jinja2>=3.1,<4.0
+python-multipart>=0.0.9,<1.0
+
+# Auth admin (pas de dépendance externe pour password / TOTP — stdlib
+# `hashlib.pbkdf2_hmac` pour le password, HMAC-SHA1 pour le TOTP).
+# La lib qrcode est facultative : la page 2FA affiche l'URI otpauth en
+# clair, l'utilisateur scanne l'URI ou saisit le secret à la main.
+qrcode[pil]>=7.4,<8.0
+
+# .env local (dev). En prod, on lit les env vars directement.
+python-dotenv>=1.0,<2.0
