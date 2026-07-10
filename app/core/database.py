@@ -6192,6 +6192,23 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 163, "maintenance_templates")
 
+    # v164 — Alertes maintenance : bouton "Fermer l'alerte" configurable.
+    # Ajoute une colonne `dismissed` (0/1) sur maintenance_alert_acks. Les
+    # rows dismissed=1 sont invisibles dans l'historique des contrôles mais
+    # servent à débloquer la logique event (l'alerte ne re-fire qu'au prochain
+    # 89). Aucun log_action, aucune trace visible → l'opérateur peut esquiver
+    # une alerte non pertinente sans polluer la qualité.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=164 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_acks)").fetchall()}
+        if "dismissed" not in cols:
+            conn.execute("ALTER TABLE maintenance_alert_acks ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_alert_acks_dismissed "
+            "ON maintenance_alert_acks(dismissed, ack_at DESC)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 164, "maintenance_alert_acks_dismissed")
+
     # v166 — Qualité : split rôle administration + traçabilité de prise en connaissance des NC par service.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=166 LIMIT 1").fetchone():
         conn.execute(
@@ -6283,6 +6300,185 @@ Ressources :
         )
         conn.commit()
         _record_schema_migration(conn, 170, "inventaires_matieres")
+
+    # v171 — Module impression cloud (agents, imprimantes, templates, jobs)
+    # Permet d'imprimer depuis le SaaS vers des imprimantes du LAN usine via un
+    # agent local (Raspberry Pi ou PC) qui poll les jobs et les envoie en TCP:9100.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=171 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS print_agents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            actif INTEGER NOT NULL DEFAULT 1,
+            last_heartbeat TEXT,
+            last_ip TEXT,
+            created_at TEXT NOT NULL,
+            note TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_agents_actif ON print_agents(actif)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS imprimantes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            poste TEXT,
+            agent_id INTEGER REFERENCES print_agents(id) ON DELETE SET NULL,
+            ip_locale TEXT NOT NULL,
+            port INTEGER NOT NULL DEFAULT 9100,
+            langage TEXT NOT NULL DEFAULT 'zpl',
+            largeur_mm INTEGER NOT NULL DEFAULT 102,
+            hauteur_mm INTEGER NOT NULL DEFAULT 152,
+            dpi INTEGER NOT NULL DEFAULT 203,
+            actif INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            note TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_imprimantes_agent ON imprimantes(agent_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_imprimantes_actif ON imprimantes(actif)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS imprimante_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
+            usage_key TEXT NOT NULL,
+            nom TEXT NOT NULL,
+            contenu TEXT NOT NULL,
+            actif INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_impr_tpl_imp_usage ON imprimante_templates(imprimante_id, usage_key)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS print_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
+            agent_id INTEGER REFERENCES print_agents(id) ON DELETE SET NULL,
+            usage_key TEXT,
+            template_id INTEGER REFERENCES imprimante_templates(id) ON DELETE SET NULL,
+            payload BLOB NOT NULL,
+            payload_langage TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            picked_at TEXT,
+            ack_at TEXT,
+            erreur TEXT,
+            tentatives INTEGER NOT NULL DEFAULT 0,
+            data_json TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status, agent_id, imprimante_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_jobs_created ON print_jobs(created_at DESC)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS user_printer_defaults (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT NOT NULL,
+            usage_key TEXT NOT NULL,
+            imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_email, usage_key)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_printer_def_user ON user_printer_defaults(user_email)")
+        conn.commit()
+        _record_schema_migration(conn, 171, "print_module_tables")
+
+    # v172 — MyBAT : ajout colonne fiche_technique ('a_faire' | 'fait')
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=172 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(bat_entries)").fetchall()}
+        if "fiche_technique" not in cols:
+            conn.execute(
+                "ALTER TABLE bat_entries ADD COLUMN fiche_technique TEXT NOT NULL DEFAULT 'a_faire'"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 172, "bat_entries_fiche_technique")
+
+    # v173 — MyQualité : Ressources Fournisseurs (certificats par fournisseur,
+    # liens N-N vers fiches du référentiel RSE, log annonces d'expiration).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=173 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_fournisseur_certificats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fournisseur_id INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                titre TEXT NOT NULL DEFAULT '',
+                date_emission TEXT,
+                date_expiration TEXT,
+                commentaire TEXT NOT NULL DEFAULT '',
+                uploaded_at TEXT NOT NULL,
+                uploaded_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qfc_four ON qualite_fournisseur_certificats(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qfc_exp ON qualite_fournisseur_certificats(date_expiration)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_fournisseur_certificat_fiches (
+                certificat_id INTEGER NOT NULL REFERENCES qualite_fournisseur_certificats(id) ON DELETE CASCADE,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                PRIMARY KEY (certificat_id, fiche_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qfcf_fiche ON qualite_fournisseur_certificat_fiches(fiche_id)")
+        # Log d'annonces d'expiration déjà émises : un enregistrement par (certificat, bucket).
+        # bucket parmi : 'expired', 'j30', 'j60' — évite de spammer plusieurs fois la même alerte.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_cert_expiration_annonces (
+                certificat_id INTEGER NOT NULL REFERENCES qualite_fournisseur_certificats(id) ON DELETE CASCADE,
+                bucket TEXT NOT NULL,
+                annonce_at TEXT NOT NULL,
+                PRIMARY KEY (certificat_id, bucket)
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 173, "qualite_ressources_fournisseurs")
+
+    # v174 — MyQualité : extension Audit avec matrice fournisseurs × certifications.
+    # audit_fournisseurs : fournisseurs impliqués dans l'audit (N-N avec fournisseurs_fsc).
+    # audit_certifications_demandees : certifications demandées par le client (N-N avec fiches).
+    # audit_matrice_overrides : override manuel du statut d'une case (fournisseur × fiche)
+    #   pour marquer 'na', 'demande_envoyee', etc. quand l'auto-déduction ne suffit pas.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=174 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_fournisseurs (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                fournisseur_id INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+                added_at TEXT NOT NULL,
+                added_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (audit_id, fournisseur_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_af_four ON audit_fournisseurs(fournisseur_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_certifications_demandees (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                added_at TEXT NOT NULL,
+                added_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (audit_id, fiche_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acd_fiche ON audit_certifications_demandees(fiche_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_matrice_overrides (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                fournisseur_id INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                statut TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                updated_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (audit_id, fournisseur_id, fiche_id)
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 174, "qualite_audit_matrice_fournisseurs_certifs")
+
+    # Migration 175 — MyMaintenance : les créneaux (planifie) peuvent avoir un
+    # nom libre pour identifier une session ("Nettoyage matinal", "Grande révision").
+    # Colonne nullable, pas de valeur par défaut : les créneaux existants restent
+    # sans nom, le frontend affiche l'horaire par défaut.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=175 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+        if "nom" not in cols:
+            conn.execute("ALTER TABLE maintenance_events ADD COLUMN nom TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 175, "maintenance_events_nom")
 
 def create_default_admin():
     import bcrypt
