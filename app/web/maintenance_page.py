@@ -3218,44 +3218,73 @@ document.addEventListener('keydown', function(e){
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
 
-function loadOps(){
-  // 1. Charge le cache local (legacy — saisies pré-DB).
+// Cache des items DB history — préservé entre appels loadOps() pour éviter
+// que renderMaintCards() (qui rappelle loadOps en début) écrase l'état DB
+// à chaque render → cards restaient à "Jamais" en boucle stérile.
+let _OPS_HISTORY_DB_CACHE = [];
+let _OPS_HISTORY_LAST_FETCH = 0;
+const _OPS_HISTORY_TTL_MS = 15000;  // Recharge la DB toutes les 15s max
+let _OPS_HISTORY_FETCHING = false;
+
+function _rebuildOpsStateFromCaches(){
+  // Merge stable : items DB (source de vérité) + localStorage legacy, dédup.
+  const seen = new Set();
+  const key = it => (it.machine || '') + '|' + (it.type || '') + '|' + (it.date_saisie || '');
+  const merged = [];
+  for(const it of _OPS_HISTORY_DB_CACHE){
+    const k = key(it);
+    if(seen.has(k)) continue;
+    seen.add(k);
+    merged.push(it);
+  }
+  let local = [];
   try{
     const raw = localStorage.getItem(OPS_STORAGE_KEY);
-    OPS_STATE.list = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(OPS_STATE.list)) OPS_STATE.list = [];
-  }catch(e){ OPS_STATE.list = []; }
-  // 2. Fetch history DB (ops termine, source de vérité partagée) et merge.
-  //    Le merge dédup sur (machine + type + date_saisie) : les items DB
-  //    priment sur les items locaux si conflit. Rerender à l'arrivée.
+    local = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(local)) local = [];
+  }catch(e){ local = []; }
+  for(const it of local){
+    const k = key(it);
+    if(seen.has(k)) continue;
+    seen.add(k);
+    merged.push(it);
+  }
+  OPS_STATE.list = merged;
+}
+
+function loadOps(){
+  // 1. Reconstruit synchro OPS_STATE.list à partir des caches (DB + localStorage).
+  //    Les items DB sont préservés entre appels — pas de reset à [] qui cassait
+  //    la boucle render → loadOps → render.
+  _rebuildOpsStateFromCaches();
+
+  // 2. Si le cache DB est encore chaud, on ne re-fetch pas (évite les rafales
+  //    de requêtes quand renderMaintCards enchaîne les loadOps).
+  if(_OPS_HISTORY_FETCHING) return;
+  if(Date.now() - _OPS_HISTORY_LAST_FETCH < _OPS_HISTORY_TTL_MS && _OPS_HISTORY_DB_CACHE.length){
+    return;
+  }
+
+  // 3. Fetch history DB (async, une fois par TTL).
+  _OPS_HISTORY_FETCHING = true;
   fetchHistoryFromDb().then(dbItems => {
-    if(!Array.isArray(dbItems) || !dbItems.length){ return; }
-    const seen = new Set();
-    const key = it => (it.machine || '') + '|' + (it.type || '') + '|' + (it.date_saisie || '');
-    const merged = [];
-    for(const it of dbItems){
-      const k = key(it);
-      if(seen.has(k)) continue;
-      seen.add(k);
-      merged.push(it);
-    }
-    for(const it of (OPS_STATE.list || [])){
-      const k = key(it);
-      if(seen.has(k)) continue;
-      seen.add(k);
-      merged.push(it);
-    }
-    OPS_STATE.list = merged;
+    _OPS_HISTORY_FETCHING = false;
+    _OPS_HISTORY_LAST_FETCH = Date.now();
+    if(!Array.isArray(dbItems)) return;
+    _OPS_HISTORY_DB_CACHE = dbItems;
+    _rebuildOpsStateFromCaches();
     // Rerender toutes les vues qui dérivent de OPS_STATE.list.
-    // - renderOps        : historique tableau (onglet "Opérations de maintenance")
-    // - renderMaintCards : cartes principales (dernière intervention par machine)
-    // - renderOpsTypes   : liste catalogue (colonne "Dernière intervention")
-    // - renderCtrlTypes  : liste contrôles (colonne "Dernière intervention")
     if(typeof renderOps === 'function') renderOps();
     if(typeof renderMaintCards === 'function') renderMaintCards();
     if(typeof renderOpsTypes === 'function') renderOpsTypes();
     if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
-  }).catch(() => {});
+  }).catch(() => { _OPS_HISTORY_FETCHING = false; });
+}
+
+// Bypass du cache — utilisé après une saisie/suppression pour rafraîchir tout de suite.
+function refreshOpsHistoryNow(){
+  _OPS_HISTORY_LAST_FETCH = 0;
+  loadOps();
 }
 
 async function fetchHistoryFromDb(){
