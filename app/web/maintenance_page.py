@@ -6466,10 +6466,19 @@ async function opOpenEditModal(eventId){
   const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
   if(!ev){ alert('Créneau introuvable.'); return; }
   const meId = (S && S.me) ? S.me.id : null;
-  if(ev.source !== 'non_planifie' || ev.created_by !== meId){
-    alert('Vous ne pouvez modifier que vos propres interventions.');
+  if(ev.created_by !== meId){
+    if(typeof showToast === 'function') showToast('Vous ne pouvez modifier que vos propres interventions.', 'danger');
+    else alert('Vous ne pouvez modifier que vos propres interventions.');
     return;
   }
+  // Créneau planifie (créé via "Nouvelle tâche") → ouvre le modal admin riche.
+  // On synchronise PLANNING_STATE d'abord (openCaseModal y cherche l'event).
+  if(ev.source === 'planifie'){
+    try{ await refreshPlanning(); }catch(e){}
+    await openCaseModal({ editId: ev.id, iso: ev.date_prevue, defaultHour: 8 });
+    return;
+  }
+  // Créneau non_planifie → modal simple (édition d'une saisie rapide).
   await opFetchCodes();
   MAINT_STATE.editingEventId = eventId;
   const sel = document.getElementById('op-new-code');
@@ -6689,11 +6698,14 @@ async function opDeleteEvent(eventId){
   const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
   if(!ev){ return; }
   const meId = (S && S.me) ? S.me.id : null;
-  if(ev.source !== 'non_planifie' || ev.created_by !== meId){
-    if(typeof showToast === 'function') showToast('Vous ne pouvez supprimer que vos propres opérations.', 'danger');
+  if(ev.created_by !== meId){
+    if(typeof showToast === 'function') showToast('Vous ne pouvez supprimer que vos propres interventions.', 'danger');
     return;
   }
-  if(!confirm('Supprimer cette opération ? Cette action est définitive.')) return;
+  const label = ev.source === 'planifie'
+    ? 'Supprimer ce créneau et toutes ses opérations ? Cette action est définitive.'
+    : 'Supprimer cette opération ? Cette action est définitive.';
+  if(!confirm(label)) return;
   const r = await fetch('/api/maintenance/events/' + eventId, {
     method:'DELETE', credentials:'include',
   });
@@ -6703,8 +6715,9 @@ async function opDeleteEvent(eventId){
     else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
-  if(typeof showToast === 'function') showToast('Opération supprimée.', 'success');
+  if(typeof showToast === 'function') showToast(ev.source === 'planifie' ? 'Créneau supprimé.' : 'Opération supprimée.', 'success');
   await opLoadTasks();
+  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
 
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
