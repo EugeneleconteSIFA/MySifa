@@ -34,8 +34,8 @@ from __future__ import annotations
 
 import sqlite3
 
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from kernse.admin.config import APP_TITLE, APP_VERSION, ENV_NAME, PLATFORM_DB_PATH
 from kernse.admin.routers import audit as audit_router
@@ -45,6 +45,7 @@ from kernse.admin.routers import promotion as promotion_router
 from kernse.admin.routers import provision as provision_router
 from kernse.admin.routers.auth import bootstrap_superadmin_if_needed
 from kernse.admin.web import console_page, login_page, twofa_page
+from kernse.shared.auth.dependency import HTTPRedirect
 from kernse.shared.db.schema import init_platform_db, seed_platform_defaults
 
 
@@ -55,6 +56,22 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url=None,
 )
+
+
+# Handler dédié aux redirections HTML levées depuis une dépendance
+# (voir kernse.shared.auth.dependency.HTTPRedirect). Sans ce handler,
+# `raise HTTPRedirect(...)` déclenche un 500 (FastAPI ne sait pas
+# comment sérialiser l'exception).
+@app.exception_handler(HTTPRedirect)
+async def _handle_redirect(request: Request, exc: HTTPRedirect) -> RedirectResponse:
+    return RedirectResponse(exc.url, status_code=exc.status_code)
+
+
+# Racine → redirige vers /admin (dashboard). Si l'utilisateur n'est pas
+# connecté, la dépendance `require_superadmin` le renverra vers /login.
+@app.get("/", include_in_schema=False)
+def _root_redirect() -> RedirectResponse:
+    return RedirectResponse("/admin", status_code=302)
 
 
 @app.on_event("startup")
