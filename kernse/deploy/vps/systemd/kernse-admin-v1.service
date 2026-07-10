@@ -25,7 +25,9 @@ ExecStart=/home/kernse/venv/bin/uvicorn kernse.admin.main:app --host 127.0.0.1 -
 Restart=on-failure
 RestartSec=5
 
-NoNewPrivileges=true
+# NoNewPrivileges DOIT être false : kernse-admin appelle sudo pour lancer
+# provision_client.sh et promote_client.sh (voir /etc/sudoers.d/kernse-admin).
+NoNewPrivileges=false
 ProtectSystem=strict
 ProtectHome=false
 ReadWritePaths=/home/kernse

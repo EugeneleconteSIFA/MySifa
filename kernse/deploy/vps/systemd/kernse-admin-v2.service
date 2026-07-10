@@ -24,7 +24,11 @@ ExecStart=/home/kernse/venv/bin/uvicorn kernse.admin.main:app --host 127.0.0.1 -
 Restart=on-failure
 RestartSec=5
 
-NoNewPrivileges=true
+# NoNewPrivileges DOIT être false : kernse-admin appelle sudo (via la
+# whitelist /etc/sudoers.d/kernse-admin) pour lancer provision_client.sh
+# et promote_client.sh. Le flag à true empêcherait sudo d'élever les
+# privilèges et casserait le provisioning et la promotion.
+NoNewPrivileges=false
 ProtectSystem=strict
 ProtectHome=false
 # Admin peut écrire dans /home/kernse (DB, backups, invocation scripts)
