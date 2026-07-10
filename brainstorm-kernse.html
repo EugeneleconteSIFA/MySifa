@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kernse — Brainstorming : du MySifa interne au SaaS TPE/PME</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;700;800&family=JetBrains+Mono:wght@600;800&family=Poppins:wght@900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#182444; --navy-2:#26314f; --navy-3:#3a4568;
+    --orange:#F2652B; --orange-2:#f37d4d; --orange-bg:#fce4d6; --orange-line:#f4b596;
+    --bg:#f6f4ef; --surf:#ffffff; --surf-2:#faf7f1; --ink:#182444; --ink-2:#4e5872; --muted:#8b91a4;
+    --line:#e6e2d7; --green:#1f9d57; --green-bg:#e3f3ea; --amber:#bf7d12; --amber-bg:#f6ecd6;
+    --red:#cf3b32; --red-bg:#f7e2e0; --violet:#6c5ce7; --violet-bg:#ece9fc;
+    --sans:'Inter Tight',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+    --brand:'Poppins',var(--sans);
+    --r:18px; --r-sm:12px;
+    --shadow:0 1px 2px rgba(24,36,68,.05), 0 12px 32px rgba(24,36,68,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#e9e5da;font-family:var(--sans);color:var(--ink);font-size:13px;line-height:1.55;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .sheet{width:210mm;min-height:297mm;background:var(--bg);margin:8mm auto;padding:13mm 15mm;box-shadow:0 2px 14px rgba(24,36,68,.22);position:relative;display:flex;flex-direction:column}
+  .brandrow{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .brand-ic{width:30px;height:30px;border-radius:8px;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--brand);font-weight:900;font-size:16px}
+  .wm{font-family:var(--brand);font-weight:900;font-size:20px;letter-spacing:-1.4px;color:var(--navy)}
+  .wm em{color:var(--orange);font-style:normal;margin-left:-3px}
+  .brandrow .ctx{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .kicker{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--orange);margin-bottom:6px}
+  h1{font-family:var(--brand);font-weight:900;font-size:29px;letter-spacing:-1.5px;line-height:1.08;margin-bottom:8px}
+  h1 em{color:var(--orange);font-style:normal}
+  h2{font-family:var(--brand);font-weight:900;font-size:19px;letter-spacing:-.8px;margin-bottom:4px}
+  h3{font-size:13px;font-weight:800;margin-bottom:6px}
+  .sub{color:var(--ink-2);font-size:13px;margin-bottom:13px}
+  .card{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px;margin-bottom:10px}
+  .card h3{display:flex;align-items:center;gap:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  ul{padding-left:16px;margin:4px 0}
+  li{margin-bottom:4px;color:var(--ink-2)}
+  li b{color:var(--ink)}
+  .tag{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .tag-ok{background:var(--green-bg);color:var(--green)}
+  .tag-warn{background:var(--amber-bg);color:var(--amber)}
+  .tag-danger{background:var(--red-bg);color:var(--red)}
+  .tag-accent{background:var(--orange-bg);color:var(--orange)}
+  .tag-navy{background:var(--navy);color:#fff}
+  .tag-violet{background:var(--violet-bg);color:var(--violet)}
+  table{width:100%;border-collapse:collapse;background:var(--surf);border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;font-size:12px;box-shadow:var(--shadow)}
+  th{background:var(--surf-2);color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:800;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+  td{padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+  tr:last-child td{border-bottom:none}
+  td b{color:var(--ink)}
+  .footer{margin-top:auto;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:10px;color:var(--muted)}
+  .footer .num{font-family:var(--mono)}
+  .big{font-family:var(--mono);font-size:26px;font-weight:800;color:var(--orange);line-height:1.1;font-feature-settings:'tnum' 1}
+  .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;font-weight:800;color:var(--muted);margin-bottom:2px}
+  .mini{font-size:11px;color:var(--muted)}
+  .callout{border-left:3px solid var(--orange);background:var(--orange-bg);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:10px 14px;margin:10px 0;color:var(--ink-2)}
+  .callout b{color:var(--ink)}
+  .phase{display:flex;gap:12px;margin-bottom:9px}
+  .phase-num{flex:0 0 34px;height:34px;border-radius:10px;background:var(--navy);color:#fff;font-family:var(--mono);font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center}
+  .phase.done .phase-num{background:var(--green)}
+  .phase.doing .phase-num{background:var(--orange)}
+  .phase-body{flex:1;background:var(--surf);border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:var(--shadow);padding:9px 14px}
+  @page{size:A4;margin:0}
+  @media print{
+    body{background:#fff}
+    .sheet{margin:0;box-shadow:none;page-break-after:always;width:auto;min-height:auto;height:297mm;overflow:hidden}
+    .sheet:last-child{page-break-after:auto}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ FEUILLE 1 — COUVERTURE + SYNTHESE ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Document de travail — confidentiel</div></div>
+  <div class="kicker">Brainstorming produit — édition Kernse</div>
+  <h1>De MySifa à <em>Kernse</em> : le chemin vers le SaaS TPE/PME</h1>
+  <div class="sub">Ce qu'il reste à créer pour vendre l'outil aux TPE/PME industrielles des Hauts-de-France — mis à jour avec les avancées : nom acté, identité graphique livrée, refactor branding fait, cockpit maquetté.</div>
+
+  <div class="card">
+    <h3>Ce qui a changé depuis la première version de ce document</h3>
+    <ul>
+      <li><b>Le nom est acté : Kernse.</b> Kit de marque complet (wordmark navy/orange, icône, favicons, charte graphique, concepts K) dans <b>kernse-branding/</b>.</li>
+      <li><b>Le refactor APP_NAME est fait</b> — config.py, html.py, portal_assets.py (28 insertions, testé avec un rebrand de bout en bout). L'app est rebrand-ready : prod/v1 gardent « MySifa », la demo affichera « Kernse » via une ligne de .env.</li>
+      <li><b>Le cockpit Kernse est maquetté</b> — docs/demo/ : login (SSO Azure AD + badge NFC), portail (⌘K, pill-bar, 14 tuiles, post-it, messagerie, FAB Kai), dashboard MyProd (KPI, jauge Sanity Score, statut machines). La cible visuelle n'est plus une idée : elle s'ouvre dans un navigateur.</li>
+      <li><b>Nouvelle DA</b> — fond crème, navy #182444, orange #F2652B, Inter Tight / Poppins / JetBrains Mono : ce document l'applique, comme tout support Kernse désormais.</li>
+    </ul>
+  </div>
+
+  <div class="grid3">
+    <div class="card" style="text-align:center">
+      <div class="big">3</div>
+      <div class="lab">chantiers majeurs</div>
+      <div class="mini">Socle SaaS · Généralisation métier · Vitrine commerciale</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div class="big">~20</div>
+      <div class="lab">modules existants</div>
+      <div class="mini">dont 8 quasi génériques, 7 à paramétrer, 5 très SIFA</div>
+    </div>
+    <div class="card" style="text-align:center">
+      <div class="big">2</div>
+      <div class="lab">offres cibles</div>
+      <div class="mini">Kernse Atelier (TPE) · Kernse Usine (PME)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>La thèse du document (inchangée, précisée)</h3>
+    <ul>
+      <li><b>Chantier A — Le socle SaaS</b> (feuille 4) : multi-entreprises, provisioning, onboarding, import de données. Toujours le plus gros morceau — rien n'a encore démarré dessus.</li>
+      <li><b>Chantier B — La généralisation métier</b> (feuille 5) : machines, opérations, terminologie, rôles en paramètres. Rien de fait, mais la démo Kernse fournit désormais le banc d'essai.</li>
+      <li><b>Chantier C — La vitrine</b> (feuilles 3 et 6) : bien entamé — le branding et les maquettes cockpit sont livrés. Reste le plus dur : faire passer la vraie app du design MySifa cyan à la DA Kernse, et créer la façade publique.</li>
+    </ul>
+    <div class="callout"><b>Positionnement retenu :</b> TPE/PME industrielles d'abord (ateliers, fabricants, sous-traitants, façonniers du Nord), avec la verticale imprimerie/façonnage comme niche d'attaque. Kernse est le nom de l'outil ; MySifa reste l'instance SIFA.</div>
+  </div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">1 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 2 — ETAT DES LIEUX ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">État des lieux</div></div>
+  <div class="kicker">État des lieux</div>
+  <h2>Audit des modules : générique, à paramétrer, ou SIFA-spécifique</h2>
+  <div class="sub">Chaque module actuel, jugé sur un seul critère : que faut-il faire pour qu'une autre entreprise industrielle puisse s'en servir tel quel ?</div>
+
+  <table>
+    <tr><th style="width:22%">Module</th><th style="width:14%">Verdict</th><th>Ce qui bloque / ce qu'il reste à faire</th></tr>
+    <tr><td><b>MyProd</b> (saisie production)</td><td><span class="tag tag-warn">À paramétrer</span></td><td>Le cœur est générique (saisie opérateur, durées, statuts, Sanity Score). Bloquant : codes opérations câblés SIFA dans operations.json (« Calage Errepi/Bunsch ») → table éditable par client.</td></tr>
+    <tr><td><b>Planning machine</b></td><td><span class="tag tag-warn">À paramétrer</span></td><td>Logique timeline solide. Bloquant : les machines sont des données SIFA → CRUD « Ressources » par client (nom, capacité, couleur, jours off).</td></tr>
+    <tr><td><b>MyStock</b></td><td><span class="tag tag-ok">Quasi générique</span></td><td>Stock, emplacements, réceptions par lot, inventaire, étiquettes : besoin universel et module très actif ces derniers mois. Reste : plan d'emplacements importable, unités/catégories configurables.</td></tr>
+    <tr><td><b>MyExpé</b> (départs)</td><td><span class="tag tag-warn">À paramétrer</span></td><td>Départs + portail transporteur + carte France : très vendeur. Bloquant : transporteurs et grilles tarifaires SIFA en dur → référentiel par client + import de grilles (le parseur existe).</td></tr>
+    <tr><td><b>MyCompta</b></td><td><span class="tag tag-warn">À paramétrer</span></td><td>Suivi comptable interne. À clarifier vs attentes PME : export expert-comptable, FEC.</td></tr>
+    <tr><td><b>Planning RH</b></td><td><span class="tag tag-ok">Quasi générique</span></td><td>Universel. Reste : types d'absences/équipes configurables.</td></tr>
+    <tr><td><b>Paie</b></td><td><span class="tag tag-danger">Sensible</span></td><td>Réglementaire (DSN, conventions). À repositionner en « préparation de paie / export gestionnaire » en SaaS.</td></tr>
+    <tr><td><b>Appels d'offre (AO)</b> + portail</td><td><span class="tag tag-danger">Très SIFA</span></td><td>Workflow façonné sur SIFA (portail fournisseur, i18n). Module optionnel « vertical » — ne pas généraliser tout de suite.</td></tr>
+    <tr><td><b>MyBAT / MyPrint</b> (module impression)</td><td><span class="tag tag-danger">Vertical imprimerie</span></td><td>BAT + impression : concepts du monde graphique, en plein développement. Hors-sujet pour un fabricant lambda, argument massue pour la verticale imprimerie → modules optionnels.</td></tr>
+    <tr><td><b>MyQualité</b></td><td><span class="tag tag-warn">À paramétrer</span></td><td>Non-conformités universelles ; types/causes à rendre configurables. Gros potentiel (ISO 9001 déclenche l'achat en PME industrielle).</td></tr>
+    <tr><td><b>Maintenance</b></td><td><span class="tag tag-warn">À paramétrer</span></td><td>Encore en dev (taggé « Dev » sur le cockpit). Dépend du référentiel machines — chantier commun avec le planning. GMAO légère très demandée.</td></tr>
+    <tr><td><b>Messages, Calendrier, Profil, Coffre RH, MyLearning</b></td><td><span class="tag tag-ok">Génériques</span></td><td>Fonctionnent tels quels partout. Coffre RH et MyLearning (étape 2 en cours) sont des différenciants inattendus.</td></tr>
+    <tr><td><b>Devis / Rentabilité / Prix matière</b></td><td><span class="tag tag-warn">À paramétrer</span></td><td>Calcul câblé sur la structure de coûts SIFA (v78 du schéma coût matière) → moteur paramétrable : postes de coûts, taux horaires machine.</td></tr>
+    <tr><td><b>Paramètres / rôles / annonces</b></td><td><span class="tag tag-ok">Générique</span></td><td>Base saine, split admin récent. Reste : rôles renommables + séparation « paramètres plateforme » (toi) vs « paramètres entreprise » (client).</td></tr>
+    <tr><td><b>Reports (rapport hebdo)</b></td><td><span class="tag tag-ok">Générique</span></td><td>À productiser : le rapport hebdo automatique est une tuile « dirigeant » très vendeuse.</td></tr>
+  </table>
+
+  <div class="callout" style="margin-top:12px"><b>Lecture d'ensemble :</b> aucun module à jeter. Le produit TPE/PME existe à ~70 % — ce qui manque n'est pas du fonctionnel métier mais du <b>paramétrage</b> (chantier B) et du <b>socle SaaS</b> (chantier A). Le chantier C, lui, a démarré fort.</div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">2 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 3 — LA PAGE D'ACCUEIL / COCKPIT ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Chantier C — cockpit</div></div>
+  <div class="kicker">Point de départ : la page d'accueil</div>
+  <h2>Le cockpit Kernse est maquetté — reste à le rendre réel, et à lui donner une façade publique</h2>
+  <div class="sub">La cible visuelle existe désormais dans docs/demo/ : login, portail et dashboard MyProd, ouvrables dans un navigateur. Deux écarts restent à combler.</div>
+
+  <div class="card">
+    <h3><span class="tag tag-ok">Acquis</span> Ce que les maquettes fixent déjà</h3>
+    <ul>
+      <li><b>Login</b> : identifiant + mot de passe, SSO Azure AD, badge NFC, statut du service en pied — un écran d'entrée crédible pour une PME équipée Microsoft.</li>
+      <li><b>Portail</b> : top bar avec palette ⌘K, pill-bar (mail, calendrier, notifications, post-it, réglages), 14 tuiles carrées avec badges et tag « Dev », post-it flottant, barre messagerie navy, FAB Kai (assistant IA).</li>
+      <li><b>Rebrand en 2 lignes</b> : APP_NAME + APP_SPLIT pilotent le wordmark partout — le mécanisme a été pensé avant même le choix du nom, il est maintenant au service de Kernse.</li>
+      <li><b>Dashboard MyProd</b> : KPI cards, jauge Sanity Score, statut machines, temps calage/prod/arrêts, tableaux par opérateur et par machine — c'est déjà la « tuile dirigeant » en préfiguration.</li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3><span class="tag tag-accent">Écart 1</span> De la maquette au produit</h3>
+      <ul>
+        <li><b>Re-skin de la vraie app</b> : l'app FastAPI vit encore dans la DA MySifa (dark cyan). Porter les tokens kernse.css dans le design system (variables CSS globales, composants, sidebar) est un chantier à part entière — à faire surface par surface : portail → login → MyProd → le reste.</li>
+        <li><b>Choix à trancher</b> : la DA Kernse s'applique-t-elle aussi à l'instance SIFA (MySifa devient un Kernse habillé) ou seulement à la demo et aux futurs clients ? Recommandation : partout — un seul design system à maintenir, SIFA devient la référence visuelle.</li>
+        <li><b>Tuiles pilotées par l'offre</b> : rôle + abonnement décident des tuiles visibles (aujourd'hui : rôle seul).</li>
+        <li><b>État vide soigné</b> : chaque tuile propose « importer / créer votre premier… » pour un compte neuf.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag tag-accent">Écart 2</span> La façade publique (n'existe pas)</h3>
+      <ul>
+        <li><b>kernse.com / .fr</b> : landing produit avec la nouvelle DA, promesse claire (« pilotez votre atelier sans Excel ni ERP usine à gaz »), captures du cockpit, cas client.</li>
+        <li><b>Page démo/contact</b> : « réservez une démo de 30 min » — l'instance demo devient l'arme commerciale.</li>
+        <li><b>Inscription sur invitation</b> au début : chaque nouveau client est accompagné.</li>
+        <li><b>Mentions légales, CGU/CGV, RGPD</b> — obligatoires dès le premier prospect.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Le premier quart d'heure d'un client — l'onboarding, toujours à créer entièrement</h3>
+    <ul>
+      <li><b>Assistant de démarrage</b> en 5 étapes : entreprise et logo → machines/ressources → codes opérations (jeux de départ par métier : imprimerie, usinage, plasturgie, assemblage) → équipe et rôles → import CSV/Excel (clients, produits, stock).</li>
+      <li><b>Données d'exemple effaçables</b> (réutiliser le futur seed de la demo) + <b>visite guidée</b> par module (le pattern traca_guide existe).</li>
+    </ul>
+    <div class="callout"><b>Toujours vrai :</b> une TPE n'a ni DSI ni chef de projet. Si le patron n'a pas configuré son atelier seul en 15 minutes, il ne reviendra pas. L'onboarding est une fonctionnalité produit, pas un détail.</div>
+  </div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">3 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 4 — CHANTIER A : SOCLE SAAS ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Chantier A — socle SaaS</div></div>
+  <div class="kicker">Chantier A — le plus structurant, non démarré</div>
+  <h2>Le socle SaaS : tout ce qui n'existe pas encore</h2>
+  <div class="sub">Aujourd'hui : 1 client = 1 instance FastAPI + 1 SQLite + 1 domaine, dupliqués à la main. Trois stratégies pour servir 10, 50, 200 entreprises.</div>
+
+  <table>
+    <tr><th style="width:24%">Stratégie</th><th>Principe</th><th style="width:30%">Verdict</th></tr>
+    <tr><td><b>1. Instance par client</b> (modèle actuel industrialisé)</td><td>Un script provisionne : dossier + service systemd + SQLite + sous-domaine (client.kernse.fr). Zéro refonte du code.</td><td><span class="tag tag-ok">Recommandée pour démarrer</span> Isolation parfaite, panne isolée, migration client par client. Viable jusqu'à ~30-50 clients bien outillé.</td></tr>
+    <tr><td><b>2. Multi-tenant en base partagée</b></td><td>Colonne organization_id partout, une instance, une DB (PostgreSQL).</td><td><span class="tag tag-warn">Plus tard</span> Refonte lourde de toutes les requêtes + risque de fuite inter-clients. Au-delà de 50 clients.</td></tr>
+    <tr><td><b>3. Hybride</b></td><td>Une instance applicative, une SQLite par organisation, résolue par sous-domaine à chaque requête.</td><td><span class="tag tag-accent">Piste élégante</span> Garde l'isolation SQLite sans multiplier les process. Refactor ciblé de get_db() uniquement.</td></tr>
+  </table>
+
+  <div class="grid2" style="margin-top:10px">
+    <div class="card">
+      <h3>À construire quoi qu'il arrive</h3>
+      <ul>
+        <li><b>Console plateforme</b> (pour toi) : liste des clients, provisionner/suspendre, version déployée, santé des instances, usage.</li>
+        <li><b>Provisioning automatisé</b> : créer un client = 1 commande (industrialiser les patterns systemd + nginx + certbot de v1/demo).</li>
+        <li><b>Sauvegardes par client</b> + restauration testée (les patterns backup/rotation existent déjà).</li>
+        <li><b>Mises à jour de flotte</b> : promouvoir une version sur tous les clients par vagues, avec le healthcheck/rollback éprouvé de promote_v2.sh.</li>
+        <li><b>Monitoring</b> : /healthz par client + alerte si une instance tombe.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Le compte, l'identité, la conformité</h3>
+      <ul>
+        <li><b>Gestion d'organisation</b> : inviter/désactiver des utilisateurs, reset de mot de passe en autonomie.</li>
+        <li><b>Sécurité</b> : politique de mots de passe, « rester connecté », 2FA admin. Le SSO Azure AD maquetté sur le login devient un vrai argument PME — à implémenter (OIDC).</li>
+        <li><b>RGPD</b> : registre, DPA par client, export/suppression des données, hébergement France/UE mis en avant.</li>
+        <li><b>Abonnement</b> : plan par organisation, activation/coupure de modules selon le plan, relance impayé (Stripe).</li>
+        <li><b>CGV/CGU et contrat</b> B2B relus par un juriste.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout"><b>Décision structurante n° 1 (inchangée) :</b> assumer la stratégie 1 pour les 12 premiers mois. Elle transforme la contrainte actuelle (duplication manuelle) en avantage commercial — « vos données dans une base dédiée, jamais mélangées » — et laisse l'énergie au paramétrage métier et au re-skin Kernse.</div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">4 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 5 — CHANTIER B : GENERALISATION METIER ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Chantier B — généralisation</div></div>
+  <div class="kicker">Chantier B</div>
+  <h2>Généralisation métier : chaque référence SIFA devient un paramètre</h2>
+  <div class="sub">La règle du chantier : plus aucune donnée métier dans le code. Tout ce qui décrit l'entreprise (machines, opérations, mots, rôles) vit en base et s'édite dans Paramètres. Le branding a montré la voie — même logique, échelle supérieure.</div>
+
+  <table>
+    <tr><th style="width:26%">Élément câblé aujourd'hui</th><th>Ce qu'il devient</th></tr>
+    <tr><td><b>Machines</b> — Cohésio 1/2, DSI, Repiquage…</td><td>CRUD « Ressources » : nom, type, capacité, couleur planning, jours off, taux horaire (alimente la rentabilité). Planning, MyProd, Maintenance et stats lisent ce référentiel.</td></tr>
+    <tr><td><b>Codes opérations</b> — operations.json (« Calage Errepi », « Calage Bunsch »…)</td><td>Table éditable : code, libellé, catégorie, sévérité, obligatoire. Livrée avec des <b>jeux de départ par métier</b> (imprimerie, usinage, plasturgie, assemblage, découpe) choisis à l'onboarding — ce qui rend Kernse « mainstream » sans le vider de sa substance.</td></tr>
+    <tr><td><b>Terminologie</b> — dossier, OF, saisie, départ…</td><td>Dictionnaire configurable léger : 2-3 lexiques prédéfinis (commandes / ordres de fabrication / dossiers) plutôt que du champ libre partout.</td></tr>
+    <tr><td><b>Rôles</b> — fabrication, logistique, expedition…</td><td>Rôles renommables + rôles personnalisés sur la grille de permissions existante (le split admin récent va déjà dans ce sens). Les 8 rôles actuels deviennent le modèle par défaut.</td></tr>
+    <tr><td><b>Transporteurs et grilles tarifaires</b> (MyExpé)</td><td>Référentiel transporteurs par client + import de grille Excel/CSV dans l'interface (le parseur import-tarif existe, il devient une fonctionnalité produit).</td></tr>
+    <tr><td><b>Plan des emplacements stock</b> — emplacements_plan.csv</td><td>Éditeur d'emplacements (zones, allées, niveaux) ou import CSV guidé à l'onboarding.</td></tr>
+    <tr><td><b>Structure de coûts</b> (rentabilité, prix matière v78)</td><td>Postes de coûts définis par le client : taux horaire machine, coût matière, marge cible. Le moteur reste, les constantes sortent.</td></tr>
+    <tr><td><b>Calendrier</b> — fériés, fermetures SIFA</td><td>Fériés France par défaut + fermetures propres à chaque entreprise.</td></tr>
+    <tr><td><b>Modules verticaux</b> — MyBAT, MyPrint, AO</td><td>Marqués « module optionnel — imprimerie/façonnage ». Ils ne polluent pas l'offre générique et deviennent l'argument massue face aux prospects du monde graphique.</td></tr>
+  </table>
+
+  <div class="callout" style="margin-top:12px"><b>Décision structurante n° 2 (inchangée) :</b> commencer par machines + opérations. Ce sont les deux référentiels dont dépendent MyProd, le planning, la Maintenance en cours de dev et la rentabilité — une fois paramétrables, 80 % de l'outil devient vendable hors SIFA.</div>
+
+  <div class="card">
+    <h3>Méthode de travail — validée par le refactor branding</h3>
+    <ul>
+      <li>Chaque généralisation se fait <b>sur staging</b> avec SIFA comme premier bénéficiaire et comportement inchangé par défaut — exactement le pattern APP_NAME : défaut « MySifa », rien ne bouge en prod, la demo exploite la variable.</li>
+      <li>Migration type : « la table machines est créée et remplie depuis les valeurs actuelles » — pattern _migrate() habituel, zéro rupture.</li>
+      <li>L'instance demo Kernse sert de banc d'essai : son seed crée une entreprise fictive avec d'autres machines et d'autres codes — si la demo tourne, la généralisation est prouvée.</li>
+    </ul>
+  </div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">5 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 6 — CHANTIER C : TUILES MAINSTREAM ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Chantier C — tuiles</div></div>
+  <div class="kicker">Chantier C</div>
+  <h2>Les tuiles qui manquent — dont plusieurs déjà maquettées sur le cockpit</h2>
+  <div class="sub">Le portail Kernse affiche déjà des tuiles vitrine (MyKPI, MyClient, MyDoc, MyPrint, MyQualité, Maintenance « Dev »). Il faut maintenant les remplir, dans cet ordre d'impact commercial.</div>
+
+  <div class="card">
+    <h3><span class="tag tag-accent">Impact fort</span> MyKPI — le tableau de bord dirigeant</h3>
+    <ul>
+      <li>Un écran : charge machines de la semaine, dossiers en retard, stock sous seuil, heures produites, top clients. Les données existent — c'est de l'agrégation cross-modules. Le dashboard MyProd maquetté (KPI cards, Sanity Score, statut machines) en est le prototype : l'élargir au-delà de la prod.</li>
+      <li>Décliné en <b>rapport hebdo automatique par mail</b> (reports_page existe — le productiser). En démo, c'est l'écran qui fait signer.</li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3><span class="tag tag-accent">Impact fort</span> Devis &amp; facturation client</h3>
+      <ul>
+        <li>Le chaînon manquant : devis → commande → production → expédition → <b>facture</b>. L'outil s'arrête à l'expédition.</li>
+        <li>Facturation électronique obligatoire : énorme déclencheur d'achat TPE — via partenaire/API plutôt qu'en développant une plateforme agréée.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag tag-accent">Impact fort</span> MyClient — CRM léger</h3>
+      <ul>
+        <li>Fiche client : coordonnées, contacts, historique dossiers/devis/factures, notes. Un carnet de commandes vivant, pas un Salesforce.</li>
+        <li>Base amorcée (clients_api_router) + tuile déjà sur le cockpit : lui donner sa page.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag tag-violet">Différenciant</span> Kai — l'assistant IA</h3>
+      <ul>
+        <li>Le FAB Kai est sur le cockpit et un panneau assistant existe déjà dans l'app. À cadrer : questions en langage naturel sur SES données (« où en est le dossier X ? », « charge de la semaine ? »).</li>
+        <li>Aucun concurrent GPAO TPE n'a ça — mais le vendre « bientôt » plutôt que le sur-promettre : c'est un différenciant de démo, pas un prérequis de vente.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3><span class="tag tag-warn">Impact moyen</span> Notifications, exports, intégrations</h3>
+      <ul>
+        <li>Alertes mail/push : dossier en retard, stock critique, NC ouverte, machine en panne.</li>
+        <li>Export CSV/Excel partout, export compta (FEC a minima), plus tard API publique. « Vos données ne sont pas captives » rassure.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="tag tag-ok">Déjà là, à mettre en avant</span> Les atouts insoupçonnés</h3>
+    <ul>
+      <li><b>Portail transporteur</b>, <b>coffre-fort RH</b>, <b>MyLearning</b>, <b>messagerie interne</b>, <b>palette ⌘K</b>, <b>badge NFC atelier</b> : aucun concurrent « planning de prod » ne les a. Arguments de landing page.</li>
+      <li><b>PWA / tablette atelier</b> : la saisie opérateur existe — la packager comme promesse (« vos opérateurs saisissent sur tablette, sans formation »).</li>
+    </ul>
+  </div>
+
+  <div class="callout"><b>À ne pas construire</b> (pièges à temps) : compta complète, paie réglementaire (DSN), ordonnancement automatique avancé, app native iOS/Android (la PWA suffit).</div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">6 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 7 — PACKAGING TPE / PME ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Packaging</div></div>
+  <div class="kicker">Packaging (sans tarifs)</div>
+  <h2>Deux offres : Kernse Atelier pour la TPE, Kernse Usine pour la PME</h2>
+  <div class="sub">Principe : la TPE achète un soulagement immédiat (sortir d'Excel), la PME achète un système de pilotage. Même produit, tuiles activées différentes. Noms de plans proposés — à valider.</div>
+
+  <table>
+    <tr><th style="width:34%">Module</th><th style="width:21%">Kernse Atelier<br><span style="font-weight:400;text-transform:none">TPE — 2 à 15 pers.</span></th><th style="width:21%">Kernse Usine<br><span style="font-weight:400;text-transform:none">PME — 15 à 100 pers.</span></th><th>Remarque</th></tr>
+    <tr><td><b>MyKPI (tableau de bord)</b></td><td><span class="tag tag-ok">Inclus</span></td><td><span class="tag tag-ok">Inclus</span></td><td>Vitrine des deux offres</td></tr>
+    <tr><td><b>Planning machine</b></td><td><span class="tag tag-ok">Inclus</span></td><td><span class="tag tag-ok">Inclus</span></td><td>Le cœur du produit</td></tr>
+    <tr><td><b>MyProd (saisie production)</b></td><td><span class="tag tag-ok">Inclus</span></td><td><span class="tag tag-ok">Inclus</span></td><td>Tablette atelier incluse</td></tr>
+    <tr><td><b>MyStock</b></td><td><span class="tag tag-ok">Inclus</span></td><td><span class="tag tag-ok">Inclus</span></td><td>Simplifié côté TPE</td></tr>
+    <tr><td><b>MyClient + Devis</b></td><td><span class="tag tag-ok">Inclus</span></td><td><span class="tag tag-ok">Inclus</span></td><td>Facturation : selon partenaire</td></tr>
+    <tr><td><b>MyExpé + portail transporteur</b></td><td><span class="tag tag-warn">Option</span></td><td><span class="tag tag-ok">Inclus</span></td><td>Différenciant PME</td></tr>
+    <tr><td><b>Planning RH + Calendrier</b></td><td><span class="tag tag-warn">Option</span></td><td><span class="tag tag-ok">Inclus</span></td><td></td></tr>
+    <tr><td><b>MyQualité (non-conformités)</b></td><td>—</td><td><span class="tag tag-ok">Inclus</span></td><td>Argument ISO 9001</td></tr>
+    <tr><td><b>Maintenance (GMAO légère)</b></td><td>—</td><td><span class="tag tag-ok">Inclus</span></td><td>Finir le dev d'abord</td></tr>
+    <tr><td><b>Rentabilité / prix de revient</b></td><td>—</td><td><span class="tag tag-ok">Inclus</span></td><td>Le module qui « paye » l'abonnement</td></tr>
+    <tr><td><b>Coffre RH, MyLearning, Messagerie, préparation paie</b></td><td>—</td><td><span class="tag tag-warn">Option</span></td><td>Pack « RH » à part</td></tr>
+    <tr><td><b>Kai (assistant IA)</b></td><td colspan="2" style="text-align:center"><span class="tag tag-violet">Bientôt — sur les deux</span></td><td>Différenciant de démo</td></tr>
+    <tr><td><b>MyBAT, MyPrint, Appels d'offre</b></td><td colspan="2" style="text-align:center"><span class="tag tag-accent">Verticale imprimerie / façonnage</span></td><td>Prospects du monde graphique</td></tr>
+  </table>
+
+  <div class="grid2" style="margin-top:10px">
+    <div class="card">
+      <h3>Ce que ça implique techniquement</h3>
+      <ul>
+        <li>Un champ « plan » par organisation + mapping plan → tuiles/routes actives (garde-fous côté API, pas seulement à l'affichage).</li>
+        <li>Upgrade en un clic : activer une tuile = un flag, pas un déploiement — « commencez petit » devient un argument.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Ce que ça implique commercialement</h3>
+      <ul>
+        <li>Kernse Atelier est le produit d'appel : démontrable en 20 minutes avec l'instance demo, simple à onboarder.</li>
+        <li>La verticale imprimerie est la niche de départ naturelle : cas client réel, vocabulaire crédible, et trois modules (BAT, Print, AO) que personne d'autre n'a.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte</span><span class="num">7 / 8</span></div>
+</section>
+
+<!-- ============ FEUILLE 8 — ROADMAP ============ -->
+<section class="sheet">
+  <div class="brandrow"><div class="brand-ic">K</div><div class="wm">K<em>ernse</em></div><div class="ctx">Roadmap</div></div>
+  <div class="kicker">Synthèse</div>
+  <h2>Roadmap : la phase 0 est aux deux tiers faite</h2>
+  <div class="sub">Ordre pensé pour vendre le plus tôt possible : la demo avant le produit, les premiers clients accompagnés avant le self-service.</div>
+
+  <div class="phase doing">
+    <div class="phase-num">0</div>
+    <div class="phase-body"><b>Identité + demo</b> <span class="tag tag-accent">En cours</span><br>
+    <span class="mini"><b>Fait :</b> nom Kernse + kit de marque + charte graphique · refactor APP_NAME (config.py, html.py, portal_assets.py — à merger sur staging avec bump de version) · maquettes cockpit (login, portail, MyProd). <b>Reste :</b> branche demo + instance mysifa-demo sur le VPS (cadré dans demo.md) · seed_demo_db.py · domaine définitif branché.</span></div>
+  </div>
+  <div class="phase">
+    <div class="phase-num">1</div>
+    <div class="phase-body"><b>Re-skin Kernse + paramétrage métier minimal</b><br>
+    <span class="mini">Porter la DA Kernse (kernse.css) dans la vraie app, surface par surface · machines et opérations en base avec éditeur dans Paramètres · jeux de départ par métier · import CSV clients/produits/stock. Livrable : la demo Kernse ressemble aux maquettes et décrit une autre entreprise que SIFA.</span></div>
+  </div>
+  <div class="phase">
+    <div class="phase-num">2</div>
+    <div class="phase-body"><b>Provisioning + premiers clients pilotes</b><br>
+    <span class="mini">Script de création d'instance client (systemd + nginx + certbot + DB vierge) · onboarding guidé v1 · sauvegardes/monitoring par client · console plateforme minimale. Livrable : 2-3 pilotes du Nord accompagnés à la main, tarif fondateur contre retours d'usage.</span></div>
+  </div>
+  <div class="phase">
+    <div class="phase-num">3</div>
+    <div class="phase-body"><b>Vitrine + tuiles mainstream</b><br>
+    <span class="mini">Landing kernse.com, page démo/contact, CGV + RGPD · MyKPI complet · MyClient + Devis. Livrable : un site qui vend sans toi et un produit qui démontre sa valeur en un écran.</span></div>
+  </div>
+  <div class="phase">
+    <div class="phase-num">4</div>
+    <div class="phase-body"><b>Industrialisation commerciale</b><br>
+    <span class="mini">Abonnement/facturation (Stripe) · plans Atelier/Usine activables · notifications · exports compta · verticale imprimerie packagée (BAT, Print, AO) · Kai v1. Livrable : un SaaS qui se vend, s'active et se facture sans intervention manuelle.</span></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Les 3 décisions à prendre maintenant</h3>
+      <ul>
+        <li><b>Périmètre du re-skin Kernse</b> : toute l'app (recommandé — un seul design system, SIFA en référence visuelle) ou demo/clients seulement.</li>
+        <li><b>Instance par client assumée</b> pour les 12 premiers mois — évite 6 mois de refonte multi-tenant avant le premier euro.</li>
+        <li><b>Merger le refactor APP_NAME</b> sur staging (avec bump de version à proposer) pour sécuriser l'acquis avant que html.py ne bouge encore.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Prochaine action concrète</h3>
+      <ul>
+        <li>Finir la phase 0 : brancher la branche demo + seed_demo_db.py (checklist demo.md) — prérequis de tout le reste.</li>
+        <li>En parallèle : lister 10 entreprises du Nord à qui montrer le cockpit Kernse dès que la demo tourne — leurs réactions valent tous les brainstormings.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer"><span>Kernse — brainstorming produit · Eugène Leconte · juillet 2026</span><span class="num">8 / 8</span></div>
+</section>
+
+</body>
+</html>

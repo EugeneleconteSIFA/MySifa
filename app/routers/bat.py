@@ -21,6 +21,7 @@ from config import UPLOAD_DIR
 ROLES_BAT = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_BAT_VIEW = ROLES_BAT | {"commercial"}
 BAT_STATUTS = {"a_faire", "en_attente", "valide"}
+BAT_FICHE_TECHNIQUE = {"a_faire", "fait"}
 BAT_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "bat")
 os.makedirs(BAT_UPLOAD_DIR, exist_ok=True)
 
@@ -52,6 +53,9 @@ def _row_to_dict(row) -> dict:
     desc = d.get("description") or d.get("numero_client") or ""
     d["description"] = desc
     d["reference"] = f"{desc}/{d['numero_article']}" if desc else d["numero_article"]
+    # Fiche technique : par défaut "a_faire" si colonne absente (compat)
+    if not d.get("fiche_technique"):
+        d["fiche_technique"] = "a_faire"
     # pdfs / pdf_count seront injectés par _enrich_pdfs
     d.setdefault("pdfs", [])
     d["pdf_count"] = 0
@@ -197,6 +201,7 @@ class BatUpdate(BaseModel):
     description: Optional[str] = None
     numero_article: Optional[str] = None
     delai_client: Optional[str] = None
+    fiche_technique: Optional[str] = None
 
 
 @router.put("/api/bat/{bat_id}")
@@ -231,14 +236,29 @@ def update_bat(bat_id: int, body: BatUpdate, request: Request):
         new_article = body.numero_article.strip() if body.numero_article is not None else current["numero_article"]
         new_delai = body.delai_client if body.delai_client is not None else current.get("delai_client")
 
+        new_fiche = body.fiche_technique if body.fiche_technique is not None else (current.get("fiche_technique") or "a_faire")
+        if new_fiche not in BAT_FICHE_TECHNIQUE:
+            raise HTTPException(status_code=400, detail="Valeur fiche technique invalide")
+
         if not new_desc or not new_article:
             raise HTTPException(status_code=400, detail="Description et numéro article obligatoires")
 
         now = _now()
-        if "delai_client" in cols:
+        has_fiche_col = "fiche_technique" in cols
+        if "delai_client" in cols and has_fiche_col:
+            conn.execute(
+                f"UPDATE bat_entries SET statut=?, notes=?, {desc_col}=?, numero_article=?, delai_client=?, fiche_technique=?, updated_at=?, updated_by=? WHERE id=?",
+                (new_statut, new_notes, new_desc, new_article, new_delai, new_fiche, now, user["id"], bat_id),
+            )
+        elif "delai_client" in cols:
             conn.execute(
                 f"UPDATE bat_entries SET statut=?, notes=?, {desc_col}=?, numero_article=?, delai_client=?, updated_at=?, updated_by=? WHERE id=?",
                 (new_statut, new_notes, new_desc, new_article, new_delai, now, user["id"], bat_id),
+            )
+        elif has_fiche_col:
+            conn.execute(
+                f"UPDATE bat_entries SET statut=?, notes=?, {desc_col}=?, numero_article=?, fiche_technique=?, updated_at=?, updated_by=? WHERE id=?",
+                (new_statut, new_notes, new_desc, new_article, new_fiche, now, user["id"], bat_id),
             )
         else:
             conn.execute(
