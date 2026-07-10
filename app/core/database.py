@@ -6376,6 +6376,16 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 171, "print_module_tables")
 
+    # v172 — MyBAT : ajout colonne fiche_technique ('a_faire' | 'fait')
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=172 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(bat_entries)").fetchall()}
+        if "fiche_technique" not in cols:
+            conn.execute(
+                "ALTER TABLE bat_entries ADD COLUMN fiche_technique TEXT NOT NULL DEFAULT 'a_faire'"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 172, "bat_entries_fiche_technique")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

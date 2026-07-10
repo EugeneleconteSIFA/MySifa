@@ -525,6 +525,17 @@ function statutBadge(e){
   return `<span class="badge ${cls} badge-clickable" onclick="openStatutModal(${e.id})" title="Cliquer pour modifier le statut">${escHtml(statutLabel(e.statut))}</span>`;
 }
 
+// Fiche technique : "a_faire" (orange) ↔ "fait" (vert)
+function ficheLabel(s){return s==='fait'?'Fait':'À faire';}
+function ficheBadge(e){
+  const val=e.fiche_technique||'a_faire';
+  const cls=val==='fait'?'badge-valide':'badge-afaire';
+  if(IS_READONLY){
+    return `<span class="badge ${cls}">${escHtml(ficheLabel(val))}</span>`;
+  }
+  return `<span class="badge ${cls} badge-clickable" onclick="toggleFicheTechnique(${e.id})" title="Cliquer pour basculer">${escHtml(ficheLabel(val))}</span>`;
+}
+
 // ── Filtrage ──────────────────────────────────────────────────────
 function filteredEntries(){
   let list=S.entries;
@@ -612,6 +623,7 @@ function renderTable(){
         <td>${descCell}</td>
         <td><span style="font-weight:700;font-family:ui-monospace,monospace;font-size:12px;color:var(--accent)">${escHtml(e.numero_article)}</span></td>
         <td>${statutBadge(e)}</td>
+        <td>${ficheBadge(e)}</td>
         <td>${delaiCell}</td>
         <td>${notesCell}</td>
         <td style="color:var(--muted);font-size:12px;white-space:nowrap">${escHtml(updDate)}</td>
@@ -627,7 +639,7 @@ function renderTable(){
     }).join('');
     wrap.innerHTML=`<table>
       <thead><tr>
-        <th>Description</th><th>N° Article</th><th>Statut</th><th>Délai client</th><th>Notes</th><th>Mise à jour</th><th>Actions</th>
+        <th>Description</th><th>N° Article</th><th>Statut</th><th>Fiche technique</th><th>Délai client</th><th>Notes</th><th>Mise à jour</th><th>Actions</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
@@ -862,6 +874,28 @@ async function submitStatutChange(newStatut){
       showToast(`Statut mis à jour : ${statutLabel(newStatut)}.`,'success');
     }
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+// ── Fiche technique — toggle inline ───────────────────────────────
+async function toggleFicheTechnique(id){
+  if(IS_READONLY) return;
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  const current=e.fiche_technique||'a_faire';
+  const next=current==='fait'?'a_faire':'fait';
+  try{
+    const r=await api(`/api/bat/${id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({fiche_technique:next})});
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      showToast(d.detail||'Erreur de mise à jour','danger');
+      return;
+    }
+    const entry=await r.json();
+    const idx=S.entries.findIndex(x=>x.id===entry.id);
+    if(idx>=0)S.entries[idx]=entry;
+    render();
+    showToast(`Fiche technique : ${ficheLabel(next)}.`,'success');
+  }catch(err){if(err.message!=='unauth')showToast('Erreur réseau','danger');}
 }
 
 // ── Modals — Suppression ──────────────────────────────────────────
