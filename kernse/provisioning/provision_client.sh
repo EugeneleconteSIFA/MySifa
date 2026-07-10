@@ -44,11 +44,16 @@ if [[ -n "$STARTER_KIT" ]] && ! [[ "$STARTER_KIT" =~ ^[a-z_]{2,32}$ ]]; then
     printf '{"ok":false,"error":"starter_kit invalide","starter_kit":"%s"}\n' "$STARTER_KIT"; exit 2
 fi
 
+# Chemins par défaut relatifs au script lui-même (sudo strip les env vars,
+# donc le .env de kernse-admin n'est pas propagé au shell d'exécution ; on
+# ne peut pas se reposer sur les surcharges KERNSE_* dans ce contexte).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 INSTANCES_ROOT="${KERNSE_INSTANCES_ROOT:-/home/kernse/instances}"
 REPO_URL="${KERNSE_METIER_REPO_URL:-https://github.com/EugeneleconteSIFA/MySifa.git}"
 BRANCH="${KERNSE_METIER_BRANCH:-main}"
-TEMPLATES_DIR="${KERNSE_TEMPLATES_DIR:-/opt/kernse/kernse/provisioning/templates}"
-STARTER_KITS_DIR="${KERNSE_STARTER_KITS_DIR:-/opt/kernse/kernse/seeds/starter_kits}"
+TEMPLATES_DIR="${KERNSE_TEMPLATES_DIR:-$SCRIPT_DIR/templates}"
+STARTER_KITS_DIR="${KERNSE_STARTER_KITS_DIR:-$SCRIPT_DIR/../seeds/starter_kits}"
 NGINX_SITES="${KERNSE_NGINX_SITES:-/etc/nginx/sites-available}"
 NGINX_ENABLED="${KERNSE_NGINX_ENABLED:-/etc/nginx/sites-enabled}"
 SYSTEMD_DIR="${KERNSE_SYSTEMD_DIR:-/etc/systemd/system}"
