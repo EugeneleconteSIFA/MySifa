@@ -45,7 +45,7 @@ if [[ -n "$STARTER_KIT" ]] && ! [[ "$STARTER_KIT" =~ ^[a-z_]{2,32}$ ]]; then
 fi
 
 INSTANCES_ROOT="${KERNSE_INSTANCES_ROOT:-/home/kernse/instances}"
-REPO_URL="${KERNSE_METIER_REPO_URL:-https://github.com/eugeneleconte/MySifa.git}"
+REPO_URL="${KERNSE_METIER_REPO_URL:-https://github.com/EugeneleconteSIFA/MySifa.git}"
 BRANCH="${KERNSE_METIER_BRANCH:-main}"
 TEMPLATES_DIR="${KERNSE_TEMPLATES_DIR:-/opt/kernse/kernse/provisioning/templates}"
 STARTER_KITS_DIR="${KERNSE_STARTER_KITS_DIR:-/opt/kernse/kernse/seeds/starter_kits}"
