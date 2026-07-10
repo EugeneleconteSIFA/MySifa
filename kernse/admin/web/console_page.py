@@ -309,9 +309,9 @@ document.addEventListener('click', async (ev) => {{
         setTimeout(()=>location.reload(), 1500);
       }} else {{
         toast('Échec : ' + (res.error || '?'), true);
-        btn.disabled = false; btn.textContent = 'Provisionner l\'instance';
+        btn.disabled = false; btn.textContent = "Provisionner l'instance";
       }}
-    }} catch (e) {{ toast(e.message, true); btn.disabled = false; btn.textContent = 'Provisionner l\'instance'; }}
+    }} catch (e) {{ toast(e.message, true); btn.disabled = false; btn.textContent = "Provisionner l'instance"; }}
   }}
 
   if (action === 'unpin') {{
