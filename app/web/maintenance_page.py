@@ -3246,7 +3246,15 @@ function loadOps(){
       merged.push(it);
     }
     OPS_STATE.list = merged;
+    // Rerender toutes les vues qui dérivent de OPS_STATE.list.
+    // - renderOps        : historique tableau (onglet "Opérations de maintenance")
+    // - renderMaintCards : cartes principales (dernière intervention par machine)
+    // - renderOpsTypes   : liste catalogue (colonne "Dernière intervention")
+    // - renderCtrlTypes  : liste contrôles (colonne "Dernière intervention")
     if(typeof renderOps === 'function') renderOps();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+    if(typeof renderOpsTypes === 'function') renderOpsTypes();
+    if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
   }).catch(() => {});
 }
 
@@ -3514,9 +3522,19 @@ function setOpsCatMachine(m){
 // Retourne la date ISO la plus récente d'une saisie sur (label, machine).
 function _lastInterventionFor(label, machine, sourceList){
   if(!label || !machine || !Array.isArray(sourceList)) return null;
+  const lblLc = String(label).toLowerCase().trim();
+  const machLc = String(machine).toLowerCase().trim();
   let latest = null;
   for(const it of sourceList){
-    if(it && it.type === label && it.machine === machine){
+    if(!it) continue;
+    const itType = String(it.type || '').toLowerCase().trim();
+    const itMach = String(it.machine || '').toLowerCase().trim();
+    // Machine peut être un CSV (ex: "Cohésio 1 · Cohésio 2") depuis la DB —
+    // on considère un match si la machine ciblée est incluse dans la liste.
+    const machineMatch = itMach === machLc
+      || itMach.split('·').map(s => s.trim()).includes(machLc)
+      || itMach.split(',').map(s => s.trim()).includes(machLc);
+    if(itType === lblLc && machineMatch){
       const d = it.date_saisie;
       if(d && (!latest || d > latest)) latest = d;
     }
@@ -3529,10 +3547,20 @@ function _lastInterventionFor(label, machine, sourceList){
 // via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
 function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
   if(!machine) return null;
+  const lblLc = String(label || '').toLowerCase().trim();
+  const machLc = String(machine).toLowerCase().trim();
+  const machMatch = (itMach) => {
+    const s = String(itMach || '').toLowerCase().trim();
+    return s === machLc
+      || s.split('·').map(x => x.trim()).includes(machLc)
+      || s.split(',').map(x => x.trim()).includes(machLc);
+  };
   let latest = null;
   if(Array.isArray(manualList)){
     for(const it of manualList){
-      if(it && it.type === label && it.machine === machine){
+      if(!it) continue;
+      const itType = String(it.type || '').toLowerCase().trim();
+      if(itType === lblLc && machMatch(it.machine)){
         const d = it.date_saisie;
         if(d && (!latest || d > latest)) latest = d;
       }
@@ -3540,7 +3568,7 @@ function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
   }
   if(Array.isArray(ackList) && code){
     for(const it of ackList){
-      if(it && it._maint_code === code && it.machine === machine){
+      if(it && it._maint_code === code && machMatch(it.machine)){
         const d = it.date_saisie;
         if(d && (!latest || d > latest)) latest = d;
       }
