@@ -30,7 +30,9 @@ RestartSec=5
 NoNewPrivileges=false
 ProtectSystem=strict
 ProtectHome=false
-ReadWritePaths=/home/kernse
+# ReadWritePaths doit inclure /etc/systemd et /etc/nginx pour que le sudo
+# vers provision_client.sh puisse écrire les unit files et les vhosts.
+ReadWritePaths=/home/kernse /etc/systemd/system /etc/nginx/sites-available /etc/nginx/sites-enabled /var/www/certbot /etc/letsencrypt
 PrivateTmp=true
 
 [Install]

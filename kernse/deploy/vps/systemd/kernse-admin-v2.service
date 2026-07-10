@@ -31,9 +31,12 @@ RestartSec=5
 NoNewPrivileges=false
 ProtectSystem=strict
 ProtectHome=false
-# Admin peut écrire dans /home/kernse (DB, backups, invocation scripts)
-# ET dans /etc/nginx et /etc/systemd via sudo (script provision_client.sh)
-ReadWritePaths=/home/kernse
+# Admin peut écrire dans /home/kernse (DB, backups, scripts) ET dans les
+# chemins /etc/systemd, /etc/nginx et /etc/letsencrypt via sudo (script
+# provision_client.sh). ProtectSystem=strict rend le reste de / en RO même
+# via sudo — donc chaque chemin utilisé par provision_client.sh doit être
+# explicitement whitelisté ici.
+ReadWritePaths=/home/kernse /etc/systemd/system /etc/nginx/sites-available /etc/nginx/sites-enabled /var/www/certbot /etc/letsencrypt
 PrivateTmp=true
 
 [Install]
