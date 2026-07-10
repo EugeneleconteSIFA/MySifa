@@ -135,6 +135,7 @@
     const tgt = p.target || {};
     let machines = Array.isArray(tgt.machines) ? tgt.machines : ['*'];
     const val = Object.assign({ button_label: 'Valider' }, p.validation || {});
+    const dismiss = Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {});
     const cl = Object.assign({ enabled: false, items: [] }, p.checklist || {});
     if (!Array.isArray(cl.items)) cl.items = [];
     cl.items = cl.items.map(it => {
@@ -159,7 +160,8 @@
     const description = (typeof p.description === 'string') ? p.description : '';
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
              description: description,
-             trigger: trig, target: { machines }, validation: val, checklist: cl };
+             trigger: trig, target: { machines }, validation: val, checklist: cl,
+             dismiss_button: dismiss };
   }
 
   function _onValueInput(inp) {
@@ -550,8 +552,8 @@
       + '<textarea class="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
       + '<div class="ta-sim-actions">'
       +   '<button type="button" class="ta-sim-btn ta-validate">' + _esc(alert.validation.button_label) + '</button>'
-      +   (alert.params && alert.params.dismiss_button && alert.params.dismiss_button.enabled
-          ? '<button type="button" class="ta-sim-btn ta-dismiss" style="background:#f97316;color:#fff;border-color:#f97316">' + _esc(alert.params.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
+      +   (alert.dismiss_button && alert.dismiss_button.enabled
+          ? '<button type="button" class="ta-sim-btn ta-dismiss" style="background:#f97316;color:#fff;border-color:#f97316">' + _esc(alert.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
           : '')
       + '</div>'
       + '</div>';
