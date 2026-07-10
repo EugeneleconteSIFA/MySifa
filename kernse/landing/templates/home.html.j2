@@ -1,0 +1,82 @@
+{% extends "base.html.j2" %}
+{% block content %}
+<section class="hero">
+  <p class="kicker">Kernse — Pilotage d'atelier</p>
+  <h1>Sortez d'Excel. Sans acheter un <em>ERP usine à gaz</em>.</h1>
+  <p class="lead">
+    Kernse est un logiciel de pilotage de production pensé pour les TPE et PME industrielles :
+    planning machines, saisie opérateur sur tablette, stocks, expéditions, qualité — un
+    seul écran par métier, aucune formation d'un mois.
+  </p>
+  <div class="hero-cta">
+    <a class="btn btn-accent" href="{{ demo_url }}">Voir la démo (5 min)</a>
+    <a class="btn btn-ghost" href="/contact">Parler à un humain</a>
+  </div>
+</section>
+
+<section id="produit" class="features">
+  <h2>Ce que <em>vous</em> pilotez avec Kernse</h2>
+  <div class="grid3">
+    <article class="feat">
+      <h3>Planning machines</h3>
+      <p>Vos dossiers glissent d'une machine à l'autre. Vous voyez la semaine en un coup d'œil.</p>
+    </article>
+    <article class="feat">
+      <h3>Saisie opérateur</h3>
+      <p>Une tablette dans l'atelier. Vos opérateurs commencent à saisir en 3 minutes.</p>
+    </article>
+    <article class="feat">
+      <h3>Stocks &amp; expéditions</h3>
+      <p>Emplacements, réceptions par lot, portail transporteur. Rien ne se perd.</p>
+    </article>
+    <article class="feat">
+      <h3>Qualité &amp; non-conformités</h3>
+      <p>Vos NC tracées, ackées service par service. Argument ISO 9001 acquis.</p>
+    </article>
+    <article class="feat">
+      <h3>Rentabilité</h3>
+      <p>Coût matière, temps machine, marge cible. Vos devis sont justes à la première ligne.</p>
+    </article>
+    <article class="feat">
+      <h3>RH légères</h3>
+      <p>Planning personnel, absences, coffre RH. Vos équipes ont un espace à elles.</p>
+    </article>
+  </div>
+</section>
+
+<section id="offres" class="offers">
+  <h2>Deux offres, un seul produit</h2>
+  <div class="grid2">
+    <article class="offer">
+      <h3>Kernse Atelier</h3>
+      <p class="target">TPE — 2 à 15 personnes</p>
+      <ul>
+        <li>Planning + saisie production</li>
+        <li>Stock simplifié</li>
+        <li>Clients + devis</li>
+        <li>Tablette atelier incluse</li>
+      </ul>
+    </article>
+    <article class="offer highlighted">
+      <h3>Kernse Usine</h3>
+      <p class="target">PME — 15 à 100 personnes</p>
+      <ul>
+        <li>Tout Kernse Atelier</li>
+        <li>Expéditions + portail transporteur</li>
+        <li>Qualité (ISO 9001)</li>
+        <li>Rentabilité + GMAO légère</li>
+        <li>Planning RH + calendrier</li>
+      </ul>
+    </article>
+  </div>
+  <p class="mini">Pack vertical imprimerie/façonnage disponible : BAT, Print, appels d'offre. <a href="/contact">Nous demander.</a></p>
+</section>
+
+<section id="faq" class="faq">
+  <h2>Questions fréquentes</h2>
+  <details><summary>Où sont mes données ?</summary><p>Dans une base SQLite dédiée à votre entreprise, sur un serveur France/UE. Jamais mélangées avec celles d'un autre client.</p></details>
+  <details><summary>Combien de temps pour démarrer ?</summary><p>15 minutes pour votre atelier — un assistant vous guide (machines, opérations, équipe, import de vos clients). Aucune formation obligatoire.</p></details>
+  <details><summary>Puis-je exporter mes données ?</summary><p>Oui, à tout moment. Format SQLite + archive ZIP des documents. Vos données ne sont jamais captives.</p></details>
+  <details><summary>Combien ça coûte ?</summary><p>Chaque offre a un prix par utilisateur/mois. Contactez-nous pour un devis précis — pas de tarif « à partir de » trompeur.</p></details>
+</section>
+{% endblock %}

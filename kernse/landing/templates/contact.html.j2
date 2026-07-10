@@ -1,0 +1,11 @@
+{% extends "base.html.j2" %}
+{% block title %}Contact — Kernse{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="kicker">Contact</p>
+  <h1>On vous <em>écoute</em>.</h1>
+  <p class="lead">Un email direct, une réponse humaine sous 24h ouvrées. Pas de call center, pas de formulaire à 15 champs.</p>
+  <p class="lead"><a class="btn btn-accent" href="mailto:{{ contact_email }}">{{ contact_email }}</a></p>
+  <p class="mini">Basés dans les Hauts-de-France. Idéalement, on se rencontre dans votre atelier.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+# Kernse — Instance client : __SLUG__
+# Généré par kernse/provisioning/provision_client.sh
+# Ne pas éditer à la main : régénérer via le script si besoin.
+
+[Unit]
+Description=Kernse client instance — __SLUG__
+After=network.target
+StartLimitIntervalSec=200
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=kernse
+Group=kernse
+WorkingDirectory=__INSTANCE_DIR__
+
+# Variables d'environnement métier (paramétrage client — cf. règle Kernse
+# du CLAUDE.md racine : SIFA valeurs par défaut, chaque client surcharge).
+Environment="PORT=__PORT__"
+Environment="DB_PATH=__DB_PATH__"
+Environment="APP_NAME=__APP_NAME__"
+Environment="KERNSE_CLIENT_SLUG=__SLUG__"
+Environment="ENV_NAME=v2"
+
+# Fichier .env local à l'instance (secrets client, éventuellement Stripe,
+# SMTP, etc.). Optionnel — n'échoue pas si absent.
+EnvironmentFile=-__INSTANCE_DIR__/.env
+
+ExecStart=__INSTANCE_DIR__/.venv/bin/uvicorn main:app --host 127.0.0.1 --port __PORT__ --workers 1
+
+Restart=on-failure
+RestartSec=5
+
+# Isolation renforcée (compatible avec SQLite en local)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=__INSTANCE_DIR__
+PrivateTmp=true
+PrivateDevices=true
+
+[Install]
+WantedBy=multi-user.target

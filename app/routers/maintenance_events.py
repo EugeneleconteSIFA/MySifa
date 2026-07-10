@@ -152,7 +152,7 @@ def _validate_time(s: Optional[str]) -> None:
 def _load_event_full(conn, event_id: int) -> Optional[dict]:
     """Retourne un dict enrichi {event, ops:[...], operators:[...]} ou None."""
     ev = conn.execute(
-        """SELECT id, machine, date_prevue, heure_debut, heure_fin, source,
+        """SELECT id, machine, nom, date_prevue, heure_debut, heure_fin, source,
                   template_id, created_by, created_at, updated_at
            FROM maintenance_events WHERE id = ?""",
         (event_id,),
@@ -192,6 +192,7 @@ def _load_event_full(conn, event_id: int) -> Optional[dict]:
     return {
         "id": ev["id"],
         "machine": ev["machine"],
+        "nom": ev["nom"],
         "date_prevue": ev["date_prevue"],
         "heure_debut": ev["heure_debut"],
         "heure_fin": ev["heure_fin"],
@@ -233,6 +234,8 @@ class EventCreateBody(BaseModel):
     # avoir plusieurs machines dans le même créneau (attribuées par op).
     # Elle reste obligatoire côté opérateur (non_planifie, 1 seul code).
     machine: Optional[str] = None
+    # nom libre du créneau ("Nettoyage matinal", "Grande révision", …), optionnel.
+    nom: Optional[str] = None
     date_prevue: str                         # YYYY-MM-DD
     heure_debut: Optional[str] = None        # HH:MM (nullable si non planifié)
     heure_fin: Optional[str] = None          # HH:MM
@@ -249,6 +252,7 @@ class EventCreateBody(BaseModel):
 
 class EventUpdateBody(BaseModel):
     machine: Optional[str] = None
+    nom: Optional[str] = None
     date_prevue: Optional[str] = None
     heure_debut: Optional[str] = None
     heure_fin: Optional[str] = None
@@ -459,12 +463,14 @@ def create_event(body: EventCreateBody, request: Request):
                 raise HTTPException(status_code=400, detail=f"opérateur inconnu: {oid}")
 
         now = _now_paris_iso()
+        # Nom libre (optionnel), stripé et normalisé à None si vide.
+        nom_clean = (body.nom or "").strip() or None
         cur = conn.execute(
             """INSERT INTO maintenance_events
-               (machine, date_prevue, heure_debut, heure_fin, source,
+               (machine, nom, date_prevue, heure_debut, heure_fin, source,
                 template_id, created_by, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (event_machine, body.date_prevue, heure_debut, heure_fin, src,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (event_machine, nom_clean, body.date_prevue, heure_debut, heure_fin, src,
              template_id, user["id"], now),
         )
         event_id = cur.lastrowid
@@ -766,6 +772,7 @@ def get_history(
             f"""SELECT o.id             AS op_id,
                        e.id             AS event_id,
                        e.machine        AS machine,
+                       e.nom            AS event_nom,
                        o.machines_csv   AS op_machines_csv,
                        o.code           AS code,
                        c.label          AS code_label,

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Kernse — Pilotage d'atelier{% endblock %}</title>
+  <meta name="description" content="{% block description %}Le pilotage d'atelier sans Excel ni ERP usine à gaz. Kernse est un SaaS pour TPE et PME industrielles.{% endblock %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;700;800&family=JetBrains+Mono:wght@600;800&family=Poppins:wght@900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/landing.css">
+</head>
+<body>
+{% if is_staging %}
+<div class="banner-staging">Kernse v1 — pré-production. Le contenu peut changer à tout moment.</div>
+{% endif %}
+<header class="topbar">
+  <a class="brand" href="/">K<em>ernse</em></a>
+  <nav>
+    <a href="/#produit">Produit</a>
+    <a href="/#offres">Offres</a>
+    <a href="/#faq">FAQ</a>
+    <a href="/contact">Contact</a>
+    <a class="cta" href="{{ demo_url }}">Voir la démo</a>
+  </nav>
+</header>
+
+<main>{% block content %}{% endblock %}</main>
+
+<footer class="foot">
+  <div class="wm">K<em>ernse</em></div>
+  <p>Le pilotage d'atelier pour TPE/PME industrielles. Hébergé en France.</p>
+  <p><a href="mailto:{{ contact_email }}">{{ contact_email }}</a> · <a href="/mentions-legales">Mentions légales</a> · <a href="/cgv">CGV</a> · <a href="https://status.kernse.fr">status.kernse.fr</a></p>
+</footer>
+</body>
+</html>

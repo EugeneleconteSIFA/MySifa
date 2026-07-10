@@ -19,6 +19,92 @@ MySifa est un outil interne de gestion de production industrielle développé po
 
 ---
 
+## Kernse — commercialisation & paramétrage (règle stratégique)
+
+MySifa est aussi le socle technique du produit commercial **Kernse**
+(SaaS TPE/PME industrielles). Le code est unique : c'est le paramétrage qui
+différencie une instance SIFA d'une instance client Kernse. Le dossier
+`kernse/` à la racine héberge tout ce qui est spécifique à la
+commercialisation (console plateforme, provisioning, onboarding, seeds
+métier, design system Kernse, landing publique). Voir `kernse/CLAUDE.md`
+pour les règles propres à ce dossier.
+
+**Règle absolue applicable à tout le repo — paramétrable dès l'écriture,
+SIFA reste défaut :**
+
+Aucune donnée qui décrit une entreprise cliente n'est écrite en dur dans le
+code. Machines, opérations, terminologie, transporteurs, structure de coûts,
+calendrier, rôles, plans d'emplacement, taux horaires, jours de fermeture :
+tout vit en base et s'édite dans Paramètres. Le code lit un référentiel, il
+ne le contient pas.
+
+Le pattern est celui du refactor `APP_NAME` : la valeur par défaut =
+la valeur SIFA actuelle, aucune rupture pour la prod, la démo Kernse et les
+futurs clients surchargent via `.env` (scalaires) ou via un seed (référentiels
+métier). Concrètement :
+
+- **Scalaire** (nom, URL, seuil, couleur d'accent) → variable dans `config.py`
+  avec `os.getenv("XXX", "<valeur SIFA>")`.
+- **Petit référentiel figé** (statuts, sévérités, codes techniques
+  structurants) → constante Python dans `config.py`, mais lue via une
+  fonction, jamais interpolée en dur dans un template.
+- **Référentiel métier** (machines, opérations, transporteurs, types de NC,
+  postes de coût, jours de fermeture) → table SQLite créée par migration,
+  seedée avec les valeurs SIFA pour la prod (v2) et v1, laissée vide pour la
+  démo Kernse et les futures instances clientes, exposée par un CRUD dans
+  Paramètres.
+
+**Anti-patterns interdits sur tout le repo :**
+
+- Écrire `"Cohésio 1"`, `"Repiquage"`, `"Errepi"`, `"Bunsch"`, ou tout autre
+  nom propre SIFA en dur dans un router, une page ou un composant JS.
+- Coder un `if machine == "Cohésio 1":` — la logique métier ne dépend jamais
+  d'une chaîne d'identifiant machine mais d'attributs (`type`, `capacite`,
+  `taux_horaire`) qui sont en base.
+- Injecter `"eleconte@sifa.pro"`, `"admin@sifa.fr"`, `"mysifa.com"`,
+  `"sifa.pro"` dans un template envoyé à un utilisateur final. Ces valeurs
+  existent dans `config.py` (via env) — on lit la variable, pas la chaîne.
+- Ajouter un template email qui commence par « Bonjour, SIFA vous
+  informe... » — c'est `APP_TITLE` qu'on interpole.
+- Écrire une migration qui remplit une nouvelle table avec des valeurs SIFA
+  sans conditionner ce seed à `ENV_NAME` ou à un flag « pas d'écrasement si
+  déjà rempli ». Un client Kernse démarre avec une table vide que
+  l'onboarding remplit, pas avec les codes SIFA à effacer.
+
+**Question test à se poser avant chaque nouvelle valeur métier :** « un
+client imprimerie de Lille qui installe Kernse demain matin, cette valeur
+a-t-elle un sens pour lui ? ». Si non → paramètre obligatoire. En cas de
+doute → paramètre obligatoire par défaut (on préfère un paramètre inutile à
+une constante à refactoriser plus tard).
+
+**Deux étages de paramétrage :**
+
+- **Plateforme** (Kernse en tant qu'éditeur) : `platform_settings` + `.env` du
+  VPS, éditée par le superadmin plateforme (Eugène). Exemples : nom de
+  marque global, URL landing, clé Stripe, catalogue des plans, catalogue
+  des jeux de départ métier.
+- **Entreprise** (le client) : `client_settings` + tables métier (`machines`,
+  `operations`, `transporteurs`, `nc_types`, `postes_cout`...), éditée par le
+  superadmin de l'organisation cliente. Exemples : machines de l'atelier,
+  codes opérations retenus, transporteurs utilisés, taux horaires,
+  terminologie (« dossier » / « OF » / « commande »), rôles renommés.
+
+**Existant SIFA-spécifique à généraliser progressivement** (chantier B du
+brainstorm Kernse) : machines de `planning`, codes d'`operations.json`,
+transporteurs et grilles tarifaires MyExpé, plan d'emplacements
+`emplacements_plan.csv`, structure de coûts pricing v78, jours fériés + jours
+off SIFA, noms de rôles (`ROLE_*` dans `config.py`), lexique (« dossier »
+partout dans l'UI). Ordre de priorité : machines + opérations d'abord (dont
+dépendent MyProd, Planning, Maintenance et rentabilité).
+
+**Modules verticaux (imprimerie/façonnage) :** MyBAT, MyPrint, Appels d'offre
+ne sont pas SIFA-spécifiques mais ne sont pas génériques non plus. Ils vivent
+dans `app/` (comme aujourd'hui) mais sont marqués `module_optional=True` et
+`vertical="imprimerie"` dans le catalogue de modules — désactivés par défaut
+sur un plan Kernse Atelier générique, activables via un pack vertical.
+
+---
+
 ## Stack technique
 
 - **Backend** : Python 3 / FastAPI — point d'entrée `main.py` à la racine
@@ -531,3 +617,298 @@ et re-taper `git checkout` retronque à nouveau.
   interactif, envelopper dans `& { … }` avec `if ($LASTEXITCODE -ne 0) { return }`
   après chaque commande. Le `return` sort du scriptblock sans fermer la fenêtre
   (contrairement à `exit 1`).
+
+---
+
+## Sécurité, secrets & audit trail
+
+Ces règles s'appliquent dès le premier client Kernse payé, mais elles sont
+utilisables tout de suite pour SIFA (aucune régression).
+
+**Secrets — jamais dans le repo git**
+
+- Toute clé (Stripe, Microsoft Graph client secret, Anthropic, DeepL, SMTP,
+  etc.) vit dans `.env` sur le VPS. `.gitignore` bloque `.env`.
+- `.env.example` (versionné) liste toutes les variables attendues avec des
+  valeurs placeholder — jamais de vraie clé, jamais de vraie URL de webhook.
+- Rotation semestrielle des secrets sensibles, documentée dans
+  `docs/archives/rotations-YYYY.md` (date, portée, qui).
+- Les secrets clients Kernse (clés Stripe par instance, si un jour on les
+  isole) sont provisionnés par un script hors-repo, jamais tapés à la main.
+
+**Anti-fuite — règles absolues**
+
+- Ne jamais logger un token, un mot de passe (même hashé), une session, une
+  clé API, un numéro de carte. Filtrer avant `logger.info`.
+- Les endpoints ne renvoient jamais un secret dans la réponse, y compris à
+  la création (ex. pas de réponse « voici la clé qu'on vient de générer,
+  gardez-la précieusement » — on force un `GET /me/api-keys` séparé qui
+  affiche les 4 derniers caractères seulement).
+- Les erreurs d'authentification ne révèlent pas si un email existe :
+  message générique « identifiants invalides », même sur un mauvais mot de
+  passe pour un compte existant.
+- Les uploads ne servent jamais de contenu exécutable (`text/html`,
+  `application/javascript`) — servis avec `Content-Disposition: attachment`.
+
+**Audit trail — table `audit_log`**
+
+Obligatoire dès qu'une donnée sensible est modifiée : utilisateurs
+(création, changement de rôle, désactivation), rôles/permissions,
+paramètres plateforme, paramètres entreprise, factures/paiements, données
+personnelles RGPD, suspensions/résiliations d'instance.
+
+- Colonnes : `id`, `at` (UTC ISO), `user_id`, `user_email`, `ip`, `action`
+  (verbe court), `entity_type`, `entity_id`, `before` (JSON), `after`
+  (JSON).
+- Rétention 12 mois minimum, 24 mois pour la facturation (obligation
+  comptable).
+- Consultable via la console plateforme (filtres : par client, par
+  utilisateur, par action, par date).
+- Écriture dans le même transaction que la modif — jamais d'audit
+  « best-effort » qu'on peut oublier de committer.
+
+**Auth — durcissement pour clients payants**
+
+- Politique mot de passe : 12 caractères min, complexité, blocklist des
+  mots de passe compromis (haveibeenpwned k-anonymity).
+- 2FA obligatoire pour les rôles `superadmin` et `direction` dès qu'il y a
+  des clients payants sur la plateforme (délai de grâce : 30 jours après
+  activation d'une organisation).
+- SSO Azure AD (OIDC) implémentable pour les clients qui le demandent —
+  le maquettage existe déjà côté login.
+
+---
+
+## Cycle de vie client (suspension, résiliation, RGPD)
+
+Aujourd'hui : un client se crée à la main. Demain : il doit pouvoir être
+suspendu (impayé), résilié (fin de contrat), ré-activé, et exporté sans
+qu'un développeur ait à écrire du SQL.
+
+**Suspension — impayé, litige, autre**
+
+- Chaque instance client a un flag `suspended` (dans la table `clients` de
+  `platform_settings`).
+- Quand `suspended=true` : le login renvoie « accès suspendu — contactez le
+  support » sans révéler la raison. La DB reste intacte, les uploads
+  restent en place, la facturation continue jusqu'au terme légal.
+- Réactivation = flag remis à `false`, aucune migration ni restauration.
+- La suspension est tracée dans l'audit log (qui a suspendu, quand,
+  raison).
+
+**Résiliation — fin de contrat**
+
+- Après notification écrite (email + interface), l'instance passe en
+  `terminated`, avec une date `terminated_at`.
+- Pendant 30 jours à partir de `terminated_at` :
+  - La DB passe en lecture seule (aucune écriture applicative acceptée).
+  - Un bouton « Export final complet » est proposé dans Paramètres :
+    dump SQLite + archive ZIP des uploads, téléchargeable par le
+    superadmin de l'organisation.
+  - Aucune facturation, aucun envoi automatique, aucune notification
+    push.
+- Une bannière rouge en tête de chaque page prévient l'utilisateur qu'il
+  est en période de rétention.
+
+**Suppression définitive — passé J+30**
+
+- Un script `kernse/scripts/purge_client.sh` détruit :
+  - La DB SQLite de l'instance et tous les uploads.
+  - Le vhost nginx, le service systemd, le sous-domaine, le certificat.
+- Un enregistrement minimal reste dans
+  `platform_settings.clients_archived` : nom d'entreprise, dates de début
+  et de fin, motif de résiliation. Pas de donnée personnelle.
+- L'audit trail plateforme conserve la trace de la suppression 5 ans
+  (obligation comptable — la donnée personnelle a disparu, l'événement
+  « suppression » reste).
+
+**RGPD — droit à l'effacement d'un utilisateur**
+
+- Un utilisateur peut demander la suppression de ses données personnelles
+  (email, nom, téléphone, avatar) sans que ça détruise l'historique de
+  ses saisies de production (obligation métier + traçabilité qualité).
+- Solution : **anonymisation**. L'utilisateur devient « Utilisateur
+  supprimé #<hash court> ». Toutes les saisies restent, l'identité
+  personnelle disparaît.
+- Endpoint dédié dans Paramètres, sous 30 jours max après demande écrite,
+  tracé dans l'audit log.
+
+**RGPD — export de données à la demande**
+
+- Un client peut demander l'export complet de ses données à tout moment
+  (self-service dans Paramètres). Format : dump SQLite + archive ZIP des
+  uploads. Livraison sous 72h max.
+- Le fait qu'on assume « une instance = une DB dédiée » rend cet export
+  trivial — c'est un argument commercial à exploiter.
+
+---
+
+## API versioning & compat descendante
+
+Aujourd'hui (SIFA seul) : les endpoints sous `/api/*` peuvent bouger
+librement — un seul consommateur, contrôlable. Cette liberté prend fin
+**au premier client payé Kernse**.
+
+**Règle Kernse — à appliquer dès qu'on commence à écrire des routes
+publiques pour Kernse**
+
+- Toute nouvelle route publique (utilisée par un front qu'on ne contrôle
+  pas totalement, un partenaire, un intégrateur, un webhook Stripe) est
+  préfixée `/api/v1/`. Les routes internes (`/healthz`, `/platform/admin/*`,
+  `/api/internal/*`) restent hors versioning.
+- Chaque route publique a un schéma Pydantic explicite en entrée et en
+  sortie. Ne jamais renvoyer un objet DB brut avec tous ses champs. Ne
+  jamais ajouter un champ **obligatoire** à un endpoint existant sans
+  bump de version.
+
+**Deprecation — 6 mois minimum**
+
+Avant de retirer une route `/api/v1/` :
+
+1. Ajouter `/api/v2/xxx` avec le nouveau contrat.
+2. Marquer `/api/v1/xxx` comme dépréciée : header HTTP `Deprecation: true`,
+   `Sunset: <date>`, plus une entrée dans `docs/api/deprecations.md`.
+3. Attendre 6 mois minimum entre la publication de v2 et le retrait de
+   v1.
+4. Prévenir chaque client par email : une fois au démarrage de la
+   période de déprecation, une fois 1 mois avant le retrait.
+
+**Compatibilité côté client**
+
+- Les instances Kernse supportent les 2 dernières versions majeures
+  d'API en parallèle. La console plateforme affiche par instance quelle
+  version le front consomme (`X-Api-Version` request header ou
+  détection au niveau du reverse proxy).
+- Le front interne (portail Kernse) migre vers la nouvelle version
+  d'API dans le mois qui suit sa publication — pas en même temps qu'un
+  autre chantier.
+
+---
+
+## Emails transactionnels & SLA
+
+**Emails multi-instance**
+
+- Chaque instance client Kernse envoie depuis son propre domaine
+  expéditeur (`noreply@<domaine-client>`), configuré à l'onboarding. Le
+  patron client renseigne SPF/DKIM/DMARC en suivant un guide dans
+  `kernse/docs/email-setup.md`.
+- **Fallback** : tant que le client n'a pas fini de configurer son
+  domaine, envoi depuis `noreply@kernse.com` avec `Reply-To` = adresse
+  support du client. Marqué comme « configuration email en attente »
+  dans le cockpit du superadmin de l'organisation.
+- Templates HTML paramétrables par instance : logo, wordmark, couleur
+  d'accent, coordonnées support, mentions légales bas de mail — tirés
+  de `client_settings.branding_email_*`.
+- **Anti-pattern absolu** : jamais d'envoi depuis `noreply@sifa.pro` ou
+  `noreply@mysifa.fr` pour une instance non-SIFA. Ce serait une fuite de
+  branding et un problème de déliverabilité (le tenant Microsoft SIFA
+  n'a pas à envoyer pour un client Kernse).
+- Déliverabilité surveillée côté plateforme : taux de bounce et de
+  plainte par instance, alerte au-dessus de 2 %.
+
+**SLA**
+
+- Engagement de disponibilité inscrit dans les CGV (proposé : **99,5 %
+  mensuel hors maintenance planifiée** — à valider avec un juriste avant
+  publication).
+- Maintenances planifiées annoncées 72h à l'avance (email + bandeau
+  in-app), toujours hors heures ouvrées (soir ou week-end).
+- **Status page publique** : `status.kernse.com` (statique ou managée
+  type Statuspage/Instatus). État de la plateforme, incidents en cours,
+  historique des 90 derniers jours.
+
+**Monitoring & alertes**
+
+- Chaque instance a un `/healthz` (déjà en place sur MySifa). La console
+  plateforme le sollicite toutes les minutes.
+- Alerte email + SMS au superadmin plateforme dès qu'une instance est
+  KO > 2 minutes, avec identification claire de l'instance concernée.
+- **Playbook incident** : détection → communication client (email
+  générique dans les 15 min) → correctif → postmortem écrit dans
+  `kernse/docs/incidents/YYYY-MM-DD-<slug>.md`. Chaque incident majeur
+  est référencé sur la status page.
+
+---
+
+## Propreté du repo et des bases de données
+
+Un repo qui se salit tue la vitesse de dev et la confiance des repreneurs
+(nouveaux devs, audit technique, due diligence en cas de rachat). Règle
+générale : **si un fichier n'est pas référencé par le code ou par la doc
+active, il ne reste pas à la racine**.
+
+**Racine du repo — ce qui a le droit d'y être**
+
+Uniquement : `main.py`, `config.py`, `database.py` (shim), `operations.json`,
+`requirements.txt`, `.env.example`, `.gitignore`, `.gitattributes`,
+`README.md`, `CLAUDE.md`, et les dossiers principaux (`app/`, `kernse/`,
+`data/`, `docs/`, `scripts/`, `tools/`, `frontend/`, `routers/`, `static/`
+si utilisés). Aucun brouillon, aucune archive de prompt, aucun CSV de test,
+aucun `.docx` de compte-rendu.
+
+**Où va quoi**
+
+- `docs/archives/` : anciens prompts (`FSC_Cursor_Prompts*.md`,
+  `PROMPT_TRACA_CODEBARRE.md`, `CURSOR_PROMPT_mystock_matieres.md`,
+  `PROMPTS_CURSOR*.md`, `MySifa — Prompts Cursor MyAO*.md`), roadmaps
+  périmées, snapshots de brainstorming, `SIFA_CONTEXT.md`.
+- `tools/fixtures/` : CSVs d'exemple pour tests d'import
+  (`Ceva_tarifs.csv`, `Coquelle_tarifs.csv`, `Coupe_tarifs.csv`).
+- `data/` : uniquement les DB actives (`production.db`), `uploads/`,
+  `emplacements_plan.csv` — bref, ce que l'app lit réellement au runtime.
+- `docs/` (à la racine, actif) : la doc encore utile — features
+  documentées, guides opérateurs, brainstorm en cours (`brainstorm-kernse.html`).
+
+**Fichiers fantômes à surveiller / supprimer**
+
+- `production.db` à la racine (ancienne archive) — à supprimer une fois
+  confirmé qu'il n'est référencé nulle part.
+- `mysifa.db` (racine ou `data/`) — fantôme vide, à supprimer.
+- `__init__.py` vide à la racine — héritage inutile, à supprimer si
+  aucun import ne le référence.
+- `.DS_Store` — ignoré par `.gitignore`, ne doit jamais atterrir dans un
+  commit.
+- Dossier `.windsurf/` — si spécifique à un poste de dev, à ignorer.
+
+**Dossier `kernse/` — mêmes règles**
+
+Pas de brouillon à la racine de `kernse/`, pas de fichier `TODO.md` qui
+traîne, pas de PDF de plaquette commerciale versionné. Un fichier n'a
+sa place que s'il est référencé par le code ou par la doc active. Les
+archives commerciales (anciennes versions de landing, vieux brainstorm)
+vont dans `kernse/docs/archives/`.
+
+**Base de données — hygiène**
+
+- Toute modification de schéma passe par une migration numérotée dans
+  `_migrate()` (racine `app/core/database.py`). Jamais de `ALTER TABLE`
+  à la main sur prod ni sur v1.
+- **VACUUM + ANALYZE mensuel automatisé** via cron VPS
+  (`/etc/cron.d/mysifa-db-maintenance`). Récupère l'espace, met à jour
+  les stats de l'optimiseur.
+- **Purge des données obsolètes** : sessions expirées > 30 jours,
+  notifications lues > 90 jours, uploads sans référence > 180 jours,
+  logs applicatifs > 90 jours. À industrialiser côté Kernse (job par
+  instance).
+- **Colonnes orphelines** (plus lues par le code après un refactor) :
+  identifier lors de la review de PR (grep sur le nom de colonne dans
+  `app/` et `kernse/`), planifier une migration de `DROP COLUMN` dans
+  le lot suivant. Ne pas laisser accumuler.
+- **Chaque instance à la même version de schéma que la référence** (v1
+  et v2 déjà alignées). Une instance client Kernse en retard sur la
+  version de schéma = bug, jamais une feature. La console plateforme
+  affiche la version de schéma par instance.
+- **Indexes** : monitorer les slow queries à mesure que le volume
+  grandit (query log SQLite, EXPLAIN QUERY PLAN). Ajouter les indexes
+  au fur et à mesure, jamais en anticipation massive.
+- **Backups par instance** : rotation 7 jours automatique
+  (`/home/kernse/backups/<client>/`), + snapshot mensuel gardé 12 mois.
+  Test de restauration trimestriel documenté.
+
+**Audit trimestriel**
+
+Chaque trimestre : passe rapide de nettoyage documentée dans
+`docs/archives/nettoyage-YYYY-QN.md` — fichiers déplacés, tables
+purgées, colonnes orphelines droppées, dette technique tracée. Sans
+cette discipline, le repo redevient un dépotoir en 12 mois.
