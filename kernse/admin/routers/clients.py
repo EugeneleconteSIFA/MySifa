@@ -101,7 +101,7 @@ def create_client(
                 payload.contact_email,
                 payload.contact_name,
                 now,
-                actor,
+                ctx.email,
             ),
         )
         log_audit(
