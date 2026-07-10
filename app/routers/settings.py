@@ -2864,7 +2864,20 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
-                if op_code and user_machine and operateur:
+                # v164 : fallback super admin (comme la branche periodic).
+                # Si Loic (superadmin) ouvre /prod ou /maintenance sans machine
+                # assignée dans son profil, on utilise la machine cible de
+                # l'alerte si elle est unique. Sans ça, un super admin ne verrait
+                # JAMAIS les alertes événementielles, ce qui empêche tout test.
+                effective_machine = user_machine
+                if not effective_machine and user_role == ROLE_SUPERADMIN:
+                    machines_list = target.get("machines") or []
+                    if isinstance(machines_list, list):
+                        specific = [m for m in machines_list if m and m != "*"]
+                        if len(specific) == 1:
+                            effective_machine = specific[0]
+                effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
+                if op_code and effective_machine and effective_operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",
