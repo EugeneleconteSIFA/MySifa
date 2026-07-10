@@ -1,0 +1,36 @@
+# Kernse — sudoers whitelist pour l'utilisateur `kernse`
+#
+# À déployer :
+#   sudo cp kernse-admin /etc/sudoers.d/kernse-admin
+#   sudo chmod 440 /etc/sudoers.d/kernse-admin
+#   sudo visudo -c    # vérification syntaxe (obligatoire)
+#
+# Permet à l'utilisateur `kernse` (sous lequel tourne kernse-admin)
+# d'exécuter les scripts de provisioning et de promotion sans mot de
+# passe. Aucun autre binaire n'est autorisé — sécurité en profondeur.
+#
+# Les scripts eux-mêmes valident leurs arguments (whitelist regex sur
+# slug + git_ref) avant toute action système : voir kernse/admin/
+# services/promotion_service.py et kernse/provisioning/*.sh.
+
+# --- Scripts autorisés (chemins absolus obligatoires) ---
+kernse ALL=(root) NOPASSWD: /home/kernse/platform/kernse/provisioning/provision_client.sh
+kernse ALL=(root) NOPASSWD: /home/kernse/platform/kernse/provisioning/promote_client.sh
+kernse ALL=(root) NOPASSWD: /home/kernse/platform-v1/kernse/provisioning/provision_client.sh
+kernse ALL=(root) NOPASSWD: /home/kernse/platform-v1/kernse/provisioning/promote_client.sh
+
+# --- Utilitaires systemd nécessaires au provisioning ---
+# `systemctl daemon-reload` est appelé par provision_client.sh.
+# `systemctl restart <service>` est appelé par promote_client.sh.
+kernse ALL=(root) NOPASSWD: /bin/systemctl daemon-reload
+kernse ALL=(root) NOPASSWD: /bin/systemctl restart kernse-client-*
+kernse ALL=(root) NOPASSWD: /bin/systemctl enable  kernse-client-*
+kernse ALL=(root) NOPASSWD: /bin/systemctl disable kernse-client-*
+kernse ALL=(root) NOPASSWD: /bin/systemctl stop    kernse-client-*
+kernse ALL=(root) NOPASSWD: /bin/systemctl start   kernse-client-*
+kernse ALL=(root) NOPASSWD: /bin/systemctl reload  nginx
+kernse ALL=(root) NOPASSWD: /usr/sbin/nginx -t
+
+# --- Interdictions explicites (défense en profondeur) ---
+# Ces commandes sont TOUJOURS refusées, même via un alias.
+kernse ALL=(root) !ALL, !/bin/su, !/bin/bash, !/usr/bin/sudo

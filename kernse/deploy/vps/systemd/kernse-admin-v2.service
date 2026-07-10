@@ -1,0 +1,36 @@
+# Kernse — Console plateforme v2 (admin.kernse.fr)
+# Accès strictement réservé aux superadmins plateforme (auth session + 2FA TOTP).
+# Recommandation nginx : IP allowlist en amont.
+
+[Unit]
+Description=Kernse Admin v2 (admin.kernse.fr)
+After=network.target
+StartLimitIntervalSec=200
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=kernse
+Group=kernse
+WorkingDirectory=/home/kernse/platform
+
+EnvironmentFile=/home/kernse/env/kernse-admin-v2.env
+Environment="KERNSE_ENV=v2"
+Environment="KERNSE_ADMIN_PORT=8102"
+Environment="KERNSE_PLATFORM_DB_PATH=/home/kernse/platform/kernse/admin/data/platform.db"
+
+ExecStart=/home/kernse/venv/bin/uvicorn kernse.admin.main:app --host 127.0.0.1 --port 8102 --workers 1
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+# Admin peut écrire dans /home/kernse (DB, backups, invocation scripts)
+# ET dans /etc/nginx et /etc/systemd via sudo (script provision_client.sh)
+ReadWritePaths=/home/kernse
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

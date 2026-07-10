@@ -1,0 +1,35 @@
+# Kernse — Console plateforme v1 (admin-v1.kernse.fr) — staging
+# ATTENTION : les actions de provisioning / promotion effectuées ici
+# affectent le VPS RÉEL (systemd, nginx, DB). C'est le banc de test des
+# scripts eux-mêmes, pas un environnement virtuel.
+
+[Unit]
+Description=Kernse Admin v1 (admin-v1.kernse.fr, staging)
+After=network.target
+StartLimitIntervalSec=200
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=kernse
+Group=kernse
+WorkingDirectory=/home/kernse/platform-v1
+
+EnvironmentFile=/home/kernse/env/kernse-admin-v1.env
+Environment="KERNSE_ENV=v1"
+Environment="KERNSE_ADMIN_PORT=8104"
+Environment="KERNSE_PLATFORM_DB_PATH=/home/kernse/platform-v1/kernse/admin/data/platform.db"
+
+ExecStart=/home/kernse/venv/bin/uvicorn kernse.admin.main:app --host 127.0.0.1 --port 8104 --workers 1
+
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/kernse
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
