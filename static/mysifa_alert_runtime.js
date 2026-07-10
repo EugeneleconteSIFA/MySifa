@@ -669,6 +669,3 @@
     refresh: function() { return _poll(); },
   };
 })();
- return _poll(); },
-  };
-})();
