@@ -6469,6 +6469,17 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 174, "qualite_audit_matrice_fournisseurs_certifs")
 
+    # Migration 175 — MyMaintenance : les créneaux (planifie) peuvent avoir un
+    # nom libre pour identifier une session ("Nettoyage matinal", "Grande révision").
+    # Colonne nullable, pas de valeur par défaut : les créneaux existants restent
+    # sans nom, le frontend affiche l'horaire par défaut.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=175 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+        if "nom" not in cols:
+            conn.execute("ALTER TABLE maintenance_events ADD COLUMN nom TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 175, "maintenance_events_nom")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
