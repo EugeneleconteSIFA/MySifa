@@ -1,0 +1,25 @@
+[Unit]
+Description=MySifa print agent (poll cloud jobs and push to LAN printers)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adapte le user si tu ne tournes pas en `pi`
+User=pi
+WorkingDirectory=/opt/mysifa-print-agent
+ExecStart=/usr/bin/python3 /opt/mysifa-print-agent/print_agent.py /opt/mysifa-print-agent/agent_config.yaml
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Sécurité : le service n'écrit qu'en syslog et n'a besoin d'aucun droit particulier
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/mysifa-print-agent
+
+[Install]
+WantedBy=multi-user.target

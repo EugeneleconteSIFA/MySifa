@@ -1,0 +1,25 @@
+# MySifa — configuration agent d'impression local
+# Copie ce fichier en `agent_config.yaml` et remplis les valeurs.
+
+# URL du VPS MySifa (sans slash final)
+server_url: https://www.mysifa.com
+
+# Token secret affiché UNE SEULE FOIS à la création de l'agent dans
+# /settings > Imprimantes > Agents locaux > Nouvel agent.
+# Colle-le tel quel entre guillemets.
+token: "REMPLACER_PAR_LE_TOKEN_AFFICHE_DANS_MYSIFA"
+
+# Cadence de polling (secondes). 2-3s = bonne réactivité côté opérateur.
+# Augmente si l'agent charge trop le CPU du Pi ou consomme trop de bande.
+poll_interval: 2
+
+# Cadence des heartbeats. Sert à MySifa pour afficher "En ligne / Hors ligne".
+# 30s = compromis raisonnable.
+heartbeat_interval: 30
+
+# Timeout socket pour la connexion à l'imprimante (secondes).
+# Passe à 15+ si tes imprimantes sont lentes à répondre (vieilles Zebra 105SL).
+printer_timeout: 8
+
+# Niveau de log : DEBUG, INFO, WARNING, ERROR
+log_level: INFO

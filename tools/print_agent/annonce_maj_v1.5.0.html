@@ -1,0 +1,25 @@
+<div style="font-size:13px;line-height:1.7;color:var(--text2)">
+  <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px">
+    Mise à jour — v1.5.0
+  </div>
+
+  <div style="margin-bottom:10px;font-weight:600;color:var(--text);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Nouveautés</div>
+  <ul style="margin:0 0 14px 0;padding-left:18px">
+    <li style="margin-bottom:5px">Nouveau module Impression : les étiquettes partent directement du saas vers les imprimantes Zebra, Brother et thermiques de l'usine, même quand vous êtes en 5G sur le téléphone.</li>
+    <li style="margin-bottom:5px">Réception matière — le bouton Imprimer envoie désormais les étiquettes d'identification bobine sur l'imprimante configurée pour votre poste. Fallback navigateur disponible.</li>
+    <li style="margin-bottom:5px">Chaque utilisateur peut retenir son imprimante par défaut par usage. Le picker s'affiche uniquement au premier envoi ou en cas de changement de poste.</li>
+    <li style="margin-bottom:5px">Nouvel onglet Paramètres > Imprimantes (super admin) : gestion des imprimantes, des templates ZPL/EPL et des agents locaux. Bouton "Test d'impression" par imprimante.</li>
+  </ul>
+
+  <div style="margin-bottom:10px;font-weight:600;color:var(--text);font-size:12px;text-transform:uppercase;letter-spacing:.5px">Technique</div>
+  <ul style="margin:0 0 14px 0;padding-left:18px">
+    <li style="margin-bottom:5px">Nouvel agent Python autonome à déployer sur un Raspberry Pi de l'usine (tools/print_agent/). Poll HTTPS sortant, zéro port ouvert côté LAN.</li>
+    <li style="margin-bottom:5px">Migration DB v171 — cinq tables : print_agents, imprimantes, imprimante_templates, print_jobs, user_printer_defaults.</li>
+  </ul>
+
+  <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6">
+    Dans l'optique d'améliorer constamment l'outil, vos retours sont les bienvenus.<br>
+    Merci de votre confiance.<br>
+    <span style="color:var(--text2);font-weight:600">Eugène</span>
+  </div>
+</div>
