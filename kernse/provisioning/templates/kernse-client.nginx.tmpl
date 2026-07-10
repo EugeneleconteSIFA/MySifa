@@ -1,0 +1,64 @@
+# Kernse — Instance client : __SLUG__ (vhost nginx)
+# Généré par kernse/provisioning/provision_client.sh
+# Ne pas éditer à la main : régénérer via le script si besoin.
+
+# HTTP → sert le challenge ACME + redirige tout le reste en HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SUBDOMAIN__;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://$server_name$request_uri;
+    }
+}
+
+# HTTPS — proxy vers l'app uvicorn locale
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name __SUBDOMAIN__;
+
+    # Certbot pose ces fichiers automatiquement après première émission.
+    # Tant que le certificat n'existe pas, décommenter les 2 lignes
+    # "ssl_certificate" ci-dessous et commenter la ligne "listen 443 ssl"
+    # est plus simple — voir provision_client.sh (étape certbot).
+    ssl_certificate     /etc/letsencrypt/live/__SUBDOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__SUBDOMAIN__/privkey.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    # Uploads (fichiers metier — plans machines, PDF, images)
+    client_max_body_size 50M;
+
+    # Anti-clickjacking, HSTS, contenu type sniffing
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location /healthz {
+        proxy_pass http://127.0.0.1:__PORT__;
+        proxy_set_header Host $host;
+        access_log off;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:__PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 60s;
+    }
+}
