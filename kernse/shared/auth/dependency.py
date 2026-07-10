@@ -27,8 +27,23 @@ class SuperadminContext:
         self.twofa_ok = twofa_ok
 
 
-def _reject_html(target: str) -> RedirectResponse:
-    return RedirectResponse(target, status_code=status.HTTP_302_FOUND)
+class HTTPRedirect(Exception):
+    """Exception dédiée aux redirections HTML depuis une dépendance FastAPI.
+
+    Une dépendance ne peut pas retourner une `RedirectResponse` directement —
+    elle DOIT lever une exception. On lève donc `HTTPRedirect` puis un
+    exception_handler enregistré dans `kernse/admin/main.py` la convertit en
+    `RedirectResponse` HTTP 302.
+    """
+
+    def __init__(self, url: str, status_code: int = status.HTTP_302_FOUND):
+        self.url = url
+        self.status_code = status_code
+        super().__init__(f"Redirect → {url} ({status_code})")
+
+
+def _reject_html(target: str) -> HTTPRedirect:
+    return HTTPRedirect(target)
 
 
 def _reject_json(detail: str, code: int = 401) -> HTTPException:
