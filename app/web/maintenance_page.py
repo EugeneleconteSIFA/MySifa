@@ -5686,8 +5686,8 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
      "Enregistrer cette opération" — le statut/saisie est partagé au groupe. -->
 <div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
   <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
-    <div class="op-modal-title">Saisie du créneau</div>
-    <div class="op-modal-sub">Renseigne chaque opération individuellement. Les mises à jour sont partagées avec le groupe assigné au créneau.</div>
+    <div class="op-modal-title">Session de maintenance</div>
+    <div class="op-modal-sub">Renseigne durée et commentaire pour chaque opération réalisée, puis clique « Marquer comme terminée ».</div>
     <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
     <div id="op-modal-saisie-ops"></div>
     <div class="op-modal-actions">
@@ -6052,31 +6052,27 @@ function opOpenSaisie(eventId){
       wrap.innerHTML = groups.map(g => {
         const opsHtml = g.ops.map(op => {
           const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          const isDone = op.statut === 'termine';
+          // Fusion pieces_changees + observations pour affichage : si les 2
+          // étaient renseignées avant, on concatène pour ne rien perdre.
+          const prevCommentaire = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
           return `
-            <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <div class="op-saisie-item ${isDone ? 'is-done' : ''}" data-op-id="${op.id}" style="border:1px solid ${isDone ? 'var(--success,#34d399)' : 'var(--border)'};border-left-width:${isDone ? '3px' : '1px'};border-radius:10px;padding:14px 16px;margin-top:12px;background:${isDone ? 'linear-gradient(90deg,rgba(52,211,153,.06) 0%,var(--card) 100%)' : 'transparent'}">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
                 <span class="op-code">${op.code}</span>
                 <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
                 <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
-              </div>
-              <div class="op-form-row"><label>Statut</label>
-                <select data-fld="statut">
-                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
-                  <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
-                  <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
-                  <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
-                </select>
+                ${isDone ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>' : ''}
               </div>
               <div class="op-form-row"><label>Durée réelle (min)</label>
-                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
+                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}" placeholder="Optionnel">
               </div>
-              <div class="op-form-row"><label>Pièces changées</label>
-                <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
+              <div class="op-form-row"><label>Commentaires</label>
+                <textarea data-fld="commentaire" rows="2" placeholder="Pièces changées, observations, remarques…">${prevCommentaire}</textarea>
               </div>
-              <div class="op-form-row"><label>Observations</label>
-                <textarea data-fld="observations">${op.observations || ''}</textarea>
-              </div>
-              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">Enregistrer cette opération</button>
+              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">
+                ${isDone ? 'Mettre à jour' : 'Marquer comme terminée'}
+              </button>
             </div>`;
         }).join('');
         return `<div class="op-machine-group">
@@ -6095,17 +6091,24 @@ function opCloseSaisie(){
 }
 
 async function opSubmitOpSaisie(eventId, opId, btnEl){
-  // Une op multi-machines apparaît dans plusieurs blocs de saisie. On cible
-  // le bloc contenant le bouton cliqué (pas juste le premier).
+  // Le modal de session partage l'UI de "Enregistrer une opération" : statut
+  // forcé à termine, commentaire unique. Une op multi-machines apparaît dans
+  // plusieurs blocs de saisie — on cible le bloc du bouton cliqué.
   const item = (btnEl && btnEl.closest && btnEl.closest('.op-saisie-item'))
     || document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
   if(!item) return;
   const val = (fld) => (item.querySelector(`[data-fld="${fld}"]`) || {}).value;
+  const dureeStr = (val('duree_reelle_min') || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    return;
+  }
+  const comment = (val('commentaire') || '').trim() || null;
   const body = {
-    statut: val('statut'),
-    duree_reelle_min: parseInt(val('duree_reelle_min'), 10) || null,
-    pieces_changees: (val('pieces_changees') || '').trim() || null,
-    observations: (val('observations') || '').trim() || null,
+    statut: 'termine',
+    duree_reelle_min: dureeMin,
+    observations: comment,
   };
   const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
     method:'PATCH', credentials:'include',
@@ -6114,12 +6117,13 @@ async function opSubmitOpSaisie(eventId, opId, btnEl){
   });
   if(!r.ok){
     const err = await r.json().catch(()=>({}));
-    alert('Erreur : ' + (err.detail || r.status));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
-  if(typeof showToast === 'function') showToast('Saisie enregistrée.', 'success');
+  if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   await opLoadTasks();
-  // Re-render du modal avec les données à jour
+  // Re-render du modal avec les données à jour (nouveau statut termine).
   opOpenSaisie(eventId);
 }
 
