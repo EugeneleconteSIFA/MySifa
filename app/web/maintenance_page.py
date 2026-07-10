@@ -732,6 +732,50 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-tab.active .op-tab-count{background:var(--accent);color:var(--accent-fg);border-color:transparent}
 .op-tab-panel{display:none;flex:1}
 .op-tab-panel.active{display:block}
+/* ── Barre sélecteur machine + toggle terminées ─────────────────── */
+.op-selector-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;flex-wrap:wrap}
+.op-selector-machine{display:inline-flex;align-items:center;gap:10px}
+.op-selector-machine label{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0}
+.op-selector-machine select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 34px 8px 14px;color:var(--text);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;min-width:150px;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;transition:border-color .15s}
+.op-selector-machine select:focus{outline:none;border-color:var(--accent)}
+.op-toggle-termine{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.op-toggle-termine input{display:none}
+.op-toggle-track{position:relative;display:inline-block;width:38px;height:22px;background:var(--bg);border:1px solid var(--border);border-radius:999px;transition:background .15s,border-color .15s}
+.op-toggle-thumb{position:absolute;top:2px;left:2px;width:16px;height:16px;background:var(--muted);border-radius:50%;transition:left .18s,background .15s}
+.op-toggle-termine input:checked ~ .op-toggle-track{background:rgba(52,211,153,.22);border-color:var(--success,#34d399)}
+.op-toggle-termine input:checked ~ .op-toggle-track .op-toggle-thumb{left:18px;background:var(--success,#34d399)}
+.op-toggle-label{font-size:13px;color:var(--text2);font-weight:600}
+.op-toggle-count{background:rgba(52,211,153,.14);color:var(--success,#34d399);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:800;min-width:24px;text-align:center}
+body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
+/* ── Boîte englobante par créneau ────────────────────────────────── */
+.op-event-box{background:transparent;border:1px solid var(--border);border-left-width:4px;border-radius:12px;padding:14px 16px;margin-bottom:16px;position:relative;transition:border-color .15s}
+.op-event-box.all-done{opacity:.75;background:linear-gradient(90deg,rgba(52,211,153,.05) 0%,transparent 100%)}
+.op-event-box-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.op-event-box-head strong{font-size:13px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--text)}
+.op-event-box-head .op-event-time{font-size:12px;color:var(--text2);font-weight:700}
+.op-event-box-head .op-event-count{background:var(--bg);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:none;letter-spacing:0}
+.op-event-box-head .op-event-mine{background:rgba(34,211,238,.14);color:var(--accent);font-size:10px;font-weight:800;padding:2px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.4px}
+.op-event-box-actions{margin-left:auto;display:inline-flex;gap:5px}
+.op-event-box-actions button{width:28px;height:28px;padding:0;border-radius:7px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
+.op-event-box-actions button:hover{color:var(--text);border-color:var(--accent)}
+.op-event-box-actions button.danger:hover{color:var(--danger);border-color:var(--danger)}
+.op-event-box-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+/* ── Carte d'op individuelle ────────────────────────────────────── */
+.op-op-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,transform .15s;position:relative}
+.op-op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.op-op-card.is-done{opacity:.72;background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,var(--card) 100%);border-left:3px solid var(--success,#34d399)}
+.op-op-position{position:absolute;top:10px;right:12px;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.3px}
+.op-op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:40px}
+.op-op-card-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
+.op-op-card-status{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
+.op-op-card-cta{margin-top:2px;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.op-op-card-cta:hover{filter:brightness(1.08)}
+.op-op-card-cta.is-done{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
+.op-op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
+.op-op-empty strong{display:block;color:var(--text2);font-size:15px;margin-bottom:6px}
+/* ── Modal single-op saisie ─────────────────────────────────────── */
+.op-single-op-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.op-single-op-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -1342,11 +1386,11 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
             <div class="page-subtitle" id="op-tasks-count">—</div>
           </div>
           <div class="op-actions">
-            <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
+            <button type="button" class="btn op-btn-accent" onclick="opOpenNewTaskModal()">
               <span class="btn-ico">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </span>
-              Enregistrer une opération
+              Nouvelle tâche
             </button>
           </div>
         </div>
@@ -1360,6 +1404,23 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
             <span>À venir</span>
             <span class="op-tab-count" id="op-count-upcoming">0</span>
           </button>
+        </div>
+        <div class="op-selector-bar">
+          <div class="op-selector-machine">
+            <label for="op-machine-select">Machine</label>
+            <select id="op-machine-select" onchange="opSetMachine(this.value)">
+              <option value="Cohésio 1">Cohésio 1</option>
+              <option value="Cohésio 2">Cohésio 2</option>
+              <option value="DSI">DSI</option>
+              <option value="Repiquage">Repiquage</option>
+            </select>
+          </div>
+          <label class="op-toggle-termine">
+            <input type="checkbox" id="op-show-termine" onchange="opToggleShowTermine(this.checked)">
+            <span class="op-toggle-track"><span class="op-toggle-thumb"></span></span>
+            <span class="op-toggle-label">Afficher terminées</span>
+            <span class="op-toggle-count" id="op-toggle-count">0</span>
+          </label>
         </div>
         <div class="op-tab-panel active" id="op-panel-today">
           <div id="op-cards-today"></div>
@@ -2902,6 +2963,11 @@ async function submitCaseModal(e){
   closeCaseModal();
   await refreshPlanning();
   renderCal();
+  // Côté opérateur : la tâche créée doit apparaître dans "Mes tâches" (si elle
+  // inclut self dans le groupe) → refresh la liste.
+  if(MAINT_ROLE === 'operator' && typeof opLoadTasks === 'function'){
+    opLoadTasks();
+  }
 }
 
 function _sameMachineSet(a, b){
@@ -3213,12 +3279,96 @@ document.addEventListener('keydown', function(e){
 const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
 
-function loadOps(){
+// Cache des items DB history — préservé entre appels loadOps() pour éviter
+// que renderMaintCards() (qui rappelle loadOps en début) écrase l'état DB
+// à chaque render → cards restaient à "Jamais" en boucle stérile.
+let _OPS_HISTORY_DB_CACHE = [];
+let _OPS_HISTORY_LAST_FETCH = 0;
+const _OPS_HISTORY_TTL_MS = 15000;  // Recharge la DB toutes les 15s max
+let _OPS_HISTORY_FETCHING = false;
+
+function _rebuildOpsStateFromCaches(){
+  // Merge stable : items DB (source de vérité) + localStorage legacy, dédup.
+  const seen = new Set();
+  const key = it => (it.machine || '') + '|' + (it.type || '') + '|' + (it.date_saisie || '');
+  const merged = [];
+  for(const it of _OPS_HISTORY_DB_CACHE){
+    const k = key(it);
+    if(seen.has(k)) continue;
+    seen.add(k);
+    merged.push(it);
+  }
+  let local = [];
   try{
     const raw = localStorage.getItem(OPS_STORAGE_KEY);
-    OPS_STATE.list = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(OPS_STATE.list)) OPS_STATE.list = [];
-  }catch(e){ OPS_STATE.list = []; }
+    local = raw ? JSON.parse(raw) : [];
+    if(!Array.isArray(local)) local = [];
+  }catch(e){ local = []; }
+  for(const it of local){
+    const k = key(it);
+    if(seen.has(k)) continue;
+    seen.add(k);
+    merged.push(it);
+  }
+  OPS_STATE.list = merged;
+}
+
+function loadOps(){
+  // 1. Reconstruit synchro OPS_STATE.list à partir des caches (DB + localStorage).
+  //    Les items DB sont préservés entre appels — pas de reset à [] qui cassait
+  //    la boucle render → loadOps → render.
+  _rebuildOpsStateFromCaches();
+
+  // 2. Si le cache DB est encore chaud, on ne re-fetch pas (évite les rafales
+  //    de requêtes quand renderMaintCards enchaîne les loadOps).
+  if(_OPS_HISTORY_FETCHING) return;
+  if(Date.now() - _OPS_HISTORY_LAST_FETCH < _OPS_HISTORY_TTL_MS && _OPS_HISTORY_DB_CACHE.length){
+    return;
+  }
+
+  // 3. Fetch history DB (async, une fois par TTL).
+  _OPS_HISTORY_FETCHING = true;
+  fetchHistoryFromDb().then(dbItems => {
+    _OPS_HISTORY_FETCHING = false;
+    _OPS_HISTORY_LAST_FETCH = Date.now();
+    if(!Array.isArray(dbItems)) return;
+    _OPS_HISTORY_DB_CACHE = dbItems;
+    _rebuildOpsStateFromCaches();
+    // Rerender toutes les vues qui dérivent de OPS_STATE.list.
+    if(typeof renderOps === 'function') renderOps();
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+    if(typeof renderOpsTypes === 'function') renderOpsTypes();
+    if(typeof renderCtrlTypes === 'function') renderCtrlTypes();
+  }).catch(() => { _OPS_HISTORY_FETCHING = false; });
+}
+
+// Bypass du cache — utilisé après une saisie/suppression pour rafraîchir tout de suite.
+function refreshOpsHistoryNow(){
+  _OPS_HISTORY_LAST_FETCH = 0;
+  loadOps();
+}
+
+async function fetchHistoryFromDb(){
+  try{
+    const r = await fetch('/api/maintenance/history?_=' + Date.now(),
+                          { credentials:'include', cache:'no-store' });
+    if(!r.ok) return [];
+    const d = await r.json();
+    // Normalise au format OPS_STATE (machine, operateur, type, date_saisie, commentaire, id, _source)
+    return (d.history || []).map(h => ({
+      id: 'db-' + h.op_id,
+      machine: h.machine || '',
+      operateur: h.operateur || '',
+      type: h.type || '',
+      commentaire: h.commentaire || '',
+      date_saisie: h.date_saisie || '',
+      duree_reelle_min: h.duree_reelle_min || null,
+      _source: 'db',   // marqueur : ne peut pas être edited/deleted côté localStorage
+      _event_id: h.event_id,
+      _op_id: h.op_id,
+      _code: h.code,
+    }));
+  }catch(e){ return []; }
 }
 function saveOps(){
   try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
@@ -3462,9 +3612,19 @@ function setOpsCatMachine(m){
 // Retourne la date ISO la plus récente d'une saisie sur (label, machine).
 function _lastInterventionFor(label, machine, sourceList){
   if(!label || !machine || !Array.isArray(sourceList)) return null;
+  const lblLc = String(label).toLowerCase().trim();
+  const machLc = String(machine).toLowerCase().trim();
   let latest = null;
   for(const it of sourceList){
-    if(it && it.type === label && it.machine === machine){
+    if(!it) continue;
+    const itType = String(it.type || '').toLowerCase().trim();
+    const itMach = String(it.machine || '').toLowerCase().trim();
+    // Machine peut être un CSV (ex: "Cohésio 1 · Cohésio 2") depuis la DB —
+    // on considère un match si la machine ciblée est incluse dans la liste.
+    const machineMatch = itMach === machLc
+      || itMach.split('·').map(s => s.trim()).includes(machLc)
+      || itMach.split(',').map(s => s.trim()).includes(machLc);
+    if(itType === lblLc && machineMatch){
       const d = it.date_saisie;
       if(d && (!latest || d > latest)) latest = d;
     }
@@ -3477,10 +3637,20 @@ function _lastInterventionFor(label, machine, sourceList){
 // via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
 function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
   if(!machine) return null;
+  const lblLc = String(label || '').toLowerCase().trim();
+  const machLc = String(machine).toLowerCase().trim();
+  const machMatch = (itMach) => {
+    const s = String(itMach || '').toLowerCase().trim();
+    return s === machLc
+      || s.split('·').map(x => x.trim()).includes(machLc)
+      || s.split(',').map(x => x.trim()).includes(machLc);
+  };
   let latest = null;
   if(Array.isArray(manualList)){
     for(const it of manualList){
-      if(it && it.type === label && it.machine === machine){
+      if(!it) continue;
+      const itType = String(it.type || '').toLowerCase().trim();
+      if(itType === lblLc && machMatch(it.machine)){
         const d = it.date_saisie;
         if(d && (!latest || d > latest)) latest = d;
       }
@@ -3488,7 +3658,7 @@ function _lastInterventionForCtrl(code, label, machine, manualList, ackList){
   }
   if(Array.isArray(ackList) && code){
     for(const it of ackList){
-      if(it && it._maint_code === code && it.machine === machine){
+      if(it && it._maint_code === code && machMatch(it.machine)){
         const d = it.date_saisie;
         if(d && (!latest || d > latest)) latest = d;
       }
@@ -5634,12 +5804,34 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
      "Enregistrer cette opération" — le statut/saisie est partagé au groupe. -->
 <div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
   <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
-    <div class="op-modal-title">Saisie du créneau</div>
-    <div class="op-modal-sub">Renseigne chaque opération individuellement. Les mises à jour sont partagées avec le groupe assigné au créneau.</div>
+    <div class="op-modal-title">Session de maintenance</div>
+    <div class="op-modal-sub">Renseigne durée et commentaire pour chaque opération réalisée, puis clique « Marquer comme terminée ».</div>
     <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
     <div id="op-modal-saisie-ops"></div>
     <div class="op-modal-actions">
       <button type="button" class="btn" onclick="opCloseSaisie()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée -->
+<div class="op-modal-overlay" id="op-modal-single" onclick="if(event.target===this) opCloseSingleModal()">
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px">
+    <div class="op-modal-title">Marquer comme terminée</div>
+    <div class="op-modal-sub" id="op-single-sub">—</div>
+    <div class="op-single-op-title" id="op-single-code-line">—</div>
+    <div class="op-single-op-name" id="op-single-name">—</div>
+    <div class="op-form-row">
+      <label for="op-single-duree">Durée réelle (min)</label>
+      <input type="number" id="op-single-duree" min="0" step="1" placeholder="Optionnel">
+    </div>
+    <div class="op-form-row">
+      <label for="op-single-comment">Commentaires</label>
+      <textarea id="op-single-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseSingleModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
     </div>
   </div>
 </div>
@@ -5789,15 +5981,22 @@ function _renderOpCard(ev, opts){
   let printedGroups = 0;
   let printedTruncated = false;
   const MAX_LINES = isToday ? Infinity : 5;
+  // Purification : quand l'event ne contient qu'une seule op, le badge statut
+  // du top-right (summary) est déjà éloquent → on masque le pill statut dans
+  // la ligne op pour éviter le doublon visuel.
+  const singleOp = totalOps === 1;
   for(const g of groups){
     if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
     let opsInThisGroup = 0;
     for(const o of g.ops){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      const statusPill = singleOp
+        ? ''
+        : `<span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>`;
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
-        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+        ${statusPill}
       </div>`);
       opsInThisGroup++;
     }
@@ -5836,13 +6035,15 @@ function _renderOpCard(ev, opts){
        </div>`
     : '';
   const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
+  // Purification card head : la machine est déjà dans le bloc parent (block-head)
+  // → on n'affiche dans le head que les badges informationnels. Si pas de badges,
+  // on omet complètement le head pour un look plus propre.
+  const headContent = `${mineBadge}`;
+  const headHtml = headContent.trim() ? `<div class="op-card-head">${headContent}</div>` : '';
   return `
     <div class="op-card ${isMine ? 'owned-by-me' : ''} ${isDone ? 'is-done' : ''}" ${clickHandler}>
       <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
-      <div class="op-card-head">
-        <strong style="font-size:15px;color:var(--text)">${escHtml(ev.machine || '—')}</strong>
-        ${srcBadge}${mineBadge}
-      </div>
+      ${headHtml}
       ${dateLine}
       <div style="font-size:12px;color:var(--text2)">${time}</div>
       <div>${opsPreview}${more}</div>
@@ -5861,27 +6062,122 @@ function _fmtDateFrShort(iso){
   }catch(e){ return iso; }
 }
 
-// Ordre canonique des machines pour l'affichage groupé.
+// Ordre canonique des machines (dropdown + fallback).
 const _MACHINE_ORDER = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
+const OP_TASKS_MACHINE_KEY = 'mysifa_op_tasks_machine_v1';
+const OP_TASKS_SHOW_TERMINE_KEY = 'mysifa_op_tasks_show_termine_v1';
 
-function _groupEventsByMachine(events){
-  // Retourne [{machine, events:[...]}, ...] avec l'ordre canonique puis
-  // "autres" machines par ordre alphabétique. Un event à machine vide
-  // tombe dans "Sans machine".
-  const buckets = new Map();
-  for(const ev of events){
-    const m = (ev.machine || '').trim() || 'Sans machine';
-    if(!buckets.has(m)) buckets.set(m, []);
-    buckets.get(m).push(ev);
+function _getSelectedMachine(){
+  try{ return localStorage.getItem(OP_TASKS_MACHINE_KEY) || 'Cohésio 1'; }
+  catch(e){ return 'Cohésio 1'; }
+}
+function _getShowTermine(){
+  try{ return localStorage.getItem(OP_TASKS_SHOW_TERMINE_KEY) === '1'; }
+  catch(e){ return false; }
+}
+function opSetMachine(name){
+  try{ localStorage.setItem(OP_TASKS_MACHINE_KEY, name); }catch(e){}
+  opRenderTasks();
+}
+function opToggleShowTermine(on){
+  try{ localStorage.setItem(OP_TASKS_SHOW_TERMINE_KEY, on ? '1' : '0'); }catch(e){}
+  opRenderTasks();
+}
+
+// Retourne les machines couvertes par un op (fallback event.machine si op.machines vide).
+function _opMachines(op, ev){
+  let m = Array.isArray(op.machines) ? op.machines.slice() : [];
+  if(!m.length && ev && ev.machine){
+    m = String(ev.machine).split('·').map(s => s.trim()).filter(Boolean);
   }
-  const seen = new Set();
+  return m;
+}
+
+// Filtre + regroupe : pour la machine sélectionnée, sort les événements qui
+// ont au moins une op sur cette machine, en gardant seulement les ops
+// concernées. Chaque op garde sa position d'origine dans event.ops (1/N).
+function _tasksForMachine(events, machine, showTermine){
   const out = [];
-  for(const m of _MACHINE_ORDER){
-    if(buckets.has(m)){ out.push({machine:m, events:buckets.get(m)}); seen.add(m); }
+  for(const ev of events){
+    const ops = (ev.ops || []);
+    const filtered = [];
+    for(let i = 0; i < ops.length; i++){
+      const op = ops[i];
+      const machines = _opMachines(op, ev);
+      if(!machines.includes(machine)) continue;
+      if(!showTermine && op.statut === 'termine') continue;
+      filtered.push({op, position: i + 1, total: ops.length});
+    }
+    if(filtered.length){
+      // allDoneOnThisMachine : utile pour le style "boîte terminée" quand
+      // toutes les ops de cet event sur la machine sont termine.
+      const allDone = filtered.every(x => x.op.statut === 'termine');
+      out.push({ ev, ops: filtered, allDone });
+    }
   }
-  const rest = Array.from(buckets.keys()).filter(m => !seen.has(m)).sort();
-  for(const m of rest){ out.push({machine:m, events:buckets.get(m)}); }
+  // Tri : d'abord les créneaux planifiés chrono (heure_debut), puis sans créneau.
+  out.sort((a, b) => {
+    const ha = a.ev.heure_debut || 'zz';  // sans créneau part à la fin
+    const hb = b.ev.heure_debut || 'zz';
+    if(ha !== hb) return ha.localeCompare(hb);
+    return (a.ev.id || 0) - (b.ev.id || 0);
+  });
   return out;
+}
+
+// Couleur session dérivée du event_id (HSL stable). Une session = une couleur.
+function _sessionColor(eventId){
+  const h = ((Number(eventId) || 0) * 137) % 360;
+  return `hsl(${h}, 65%, 55%)`;
+}
+
+function _renderEventBox(group){
+  const ev = group.ev;
+  const color = _sessionColor(ev.id);
+  const timeLabel = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
+    : 'Sans créneau';
+  const meId = (S && S.me) ? S.me.id : null;
+  const isMine = (meId != null && ev.created_by === meId);
+  const dateLabel = _fmtDateFrShort(ev.date_prevue);
+  const isToday = ev.date_prevue === _fmtDateISO(new Date());
+  const dateChip = isToday ? '' : `<span class="op-event-count">${dateLabel}</span>`;
+  const totalOpsInEvent = (ev.ops || []).length;
+  const actionsHtml = isMine ? `
+    <div class="op-event-box-actions">
+      <button type="button" title="Modifier le créneau" onclick="opOpenEditModal(${ev.id})">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
+      <button type="button" class="danger" title="Supprimer" onclick="opDeleteEvent(${ev.id})">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>` : '';
+  const opsHtml = group.ops.map(({op, position, total}) => {
+    const isDone = op.statut === 'termine';
+    const statusLabel = _statutLabel(op.statut);
+    return `<div class="op-op-card ${isDone ? 'is-done' : ''}" style="border-left:${isDone ? '3px solid var(--success,#34d399)' : `3px solid ${color}`}">
+      <span class="op-op-position">${position}/${total}</span>
+      <div class="op-op-card-head">
+        <span class="op-code">${op.code}</span>
+        <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
+      </div>
+      <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
+      <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
+        ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
+      </button>
+    </div>`;
+  }).join('');
+  return `<div class="op-event-box ${group.allDone ? 'all-done' : ''}" style="border-left-color:${color}">
+    <div class="op-event-box-head">
+      <strong>Créneau</strong>
+      <span class="op-event-time">${escHtml(timeLabel)}</span>
+      <span class="op-event-count">${totalOpsInEvent} op.</span>
+      ${dateChip}
+      ${isMine ? '<span class="op-event-mine">Mienne</span>' : ''}
+      ${actionsHtml}
+    </div>
+    <div class="op-event-box-cards">${opsHtml}</div>
+  </div>`;
 }
 
 function _isEventDone(ev){
@@ -5890,69 +6186,68 @@ function _isEventDone(ev){
   return ops.every(o => o.statut === 'termine');
 }
 
-function _renderMachineGroups(events, isToday){
-  const groups = _groupEventsByMachine(events);
-  return groups.map(g => {
-    // Sépare À faire/En cours (haut) et Terminées (bas) au sein d'une même
-    // machine — laisse d'abord ce qui reste à traiter.
-    const todo = g.events.filter(ev => !_isEventDone(ev));
-    const done = g.events.filter(ev => _isEventDone(ev));
-    const todoCards = todo.map(ev => _renderOpCard(ev, {isToday, isDone:false})).join('');
-    const doneCards = done.map(ev => _renderOpCard(ev, {isToday, isDone:true})).join('');
-    const doneSection = done.length ? `
-      <div class="op-machine-subhead op-machine-subhead-done">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-        <span>Terminées</span>
-        <span class="op-machine-subhead-count">${done.length}</span>
-      </div>
-      <div class="op-machine-block-cards op-machine-block-cards-done">${doneCards}</div>` : '';
-    const todoSection = todo.length ? `
-      <div class="op-machine-block-cards">${todoCards}</div>` : (done.length
-        ? '' /* on n'affiche pas de header À faire vide si tout est done */
-        : '');
-    return `<div class="op-machine-block">
-      <div class="op-machine-block-head">
-        <span class="op-machine-dot"></span>
-        <span>${escHtml(g.machine)}</span>
-        <span class="op-machine-badge">${todo.length} à faire${done.length ? ' · ' + done.length + ' terminée' + (done.length > 1 ? 's' : '') : ''}</span>
-      </div>
-      ${todoSection}
-      ${doneSection}
-    </div>`;
-  }).join('');
-}
-
 function opRenderTasks(){
   const listT = document.getElementById('op-cards-today');
   const listU = document.getElementById('op-cards-upcoming');
   const cntT = document.getElementById('op-count-today');
   const cntU = document.getElementById('op-count-upcoming');
   const summary = document.getElementById('op-tasks-count');
+  const toggleCount = document.getElementById('op-toggle-count');
   if(!listT || !listU) return;
+
+  // Sync dropdown machine + toggle avec le localStorage (au cas où re-mount).
+  const machine = _getSelectedMachine();
+  const showTermine = _getShowTermine();
+  const sel = document.getElementById('op-machine-select');
+  if(sel && sel.value !== machine) sel.value = machine;
+  const chk = document.getElementById('op-show-termine');
+  if(chk) chk.checked = showTermine;
 
   const today = _fmtDateISO(new Date());
   const events = MAINT_STATE.tasks || [];
   const evToday = events.filter(ev => ev.date_prevue === today);
-  const evUpcoming = events.filter(ev => ev.date_prevue > today)
-    .sort((a,b) => (a.date_prevue + (a.heure_debut||'')).localeCompare(b.date_prevue + (b.heure_debut||'')));
+  const evUpcoming = events.filter(ev => ev.date_prevue > today);
 
-  if(cntT) cntT.textContent = evToday.length;
-  if(cntU) cntU.textContent = evUpcoming.length;
+  // Filtre par machine : garde uniquement les events avec ≥1 op sur la machine
+  // sélectionnée (respectant le toggle terminées).
+  const groupsToday = _tasksForMachine(evToday, machine, showTermine);
+  const groupsUpcoming = _tasksForMachine(evUpcoming, machine, showTermine);
+
+  // Compteurs onglets (nb d'events visibles avec la machine active).
+  if(cntT) cntT.textContent = groupsToday.length;
+  if(cntU) cntU.textContent = groupsUpcoming.length;
+
+  // Sous-titre : nombre total d'ops visibles (sur la machine active).
+  const totalOpsVisible = groupsToday.reduce((s, g) => s + g.ops.length, 0)
+                         + groupsUpcoming.reduce((s, g) => s + g.ops.length, 0);
   if(summary){
-    const nOps = events.reduce((s, e) => s + (e.ops || []).length, 0);
-    summary.textContent = events.length + (events.length > 1 ? ' créneaux' : ' créneau')
-      + ' — ' + nOps + (nOps > 1 ? ' opérations' : ' opération');
+    summary.textContent = 'Machine ' + machine + ' — ' + totalOpsVisible
+      + (totalOpsVisible > 1 ? ' opérations visibles' : ' opération visible');
   }
 
-  if(!evToday.length){
-    listT.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau aujourd\'hui</strong>Rien de programmé pour toi. Tu peux déclarer une intervention non planifiée si nécessaire.</div>';
-  } else {
-    listT.innerHTML = _renderMachineGroups(evToday, true);
+  // Compteur toggle : nombre d'ops terminées sur cette machine (aujourd'hui uniquement).
+  let doneTodayOnMachine = 0;
+  for(const ev of evToday){
+    for(const op of (ev.ops || [])){
+      if(op.statut !== 'termine') continue;
+      if(_opMachines(op, ev).includes(machine)) doneTodayOnMachine++;
+    }
   }
-  if(!evUpcoming.length){
-    listU.innerHTML = '<div class="op-col-empty"><strong>Aucun créneau à venir</strong>Ta liste est à jour.</div>';
+  if(toggleCount) toggleCount.textContent = doneTodayOnMachine;
+
+  // Rendu
+  if(!groupsToday.length){
+    const msg = showTermine
+      ? `<strong>Aucun créneau sur ${escHtml(machine)}</strong>Ta journée est vide sur cette machine.`
+      : `<strong>Rien à faire sur ${escHtml(machine)}</strong>${doneTodayOnMachine ? 'Active « Afficher terminées » pour voir ce qui a été fait.' : 'Aucun créneau programmé aujourd\'hui.'}`;
+    listT.innerHTML = '<div class="op-op-empty">' + msg + '</div>';
   } else {
-    listU.innerHTML = _renderMachineGroups(evUpcoming, false);
+    listT.innerHTML = groupsToday.map(_renderEventBox).join('');
+  }
+  if(!groupsUpcoming.length){
+    listU.innerHTML = `<div class="op-op-empty"><strong>Aucun créneau à venir sur ${escHtml(machine)}</strong>Ta liste est à jour.</div>`;
+  } else {
+    listU.innerHTML = groupsUpcoming.map(_renderEventBox).join('');
   }
 }
 
@@ -5991,31 +6286,27 @@ function opOpenSaisie(eventId){
       wrap.innerHTML = groups.map(g => {
         const opsHtml = g.ops.map(op => {
           const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          const isDone = op.statut === 'termine';
+          // Fusion pieces_changees + observations pour affichage : si les 2
+          // étaient renseignées avant, on concatène pour ne rien perdre.
+          const prevCommentaire = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
           return `
-            <div class="op-saisie-item" data-op-id="${op.id}" style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <div class="op-saisie-item ${isDone ? 'is-done' : ''}" data-op-id="${op.id}" style="border:1px solid ${isDone ? 'var(--success,#34d399)' : 'var(--border)'};border-left-width:${isDone ? '3px' : '1px'};border-radius:10px;padding:14px 16px;margin-top:12px;background:${isDone ? 'linear-gradient(90deg,rgba(52,211,153,.06) 0%,var(--card) 100%)' : 'transparent'}">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
                 <span class="op-code">${op.code}</span>
                 <span class="op-cat ${_catClass(op.code_categorie || 'autre')}">${catLbl}</span>
                 <strong style="flex:1;font-size:13px;color:var(--text)">${op.code_label || '—'}</strong>
-              </div>
-              <div class="op-form-row"><label>Statut</label>
-                <select data-fld="statut">
-                  <option value="a_faire" ${op.statut === 'a_faire' ? 'selected' : ''}>À faire</option>
-                  <option value="en_cours" ${op.statut === 'en_cours' ? 'selected' : ''}>En cours</option>
-                  <option value="termine" ${op.statut === 'termine' ? 'selected' : ''}>Terminé</option>
-                  <option value="reporte" ${op.statut === 'reporte' ? 'selected' : ''}>Reporté</option>
-                </select>
+                ${isDone ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>' : ''}
               </div>
               <div class="op-form-row"><label>Durée réelle (min)</label>
-                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}">
+                <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}" placeholder="Optionnel">
               </div>
-              <div class="op-form-row"><label>Pièces changées</label>
-                <input type="text" data-fld="pieces_changees" value="${(op.pieces_changees || '').replace(/"/g, '&quot;')}">
+              <div class="op-form-row"><label>Commentaires</label>
+                <textarea data-fld="commentaire" rows="2" placeholder="Pièces changées, observations, remarques…">${prevCommentaire}</textarea>
               </div>
-              <div class="op-form-row"><label>Observations</label>
-                <textarea data-fld="observations">${op.observations || ''}</textarea>
-              </div>
-              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">Enregistrer cette opération</button>
+              <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">
+                ${isDone ? 'Mettre à jour' : 'Marquer comme terminée'}
+              </button>
             </div>`;
         }).join('');
         return `<div class="op-machine-group">
@@ -6034,17 +6325,24 @@ function opCloseSaisie(){
 }
 
 async function opSubmitOpSaisie(eventId, opId, btnEl){
-  // Une op multi-machines apparaît dans plusieurs blocs de saisie. On cible
-  // le bloc contenant le bouton cliqué (pas juste le premier).
+  // Le modal de session partage l'UI de "Enregistrer une opération" : statut
+  // forcé à termine, commentaire unique. Une op multi-machines apparaît dans
+  // plusieurs blocs de saisie — on cible le bloc du bouton cliqué.
   const item = (btnEl && btnEl.closest && btnEl.closest('.op-saisie-item'))
     || document.querySelector(`.op-saisie-item[data-op-id="${opId}"]`);
   if(!item) return;
   const val = (fld) => (item.querySelector(`[data-fld="${fld}"]`) || {}).value;
+  const dureeStr = (val('duree_reelle_min') || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    return;
+  }
+  const comment = (val('commentaire') || '').trim() || null;
   const body = {
-    statut: val('statut'),
-    duree_reelle_min: parseInt(val('duree_reelle_min'), 10) || null,
-    pieces_changees: (val('pieces_changees') || '').trim() || null,
-    observations: (val('observations') || '').trim() || null,
+    statut: 'termine',
+    duree_reelle_min: dureeMin,
+    observations: comment,
   };
   const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
     method:'PATCH', credentials:'include',
@@ -6053,12 +6351,13 @@ async function opSubmitOpSaisie(eventId, opId, btnEl){
   });
   if(!r.ok){
     const err = await r.json().catch(()=>({}));
-    alert('Erreur : ' + (err.detail || r.status));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
-  if(typeof showToast === 'function') showToast('Saisie enregistrée.', 'success');
+  if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   await opLoadTasks();
-  // Re-render du modal avec les données à jour
+  // Re-render du modal avec les données à jour (nouveau statut termine).
   opOpenSaisie(eventId);
 }
 
@@ -6097,6 +6396,12 @@ async function opOpenNewModal(){
   document.getElementById('op-modal-new-sub').textContent = 'Enregistre une opération de maintenance déjà effectuée. Elle sera marquée « Terminée » et rattachée à la machine sélectionnée.';
   document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
   _opResetModalFields();
+  // Pré-remplit avec la machine actuellement sélectionnée dans "Mes tâches".
+  try{
+    const currentMach = _getSelectedMachine();
+    const machEl = document.getElementById('op-new-machine');
+    if(machEl && currentMach) machEl.value = currentMach;
+  }catch(e){}
   document.getElementById('op-modal-new').classList.add('active');
 }
 
@@ -6251,6 +6556,76 @@ async function opSubmitNew(){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
   }
+}
+
+async function opOpenNewTaskModal(){
+  // Ouvre le modal admin "planning-case-modal" côté opérateur pour créer
+  // une tâche riche (N ops, N machines, N opérateurs, plage horaire).
+  // Le backend forcera l'inclusion de self dans les opérateurs (garde-fou).
+  const today = _fmtDateISO(new Date());
+  const now = new Date();
+  const defaultHour = Math.max(6, Math.min(18, now.getHours()));
+  // Pré-remplit self dans _CASE_OPERATORS pour cohérence UX (le backend le
+  // rajoutera de toute façon, mais c'est plus clair côté formulaire).
+  if(S && S.me){
+    _CASE_OPERATORS = [{ id: S.me.id, nom: S.me.name || S.me.nom || 'Moi' }];
+  }
+  await openCaseModal({ iso: today, defaultHour });
+}
+
+// ── Modal single-op : marquer UNE op d'un créneau comme terminée ─────
+MAINT_STATE.singleOpTarget = null;  // { eventId, opId }
+
+function opOpenSingleOpModal(eventId, opId){
+  const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
+  if(!ev){ return; }
+  const op = (ev.ops || []).find(o => o.id === opId);
+  if(!op){ return; }
+  MAINT_STATE.singleOpTarget = { eventId, opId };
+  const timeLabel = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
+    : 'Sans créneau';
+  document.getElementById('op-single-sub').textContent = 'Créneau ' + timeLabel + ' · ' + (ev.machine || '');
+  document.getElementById('op-single-code-line').textContent = 'Code ' + op.code;
+  document.getElementById('op-single-name').textContent = op.code_label || '—';
+  document.getElementById('op-single-duree').value = op.duree_reelle_min || '';
+  // Fusion pièces + observations si les 2 existaient historiquement.
+  const prev = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
+  document.getElementById('op-single-comment').value = prev;
+  document.getElementById('op-modal-single').classList.add('active');
+}
+
+function opCloseSingleModal(){
+  MAINT_STATE.singleOpTarget = null;
+  document.getElementById('op-modal-single').classList.remove('active');
+}
+
+async function opSubmitSingleOp(){
+  const tgt = MAINT_STATE.singleOpTarget;
+  if(!tgt){ opCloseSingleModal(); return; }
+  const dureeStr = (document.getElementById('op-single-duree').value || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    return;
+  }
+  const comment = (document.getElementById('op-single-comment').value || '').trim() || null;
+  const body = { statut: 'termine', duree_reelle_min: dureeMin, observations: comment };
+  const r = await fetch('/api/maintenance/events/' + tgt.eventId + '/ops/' + tgt.opId, {
+    method:'PATCH', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
+  opCloseSingleModal();
+  await opLoadTasks();
+  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
 
 async function opDeleteEvent(eventId){
