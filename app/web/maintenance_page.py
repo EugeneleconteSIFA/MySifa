@@ -742,6 +742,16 @@ body[data-maint-role="operator"] .content{display:none !important}
 .op-machine-block-head .op-machine-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .op-machine-block-head .op-machine-badge{margin-left:auto;background:var(--bg);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;text-transform:none;letter-spacing:0}
 .op-machine-block-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+/* Sous-section "Terminées" dans un bloc machine */
+.op-machine-subhead{display:flex;align-items:center;gap:8px;margin:14px 0 10px 4px;padding:6px 10px;border-radius:8px;background:rgba(52,211,153,.10);color:var(--success,#34d399);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;width:fit-content}
+.op-machine-subhead-count{background:rgba(52,211,153,.22);color:var(--success,#34d399);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:800}
+body.light .op-machine-subhead{background:rgba(5,150,105,.12);color:#059669}
+body.light .op-machine-subhead-count{background:rgba(5,150,105,.22);color:#059669}
+.op-machine-block-cards-done{opacity:.85}
+/* Carte d'op terminée — ton "acquis", check vert, bord gauche vert */
+.op-card.is-done{border-left:3px solid var(--success,#34d399);background:linear-gradient(90deg,rgba(52,211,153,.08) 0%,var(--card) 100%)}
+.op-card.is-done .op-card-head strong{color:var(--text2)}
+body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,var(--card) 100%)}
 /* Actions Modifier / Supprimer sur la carte (opérateur propriétaire) */
 .op-card-actions{position:absolute;bottom:14px;right:14px;display:inline-flex;gap:6px}
 .op-card.owned-by-me{padding-bottom:52px}
@@ -843,8 +853,8 @@ body[data-maint-role="operator"] .content{display:none !important}
       Planning
     </button>
     <button type="button" class="nav-btn op-only" onclick="opOpenNewModal()" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px;color:var(--accent)">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Nouvelle intervention
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Enregistrer une opération
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
@@ -1334,9 +1344,9 @@ body[data-maint-role="operator"] .content{display:none !important}
           <div class="op-actions">
             <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
               <span class="btn-ico">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
               </span>
-              Nouvelle intervention
+              Enregistrer une opération
             </button>
           </div>
         </div>
@@ -5634,14 +5644,14 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
-<!-- Modal nouvelle intervention / édition (opérateur : source=non_planifie) -->
+<!-- Modal Enregistrer une opération (opérateur : source=non_planifie, statut=termine) -->
 <div class="op-modal-overlay" id="op-modal-new" onclick="if(event.target===this) opCloseNewModal()">
   <div class="op-modal" role="dialog" aria-modal="true">
-    <div class="op-modal-title" id="op-modal-new-title">Nouvelle intervention</div>
-    <div class="op-modal-sub" id="op-modal-new-sub">Déclare une intervention non planifiée survenue en cours de session.</div>
+    <div class="op-modal-title" id="op-modal-new-title">Enregistrer une opération</div>
+    <div class="op-modal-sub" id="op-modal-new-sub">Enregistre une opération de maintenance déjà effectuée. Elle sera marquée « Terminée » et rattachée à la machine sélectionnée.</div>
     <div class="op-form-row">
-      <label for="op-new-code">Code opération *</label>
-      <select id="op-new-code"></select>
+      <label for="op-new-date">Date de l'intervention *</label>
+      <input type="date" id="op-new-date">
     </div>
     <div class="op-form-row">
       <label for="op-new-machine">Machine *</label>
@@ -5652,9 +5662,21 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
         <option value="Repiquage">Repiquage</option>
       </select>
     </div>
+    <div class="op-form-row">
+      <label for="op-new-code">Code opération *</label>
+      <select id="op-new-code"></select>
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-duree">Durée réelle (min)</label>
+      <input type="number" id="op-new-duree" min="0" step="1" placeholder="Optionnel">
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-comment">Commentaires</label>
+      <textarea id="op-new-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
+    </div>
     <div class="op-modal-actions">
       <button type="button" class="btn" onclick="opCloseNewModal()">Annuler</button>
-      <button type="button" class="btn op-btn-accent" id="op-modal-new-submit" onclick="opSubmitNew()">Créer et remplir</button>
+      <button type="button" class="btn op-btn-accent" id="op-modal-new-submit" onclick="opSubmitNew()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -5755,6 +5777,7 @@ function _groupOpsByMachine(ev){
 function _renderOpCard(ev, opts){
   opts = opts || {};
   const isToday = !!opts.isToday;
+  const isDone = !!opts.isDone;
   const time = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)
     : '<em style="color:var(--muted);font-style:normal">Sans créneau horaire</em>';
@@ -5814,7 +5837,7 @@ function _renderOpCard(ev, opts){
     : '';
   const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
   return `
-    <div class="op-card ${isMine ? 'owned-by-me' : ''}" ${clickHandler}>
+    <div class="op-card ${isMine ? 'owned-by-me' : ''} ${isDone ? 'is-done' : ''}" ${clickHandler}>
       <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
       <div class="op-card-head">
         <strong style="font-size:15px;color:var(--text)">${escHtml(ev.machine || '—')}</strong>
@@ -5861,17 +5884,40 @@ function _groupEventsByMachine(events){
   return out;
 }
 
+function _isEventDone(ev){
+  const ops = (ev && ev.ops) || [];
+  if(!ops.length) return false;
+  return ops.every(o => o.statut === 'termine');
+}
+
 function _renderMachineGroups(events, isToday){
   const groups = _groupEventsByMachine(events);
   return groups.map(g => {
-    const cards = g.events.map(ev => _renderOpCard(ev, {isToday})).join('');
+    // Sépare À faire/En cours (haut) et Terminées (bas) au sein d'une même
+    // machine — laisse d'abord ce qui reste à traiter.
+    const todo = g.events.filter(ev => !_isEventDone(ev));
+    const done = g.events.filter(ev => _isEventDone(ev));
+    const todoCards = todo.map(ev => _renderOpCard(ev, {isToday, isDone:false})).join('');
+    const doneCards = done.map(ev => _renderOpCard(ev, {isToday, isDone:true})).join('');
+    const doneSection = done.length ? `
+      <div class="op-machine-subhead op-machine-subhead-done">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Terminées</span>
+        <span class="op-machine-subhead-count">${done.length}</span>
+      </div>
+      <div class="op-machine-block-cards op-machine-block-cards-done">${doneCards}</div>` : '';
+    const todoSection = todo.length ? `
+      <div class="op-machine-block-cards">${todoCards}</div>` : (done.length
+        ? '' /* on n'affiche pas de header À faire vide si tout est done */
+        : '');
     return `<div class="op-machine-block">
       <div class="op-machine-block-head">
         <span class="op-machine-dot"></span>
         <span>${escHtml(g.machine)}</span>
-        <span class="op-machine-badge">${g.events.length} tâche${g.events.length > 1 ? 's' : ''}</span>
+        <span class="op-machine-badge">${todo.length} à faire${done.length ? ' · ' + done.length + ' terminée' + (done.length > 1 ? 's' : '') : ''}</span>
       </div>
-      <div class="op-machine-block-cards">${cards}</div>
+      ${todoSection}
+      ${doneSection}
     </div>`;
   }).join('');
 }
@@ -6026,6 +6072,20 @@ async function opSubmitSaisie(){
 // État du modal : null = création, sinon id de l'event en cours d'édition
 MAINT_STATE.editingEventId = null;
 
+function _opResetModalFields(){
+  const today = _fmtDateISO(new Date());
+  const dateEl = document.getElementById('op-new-date');
+  const machineEl = document.getElementById('op-new-machine');
+  const codeEl = document.getElementById('op-new-code');
+  const dureeEl = document.getElementById('op-new-duree');
+  const commEl = document.getElementById('op-new-comment');
+  if(dateEl) dateEl.value = today;
+  if(machineEl) machineEl.value = 'Cohésio 1';
+  if(codeEl && MAINT_STATE.codes && MAINT_STATE.codes.length) codeEl.value = MAINT_STATE.codes[0].code;
+  if(dureeEl) dureeEl.value = '';
+  if(commEl) commEl.value = '';
+}
+
 async function opOpenNewModal(){
   await opFetchCodes();
   MAINT_STATE.editingEventId = null;
@@ -6033,11 +6093,10 @@ async function opOpenNewModal(){
   sel.innerHTML = MAINT_STATE.codes.map(c =>
     `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
   ).join('');
-  document.getElementById('op-modal-new-title').textContent = 'Nouvelle intervention';
-  document.getElementById('op-modal-new-sub').textContent = 'Déclare une intervention non planifiée survenue en cours de session.';
-  document.getElementById('op-modal-new-submit').textContent = 'Créer et remplir';
-  document.getElementById('op-new-code').value = MAINT_STATE.codes.length ? MAINT_STATE.codes[0].code : '';
-  document.getElementById('op-new-machine').value = 'Cohésio 1';
+  document.getElementById('op-modal-new-title').textContent = 'Enregistrer une opération';
+  document.getElementById('op-modal-new-sub').textContent = 'Enregistre une opération de maintenance déjà effectuée. Elle sera marquée « Terminée » et rattachée à la machine sélectionnée.';
+  document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
+  _opResetModalFields();
   document.getElementById('op-modal-new').classList.add('active');
 }
 
@@ -6046,7 +6105,7 @@ async function opOpenEditModal(eventId){
   if(!ev){ alert('Créneau introuvable.'); return; }
   const meId = (S && S.me) ? S.me.id : null;
   if(ev.source !== 'non_planifie' || ev.created_by !== meId){
-    alert('Vous ne pouvez modifier que vos propres interventions non planifiées.');
+    alert('Vous ne pouvez modifier que vos propres interventions.');
     return;
   }
   await opFetchCodes();
@@ -6056,13 +6115,19 @@ async function opOpenEditModal(eventId){
     `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
   ).join('');
   // Pré-remplit avec les valeurs actuelles
-  const currentCode = (ev.ops && ev.ops[0]) ? ev.ops[0].code : '';
-  if(currentCode) sel.value = currentCode;
-  const machineSel = document.getElementById('op-new-machine');
-  if(ev.machine) machineSel.value = ev.machine;
-  document.getElementById('op-modal-new-title').textContent = 'Modifier l\'intervention';
-  document.getElementById('op-modal-new-sub').textContent = 'Ajuste le code opération ou la machine.';
-  document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
+  const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+  const dateEl = document.getElementById('op-new-date');
+  if(dateEl) dateEl.value = ev.date_prevue || _fmtDateISO(new Date());
+  const machineEl = document.getElementById('op-new-machine');
+  if(machineEl && ev.machine) machineEl.value = ev.machine;
+  if(currentOp && currentOp.code) sel.value = currentOp.code;
+  const dureeEl = document.getElementById('op-new-duree');
+  if(dureeEl) dureeEl.value = (currentOp && currentOp.duree_reelle_min != null) ? currentOp.duree_reelle_min : '';
+  const commEl = document.getElementById('op-new-comment');
+  if(commEl) commEl.value = (currentOp && currentOp.observations) ? currentOp.observations : '';
+  document.getElementById('op-modal-new-title').textContent = 'Modifier l\'opération';
+  document.getElementById('op-modal-new-sub').textContent = 'Ajuste la date, la machine, le code ou les informations complémentaires.';
+  document.getElementById('op-modal-new-submit').textContent = 'Enregistrer les modifications';
   document.getElementById('op-modal-new').classList.add('active');
 }
 
@@ -6071,54 +6136,83 @@ function opCloseNewModal(){
   document.getElementById('op-modal-new').classList.remove('active');
 }
 
+// Helper : PATCH le statut/durée/commentaires d'une op pour la marquer Terminée.
+async function _patchOpTermine(eventId, opId, dureeMin, comment){
+  const body = { statut: 'termine' };
+  if(dureeMin != null && !Number.isNaN(dureeMin)) body.duree_reelle_min = dureeMin;
+  if(comment) body.observations = comment;
+  const r = await fetch('/api/maintenance/events/' + eventId + '/ops/' + opId, {
+    method:'PATCH', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body),
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    throw new Error(err.detail || r.status);
+  }
+}
+
 async function opSubmitNew(){
-  const code = document.getElementById('op-new-code').value;
+  const dateVal = document.getElementById('op-new-date').value;
   const machine = document.getElementById('op-new-machine').value;
-  if(!code || !machine){
-    if(typeof showToast === 'function') showToast('Code et machine obligatoires.', 'danger');
-    else alert('Code et machine obligatoires.');
+  const code = document.getElementById('op-new-code').value;
+  const dureeStr = document.getElementById('op-new-duree').value;
+  const comment = (document.getElementById('op-new-comment').value || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+
+  if(!dateVal || !machine || !code){
+    if(typeof showToast === 'function') showToast('Date, machine et code sont obligatoires.', 'danger');
+    else alert('Date, machine et code sont obligatoires.');
     return;
   }
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    return;
+  }
+
   const editingId = MAINT_STATE.editingEventId;
   if(editingId != null){
-    // ─── Mode édition : PATCH machine si changée, remplace op si code changé
+    // ─── Mode édition
     const ev = (MAINT_STATE.tasks || []).find(x => x.id === editingId);
     if(!ev){ opCloseNewModal(); return; }
     try{
-      if((ev.machine || '') !== machine){
+      // PATCH event : machine et/ou date si changées
+      const evPatch = {};
+      if((ev.machine || '') !== machine) evPatch.machine = machine;
+      if((ev.date_prevue || '') !== dateVal) evPatch.date_prevue = dateVal;
+      if(Object.keys(evPatch).length){
         const r1 = await fetch('/api/maintenance/events/' + editingId, {
           method:'PATCH', credentials:'include',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({machine}),
+          body: JSON.stringify(evPatch),
         });
-        if(!r1.ok){
-          const err = await r1.json().catch(()=>({}));
-          throw new Error(err.detail || r1.status);
-        }
+        if(!r1.ok){ const err = await r1.json().catch(()=>({})); throw new Error(err.detail || r1.status); }
       }
-      const currentCode = (ev.ops && ev.ops[0]) ? ev.ops[0].code : '';
-      const currentOpId = (ev.ops && ev.ops[0]) ? ev.ops[0].id : null;
-      if(currentCode !== code){
-        if(currentOpId != null){
-          const rDel = await fetch('/api/maintenance/events/' + editingId + '/ops/' + currentOpId, {
+      const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+      let opId = currentOp ? currentOp.id : null;
+      // Si le code change, on remplace l'op (delete + add)
+      if(!currentOp || currentOp.code !== code){
+        if(opId != null){
+          const rDel = await fetch('/api/maintenance/events/' + editingId + '/ops/' + opId, {
             method:'DELETE', credentials:'include',
           });
-          if(!rDel.ok){
-            const err = await rDel.json().catch(()=>({}));
-            throw new Error(err.detail || rDel.status);
-          }
+          if(!rDel.ok){ const err = await rDel.json().catch(()=>({})); throw new Error(err.detail || rDel.status); }
         }
         const rAdd = await fetch('/api/maintenance/events/' + editingId + '/ops', {
           method:'POST', credentials:'include',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({code, machines:[machine]}),
         });
-        if(!rAdd.ok){
-          const err = await rAdd.json().catch(()=>({}));
-          throw new Error(err.detail || rAdd.status);
-        }
+        if(!rAdd.ok){ const err = await rAdd.json().catch(()=>({})); throw new Error(err.detail || rAdd.status); }
+        const dataAdd = await rAdd.json();
+        const newOp = (dataAdd.event && dataAdd.event.ops || []).find(o => o.code === code);
+        opId = newOp ? newOp.id : opId;
       }
-      if(typeof showToast === 'function') showToast('Intervention mise à jour.', 'success');
+      // PATCH op : force termine + durée + observations
+      if(opId != null){
+        await _patchOpTermine(editingId, opId, dureeMin, comment);
+      }
+      if(typeof showToast === 'function') showToast('Opération mise à jour.', 'success');
       opCloseNewModal();
       await opLoadTasks();
     }catch(e){
@@ -6127,32 +6221,36 @@ async function opSubmitNew(){
     }
     return;
   }
+
   // ─── Mode création
-  const body = {
-    machine,
-    date_prevue: _fmtDateISO(new Date()),
-    source: 'non_planifie',
-    ops: [code],
-    operators: [],  // Le serveur forcera l'user courant.
-  };
-  const r = await fetch('/api/maintenance/events', {
-    method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body),
-  });
-  if(!r.ok){
-    const err = await r.json().catch(()=>({}));
-    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
-    else alert('Erreur : ' + (err.detail || r.status));
-    return;
+  try{
+    // 1. POST /events → crée l'event non_planifie avec 1 op (statut a_faire par défaut)
+    const body = {
+      machine,
+      date_prevue: dateVal,
+      source: 'non_planifie',
+      ops: [code],
+      operators: [],  // Le serveur forcera l'user courant.
+    };
+    const r = await fetch('/api/maintenance/events', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || r.status); }
+    const data = await r.json();
+    const ev = data.event;
+    const op = (ev.ops || [])[0];
+    if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
+    // 2. PATCH op → statut termine + durée + observations (déclenche done_at côté back)
+    await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+    if(typeof showToast === 'function') showToast('Opération enregistrée.', 'success');
+    opCloseNewModal();
+    await opLoadTasks();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    else alert('Erreur : ' + e.message);
   }
-  const data = await r.json();
-  if(typeof showToast === 'function') showToast('Intervention déclarée.', 'success');
-  opCloseNewModal();
-  const dateInput = document.getElementById('op-tasks-date');
-  if(dateInput) dateInput.value = body.date_prevue;
-  await opLoadTasks();
-  if(data.event && data.event.id) opOpenSaisie(data.event.id);
 }
 
 async function opDeleteEvent(eventId){
@@ -6160,10 +6258,10 @@ async function opDeleteEvent(eventId){
   if(!ev){ return; }
   const meId = (S && S.me) ? S.me.id : null;
   if(ev.source !== 'non_planifie' || ev.created_by !== meId){
-    if(typeof showToast === 'function') showToast('Vous ne pouvez supprimer que vos propres interventions non planifiées.', 'danger');
+    if(typeof showToast === 'function') showToast('Vous ne pouvez supprimer que vos propres opérations.', 'danger');
     return;
   }
-  if(!confirm('Supprimer cette intervention ? Cette action est définitive.')) return;
+  if(!confirm('Supprimer cette opération ? Cette action est définitive.')) return;
   const r = await fetch('/api/maintenance/events/' + eventId, {
     method:'DELETE', credentials:'include',
   });
@@ -6173,7 +6271,7 @@ async function opDeleteEvent(eventId){
     else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
-  if(typeof showToast === 'function') showToast('Intervention supprimée.', 'success');
+  if(typeof showToast === 'function') showToast('Opération supprimée.', 'success');
   await opLoadTasks();
 }
 
@@ -6222,9 +6320,9 @@ async function opLoadPlanning(){
                        { credentials:'include', cache: 'no-store' });
   if(!r.ok){
     const persoEl = document.getElementById('op-plan-personnel');
-    const genEl = document.getElementById('op-plan-general');
     if(persoEl) persoEl.innerHTML = _opRenderPlanTable([], null);
-    if(genEl) genEl.innerHTML = _opRenderPlanTable([], null);
+    // NB : #op-plan-general est géré par le calendrier admin monté via
+    // _mountOperatorGeneralCalendar — ne jamais écraser son innerHTML ici.
     return;
   }
   const data = await r.json();
@@ -6234,9 +6332,8 @@ async function opLoadPlanning(){
   const perso = events.filter(ev => (ev.operators || []).some(o => o.id === meId));
   const persoEl = document.getElementById('op-plan-personnel');
   if(persoEl) persoEl.innerHTML = _opRenderPlanTable(perso, meId);
-  // Onglet Général : tous.
-  const genEl = document.getElementById('op-plan-general');
-  if(genEl) genEl.innerHTML = _opRenderPlanTable(events, meId);
+  // Onglet Général : rendu par renderCal() sur le calendrier admin monté.
+  // Ne pas écraser #op-plan-general ici — voir _mountOperatorGeneralCalendar.
 }
 
 function opSetPlanTab(name){
@@ -6643,7 +6740,10 @@ function _mountOperatorGeneralCalendar(){
   const dst = document.getElementById('op-plan-general');
   if(!src || !dst) return;
   if(!dst.querySelector('.cal-sec')){
-    // 1er mount : vide le tableau read-only par défaut, injecte la calendrier
+    // 1er mount : vide le tableau read-only par défaut, déplace le calendrier
+    // (déplacer plutôt que cloner : les listeners JS sur .cal-event / cellules
+    // sont attachés au node, et renderCal() cible par ID unique — un clone
+    // dupliquerait les IDs et casserait le rendu).
     dst.innerHTML = '';
     // Bandeau discret "lecture seule" au-dessus du calendrier
     const banner = document.createElement('div');
@@ -6684,11 +6784,14 @@ window.opSetPlanTab = opSetPlanTabWithCal;
     const planInput = document.getElementById('op-plan-date');
     if(planInput) planInput.value = _fmtDateISO(new Date());
     opLoadTasks();
-    // Pré-charge le planning en tâche de fond.
-    opLoadPlanning();
-    // Monte le calendrier admin dans l'onglet Général (lazy — au 1er clic
-    // sur l'onglet, mais on prépare le DOM tôt pour un feedback instant).
+    // Monte le calendrier admin dans l'onglet Général AVANT opLoadPlanning
+    // (le mount déplace .cal-sec dans #op-plan-general ; l'ordre garantit
+    // qu'aucune écriture postérieure n'écrase le calendrier).
     _mountOperatorGeneralCalendar();
+    // Pré-charge le planning (table Personnel + refresh du calendrier)
+    opLoadPlanning();
+    // Rendu initial du calendrier depuis les données admin (±90 jours).
+    refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   }
 })();
 </script>
