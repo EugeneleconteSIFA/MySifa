@@ -117,13 +117,11 @@ def _require_admin(request: Request) -> dict:
 
 
 def _can_operator_manage_event(event: dict, user_id: int) -> bool:
-    """Un opérateur peut modifier/supprimer un event si :
-       - event.source == 'non_planifie'
-       - event.created_by == user_id
-    Sert de garde pour les endpoints PATCH/DELETE côté opérateur."""
+    """Un opérateur peut modifier/supprimer un event qu'il a créé (peu importe
+    la source). Depuis le "Nouvelle tâche" côté opérateur, il peut créer des
+    events planifie avec N ops → il doit pouvoir les gérer ensuite.
+    Sert de garde pour les endpoints PATCH/DELETE/ops côté opérateur."""
     if not event:
-        return False
-    if event.get("source") != "non_planifie":
         return False
     return event.get("created_by") == user_id
 
@@ -279,8 +277,9 @@ class OperatorAddBody(BaseModel):
 @router.get("/api/maintenance/operators")
 def list_operators(request: Request):
     """Liste des utilisateurs assignables (rôle fabrication + actifs).
-    Admin only : un opérateur n'a pas à choisir qui assigner."""
-    _require_admin(request)
+    Ouvert à admin et opérateur (l'opérateur peut désormais créer des tâches
+    riches "à la admin" — cf. bouton Nouvelle tâche v163+)."""
+    _require_access(request)
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, nom, email, identifiant "
@@ -377,17 +376,48 @@ def create_event(body: EventCreateBody, request: Request):
     operator_ids = list(dict.fromkeys(body.operators))
 
     if maint_role == "operator":
-        src = "non_planifie"
-        heure_debut = None
-        heure_fin = None
-        operator_ids = [user["id"]]
-        if len(ops_specs) != 1:
-            raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
-        if not body.machine:
-            raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
-        # L'opérateur déclare 1 op sur 1 machine (celle du body).
-        ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
-        event_machine = body.machine
+        # v163+ : l'opérateur peut créer soit une saisie rapide (non_planifie,
+        # 1 code, self forcé — flow "Enregistrer une opération"), soit un
+        # créneau planifie complet (N ops, N machines, N operators — flow
+        # "Nouvelle tâche"). On détecte le mode via body.source.
+        if src not in _VALID_SOURCES:
+            raise HTTPException(status_code=400, detail=f"source invalide: {src}")
+        if src == "non_planifie":
+            heure_debut = None
+            heure_fin = None
+            operator_ids = [user["id"]]
+            if len(ops_specs) != 1:
+                raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
+            if not body.machine:
+                raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
+            ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
+            event_machine = body.machine
+        else:
+            # source=planifie côté opérateur : mêmes règles qu'admin, sauf que
+            # self doit être dans les opérateurs assignés (garde-fou anti-abus).
+            heure_debut = body.heure_debut
+            heure_fin = body.heure_fin
+            if not ops_specs:
+                raise HTTPException(status_code=400, detail="Au moins un code d'opération est requis")
+            if user["id"] not in operator_ids:
+                operator_ids = list(dict.fromkeys([user["id"]] + operator_ids))
+            normalized = []
+            machines_union = []
+            for code, mcsv in ops_specs:
+                if not mcsv:
+                    if body.machine:
+                        mcsv = _machines_list_to_csv([body.machine])
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"L'opération {code} doit être attribuée à au moins une machine",
+                        )
+                normalized.append((code, mcsv))
+                for m in _machines_csv_to_list(mcsv):
+                    if m not in machines_union:
+                        machines_union.append(m)
+            ops_specs = normalized
+            event_machine = _machines_list_to_csv(machines_union) or (body.machine or "")
     else:
         if src not in _VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"source invalide: {src}")
@@ -605,10 +635,15 @@ def delete_op(event_id: int, op_id: int, request: Request):
 
 @router.post("/api/maintenance/events/{event_id}/operators")
 def add_operator(event_id: int, body: OperatorAddBody, request: Request):
-    _require_admin(request)
+    """Admin : ajout libre. Opérateur : uniquement sur son propre event."""
+    user, maint_role = _require_access(request)
     with get_db() as conn:
-        if not conn.execute("SELECT 1 FROM maintenance_events WHERE id=?", (event_id,)).fetchone():
+        ev_check = _load_event_full(conn, event_id)
+        if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if maint_role == "operator":
+            if not _can_operator_manage_event(ev_check, user["id"]):
+                raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
         if not conn.execute("SELECT 1 FROM users WHERE id=?", (body.operator_id,)).fetchone():
             raise HTTPException(status_code=400, detail=f"opérateur inconnu: {body.operator_id}")
         conn.execute(
@@ -622,10 +657,18 @@ def add_operator(event_id: int, body: OperatorAddBody, request: Request):
 
 @router.delete("/api/maintenance/events/{event_id}/operators/{operator_id}")
 def remove_operator(event_id: int, operator_id: int, request: Request):
-    _require_admin(request)
+    """Admin : suppression libre. Opérateur : uniquement sur son propre event
+    (et il ne peut pas se retirer lui-même sinon il perd les droits d'édition)."""
+    user, maint_role = _require_access(request)
     with get_db() as conn:
-        if not conn.execute("SELECT 1 FROM maintenance_events WHERE id=?", (event_id,)).fetchone():
+        ev_check = _load_event_full(conn, event_id)
+        if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if maint_role == "operator":
+            if not _can_operator_manage_event(ev_check, user["id"]):
+                raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
+            if operator_id == user["id"]:
+                raise HTTPException(status_code=400, detail="Impossible de se retirer soi-même du groupe (perte d'accès en cas d'erreur)")
         conn.execute(
             "DELETE FROM maintenance_event_operators WHERE event_id=? AND operator_id=?",
             (event_id, operator_id),
@@ -678,6 +721,92 @@ class TemplateUpdateBody(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     ops: Optional[List[TemplateOpSpec]] = None
+
+
+
+@router.get("/api/maintenance/history")
+def get_history(
+    request: Request,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    machine: Optional[str] = None,
+    operator_id: Optional[int] = None,
+    code: Optional[str] = None,
+):
+    """Historique des opérations terminées (source de vérité DB, partagée
+    admin+opérateur). Retourne les ops statut=termine avec joins event+code+
+    users, formatées pour la table "Historique des opérations".
+
+    Filtres optionnels par plage de date (sur done_at OU date_prevue),
+    machine, opérateur créateur/exécutant, code."""
+    _require_access(request)
+    where = ["o.statut = 'termine'"]
+    params: List[Any] = []
+    if date_from:
+        _validate_date(date_from)
+        where.append("(o.done_at >= ? OR e.date_prevue >= ?)")
+        params.extend([date_from, date_from])
+    if date_to:
+        _validate_date(date_to)
+        where.append("(o.done_at <= ? OR e.date_prevue <= ?)")
+        # Ajoute un buffer à date_to pour couvrir toute la journée côté done_at
+        params.extend([date_to + "T23:59:59", date_to])
+    if code:
+        where.append("o.code = ?")
+        params.append(code)
+    if machine:
+        # Match dans l'union event.machine CSV OU op.machines_csv
+        where.append("(e.machine LIKE ? OR o.machines_csv LIKE ?)")
+        params.extend([f"%{machine}%", f"%{machine}%"])
+    if operator_id:
+        where.append("(o.done_by = ? OR e.created_by = ?)")
+        params.extend([operator_id, operator_id])
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT o.id             AS op_id,
+                       e.id             AS event_id,
+                       e.machine        AS machine,
+                       o.machines_csv   AS op_machines_csv,
+                       o.code           AS code,
+                       c.label          AS code_label,
+                       c.categorie      AS categorie,
+                       o.duree_reelle_min AS duree_reelle_min,
+                       o.observations   AS commentaire,
+                       o.pieces_changees AS pieces_changees,
+                       o.done_at        AS done_at,
+                       o.done_by        AS done_by,
+                       ub.nom           AS done_by_nom,
+                       e.date_prevue    AS date_prevue,
+                       e.created_by     AS created_by,
+                       uc.nom           AS created_by_nom,
+                       e.source         AS source
+                FROM maintenance_event_ops o
+                JOIN maintenance_events e ON e.id = o.event_id
+                LEFT JOIN maintenance_codes c ON c.code = o.code
+                LEFT JOIN users ub ON ub.id = o.done_by
+                LEFT JOIN users uc ON uc.id = e.created_by
+                WHERE {" AND ".join(where)}
+                ORDER BY COALESCE(o.done_at, e.date_prevue) DESC, o.id DESC
+                LIMIT 2000""",
+            params,
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        # Machines : préfère op.machines_csv, fallback event.machine
+        machines_list = _machines_csv_to_list(d.pop("op_machines_csv"))
+        if not machines_list and d.get("machine"):
+            machines_list = _machines_csv_to_list(d["machine"])
+        d["machines"] = machines_list
+        d["machine"] = " · ".join(machines_list) if machines_list else (d.get("machine") or "")
+        # Date_saisie : done_at si présent (moment d'exécution enregistré),
+        # sinon date_prevue (jour d'intervention déclaré).
+        d["date_saisie"] = d.get("done_at") or d.get("date_prevue")
+        # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
+        d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
+        d["type"] = d.get("code_label") or d.get("code") or ""
+        out.append(d)
+    return {"history": out}
 
 
 def _load_template_full(conn, template_id: int) -> Optional[dict]:
