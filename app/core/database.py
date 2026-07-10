@@ -6284,6 +6284,81 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 170, "inventaires_matieres")
 
+    # v171 — Module impression cloud (agents, imprimantes, templates, jobs)
+    # Permet d'imprimer depuis le SaaS vers des imprimantes du LAN usine via un
+    # agent local (Raspberry Pi ou PC) qui poll les jobs et les envoie en TCP:9100.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=171 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS print_agents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            actif INTEGER NOT NULL DEFAULT 1,
+            last_heartbeat TEXT,
+            last_ip TEXT,
+            created_at TEXT NOT NULL,
+            note TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_agents_actif ON print_agents(actif)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS imprimantes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            poste TEXT,
+            agent_id INTEGER REFERENCES print_agents(id) ON DELETE SET NULL,
+            ip_locale TEXT NOT NULL,
+            port INTEGER NOT NULL DEFAULT 9100,
+            langage TEXT NOT NULL DEFAULT 'zpl',
+            largeur_mm INTEGER NOT NULL DEFAULT 102,
+            hauteur_mm INTEGER NOT NULL DEFAULT 152,
+            dpi INTEGER NOT NULL DEFAULT 203,
+            actif INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            note TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_imprimantes_agent ON imprimantes(agent_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_imprimantes_actif ON imprimantes(actif)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS imprimante_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
+            usage_key TEXT NOT NULL,
+            nom TEXT NOT NULL,
+            contenu TEXT NOT NULL,
+            actif INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL,
+            updated_by TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_impr_tpl_imp_usage ON imprimante_templates(imprimante_id, usage_key)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS print_jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
+            agent_id INTEGER REFERENCES print_agents(id) ON DELETE SET NULL,
+            usage_key TEXT,
+            template_id INTEGER REFERENCES imprimante_templates(id) ON DELETE SET NULL,
+            payload BLOB NOT NULL,
+            payload_langage TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            picked_at TEXT,
+            ack_at TEXT,
+            erreur TEXT,
+            tentatives INTEGER NOT NULL DEFAULT 0,
+            data_json TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status, agent_id, imprimante_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_print_jobs_created ON print_jobs(created_at DESC)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS user_printer_defaults (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT NOT NULL,
+            usage_key TEXT NOT NULL,
+            imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
+            updated_at TEXT NOT NULL,
+            UNIQUE(user_email, usage_key)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user_printer_def_user ON user_printer_defaults(user_email)")
+        conn.commit()
+        _record_schema_migration(conn, 171, "print_module_tables")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

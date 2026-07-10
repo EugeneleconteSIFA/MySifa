@@ -470,6 +470,11 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
+      <div class="nav-group-label" style="margin-top:8px"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-tab="printers">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimantes
+      </button>
       <div class="nav-group-label" style="margin-top:8px"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="promote">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
@@ -1295,6 +1300,167 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
       </div>
     </section>
 
+    <section id="panel-printers" class="hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+        <div>
+          <div style="font-size:17px;font-weight:700;color:var(--text)">Imprimantes</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px">
+            Configure les imprimantes réseau de l'usine et les agents locaux qui font le pont avec MySifa.
+          </div>
+        </div>
+      </div>
+
+      <!-- Sous-onglets Imprimantes / Templates / Agents -->
+      <div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border)">
+        <button type="button" class="pr-sub active" data-prsub="imp" onclick="prSetSub('imp')" style="background:transparent;border:none;padding:10px 14px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--accent);font-family:inherit">Imprimantes</button>
+        <button type="button" class="pr-sub" data-prsub="tpl" onclick="prSetSub('tpl')" style="background:transparent;border:none;padding:10px 14px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit">Templates</button>
+        <button type="button" class="pr-sub" data-prsub="ag" onclick="prSetSub('ag')" style="background:transparent;border:none;padding:10px 14px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit">Agents locaux</button>
+      </div>
+
+      <!-- Sous-panneau : Imprimantes -->
+      <div id="pr-panel-imp">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn btn-accent" onclick="prEditImprimante(null)" style="padding:8px 14px;font-size:13px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:-2px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nouvelle imprimante
+          </button>
+        </div>
+        <div id="pr-imp-list" style="display:flex;flex-direction:column;gap:10px">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+        </div>
+      </div>
+
+      <!-- Sous-panneau : Templates -->
+      <div id="pr-panel-tpl" style="display:none">
+        <div id="pr-tpl-list" style="display:flex;flex-direction:column;gap:10px">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+        </div>
+      </div>
+
+      <!-- Sous-panneau : Agents locaux -->
+      <div id="pr-panel-ag">
+        <div id="pr-ag-panel" style="display:none">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+            <button class="btn btn-accent" onclick="prCreateAgent()" style="padding:8px 14px;font-size:13px">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:-2px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nouvel agent
+            </button>
+          </div>
+          <div id="pr-ag-token-reveal" style="display:none;background:rgba(34,211,238,.1);border:1px solid var(--accent);border-radius:12px;padding:16px 20px;margin-bottom:16px">
+            <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">
+              Copiez ce token — il ne sera plus affiché
+            </div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <code id="pr-ag-token-value" style="flex:1;font-family:monospace;font-size:13px;color:var(--text);word-break:break-all;background:var(--bg);padding:10px 14px;border-radius:8px;border:1px solid var(--border)"></code>
+              <button class="btn btn-ghost" onclick="prCopyToken()" style="border:1px solid var(--border);padding:10px 12px">Copier</button>
+            </div>
+          </div>
+          <div id="pr-ag-list" style="display:flex;flex-direction:column;gap:10px">
+            <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal imprimante -->
+      <div id="pr-imp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prCloseModal()">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(640px,95vw);max-height:90vh;overflow:auto">
+          <h2 id="pr-imp-modal-title" style="margin:0 0 18px;font-size:17px">Nouvelle imprimante</h2>
+          <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div style="grid-column:span 2">
+              <label class="pr-lbl">Nom</label>
+              <input id="pr-f-nom" type="text" class="pr-inp" placeholder="Ex : Zebra Réception matière">
+            </div>
+            <div>
+              <label class="pr-lbl">Poste / atelier</label>
+              <input id="pr-f-poste" type="text" class="pr-inp" placeholder="Ex : Réception">
+            </div>
+            <div>
+              <label class="pr-lbl">Agent local</label>
+              <select id="pr-f-agent" class="pr-inp"><option value="">Aucun</option></select>
+            </div>
+            <div>
+              <label class="pr-lbl">Adresse IP</label>
+              <input id="pr-f-ip" type="text" class="pr-inp" placeholder="192.168.1.42">
+            </div>
+            <div>
+              <label class="pr-lbl">Port</label>
+              <input id="pr-f-port" type="number" class="pr-inp" value="9100">
+            </div>
+            <div>
+              <label class="pr-lbl">Langage</label>
+              <select id="pr-f-langage" class="pr-inp">
+                <option value="zpl">ZPL — Zebra</option>
+                <option value="epl">EPL — vieilles Zebra</option>
+                <option value="escpos">ESC/POS — Brother, tickets</option>
+              </select>
+            </div>
+            <div>
+              <label class="pr-lbl">DPI</label>
+              <select id="pr-f-dpi" class="pr-inp">
+                <option value="203">203 dpi (standard)</option>
+                <option value="300">300 dpi</option>
+                <option value="600">600 dpi</option>
+              </select>
+            </div>
+            <div>
+              <label class="pr-lbl">Largeur (mm)</label>
+              <input id="pr-f-largeur" type="number" class="pr-inp" value="102">
+            </div>
+            <div>
+              <label class="pr-lbl">Hauteur (mm)</label>
+              <input id="pr-f-hauteur" type="number" class="pr-inp" value="152">
+            </div>
+            <div style="grid-column:span 2">
+              <label class="pr-lbl">Note (optionnel)</label>
+              <input id="pr-f-note" type="text" class="pr-inp">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:space-between;margin-top:18px">
+            <button id="pr-f-del" class="btn btn-ghost" style="color:var(--danger);display:none" onclick="prDeleteImprimante()">Supprimer</button>
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button class="btn btn-ghost" onclick="prCloseModal()">Annuler</button>
+              <button class="btn btn-accent" onclick="prSaveImprimante()">Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal template -->
+      <div id="pr-tpl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prCloseTplModal()">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(820px,95vw);max-height:90vh;overflow:auto">
+          <h2 id="pr-tpl-modal-title" style="margin:0 0 18px;font-size:17px">Éditer le template</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div>
+              <label class="pr-lbl">Nom</label>
+              <input id="pr-tpl-nom" type="text" class="pr-inp">
+            </div>
+            <div>
+              <label class="pr-lbl">Usage métier</label>
+              <select id="pr-tpl-usage" class="pr-inp"></select>
+            </div>
+          </div>
+          <div style="margin-bottom:6px">
+            <label class="pr-lbl">Placeholders disponibles</label>
+            <div id="pr-tpl-placeholders" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px"></div>
+          </div>
+          <div style="margin-bottom:12px">
+            <label class="pr-lbl">Contenu (ZPL / EPL / ESC-POS avec placeholders)</label>
+            <textarea id="pr-tpl-contenu" class="pr-inp" spellcheck="false" style="min-height:280px;font-family:'SFMono-Regular',Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre;resize:vertical"></textarea>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">
+              Utilise <code>{{champ}}</code>, <code>{{barcode:champ,CODE128,140}}</code>, <code>{{qrcode:champ}}</code>, <code>{{now:%d/%m/%Y}}</code>.
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:space-between;margin-top:18px">
+            <button id="pr-tpl-del" class="btn btn-ghost" style="color:var(--danger);display:none" onclick="prDeleteTemplate()">Supprimer</button>
+            <div style="display:flex;gap:8px;margin-left:auto">
+              <button class="btn btn-ghost" onclick="prCloseTplModal()">Annuler</button>
+              <button class="btn btn-accent" onclick="prSaveTemplate()">Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -1490,7 +1656,7 @@ function setTab(id) {
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
   });
-  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote'].forEach(p => {
+  ['users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -1506,6 +1672,7 @@ function setTab(id) {
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
+  if (id === 'printers') initPrintersPanel();
   if (id === 'dashboards') renderSettingsDashboards();
   if (id === 'api') loadApiKeys();
   if (id === 'promote') loadPromoteStatus();
@@ -6390,6 +6557,415 @@ async function syncDbV1() {
     btn.textContent = original;
   }
 }
+
+// ═════════════════════════════════════════════════════════════════════
+// PRINTERS — CRUD imprimantes / templates / agents (superadmin)
+// ═════════════════════════════════════════════════════════════════════
+const PR = {
+  imprimantes: [], templates: [], agents: [], usages: [],
+  sub: 'imp',
+  editingImp: null, editingTpl: null,
+};
+
+function prNoStore() { return { credentials: 'include', headers: {} }; }
+
+async function prFetch(url, opts) {
+  const o = { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...(opts || {}) };
+  const r = await fetch(url, o);
+  const txt = await r.text().catch(() => '');
+  let data = null; try { data = txt ? JSON.parse(txt) : null; } catch(e) {}
+  if (!r.ok) {
+    const msg = (data && data.detail) ? data.detail : ('HTTP ' + r.status);
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function prToast(msg, kind) {
+  if (typeof showToast === 'function') showToast(msg, kind || 'success');
+  else console.log('[printers]', msg);
+}
+
+function _escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+)); }
+
+async function initPrintersPanel() {
+  // Un seul chargement d'entrée : on tire tout en parallèle.
+  document.getElementById('pr-panel-ag').querySelector('#pr-ag-panel').style.display = '';
+  try {
+    const [imp, tpl, ag, us] = await Promise.all([
+      prFetch('/api/print/imprimantes'),
+      prFetch('/api/print/templates'),
+      prFetch('/api/print/agents'),
+      prFetch('/api/print/usages'),
+    ]);
+    PR.imprimantes = imp || [];
+    PR.templates = tpl || [];
+    PR.agents = ag || [];
+    PR.usages = us || [];
+  } catch (e) {
+    prToast('Chargement imprimantes: ' + e.message, 'danger');
+  }
+  prRenderImprimantes();
+  prRenderTemplates();
+  prRenderAgents();
+}
+
+function prSetSub(sub) {
+  PR.sub = sub;
+  document.querySelectorAll('.pr-sub').forEach(b => {
+    const on = b.dataset.prsub === sub;
+    b.style.color = on ? 'var(--text)' : 'var(--muted)';
+    b.style.borderBottom = '2px solid ' + (on ? 'var(--accent)' : 'transparent');
+    b.classList.toggle('active', on);
+  });
+  document.getElementById('pr-panel-imp').style.display = (sub === 'imp') ? '' : 'none';
+  document.getElementById('pr-panel-tpl').style.display = (sub === 'tpl') ? '' : 'none';
+  document.getElementById('pr-panel-ag').style.display = (sub === 'ag') ? '' : 'none';
+}
+
+// ─── Imprimantes ─────────────────────────────────────────────────
+function prRenderImprimantes() {
+  const root = document.getElementById('pr-imp-list');
+  if (!root) return;
+  if (!PR.imprimantes.length) {
+    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucune imprimante configurée. Clique sur « Nouvelle imprimante ».</div>';
+    return;
+  }
+  const agentMap = {};
+  PR.agents.forEach(a => { agentMap[a.id] = a; });
+  root.innerHTML = PR.imprimantes.map(i => {
+    const agent = i.agent_id ? agentMap[i.agent_id] : null;
+    const agentLbl = agent ? _escH(agent.nom) : '<em style="color:var(--muted)">Non rattachée</em>';
+    const status = i.actif
+      ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Active</span>'
+      : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactive</span>';
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:700;color:var(--text)">${_escH(i.nom)}</span>
+              ${status}
+              <span style="font-size:11px;background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${_escH(i.langage)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">
+              ${_escH(i.poste || 'Sans poste')} · ${_escH(i.ip_locale)}:${i.port} · ${i.largeur_mm}×${i.hauteur_mm}mm @ ${i.dpi}dpi · Agent : ${agentLbl}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="prTestPrint(${i.id})">Test d'impression</button>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="prEditImprimante(${i.id})">Modifier</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function prEditImprimante(id) {
+  PR.editingImp = id;
+  const i = id ? PR.imprimantes.find(x => x.id === id) : null;
+  document.getElementById('pr-imp-modal-title').textContent = i ? ('Modifier — ' + i.nom) : 'Nouvelle imprimante';
+  document.getElementById('pr-f-nom').value = i ? i.nom : '';
+  document.getElementById('pr-f-poste').value = (i && i.poste) || '';
+  const agSel = document.getElementById('pr-f-agent');
+  agSel.innerHTML = '<option value="">Aucun</option>' + PR.agents.map(a =>
+    `<option value="${a.id}">${_escH(a.nom)}</option>`).join('');
+  agSel.value = (i && i.agent_id) ? String(i.agent_id) : '';
+  document.getElementById('pr-f-ip').value = i ? i.ip_locale : '';
+  document.getElementById('pr-f-port').value = i ? i.port : 9100;
+  document.getElementById('pr-f-langage').value = i ? i.langage : 'zpl';
+  document.getElementById('pr-f-dpi').value = i ? i.dpi : 203;
+  document.getElementById('pr-f-largeur').value = i ? i.largeur_mm : 102;
+  document.getElementById('pr-f-hauteur').value = i ? i.hauteur_mm : 152;
+  document.getElementById('pr-f-note').value = (i && i.note) || '';
+  document.getElementById('pr-f-del').style.display = i ? '' : 'none';
+  document.getElementById('pr-imp-modal').style.display = 'flex';
+}
+
+function prCloseModal() {
+  document.getElementById('pr-imp-modal').style.display = 'none';
+  PR.editingImp = null;
+}
+
+async function prSaveImprimante() {
+  const body = {
+    nom: document.getElementById('pr-f-nom').value.trim(),
+    poste: document.getElementById('pr-f-poste').value.trim() || null,
+    agent_id: parseInt(document.getElementById('pr-f-agent').value, 10) || null,
+    ip_locale: document.getElementById('pr-f-ip').value.trim(),
+    port: parseInt(document.getElementById('pr-f-port').value, 10) || 9100,
+    langage: document.getElementById('pr-f-langage').value,
+    dpi: parseInt(document.getElementById('pr-f-dpi').value, 10) || 203,
+    largeur_mm: parseInt(document.getElementById('pr-f-largeur').value, 10) || 102,
+    hauteur_mm: parseInt(document.getElementById('pr-f-hauteur').value, 10) || 152,
+    note: document.getElementById('pr-f-note').value.trim() || null,
+  };
+  if (!body.nom) { prToast('Nom requis.', 'danger'); return; }
+  if (!body.ip_locale) { prToast('IP requise.', 'danger'); return; }
+  try {
+    if (PR.editingImp) {
+      await prFetch('/api/print/imprimantes/' + PR.editingImp, {
+        method: 'PATCH', body: JSON.stringify(body),
+      });
+      prToast('Imprimante modifiée.');
+    } else {
+      await prFetch('/api/print/imprimantes', {
+        method: 'POST', body: JSON.stringify(body),
+      });
+      prToast('Imprimante créée.');
+    }
+    prCloseModal();
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prDeleteImprimante() {
+  if (!PR.editingImp) return;
+  if (!confirm('Supprimer cette imprimante ? Les templates associés seront également supprimés.')) return;
+  try {
+    await prFetch('/api/print/imprimantes/' + PR.editingImp, { method: 'DELETE' });
+    prToast('Imprimante supprimée.');
+    prCloseModal();
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prTestPrint(imprimanteId) {
+  try {
+    const r = await prFetch('/api/print/test', {
+      method: 'POST', body: JSON.stringify({ imprimante_id: imprimanteId }),
+    });
+    prToast(r.message || 'Test envoyé.', 'success');
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+// ─── Templates ──────────────────────────────────────────────────
+function prRenderTemplates() {
+  const root = document.getElementById('pr-tpl-list');
+  if (!root) return;
+  if (!PR.imprimantes.length) {
+    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Ajoute d\'abord une imprimante.</div>';
+    return;
+  }
+  const impMap = {};
+  PR.imprimantes.forEach(i => { impMap[i.id] = i; });
+  const grouped = {};
+  PR.imprimantes.forEach(i => { grouped[i.id] = { imp: i, templates: [] }; });
+  PR.templates.forEach(t => { if (grouped[t.imprimante_id]) grouped[t.imprimante_id].templates.push(t); });
+  root.innerHTML = Object.values(grouped).map(g => {
+    const tplHtml = g.templates.length
+      ? g.templates.map(t => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-top:6px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${_escH(t.nom)}</div>
+            <div style="font-size:11px;color:var(--muted)">${_escH(t.usage_label)} — ${t.actif ? 'Actif' : 'Inactif'}</div>
+          </div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prEditTemplate(${t.id})">Modifier</button>
+        </div>`).join('')
+      : '<div style="padding:8px 12px;color:var(--muted);font-size:12px;font-style:italic">Aucun template pour cette imprimante.</div>';
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">${_escH(g.imp.nom)}</div>
+            <div style="font-size:11px;color:var(--muted)">${_escH(g.imp.langage.toUpperCase())} — ${_escH(g.imp.poste || 'Sans poste')}</div>
+          </div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prNewTemplate(${g.imp.id})">+ Template</button>
+        </div>
+        ${tplHtml}
+      </div>`;
+  }).join('');
+}
+
+function prNewTemplate(imprimanteId) {
+  PR.editingTpl = { imprimanteId };
+  document.getElementById('pr-tpl-modal-title').textContent = 'Nouveau template';
+  document.getElementById('pr-tpl-nom').value = '';
+  document.getElementById('pr-tpl-contenu').value = '';
+  const usel = document.getElementById('pr-tpl-usage');
+  usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
+  usel.value = PR.usages[0] ? PR.usages[0].key : '';
+  prRenderPlaceholders(usel.value);
+  usel.onchange = () => prRenderPlaceholders(usel.value);
+  document.getElementById('pr-tpl-del').style.display = 'none';
+  document.getElementById('pr-tpl-modal').style.display = 'flex';
+}
+
+function prEditTemplate(id) {
+  const t = PR.templates.find(x => x.id === id);
+  if (!t) return;
+  PR.editingTpl = { id: t.id, imprimanteId: t.imprimante_id };
+  document.getElementById('pr-tpl-modal-title').textContent = 'Modifier — ' + t.nom;
+  document.getElementById('pr-tpl-nom').value = t.nom;
+  document.getElementById('pr-tpl-contenu').value = t.contenu;
+  const usel = document.getElementById('pr-tpl-usage');
+  usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
+  usel.value = t.usage_key;
+  usel.disabled = true; // usage fixe une fois créé, sinon création d'un nouveau
+  prRenderPlaceholders(usel.value);
+  document.getElementById('pr-tpl-del').style.display = '';
+  document.getElementById('pr-tpl-modal').style.display = 'flex';
+}
+
+function prRenderPlaceholders(usageKey) {
+  const usage = PR.usages.find(u => u.key === usageKey);
+  const root = document.getElementById('pr-tpl-placeholders');
+  if (!root) return;
+  if (!usage) { root.innerHTML = '<span style="color:var(--muted)">Aucun placeholder défini.</span>'; return; }
+  root.innerHTML = usage.placeholders.map(p => {
+    const raw = p.startsWith('{{') ? p : `{{${p}}}`;
+    return `<button type="button" onclick="prInsertPh('${raw.replace(/'/g,"\\'")}')" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-family:monospace;font-size:11px;color:var(--accent);cursor:pointer">${_escH(raw)}</button>`;
+  }).join('');
+}
+
+function prInsertPh(placeholder) {
+  const ta = document.getElementById('pr-tpl-contenu');
+  const s = ta.selectionStart, e = ta.selectionEnd;
+  ta.value = ta.value.slice(0, s) + placeholder + ta.value.slice(e);
+  ta.focus();
+  ta.setSelectionRange(s + placeholder.length, s + placeholder.length);
+}
+
+function prCloseTplModal() {
+  document.getElementById('pr-tpl-modal').style.display = 'none';
+  document.getElementById('pr-tpl-usage').disabled = false;
+  PR.editingTpl = null;
+}
+
+async function prSaveTemplate() {
+  const nom = document.getElementById('pr-tpl-nom').value.trim();
+  const contenu = document.getElementById('pr-tpl-contenu').value;
+  const usage_key = document.getElementById('pr-tpl-usage').value;
+  if (!nom) { prToast('Nom requis.', 'danger'); return; }
+  if (!contenu.trim()) { prToast('Contenu requis.', 'danger'); return; }
+  try {
+    if (PR.editingTpl && PR.editingTpl.id) {
+      await prFetch('/api/print/templates/' + PR.editingTpl.id, {
+        method: 'PATCH', body: JSON.stringify({ nom, contenu }),
+      });
+      prToast('Template enregistré.');
+    } else {
+      await prFetch('/api/print/templates', {
+        method: 'POST',
+        body: JSON.stringify({
+          imprimante_id: PR.editingTpl.imprimanteId,
+          usage_key, nom, contenu,
+        }),
+      });
+      prToast('Template créé.');
+    }
+    prCloseTplModal();
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prDeleteTemplate() {
+  if (!PR.editingTpl || !PR.editingTpl.id) return;
+  if (!confirm('Supprimer ce template ?')) return;
+  try {
+    await prFetch('/api/print/templates/' + PR.editingTpl.id, { method: 'DELETE' });
+    prToast('Template supprimé.');
+    prCloseTplModal();
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+// ─── Agents ─────────────────────────────────────────────────────
+function prRenderAgents() {
+  const root = document.getElementById('pr-ag-list');
+  if (!root) return;
+  if (!PR.agents.length) {
+    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucun agent local configuré. Crée un agent pour connecter un poste de l\'usine.</div>';
+    return;
+  }
+  const now = Date.now();
+  root.innerHTML = PR.agents.map(a => {
+    const hb = a.last_heartbeat ? new Date(a.last_heartbeat) : null;
+    const ageMin = hb ? Math.round((now - hb.getTime()) / 60000) : null;
+    let live;
+    if (!hb) live = '<span style="color:var(--muted);font-size:11px">Jamais connecté</span>';
+    else if (ageMin < 3) live = '<span style="display:inline-flex;align-items:center;gap:6px;color:var(--success);font-size:11px"><span style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block"></span>En ligne</span>';
+    else live = `<span style="color:var(--warn);font-size:11px">Hors ligne (${ageMin}min)</span>`;
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:14px;font-weight:700;color:var(--text)">${_escH(a.nom)}</span>
+            ${live}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">
+            ${a.last_ip ? 'IP: ' + _escH(a.last_ip) + ' · ' : ''}Créé le ${_escH((a.created_at || '').slice(0,10))}
+          </div>
+        </div>
+        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" onclick="prDeleteAgent(${a.id})">Supprimer</button>
+      </div>`;
+  }).join('');
+}
+
+async function prCreateAgent() {
+  const nom = prompt('Nom de l\'agent (ex : Pi-Réception) :');
+  if (!nom || !nom.trim()) return;
+  try {
+    const r = await prFetch('/api/print/agents', {
+      method: 'POST', body: JSON.stringify({ nom: nom.trim() }),
+    });
+    // Reveal token
+    const reveal = document.getElementById('pr-ag-token-reveal');
+    const val = document.getElementById('pr-ag-token-value');
+    val.textContent = r.token;
+    reveal.style.display = '';
+    prToast('Agent créé. Copie le token maintenant.', 'success');
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+function prCopyToken() {
+  const val = document.getElementById('pr-ag-token-value').textContent;
+  if (navigator.clipboard) navigator.clipboard.writeText(val).then(() => prToast('Token copié.'));
+  else {
+    const ta = document.createElement('textarea');
+    ta.value = val; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); prToast('Token copié.'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+}
+
+async function prDeleteAgent(id) {
+  if (!confirm('Supprimer cet agent ? Les imprimantes rattachées perdront leur agent (à réaffecter).')) return;
+  try {
+    await prFetch('/api/print/agents/' + id, { method: 'DELETE' });
+    prToast('Agent supprimé.');
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+// Styles utilitaires pour la modale printers
+(function _prInjectCss(){
+  const s = document.createElement('style');
+  s.textContent = `
+    .pr-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px}
+    .pr-inp{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;outline:none}
+    .pr-inp:focus{border-color:var(--accent)}
+  `;
+  document.head.appendChild(s);
+})();
+
 </script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>

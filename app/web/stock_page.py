@@ -13876,13 +13876,129 @@ function recepShowPrintModal(lot) {
       el('button', { cls: 'btn-recep btn-recep-muted', on: { click: closeMroot } }, 'Fermer'),
       el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
+        recepPrintLabelsSmart(lot, state.refProduit, n, claimLabel);
+      }}}, iconEl('printer', 14), ' Imprimer'),
+      el('button', { cls: 'btn-recep btn-recep-muted', style: { fontSize: '11px', padding: '6px 10px' }, on: { click: () => {
+        const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
         recepPrintLabels(lot, state.refProduit, n, claimLabel);
-      }}}, iconEl('printer', 14), ' Imprimer')
+      }}}, 'Navigateur')
     )
   );
   sheet.addEventListener('click', e => e.stopPropagation());
   overlay.appendChild(sheet);
   document.getElementById('mroot').appendChild(overlay);
+}
+
+// ── Impression cloud → agent local → imprimante Zebra/Brother ──────────
+// Envoie les jobs d'impression au VPS ; l'agent local les récupère et les
+// pousse sur l'imprimante réseau. Fallback navigateur (window.print) via le
+// petit bouton "Navigateur" à côté du bouton principal.
+async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) {
+  const fscBanner = ((lot && lot.fsc_type_claim) || 'non_fsc') === 'non_fsc'
+    ? 'MATIERE NON FSC' : 'MATIERE FSC';
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' + now.getFullYear();
+  const operateurNom = (S && S.user && S.user.nom) || 'Opérateur';
+  const data = {
+    lot_numero: lot.lot_numero || '',
+    fournisseur: lot.fournisseur || '',
+    fsc_label: claimLabel || '',
+    fsc_banner: fscBanner,
+    ref_produit: refProduit || '',
+    code_barre: lot.lot_numero || '',
+    operateur_nom: operateurNom,
+    date_reception: dateStr,
+  };
+  try {
+    const r = await api('/api/print/label', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usage_key: 'reception_matiere', copies: nbEtiquettes, data }),
+    });
+    showToast((r.copies || nbEtiquettes) + ' étiquette(s) envoyée(s) à ' + (r.imprimante || 'imprimante'), 'success');
+    closeMroot();
+    return;
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    // Erreur 409 "Aucune imprimante configurée" : proposer le picker
+    if (msg && (msg.includes('Aucune imprimante') || msg.includes('template'))) {
+      _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, msg);
+      return;
+    }
+    // Autres erreurs : toast + fallback proposé
+    showToast('Impression cloud : ' + msg, 'error');
+  }
+}
+
+// Picker d'imprimante affiché en cas d'absence de défaut utilisateur
+async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg) {
+  let imprimantes = [];
+  try {
+    imprimantes = await api('/api/print/my-imprimantes');
+  } catch (e) {
+    showToast('Impossible de charger la liste des imprimantes : ' + e.message, 'error');
+    return;
+  }
+  if (!imprimantes || !imprimantes.length) {
+    showToast('Aucune imprimante configurée dans MySifa. Contacte l\'admin.', 'error');
+    return;
+  }
+  closeMroot();
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:440px;width:100%;max-height:90vh;overflow:auto';
+  card.innerHTML = `
+    <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">Choisir une imprimante</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${warnMsg ? String(warnMsg).replace(/</g, '&lt;') : 'Sélectionne l\'imprimante pour cette réception.'}</div>
+    <select id="_rp-picker" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;margin-bottom:12px">
+      ${imprimantes.map(i => `<option value="${i.id}">${(i.poste ? i.poste + ' — ' : '')}${String(i.nom).replace(/</g, '&lt;')}</option>`).join('')}
+    </select>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-bottom:16px;cursor:pointer">
+      <input type="checkbox" id="_rp-remember" checked style="width:16px;height:16px;cursor:pointer">
+      Retenir comme imprimante par défaut pour la réception matière
+    </label>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button id="_rp-cancel" style="padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:13px;font-family:inherit;font-weight:600;cursor:pointer">Annuler</button>
+      <button id="_rp-go" style="padding:9px 16px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:13px;font-family:inherit;font-weight:700;cursor:pointer">Imprimer</button>
+    </div>
+  `;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  card.querySelector('#_rp-cancel').onclick = () => document.body.removeChild(overlay);
+  card.querySelector('#_rp-go').onclick = async () => {
+    const impId = parseInt(card.querySelector('#_rp-picker').value, 10);
+    const remember = card.querySelector('#_rp-remember').checked;
+    if (!impId) return;
+    try {
+      const r = await api('/api/print/label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          usage_key: 'reception_matiere',
+          copies: nbEtiquettes,
+          imprimante_id: impId,
+          data,
+        }),
+      });
+      if (remember) {
+        // Fire-and-forget : on n'échoue pas l'impression si l'enregistrement du défaut plante.
+        try {
+          await api('/api/print/my-defaults', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ defaults: { reception_matiere: impId } }),
+          });
+        } catch (e) {}
+      }
+      showToast((r.copies || nbEtiquettes) + ' étiquette(s) envoyée(s) à ' + (r.imprimante || 'imprimante'), 'success');
+      document.body.removeChild(overlay);
+    } catch (e) {
+      showToast('Erreur : ' + (e && e.message ? e.message : String(e)), 'error');
+    }
+  };
 }
 
 function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
