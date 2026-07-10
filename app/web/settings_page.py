@@ -3945,6 +3945,7 @@ function _alertDefaults(existing) {
     trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
     target: { machines: machines },
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
+    dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
   };
 }
@@ -4063,6 +4064,19 @@ function _renderAlertFormFields(params, opts) {
     +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
     +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
     +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
+    + '</div>'
+    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
+    +     '<div>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
+    +       '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Aucune trace nulle part.</span>'
+    +     '</div>'
+    +     '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +   '</div>'
+    +   '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
+    +     '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
+    +     '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider).</div>'
+    +   '</div>'
     + '</div>'
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
@@ -4232,6 +4246,13 @@ function _afOnChecklistToggle() {
     const cards = document.querySelectorAll('.af-cl-card');
     if (!cards.length) _afAddChecklistItem();
   }
+}
+
+// v164 : toggle du bouton dismiss (fermeture sans saisie)
+function _afOnDismissToggle() {
+  const en = document.getElementById('af-dismiss-enabled')?.checked;
+  const wrap = document.getElementById('af-dismiss-wrap');
+  if (wrap) wrap.style.display = en ? '' : 'none';
 }
 
 // v163+ : n'affiche le filtre « produit » (bobine/plis) que pour les
@@ -4416,6 +4437,12 @@ function _afReadParams() {
     validation: {
       button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
     },
+    dismiss_button: (function(){
+      const en = !!document.getElementById('af-dismiss-enabled')?.checked;
+      if(!en) return { enabled: false, label: '' };
+      const lbl = (document.getElementById('af-dismiss-label').value || 'Fermer l\'alerte').trim() || 'Fermer l\'alerte';
+      return { enabled: true, label: lbl };
+    })(),
     checklist: {
       enabled: clEnabled && items.length > 0,
       items: items,
@@ -4699,6 +4726,9 @@ async function previewAlert(id) {
     + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
     + '<div class="ta-sim-actions">'
     +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
+    +   (d.dismiss_button && d.dismiss_button.enabled
+        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
+        : '')
     + '</div>'
     + '</div>';
 
@@ -4777,6 +4807,15 @@ async function previewAlert(id) {
     _taRenderConfirm(actions);
   }
   document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  // v164 : bouton dismiss dans la preview
+  const taDismiss = document.getElementById('ta-dismiss');
+  if (taDismiss) {
+    taDismiss.addEventListener('click', () => {
+      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
+      close();
+      document.removeEventListener('keydown', onKey);
+    });
+  }
 }
 
 function openEditAlertModal(id) {
