@@ -2456,3 +2456,629 @@ def ref_delete_fichier(fid: int, request: Request):
         conn.execute("DELETE FROM qualite_ref_fichiers WHERE id=?", (fid,))
         conn.commit()
     return {"ok": True}
+
+
+# ============================================================================
+# RESSOURCES FOURNISSEURS — un dossier par fournisseur avec certificats
+# ============================================================================
+
+RESSOURCES_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "qualite")
+os.makedirs(RESSOURCES_UPLOAD_DIR, exist_ok=True)
+
+
+def _compute_cert_status(date_expiration: Optional[str]) -> str:
+    """'valide' | 'expire_bientot' (<60j) | 'expire' | 'sans_date' (pas de date d'expiration)."""
+    if not date_expiration:
+        return "sans_date"
+    try:
+        dexp = datetime.strptime(date_expiration[:10], "%Y-%m-%d").date()
+    except Exception:
+        return "sans_date"
+    today = datetime.now().date()
+    if dexp < today:
+        return "expire"
+    delta = (dexp - today).days
+    if delta <= 60:
+        return "expire_bientot"
+    return "valide"
+
+
+def _cert_row_to_dict(row) -> dict:
+    d = dict(row)
+    d["statut"] = _compute_cert_status(d.get("date_expiration"))
+    return d
+
+
+# ─── Liste fournisseurs (avec compteurs certifs) ─────────────────────
+
+@router.get("/api/qualite/ressources/fournisseurs")
+def ressources_list_fournisseurs(request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        four_rows = conn.execute(
+            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
+        ).fetchall()
+        # Charger tous les certificats en une passe puis agréger
+        cert_rows = conn.execute(
+            "SELECT fournisseur_id, date_expiration FROM qualite_fournisseur_certificats"
+        ).fetchall()
+    by_four = {}
+    for r in cert_rows:
+        fid = r["fournisseur_id"]
+        s = _compute_cert_status(r["date_expiration"])
+        d = by_four.setdefault(fid, {"total": 0, "valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
+        d["total"] += 1
+        d[s] += 1
+    out = []
+    for row in four_rows:
+        f = dict(row)
+        stats = by_four.get(f["id"], {"total": 0, "valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
+        f["cert_stats"] = stats
+        out.append(f)
+    return out
+
+
+# ─── Détail d'un fournisseur (avec certificats + fiches liées) ───────
+
+@router.get("/api/qualite/ressources/fournisseurs/{four_id}")
+def ressources_get_fournisseur(four_id: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        four = conn.execute(
+            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc WHERE id=?",
+            (four_id,),
+        ).fetchone()
+        if not four:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        certs = conn.execute(
+            """SELECT c.*, u.nom AS uploaded_by_nom
+               FROM qualite_fournisseur_certificats c
+               LEFT JOIN users u ON u.id = c.uploaded_by
+               WHERE c.fournisseur_id=?
+               ORDER BY COALESCE(c.date_expiration, c.uploaded_at) DESC, c.id DESC""",
+            (four_id,),
+        ).fetchall()
+        certs = [_cert_row_to_dict(r) for r in certs]
+        if certs:
+            ids = [c["id"] for c in certs]
+            qmarks = ",".join(["?"] * len(ids))
+            links = conn.execute(
+                f"""SELECT l.certificat_id, l.fiche_id, f.nom AS fiche_nom, f.acronyme AS fiche_acronyme, f.slug AS fiche_slug, f.categorie AS fiche_categorie
+                    FROM qualite_fournisseur_certificat_fiches l
+                    JOIN qualite_ref_fiches f ON f.id = l.fiche_id
+                    WHERE l.certificat_id IN ({qmarks})""",
+                ids,
+            ).fetchall()
+            by_cert = {}
+            for lk in links:
+                by_cert.setdefault(lk["certificat_id"], []).append({
+                    "fiche_id": lk["fiche_id"],
+                    "nom": lk["fiche_nom"],
+                    "acronyme": lk["fiche_acronyme"],
+                    "slug": lk["fiche_slug"],
+                    "categorie": lk["fiche_categorie"],
+                })
+            for c in certs:
+                c["fiches"] = by_cert.get(c["id"], [])
+        else:
+            for c in certs:
+                c["fiches"] = []
+    return {"fournisseur": dict(four), "certificats": certs}
+
+
+# ─── Upload d'un certificat ──────────────────────────────────────────
+
+@router.post("/api/qualite/ressources/fournisseurs/{four_id}/certificats")
+async def ressources_upload_certificat(
+    four_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    titre: str = "",
+    date_emission: str = "",
+    date_expiration: str = "",
+    commentaire: str = "",
+    fiche_ids: str = "",
+):
+    user = _require_qualite_access(request)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Aucun fichier")
+    original = _sanitize_filename(file.filename)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM fournisseurs_fsc WHERE id=?", (four_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        ts = datetime.now().strftime("%Y%m%d%H%M%S%f")[:18]
+        ext = ""
+        if "." in original:
+            ext = "." + original.rsplit(".", 1)[1].lower()
+        filename = f"res_{four_id}_{ts}{ext}"
+        dest = os.path.join(RESSOURCES_UPLOAD_DIR, filename)
+        with open(dest, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        size = os.path.getsize(dest)
+        conn.execute(
+            """INSERT INTO qualite_fournisseur_certificats
+               (fournisseur_id, filename, original_name, mime_type, size_bytes,
+                titre, date_emission, date_expiration, commentaire, uploaded_at, uploaded_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                four_id, filename, original, file.content_type or None, size,
+                (titre or "").strip(),
+                (date_emission or "").strip() or None,
+                (date_expiration or "").strip() or None,
+                (commentaire or "").strip(),
+                _now(), user["id"],
+            ),
+        )
+        cert_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        # Fiches liées : CSV "1,3,7"
+        wanted = []
+        for tok in (fiche_ids or "").split(","):
+            tok = tok.strip()
+            if tok.isdigit():
+                wanted.append(int(tok))
+        if wanted:
+            existing = conn.execute(
+                f"SELECT id FROM qualite_ref_fiches WHERE id IN ({','.join(['?']*len(wanted))})",
+                wanted,
+            ).fetchall()
+            ok_ids = {r["id"] for r in existing}
+            for fid in wanted:
+                if fid in ok_ids:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO qualite_fournisseur_certificat_fiches (certificat_id, fiche_id) VALUES (?,?)",
+                        (cert_id, fid),
+                    )
+        conn.commit()
+    return ressources_get_fournisseur(four_id, request)
+
+
+# ─── Mise à jour métadonnées / fiches liées d'un certificat ──────────
+
+class CertPatchBody(BaseModel):
+    titre: Optional[str] = None
+    date_emission: Optional[str] = None
+    date_expiration: Optional[str] = None
+    commentaire: Optional[str] = None
+    fiche_ids: Optional[List[int]] = None
+
+
+@router.patch("/api/qualite/ressources/certificats/{cert_id}")
+def ressources_patch_certificat(cert_id: int, body: CertPatchBody, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM qualite_fournisseur_certificats WHERE id=?", (cert_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Certificat introuvable")
+        sets = []
+        vals = []
+        d = body.model_dump(exclude_unset=True)
+        if "titre" in d:
+            sets.append("titre=?"); vals.append((d["titre"] or "").strip())
+        if "date_emission" in d:
+            v = (d["date_emission"] or "").strip() or None
+            sets.append("date_emission=?"); vals.append(v)
+        if "date_expiration" in d:
+            v = (d["date_expiration"] or "").strip() or None
+            sets.append("date_expiration=?"); vals.append(v)
+            # Reset des annonces si nouvelle date : un nouveau cycle d'alertes s'ouvre
+            conn.execute("DELETE FROM qualite_cert_expiration_annonces WHERE certificat_id=?", (cert_id,))
+        if "commentaire" in d:
+            sets.append("commentaire=?"); vals.append((d["commentaire"] or "").strip())
+        if sets:
+            vals.append(cert_id)
+            conn.execute(f"UPDATE qualite_fournisseur_certificats SET {', '.join(sets)} WHERE id=?", vals)
+        if "fiche_ids" in d and d["fiche_ids"] is not None:
+            conn.execute("DELETE FROM qualite_fournisseur_certificat_fiches WHERE certificat_id=?", (cert_id,))
+            wanted = [int(x) for x in d["fiche_ids"] if isinstance(x, int) or (isinstance(x, str) and x.isdigit())]
+            if wanted:
+                existing = conn.execute(
+                    f"SELECT id FROM qualite_ref_fiches WHERE id IN ({','.join(['?']*len(wanted))})",
+                    wanted,
+                ).fetchall()
+                ok_ids = {r["id"] for r in existing}
+                for fid in wanted:
+                    if fid in ok_ids:
+                        conn.execute(
+                            "INSERT OR IGNORE INTO qualite_fournisseur_certificat_fiches (certificat_id, fiche_id) VALUES (?,?)",
+                            (cert_id, fid),
+                        )
+        conn.commit()
+        four_id = row["fournisseur_id"]
+    return ressources_get_fournisseur(four_id, request)
+
+
+# ─── Suppression / téléchargement d'un certificat ────────────────────
+
+@router.delete("/api/qualite/ressources/certificats/{cert_id}")
+def ressources_delete_certificat(cert_id: int, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM qualite_fournisseur_certificats WHERE id=?", (cert_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Certificat introuvable")
+        path = os.path.join(RESSOURCES_UPLOAD_DIR, row["filename"])
+        if os.path.exists(path):
+            try: os.remove(path)
+            except Exception: pass
+        conn.execute("DELETE FROM qualite_fournisseur_certificats WHERE id=?", (cert_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+@router.get("/api/qualite/ressources/certificats/{cert_id}/download")
+def ressources_download_certificat(cert_id: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM qualite_fournisseur_certificats WHERE id=?", (cert_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Certificat introuvable")
+    d = dict(row)
+    path = os.path.join(RESSOURCES_UPLOAD_DIR, d["filename"])
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Fichier absent du serveur")
+    media = d.get("mime_type") or "application/octet-stream"
+    return FileResponse(path, media_type=media, filename=d["original_name"],
+                        headers={"Content-Disposition": f'inline; filename="{d["original_name"]}"'})
+
+
+# ─── Alertes expiration (liste + scan pour annonces auto) ────────────
+
+@router.get("/api/qualite/ressources/expiration-alerts")
+def ressources_expiration_alerts(request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT c.id, c.fournisseur_id, c.titre, c.original_name, c.date_expiration,
+                      f.nom AS fournisseur_nom
+               FROM qualite_fournisseur_certificats c
+               JOIN fournisseurs_fsc f ON f.id = c.fournisseur_id
+               WHERE c.date_expiration IS NOT NULL AND c.date_expiration != ''
+               ORDER BY c.date_expiration ASC"""
+        ).fetchall()
+    today = datetime.now().date()
+    expired = []
+    j30 = []
+    j60 = []
+    for r in rows:
+        try:
+            dexp = datetime.strptime(r["date_expiration"][:10], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        delta = (dexp - today).days
+        item = {
+            "id": r["id"],
+            "fournisseur_id": r["fournisseur_id"],
+            "fournisseur_nom": r["fournisseur_nom"],
+            "titre": r["titre"] or r["original_name"],
+            "date_expiration": r["date_expiration"],
+            "jours": delta,
+        }
+        if delta < 0:
+            expired.append(item)
+        elif delta <= 30:
+            j30.append(item)
+        elif delta <= 60:
+            j60.append(item)
+    return {"expired": expired, "j30": j30, "j60": j60}
+
+
+def _emit_expiration_annonce(conn, scope: str, titre: str, message: str) -> None:
+    """Insère une annonce dans update_announcements (best-effort, jamais bloquant).
+    Dédup soft : si une annonce identique existe déjà et est active, on rafraîchit
+    juste son message plutôt que d'empiler."""
+    try:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(update_announcements)").fetchall()}
+    except Exception:
+        return
+    if not cols:
+        return
+    try:
+        exist = conn.execute(
+            "SELECT 1 FROM update_announcements WHERE scope=? AND titre=? AND active=1 LIMIT 1",
+            (scope, titre),
+        ).fetchone()
+        if exist:
+            conn.execute(
+                "UPDATE update_announcements SET message=?, created_at=? WHERE scope=? AND titre=? AND active=1",
+                (message, _now(), scope, titre),
+            )
+            return
+        conn.execute(
+            "INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active) VALUES (?,?,?,?,?,1)",
+            (scope, titre, message, _now(), "système"),
+        )
+    except Exception:
+        pass
+
+
+@router.post("/api/qualite/ressources/scan-expirations")
+def ressources_scan_expirations(request: Request):
+    """Scan des certificats : émet une annonce interne pour chaque bucket
+    (expired / j30 / j60) fraîchement atteint et non encore annoncé.
+    Idempotent : peut être appelé au boot et à chaque ouverture de MyQualité."""
+    _require_qualite_view(request)
+    alerts = ressources_expiration_alerts(request)
+    with get_db() as conn:
+        already = {
+            (r["certificat_id"], r["bucket"])
+            for r in conn.execute("SELECT certificat_id, bucket FROM qualite_cert_expiration_annonces").fetchall()
+        }
+        emitted = {"expired": 0, "j30": 0, "j60": 0}
+        for bucket, items in (("expired", alerts["expired"]), ("j30", alerts["j30"]), ("j60", alerts["j60"])):
+            new_items = [it for it in items if (it["id"], bucket) not in already]
+            if not new_items:
+                continue
+            lines = "".join(
+                f"<li style='margin-bottom:4px'>{it['fournisseur_nom']} — {it['titre']} "
+                f"({'expiré depuis ' + str(-it['jours']) + 'j' if it['jours']<0 else 'dans ' + str(it['jours']) + 'j'})</li>"
+                for it in new_items
+            )
+            label = {"expired": "Certificats expirés", "j30": "Certificats — expiration < 30 jours", "j60": "Certificats — expiration < 60 jours"}[bucket]
+            msg = (
+                f"<div style='font-size:13px;line-height:1.7;color:var(--text2)'>"
+                f"<div style='font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px'>{label}</div>"
+                f"<ul style='margin:0;padding-left:18px'>{lines}</ul></div>"
+            )
+            _emit_expiration_annonce(conn, "qualite", label, msg)
+            for it in new_items:
+                conn.execute(
+                    "INSERT OR IGNORE INTO qualite_cert_expiration_annonces (certificat_id, bucket, annonce_at) VALUES (?,?,?)",
+                    (it["id"], bucket, _now()),
+                )
+                emitted[bucket] += 1
+        conn.commit()
+    return {"ok": True, "emitted": emitted, "counts": {"expired": len(alerts["expired"]), "j30": len(alerts["j30"]), "j60": len(alerts["j60"])}}
+
+
+# ============================================================================
+# AUDIT — extension matrice fournisseurs × certifications demandées client
+# ============================================================================
+
+
+def _matrice_status_from_cert_stats(cert_stats: dict) -> str:
+    """Réduit les statuts individuels des certifs liées en un statut global :
+    - 'ok' : au moins un certif valide
+    - 'expire_bientot' : que des certifs qui expirent bientôt (aucun valide)
+    - 'expire' : que des certifs expirés
+    - 'sans_date' : que des certifs sans date d'expiration
+    - 'manquant' : aucun certif
+    """
+    if cert_stats.get("valide", 0) > 0:
+        return "ok"
+    if cert_stats.get("expire_bientot", 0) > 0:
+        return "expire_bientot"
+    if cert_stats.get("expire", 0) > 0:
+        return "expire"
+    if cert_stats.get("sans_date", 0) > 0:
+        return "sans_date"
+    return "manquant"
+
+
+@router.get("/api/qualite/audits/{audit_id}/matrice")
+def audit_get_matrice(audit_id: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        four_rows = conn.execute(
+            """SELECT f.id, f.nom, f.licence, f.certificat
+               FROM audit_fournisseurs af
+               JOIN fournisseurs_fsc f ON f.id = af.fournisseur_id
+               WHERE af.audit_id=?
+               ORDER BY f.nom COLLATE NOCASE ASC""",
+            (audit_id,),
+        ).fetchall()
+        fiche_rows = conn.execute(
+            """SELECT r.id, r.slug, r.nom, r.acronyme, r.categorie
+               FROM audit_certifications_demandees ac
+               JOIN qualite_ref_fiches r ON r.id = ac.fiche_id
+               WHERE ac.audit_id=?
+               ORDER BY r.nom COLLATE NOCASE ASC""",
+            (audit_id,),
+        ).fetchall()
+        four_ids = [r["id"] for r in four_rows]
+        fiche_ids = [r["id"] for r in fiche_rows]
+        # Charger tous les liens certif × fiche pour les fournisseurs concernés
+        cert_link_stats = {}   # {(four_id, fiche_id): {"valide":n,"expire_bientot":n,"expire":n,"sans_date":n}}
+        cert_examples = {}     # {(four_id, fiche_id): [cert_id,...]}
+        if four_ids and fiche_ids:
+            q = f"""
+                SELECT c.id AS cert_id, c.fournisseur_id, c.date_expiration, l.fiche_id
+                FROM qualite_fournisseur_certificats c
+                JOIN qualite_fournisseur_certificat_fiches l ON l.certificat_id = c.id
+                WHERE c.fournisseur_id IN ({','.join(['?']*len(four_ids))})
+                  AND l.fiche_id IN ({','.join(['?']*len(fiche_ids))})
+            """
+            for r in conn.execute(q, four_ids + fiche_ids).fetchall():
+                key = (r["fournisseur_id"], r["fiche_id"])
+                s = _compute_cert_status(r["date_expiration"])
+                d = cert_link_stats.setdefault(key, {"valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
+                d[s] = d.get(s, 0) + 1
+                cert_examples.setdefault(key, []).append(r["cert_id"])
+        # Charger les overrides manuels
+        over_rows = conn.execute(
+            "SELECT * FROM audit_matrice_overrides WHERE audit_id=?",
+            (audit_id,),
+        ).fetchall()
+        overrides = {(r["fournisseur_id"], r["fiche_id"]): dict(r) for r in over_rows}
+        # Construire la matrice
+        cells = []
+        for f in four_rows:
+            for r in fiche_rows:
+                key = (f["id"], r["id"])
+                stats = cert_link_stats.get(key, {"valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
+                auto = _matrice_status_from_cert_stats(stats)
+                over = overrides.get(key)
+                cell = {
+                    "fournisseur_id": f["id"],
+                    "fiche_id": r["id"],
+                    "auto_statut": auto,
+                    "cert_stats": stats,
+                    "cert_ids": cert_examples.get(key, []),
+                    "override_statut": (over["statut"] if over else None),
+                    "override_note": (over["note"] if over else ""),
+                    "statut": (over["statut"] if over else auto),
+                }
+                cells.append(cell)
+        # Résumé rapide (nb OK / total)
+        total = len(cells)
+        ok = sum(1 for c in cells if c["statut"] == "ok")
+    return {
+        "fournisseurs": [dict(r) for r in four_rows],
+        "certifications": [dict(r) for r in fiche_rows],
+        "cells": cells,
+        "resume": {"total": total, "ok": ok},
+    }
+
+
+class MatriceIdsBody(BaseModel):
+    ids: List[int]
+
+
+@router.put("/api/qualite/audits/{audit_id}/matrice/fournisseurs")
+def audit_set_matrice_fournisseurs(audit_id: int, body: MatriceIdsBody, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        wanted = [int(x) for x in (body.ids or []) if isinstance(x, int)]
+        # Ne garder que ceux qui existent réellement
+        if wanted:
+            exists = conn.execute(
+                f"SELECT id FROM fournisseurs_fsc WHERE id IN ({','.join(['?']*len(wanted))})",
+                wanted,
+            ).fetchall()
+            wanted = [r["id"] for r in exists]
+        conn.execute("DELETE FROM audit_fournisseurs WHERE audit_id=?", (audit_id,))
+        for fid in wanted:
+            conn.execute(
+                "INSERT OR IGNORE INTO audit_fournisseurs (audit_id, fournisseur_id, added_at, added_by) VALUES (?,?,?,?)",
+                (audit_id, fid, _now(), user["id"]),
+            )
+        # Purger les overrides devenus orphelins
+        conn.execute(
+            "DELETE FROM audit_matrice_overrides WHERE audit_id=? AND fournisseur_id NOT IN (SELECT fournisseur_id FROM audit_fournisseurs WHERE audit_id=?)",
+            (audit_id, audit_id),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?", (_now(), user["id"], audit_id))
+        conn.commit()
+    return audit_get_matrice(audit_id, request)
+
+
+@router.put("/api/qualite/audits/{audit_id}/matrice/certifications")
+def audit_set_matrice_certifications(audit_id: int, body: MatriceIdsBody, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        wanted = [int(x) for x in (body.ids or []) if isinstance(x, int)]
+        if wanted:
+            exists = conn.execute(
+                f"SELECT id FROM qualite_ref_fiches WHERE id IN ({','.join(['?']*len(wanted))})",
+                wanted,
+            ).fetchall()
+            wanted = [r["id"] for r in exists]
+        conn.execute("DELETE FROM audit_certifications_demandees WHERE audit_id=?", (audit_id,))
+        for fid in wanted:
+            conn.execute(
+                "INSERT OR IGNORE INTO audit_certifications_demandees (audit_id, fiche_id, added_at, added_by) VALUES (?,?,?,?)",
+                (audit_id, fid, _now(), user["id"]),
+            )
+        conn.execute(
+            "DELETE FROM audit_matrice_overrides WHERE audit_id=? AND fiche_id NOT IN (SELECT fiche_id FROM audit_certifications_demandees WHERE audit_id=?)",
+            (audit_id, audit_id),
+        )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?", (_now(), user["id"], audit_id))
+        conn.commit()
+    return audit_get_matrice(audit_id, request)
+
+
+class MatriceCellBody(BaseModel):
+    fournisseur_id: int
+    fiche_id: int
+    statut: Optional[str] = None   # null → efface l'override
+    note: Optional[str] = ""
+
+
+MATRICE_OVERRIDE_STATUTS = ("ok", "expire_bientot", "expire", "manquant", "sans_date", "na", "demande_envoyee")
+
+
+@router.put("/api/qualite/audits/{audit_id}/matrice/cell")
+def audit_set_matrice_cell(audit_id: int, body: MatriceCellBody, request: Request):
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        # Vérif que la case fait bien partie de la sélection
+        if not conn.execute(
+            "SELECT 1 FROM audit_fournisseurs WHERE audit_id=? AND fournisseur_id=?",
+            (audit_id, body.fournisseur_id),
+        ).fetchone():
+            raise HTTPException(status_code=400, detail="Fournisseur non sélectionné dans cet audit")
+        if not conn.execute(
+            "SELECT 1 FROM audit_certifications_demandees WHERE audit_id=? AND fiche_id=?",
+            (audit_id, body.fiche_id),
+        ).fetchone():
+            raise HTTPException(status_code=400, detail="Certification non sélectionnée dans cet audit")
+        if body.statut is None or body.statut == "":
+            conn.execute(
+                "DELETE FROM audit_matrice_overrides WHERE audit_id=? AND fournisseur_id=? AND fiche_id=?",
+                (audit_id, body.fournisseur_id, body.fiche_id),
+            )
+        else:
+            if body.statut not in MATRICE_OVERRIDE_STATUTS:
+                raise HTTPException(status_code=400, detail="Statut invalide")
+            conn.execute(
+                """INSERT INTO audit_matrice_overrides
+                   (audit_id, fournisseur_id, fiche_id, statut, note, updated_at, updated_by)
+                   VALUES (?,?,?,?,?,?,?)
+                   ON CONFLICT(audit_id, fournisseur_id, fiche_id) DO UPDATE SET
+                     statut=excluded.statut, note=excluded.note,
+                     updated_at=excluded.updated_at, updated_by=excluded.updated_by""",
+                (audit_id, body.fournisseur_id, body.fiche_id,
+                 body.statut, (body.note or "").strip(), _now(), user["id"]),
+            )
+        conn.execute("UPDATE audit_dossiers SET updated_at=?, updated_by=? WHERE id=?", (_now(), user["id"], audit_id))
+        conn.commit()
+    return audit_get_matrice(audit_id, request)
+
+
+# ─── Pickers : fournisseurs / fiches disponibles pour la matrice ─────
+
+@router.get("/api/qualite/audits/{audit_id}/matrice/pickers")
+def audit_matrice_pickers(audit_id: int, request: Request):
+    """Renvoie la liste complète des fournisseurs + fiches, plus la sélection courante."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        fours = conn.execute(
+            "SELECT id, nom, licence FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
+        ).fetchall()
+        fiches = conn.execute(
+            """SELECT id, slug, nom, acronyme, categorie FROM qualite_ref_fiches
+               WHERE statut_validation='valide' OR statut_validation IS NULL
+               ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()
+        # Si la contrainte "valide only" ne donne rien, tomber sur tout
+        if not fiches:
+            fiches = conn.execute(
+                "SELECT id, slug, nom, acronyme, categorie FROM qualite_ref_fiches ORDER BY nom COLLATE NOCASE ASC"
+            ).fetchall()
+        sel_four = [r["fournisseur_id"] for r in conn.execute(
+            "SELECT fournisseur_id FROM audit_fournisseurs WHERE audit_id=?", (audit_id,)
+        ).fetchall()]
+        sel_fiche = [r["fiche_id"] for r in conn.execute(
+            "SELECT fiche_id FROM audit_certifications_demandees WHERE audit_id=?", (audit_id,)
+        ).fetchall()]
+    return {
+        "fournisseurs": [dict(r) for r in fours],
+        "fiches": [dict(r) for r in fiches],
+        "selection": {"fournisseurs": sel_four, "fiches": sel_fiche},
+    }
