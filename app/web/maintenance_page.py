@@ -1342,11 +1342,11 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
             <div class="page-subtitle" id="op-tasks-count">—</div>
           </div>
           <div class="op-actions">
-            <button type="button" class="btn op-btn-accent" onclick="opOpenNewModal()">
+            <button type="button" class="btn op-btn-accent" onclick="opOpenNewTaskModal()">
               <span class="btn-ico">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               </span>
-              Enregistrer une opération
+              Nouvelle tâche
             </button>
           </div>
         </div>
@@ -2902,6 +2902,11 @@ async function submitCaseModal(e){
   closeCaseModal();
   await refreshPlanning();
   renderCal();
+  // Côté opérateur : la tâche créée doit apparaître dans "Mes tâches" (si elle
+  // inclut self dans le groupe) → refresh la liste.
+  if(MAINT_ROLE === 'operator' && typeof opLoadTasks === 'function'){
+    opLoadTasks();
+  }
 }
 
 function _sameMachineSet(a, b){
@@ -3214,11 +3219,58 @@ const OPS_STORAGE_KEY = 'mysifa_maint_operations_v1';
 const OPS_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [] };
 
 function loadOps(){
+  // 1. Charge le cache local (legacy — saisies pré-DB).
   try{
     const raw = localStorage.getItem(OPS_STORAGE_KEY);
     OPS_STATE.list = raw ? JSON.parse(raw) : [];
     if(!Array.isArray(OPS_STATE.list)) OPS_STATE.list = [];
   }catch(e){ OPS_STATE.list = []; }
+  // 2. Fetch history DB (ops termine, source de vérité partagée) et merge.
+  //    Le merge dédup sur (machine + type + date_saisie) : les items DB
+  //    priment sur les items locaux si conflit. Rerender à l'arrivée.
+  fetchHistoryFromDb().then(dbItems => {
+    if(!Array.isArray(dbItems) || !dbItems.length){ return; }
+    const seen = new Set();
+    const key = it => (it.machine || '') + '|' + (it.type || '') + '|' + (it.date_saisie || '');
+    const merged = [];
+    for(const it of dbItems){
+      const k = key(it);
+      if(seen.has(k)) continue;
+      seen.add(k);
+      merged.push(it);
+    }
+    for(const it of (OPS_STATE.list || [])){
+      const k = key(it);
+      if(seen.has(k)) continue;
+      seen.add(k);
+      merged.push(it);
+    }
+    OPS_STATE.list = merged;
+    if(typeof renderOps === 'function') renderOps();
+  }).catch(() => {});
+}
+
+async function fetchHistoryFromDb(){
+  try{
+    const r = await fetch('/api/maintenance/history?_=' + Date.now(),
+                          { credentials:'include', cache:'no-store' });
+    if(!r.ok) return [];
+    const d = await r.json();
+    // Normalise au format OPS_STATE (machine, operateur, type, date_saisie, commentaire, id, _source)
+    return (d.history || []).map(h => ({
+      id: 'db-' + h.op_id,
+      machine: h.machine || '',
+      operateur: h.operateur || '',
+      type: h.type || '',
+      commentaire: h.commentaire || '',
+      date_saisie: h.date_saisie || '',
+      duree_reelle_min: h.duree_reelle_min || null,
+      _source: 'db',   // marqueur : ne peut pas être edited/deleted côté localStorage
+      _event_id: h.event_id,
+      _op_id: h.op_id,
+      _code: h.code,
+    }));
+  }catch(e){ return []; }
 }
 function saveOps(){
   try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
@@ -5789,15 +5841,22 @@ function _renderOpCard(ev, opts){
   let printedGroups = 0;
   let printedTruncated = false;
   const MAX_LINES = isToday ? Infinity : 5;
+  // Purification : quand l'event ne contient qu'une seule op, le badge statut
+  // du top-right (summary) est déjà éloquent → on masque le pill statut dans
+  // la ligne op pour éviter le doublon visuel.
+  const singleOp = totalOps === 1;
   for(const g of groups){
     if(previewLines.length + 2 > MAX_LINES){ printedTruncated = true; break; }
     let opsInThisGroup = 0;
     for(const o of g.ops){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      const statusPill = singleOp
+        ? ''
+        : `<span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>`;
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
-        <span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>
+        ${statusPill}
       </div>`);
       opsInThisGroup++;
     }
@@ -5836,13 +5895,15 @@ function _renderOpCard(ev, opts){
        </div>`
     : '';
   const clickHandler = isToday ? '' : `onclick="opOpenSaisie(${ev.id})"`;
+  // Purification card head : la machine est déjà dans le bloc parent (block-head)
+  // → on n'affiche dans le head que les badges informationnels. Si pas de badges,
+  // on omet complètement le head pour un look plus propre.
+  const headContent = `${mineBadge}`;
+  const headHtml = headContent.trim() ? `<div class="op-card-head">${headContent}</div>` : '';
   return `
     <div class="op-card ${isMine ? 'owned-by-me' : ''} ${isDone ? 'is-done' : ''}" ${clickHandler}>
       <div class="op-status-wrap" style="position:absolute;top:14px;right:14px">${summary}</div>
-      <div class="op-card-head">
-        <strong style="font-size:15px;color:var(--text)">${escHtml(ev.machine || '—')}</strong>
-        ${srcBadge}${mineBadge}
-      </div>
+      ${headHtml}
       ${dateLine}
       <div style="font-size:12px;color:var(--text2)">${time}</div>
       <div>${opsPreview}${more}</div>
@@ -6251,6 +6312,21 @@ async function opSubmitNew(){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
   }
+}
+
+async function opOpenNewTaskModal(){
+  // Ouvre le modal admin "planning-case-modal" côté opérateur pour créer
+  // une tâche riche (N ops, N machines, N opérateurs, plage horaire).
+  // Le backend forcera l'inclusion de self dans les opérateurs (garde-fou).
+  const today = _fmtDateISO(new Date());
+  const now = new Date();
+  const defaultHour = Math.max(6, Math.min(18, now.getHours()));
+  // Pré-remplit self dans _CASE_OPERATORS pour cohérence UX (le backend le
+  // rajoutera de toute façon, mais c'est plus clair côté formulaire).
+  if(S && S.me){
+    _CASE_OPERATORS = [{ id: S.me.id, nom: S.me.name || S.me.nom || 'Moi' }];
+  }
+  await openCaseModal({ iso: today, defaultHour });
 }
 
 async function opDeleteEvent(eventId){
