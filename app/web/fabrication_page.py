@@ -984,7 +984,8 @@ let S = {
   repiquageAddCartonsValue: '',     // valeur de l'input "+ N cartons"
   repiquageAdjustOpen: false,       // modal ajustement admin
   repiquageAdjustScope: 'jour',     // 'jour' | 'cumul'
-  repiquageAdjustValue: '',
+  repiquageAdjustMode: 'delta',     // 'delta' (ajouter/retirer) | 'cible' (définir valeur)
+  repiquageAdjustValue: '',         // delta signé OU valeur cible selon le mode
   repiquageAdjustDate: '',          // date YYYY-MM-DD pour scope=cumul
   repiquageDossierTab: 'saisie',    // 'saisie' | 'historique' | 'discussion'
   repiquageHistorique: [],
@@ -4891,31 +4892,55 @@ async function repiquageRetirerCarton(){
 function repiquageOpenAdjust(scope){
   const e = S.repiquageEtat;
   if(!e) return;
-  const cur = scope === 'jour' ? (e.jour?.nb_cartons||0) : (e.cumul?.nb_cartons||0);
   // Date par défaut = aujourd'hui (YYYY-MM-DD)
   const todayIso = new Date().toISOString().slice(0,10);
+  // Mode par défaut = 'delta' (ajouter/retirer) — input vide, l'admin tape +N ou -N
   set({
     repiquageAdjustOpen: true,
     repiquageAdjustScope: scope,
-    repiquageAdjustValue: String(cur),
+    repiquageAdjustMode: 'delta',
+    repiquageAdjustValue: '',
     repiquageAdjustDate: todayIso,
   });
 }
 
 async function repiquageSubmitAdjust(){
   if(!S.repiquageDossierActif) return;
+  const e = S.repiquageEtat || {};
+  const scope = S.repiquageAdjustScope || 'jour';
+  const cur = scope === 'jour' ? (e.jour?.nb_cartons||0) : (e.cumul?.nb_cartons||0);
+  const mode = S.repiquageAdjustMode || 'delta';
   const raw = (S.repiquageAdjustValue||'').toString().trim();
+  // En mode delta on accepte le signe (+/-) ; en mode cible on refuse le négatif
   const n = parseInt(raw, 10);
-  if(!Number.isFinite(n) || n < 0){
-    showToast('Valeur invalide (entier >= 0)','danger');
+  if(!Number.isFinite(n)){
+    showToast('Valeur invalide','danger');
     return;
+  }
+  let cible;
+  if(mode === 'delta'){
+    if(n === 0){
+      showToast('Delta nul — rien à ajuster','info');
+      return;
+    }
+    cible = cur + n;
+    if(cible < 0){
+      showToast('Impossible : le résultat serait négatif ('+cible+' cartons)','danger');
+      return;
+    }
+  } else {
+    if(n < 0){
+      showToast('La valeur cible doit être >= 0','danger');
+      return;
+    }
+    cible = n;
   }
   set({loading:true});
   try{
     const body = {
       no_dossier: S.repiquageDossierActif,
       scope: S.repiquageAdjustScope,
-      nb_cartons_cible: n,
+      nb_cartons_cible: cible,
     };
     if(S.adminMachineId) body.machine_id = S.adminMachineId;
     if(S.repiquageAdjustScope === 'cumul' && S.repiquageAdjustDate){
@@ -4930,7 +4955,14 @@ async function repiquageSubmitAdjust(){
     if(S.repiquageDossierTab === 'historique'){
       await loadRepiquageHistorique(S.repiquageDossierActif);
     }
-    showToast('Compteur ajusté', 'success');
+    let msg;
+    if(mode === 'delta'){
+      const abs = Math.abs(n);
+      msg = (n>0 ? '+' : '−') + abs + ' carton' + (abs>1?'s':'');
+    } else {
+      msg = 'Compteur ajusté (' + cible + ' carton' + (cible>1?'s':'') + ')';
+    }
+    showToast(msg, 'success');
   }catch(e){
     showToast(e?.message||'Erreur','danger');
   }finally{
@@ -5944,19 +5976,49 @@ function renderRepiquageEditParamModal(){
 /* ── Repiquage : modal "Ajuster compteur" (admin) ───────────── */
 function renderRepiquageAdjustModal(){
   const scope = S.repiquageAdjustScope || 'jour';
-  const labelScope = scope === 'jour' ? 'd\u2019aujourd\u2019hui' : 'cumulé sur le dossier';
+  const mode  = S.repiquageAdjustMode || 'delta';
   const titreScope = scope === 'jour' ? 'Compteur du jour' : 'Compteur cumulé';
   const e = S.repiquageEtat || {};
   const cur = scope === 'jour' ? (e.jour?.nb_cartons||0) : (e.cumul?.nb_cartons||0);
 
-  const inp = h('input',{
-    type:'number', min:'0', step:'1',
+  const setMode = (m) => {
+    if(m === S.repiquageAdjustMode) return;
+    S.repiquageAdjustMode = m;
+    S.repiquageAdjustValue = '';
+    render();
+  };
+
+  // Segmented control : Ajouter/Retirer  vs  Définir cible
+  const segBtn = (m, label) => h('button',{
+    onClick:(ev)=>{ ev.preventDefault(); setMode(m); },
+    style:{
+      flex:'1 1 0', padding:'8px 10px', fontSize:'12px', fontWeight:'700',
+      fontFamily:'inherit', cursor:'pointer',
+      border:'1.5px solid '+(mode===m ? 'var(--accent)' : 'var(--border)'),
+      background: mode===m ? 'var(--accent-bg)' : 'transparent',
+      color: mode===m ? 'var(--accent)' : 'var(--muted)',
+      borderRadius:'8px', transition:'all .12s',
+      textTransform:'uppercase', letterSpacing:'.4px',
+    },
+  }, label);
+
+  const segmented = h('div',{style:{display:'flex', gap:'8px', marginBottom:'14px'}},
+    segBtn('delta', 'Ajouter / Retirer'),
+    segBtn('cible', 'Définir cible'),
+  );
+
+  // Input principal (delta signé OU cible absolue selon le mode)
+  const inpAttrs = {
+    type:'number', step:'1',
+    placeholder: mode === 'delta' ? 'ex. 3  ou  -2' : 'ex. 25',
     style:{
       background:'var(--bg)', border:'1.5px solid var(--border)', borderRadius:'8px',
-      padding:'12px 14px', fontSize:'15px', color:'var(--text)', fontFamily:'inherit',
-      outline:'none', width:'100%',
+      padding:'12px 14px', fontSize:'18px', color:'var(--text)', fontFamily:'inherit',
+      outline:'none', width:'100%', fontWeight:'700', textAlign:'center',
     },
-  });
+  };
+  if(mode === 'cible') inpAttrs.min = '0';
+  const inp = h('input', inpAttrs);
   inp.value = S.repiquageAdjustValue || '';
   inp.addEventListener('input', ev=>{ S.repiquageAdjustValue = ev.target.value; });
   inp.addEventListener('keydown', ev=>{
@@ -5964,20 +6026,79 @@ function renderRepiquageAdjustModal(){
   });
   setTimeout(()=>{ inp.focus(); inp.select?.(); }, 50);
 
+  // Quick actions +/- (mode delta uniquement)
+  const quickBtn = (delta) => h('button',{
+    onClick:(ev)=>{
+      ev.preventDefault();
+      const curVal = parseInt((S.repiquageAdjustValue||'').toString(), 10);
+      const base = Number.isFinite(curVal) ? curVal : 0;
+      S.repiquageAdjustValue = String(base + delta);
+      render();
+    },
+    style:{
+      flex:'1 1 0', padding:'10px 6px', fontSize:'13px', fontWeight:'800',
+      fontFamily:'inherit', cursor:'pointer', background:'transparent',
+      color: delta>0 ? 'var(--success)' : 'var(--danger)',
+      border:'1.5px solid ' + (delta>0 ? 'var(--success)' : 'var(--danger)'),
+      borderRadius:'8px', transition:'all .12s',
+    },
+  }, (delta>0?'+':'')+delta);
+
+  const quickRow = mode === 'delta' ? h('div',{style:{
+    display:'flex', gap:'6px', marginTop:'10px', flexWrap:'wrap',
+  }},
+    quickBtn(-10), quickBtn(-5), quickBtn(-1),
+    quickBtn(1),  quickBtn(5),  quickBtn(10),
+  ) : null;
+
+  // Aperçu du résultat
+  const rawVal = parseInt((S.repiquageAdjustValue||'').toString(), 10);
+  let apercuText = '';
+  if(Number.isFinite(rawVal)){
+    if(mode === 'delta'){
+      const next = cur + rawVal;
+      apercuText = 'Résultat : ' + Number(cur).toLocaleString('fr-FR')
+        + ' → ' + Number(next).toLocaleString('fr-FR')
+        + ' carton' + (Math.abs(next)>1?'s':'');
+    } else {
+      const delta = rawVal - cur;
+      const signe = delta >= 0 ? '+' : '';
+      apercuText = 'Delta appliqué : ' + signe + delta.toLocaleString('fr-FR')
+        + ' carton' + (Math.abs(delta)>1?'s':'');
+    }
+  }
+  const apercu = apercuText ? h('div',{style:{
+    marginTop:'8px', fontSize:'12px', color:'var(--muted)', textAlign:'center',
+  }}, apercuText) : null;
+
+  const labelInput = mode === 'delta'
+    ? 'Nombre de cartons à ajouter (positif) ou retirer (négatif)'
+    : 'Nombre de cartons cible';
+
+  const bandeauInfo = mode === 'delta'
+    ? (scope === 'jour'
+        ? ' Ajuste votre saisie du jour pour ce dossier.'
+        : ' Une ligne d\u2019ajustement sera tracée à votre nom à la date indiquée.')
+    : (scope === 'jour'
+        ? ' Modifie directement votre saisie du jour pour ce dossier.'
+        : ' Une ligne d\u2019ajustement sera tracée à votre nom à la date indiquée.');
+
   return h('div',{className:'fab-modal-overlay',onClick:(ev)=>{if(ev.target===ev.currentTarget)set({repiquageAdjustOpen:false});}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},
         svgIcon('edit',18),' Ajuster — '+titreScope),
       h('div',{className:'fab-modal-sub'},
-        'Saisissez la valeur cible du nombre de cartons '+labelScope+'. '
-        + 'Valeur actuelle : '+Number(cur).toLocaleString('fr-FR')+'.'
+        'Valeur actuelle : '+Number(cur).toLocaleString('fr-FR')+' carton'+(cur>1?'s':'')+'.'
       ),
-      h('div',{className:'fab-field',style:{marginBottom:'14px'}},
+      segmented,
+      h('div',{className:'fab-field',style:{marginBottom:'6px'}},
         h('label',{style:{textTransform:'uppercase',fontSize:'10px',fontWeight:'700',color:'var(--muted)',letterSpacing:'.5px',display:'block',marginBottom:'6px'}},
-          'Nombre de cartons cible'),
+          labelInput),
         inp,
+        quickRow,
+        apercu,
       ),
-      scope === 'cumul' ? h('div',{className:'fab-field',style:{marginBottom:'14px'}},
+      scope === 'cumul' ? h('div',{className:'fab-field',style:{marginTop:'14px', marginBottom:'6px'}},
         h('label',{style:{textTransform:'uppercase',fontSize:'10px',fontWeight:'700',color:'var(--muted)',letterSpacing:'.5px',display:'block',marginBottom:'6px'}},
           'Date de production'),
         (function(){
@@ -5999,12 +6120,10 @@ function renderRepiquageAdjustModal(){
       h('div',{style:{
         background:'rgba(251,191,36,.10)', border:'1px solid var(--warn)',
         borderRadius:'8px', padding:'10px 12px', fontSize:'12px', color:'var(--text2)',
-        marginBottom:'14px', lineHeight:'1.5',
+        marginTop:'14px', marginBottom:'14px', lineHeight:'1.5',
       }},
         svgIcon('alert',12),
-        scope === 'jour'
-          ? ' Modifie directement votre saisie du jour pour ce dossier.'
-          : ' Une ligne d\u2019ajustement sera tracée à votre nom à la date indiquée.'
+        bandeauInfo
       ),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
