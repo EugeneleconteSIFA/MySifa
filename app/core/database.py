@@ -6386,6 +6386,89 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 172, "bat_entries_fiche_technique")
 
+    # v173 — MyQualité : Ressources Fournisseurs (certificats par fournisseur,
+    # liens N-N vers fiches du référentiel RSE, log annonces d'expiration).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=173 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_fournisseur_certificats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fournisseur_id INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+                filename TEXT NOT NULL,
+                original_name TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                titre TEXT NOT NULL DEFAULT '',
+                date_emission TEXT,
+                date_expiration TEXT,
+                commentaire TEXT NOT NULL DEFAULT '',
+                uploaded_at TEXT NOT NULL,
+                uploaded_by INTEGER REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qfc_four ON qualite_fournisseur_certificats(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qfc_exp ON qualite_fournisseur_certificats(date_expiration)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_fournisseur_certificat_fiches (
+                certificat_id INTEGER NOT NULL REFERENCES qualite_fournisseur_certificats(id) ON DELETE CASCADE,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                PRIMARY KEY (certificat_id, fiche_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qfcf_fiche ON qualite_fournisseur_certificat_fiches(fiche_id)")
+        # Log d'annonces d'expiration déjà émises : un enregistrement par (certificat, bucket).
+        # bucket parmi : 'expired', 'j30', 'j60' — évite de spammer plusieurs fois la même alerte.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_cert_expiration_annonces (
+                certificat_id INTEGER NOT NULL REFERENCES qualite_fournisseur_certificats(id) ON DELETE CASCADE,
+                bucket TEXT NOT NULL,
+                annonce_at TEXT NOT NULL,
+                PRIMARY KEY (certificat_id, bucket)
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 173, "qualite_ressources_fournisseurs")
+
+    # v174 — MyQualité : extension Audit avec matrice fournisseurs × certifications.
+    # audit_fournisseurs : fournisseurs impliqués dans l'audit (N-N avec fournisseurs_fsc).
+    # audit_certifications_demandees : certifications demandées par le client (N-N avec fiches).
+    # audit_matrice_overrides : override manuel du statut d'une case (fournisseur × fiche)
+    #   pour marquer 'na', 'demande_envoyee', etc. quand l'auto-déduction ne suffit pas.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=174 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_fournisseurs (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                fournisseur_id INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+                added_at TEXT NOT NULL,
+                added_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (audit_id, fournisseur_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_af_four ON audit_fournisseurs(fournisseur_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_certifications_demandees (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                added_at TEXT NOT NULL,
+                added_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (audit_id, fiche_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_acd_fiche ON audit_certifications_demandees(fiche_id)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_matrice_overrides (
+                audit_id INTEGER NOT NULL REFERENCES audit_dossiers(id) ON DELETE CASCADE,
+                fournisseur_id INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+                fiche_id INTEGER NOT NULL REFERENCES qualite_ref_fiches(id) ON DELETE CASCADE,
+                statut TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                updated_by INTEGER REFERENCES users(id),
+                PRIMARY KEY (audit_id, fournisseur_id, fiche_id)
+            )
+        """)
+        conn.commit()
+        _record_schema_migration(conn, 174, "qualite_audit_matrice_fournisseurs_certifs")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

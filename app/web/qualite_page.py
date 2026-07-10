@@ -386,6 +386,11 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       Audits client
       <span class="nav-badge" id="sb-audits" style="display:none">0</span>
     </button>
+    <button type="button" class="nav-btn" id="nav-ressources" onclick="setView('ressources-list')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+      Ressources fournisseurs
+      <span class="nav-badge" id="sb-ressources" style="display:none">0</span>
+    </button>
     <button type="button" class="nav-btn" id="nav-ref" onclick="setView('ref-list')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       Référentiel RSE
@@ -622,6 +627,14 @@ const S = {
   // myAckService : clé du service NC du user courant (ou null s'il n'en a pas)
   ackServices: [],
   myAckService: null,
+  // ── Ressources Fournisseurs (v1.6) ─────────────────────────────
+  resList: [],                // [{id,nom,licence,certificat,cert_stats:{...}}]
+  resSearch: '',
+  currentRes: null,           // {fournisseur:{...}, certificats:[...]}
+  resAlerts: null,            // {expired:[],j30:[],j60:[]}
+  // ── Audit matrice (v1.6) ────────────────────────────────────────
+  auditMatrice: null,         // {fournisseurs, certifications, cells, resume}
+  auditMatricePickers: null,  // {fournisseurs, fiches, selection}
 };
 
 const STATUTS = [
@@ -809,6 +822,15 @@ function setView(v){
     const navAud=document.getElementById('nav-audits'); if(navAud) navAud.classList.add('active');
     document.getElementById('mobile-sub').textContent=S.currentAudit?S.currentAudit.numero:'Audit';
     renderAuditDetail();
+  } else if(v==='ressources-list'){
+    const nav=document.getElementById('nav-ressources'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent='Ressources fournisseurs';
+    if(typeof loadRessources==='function') loadRessources();
+    else renderRessourcesList();
+  } else if(v==='ressources-detail'){
+    const nav=document.getElementById('nav-ressources'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent=S.currentRes?S.currentRes.fournisseur.nom:'Fournisseur';
+    renderRessourcesDetail();
   } else if(v==='ref-list'){
     const nav=document.getElementById('nav-ref'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent='Référentiel RSE';
@@ -1935,6 +1957,10 @@ function renderAuditDetail(){
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         Informations
       </button>
+      <button class="detail-tab${S.auditDetailTab==='matrice'?' active':''}" onclick="setAuditTab('matrice')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Matrice fournisseurs
+      </button>
       <button class="detail-tab${S.auditDetailTab==='discussion'?' active':''}" onclick="setAuditTab('discussion')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         Échanges
@@ -1950,6 +1976,8 @@ function setAuditTab(t){
   S.auditDetailTab=t;
   if(t==='discussion'){
     loadAuditMessages(S.currentAudit.id).then(()=>{document.querySelectorAll('.detail-tab').forEach(b=>b.classList.remove('active'));const btns=Array.from(document.querySelectorAll('.detail-tab'));btns.forEach(b=>{if(b.textContent.trim().startsWith('Échanges'))b.classList.add('active');});renderAuditTab();});
+  } else if(t==='matrice'){
+    loadAuditMatrice(S.currentAudit.id).then(()=>renderAuditDetail());
   } else {
     renderAuditDetail();
   }
@@ -1960,6 +1988,7 @@ function renderAuditTab(){
   if(!body) return;
   if(S.auditDetailTab==='fichiers') body.innerHTML=renderAuditFichiersHTML();
   else if(S.auditDetailTab==='fiche') body.innerHTML=renderAuditFicheHTML();
+  else if(S.auditDetailTab==='matrice') body.innerHTML=renderAuditMatriceHTML();
   else if(S.auditDetailTab==='discussion') body.innerHTML=renderAuditDiscussionHTML();
   if(S.auditDetailTab==='discussion'){
     const scroll=document.getElementById('aud-msg-scroll');
@@ -2501,6 +2530,8 @@ async function init(){
   // Précharger les candidats auditeurs (utile dès l'ouverture de la modal création audit)
   if(typeof loadAuditeursCandidats==='function') loadAuditeursCandidats();
   setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);
+  // Scan expirations certificats fournisseurs : émet des annonces internes si un bucket vient d'être franchi.
+  if(S.isQualiteAdmin){ try{ fetch('/api/qualite/ressources/scan-expirations',{method:'POST',credentials:'include'}); }catch(e){} }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3341,6 +3372,572 @@ document.addEventListener('keydown', function(ev){
   const el = document.getElementById('ref-search');
   if(el && S.view==='ref-list'){ ev.preventDefault(); el.focus(); el.select(); }
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE RESSOURCES FOURNISSEURS (v1.6)
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function injectRessourcesCSS(){
+  const st = document.createElement('style');
+  st.textContent = `
+    .res-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+    .res-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .15s,transform .15s}
+    .res-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+    .res-card-nom{font-weight:700;color:var(--text);font-size:14px;margin-bottom:4px}
+    .res-card-lic{font-family:ui-monospace,monospace;color:var(--muted);font-size:11px;margin-bottom:10px}
+    .res-card-stats{display:flex;gap:6px;flex-wrap:wrap;font-size:11px}
+    .res-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-weight:600}
+    .res-pill.ok{background:rgba(52,211,153,.15);color:var(--success)}
+    .res-pill.soon{background:rgba(251,191,36,.18);color:var(--warn)}
+    .res-pill.exp{background:rgba(248,113,113,.18);color:var(--danger)}
+    .res-pill.nod{background:var(--accent-bg);color:var(--accent)}
+    .res-pill.tot{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
+    .res-cert-list{display:flex;flex-direction:column;gap:10px}
+    .res-cert{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+    .res-cert.expired{border-left:3px solid var(--danger)}
+    .res-cert.soon{border-left:3px solid var(--warn)}
+    .res-cert.valid{border-left:3px solid var(--success)}
+    .res-cert.nod{border-left:3px solid var(--accent)}
+    .res-cert-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+    .res-cert-title{font-weight:700;color:var(--text);font-size:13px}
+    .res-cert-meta{font-size:11px;color:var(--muted);margin-top:2px}
+    .res-cert-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+    .res-cert-tag{background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;letter-spacing:.3px}
+    .res-cert-com{margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5;white-space:pre-wrap}
+    .res-cert-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .res-alert-box{background:var(--accent-bg);border:1px solid var(--accent);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+    .res-alert-box.warn{background:rgba(251,191,36,.12);border-color:var(--warn)}
+    .res-alert-box.exp{background:rgba(248,113,113,.12);border-color:var(--danger)}
+    .res-alert-title{font-weight:700;font-size:13px;color:var(--text);margin-bottom:6px}
+    .res-alert-list{font-size:12px;color:var(--text2);line-height:1.6;margin:0;padding-left:18px}
+    /* Matrice */
+    .matrice-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:12px}
+    .matrice{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}
+    .matrice th, .matrice td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;vertical-align:middle}
+    .matrice thead th{background:var(--bg);position:sticky;top:0;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;font-size:10px}
+    .matrice tbody tr:hover{background:var(--accent-bg)}
+    .matrice th.four, .matrice td.four{text-align:left;position:sticky;left:0;background:var(--card);z-index:1;min-width:180px;font-weight:600;color:var(--text)}
+    .matrice tbody tr:hover td.four{background:var(--accent-bg)}
+    .m-cell{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:28px;padding:0 10px;border-radius:8px;font-weight:700;font-size:11px;cursor:pointer;border:1px solid transparent}
+    .m-cell.ok{background:rgba(52,211,153,.18);color:var(--success)}
+    .m-cell.soon{background:rgba(251,191,36,.2);color:var(--warn)}
+    .m-cell.exp{background:rgba(248,113,113,.2);color:var(--danger)}
+    .m-cell.miss{background:rgba(148,163,184,.15);color:var(--muted);border:1px dashed var(--border)}
+    .m-cell.na{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+    .m-cell.sent{background:var(--accent-bg);color:var(--accent)}
+    .m-cell.sansdate{background:rgba(148,163,184,.18);color:var(--text2)}
+    .m-cell.overridden{outline:2px solid var(--accent);outline-offset:1px}
+    .m-legend{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-top:12px;font-size:11px}
+    .m-legend .item{display:inline-flex;align-items:center;gap:6px;color:var(--text2)}
+  `;
+  document.head.appendChild(st);
+})();
+
+async function loadRessources(){
+  try{
+    const r = await api('/api/qualite/ressources/fournisseurs');
+    if(!r.ok){ showToast('Erreur chargement ressources','danger'); return; }
+    S.resList = await r.json();
+    // Charger aussi les alertes pour le bandeau
+    try{
+      const r2 = await api('/api/qualite/ressources/expiration-alerts');
+      if(r2.ok) S.resAlerts = await r2.json();
+    }catch(e){}
+    if(S.view==='ressources-list') renderRessourcesList();
+  }catch(e){ if(e.message!=='unauth') showToast('Erreur réseau','danger'); }
+}
+
+function ressourcesFiltered(){
+  const q = (S.resSearch||'').trim().toLowerCase();
+  const list = S.resList||[];
+  if(!q) return list;
+  return list.filter(f => (f.nom||'').toLowerCase().includes(q) || (f.licence||'').toLowerCase().includes(q));
+}
+
+function renderRessourcesList(){
+  const ae=document.activeElement;const fid=ae?.id;const cs=ae?.selectionStart;const ce=ae?.selectionEnd;
+  const root=document.getElementById('content');
+  const list = ressourcesFiltered();
+
+  // Bandeau alertes
+  let alertHtml = '';
+  const a = S.resAlerts;
+  if(a){
+    const parts = [];
+    if(a.expired && a.expired.length){
+      parts.push(`<div class="res-alert-box exp"><div class="res-alert-title">${a.expired.length} certificat(s) expiré(s)</div>
+        <ul class="res-alert-list">${a.expired.slice(0,6).map(x=>`<li>${escHtml(x.fournisseur_nom)} — ${escHtml(x.titre)} · expiré depuis ${-x.jours}j</li>`).join('')}${a.expired.length>6?`<li>… et ${a.expired.length-6} autre(s)</li>`:''}</ul></div>`);
+    }
+    if(a.j30 && a.j30.length){
+      parts.push(`<div class="res-alert-box warn"><div class="res-alert-title">${a.j30.length} certificat(s) expirent sous 30 jours</div>
+        <ul class="res-alert-list">${a.j30.slice(0,6).map(x=>`<li>${escHtml(x.fournisseur_nom)} — ${escHtml(x.titre)} · dans ${x.jours}j</li>`).join('')}${a.j30.length>6?`<li>… et ${a.j30.length-6} autre(s)</li>`:''}</ul></div>`);
+    }
+    alertHtml = parts.join('');
+  }
+
+  let body;
+  if(!list.length){
+    body = `<div class="aud-emp"><div class="emp-title">${S.resSearch?'Aucun résultat pour « '+escHtml(S.resSearch)+' »':'Aucun fournisseur'}</div>
+      <div class="emp-sub">${S.resSearch?'':'Les fournisseurs sont gérés dans les paramètres.'}</div></div>`;
+  } else {
+    body = `<div class="res-grid">${list.map(f=>{
+      const s = f.cert_stats || {total:0,valide:0,expire_bientot:0,expire:0,sans_date:0};
+      const pills = [];
+      pills.push(`<span class="res-pill tot">${s.total} certif${s.total>1?'s':''}</span>`);
+      if(s.valide) pills.push(`<span class="res-pill ok">${s.valide} valide</span>`);
+      if(s.expire_bientot) pills.push(`<span class="res-pill soon">${s.expire_bientot} bientôt</span>`);
+      if(s.expire) pills.push(`<span class="res-pill exp">${s.expire} expiré</span>`);
+      if(s.sans_date) pills.push(`<span class="res-pill nod">${s.sans_date} sans date</span>`);
+      return `<div class="res-card" onclick="openRessourceFournisseur(${f.id})">
+        <div class="res-card-nom">${escHtml(f.nom||'')}</div>
+        <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
+        <div class="res-card-stats">${pills.join('')}</div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  root.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0;font-size:18px;color:var(--text)">Ressources fournisseurs</h2>
+      <div style="font-size:12px;color:var(--muted)">Un dossier par fournisseur · Certificats & labels</div>
+    </div>
+    ${alertHtml}
+    <div class="aud-toolbar">
+      <div class="search-wrap" style="position:relative">
+        <input type="search" id="res-search" placeholder="Rechercher un fournisseur..." value="${escAttr(S.resSearch)}"
+          oninput="S.resSearch=this.value;renderRessourcesList()"
+          onkeydown="if(event.key==='Escape'){S.resSearch='';this.value='';renderRessourcesList();}"
+          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px">
+      </div>
+    </div>
+    ${body}
+  `;
+  if(fid){const el=document.getElementById(fid);if(el){el.focus();if(cs!=null){try{el.setSelectionRange(cs,ce);}catch(e){}}}}
+}
+
+async function openRessourceFournisseur(id){
+  try{
+    const r = await api('/api/qualite/ressources/fournisseurs/'+id);
+    if(!r.ok){ showToast('Fournisseur introuvable','danger'); return; }
+    S.currentRes = await r.json();
+    setView('ressources-detail');
+  }catch(e){ if(e.message!=='unauth') showToast('Erreur réseau','danger'); }
+}
+
+function certKindClass(s){
+  return s==='expire'?'expired':s==='expire_bientot'?'soon':s==='valide'?'valid':'nod';
+}
+function certKindLabel(s){
+  return s==='expire'?'Expiré':s==='expire_bientot'?'Expire bientôt':s==='valide'?'Valide':'Sans date';
+}
+
+function renderRessourcesDetail(){
+  const root=document.getElementById('content');
+  const d = S.currentRes;
+  if(!d){ root.innerHTML = '<div class="aud-emp"><div class="emp-title">Fournisseur introuvable</div></div>'; return; }
+  const f = d.fournisseur;
+  const certs = d.certificats||[];
+
+  const certsHtml = certs.length ? certs.map(c=>{
+    const kind = certKindClass(c.statut);
+    const label = certKindLabel(c.statut);
+    const tags = (c.fiches||[]).map(fi=>`<span class="res-cert-tag" title="${escAttr(fi.nom||'')}">${escHtml(fi.acronyme||fi.nom||'')}</span>`).join('');
+    return `<div class="res-cert ${kind}">
+      <div class="res-cert-hd">
+        <div style="flex:1;min-width:0">
+          <div class="res-cert-title">${escHtml(c.titre||c.original_name||'Certificat')}</div>
+          <div class="res-cert-meta">
+            ${escHtml(label)}
+            ${c.date_emission?' · émis le '+escHtml(fmtDate(c.date_emission)):''}
+            ${c.date_expiration?' · expire le '+escHtml(fmtDate(c.date_expiration)):''}
+            · déposé le ${escHtml(fmtDate(c.uploaded_at))}${c.uploaded_by_nom?' par '+escHtml(c.uploaded_by_nom):''}
+          </div>
+          ${tags?`<div class="res-cert-tags">${tags}</div>`:''}
+          ${c.commentaire?`<div class="res-cert-com">${escHtml(c.commentaire)}</div>`:''}
+        </div>
+        <div class="res-cert-actions">
+          <a class="btn btn-ghost" href="/api/qualite/ressources/certificats/${c.id}/download" target="_blank" style="padding:6px 10px;font-size:12px">Ouvrir</a>
+          <button type="button" class="btn btn-ghost qual-write" onclick="openEditCertModal(${c.id})" style="padding:6px 10px;font-size:12px">Modifier</button>
+          <button type="button" class="btn btn-danger qual-write" onclick="deleteCert(${c.id})" style="padding:6px 10px;font-size:12px">Supprimer</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Aucun certificat pour ce fournisseur. Ajoutez-en un pour commencer.</div>';
+
+  root.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="setView('ressources-list')" style="padding:6px 10px;font-size:12px">← Retour</button>
+          <h2 style="margin:0;font-size:18px;color:var(--text)">${escHtml(f.nom||'')}</h2>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:ui-monospace,monospace">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
+      </div>
+      <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-accent" onclick="openAddCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+      </div>
+    </div>
+    <div class="res-cert-list">${certsHtml}</div>
+  `;
+}
+
+function openAddCertModal(){ openCertModal(null); }
+function openEditCertModal(cid){ openCertModal(cid); }
+
+function openCertModal(certId){
+  const d = S.currentRes;
+  if(!d) return;
+  const cert = certId ? (d.certificats||[]).find(x=>x.id===certId) : null;
+  // Charger les fiches du référentiel via S.refFiches, ou les recharger
+  const fichesPromise = (S.refFiches && S.refFiches.length) ? Promise.resolve(S.refFiches) : (async()=>{
+    try{ const r=await api('/api/qualite/ref/fiches?statut_validation=valide'); if(r.ok){ S.refFiches=await r.json(); return S.refFiches; } }catch(e){}
+    return [];
+  })();
+  fichesPromise.then(fiches=>{
+    const selected = new Set((cert && cert.fiches ? cert.fiches.map(x=>x.fiche_id) : []));
+    const optsHtml = fiches.map(fi=>{
+      const chk = selected.has(fi.id) ? 'checked' : '';
+      const lbl = fi.acronyme ? (fi.acronyme+' — '+fi.nom) : fi.nom;
+      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2)">
+        <input type="checkbox" value="${fi.id}" ${chk} class="cert-fiche-chk">
+        <span>${escHtml(lbl)}</span>
+      </label>`;
+    }).join('');
+
+    const html = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+      <div class="modal" style="max-width:640px">
+        <div class="modal-hd"><h3>${cert?'Modifier':'Ajouter'} un certificat</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+        <div class="modal-bd" style="max-height:70vh;overflow:auto">
+          ${cert?`<div style="margin-bottom:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text2)"><strong>${escHtml(cert.original_name)}</strong> · ${(cert.size_bytes/1024).toFixed(0)} Ko</div>`:`
+          <div class="aud-info-cell" style="margin-bottom:12px">
+            <div class="aud-info-label">Fichier PDF / image</div>
+            <input type="file" id="cert-file" accept=".pdf,.png,.jpg,.jpeg" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+          </div>`}
+          <div class="aud-info-cell" style="margin-bottom:12px">
+            <div class="aud-info-label">Titre / intitulé</div>
+            <input type="text" id="cert-titre" value="${escAttr(cert?cert.titre||'':'')}" placeholder="ex. Certificat ISO 9001 2026" style="width:100%">
+          </div>
+          <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <div class="aud-info-cell" style="flex:1;min-width:180px">
+              <div class="aud-info-label">Date d'émission</div>
+              <input type="date" id="cert-emit" value="${escAttr(cert?(cert.date_emission||''):'')}" style="width:100%">
+            </div>
+            <div class="aud-info-cell" style="flex:1;min-width:180px">
+              <div class="aud-info-label">Date d'expiration</div>
+              <input type="date" id="cert-exp" value="${escAttr(cert?(cert.date_expiration||''):'')}" style="width:100%">
+            </div>
+          </div>
+          <div class="aud-info-cell" style="margin-bottom:12px">
+            <div class="aud-info-label">Commentaire</div>
+            <textarea id="cert-com" rows="3" style="width:100%">${escHtml(cert?cert.commentaire||'':'')}</textarea>
+          </div>
+          <div class="aud-info-cell">
+            <div class="aud-info-label">Labels / certifications liés (référentiel RSE)</div>
+            <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--bg)">
+              ${optsHtml || '<div style="color:var(--muted);font-size:12px;padding:10px">Aucune fiche RSE disponible</div>'}
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+          <button class="btn btn-accent" onclick="submitCert(${cert?cert.id:'null'})">${cert?'Enregistrer':'Ajouter'}</button>
+        </div>
+      </div>
+    </div>`;
+    document.getElementById('mroot').innerHTML = html;
+  });
+}
+function closeMroot(){ document.getElementById('mroot').innerHTML=''; }
+
+async function submitCert(certId){
+  const titre = document.getElementById('cert-titre').value.trim();
+  const emit = document.getElementById('cert-emit').value;
+  const exp = document.getElementById('cert-exp').value;
+  const com = document.getElementById('cert-com').value.trim();
+  const fiche_ids = Array.from(document.querySelectorAll('.cert-fiche-chk:checked')).map(el=>Number(el.value));
+  if(certId){
+    // PATCH
+    try{
+      const r = await api('/api/qualite/ressources/certificats/'+certId, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({titre, date_emission: emit, date_expiration: exp, commentaire: com, fiche_ids})
+      });
+      if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+      S.currentRes = await r.json();
+      closeMroot(); renderRessourcesDetail(); showToast('Certificat mis à jour.','success');
+    }catch(e){ showToast('Erreur réseau','danger'); }
+  } else {
+    // POST : upload
+    const fileInput = document.getElementById('cert-file');
+    if(!fileInput || !fileInput.files.length){ showToast('Sélectionnez un fichier','danger'); return; }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('titre', titre);
+    fd.append('date_emission', emit);
+    fd.append('date_expiration', exp);
+    fd.append('commentaire', com);
+    fd.append('fiche_ids', fiche_ids.join(','));
+    try{
+      const r = await api('/api/qualite/ressources/fournisseurs/'+S.currentRes.fournisseur.id+'/certificats', {method:'POST', body: fd});
+      if(!r.ok){ showToast('Erreur envoi','danger'); return; }
+      S.currentRes = await r.json();
+      closeMroot(); renderRessourcesDetail(); showToast('Certificat ajouté.','success');
+      loadRessources();
+    }catch(e){ showToast('Erreur réseau','danger'); }
+  }
+}
+
+async function deleteCert(cid){
+  if(!confirm('Supprimer ce certificat ? Cette action est définitive.')) return;
+  try{
+    const r = await api('/api/qualite/ressources/certificats/'+cid, {method:'DELETE'});
+    if(!r.ok){ showToast('Erreur suppression','danger'); return; }
+    // Recharger le détail
+    const rr = await api('/api/qualite/ressources/fournisseurs/'+S.currentRes.fournisseur.id);
+    if(rr.ok){ S.currentRes = await rr.json(); renderRessourcesDetail(); showToast('Certificat supprimé.','info'); }
+    loadRessources();
+  }catch(e){ showToast('Erreur réseau','danger'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE AUDIT — MATRICE FOURNISSEURS × CERTIFICATIONS (v1.6)
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadAuditMatrice(id){
+  try{
+    const r = await api('/api/qualite/audits/'+id+'/matrice');
+    if(!r.ok){ showToast('Erreur chargement matrice','danger'); return; }
+    S.auditMatrice = await r.json();
+  }catch(e){ if(e.message!=='unauth') showToast('Erreur réseau','danger'); }
+}
+
+function matriceCellClass(statut, overridden){
+  const base = statut==='ok'?'ok'
+    : statut==='expire_bientot'?'soon'
+    : statut==='expire'?'exp'
+    : statut==='manquant'?'miss'
+    : statut==='na'?'na'
+    : statut==='demande_envoyee'?'sent'
+    : statut==='sans_date'?'sansdate'
+    : 'miss';
+  return 'm-cell '+base+(overridden?' overridden':'');
+}
+function matriceCellLabel(statut){
+  return statut==='ok'?'OK'
+    : statut==='expire_bientot'?'~'
+    : statut==='expire'?'!'
+    : statut==='manquant'?'—'
+    : statut==='na'?'N/A'
+    : statut==='demande_envoyee'?'→'
+    : statut==='sans_date'?'?'
+    : '—';
+}
+function matriceCellTitle(cell, four, fiche){
+  const s = cell.statut;
+  const parts = [four.nom+' × '+(fiche.acronyme||fiche.nom)];
+  const map = {ok:'Certif valide',expire_bientot:'Certif expire bientôt',expire:'Certif expiré',manquant:'Aucun certif lié',na:'Non applicable',demande_envoyee:'Demande envoyée',sans_date:'Certif sans date d\'expiration'};
+  parts.push(map[s]||s);
+  if(cell.override_statut) parts.push('(override manuel)');
+  return parts.join(' — ');
+}
+
+function renderAuditMatriceHTML(){
+  const m = S.auditMatrice;
+  const a = S.currentAudit;
+  if(!m){ return '<div class="aud-card" style="padding:18px"><div style="color:var(--muted)">Chargement de la matrice...</div></div>'; }
+
+  const fs = m.fournisseurs||[];
+  const cs = m.certifications||[];
+  const cells = m.cells||[];
+  const canWrite = !S.isQualiteReadonly;
+
+  const toolbar = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <div><strong style="color:var(--text)">${fs.length}</strong> <span style="color:var(--muted);font-size:12px">fournisseur(s)</span></div>
+        <div><strong style="color:var(--text)">${cs.length}</strong> <span style="color:var(--muted);font-size:12px">certification(s) demandée(s)</span></div>
+        ${cs.length?`<div><span style="color:var(--success);font-weight:700">${m.resume.ok}</span> <span style="color:var(--muted);font-size:12px">/ ${m.resume.total} cases OK</span></div>`:''}
+      </div>
+      <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+        ${canWrite?`<button class="btn btn-ghost" onclick="openAuditPickerFournisseurs()" style="padding:8px 12px;font-size:12px">Fournisseurs impliqués</button>
+        <button class="btn btn-ghost" onclick="openAuditPickerCertifs()" style="padding:8px 12px;font-size:12px">Certifs demandées</button>`:''}
+      </div>
+    </div>
+  `;
+
+  if(!fs.length || !cs.length){
+    return `<div class="aud-card" style="padding:20px">
+      ${toolbar}
+      <div style="color:var(--muted);padding:24px;text-align:center;font-size:13px">
+        ${!fs.length?'Sélectionnez les fournisseurs impliqués dans cet audit.':''}
+        ${(!fs.length && !cs.length)?'<br>':''}
+        ${!cs.length?'Sélectionnez les certifications demandées par le client.':''}
+      </div>
+    </div>`;
+  }
+
+  // Index cells par (four_id, fiche_id)
+  const byKey = {};
+  cells.forEach(c=>{ byKey[c.fournisseur_id+':'+c.fiche_id] = c; });
+
+  const headCerts = cs.map(f=>`<th title="${escAttr(f.nom||'')}">${escHtml(f.acronyme||f.nom||'')}</th>`).join('');
+  const rows = fs.map(fr=>{
+    const tds = cs.map(fi=>{
+      const c = byKey[fr.id+':'+fi.id];
+      if(!c) return '<td>—</td>';
+      const cls = matriceCellClass(c.statut, !!c.override_statut);
+      const lbl = matriceCellLabel(c.statut);
+      const title = matriceCellTitle(c, fr, fi);
+      return `<td><span class="${cls}" title="${escAttr(title)}" onclick="${canWrite?`openMatriceCellEditor(${fr.id},${fi.id})`:''}">${lbl}</span></td>`;
+    }).join('');
+    return `<tr><td class="four" title="${escAttr(fr.nom||'')}">${escHtml(fr.nom||'')}</td>${tds}</tr>`;
+  }).join('');
+
+  const legend = `
+    <div class="m-legend">
+      <span class="item"><span class="m-cell ok">OK</span> Certif valide</span>
+      <span class="item"><span class="m-cell soon">~</span> Expire &lt;60j</span>
+      <span class="item"><span class="m-cell exp">!</span> Expiré</span>
+      <span class="item"><span class="m-cell miss">—</span> Manquant</span>
+      <span class="item"><span class="m-cell sansdate">?</span> Sans date</span>
+      <span class="item"><span class="m-cell sent">→</span> Demande envoyée</span>
+      <span class="item"><span class="m-cell na">N/A</span> Non applicable</span>
+    </div>
+  `;
+
+  return `<div>
+    ${toolbar}
+    <div class="matrice-wrap"><table class="matrice">
+      <thead><tr><th class="four">Fournisseur</th>${headCerts}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    ${legend}
+  </div>`;
+}
+
+async function openAuditPickerFournisseurs(){
+  const id = S.currentAudit.id;
+  const r = await api('/api/qualite/audits/'+id+'/matrice/pickers');
+  if(!r.ok){ showToast('Erreur chargement','danger'); return; }
+  S.auditMatricePickers = await r.json();
+  const sel = new Set(S.auditMatricePickers.selection.fournisseurs || []);
+  const opts = (S.auditMatricePickers.fournisseurs||[]).map(f=>{
+    const chk = sel.has(f.id)?'checked':'';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--text2)"><input type="checkbox" class="mtr-four" value="${f.id}" ${chk}><span>${escHtml(f.nom||'')}${f.licence?` <span style="color:var(--muted);font-family:ui-monospace,monospace;font-size:11px">(${escHtml(f.licence)})</span>`:''}</span></label>`;
+  }).join('');
+  document.getElementById('mroot').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-hd"><h3>Fournisseurs impliqués</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+      <div class="modal-bd" style="max-height:60vh;overflow:auto">
+        <div style="margin-bottom:8px;font-size:12px;color:var(--muted)">Sélectionnez les fournisseurs concernés par cet audit.</div>
+        ${opts || '<div style="color:var(--muted);font-size:12px">Aucun fournisseur enregistré</div>'}
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+        <button class="btn btn-accent" onclick="saveAuditPickerFour()">Enregistrer</button>
+      </div>
+    </div></div>`;
+}
+async function saveAuditPickerFour(){
+  const ids = Array.from(document.querySelectorAll('.mtr-four:checked')).map(el=>Number(el.value));
+  try{
+    const r = await api('/api/qualite/audits/'+S.currentAudit.id+'/matrice/fournisseurs',{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})
+    });
+    if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+    S.auditMatrice = await r.json();
+    closeMroot(); renderAuditDetail(); showToast('Fournisseurs mis à jour.','success');
+  }catch(e){ showToast('Erreur réseau','danger'); }
+}
+
+async function openAuditPickerCertifs(){
+  const id = S.currentAudit.id;
+  const r = await api('/api/qualite/audits/'+id+'/matrice/pickers');
+  if(!r.ok){ showToast('Erreur chargement','danger'); return; }
+  S.auditMatricePickers = await r.json();
+  const sel = new Set(S.auditMatricePickers.selection.fiches || []);
+  const opts = (S.auditMatricePickers.fiches||[]).map(f=>{
+    const chk = sel.has(f.id)?'checked':'';
+    const lbl = f.acronyme ? (f.acronyme+' — '+f.nom) : f.nom;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--text2)"><input type="checkbox" class="mtr-cert" value="${f.id}" ${chk}><span>${escHtml(lbl||'')}${f.categorie?` <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px">${escHtml(f.categorie)}</span>`:''}</span></label>`;
+  }).join('');
+  document.getElementById('mroot').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-hd"><h3>Certifications demandées par le client</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+      <div class="modal-bd" style="max-height:60vh;overflow:auto">
+        <div style="margin-bottom:8px;font-size:12px;color:var(--muted)">Sélectionnez les certifications à vérifier auprès des fournisseurs pour cet audit.</div>
+        ${opts || '<div style="color:var(--muted);font-size:12px">Aucune fiche RSE disponible</div>'}
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+        <button class="btn btn-accent" onclick="saveAuditPickerCert()">Enregistrer</button>
+      </div>
+    </div></div>`;
+}
+async function saveAuditPickerCert(){
+  const ids = Array.from(document.querySelectorAll('.mtr-cert:checked')).map(el=>Number(el.value));
+  try{
+    const r = await api('/api/qualite/audits/'+S.currentAudit.id+'/matrice/certifications',{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})
+    });
+    if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+    S.auditMatrice = await r.json();
+    closeMroot(); renderAuditDetail(); showToast('Certifications mises à jour.','success');
+  }catch(e){ showToast('Erreur réseau','danger'); }
+}
+
+function openMatriceCellEditor(fourId, ficheId){
+  const m = S.auditMatrice; if(!m) return;
+  const cell = m.cells.find(c=>c.fournisseur_id===fourId && c.fiche_id===ficheId);
+  const four = m.fournisseurs.find(f=>f.id===fourId);
+  const fiche = m.certifications.find(f=>f.id===ficheId);
+  if(!cell || !four || !fiche) return;
+  const cur = cell.override_statut || cell.auto_statut;
+  const opts = [
+    {k:'', label:'— Auto (statut calculé selon les certificats) —'},
+    {k:'ok', label:'OK'},
+    {k:'expire_bientot', label:'Expire bientôt'},
+    {k:'expire', label:'Expiré'},
+    {k:'manquant', label:'Manquant'},
+    {k:'sans_date', label:'Sans date'},
+    {k:'demande_envoyee', label:'Demande envoyée au fournisseur'},
+    {k:'na', label:'Non applicable'},
+  ].map(o=>`<option value="${o.k}" ${(cell.override_statut||'')===o.k?'selected':''}>${escHtml(o.label)}</option>`).join('');
+  document.getElementById('mroot').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-hd"><h3>${escHtml(four.nom)} × ${escHtml(fiche.acronyme||fiche.nom)}</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+      <div class="modal-bd">
+        <div style="margin-bottom:10px;font-size:12px;color:var(--muted)">Statut auto (basé sur les certificats liés) : <strong style="color:var(--text2)">${escHtml(matriceCellLabel(cell.auto_statut))} — ${escHtml((cell.cert_stats.valide||0)+' valide, '+(cell.cert_stats.expire_bientot||0)+' bientôt, '+(cell.cert_stats.expire||0)+' expiré')}</strong></div>
+        <div class="aud-info-cell" style="margin-bottom:12px">
+          <div class="aud-info-label">Override manuel</div>
+          <select id="mtr-statut" style="width:100%">${opts}</select>
+        </div>
+        <div class="aud-info-cell">
+          <div class="aud-info-label">Note</div>
+          <textarea id="mtr-note" rows="3" style="width:100%">${escHtml(cell.override_note||'')}</textarea>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+        <button class="btn btn-accent" onclick="saveMatriceCell(${fourId},${ficheId})">Enregistrer</button>
+      </div>
+    </div></div>`;
+}
+async function saveMatriceCell(fourId, ficheId){
+  const statut = document.getElementById('mtr-statut').value;
+  const note = document.getElementById('mtr-note').value.trim();
+  try{
+    const r = await api('/api/qualite/audits/'+S.currentAudit.id+'/matrice/cell',{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({fournisseur_id:fourId, fiche_id:ficheId, statut: statut||null, note})
+    });
+    if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+    S.auditMatrice = await r.json();
+    closeMroot(); renderAuditDetail(); showToast('Case mise à jour.','success');
+  }catch(e){ showToast('Erreur réseau','danger'); }
+}
+
 
 init();
 </script>
