@@ -17054,7 +17054,7 @@ function render() {
   const sidebar = el('div', { cls:'sidebar' },
     el('div', { cls:'sidebar-logo' },
       el('div', { cls:'logo-brand' }, 'My', el('span',null,'Stock')),
-      el('div', { cls:'logo-sub' }, 'by SIFA')
+      el('div', { cls:'logo-sub' }, 'by __APP_ORG_NAME__')
     ),
     el('div', { cls:'sidebar-nav' },
       ...renderSidebarItems(buildSidebarNavStructure())

@@ -1662,7 +1662,7 @@ function renderSidebar(){
   return h('nav',{className:'fab-sidebar'},
     h('div',{className:'fab-sidebar-head'},
       h('div',{className:'fab-sidebar-brand'},'Saisie',h('span',null,' Prod')),
-      h('div',{className:'fab-sidebar-sub'},'by SIFA')
+      h('div',{className:'fab-sidebar-sub'},'by __APP_ORG_NAME__')
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
     h('div',{className:'fab-sidebar-bottom'},

@@ -4249,7 +4249,7 @@ function renderExpe(){
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Expé')),
-      h('div',{className:'logo-sub'},'by SIFA')
+      h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
     ),
     // Sections collapsibles
     (()=>{

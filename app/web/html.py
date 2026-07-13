@@ -13,6 +13,15 @@ from config import (
     APP_ORG_NAME,
     APP_TAGLINE,
     APP_LOGIN_HINT,
+    KERNSE_THEME,
+)
+
+# Balise <link> vers kernse-theme.css injectée seulement si l'instance a
+# posé `KERNSE_THEME=1` dans son .env. Sinon chaîne vide → DA MySifa
+# (dark cyan) intacte pour SIFA prod.
+_KERNSE_THEME_LINK = (
+    '<link rel="stylesheet" href="/static/kernse-theme.css">'
+    if KERNSE_THEME else ""
 )
 from app.web.expe_assets import (
     EXPE_CARTE_FRANCE_CSS,
@@ -68,6 +77,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
+__KERNSE_THEME_CSS__
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -3845,7 +3855,7 @@ function renderStock(){
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Stock')),
-      h('div',{className:'logo-sub'},'by SIFA')
+      h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
     ),
     h('button',{className:'nav-btn'+(S.stockView==='grille'?' active':''),
       onClick:async()=>{
@@ -4734,7 +4744,7 @@ function renderSidebar(){
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
-    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by SIFA')),
+    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')),
     ...items.map(i=>{
       const btn=h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
         if(i.key==='_planning'){window.location.href='/planning';return;}
@@ -4878,9 +4888,9 @@ function renderMessagesApp(){
   }
   const isLight=document.body.classList.contains('light');
   const sidebar=h('nav',{className:'sidebar'},
-    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Sifa')),h('div',{className:'logo-sub'},'by SIFA')),
+    h('div',{className:'logo'},h('div',{className:'logo-brand'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__')),h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')),
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{set({app:'portal',sidebarOpen:false});}},
-      '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      '← Retour ',h('span',{className:'wm'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__'))
     ),
     h('div',{className:'sidebar-bottom'},
       sidebarUserChip(S.user),
@@ -11001,6 +11011,8 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__APP_LOGIN_HINT__", APP_LOGIN_HINT)
         .replace("__APP_ORG_NAME__", APP_ORG_NAME)
         .replace("__APP_NAME__", APP_NAME)
+        # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
+        .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
         # Re-substitution du __V_LABEL__ (peut apparaître dans les assets
         # injectés au-dessus après leur inclusion). Idempotent.
         .replace("__V_LABEL__", f"v{APP_VERSION}")
