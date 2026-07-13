@@ -804,3 +804,192 @@ body.kernse-theme .portal-search-glogo::before {
   background-repeat: no-repeat;
   background-size: 20px;
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Widgets Kernse — override visuel des widgets flottants existants
+ * (mysifa_postit, mysifa_ai_chat = Kai, mysifa_dock = messagerie,
+ * mysifa_cmdk = ⌘K palette, mysifa_humeur)
+ * ═════════════════════════════════════════════════════════════════════ */
+
+/* ─── Post-it à faire (couleur pastel Kernse) ─── */
+body.kernse-theme .postit {
+  --postit-color: #F2652B;
+  --postit-paper: #fef5e0;
+  --postit-paper-edge: #f0dfa8;
+  --postit-paper-sep: #ecd68a;
+  --postit-ink: #4a3a08;
+  --postit-ink-soft: #6b551a;
+  --postit-ink-muted: #a58c46;
+  --postit-ink-strong: #7a5f0d;
+  --postit-shadow: 0 12px 32px rgba(120,100,20,.16), 0 2px 6px rgba(24,36,68,.06);
+  border-radius: 16px !important;
+  font-family: var(--font-sans, 'Inter Tight', system-ui, sans-serif) !important;
+}
+body.kernse-theme .postit-header {
+  font-family: var(--font-sans, inherit) !important;
+}
+body.kernse-theme .postit-title {
+  font-family: var(--font-sans, inherit) !important;
+  font-weight: 700 !important;
+  color: var(--postit-ink) !important;
+}
+
+/* ─── Kai (agent IA) — bouton et panneau navy/orange ─── */
+body.kernse-theme #ai-chat-btn {
+  background: linear-gradient(135deg, var(--navy), var(--navy-2, #26314f)) !important;
+  box-shadow: 0 8px 24px rgba(24,36,68,.25), 0 0 0 1px rgba(255,255,255,.1) inset !important;
+  width: 56px !important;
+  height: 56px !important;
+}
+body.kernse-theme #ai-chat-btn:hover {
+  transform: scale(1.06) !important;
+  box-shadow: 0 12px 32px rgba(24,36,68,.32), 0 0 0 3px var(--orange-bg, rgba(242,101,43,.16)) !important;
+}
+body.kernse-theme #ai-chat-btn svg {
+  color: var(--orange) !important;
+  stroke: var(--orange) !important;
+  width: 26px !important;
+  height: 26px !important;
+}
+/* Chip texte "Kai · en ligne" à gauche du bouton */
+body.kernse-theme #ai-chat-root.ai-on-portal::before {
+  content: 'Kai · en ligne';
+  position: fixed;
+  bottom: 38px;
+  right: 92px;
+  padding: 8px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--navy);
+  font-family: var(--font-sans, inherit);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(24,36,68,.08);
+  z-index: 8002;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+body.kernse-theme #ai-chat-root.ai-on-portal::after {
+  content: '';
+  position: fixed;
+  bottom: 50px;
+  right: 170px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success, #1f9d57);
+  box-shadow: 0 0 0 3px rgba(31,157,87,.2);
+  z-index: 8003;
+  pointer-events: none;
+}
+body.kernse-theme #ai-chat-panel {
+  border: 1px solid var(--border) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 20px 60px rgba(24,36,68,.2) !important;
+  background: var(--card) !important;
+}
+body.kernse-theme #ai-chat-header {
+  background: linear-gradient(135deg, var(--navy), var(--navy-2, #26314f)) !important;
+  color: #fff !important;
+  border-radius: 18px 18px 0 0 !important;
+}
+body.kernse-theme #ai-chat-header .ai-dot {
+  background: var(--success, #1f9d57) !important;
+  box-shadow: 0 0 0 3px rgba(31,157,87,.25) !important;
+}
+body.kernse-theme #ai-chat-header .ai-title {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 800 !important;
+}
+body.kernse-theme #ai-chat-header .ai-sub { color: rgba(255,255,255,.7) !important; }
+
+/* ─── Dock (Messagerie + Calculette) — chip navy Kernse ─── */
+body.kernse-theme .mysifa-dock-fab,
+body.kernse-theme .calc-fab {
+  background: var(--navy) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px rgba(24,36,68,.18), 0 0 0 1px rgba(255,255,255,.08) inset !important;
+  width: 52px !important;
+  height: 52px !important;
+  font-family: var(--font-sans, inherit) !important;
+}
+body.kernse-theme .mysifa-dock-fab:hover,
+body.kernse-theme .calc-fab:hover {
+  transform: scale(1.06);
+  box-shadow: 0 8px 24px rgba(24,36,68,.28), 0 0 0 3px var(--orange-bg, rgba(242,101,43,.16)) !important;
+}
+body.kernse-theme .mysifa-dock-fab svg,
+body.kernse-theme .calc-fab svg {
+  color: var(--orange) !important;
+  stroke: var(--orange) !important;
+}
+body.kernse-theme .mysifa-dock-panel,
+body.kernse-theme .calc-panel {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(24,36,68,.2) !important;
+  color: var(--text) !important;
+}
+body.kernse-theme .mysifa-dock-panel-head {
+  background: linear-gradient(135deg, var(--navy), var(--navy-2, #26314f)) !important;
+  color: #fff !important;
+  border-radius: 16px 16px 0 0 !important;
+}
+body.kernse-theme .mysifa-dock-panel-title {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 800 !important;
+}
+
+/* ─── Messagerie bubble bas-gauche (card navy avec prévisualisation) ─── */
+body.kernse-theme .msg-badge-nav,
+body.kernse-theme .chat-nav-bubble {
+  background: var(--navy) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 24px rgba(24,36,68,.2) !important;
+}
+body.kernse-theme .msg-badge-nav *,
+body.kernse-theme .chat-nav-bubble * { font-family: var(--font-sans, inherit) !important; }
+
+/* ─── Command palette ⌘K ─── */
+body.kernse-theme #cmdk-overlay { background: rgba(24,36,68,.55) !important; }
+body.kernse-theme .cmdk-modal {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 30px 80px rgba(24,36,68,.3) !important;
+}
+body.kernse-theme .cmdk-search input {
+  color: var(--text) !important;
+  font-family: var(--font-sans, inherit) !important;
+}
+body.kernse-theme .cmdk-search input::placeholder { color: var(--muted) !important; }
+body.kernse-theme .cmdk-search-kbd {
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+}
+body.kernse-theme .cmdk-row:hover,
+body.kernse-theme .cmdk-row.cmdk-active {
+  background: var(--accent-bg, rgba(242,101,43,.1)) !important;
+  color: var(--orange) !important;
+}
+
+/* ─── Rich footer / connexion info (bas de portail) ─── */
+body.kernse-theme .portal-user::before {
+  content: 'Connecté';
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin-right: 8px;
+}
+body.kernse-theme .portal-user > span:first-of-type {
+  color: var(--navy) !important;
+  font-weight: 700 !important;
+}
