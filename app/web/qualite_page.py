@@ -338,6 +338,14 @@ body.qualite-readonly .aud-aud-chip .x{display:none}
 .modal-close:hover{color:var(--danger)}
 .modal-title{font-size:16px;font-weight:800;margin-bottom:18px}
 .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+/* Alias utilisés par les modaux Ressources fournisseurs / Audit matrice (openCertModal, openAuditPickerFournisseurs, openAuditPickerCertifs, openMatriceCellEditor) */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.modal-hd h3{margin:0;font-size:16px;font-weight:800;color:var(--text)}
+.modal-x{background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:4px 8px;border-radius:6px;transition:.15s}
+.modal-x:hover{color:var(--danger)}
+.modal-bd{font-size:13px;color:var(--text2);line-height:1.55}
+.modal-ft{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
 
 /* ── Picker dossier ── */
 .picker-list{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
