@@ -72,8 +72,6 @@ APP_LOGIN_HINT = os.getenv(
 )
 
 # Grand titre affiché sur la login DA Kernse (KERNSE_THEME=1 uniquement).
-# Ex. « Bienvenue. » suivi de « Portail interne Kernse. » — split en 2 lignes
-# pour la mise en page grande typo Poppins de la maquette.
 APP_WELCOME_TITLE = os.getenv("APP_WELCOME_TITLE", "Bienvenue.")
 APP_WELCOME_SUB = os.getenv(
     "APP_WELCOME_SUB",
@@ -84,7 +82,7 @@ APP_WELCOME_SUB = os.getenv(
 # APP_TAGLINE reste utilisée pour le sous-titre court MySifa historique.
 APP_TAGLINE_RICH = os.getenv(
     "APP_TAGLINE_RICH",
-    "Production, stocks, planning, comptabilité, appels d'offre — "
+    "Production, stocks, planning, comptabilité, appels d\'offre — "
     "tous les outils métier au même endroit, avec la palette de "
     "commandes ⌘K pour aller vite.",
 )

@@ -13,6 +13,10 @@ from config import (
     APP_ORG_NAME,
     APP_TAGLINE,
     APP_LOGIN_HINT,
+    APP_WELCOME_TITLE,
+    APP_WELCOME_SUB,
+    APP_TAGLINE_RICH,
+    APP_STATUS_TEXT,
     KERNSE_THEME,
 )
 
@@ -47,6 +51,17 @@ from app.web.login_assets import (
     LOGIN_MAIN_CSS,
     LOGIN_MAIN_JS,
 )
+
+# Override conditionnel : si KERNSE_THEME=1 sur cette instance, on remplace
+# les assets du login MySifa historique par la variante DA Kernse
+# (logo icône K, gros "Bienvenue.", tagline riche, SSO Azure AD + Badge NFC,
+# footer statut opérationnel, bouton primary navy). La logique métier
+# (endpoints auth, state) reste identique — c'est seulement le rendu HTML.
+if KERNSE_THEME:
+    from app.web.kernse_theme.login_assets import (
+        LOGIN_MAIN_CSS,   # noqa: F811 (override MySifa)
+        LOGIN_MAIN_JS,    # noqa: F811
+    )
 
 _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
@@ -11014,6 +11029,10 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__APP_LOGIN_HINT__", _js_escape(APP_LOGIN_HINT))
         .replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
         .replace("__APP_NAME__", _js_escape(APP_NAME))
+        .replace("__APP_WELCOME_TITLE__", _js_escape(APP_WELCOME_TITLE))
+        .replace("__APP_WELCOME_SUB__", _js_escape(APP_WELCOME_SUB))
+        .replace("__APP_TAGLINE_RICH__", _js_escape(APP_TAGLINE_RICH))
+        .replace("__APP_STATUS_TEXT__", _js_escape(APP_STATUS_TEXT))
         # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
         .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
         # Re-substitution du __V_LABEL__ (peut apparaître dans les assets
