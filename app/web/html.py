@@ -11005,17 +11005,35 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
         # ─── Branding paramétrable (LAST : appliqué aux contenus injectés
         # au-dessus, notamment LOGIN_MAIN_JS et PORTAL_MAIN_JS). Défaut SIFA.
-        .replace("__APP_NAME_PREFIX__", APP_NAME_PREFIX)
-        .replace("__APP_NAME_SUFFIX__", APP_NAME_SUFFIX)
-        .replace("__APP_TAGLINE__", APP_TAGLINE)
-        .replace("__APP_LOGIN_HINT__", APP_LOGIN_HINT)
-        .replace("__APP_ORG_NAME__", APP_ORG_NAME)
-        .replace("__APP_NAME__", APP_NAME)
+        # Les valeurs sont escapées pour être sûres dans une chaîne JS
+        # single-quotée : `\` → `\\`, `'` → `\'`, `\n` → `\\n`. Sinon une
+        # apostrophe dans APP_TAGLINE (ex. « d'atelier ») casse le parseur JS.
+        .replace("__APP_NAME_PREFIX__", _js_escape(APP_NAME_PREFIX))
+        .replace("__APP_NAME_SUFFIX__", _js_escape(APP_NAME_SUFFIX))
+        .replace("__APP_TAGLINE__", _js_escape(APP_TAGLINE))
+        .replace("__APP_LOGIN_HINT__", _js_escape(APP_LOGIN_HINT))
+        .replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
+        .replace("__APP_NAME__", _js_escape(APP_NAME))
         # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
         .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
         # Re-substitution du __V_LABEL__ (peut apparaître dans les assets
         # injectés au-dessus après leur inclusion). Idempotent.
         .replace("__V_LABEL__", f"v{APP_VERSION}")
+    )
+
+
+def _js_escape(s: str) -> str:
+    """Escape une chaîne pour usage dans une string JavaScript single-quotée.
+
+    Nécessaire parce que les placeholders __APP_*__ sont substitués dans du
+    JS déjà rendu, à l'intérieur de `h('span', null, '__APP_*__')`. Toute
+    apostrophe / backslash / retour à la ligne casserait le parseur JS.
+    """
+    return (
+        s.replace("\\", "\\\\")
+         .replace("'", "\\'")
+         .replace("\n", "\\n")
+         .replace("\r", "")
     )
 
 
