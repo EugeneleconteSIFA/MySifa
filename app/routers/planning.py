@@ -1079,7 +1079,8 @@ def _compute_timeline_slots(
             pend = _parse_planned_dt(pe)
             if pend:
                 cand = advance_to_work(pend)
-                if cand and cand > cursor:
+                # Colle l'attente suivante à la fin réelle du terminé.
+                if cand:
                     cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
@@ -1123,7 +1124,9 @@ def _compute_timeline_slots(
             pend = _parse_planned_dt(pe)
             if pend:
                 cand = advance_to_work(pend)
-                if cand and cand > cursor:
+                # Curseur = fin exacte de l'en_cours (colle l'attente suivante,
+                # même si l'en_cours est en retard sur son planning).
+                if cand:
                     cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
