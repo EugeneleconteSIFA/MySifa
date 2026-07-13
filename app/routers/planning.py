@@ -1063,7 +1063,27 @@ def _compute_timeline_slots(
     # à "maintenant" et se superposait visuellement au dossier réellement en production.
     for e in entries:
         if (e.get("statut") or "") == "en_cours" and _is_frozen_entry(e):
-            pend = _parse_planned_dt(e.get("planned_end"))
+            # Recalcul de la vraie fin de l'en_cours pour le curseur : on part
+            # du run_start réel (1re saisie) + duree_heures, plutôt que du
+            # planned_end stocké qui peut être stale (ex : horaires modifiés
+            # depuis le dernier calcul). Sans ça, les dossiers en attente
+            # positionnés AVANT l'en_cours dans la file sont placés sur du
+            # stale et se retrouvent visuellement écrasés par l'en_cours
+            # une fois qu'il est recalculé dans la boucle principale.
+            manual_end = int(e.get("planned_end_manual") or 0) == 1
+            ref = (e.get("numero_of") or e.get("reference") or "").strip()
+            run_start = _prod_run_start_for_machine(conn, machine_id, m, ref) if ref else None
+            fresh_pend = None
+            if run_start is not None and not manual_end:
+                try:
+                    duree_h = float(e.get("duree_heures") or 0)
+                    if duree_h > 0:
+                        _, fresh_pend, _ = consume_duration_from(
+                            run_start.replace(microsecond=0), duree_h
+                        )
+                except (TypeError, ValueError):
+                    fresh_pend = None
+            pend = fresh_pend or _parse_planned_dt(e.get("planned_end"))
             if pend:
                 cand = advance_to_work(pend)
                 if cand and cand > cursor:
@@ -1079,8 +1099,7 @@ def _compute_timeline_slots(
             pend = _parse_planned_dt(pe)
             if pend:
                 cand = advance_to_work(pend)
-                # Colle l'attente suivante à la fin réelle du terminé.
-                if cand:
+                if cand and cand > cursor:
                     cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
@@ -1124,9 +1143,7 @@ def _compute_timeline_slots(
             pend = _parse_planned_dt(pe)
             if pend:
                 cand = advance_to_work(pend)
-                # Curseur = fin exacte de l'en_cours (colle l'attente suivante,
-                # même si l'en_cours est en retard sur son planning).
-                if cand:
+                if cand and cand > cursor:
                     cursor = cand
             slots.append(_slot_payload(e, ps, pe))
             continue
