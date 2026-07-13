@@ -729,6 +729,42 @@ const GRID_DEF = [
     ]
   },
 ];
+
+// Retourne les créneaux effectifs d'une machine, en s'appuyant sur rh_machine_config
+// quand disponible. Défauts codés (GRID_DEF.creneaux) utilisés pour les machines
+// sans config, ou pour LOG / RESP (rôles pilotés à part).
+function getEffectiveCreneaux(mdef){
+  if(!mdef) return [];
+  if(mdef.special) return mdef.creneaux;                 // LOG, RESP
+  if(!S.machines || !S.machineConfigs) return mdef.creneaux;
+  const mac = S.machines.find(x=>x.code===mdef.code);
+  if(!mac) return mdef.creneaux;
+  const cfg = (S.machineConfigs||[]).find(c=>c.machine_id===mac.id||String(c.machine_id)===String(mac.id));
+  if(!cfg) return mdef.creneaux;
+  // Postes : hérités des créneaux codés (matin/aprem définissent les mêmes postes).
+  const basePostes = (mdef.creneaux[0]&&mdef.creneaux[0].postes)?mdef.creneaux[0].postes:['conducteur'];
+  const baseHoursFri = mdef.creneaux.reduce((acc,cr)=>{acc[cr.key]=cr.hours_fri||null;return acc;},{});
+  const out=[];
+  if(+cfg.matin_actif===1){
+    out.push({key:'matin',label:'Matin',
+      hours:(cfg.matin_debut+' – '+cfg.matin_fin),
+      hours_fri:baseHoursFri.matin, postes:basePostes});
+  }
+  if(+cfg.aprem_actif===1){
+    out.push({key:'aprem',label:'Après-midi',
+      hours:(cfg.aprem_debut+' – '+cfg.aprem_fin),
+      hours_fri:baseHoursFri.aprem, postes:basePostes});
+  }
+  if(+cfg.nuit_actif===1){
+    out.push({key:'nuit',label:'Nuit',
+      hours:(cfg.nuit_debut+' – '+cfg.nuit_fin),
+      hours_fri:null, postes:basePostes});
+  }
+  // Aucun créneau actif : on retombe sur les défauts pour éviter une machine muette.
+  if(!out.length) return mdef.creneaux;
+  return out;
+}
+
 const POSTE_LABELS = {
   conducteur:'Conducteur', aide:'Aide', emballage:'Emballage',
   resp_atelier:"Resp. d'atelier", logistique:'Logistique'
@@ -1013,14 +1049,17 @@ async function loadData(){
   try{
     const weeks=getWeeksToShow();
     const from=weeks[0]; const to=weeks[weeks.length-1];
-    const [pers,plan,conges]=await Promise.all([
+    const [pers,plan,conges,mcfgs]=await Promise.all([
       api('/personnel').catch(()=>({personnel:[]})),
       api(`/planning?from_week=${from}&to_week=${to}`).catch(()=>({planning:[]})),
       api('/conges').catch(()=>({conges:[]})),
+      api('/machine-configs').catch(()=>({configs:[]})),
     ]);
     S.personnel=pers?.personnel||[];
     S.planning=plan?.planning||[];
     S.conges=conges?.conges||[];
+    S.machineConfigs=mcfgs?.configs||[];
+    S.machineConfigsLoaded=true;
   }catch(e){toast('Erreur chargement : '+e.message,'error');}
   S.loading=false; render();
 }
@@ -1530,9 +1569,10 @@ function buildPlanningGrid(){
   gw.className='rh-grid-wrap';
 
   GRID_DEF.forEach(mdef=>{
+    const effCreneaux = getEffectiveCreneaux(mdef);
     // Postes uniques (union de tous les creneaux de cette machine)
     const allPostes=[];
-    mdef.creneaux.forEach(cr=>{
+    effCreneaux.forEach(cr=>{
       cr.postes.forEach(p=>{if(!allPostes.includes(p))allPostes.push(p);});
     });
 
@@ -1572,7 +1612,7 @@ function buildPlanningGrid(){
       const wn=ws.split('W')[1];
       const mon=weekMonday(ws),sun=new Date(mon);sun.setDate(mon.getDate()+6);
 
-      mdef.creneaux.forEach(cr=>{
+      effCreneaux.forEach(cr=>{
         const row=document.createElement('tr');
         row.className='rh-poste-row'+(isCur?' rh-cur-week-row':'');
 
@@ -1888,7 +1928,7 @@ function buildDayDetailModal(){
 
   // En-tête
   const machDef=GRID_DEF.find(m=>m.code===t.machineCode)||{label:t.machineCode};
-  const crDef=(machDef.creneaux||[]).find(c=>c.key===t.creneau)||{label:t.creneau};
+  const crDef=(getEffectiveCreneaux(machDef)||[]).find(c=>c.key===t.creneau)||{label:t.creneau};
   const posteLbl=POSTE_LABELS[t.poste]||t.poste;
   const mon=weekMonday(t.semaine);
   const wkN=t.semaine.split('W')[1];
@@ -2272,12 +2312,12 @@ function buildOperatorView(){
         const rows=[
           {k:'Machine',v:myPlan.machine_nom||'—'},
           {k:'Poste',v:POSTE_LABELS[myPlan.poste]||myPlan.poste},
-          {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':'Journée'},
+          {k:'Créneau',v:myPlan.creneau==='matin'?'Matin':myPlan.creneau==='aprem'?'Après-midi':myPlan.creneau==='nuit'?'Nuit':'Journée'},
         ];
         if(joursLbl) rows.push({k:'Jours',v:joursLbl});
         const gdef=GRID_DEF.find(g=>g.code===myPlan.machine_code||(myPlan.poste==='logistique'&&g.code==='LOG')||(myPlan.poste==='resp_atelier'&&g.code==='RESP'));
         if(gdef){
-          const cr=gdef.creneaux.find(c=>c.key===myPlan.creneau);
+          const cr=getEffectiveCreneaux(gdef).find(c=>c.key===myPlan.creneau);
           if(cr&&cr.hours) rows.push({k:'Horaires',v:cr.hours});
         }
         rows.forEach(r=>{
@@ -2708,12 +2748,14 @@ function buildPivotTable(machines,weeks,hasMatinAprem){
   const machineCols=[];
   machines.forEach(m=>{
     const uniquePostes=[];
-    m.creneaux.forEach(cr=>{
+    const effCr = getEffectiveCreneaux(m);
+    effCr.forEach(cr=>{
       cr.postes.forEach(p=>{
         if(!uniquePostes.includes(p))uniquePostes.push(p);
       });
     });
-    machineCols.push({machine:m,posteCount:uniquePostes.length,uniquePostes});
+    // Injecter les créneaux effectifs sur la machine pour l'usage downstream
+    machineCols.push({machine:m,posteCount:uniquePostes.length,uniquePostes,effCreneaux:effCr});
   });
   
   const thead=document.createElement('thead');
