@@ -1597,10 +1597,43 @@ function renderPortal(){
         return btn;
       })()
     ),
-    h('div',{className:'portal-logo'},
-      h('div',{className:'brand'},'My',h('span',null,'Sifa')),
-      h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')
-    ),
+    // ── Header : MySifa historique OU Kernse DA (icône K + wordmark
+    // top-left, welcome "Bonjour <Prénom>, par où commence-t-on ?" central,
+    // date mono top-right). Détection via body.kernse-theme, injectée par
+    // html.py quand KERNSE_THEME=1.
+    (function renderPortalHeader(){
+      if(document.body.classList.contains('kernse-theme')){
+        // — SVG K styled icon —
+        const kIcon = h('div',{className:'k-logo-icon'});
+        kIcon.innerHTML = '<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="6" y="5" width="4" height="22" rx="1.5" fill="#ffffff"/><path d="M11 15 L20 5 L26 5 L15 15.5 L26 27 L20 27 L11 17 Z" fill="#F2652B"/></svg>';
+        // — Date "MER. 08 JUIL. 2026" mono uppercase —
+        const _now = new Date();
+        const _jours = ['DIM.','LUN.','MAR.','MER.','JEU.','VEN.','SAM.'];
+        const _mois  = ['JANV.','FÉVR.','MARS','AVR.','MAI','JUIN','JUIL.','AOÛT','SEPT.','OCT.','NOV.','DÉC.'];
+        const _dstr  = _jours[_now.getDay()]+' '+String(_now.getDate()).padStart(2,'0')+' '+_mois[_now.getMonth()]+' '+_now.getFullYear();
+        // — Prénom (première partie du nom) —
+        const _fullNom = (S.user && S.user.nom) ? String(S.user.nom).trim() : '';
+        const _prenom  = _fullNom ? _fullNom.split(/\s+/)[0] : '';
+        return h('div',{className:'k-portal-header-block'},
+          h('div',{className:'k-portal-topline'},
+            h('div',{className:'k-portal-brand-row'},
+              kIcon,
+              h('div',{className:'k-wordmark'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__'))
+            ),
+            h('div',{className:'k-portal-date'},_dstr)
+          ),
+          h('h1',{className:'k-portal-welcome'},
+            _prenom ? 'Bonjour '+_prenom+', par où ' : 'Bonjour, par où ',
+            h('em',{className:'k-portal-welcome-hl'},'commence-t-on'),
+            ' ?'
+          )
+        );
+      }
+      return h('div',{className:'portal-logo'},
+        h('div',{className:'brand'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__')),
+        h('div',{className:'tagline'},'__APP_TAGLINE__')
+      );
+    })(),
     gBox,
     appsBlock,
     h('div',{className:'portal-user'},

@@ -2598,6 +2598,11 @@ async function init(){
 .ref-block input:focus,.ref-block select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
 .ref-field{margin-bottom:12px}
 .ref-field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
+.ref-field input[type=text],.ref-field input[type=url],.ref-field input[type=email],.ref-field input[type=number],.ref-field input[type=date],.ref-field select,.ref-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px;transition:border-color .15s,box-shadow .15s;box-sizing:border-box}
+.ref-field textarea{resize:vertical;min-height:70px;line-height:1.5}
+.ref-field select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:36px;cursor:pointer}
+.ref-field input:focus,.ref-field select:focus,.ref-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.ref-field input::placeholder,.ref-field textarea::placeholder{color:var(--muted);opacity:.7}
 
 .ref-questions-list{display:flex;flex-direction:column;gap:6px}
 .ref-question-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text2)}
@@ -3645,10 +3650,9 @@ function openCertModal(certId){
         </div>
       </div>
     </div>`;
-    document.getElementById('mroot').innerHTML = html;
+    _refMroot().innerHTML = html;
   });
 }
-function closeMroot(){ document.getElementById('mroot').innerHTML=''; }
 
 async function submitCert(certId){
   const titre = document.getElementById('cert-titre').value.trim();
@@ -3826,7 +3830,7 @@ async function openAuditPickerFournisseurs(){
     const chk = sel.has(f.id)?'checked':'';
     return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--text2)"><input type="checkbox" class="mtr-four" value="${f.id}" ${chk}><span>${escHtml(f.nom||'')}${f.licence?` <span style="color:var(--muted);font-family:ui-monospace,monospace;font-size:11px">(${escHtml(f.licence)})</span>`:''}</span></label>`;
   }).join('');
-  document.getElementById('mroot').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+  _refMroot().innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
     <div class="modal" style="max-width:520px">
       <div class="modal-hd"><h3>Fournisseurs impliqués</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
       <div class="modal-bd" style="max-height:60vh;overflow:auto">
@@ -3862,7 +3866,7 @@ async function openAuditPickerCertifs(){
     const lbl = f.acronyme ? (f.acronyme+' — '+f.nom) : f.nom;
     return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;font-size:13px;color:var(--text2)"><input type="checkbox" class="mtr-cert" value="${f.id}" ${chk}><span>${escHtml(lbl||'')}${f.categorie?` <span style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px">${escHtml(f.categorie)}</span>`:''}</span></label>`;
   }).join('');
-  document.getElementById('mroot').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+  _refMroot().innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
     <div class="modal" style="max-width:560px">
       <div class="modal-hd"><h3>Certifications demandées par le client</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
       <div class="modal-bd" style="max-height:60vh;overflow:auto">
@@ -3904,7 +3908,7 @@ function openMatriceCellEditor(fourId, ficheId){
     {k:'demande_envoyee', label:'Demande envoyée au fournisseur'},
     {k:'na', label:'Non applicable'},
   ].map(o=>`<option value="${o.k}" ${(cell.override_statut||'')===o.k?'selected':''}>${escHtml(o.label)}</option>`).join('');
-  document.getElementById('mroot').innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+  _refMroot().innerHTML = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
     <div class="modal" style="max-width:480px">
       <div class="modal-hd"><h3>${escHtml(four.nom)} × ${escHtml(fiche.acronyme||fiche.nom)}</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
       <div class="modal-bd">
