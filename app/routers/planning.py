@@ -553,9 +553,15 @@ def _normalize_parity_body(body: dict) -> Dict[str, Any]:
 
 
 def _load_day_horaires_map(conn, machine_id: int) -> Dict[str, Tuple[float, float]]:
-    """Overrides journaliers (planning_day_horaires) — priorité sur horaires machine / paire-impair."""
+    """Overrides journaliers (planning_day_horaires) — priorité sur horaires machine / paire-impair.
+
+    Quand journee_entiere=1, on force (0.0, 24.0) pour que la logique aval
+    n'ait pas besoin de connaître le flag.
+    """
     rows = conn.execute(
-        "SELECT date, heure_debut, heure_fin FROM planning_day_horaires WHERE machine_id=?",
+        """SELECT date, heure_debut, heure_fin,
+                  COALESCE(journee_entiere, 0) AS journee_entiere
+             FROM planning_day_horaires WHERE machine_id=?""",
         (machine_id,),
     ).fetchall()
     out: Dict[str, Tuple[float, float]] = {}
@@ -565,7 +571,9 @@ def _load_day_horaires_map(conn, machine_id: int) -> Dict[str, Tuple[float, floa
             e = float(r["heure_fin"])
         except (TypeError, ValueError):
             continue
-        if e > s:
+        if int(r["journee_entiere"] or 0) == 1:
+            out[str(r["date"])] = (0.0, 24.0)
+        elif e > s:
             out[str(r["date"])] = (s, e)
     return out
 
@@ -573,17 +581,24 @@ def _load_day_horaires_map(conn, machine_id: int) -> Dict[str, Tuple[float, floa
 def _load_planning_calendar_maps(
     conn, machine_id: int
 ) -> tuple[dict, dict, Dict[str, int], Dict[str, Tuple[float, float]]]:
-    """Config semaines (samedi), fériés, jours travaillés, horaires journaliers — aligné GET /timeline."""
+    """Config semaines (samedi + journée entière), fériés, jours travaillés, horaires journaliers — aligné GET /timeline.
+
+    configs[sw] est un dict {"samedi_travaille": 0/1, "journee_entiere": 0/1}.
+    """
     configs: dict = {}
     today = datetime.now()
     for w in range(8):
         d = today + timedelta(weeks=w)
         sw = f"{d.year}-W{d.isocalendar()[1]:02d}"
         cfg = conn.execute(
-            "SELECT samedi_travaille FROM planning_config WHERE machine_id=? AND semaine=?",
+            """SELECT samedi_travaille, COALESCE(journee_entiere, 0) AS journee_entiere
+                 FROM planning_config WHERE machine_id=? AND semaine=?""",
             (machine_id, sw),
         ).fetchone()
-        configs[sw] = cfg["samedi_travaille"] if cfg else 0
+        configs[sw] = {
+            "samedi_travaille": int(cfg["samedi_travaille"] or 0) if cfg else 0,
+            "journee_entiere":  int(cfg["journee_entiere"] or 0) if cfg else 0,
+        }
     hol_rows = conn.execute(
         "SELECT date, is_off FROM planning_holidays WHERE machine_id=?",
         (machine_id,),
@@ -610,10 +625,14 @@ def _load_planning_calendar_maps_range(
         if sw in configs:
             continue
         cfg = conn.execute(
-            "SELECT samedi_travaille FROM planning_config WHERE machine_id=? AND semaine=?",
+            """SELECT samedi_travaille, COALESCE(journee_entiere, 0) AS journee_entiere
+                 FROM planning_config WHERE machine_id=? AND semaine=?""",
             (machine_id, sw),
         ).fetchone()
-        configs[sw] = cfg["samedi_travaille"] if cfg else 0
+        configs[sw] = {
+            "samedi_travaille": int(cfg["samedi_travaille"] or 0) if cfg else 0,
+            "journee_entiere":  int(cfg["journee_entiere"] or 0) if cfg else 0,
+        }
     hol_rows = conn.execute(
         "SELECT date, is_off FROM planning_holidays WHERE machine_id=?",
         (machine_id,),
@@ -664,13 +683,20 @@ def _hours_for_date_factory(
                 return None
         elif wd == 5:
             if dw is None:
-                if int(configs.get(week_key(dt), 0) or 0) == 0:
+                if int((configs.get(week_key(dt), {}) or {}).get("samedi_travaille", 0) or 0) == 0:
                     return None
             elif int(dw) == 0:
                 return None
+        # Journée entière : hiérarchie override day > override semaine > default machine.
+        # (le jour doit rester travaillé — les checks day-off ci-dessus s'appliquent d'abord)
         dh = dh_map.get(dkey)
         if dh is not None:
             return dh
+        wk_cfg = configs.get(week_key(dt), {}) or {}
+        if isinstance(wk_cfg, dict) and int(wk_cfg.get("journee_entiere", 0) or 0) == 1:
+            return (0.0, 24.0)
+        if int(m.get("journee_entiere") or 0) == 1:
+            return (0.0, 24.0)
         if wd in base_hours:
             if _parity_defs is not None:
                 par = "pair" if _is_pair_week(dt) else "impair"
@@ -2880,19 +2906,31 @@ def list_day_horaires(machine_id: int, request: Request, start: str, end: str):
     require_planning_view(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT date, heure_debut, heure_fin FROM planning_day_horaires
-               WHERE machine_id=? AND date>=? AND date<=?
-               ORDER BY date""",
+            """SELECT date, heure_debut, heure_fin,
+                      COALESCE(journee_entiere, 0) AS journee_entiere
+                 FROM planning_day_horaires
+                WHERE machine_id=? AND date>=? AND date<=?
+                ORDER BY date""",
             (machine_id, start, end),
         ).fetchall()
-    return [{"date": r["date"], "heure_debut": r["heure_debut"], "heure_fin": r["heure_fin"]} for r in rows]
+    return [
+        {
+            "date": r["date"],
+            "heure_debut": r["heure_debut"],
+            "heure_fin": r["heure_fin"],
+            "journee_entiere": int(r["journee_entiere"] or 0),
+        }
+        for r in rows
+    ]
 
 
 @router.put("/machines/{machine_id}/day-horaires")
 async def set_day_horaires(machine_id: int, request: Request):
     """Enregistre ou met à jour l'horaire pour une date précise.
-    Body: {date:'YYYY-MM-DD', heure_debut: 5.0, heure_fin: 13.0}
+
+    Body: {date:'YYYY-MM-DD', heure_debut: 5.0, heure_fin: 13.0, journee_entiere?: 0|1}
     Passer heure_debut==null supprime l'override.
+    Quand journee_entiere==1, on force heure_debut=0 et heure_fin=24 (3×8).
     """
     require_admin(request)
     body = await request.json()
@@ -2900,8 +2938,14 @@ async def set_day_horaires(machine_id: int, request: Request):
     if not date:
         raise HTTPException(400, "date requise (YYYY-MM-DD)")
 
-    # Suppression de l'override
-    if body.get("heure_debut") is None:
+    je_raw = body.get("journee_entiere", 0)
+    try:
+        je = 1 if int(je_raw or 0) == 1 else 0
+    except (TypeError, ValueError):
+        je = 0
+
+    # Suppression de l'override (heure_debut null ET pas de journee_entiere).
+    if body.get("heure_debut") is None and je == 0:
         with get_db() as conn:
             conn.execute(
                 "DELETE FROM planning_day_horaires WHERE machine_id=? AND date=?",
@@ -2910,24 +2954,72 @@ async def set_day_horaires(machine_id: int, request: Request):
             conn.commit()
         return {"success": True, "deleted": True}
 
-    try:
-        hd = float(body["heure_debut"])
-        hf = float(body["heure_fin"])
-    except (TypeError, ValueError, KeyError):
-        raise HTTPException(400, "heure_debut et heure_fin doivent être des nombres")
-    if not (0 <= hd < hf <= 24):
-        raise HTTPException(400, "Plage invalide : 0 ≤ début < fin ≤ 24")
+    if je == 1:
+        hd, hf = 0.0, 24.0
+    else:
+        try:
+            hd = float(body["heure_debut"])
+            hf = float(body["heure_fin"])
+        except (TypeError, ValueError, KeyError):
+            raise HTTPException(400, "heure_debut et heure_fin doivent être des nombres")
+        if not (0 <= hd < hf <= 24):
+            raise HTTPException(400, "Plage invalide : 0 ≤ début < fin ≤ 24")
 
     with get_db() as conn:
         conn.execute(
-            """INSERT INTO planning_day_horaires (machine_id, date, heure_debut, heure_fin)
-               VALUES (?,?,?,?)
+            """INSERT INTO planning_day_horaires (machine_id, date, heure_debut, heure_fin, journee_entiere)
+               VALUES (?,?,?,?,?)
                ON CONFLICT(machine_id, date)
-               DO UPDATE SET heure_debut=excluded.heure_debut, heure_fin=excluded.heure_fin""",
-            (machine_id, date, hd, hf),
+               DO UPDATE SET heure_debut=excluded.heure_debut,
+                             heure_fin=excluded.heure_fin,
+                             journee_entiere=excluded.journee_entiere""",
+            (machine_id, date, hd, hf, je),
         )
+        _invalidate_attente_plans(conn, machine_id)
         conn.commit()
-    return {"success": True}
+    return {"success": True, "journee_entiere": je}
+
+
+# ═══════════════════════════════════════════════════════════════
+# JOURNÉE ENTIÈRE — default machine
+# ═══════════════════════════════════════════════════════════════
+
+@router.put("/machines/{machine_id}/journee-entiere")
+async def set_machine_journee_entiere(machine_id: int, request: Request):
+    """Active/désactive la journée entière par défaut sur une machine.
+
+    Body: {"journee_entiere": 0|1}
+    Quand actif, tous les jours travaillés de cette machine s'étendent de
+    00:00 à 23:59, sauf override plus prioritaire (day override, week override).
+    """
+    user = require_admin(request)
+    body = await request.json()
+    try:
+        je = 1 if int(body.get("journee_entiere", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        je = 0
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            "UPDATE machines SET journee_entiere=? WHERE id=?",
+            (je, machine_id),
+        )
+        _invalidate_attente_plans(conn, machine_id)
+        conn.commit()
+    try:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="planning",
+            objet=f"Journée entière machine {ex['nom']}",
+            detail={"journee_entiere": je},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "journee_entiere": je}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -3050,8 +3142,10 @@ def get_week_config(machine_id: int, request: Request, semaine: Optional[str] = 
             (machine_id, semaine)
         ).fetchone()
     if row:
-        return dict(row)
-    return {"machine_id": machine_id, "semaine": semaine, "samedi_travaille": 0, "notes": ""}
+        d = dict(row)
+        d["journee_entiere"] = int(d.get("journee_entiere") or 0)
+        return d
+    return {"machine_id": machine_id, "semaine": semaine, "samedi_travaille": 0, "notes": "", "journee_entiere": 0}
 
 
 @router.put("/machines/{machine_id}/config")
@@ -3064,20 +3158,28 @@ async def set_week_config(machine_id: int, request: Request):
         today = datetime.now()
         semaine = f"{today.year}-W{today.isocalendar()[1]:02d}"
 
+    try:
+        je = 1 if int(body.get("journee_entiere", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        je = 0
+
     with get_db() as conn:
         conn.execute("""
-            INSERT INTO planning_config (machine_id, semaine, samedi_travaille, notes)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO planning_config (machine_id, semaine, samedi_travaille, notes, journee_entiere)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(machine_id, semaine)
-            DO UPDATE SET samedi_travaille=excluded.samedi_travaille, notes=excluded.notes
+            DO UPDATE SET samedi_travaille=excluded.samedi_travaille,
+                          notes=excluded.notes,
+                          journee_entiere=excluded.journee_entiere
         """, (
             machine_id, semaine,
             body.get("samedi_travaille", 0),
-            body.get("notes", "")
+            body.get("notes", ""),
+            je,
         ))
         _invalidate_attente_plans(conn, machine_id)
         conn.commit()
-    return {"success": True}
+    return {"success": True, "journee_entiere": je}
 
 
 # ═══════════════════════════════════════════════════════════════

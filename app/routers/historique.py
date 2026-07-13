@@ -29,7 +29,10 @@ def _day_key(dt: Optional[datetime], raw: Any) -> str:
     return s[:10] if len(s) >= 10 else s
 
 
-def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def compute_sanity_score_v2(
+    rows: List[Dict[str, Any]],
+    ctx: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """Sanity v2 (règles métier).
 
     Règles (pénalités cumulées, score sur 100):
@@ -42,9 +45,28 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     - -7  si fin dossier (89) sans quantité traitée (nb étiquettes)
     - -7  si début dossier (01) directement suivi d'une fin dossier (89)
            sans saisie intermédiaire (calage / production / nettoyage / technique)
+
+    Règles ajoutées via ``ctx`` (backward-compatible : sans ctx, comportement
+    identique à v2 historique) :
+    - -7  si fin dossier (89) sans aucune entrée Z1 pour ce no_dossier
+    - -3  par entrée Z1 sans palettes déclarées (mouvement_palettes vide)
+    - -3  si fin dossier avec quantite_traitee>0 mais aucun scan MP
+    - +1  par alerte maintenance/qualité validée pendant la journée opérateur
+
+    ctx (tous optionnels) :
+        z1_by_dossier      : {no_dossier: {"count": int, "mouvement_ids": [int]}}
+        palettes_by_mvt_id : {mouvement_id: nb_palettes_declarees}
+        mp_scans_by_dossier: {no_dossier: nb_scans}
+        acks_by_op_day     : {(operateur, "YYYY-MM-DD"): nb_acks}
     """
     if not rows:
         return {"score": 0, "mention": "Aucune saisie", "color": "warn", "penalites": [], "events": {}}
+
+    ctx = ctx or {}
+    z1_by_dossier       = ctx.get("z1_by_dossier") or {}
+    palettes_by_mvt_id  = ctx.get("palettes_by_mvt_id") or {}
+    mp_scans_by_dossier = ctx.get("mp_scans_by_dossier") or {}
+    acks_by_op_day      = ctx.get("acks_by_op_day") or {}
 
     # Group by opérateur + shift ("journée opérateur" : 86 → 87, peut
     # traverser minuit). assign_shift_keys mute les lignes en y ajoutant
@@ -80,6 +102,11 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     c_arret_50 = 0
     c_missing_metrage = 0
     c_empty_dossier = 0
+    # Nouvelles règles Z1 / MP / alertes (dépendent de ctx)
+    c_89_no_z1 = 0
+    c_z1_no_palettes = 0
+    c_89_no_mp_scan = 0
+    c_alertes_ok = 0
 
     prod_codes = {CODE_PRODUCTION, CODE_REPRISE}
     calage_codes = CODES_CALAGE
@@ -130,17 +157,76 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         # -7 : manque métrage sur fin dossier (89)
         # Règle appliquée par journée: si au moins une fin dossier est incomplète.
+        # Boucle mutualisée avec les nouvelles règles Z1/MP pour éviter deux
+        # itérations sur les mêmes lignes.
         miss_m = False
+        seen_dossiers_89: set[str] = set()
         for x in lignes_sorted:
             if str(x.get("operation_code") or "") != CODE_FIN_DOS:
                 continue
             mr = x.get("metrage_reel", None)
-            dos = x.get("no_dossier") or ""
+            dos_raw = x.get("no_dossier") or ""
+            dos = str(dos_raw).strip()
             if mr is None or (isinstance(mr, (int, float)) and float(mr) == 0.0) or str(mr).strip() == "":
                 miss_m = True
-                add_event("jour_missing_metrage", op, jour, str(dos))
+                add_event("jour_missing_metrage", op, jour, dos)
+
+            # ── Nouvelles règles Z1 / MP (ctx-dépendantes) ────────────
+            # On dédoublonne par no_dossier au sein de la même journée op :
+            # une même fin de dossier saisie deux fois ne pénalise qu'une fois.
+            if not dos or dos in seen_dossiers_89:
+                continue
+            seen_dossiers_89.add(dos)
+
+            # Uniquement si un ctx a été fourni côté appelant. Sinon on
+            # skippe silencieusement (weekly_report et anciens appels
+            # gardent leur comportement).
+            if not ctx:
+                continue
+
+            z1_info = z1_by_dossier.get(dos) or {}
+            z1_count = int(z1_info.get("count") or 0)
+            if z1_count == 0:
+                c_89_no_z1 += 1
+                add_event("dossier_fin_sans_z1", op, jour, dos)
+            else:
+                mvt_ids = z1_info.get("mouvement_ids") or []
+                for mid in mvt_ids:
+                    try:
+                        nb_pal = int(palettes_by_mvt_id.get(mid, 0) or 0)
+                    except (TypeError, ValueError):
+                        nb_pal = 0
+                    if nb_pal == 0:
+                        c_z1_no_palettes += 1
+                        add_event("z1_sans_palettes", op, jour, dos)
+
+            # Scan MP : fin dossier avec quantité traitée > 0 et 0 scan.
+            q_tr = x.get("quantite_traitee", None)
+            try:
+                q_tr_f = float(q_tr) if q_tr is not None else 0.0
+            except (TypeError, ValueError):
+                q_tr_f = 0.0
+            nb_scans = int(mp_scans_by_dossier.get(dos, 0) or 0)
+            if q_tr_f > 0 and nb_scans == 0:
+                c_89_no_mp_scan += 1
+                add_event("dossier_fin_sans_mp_scan", op, jour, dos)
         if miss_m:
             c_missing_metrage += 1
+
+        # ── Bonus alertes maintenance/qualité validées sur la journée ─
+        # +1 point par ack pris sur cette (op, jour). On ne dédoublonne
+        # pas : chaque validation d'alerte compte, y compris plusieurs
+        # occurrences d'une même alerte périodique dans la journée.
+        # Clé opérateur normalisée (lower/strip) : les noms peuvent différer
+        # entre production_data.operateur et maintenance_alert_acks.user_nom.
+        if ctx:
+            op_key_ack = str(op or "").strip().lower()
+            try:
+                nb_acks = int(acks_by_op_day.get((op_key_ack, jour), 0) or 0)
+            except (TypeError, ValueError):
+                nb_acks = 0
+            if nb_acks > 0:
+                c_alertes_ok += nb_acks
 
         # -7 : début dossier (01) directement suivi de fin dossier (89)
         # sans saisie intermédiaire (calage/production/nettoyage/technique).
@@ -182,6 +268,17 @@ def compute_sanity_score_v2(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         -7,
         c_empty_dossier,
     )
+    # Nouvelles règles (dépendent de ctx — 0 si non fourni)
+    add_pen("dossier_fin_sans_z1", "Fin de dossier sans entrée Z1", -7, c_89_no_z1)
+    add_pen("z1_sans_palettes", "Entrée Z1 sans palettes déclarées", -3, c_z1_no_palettes)
+    add_pen(
+        "dossier_fin_sans_mp_scan",
+        "Fin de dossier avec quantité traitée mais aucun scan matière",
+        -3,
+        c_89_no_mp_scan,
+    )
+    # Bonus (pts unitaire positif)
+    add_pen("bonus_alertes_validees", "Alertes maintenance/qualité validées", 1, c_alertes_ok)
 
     # pts négatifs => total_pen négatif : on soustrait via addition
     score = 100 + total_pen
@@ -412,6 +509,100 @@ def dashboard_historique(
             FROM production_data WHERE {wc_san} {san_machine_excl}
             ORDER BY operateur,date_operation""", ps).fetchall()
 
+        # ── Contexte enrichi pour compute_sanity_score_v2 ─────────────
+        # Objectif : intégrer au score les actions opérateur qui ne sont pas
+        # dans production_data (entrées Z1, palettes déclarées, scans MP,
+        # alertes maintenance/qualité ackées). Toutes ces requêtes sont
+        # scopées aux dossiers/opérateurs/dates déjà filtrés par l'UI, donc
+        # bornées et indexées.
+        sanity_ctx: Dict[str, Any] = {
+            "z1_by_dossier": {},
+            "palettes_by_mvt_id": {},
+            "mp_scans_by_dossier": {},
+            "acks_by_op_day": {},
+        }
+        san_dossiers = sorted({
+            str(r["no_dossier"]).strip()
+            for r in san_rows
+            if r["no_dossier"] and str(r["no_dossier"]).strip()
+        })
+        if san_dossiers:
+            ph_d = ",".join(["?"] * len(san_dossiers))
+            # Entrées Z1 (produit fini → stock zone Z1) rattachées à ces dossiers
+            z1_rows = conn.execute(
+                f"""SELECT id, no_dossier
+                    FROM mouvements_stock
+                    WHERE type_mouvement='entree'
+                      AND UPPER(COALESCE(emplacement,'')) = 'Z1'
+                      AND TRIM(COALESCE(no_dossier,'')) IN ({ph_d})""",
+                san_dossiers,
+            ).fetchall()
+            z1_by_dossier_ctx: Dict[str, Dict[str, Any]] = {}
+            all_z1_mvt_ids: list[int] = []
+            for r in z1_rows:
+                d = str(r["no_dossier"]).strip()
+                info = z1_by_dossier_ctx.setdefault(d, {"count": 0, "mouvement_ids": []})
+                info["count"] += 1
+                info["mouvement_ids"].append(int(r["id"]))
+                all_z1_mvt_ids.append(int(r["id"]))
+            sanity_ctx["z1_by_dossier"] = z1_by_dossier_ctx
+
+            # Palettes déclarées par mouvement (mouvement_palettes)
+            if all_z1_mvt_ids:
+                ph_m = ",".join(["?"] * len(all_z1_mvt_ids))
+                pal_rows = conn.execute(
+                    f"""SELECT mouvement_id, COUNT(*) AS n
+                        FROM mouvement_palettes
+                        WHERE mouvement_id IN ({ph_m})
+                        GROUP BY mouvement_id""",
+                    all_z1_mvt_ids,
+                ).fetchall()
+                sanity_ctx["palettes_by_mvt_id"] = {
+                    int(r["mouvement_id"]): int(r["n"]) for r in pal_rows
+                }
+
+            # Scans matière première par dossier
+            mp_rows_s = conn.execute(
+                f"""SELECT TRIM(no_dossier) AS no_dossier, COUNT(*) AS n
+                    FROM fab_matieres_utilisees
+                    WHERE TRIM(COALESCE(no_dossier,'')) IN ({ph_d})
+                    GROUP BY TRIM(no_dossier)""",
+                san_dossiers,
+            ).fetchall()
+            sanity_ctx["mp_scans_by_dossier"] = {
+                str(r["no_dossier"]).strip(): int(r["n"]) for r in mp_rows_s
+            }
+
+        # Alertes maintenance/qualité ackées, groupées par (opérateur, jour)
+        # Clé opérateur en lower/strip pour matcher production_data.operateur
+        # (l'UI ack utilise user.nom, qui peut différer légèrement).
+        san_ops_norm = sorted({
+            str(r["operateur"] or "").strip().lower()
+            for r in san_rows
+            if r["operateur"] and str(r["operateur"]).strip()
+        })
+        if san_ops_norm:
+            ph_op = ",".join(["?"] * len(san_ops_norm))
+            ack_q = (
+                "SELECT LOWER(TRIM(COALESCE(user_nom,''))) AS op, "
+                "       DATE(ack_at) AS d, COUNT(*) AS n "
+                "FROM maintenance_alert_acks "
+                f"WHERE LOWER(TRIM(COALESCE(user_nom,''))) IN ({ph_op})"
+            )
+            ack_params: list = list(san_ops_norm)
+            if date_from:
+                ack_q += " AND ack_at >= ?"
+                ack_params.append(date_from + "T00:00:00")
+            if date_to:
+                ack_q += " AND ack_at <= ?"
+                ack_params.append(date_to + "T23:59:59")
+            ack_q += " GROUP BY op, d"
+            ack_rows = conn.execute(ack_q, ack_params).fetchall()
+            sanity_ctx["acks_by_op_day"] = {
+                (str(r["op"] or ""), str(r["d"] or "")): int(r["n"])
+                for r in ack_rows
+            }
+
     duree_by_id = compute_duree_minutes_by_id([dict(r) for r in dur_rows])
     issues_list = [dict(r) for r in issues]
     for it in issues_list:
@@ -441,7 +632,7 @@ def dashboard_historique(
 
     san_list = [dict(r) for r in san_rows]
     saisie_errors = analyse_saisie_errors(san_list)
-    sanity        = compute_sanity_score_v2(san_list)
+    sanity        = compute_sanity_score_v2(san_list, sanity_ctx)
 
     # Si le filtre machine ne contient QUE Repiquage, neutraliser le sanity score
     # (sinon il vaudrait 100 par defaut sur 0 evenement, ce qui est trompeur).
@@ -460,7 +651,9 @@ def dashboard_historique(
             sanity_by_operateur = {}
             for op in sel_ops:
                 sub = [r for r in san_list if str(r.get("operateur") or "") == str(op)]
-                sanity_by_operateur[op] = compute_sanity_score_v2(sub)
+                # ctx est partagé : les clés (op, jour) et no_dossier
+                # sont scopées, le sous-set d'op filtre naturellement.
+                sanity_by_operateur[op] = compute_sanity_score_v2(sub, sanity_ctx)
             activity_min = _activity_minutes_by_operateur(
                 [dict(r) for r in dur_rows], duree_by_id
             )

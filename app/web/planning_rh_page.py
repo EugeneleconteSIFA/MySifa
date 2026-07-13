@@ -876,6 +876,10 @@ const S = {
   modalTarget: null,     // { semaine, machineCode, poste, creneau, machineId }
   dayDetailTarget: null, // { semaine, machineCode, poste, creneau, machineId }
   dayDetailEdit: {},     // { [planId]: joursFlags [bool×6] }
+  machineConfigs: [],    // Config équipes par machine (rh_machine_config)
+  machineConfigSelected: null, // machine_id sélectionnée dans le modal réglages
+  machineConfigDraft: null, // brouillon en cours d'édition
+  machineConfigsLoaded: false, // évite un fetch au premier rendu si déjà chargé
 };
 
 // ── Helpers semaines ───────────────────────────────────
@@ -1382,6 +1386,7 @@ function icon(name,sz=14){
     check:'<polyline points="20 6 9 17 4 12"/>',
     mail:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   };
   return`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
 }
@@ -1477,6 +1482,9 @@ function renderHeader(){
         ${S.tab==='planning'?`
           <button type="button" class="rh-icon-btn" onclick="printPlanning()" title="Imprimer le planning">
             ${icon('printer',13)} Imprimer
+          </button>
+          <button type="button" class="rh-icon-btn rh-icon-btn--icon-only" onclick="openMachineConfigModal()" title="Configurer les équipes par machine" aria-label="Réglages équipes">
+            ${icon('settings',14)}<span class="rh-icon-btn-label"> Réglages</span>
           </button>
         `:''}
       </div>
@@ -2312,6 +2320,180 @@ function buildOperatorView(){
   return wrap;
 }
 
+// ══════════════════════════════════════════════════════════
+// Modale — configuration des équipes par machine (matin/aprem/nuit)
+// ══════════════════════════════════════════════════════════
+async function loadMachineConfigs(){
+  try{
+    const r=await api('/machine-configs');
+    S.machineConfigs=(r&&r.configs)||[];
+    S.machineConfigsLoaded=true;
+  }catch(e){
+    S.machineConfigs=[];
+    toast('Chargement config équipes impossible : '+e.message,'error');
+  }
+}
+
+async function openMachineConfigModal(){
+  if(!S.isEditor){ toast('Modification réservée aux configurateurs.','error'); return; }
+  if(!S.machineConfigsLoaded){ await loadMachineConfigs(); }
+  if(!S.machineConfigs.length){ toast('Aucune machine active.','error'); return; }
+  S.machineConfigSelected = S.machineConfigSelected || S.machineConfigs[0].machine_id;
+  S.machineConfigDraft = _cloneMachineConfig(_findMachineConfig(S.machineConfigSelected));
+  S.modal='machine_config';
+  render();
+}
+
+function _findMachineConfig(mid){
+  return (S.machineConfigs||[]).find(c=>c.machine_id===mid || String(c.machine_id)===String(mid));
+}
+
+function _cloneMachineConfig(cfg){
+  if(!cfg) return null;
+  return JSON.parse(JSON.stringify(cfg));
+}
+
+function onMachineConfigSelect(mid){
+  const id=parseInt(mid,10);
+  if(!isFinite(id)) return;
+  S.machineConfigSelected=id;
+  S.machineConfigDraft=_cloneMachineConfig(_findMachineConfig(id));
+  render();
+}
+
+function onMcShiftToggle(shift){
+  const d=S.machineConfigDraft; if(!d) return;
+  const key=shift+'_actif';
+  d[key]=d[key]?0:1;
+  render();
+}
+
+function onMcShiftInput(shift,which,val){
+  const d=S.machineConfigDraft; if(!d) return;
+  d[shift+'_'+which]=val;
+}
+
+function onMcModeChange(mode){
+  const d=S.machineConfigDraft; if(!d) return;
+  d.mode_alternance=(mode==='alterne')?'alterne':'identique';
+  render();
+}
+
+function _isHHMM(v){ return /^\d{1,2}:\d{2}$/.test(String(v||'').trim()); }
+
+async function saveMachineConfig(){
+  const d=S.machineConfigDraft; if(!d) return;
+  const shifts=[['matin','Matin'],['aprem','Après-midi'],['nuit','Nuit']];
+  for(const [k,lbl] of shifts){
+    if(!_isHHMM(d[k+'_debut'])||!_isHHMM(d[k+'_fin'])){
+      toast(lbl+' : format horaire attendu HH:MM','error'); return;
+    }
+  }
+  const anyActive=(d.matin_actif|d.aprem_actif|d.nuit_actif);
+  if(!anyActive){
+    if(!confirm('Aucune équipe active pour cette machine — confirmer ?')) return;
+  }
+  try{
+    await api('/machine-configs/'+d.machine_id,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        matin_actif:d.matin_actif, matin_debut:d.matin_debut, matin_fin:d.matin_fin,
+        aprem_actif:d.aprem_actif, aprem_debut:d.aprem_debut, aprem_fin:d.aprem_fin,
+        nuit_actif:d.nuit_actif,   nuit_debut:d.nuit_debut,   nuit_fin:d.nuit_fin,
+        mode_alternance:d.mode_alternance
+      })
+    });
+    // Mettre à jour le cache
+    const idx=(S.machineConfigs||[]).findIndex(c=>c.machine_id===d.machine_id);
+    if(idx>=0) S.machineConfigs[idx]={...S.machineConfigs[idx],...d};
+    toast('Configuration enregistrée.');
+    S.modal=null; render();
+  }catch(e){
+    toast('Enregistrement impossible : '+(e.message||''),'error');
+  }
+}
+
+function buildMachineConfigModal(){
+  if(S.modal!=='machine_config') return null;
+  if(!S.machineConfigDraft) return null;
+  const d=S.machineConfigDraft;
+  const machinesOpts=(S.machineConfigs||[]).map(c=>
+    `<option value="${c.machine_id}"${c.machine_id===d.machine_id?' selected':''}>${c.nom||('Machine '+c.machine_id)}</option>`
+  ).join('');
+
+  function shiftBlock(key, label){
+    const actif=!!d[key+'_actif'];
+    const dbt=d[key+'_debut']||'';
+    const fin=d[key+'_fin']||'';
+    return `
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--bg)">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text)">
+          <input type="checkbox" ${actif?'checked':''} onchange="onMcShiftToggle('${key}')">
+          ${label}
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div class="fd" style="margin:0">
+            <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Début (HH:MM)</label>
+            <input type="text" inputmode="numeric" placeholder="05:00" value="${dbt}" ${actif?'':'disabled'}
+              oninput="onMcShiftInput('${key}','debut',this.value)"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card);color:var(--text);font-family:var(--mono);font-size:13px">
+          </div>
+          <div class="fd" style="margin:0">
+            <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Fin (HH:MM)</label>
+            <input type="text" inputmode="numeric" placeholder="13:00" value="${fin}" ${actif?'':'disabled'}
+              oninput="onMcShiftInput('${key}','fin',this.value)"
+              style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--card);color:var(--text);font-family:var(--mono);font-size:13px">
+          </div>
+        </div>
+      </div>`;
+  }
+
+  const modeIdentique = d.mode_alternance!=='alterne';
+
+  const ov=document.createElement('div'); ov.className='rh-modal-ov';
+  ov.addEventListener('mousedown',e=>{if(e.target===ov){S.modal=null;render();}});
+  const box=document.createElement('div'); box.className='rh-modal-box';
+  box.style.maxWidth='560px';
+  box.innerHTML=`
+    <button class="rh-modal-close" onclick="S.modal=null;render();">${icon('x',16)}</button>
+    <h3>Réglages équipes — par machine</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 14px">
+      Créneaux affichés dans le planning RH pour la machine sélectionnée. Le mode d'alternance
+      active la rotation d'équipes A/B (semaines paires / impaires).
+    </p>
+    <div class="fd" style="margin-bottom:14px">
+      <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Machine</label>
+      <select onchange="onMachineConfigSelect(this.value)"
+        style="width:100%;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;background:var(--card);color:var(--text);font-size:14px">
+        ${machinesOpts}
+      </select>
+    </div>
+    ${shiftBlock('matin','Équipe matin')}
+    ${shiftBlock('aprem','Équipe après-midi')}
+    ${shiftBlock('nuit','Équipe nuit (3×8)')}
+    <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:10px;background:var(--bg)">
+      <div style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+        Mode d'alternance
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:6px;color:var(--text)">
+        <input type="radio" name="mc-mode" ${modeIdentique?'checked':''} onchange="onMcModeChange('identique')">
+        Créneaux identiques chaque semaine
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text)">
+        <input type="radio" name="mc-mode" ${!modeIdentique?'checked':''} onchange="onMcModeChange('alterne')">
+        Alternance équipes A / B (rotation semaine paire / impaire)
+      </label>
+    </div>
+    <div class="rh-modal-acts">
+      <button type="button" class="rh-icon-btn" onclick="S.modal=null;render();">Annuler</button>
+      <button type="button" class="rh-icon-btn active" onclick="saveMachineConfig()">Enregistrer</button>
+    </div>
+  `;
+  ov.appendChild(box);
+  return ov;
+}
+
 // ── Modals rendu ───────────────────────────────────────
 function renderModals(){
   const mr=document.getElementById('rh-modal-root');
@@ -2324,6 +2506,9 @@ function renderModals(){
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else if(S.modal==='day_detail'){
     const m=buildDayDetailModal();
+    mr.innerHTML=''; if(m)mr.appendChild(m);
+  }else if(S.modal==='machine_config'){
+    const m=buildMachineConfigModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{
     mr.innerHTML='';
