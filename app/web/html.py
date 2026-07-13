@@ -1,4 +1,28 @@
-from config import APP_VERSION, APP_META_DESCRIPTION, APP_PAGE_TITLE, THEME_COLOR_META, ENV_NAME, IS_STAGING, MAINTENANCE_OPEN_BETA
+from config import (
+    APP_VERSION,
+    APP_META_DESCRIPTION,
+    APP_PAGE_TITLE,
+    THEME_COLOR_META,
+    ENV_NAME,
+    IS_STAGING,
+    MAINTENANCE_OPEN_BETA,
+    # Branding paramétrable (défaut SIFA — voir config.py).
+    APP_NAME,
+    APP_NAME_PREFIX,
+    APP_NAME_SUFFIX,
+    APP_ORG_NAME,
+    APP_TAGLINE,
+    APP_LOGIN_HINT,
+    KERNSE_THEME,
+)
+
+# Balise <link> vers kernse-theme.css injectée seulement si l'instance a
+# posé `KERNSE_THEME=1` dans son .env. Sinon chaîne vide → DA MySifa
+# (dark cyan) intacte pour SIFA prod.
+_KERNSE_THEME_LINK = (
+    '<link rel="stylesheet" href="/static/kernse-theme.css">'
+    if KERNSE_THEME else ""
+)
 from app.web.expe_assets import (
     EXPE_CARTE_FRANCE_CSS,
     EXPE_CARTE_FRANCE_JS,
@@ -53,6 +77,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
+__KERNSE_THEME_CSS__
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -3830,7 +3855,7 @@ function renderStock(){
   const sidebar=h('nav',{className:'sidebar'},
     h('div',{className:'logo'},
       h('div',{className:'logo-brand'},'My',h('span',null,'Stock')),
-      h('div',{className:'logo-sub'},'by SIFA')
+      h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
     ),
     h('button',{className:'nav-btn'+(S.stockView==='grille'?' active':''),
       onClick:async()=>{
@@ -4719,7 +4744,7 @@ function renderSidebar(){
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
-    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by SIFA')),
+    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Prod')),h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')),
     ...items.map(i=>{
       const btn=h('button',{className:'nav-btn'+(S.page===i.key?' active':''),onClick:()=>{
         if(i.key==='_planning'){window.location.href='/planning';return;}
@@ -4863,9 +4888,9 @@ function renderMessagesApp(){
   }
   const isLight=document.body.classList.contains('light');
   const sidebar=h('nav',{className:'sidebar'},
-    h('div',{className:'logo'},h('div',{className:'logo-brand'},'My',h('span',null,'Sifa')),h('div',{className:'logo-sub'},'by SIFA')),
+    h('div',{className:'logo'},h('div',{className:'logo-brand'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__')),h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')),
       h('button',{className:'nav-btn back-mysifa',onClick:()=>{set({app:'portal',sidebarOpen:false});}},
-      '← Retour ',h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      '← Retour ',h('span',{className:'wm'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__'))
     ),
     h('div',{className:'sidebar-bottom'},
       sidebarUserChip(S.user),
@@ -5466,6 +5491,9 @@ const SANITY_LABELS={
   jour_missing_metrage:{label:"Métrage manquant (fin dossier)"},
   jour_missing_etiquettes:{label:"Nombre d’étiquettes manquant (fin dossier)"},
   jour_empty_dossier:{label:"Dossier vide (début → fin sans saisie)"},
+  dossier_fin_sans_z1:{label:"Fin de dossier sans entrée Z1"},
+  z1_sans_palettes:{label:"Entrée Z1 sans palettes déclarées"},
+  dossier_fin_sans_mp_scan:{label:"Fin de dossier sans scan matière"},
 };
 function renderSanityEventsBlock(sanity){
   const events=sanity&&sanity.events?sanity.events:{};
@@ -10903,7 +10931,7 @@ _MODULE_CONFIG: dict[str, dict] = {
 }
 _DEFAULT_CONFIG = {
     "touch_icon": 'href="/static/mys_icon_180.png"',
-    "app_title": "MySifa",
+    "app_title": APP_NAME,   # ← paramétrable (défaut "MySifa")
     "manifest": "/manifest.webmanifest",
 }
 
@@ -10931,11 +10959,12 @@ def render_frontend_html(initial_app: str = "portal") -> str:
     if IS_STAGING:
         touch_icon = touch_icon.replace("mys_icon_180.png", "mys_icon-light_180.png")
     # Marque affichée dans le titre onglet + apple-mobile-web-app-title.
-    # Prod → "MySifa" ; staging v1 → "MySifa test" (impossible de confondre les 2 onglets).
-    brand = "MySifa test" if IS_STAGING else "MySifa"
-    # Page-title : si l'app_title == "MySifa", pas de doublon (on affiche la brand seule).
-    # Sinon on préfixe : "MyExpé — MySifa" / "MyExpé — MySifa test".
-    if cfg["app_title"] == "MySifa":
+    # Prod → APP_NAME ; staging v1 → "<APP_NAME> test" (impossible de confondre
+    # les 2 onglets). APP_NAME est paramétrable via .env (défaut "MySifa").
+    brand = f"{APP_NAME} test" if IS_STAGING else APP_NAME
+    # Page-title : si l'app_title == APP_NAME, pas de doublon (on affiche la
+    # brand seule). Sinon on préfixe : "MyExpé — MySifa" / "MyExpé — Kernse test".
+    if cfg["app_title"] == APP_NAME:
         page_title = brand
     else:
         page_title = f"{cfg['app_title']} — {brand}"
@@ -10974,6 +11003,19 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_DEVIS_JS__", EXPE_DEVIS_JS)
         .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
+        # ─── Branding paramétrable (LAST : appliqué aux contenus injectés
+        # au-dessus, notamment LOGIN_MAIN_JS et PORTAL_MAIN_JS). Défaut SIFA.
+        .replace("__APP_NAME_PREFIX__", APP_NAME_PREFIX)
+        .replace("__APP_NAME_SUFFIX__", APP_NAME_SUFFIX)
+        .replace("__APP_TAGLINE__", APP_TAGLINE)
+        .replace("__APP_LOGIN_HINT__", APP_LOGIN_HINT)
+        .replace("__APP_ORG_NAME__", APP_ORG_NAME)
+        .replace("__APP_NAME__", APP_NAME)
+        # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
+        .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
+        # Re-substitution du __V_LABEL__ (peut apparaître dans les assets
+        # injectés au-dessus après leur inclusion). Idempotent.
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
     )
 
 

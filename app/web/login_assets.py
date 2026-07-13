@@ -1,4 +1,12 @@
-"""Login MySifa — assets CSS/JS (injectés dans app/web/html.py). Pas de route FastAPI ici."""
+"""Login — assets CSS/JS (injectés dans app/web/html.py).
+
+Ces constantes contiennent des placeholders `__APP_NAME_PREFIX__`,
+`__APP_NAME_SUFFIX__`, `__APP_TAGLINE__`, `__APP_LOGIN_HINT__`,
+`__APP_ORG_NAME__`, `__APP_NAME__`, `__V_LABEL__` qui sont substitués
+par `render_frontend_html()` dans `html.py` à partir des variables
+d'environnement `APP_NAME`, `APP_SPLIT`, `APP_ORG_NAME`, `APP_TAGLINE`,
+`APP_LOGIN_HINT`. Défaut = valeurs SIFA (MySifa / SIFA).
+"""
 
 LOGIN_MAIN_CSS = r"""
 .login-page{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center}
@@ -168,12 +176,12 @@ function renderLogin(){
     themeBtn,
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},
-        h('div',{className:'brand'},'My',h('span',null,'Sifa')),
-        h('div',{className:'tagline'},'Portail interne — Production, stocks et outils métier')
+        h('div',{className:'brand'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__')),
+        h('div',{className:'tagline'},'__APP_TAGLINE__')
       ),
       h('div',{className:'login-card'},
         h('h2',null,'Connexion'),
-        h('p',null,'Accès réservé au personnel SIFA'),
+        h('p',null,'__APP_LOGIN_HINT__'),
         errEl,
         h('form',{onSubmit:submit},
           h('div',{className:'field'},h('label',{'for':'login-email'},'Identifiant ou email'),emailI),
@@ -181,7 +189,7 @@ function renderLogin(){
           h('button',{type:'submit',className:'login-btn',disabled:!!S.loginSubmitting},S.loginSubmitting?'Connexion…':'Se connecter')
         )
       ),
-      h('div',{className:'login-footer'},'© SIFA — MySifa __V_LABEL__')
+      h('div',{className:'login-footer'},'© __APP_ORG_NAME__ — __APP_NAME__ __V_LABEL__')
     )
   );
 }

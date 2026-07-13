@@ -869,6 +869,13 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
         </div>
         <div id="mac-horaires-wrap">
           <p class="sub" style="margin-top:-4px;margin-bottom:14px">Horaires par défaut du planning de production (lun–sam). Cohésio 2 : semaines paires / impaires.</p>
+          <label id="mac-je-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:14px;font-size:13px">
+            <input type="checkbox" id="mac-je">
+            <span style="font-weight:600;color:var(--text)">Journée entière par défaut (00:00 → 23:59, 3 équipes 8 h)</span>
+          </label>
+          <p id="mac-je-hint" class="sub" style="margin-top:-8px;margin-bottom:14px;font-size:11px;color:var(--muted)">
+            Quand activé, cette machine tourne en continu tous les jours travaillés. Les horaires ci-dessous ne sont utilisés que si un override journalier ou hebdomadaire les rétablit.
+          </p>
           <div id="mac-horaires-weekly"></div>
           <div id="mac-horaires-parity" class="hidden" style="margin-top:16px"></div>
           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
@@ -1926,6 +1933,8 @@ function renderMacHorairesForm() {
   const m = macMachine;
   const weekly = document.getElementById('mac-horaires-weekly');
   const parityBox = document.getElementById('mac-horaires-parity');
+  const jeBox = document.getElementById('mac-je');
+  if (jeBox) jeBox.checked = !!(m && +m.journee_entiere === 1);
   if (!weekly || !m) return;
   const mk = macMachineKey(m);
   const isC2 = mk === 'C2';
@@ -2080,10 +2089,18 @@ async function saveMacHoraires() {
         body: JSON.stringify(bulk),
       });
     }
-    if (mk !== 'C2' && !Object.keys(bulk).length) {
+    if (mk !== 'C2' && !Object.keys(bulk).length && !document.getElementById('mac-je')?.checked) {
       toast('Renseignez au moins un créneau horaire.', true);
       return;
     }
+    // Journée entière par défaut sur la machine
+    const jeBox = document.getElementById('mac-je');
+    const je = jeBox && jeBox.checked ? 1 : 0;
+    await api('/api/planning/machines/' + id + '/journee-entiere', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ journee_entiere: je }),
+    });
     toast('Horaires enregistrés.');
     await loadMacMachineDetail();
     await loadMachines();

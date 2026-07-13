@@ -452,7 +452,7 @@ function renderCompta(){
       h('div',{className:'logo-row'},
         h('div',{className:'logo-brand'},'My',h('span',null,'Compta')),
       ),
-      h('div',{className:'logo-sub'},'by SIFA')
+      h('div',{className:'logo-sub'},'by __APP_ORG_NAME__')
     ),
     h('div',{className:'nav-scroll tabs',style:{width:'100%',margin:0}},
       h('div',{className:'nav-group-label'},'Import'),

@@ -1,0 +1,147 @@
+/* =====================================================================
+ * Kernse theme — override du design system MySifa
+ * Injecté dans le <head> UNIQUEMENT si KERNSE_THEME=1 dans le .env.
+ * Défaut SIFA : ce fichier n'est pas chargé, DA MySifa dark cyan intacte.
+ *
+ * Principe : on override les variables CSS de MySifa avec les tokens
+ * Kernse (crème + navy + orange). Les composants continuent d'utiliser
+ * var(--bg), var(--accent), etc. — pas de refactor CSS invasif.
+ * ===================================================================== */
+
+/* Polices Kernse (Inter Tight / Poppins / JetBrains Mono) */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;600;700;800&family=JetBrains+Mono:wght@600;800&family=Poppins:wght@900&display=swap');
+
+:root {
+  /* Fond & surfaces (clair, papier crème) */
+  --bg:          #f6f4ef;
+  --card:        #ffffff;
+  --border:      #e6e2d7;
+
+  /* Encre */
+  --text:        #182444;      /* navy Kernse */
+  --text2:       #4e5872;
+  --muted:       #8b91a4;
+
+  /* Accent orange Kernse (au lieu de cyan MySifa) */
+  --accent:      #F2652B;
+  --accent-bg:   rgba(242,101,43,.12);
+  --accent-2:    #f37d4d;
+
+  /* Statuts (moins lumineux qu'en mode dark, adaptés au fond crème) */
+  --success:     #1f9d57;
+  --ok:          #1f9d57;
+  --success-bg:  #e3f3ea;
+  --warn:        #bf7d12;
+  --warn-bg:     #f6ecd6;
+  --danger:      #cf3b32;
+  --danger-bg:   #f7e2e0;
+
+  /* Kernse spécifique — accessible aux futurs composants */
+  --navy:        #182444;
+  --navy-2:      #26314f;
+  --orange:      #F2652B;
+  --orange-bg:   #fce4d6;
+
+  /* Typo — override les 'Segoe UI', system-ui MySifa */
+  --font-sans:   'Inter Tight', system-ui, sans-serif;
+  --font-brand:  'Poppins', 'Inter Tight', system-ui, sans-serif;
+  --font-mono:   'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Force body en fond crème + navy (indépendant de la classe .light) */
+html, body {
+  background: var(--bg) !important;
+  color:      var(--text) !important;
+  font-family: var(--font-sans) !important;
+}
+
+/* Wordmark et titres — plus punchy en Poppins 900 */
+.brand,
+.logo-brand,
+.wm {
+  font-family: var(--font-brand) !important;
+  font-weight: 900 !important;
+  letter-spacing: -1px !important;
+}
+.brand span,
+.logo-brand span,
+.wm span {
+  color: var(--orange) !important;
+  margin-left: -3px;   /* effet split serré Kernse */
+}
+
+/* Sous-titres (tagline, logo-sub, "by X") */
+.tagline,
+.logo-sub {
+  color: var(--muted) !important;
+  font-family: var(--font-sans) !important;
+}
+
+/* Boutons accents (login-btn, btn-accent, .primary) — orange */
+.login-btn,
+.btn-accent,
+button.primary,
+.btn.primary {
+  background: var(--orange) !important;
+  color: #fff !important;
+  border-color: var(--orange) !important;
+}
+.login-btn:hover,
+.btn-accent:hover,
+button.primary:hover {
+  background: var(--accent-2) !important;
+  filter: brightness(1.03);
+}
+
+/* Cards (login-card, portal-tile, etc.) — fond blanc, ombre douce */
+.login-card,
+.portal-tile,
+.card {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 1px 2px rgba(24,36,68,.05), 0 12px 32px rgba(24,36,68,.08) !important;
+}
+
+/* Inputs — fond blanc, bordure crème, focus orange */
+input, select, textarea {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none !important;
+  border-color: var(--orange) !important;
+  box-shadow: 0 0 0 3px var(--accent-bg) !important;
+}
+
+/* Sidebar — passe en clair navy/crème */
+.sidebar {
+  background: var(--card) !important;
+  color: var(--text) !important;
+  border-right: 1px solid var(--border) !important;
+}
+.sidebar .nav-btn {
+  color: var(--text2) !important;
+}
+.sidebar .nav-btn.active {
+  background: var(--accent-bg) !important;
+  color: var(--orange) !important;
+}
+
+/* Login footer et other muted text */
+.login-footer {
+  color: var(--muted) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+}
+
+/* Icônes SVG dans les tuiles portail — passent en navy */
+.portal-tile svg,
+.nav-btn svg {
+  stroke: currentColor !important;
+}
+
+/* Le train d'icônes de la login page — fondu vers crème */
+.login-train-layer svg {
+  opacity: 0.35;
+}
