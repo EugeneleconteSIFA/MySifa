@@ -145,3 +145,641 @@ input:focus, select:focus, textarea:focus {
 .login-train-layer svg {
   opacity: 0.35;
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Portail Kernse — override des styles portal_assets.py
+ * (14 tuiles, wordmark, recherche, actions coin)
+ * ═════════════════════════════════════════════════════════════════════ */
+
+/* Fond crème + centrage */
+body.kernse-theme .portal-page {
+  background: var(--bg) !important;
+  min-height: 100vh;
+  padding: 32px 24px 24px;
+}
+
+/* Wordmark portail — plus grand, Poppins, split navy/orange */
+body.kernse-theme .portal-logo {
+  margin-bottom: 32px;
+}
+body.kernse-theme .portal-logo .brand {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 900 !important;
+  font-size: 48px !important;
+  letter-spacing: -2.5px !important;
+  color: var(--navy) !important;
+  line-height: 1;
+}
+body.kernse-theme .portal-logo .brand span {
+  color: var(--orange) !important;
+  margin-left: -3px;
+}
+body.kernse-theme .portal-logo .tagline {
+  color: var(--muted) !important;
+  font-size: 14px !important;
+  letter-spacing: .3px !important;
+  margin-top: 10px;
+  font-weight: 500;
+}
+
+/* Barre de recherche — fond blanc, focus orange */
+body.kernse-theme .portal-search input {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+  color: var(--text) !important;
+  font-family: var(--font-sans, inherit) !important;
+  padding: 14px 18px 14px 46px !important;
+  font-size: 15px;
+  transition: border-color .15s, box-shadow .15s;
+}
+body.kernse-theme .portal-search input:focus {
+  outline: none !important;
+  border-color: var(--orange) !important;
+  box-shadow: 0 0 0 3px rgba(242,101,43,.15) !important;
+}
+body.kernse-theme .portal-search-glogo {
+  color: var(--muted);
+}
+body.kernse-theme .portal-search button {
+  background: var(--navy) !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  padding: 12px 20px !important;
+  font-family: var(--font-sans, inherit) !important;
+}
+body.kernse-theme .portal-search button:hover {
+  background: var(--navy-2, #26314f) !important;
+  box-shadow: 0 6px 16px rgba(24,36,68,.2) !important;
+}
+body.kernse-theme .portal-search-hint {
+  color: var(--muted) !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  letter-spacing: .3px;
+}
+
+/* Tuiles — fond blanc, coin arrondi, hover navy */
+body.kernse-theme .portal-app {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 2px rgba(24,36,68,.04);
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+}
+body.kernse-theme .portal-app:hover {
+  border-color: var(--navy) !important;
+  background: var(--card) !important;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(24,36,68,.12) !important;
+}
+body.kernse-theme .portal-app-name {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 800 !important;
+  color: var(--navy) !important;
+  font-size: 14px;
+  letter-spacing: -.2px;
+  margin-top: 8px;
+}
+body.kernse-theme .portal-app-desc {
+  color: var(--text2, var(--muted)) !important;
+  font-size: 11px !important;
+  line-height: 1.35;
+}
+body.kernse-theme .portal-app-icon {
+  color: var(--navy);
+}
+body.kernse-theme .portal-app:hover .portal-app-icon {
+  color: var(--orange);
+}
+
+/* Badge "Dev" et badge de notif */
+body.kernse-theme .badge-dev {
+  background: var(--orange) !important;
+  color: #fff !important;
+}
+body.kernse-theme .portal-app-badge {
+  background: var(--danger, #cf3b32) !important;
+  box-shadow: 0 0 0 2px var(--card) !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+}
+
+/* Placeholder tuile (drag & drop) */
+body.kernse-theme .portal-app--placeholder {
+  border: 2px dashed var(--border) !important;
+  background: transparent !important;
+}
+body.kernse-theme .portal-app--placeholder:hover {
+  border-color: var(--orange) !important;
+}
+body.kernse-theme .portal-app--placeholder .portal-ph-plus {
+  color: var(--muted);
+}
+body.kernse-theme .portal-app--placeholder .portal-ph-label {
+  color: var(--muted) !important;
+  font-family: var(--font-sans, inherit) !important;
+}
+
+/* Actions en coin (settings, humeur, prof, etc.) */
+body.kernse-theme .portal-settings-corner,
+body.kernse-theme .portal-corner-stack > button {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text2, var(--ink-2)) !important;
+  border-radius: 12px !important;
+}
+body.kernse-theme .portal-settings-corner:hover,
+body.kernse-theme .portal-corner-stack > button:hover {
+  border-color: var(--orange) !important;
+  color: var(--orange) !important;
+}
+body.kernse-theme .portal-corner-badge {
+  background: var(--orange) !important;
+  color: #fff !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+}
+
+/* Wordmark de retour "← Retour <Kernse>" */
+body.kernse-theme .back-mysifa {
+  color: var(--navy) !important;
+}
+body.kernse-theme .back-mysifa:hover {
+  background: var(--accent-bg, rgba(242,101,43,.12)) !important;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Modules Kernse — sidebar + composants communs
+ * S'applique à MyProd, MyStock, MyExpé, MyCompta, Planning, Paie...
+ * ═════════════════════════════════════════════════════════════════════ */
+
+/* Sidebar : fond blanc + bordure douce + boutons navy/orange */
+body.kernse-theme .sidebar {
+  background: var(--card) !important;
+  border-right: 1px solid var(--border) !important;
+  color: var(--text) !important;
+}
+body.kernse-theme .nav-btn {
+  color: var(--text2) !important;
+  font-family: var(--font-sans, inherit) !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  transition: background .15s, color .15s;
+}
+body.kernse-theme .nav-btn:hover:not(.active) {
+  background: var(--accent-bg, rgba(242,101,43,.12)) !important;
+  color: var(--orange) !important;
+  box-shadow: none !important;
+}
+body.kernse-theme .nav-btn.active {
+  background: var(--accent-bg, rgba(242,101,43,.12)) !important;
+  color: var(--orange) !important;
+  font-weight: 700 !important;
+}
+body.kernse-theme .nav-badge {
+  background: var(--orange) !important;
+  color: #fff !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+}
+
+/* User chip / theme / logout / version en bas de sidebar */
+body.kernse-theme .sidebar-bottom .user-chip,
+body.kernse-theme .sidebar-bottom .theme-btn,
+body.kernse-theme .sidebar-bottom .logout-btn {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  border-radius: 10px !important;
+}
+body.kernse-theme .sidebar-bottom .theme-btn:hover,
+body.kernse-theme .sidebar-bottom .logout-btn:hover {
+  border-color: var(--orange) !important;
+  color: var(--orange) !important;
+}
+body.kernse-theme .sidebar-bottom .version {
+  color: var(--muted) !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+  font-size: 11px;
+  text-align: center;
+  padding: 6px 0;
+}
+
+/* Cards de contenu (dans les modules) */
+body.kernse-theme .card {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 1px 2px rgba(24,36,68,.03);
+}
+
+/* Boutons standard (dans les modules) */
+body.kernse-theme .btn,
+body.kernse-theme button.btn {
+  border-radius: 10px !important;
+  font-family: var(--font-sans, inherit) !important;
+  font-weight: 700 !important;
+  transition: filter .15s, box-shadow .15s, background .15s;
+}
+body.kernse-theme .btn-accent,
+body.kernse-theme .btn.primary {
+  background: var(--navy) !important;
+  color: #fff !important;
+  border: none !important;
+}
+body.kernse-theme .btn-accent:hover,
+body.kernse-theme .btn.primary:hover {
+  background: var(--navy-2, #26314f) !important;
+  filter: none !important;
+}
+body.kernse-theme .btn-ghost {
+  background: transparent !important;
+  color: var(--text2) !important;
+  border: 1px solid var(--border) !important;
+}
+body.kernse-theme .btn-ghost:hover {
+  border-color: var(--orange) !important;
+  color: var(--orange) !important;
+}
+body.kernse-theme .btn-danger {
+  background: var(--danger, #cf3b32) !important;
+  color: #fff !important;
+}
+
+/* Inputs / selects / textareas dans les modules */
+body.kernse-theme input[type=text],
+body.kernse-theme input[type=email],
+body.kernse-theme input[type=password],
+body.kernse-theme input[type=number],
+body.kernse-theme input[type=search],
+body.kernse-theme input[type=date],
+body.kernse-theme input[type=datetime-local],
+body.kernse-theme input[type=tel],
+body.kernse-theme select,
+body.kernse-theme textarea {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text) !important;
+  font-family: var(--font-sans, inherit) !important;
+  border-radius: 10px !important;
+}
+body.kernse-theme input:focus,
+body.kernse-theme select:focus,
+body.kernse-theme textarea:focus {
+  outline: none !important;
+  border-color: var(--orange) !important;
+  box-shadow: 0 0 0 3px rgba(242,101,43,.15) !important;
+}
+
+/* Tables (fréquentes dans Stock, Compta, Expé) */
+body.kernse-theme table {
+  background: var(--card) !important;
+  border-collapse: collapse;
+}
+body.kernse-theme table th {
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 800;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+body.kernse-theme table td {
+  color: var(--text2, var(--ink-2)) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 10px 12px;
+}
+body.kernse-theme table tr:hover td {
+  background: var(--accent-bg, rgba(242,101,43,.06)) !important;
+}
+
+/* Toasts / notifications */
+body.kernse-theme .toast,
+body.kernse-theme .notif {
+  background: var(--navy) !important;
+  color: #fff !important;
+  border-radius: 10px !important;
+  font-family: var(--font-sans, inherit) !important;
+  box-shadow: 0 12px 32px rgba(24,36,68,.2) !important;
+}
+body.kernse-theme .toast.success,
+body.kernse-theme .toast-success { background: var(--success, #1f9d57) !important; }
+body.kernse-theme .toast.danger,
+body.kernse-theme .toast-danger,
+body.kernse-theme .toast.error { background: var(--danger, #cf3b32) !important; }
+body.kernse-theme .toast.warn,
+body.kernse-theme .toast-warn { background: var(--warn, #bf7d12) !important; }
+
+/* Topbar mobile */
+body.kernse-theme .mobile-topbar {
+  background: var(--card) !important;
+  border-bottom: 1px solid var(--border) !important;
+  color: var(--navy) !important;
+}
+body.kernse-theme .mobile-topbar .brand,
+body.kernse-theme .mobile-topbar .logo-brand {
+  color: var(--navy) !important;
+}
+
+/* Modals */
+body.kernse-theme .modal-backdrop,
+body.kernse-theme .mroot > *:first-child {
+  background: rgba(24,36,68,.55) !important;
+}
+body.kernse-theme .modal,
+body.kernse-theme .mroot .modal-content {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 60px rgba(24,36,68,.25) !important;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Portail Kernse — header top (K + wordmark left, date right, welcome)
+ * ═════════════════════════════════════════════════════════════════════ */
+
+/* Le nouveau bloc header remplace .portal-logo quand kernse-theme */
+body.kernse-theme .k-portal-header-block {
+  max-width: 1240px;
+  width: 100%;
+  margin: 0 auto 24px;
+  padding: 0 24px;
+}
+
+body.kernse-theme .k-portal-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+body.kernse-theme .k-portal-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+body.kernse-theme .k-portal-brand-row .k-logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--navy);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(24,36,68,.15);
+}
+body.kernse-theme .k-portal-brand-row .k-logo-icon svg { width: 22px; height: 22px; }
+
+body.kernse-theme .k-portal-brand-row .k-wordmark {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: -1.2px;
+  color: var(--navy);
+  line-height: 1;
+}
+body.kernse-theme .k-portal-brand-row .k-wordmark span {
+  color: var(--orange);
+  margin-left: -3px;
+}
+
+body.kernse-theme .k-portal-date {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+body.kernse-theme .k-portal-welcome {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 900;
+  font-size: 52px;
+  letter-spacing: -2.5px;
+  line-height: 1.02;
+  color: var(--navy);
+  margin: 8px 0 24px;
+  max-width: 100%;
+}
+body.kernse-theme .k-portal-welcome .k-portal-welcome-hl {
+  color: var(--orange);
+  font-style: normal;
+}
+
+/* Cacher .portal-logo original côté kernse (au cas où déjà rendu) */
+body.kernse-theme .portal-logo { display: none !important; }
+
+@media (max-width: 720px) {
+  body.kernse-theme .k-portal-welcome { font-size: 32px; letter-spacing: -1.5px; }
+  body.kernse-theme .k-portal-topline { flex-direction: column; gap: 10px; align-items: flex-start; }
+  body.kernse-theme .k-portal-date { align-self: flex-end; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Tuiles Kernse — icônes orange sur bg orange arrondi
+ * (précision maquette : orange-tinted circle 48x48, icône orange dedans)
+ * ═════════════════════════════════════════════════════════════════════ */
+
+body.kernse-theme .portal-app {
+  padding: 20px 14px 16px !important;
+  border-radius: 20px !important;
+  width: 168px !important;
+  height: 168px !important;
+  flex: 0 0 168px !important;
+  gap: 10px !important;
+  align-items: flex-start !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+}
+body.kernse-theme .portal-app-icon {
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 14px !important;
+  background: var(--orange-bg, #fce4d6) !important;
+  color: var(--orange) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-bottom: 4px;
+}
+body.kernse-theme .portal-app-icon svg {
+  width: 26px !important;
+  height: 26px !important;
+  color: var(--orange) !important;
+  stroke: var(--orange) !important;
+}
+body.kernse-theme .portal-app:hover .portal-app-icon {
+  background: var(--orange) !important;
+  color: #fff !important;
+}
+body.kernse-theme .portal-app:hover .portal-app-icon svg {
+  color: #fff !important;
+  stroke: #fff !important;
+}
+body.kernse-theme .portal-app-name {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 900 !important;
+  font-size: 15px !important;
+  color: var(--navy) !important;
+  text-align: left !important;
+  letter-spacing: -.3px !important;
+  margin-top: 4px !important;
+}
+body.kernse-theme .portal-app-desc {
+  font-size: 11px !important;
+  color: var(--text2, var(--muted)) !important;
+  text-align: left !important;
+  line-height: 1.35 !important;
+}
+
+/* Grille tuiles : 5 colonnes desktop, wrap responsive */
+body.kernse-theme .portal-apps {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(168px, 1fr));
+  gap: 16px !important;
+  justify-items: stretch !important;
+  align-items: stretch !important;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+body.kernse-theme .portal-app { width: 100% !important; flex: 1 1 auto !important; }
+@media (max-width: 1160px) { body.kernse-theme .portal-apps { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 900px)  { body.kernse-theme .portal-apps { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 620px)  { body.kernse-theme .portal-apps { grid-template-columns: repeat(2, 1fr); } }
+
+/* Badge notif rouge sur tuile (2, 11, etc.) */
+body.kernse-theme .portal-app-badge {
+  top: 12px !important;
+  right: 12px !important;
+  left: auto !important;
+  background: var(--danger, #cf3b32) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+}
+/* Badge "DEV" orange en haut */
+body.kernse-theme .badge-dev {
+  background: var(--warn-bg, #f6ecd6) !important;
+  color: var(--warn, #bf7d12) !important;
+  border-radius: 6px !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+  font-size: 9px !important;
+  padding: 3px 8px !important;
+  letter-spacing: 1px !important;
+}
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Recherche Kernse : plus grand, placeholder Kernse, ⌘K badge droit
+ * ═════════════════════════════════════════════════════════════════════ */
+
+body.kernse-theme .portal-search {
+  max-width: 1240px !important;
+  width: 100% !important;
+  margin: 0 auto 32px !important;
+  padding: 0 24px;
+}
+body.kernse-theme .portal-search input {
+  padding: 16px 60px 16px 52px !important;
+  font-size: 15px !important;
+  border-radius: 14px !important;
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 1px 2px rgba(24,36,68,.02);
+}
+body.kernse-theme .portal-search input::placeholder {
+  color: var(--muted) !important;
+  opacity: 0.7;
+}
+body.kernse-theme .portal-search .portal-search-cmdk-badge {
+  right: 14px !important;
+  background: var(--bg) !important;
+  color: var(--muted) !important;
+  border: 1px solid var(--border) !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  letter-spacing: .5px !important;
+}
+body.kernse-theme .portal-search-hint { display: none !important; }
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Actions coin (notif, calendrier, docs, settings) : passent en top-nav
+ * ═════════════════════════════════════════════════════════════════════ */
+
+body.kernse-theme .portal-corner-stack {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  flex-direction: row !important;
+  gap: 6px !important;
+  padding: 6px 8px !important;
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 12px rgba(24,36,68,.06) !important;
+  align-items: center !important;
+}
+body.kernse-theme .portal-corner-stack .portal-settings-corner {
+  width: 40px !important;
+  height: 40px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text2) !important;
+  border-radius: 10px !important;
+  padding: 0 !important;
+}
+body.kernse-theme .portal-corner-stack .portal-settings-corner:hover {
+  background: var(--accent-bg, rgba(242,101,43,.12)) !important;
+  color: var(--orange) !important;
+}
+body.kernse-theme .portal-corner-badge {
+  top: 6px !important;
+  right: 6px !important;
+  left: auto !important;
+  background: var(--orange) !important;
+  color: #fff !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  padding: 0 5px !important;
+  font-size: 10px !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+  border: 2px solid var(--card) !important;
+  box-shadow: none !important;
+}
+
+/* Bloc user en bas remplacé par footer riche */
+body.kernse-theme .portal-user {
+  max-width: 1240px !important;
+  margin: 40px auto 20px !important;
+  padding: 20px 24px 0 !important;
+  border-top: 1px solid var(--border) !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  flex-wrap: wrap;
+}
+body.kernse-theme .portal-user .portal-logout {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text2) !important;
+  padding: 8px 14px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  font-family: var(--font-sans, inherit) !important;
+}
+body.kernse-theme .portal-user .portal-logout:hover {
+  border-color: var(--orange) !important;
+  color: var(--orange) !important;
+}
