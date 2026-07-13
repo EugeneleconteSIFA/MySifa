@@ -35,18 +35,71 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "1.7.0"
-# Titre API / OpenAPI
-APP_TITLE = "MySifa"
-# Onglet navigateur & SEO (injecté dans frontend/html.py)
-APP_PAGE_TITLE = "MySifa — Portail interne SIFA"
-APP_META_DESCRIPTION = (
-    "Portail interne SIFA : production, stocks, planning et outils métier."
+APP_VERSION = "1.8.0"
+
+# ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
+# Ces variables permettent à une instance client Kernse de rebrander toute
+# l'app sans modifier une seule ligne de code. Elles sont lues par
+# `app/web/login_assets.py`, `html.py`, tous les rendus HTML de la sidebar,
+# du portail et des footers. Défaut : « MySifa » / « SIFA » (comportement
+# historique inchangé pour la prod SIFA).
+
+# Nom affiché en wordmark, titres, footers.
+APP_NAME = os.getenv("APP_NAME", "MySifa")
+
+# Indice de coupure du wordmark pour l'affichage bicolore. Ex. :
+#   "MySifa" + APP_SPLIT=2 → "My" (couleur principale) + "Sifa" (accent)
+#   "Kernse" + APP_SPLIT=1 → "K"  + "ernse"
+_APP_SPLIT_RAW = int(os.getenv("APP_SPLIT", "2"))
+APP_SPLIT       = max(1, min(_APP_SPLIT_RAW, max(1, len(APP_NAME) - 1)))
+APP_NAME_PREFIX = APP_NAME[:APP_SPLIT]
+APP_NAME_SUFFIX = APP_NAME[APP_SPLIT:]
+
+# Nom de l'organisation propriétaire de l'instance (utilisé dans le footer,
+# les emails, la meta description).
+APP_ORG_NAME = os.getenv("APP_ORG_NAME", "SIFA")
+
+# Sous-titre du login et du portail.
+APP_TAGLINE = os.getenv(
+    "APP_TAGLINE",
+    "Portail interne — Production, stocks et outils métier",
 )
-# Couleur barre d’état mobile (thème sombre par défaut)
-THEME_COLOR_META = "#0a0e17"
-# Page planning (/planning) — titre d’onglet
-APP_PLANNING_PAGE_TITLE = "Planning — MySifa"
+
+# Petit texte sous « Connexion » (« Accès réservé au personnel SIFA »).
+APP_LOGIN_HINT = os.getenv(
+    "APP_LOGIN_HINT",
+    f"Accès réservé au personnel {APP_ORG_NAME}",
+)
+
+# Titre API / OpenAPI. Par défaut = APP_NAME.
+APP_TITLE = os.getenv("APP_TITLE", APP_NAME)
+
+# Onglet navigateur & SEO.
+APP_PAGE_TITLE = os.getenv(
+    "APP_PAGE_TITLE",
+    f"{APP_NAME} — Portail interne {APP_ORG_NAME}",
+)
+APP_META_DESCRIPTION = os.getenv(
+    "APP_META_DESCRIPTION",
+    f"Portail interne {APP_ORG_NAME} : production, stocks, planning et outils métier.",
+)
+
+# Thème visuel : dark cyan MySifa (défaut) ou clair navy/orange Kernse.
+# Active via KERNSE_THEME=1 dans le .env de l'instance client.
+KERNSE_THEME = os.getenv("KERNSE_THEME", "0") in {"1", "true", "True", "yes", "YES"}
+
+# Couleur barre d'état mobile (dérivée du thème actif).
+THEME_COLOR_META = os.getenv(
+    "THEME_COLOR_META",
+    "#f6f4ef" if KERNSE_THEME else "#0a0e17",
+)
+
+# Page planning (/planning) — titre d'onglet.
+APP_PLANNING_PAGE_TITLE = os.getenv(
+    "APP_PLANNING_PAGE_TITLE",
+    f"Planning — {APP_NAME}",
+)
+
 HOST        = "0.0.0.0"
 PORT        = int(os.getenv("PORT", 8000))
 

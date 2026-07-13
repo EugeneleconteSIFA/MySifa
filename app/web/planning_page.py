@@ -1170,7 +1170,12 @@ async function loadDayHoraires(){
   const start=ymd(mon), end=ymd(addD(mon,nb));
   const rows=await api(`/machines/${MID}/day-horaires?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const map={};
-  (rows||[]).forEach(r=>{ map[String(r.date)]={s:r.heure_debut, e:r.heure_fin}; });
+  (rows||[]).forEach(r=>{
+    map[String(r.date)]={
+      s:r.heure_debut, e:r.heure_fin,
+      je: (+r.journee_entiere===1)?1:0
+    };
+  });
   S.dayHoraires=map;
 }
 
@@ -1608,6 +1613,11 @@ function getWhForDate(di,dateObj,ds,forEdit){
   // Priorité 1 : override ponctuel par date (planning_day_horaires)
   if(ds && S.dayHoraires && S.dayHoraires[ds]){
     return S.dayHoraires[ds];
+  }
+  // Priorité 1bis : journée entière par défaut sur la machine (00:00 → 23:59).
+  // S'applique aux jours travaillés uniquement (les day-off restent day-off).
+  if(S.machine && +S.machine.journee_entiere===1){
+    return {s:0, e:24, je:1};
   }
   const mk=machineKey();
   const mrec=S.machine;
@@ -4579,30 +4589,54 @@ function openHorairesModal(ds, di){
   // Afficher la date lisible
   const dateLabel = ds ? new Date(ds+'T12:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'}) : dn;
   const hasOverride = !!(ds && S.dayHoraires && S.dayHoraires[ds]);
+  const isJe = !!(hasOverride && S.dayHoraires[ds].je===1);
   document.getElementById("mroot").innerHTML=modalHTML(
     `Plage horaire — ${dateLabel}`,
-    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 16px">
+    `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">
       Horaire pour ce jour uniquement${hasOverride?' <span style="color:var(--accent);font-weight:700">· Override actif</span>':''}.
     </p>
-    <div class="fd"><label>Début (HH:MM)</label><input type="text" inputmode="numeric" placeholder="07:00" id="f-h-start" value="${fracToTimeInput(s)}"></div>
-    <div class="fd"><label>Fin de journée (HH:MM)</label><input type="text" inputmode="numeric" placeholder="19:00" id="f-h-end" value="${fracToTimeInput(e)}"></div>
+    <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:14px;font-size:13px">
+      <input type="checkbox" id="f-h-je" ${isJe?'checked':''} onchange="onDayJeToggle()">
+      <span style="font-weight:600;color:var(--text)">Journée entière (3 équipes 8 h — 00:00 → 23:59)</span>
+    </label>
+    <div class="fd"><label>Début (HH:MM)</label><input type="text" inputmode="numeric" placeholder="07:00" id="f-h-start" value="${fracToTimeInput(s)}" ${isJe?'disabled':''}></div>
+    <div class="fd"><label>Fin de journée (HH:MM)</label><input type="text" inputmode="numeric" placeholder="19:00" id="f-h-end" value="${fracToTimeInput(e)}" ${isJe?'disabled':''}></div>
     ${hasOverride?`<div style="margin-top:10px;text-align:right"><button type="button" class="btn-s" style="color:var(--danger);border-color:var(--danger)" onclick="resetHorairesDate('${ds}')">Réinitialiser au modèle hebdo</button></div>`:''}`,
     "Enregistrer",
     `submitHoraires('${ds}')`
   );
 }
+
+function onDayJeToggle(){
+  const je=document.getElementById("f-h-je");
+  const s=document.getElementById("f-h-start");
+  const e=document.getElementById("f-h-end");
+  if(!je||!s||!e) return;
+  if(je.checked){
+    s.value="00:00"; e.value="23:59";
+    s.disabled=true; e.disabled=true;
+  } else {
+    s.disabled=false; e.disabled=false;
+  }
+}
 async function submitHoraires(ds){
   if(!CAN_EDIT) return;
-  const st=(document.getElementById("f-h-start").value||"").trim();
-  const en=(document.getElementById("f-h-end").value||"").trim();
-  if(!st||!en) return void alert("Indiquez début et fin.");
-  if(!isHHMM(st)||!isHHMM(en)) return void alert("Format attendu : HH:MM (24h). Exemple : 07:00");
-  // Convertir HH:MM → fraction décimale
-  const toFrac = hhmm => { const [h,m]=hhmm.split(":").map(Number); return h+m/60; };
-  const hd = toFrac(st), hf = toFrac(en);
-  if(hf <= hd) return void alert("L'heure de fin doit être après le début.");
+  const jeBox=document.getElementById("f-h-je");
+  const je=jeBox&&jeBox.checked?1:0;
+  let hd, hf;
+  if(je===1){
+    hd=0; hf=24;
+  } else {
+    const st=(document.getElementById("f-h-start").value||"").trim();
+    const en=(document.getElementById("f-h-end").value||"").trim();
+    if(!st||!en) return void alert("Indiquez début et fin.");
+    if(!isHHMM(st)||!isHHMM(en)) return void alert("Format attendu : HH:MM (24h). Exemple : 07:00");
+    const toFrac = hhmm => { const [h,m]=hhmm.split(":").map(Number); return h+m/60; };
+    hd = toFrac(st); hf = toFrac(en);
+    if(hf <= hd) return void alert("L'heure de fin doit être après le début.");
+  }
   try{
-    await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:ds,heure_debut:hd,heure_fin:hf})});
+    await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:ds,heure_debut:hd,heure_fin:hf,journee_entiere:je})});
     closeM(); load();
   }catch(err){
     let msg="Modification impossible.";
@@ -4745,9 +4779,27 @@ function openWeekSettingsModal(monTs){
         style="padding:5px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px;font-family:var(--mono);outline:none;width:100%;min-width:0;box-sizing:border-box">
     </div>`;
   }
+  // Semaine "journée entière" active si tous les jours travaillés ont un override je=1
+  let allJe=true, someWorked=false;
+  for(let i=0;i<6;i++){
+    const d=addD(mon,i);
+    const di=d.getDay();
+    if(di===0) continue;
+    const ds=ymd(d);
+    const worked=!isPlanningDayOff(di,ds);
+    if(!worked) continue;
+    someWorked=true;
+    const ov=S.dayHoraires&&S.dayHoraires[ds];
+    if(!ov || +ov.je!==1){ allJe=false; break; }
+  }
+  const weekJe=someWorked && allJe;
   document.getElementById("mroot").innerHTML=modalHTML(
     `Paramètres — Semaine S${wn}`,
     `<p style="font-size:12px;color:var(--muted);margin:-8px 0 12px">Jours travaillés et horaires précis pour la semaine S${wn}. Ces réglages supplantent les horaires par défaut.</p>
+    <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:12px;font-size:13px">
+      <input type="checkbox" id="wks-je-all" ${weekJe?'checked':''} onchange="onWeekJeToggle()">
+      <span style="font-weight:600;color:var(--text)">Toute la semaine en journée entière (3 équipes 8 h)</span>
+    </label>
     <div style="display:grid;grid-template-columns:72px 90px 1fr 1fr;gap:4px 10px;padding:0 0 6px;border-bottom:1px solid var(--border2)">
       <span style="font-size:10px;color:var(--muted)">Jour</span>
       <span style="font-size:10px;color:var(--muted)">État</span>
@@ -4756,6 +4808,21 @@ function openWeekSettingsModal(monTs){
     </div>${rows}`,
     "Enregistrer",`submitWeekSettings(${monTs})`
   );
+  if(weekJe) onWeekJeToggle();
+}
+
+function onWeekJeToggle(){
+  const box=document.getElementById("wks-je-all");
+  if(!box) return;
+  const on=box.checked;
+  document.querySelectorAll('[id^="wks-s-"]').forEach(el=>{
+    if(on){ el.value="00:00"; el.disabled=true; }
+    else { el.disabled=false; }
+  });
+  document.querySelectorAll('[id^="wks-e-"]').forEach(el=>{
+    if(on){ el.value="23:59"; el.disabled=true; }
+    else { el.disabled=false; }
+  });
 }
 
 async function submitWeekSettings(monTs){
@@ -4778,7 +4845,7 @@ async function submitWeekSettings(monTs){
     const st=(sEl?.value||"").trim();
     const en=(eEl?.value||"").trim();
     if(st&&(!isHHMM(st)||!isHHMM(en))){errors.push(`Format horaire invalide — ${ds}`);continue;}
-    ops.push({ds,isSat,worked,st,en});
+    ops.push({ds,isSat,worked,st,en,je: (document.getElementById("wks-je-all")?.checked?1:0)});
   }
   if(errors.length){alert(errors.join("\n"));return;}
   try{
@@ -4789,9 +4856,13 @@ async function submitWeekSettings(monTs){
         await api(`/machines/${MID}/holidays`,{method:"PUT",body:JSON.stringify({date:op.ds,is_off:op.worked?0:1})});
         await api(`/machines/${MID}/day-work`,{method:"PUT",body:JSON.stringify({date:op.ds,is_worked:op.worked?1:0})});
       }
-      if(op.worked&&op.st&&op.en){
-        const hd=toFrac(op.st),hf=toFrac(op.en);
-        if(hf>hd) await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:op.ds,heure_debut:hd,heure_fin:hf})});
+      if(op.worked){
+        if(op.je===1){
+          await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:op.ds,heure_debut:0,heure_fin:24,journee_entiere:1})});
+        } else if(op.st&&op.en){
+          const hd=toFrac(op.st),hf=toFrac(op.en);
+          if(hf>hd) await api(`/machines/${MID}/day-horaires`,{method:"PUT",body:JSON.stringify({date:op.ds,heure_debut:hd,heure_fin:hf,journee_entiere:0})});
+        }
       }
     }
     closeM(); load();

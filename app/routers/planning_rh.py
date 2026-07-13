@@ -795,3 +795,177 @@ async def update_solde(request: Request):
         )
         conn.commit()
     return {"ok": True}
+
+
+# ══════════════════════════════════════════════════════════════════
+# CONFIGURATION DES ÉQUIPES PAR MACHINE (matin / aprem / nuit)
+# ══════════════════════════════════════════════════════════════════
+# Ces réglages pilotent l'affichage des créneaux dans le planning RH :
+# les machines sans ligne dans rh_machine_config utilisent les défauts
+# codés côté frontend (compat rétro). Le mode_alternance = 'alterne'
+# active la rotation d'équipes A/B semaine paire / impaire.
+
+def _validate_hhmm(val: str, field: str) -> str:
+    v = (val or "").strip()
+    if not v:
+        raise HTTPException(400, f"{field} requis (HH:MM)")
+    try:
+        h, m = v.split(":")
+        hi, mi = int(h), int(m)
+        if not (0 <= hi <= 23 and 0 <= mi <= 59):
+            raise ValueError()
+    except (ValueError, AttributeError):
+        raise HTTPException(400, f"{field} invalide (HH:MM attendu)")
+    return f"{hi:02d}:{mi:02d}"
+
+
+def _rh_machine_config_row_to_dict(row) -> dict:
+    return {
+        "machine_id":       row["machine_id"],
+        "matin_actif":      int(row["matin_actif"] or 0),
+        "matin_debut":      row["matin_debut"] or "05:00",
+        "matin_fin":        row["matin_fin"]   or "13:00",
+        "aprem_actif":      int(row["aprem_actif"] or 0),
+        "aprem_debut":      row["aprem_debut"] or "13:00",
+        "aprem_fin":        row["aprem_fin"]   or "21:00",
+        "nuit_actif":       int(row["nuit_actif"] or 0),
+        "nuit_debut":       row["nuit_debut"] or "21:00",
+        "nuit_fin":         row["nuit_fin"]   or "05:00",
+        "mode_alternance":  (row["mode_alternance"] or "identique"),
+        "updated_at":       row["updated_at"],
+    }
+
+
+@router.get("/machine-configs")
+def list_machine_configs(request: Request):
+    """Retourne la config d'équipes pour toutes les machines actives.
+
+    Format : {"configs": [ { machine_id, nom, matin_actif, ... }, ... ]}
+    Les machines sans ligne dans rh_machine_config renvoient les défauts.
+    """
+    _require_view(request)
+    with get_db() as conn:
+        machines = conn.execute(
+            "SELECT id, nom FROM machines WHERE actif=1 ORDER BY nom"
+        ).fetchall()
+        configs = {
+            r["machine_id"]: _rh_machine_config_row_to_dict(r)
+            for r in conn.execute("SELECT * FROM rh_machine_config").fetchall()
+        }
+    out = []
+    for m in machines:
+        cfg = configs.get(m["id"])
+        if cfg:
+            cfg = dict(cfg)
+            cfg["nom"] = m["nom"]
+            out.append(cfg)
+        else:
+            out.append({
+                "machine_id":      m["id"],
+                "nom":             m["nom"],
+                "matin_actif":     1,
+                "matin_debut":     "05:00",
+                "matin_fin":       "13:00",
+                "aprem_actif":     1,
+                "aprem_debut":     "13:00",
+                "aprem_fin":       "21:00",
+                "nuit_actif":      0,
+                "nuit_debut":      "21:00",
+                "nuit_fin":        "05:00",
+                "mode_alternance": "identique",
+                "updated_at":      None,
+            })
+    return {"configs": out}
+
+
+@router.put("/machine-configs/{machine_id}")
+async def set_machine_config(machine_id: int, request: Request):
+    """Enregistre la configuration d'équipes d'une machine.
+
+    Body (tous les champs optionnels — les manquants gardent leur valeur en base
+    ou reçoivent le défaut) :
+      matin_actif, matin_debut, matin_fin
+      aprem_actif, aprem_debut, aprem_fin
+      nuit_actif, nuit_debut, nuit_fin
+      mode_alternance : 'identique' | 'alterne'
+    """
+    editor = _require_edit(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Body invalide")
+
+    def as_bool(v, default=0):
+        if v is None:
+            return default
+        try:
+            return 1 if int(v) else 0
+        except (TypeError, ValueError):
+            return default
+
+    matin_actif = as_bool(body.get("matin_actif"), 1)
+    aprem_actif = as_bool(body.get("aprem_actif"), 1)
+    nuit_actif  = as_bool(body.get("nuit_actif"), 0)
+
+    matin_debut = _validate_hhmm(body.get("matin_debut", "05:00"), "matin_debut")
+    matin_fin   = _validate_hhmm(body.get("matin_fin",   "13:00"), "matin_fin")
+    aprem_debut = _validate_hhmm(body.get("aprem_debut", "13:00"), "aprem_debut")
+    aprem_fin   = _validate_hhmm(body.get("aprem_fin",   "21:00"), "aprem_fin")
+    nuit_debut  = _validate_hhmm(body.get("nuit_debut",  "21:00"), "nuit_debut")
+    nuit_fin    = _validate_hhmm(body.get("nuit_fin",    "05:00"), "nuit_fin")
+
+    mode = (body.get("mode_alternance") or "identique").strip().lower()
+    if mode not in ("identique", "alterne"):
+        raise HTTPException(400, "mode_alternance doit être 'identique' ou 'alterne'")
+
+    with get_db() as conn:
+        mac = conn.execute(
+            "SELECT id, nom FROM machines WHERE id=?", (machine_id,)
+        ).fetchone()
+        if not mac:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            """INSERT INTO rh_machine_config
+                   (machine_id, matin_actif, matin_debut, matin_fin,
+                    aprem_actif, aprem_debut, aprem_fin,
+                    nuit_actif, nuit_debut, nuit_fin,
+                    mode_alternance, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(machine_id) DO UPDATE SET
+                   matin_actif=excluded.matin_actif,
+                   matin_debut=excluded.matin_debut,
+                   matin_fin=excluded.matin_fin,
+                   aprem_actif=excluded.aprem_actif,
+                   aprem_debut=excluded.aprem_debut,
+                   aprem_fin=excluded.aprem_fin,
+                   nuit_actif=excluded.nuit_actif,
+                   nuit_debut=excluded.nuit_debut,
+                   nuit_fin=excluded.nuit_fin,
+                   mode_alternance=excluded.mode_alternance,
+                   updated_at=datetime('now')""",
+            (
+                machine_id, matin_actif, matin_debut, matin_fin,
+                aprem_actif, aprem_debut, aprem_fin,
+                nuit_actif, nuit_debut, nuit_fin,
+                mode,
+            ),
+        )
+        conn.commit()
+
+    try:
+        log_action(
+            user=editor,
+            action="UPDATE",
+            module="planning_rh",
+            objet=f"Config équipes machine {mac['nom']}",
+            detail={
+                "matin": {"actif": matin_actif, "debut": matin_debut, "fin": matin_fin},
+                "aprem": {"actif": aprem_actif, "debut": aprem_debut, "fin": aprem_fin},
+                "nuit":  {"actif": nuit_actif,  "debut": nuit_debut,  "fin": nuit_fin},
+                "mode_alternance": mode,
+            },
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "machine_id": machine_id}
