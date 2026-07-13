@@ -1736,7 +1736,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 
 </style>
 </head>
-<body class="__STAGING_BODY_CLASS__">
+<body class="__STAGING_BODY_CLASS__ __KERNSE_THEME_CLASS__">
 <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><filter id="cloudNoise" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.014" numOctaves="2" seed="7" stitchTiles="stitch"/><feDisplacementMap in="SourceGraphic" scale="55"/></filter></svg>
 <div class="staging-bandeau __STAGING_INITIAL_CLASS__" id="msf-staging-bandeau" __STAGING_INITIAL_HIDDEN__>
   <span class="msf-imp-msg" id="msf-staging-msg">__STAGING_INITIAL_MSG__</span>
@@ -11035,6 +11035,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__APP_STATUS_TEXT__", _js_escape(APP_STATUS_TEXT))
         # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
         .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
+        .replace("__KERNSE_THEME_CLASS__", "kernse-theme" if KERNSE_THEME else "")
         # Re-substitution du __V_LABEL__ (peut apparaître dans les assets
         # injectés au-dessus après leur inclusion). Idempotent.
         .replace("__V_LABEL__", f"v{APP_VERSION}")

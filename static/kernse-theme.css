@@ -145,3 +145,65 @@ input:focus, select:focus, textarea:focus {
 .login-train-layer svg {
   opacity: 0.35;
 }
+
+/* ═════════════════════════════════════════════════════════════════════
+ * Logo icône K injecté sur toutes les sidebars quand body.kernse-theme
+ * ═════════════════════════════════════════════════════════════════════ */
+
+/* Icône K en ::before sur chaque .logo (portail principal + sidebars modules) */
+body.kernse-theme .logo,
+body.kernse-theme .sidebar .logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+body.kernse-theme .logo::before {
+  content: '';
+  display: inline-block;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background:
+    var(--navy)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'><rect x='6' y='5' width='4' height='22' rx='1.5' fill='white'/><path d='M11 15 L20 5 L26 5 L15 15.5 L26 27 L20 27 L11 17 Z' fill='%23F2652B'/></svg>")
+    center/22px 22px no-repeat;
+  box-shadow: 0 2px 6px rgba(24,36,68,.15);
+}
+
+/* Ne pas doubler le logo dans la login-box (elle a déjà k-logo-icon) */
+body.kernse-theme .login-box .logo::before {
+  display: none;
+}
+
+/* Wordmark : Poppins + wordmark bicolore respecté */
+body.kernse-theme .logo-brand,
+body.kernse-theme .brand,
+body.kernse-theme .wm {
+  font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
+  font-weight: 900 !important;
+  letter-spacing: -1px !important;
+  color: var(--navy) !important;
+}
+body.kernse-theme .logo-brand span,
+body.kernse-theme .brand span,
+body.kernse-theme .wm span {
+  color: var(--orange) !important;
+  margin-left: -3px;
+}
+body.kernse-theme .logo-sub {
+  color: var(--muted) !important;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace) !important;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+}
+
+/* Bouton "← Retour <wordmark>" navigation retour portail */
+body.kernse-theme .back-mysifa {
+  color: var(--navy) !important;
+}
+body.kernse-theme .back-mysifa .wm span {
+  color: var(--orange) !important;
+}
