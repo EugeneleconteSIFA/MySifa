@@ -560,16 +560,24 @@ body.kernse-theme .k-portal-date {
 body.kernse-theme .k-portal-welcome {
   font-family: var(--font-brand, 'Poppins', system-ui, sans-serif) !important;
   font-weight: 900;
-  font-size: 52px;
-  letter-spacing: -2.5px;
-  line-height: 1.02;
+  font-size: clamp(28px, 4.5vw, 48px);
+  letter-spacing: -1.8px;
+  line-height: 1.05;
   color: var(--navy);
-  margin: 8px 0 24px;
+  margin: 8px 0 28px;
   max-width: 100%;
+  text-wrap: balance;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  hyphens: none;
 }
 body.kernse-theme .k-portal-welcome .k-portal-welcome-hl {
   color: var(--orange);
   font-style: normal;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  body.kernse-theme .k-portal-welcome { font-size: clamp(24px, 6vw, 34px); letter-spacing: -1px; }
 }
 
 /* Cacher .portal-logo original côté kernse (au cas où déjà rendu) */
@@ -782,4 +790,17 @@ body.kernse-theme .portal-user .portal-logout {
 body.kernse-theme .portal-user .portal-logout:hover {
   border-color: var(--orange) !important;
   color: var(--orange) !important;
+}
+
+
+/* En mode Kernse, cacher le logo Google et changer l'icône recherche */
+body.kernse-theme .portal-search-glogo svg { display: none; }
+body.kernse-theme .portal-search-glogo::before {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 20px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b91a4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><line x1='16.5' y1='16.5' x2='21' y2='21'/></svg>");
+  background-repeat: no-repeat;
+  background-size: 20px;
 }
