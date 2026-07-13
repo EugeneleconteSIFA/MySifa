@@ -1691,6 +1691,19 @@ def _migrate(conn):
                 zone_messagerie INTEGER DEFAULT 0,      -- <6 palettes (ramasse)
                 tarif_filename TEXT,                    -- nom du fichier uploadé
                 tarif_url TEXT,                         -- chemin relatif de stockage
+                -- Colonnes ajoutées par migrations ultérieures — dupliquées
+                -- ici pour que le seed initial (`seed_expe_transporteurs_if_empty`,
+                -- appelé dans la même migration que la CREATE TABLE) fonctionne
+                -- sur une DB fraîche Kernse. Les ALTER TABLE plus loin sont
+                -- devenus des no-op grâce au check `if col not in cols`.
+                palette_max INTEGER,                    -- v64
+                poids_max_kg REAL,                      -- v64
+                accepte_poids INTEGER DEFAULT 1,        -- v64
+                accepte_palette INTEGER DEFAULT 1,      -- v64
+                couleur TEXT,                           -- v98
+                contact_portail_url TEXT,               -- v127
+                contact_emails TEXT,                    -- v127
+                contact_tels TEXT,                      -- v155
                 actif INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
@@ -6490,6 +6503,56 @@ Ressources :
             conn.execute("ALTER TABLE maintenance_events ADD COLUMN nom TEXT")
         conn.commit()
         _record_schema_migration(conn, 175, "maintenance_events_nom")
+
+    # Migration 176 — Planning prod : flag "journée entière" (00:00 → 23:59).
+    # Peut être activé à trois niveaux : override journalier, config semaine,
+    # default machine. Le flag est prioritaire sur les heures stockées : quand
+    # actif, getWhForDate() renvoie 0-24 pour ce jour. Rétro-compatible : les
+    # entrées existantes ont journee_entiere=0 (comportement inchangé).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=176 LIMIT 1").fetchone():
+        cols_m = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
+        if "journee_entiere" not in cols_m:
+            conn.execute("ALTER TABLE machines ADD COLUMN journee_entiere INTEGER DEFAULT 0")
+        cols_pc = {r["name"] for r in conn.execute("PRAGMA table_info(planning_config)").fetchall()}
+        if "journee_entiere" not in cols_pc:
+            conn.execute("ALTER TABLE planning_config ADD COLUMN journee_entiere INTEGER DEFAULT 0")
+        cols_pdh = {r["name"] for r in conn.execute("PRAGMA table_info(planning_day_horaires)").fetchall()}
+        if "journee_entiere" not in cols_pdh:
+            conn.execute("ALTER TABLE planning_day_horaires ADD COLUMN journee_entiere INTEGER DEFAULT 0")
+        conn.commit()
+        _record_schema_migration(conn, 176, "planning_journee_entiere_flag")
+
+    # Migration 177 — Planning RH : configuration des équipes par machine
+    # (matin/aprem/nuit + mode alternance). Alimente le bouton réglages du
+    # planning RH ; les créneaux affichés sont désormais lus en base plutôt
+    # que codés dans planning_rh_page.py. Une machine sans ligne dans cette
+    # table utilise les défauts codés côté frontend (compat).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=177 LIMIT 1").fetchone():
+        existing = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        if "rh_machine_config" not in existing:
+            conn.execute("""CREATE TABLE rh_machine_config (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                machine_id INTEGER NOT NULL UNIQUE,
+                matin_actif INTEGER NOT NULL DEFAULT 1,
+                matin_debut TEXT NOT NULL DEFAULT '05:00',
+                matin_fin   TEXT NOT NULL DEFAULT '13:00',
+                aprem_actif INTEGER NOT NULL DEFAULT 1,
+                aprem_debut TEXT NOT NULL DEFAULT '13:00',
+                aprem_fin   TEXT NOT NULL DEFAULT '21:00',
+                nuit_actif  INTEGER NOT NULL DEFAULT 0,
+                nuit_debut  TEXT NOT NULL DEFAULT '21:00',
+                nuit_fin    TEXT NOT NULL DEFAULT '05:00',
+                mode_alternance TEXT NOT NULL DEFAULT 'identique',  -- 'identique' | 'alterne'
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (machine_id) REFERENCES machines(id)
+            )""")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_rh_machine_config_mid ON rh_machine_config(machine_id)"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 177, "rh_machine_config")
 
 def create_default_admin():
     import bcrypt
