@@ -61,6 +61,17 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                   f"La DB n'est PAS modifiée par cette instance.")
             _schema_migrate_done = True
             return
+        # DB fraîche (client Kernse nouvellement provisionné, MySifa jamais
+        # démarré) : les tables de base n'existent pas encore. _migrate()
+        # tente des ALTER TABLE et crashe. On skip ici et on laisse `init_db()`
+        # créer le schéma de base via son executescript, puis appeler _migrate
+        # lui-même sur une DB peuplée. Le flag _schema_migrate_done reste
+        # à False pour que init_db puisse boucler.
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='production_data' LIMIT 1"
+        ).fetchone()
+        if not row:
+            return
         _migrate(conn)
         conn.commit()
         _schema_migrate_done = True
