@@ -531,21 +531,27 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:180px;transition:border-color .15s,box-shadow .15s}
 .maint-frame .maint-frame-stats{flex:1}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
-.maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.4px;line-height:1.3}
 .maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.maint-frame-badges{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-.maint-frame-cat-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;white-space:nowrap}
+.maint-frame-badges{display:flex;flex-direction:row;align-items:center;gap:6px;flex-shrink:0;opacity:.72;transition:opacity .15s}
+.maint-frame:hover .maint-frame-badges{opacity:1}
+.maint-frame-cat-pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent;white-space:nowrap}
+.maint-frame-badges .niv-badge{font-size:9px;padding:2px 6px;font-weight:600}
 .maint-frame-cat-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
-.maint-frame-cat-pill.interventions{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.maint-frame-cat-pill.interventions,
+.maint-frame-cat-pill.entretien{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.maint-frame-cat-pill.remplacements{color:#fb923c;border-color:rgba(251,146,60,.4);background:rgba(251,146,60,.12)}
 body.light .maint-frame-cat-pill.controles{color:var(--ok,#059669);background:rgba(5,150,105,.10)}
-body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124,58,237,.10);border-color:rgba(124,58,237,.35)}
+body.light .maint-frame-cat-pill.interventions,
+body.light .maint-frame-cat-pill.entretien{color:#7c3aed;background:rgba(124,58,237,.10);border-color:rgba(124,58,237,.35)}
+body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234,88,12,.10);border-color:rgba(234,88,12,.35)}
 .maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
 .maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
-.maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 20px}
-.maint-frame-stat{display:flex;flex-direction:column;gap:4px;min-width:0}
-.maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
+.maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:20px 22px 16px}
+.maint-frame-stat{display:flex;flex-direction:column;gap:6px;min-width:0}
+.maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.maint-frame-stat-value{font-size:22px;color:var(--accent);font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.2px}
+.maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic;font-size:18px}
 .maint-frame-progress{padding:0 20px 12px}
 .maint-frame-progress-track{height:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
 .maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
@@ -578,6 +584,11 @@ body.light .maint-frame-cat-pill.interventions{color:#7c3aed;background:rgba(124
 .maint-machine-btn:hover{background:var(--bg);color:var(--text)}
 .maint-machine-btn.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
+.maint-cat-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
+.maint-cat-btn:hover{background:var(--bg);color:var(--text)}
+.maint-cat-btn[data-maint-cat="entretien"].active{background:#a78bfa;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.maint-cat-btn[data-maint-cat="remplacements"].active{background:#fb923c;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.maint-cat-btn.active:hover{filter:brightness(1.05)}
 .maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:14px}
 .maint-wearpart{min-height:260px}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
@@ -820,7 +831,9 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .op-code{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.4px;font-family:monospace}
 .op-cat{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 .op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
-.op-cat-interventions{background:rgba(167,139,250,.16);color:#8b5cf6}
+.op-cat-interventions,
+.op-cat-entretien{background:rgba(167,139,250,.16);color:#8b5cf6}
+.op-cat-remplacements{background:rgba(251,146,60,.16);color:#ea580c}
 .op-cat-suivi{background:rgba(251,191,36,.16);color:#f59e0b}
 .op-card-title{font-size:14px;font-weight:600;color:var(--text);line-height:1.4}
 .op-card-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--text2)}
@@ -954,6 +967,11 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1</button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2</button>
+          </div>
+          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Catégorie</label>
+          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien</button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions</button>
           </div>
           <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
         </div>
@@ -2944,15 +2962,14 @@ async function submitCaseModal(e){
   const editId = _PENDING_CASE.editId;
   try{
     if(editId){
-      // PATCH horaires + sync ops (avec machines) + sync operators.
+      // PATCH horaires + sync ops + sync operators.
       // Sync operators/ops D'ABORD (indépendant des metas) — comme ça, même
-      // si le PATCH meta échoue (ex. colonne nom pas encore migrée), les
-      // opérateurs assignés et les ops modifiées passent quand même.
+      // si le PATCH meta échoue, les opérateurs assignés et les ops passent
+      // quand même.
       let syncError = null;
       try{
         await _syncEventOpsAndOperators(editId, wantedOps, operatorIds);
       }catch(e){ syncError = e; }
-      // PATCH meta (date/heures/nom)
       const rMeta = await fetch('/api/maintenance/events/' + encodeURIComponent(editId), {
         method:'PATCH', credentials:'include',
         headers:{'Content-Type':'application/json'},
@@ -3702,14 +3719,18 @@ async function loadOpsTypes(){
     }
     const data = await res.json();
     const items = Array.isArray(data && data.items) ? data.items : [];
-    // 'suivi' (catégorie supprimée côté UI) est remappée en 'interventions'
-    // pour les codes legacy qui n'ont pas encore été corrigés en base.
-    const normCat = (c) => (c === 'interventions' || c === 'suivi') ? 'interventions' : 'controles';
-    // Liste d'opérations : Interventions (toutes) + Contrôles avec periodique=OUI.
+    // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+    // Les codes legacy ('interventions', 'suivi') sont remappés vers 'entretien'.
+    const normCat = (c) => {
+      if (c === 'remplacements') return 'remplacements';
+      if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
+      return 'controles';
+    };
+    // Liste d'opérations : Entretien + Remplacements (toutes) + Contrôles avec periodique=OUI.
     OPS_TYPES_STATE.list = items
       .filter(it => {
         const cn = normCat(it.categorie);
-        return (cn === 'interventions') || (cn === 'controles' && !!it.periodique);
+        return (cn === 'entretien') || (cn === 'remplacements') || (cn === 'controles' && !!it.periodique);
       })
       .map(it => ({
         id: it.code,
@@ -3851,14 +3872,16 @@ function _renderWearPartRings(ratios){
 
 // Trouve le code Intervention correspondant à une pièce d'usure (par pattern
 // sur le libellé). pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
-// Cherche dans OPS_TYPES_STATE.list (qui contient toutes les Interventions).
+// Cherche dans OPS_TYPES_STATE.list (qui contient Entretien + Remplacements).
 // Normalise vers { label, intervalle, metrage_ref } pour rester compatible
 // avec l'ancien retour de _findSuiviCodeForWearPart.
 function _findWearPartCode(pieceId, pos){
   const list = OPS_TYPES_STATE.list || [];
   const single = _wearPartIsSingle(pieceId);
   for(const t of list){
-    if(t.categorie !== 'interventions') continue;
+    // Depuis v178, on cherche dans Entretien + Remplacements (les deux
+    // héritent des propriétés de l'ancienne catégorie Interventions).
+    if(t.categorie !== 'entretien' && t.categorie !== 'remplacements' && t.categorie !== 'interventions') continue;
     const lbl = (t.nom || '').toLowerCase();
     let isMatch = false;
     if(single){
@@ -3931,7 +3954,7 @@ function openOpsTypeDetailsModal(code){
       }
     }catch(e){}
   }
-  const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+  const catLabel = _maintCatLabelFront(t.categorie);
   const intervalleTxt = t.periodique
     ? (t.intervalle || 'À compléter (Paramètres → Maintenance)')
     : '— (non périodique)';
@@ -3940,7 +3963,7 @@ function openOpsTypeDetailsModal(code){
     '<div style="color:var(--text);font-weight:500">' + val + '</div></div>';
   infoEl.innerHTML = ''
     + _kv('Code', escHtml(String(t.id)))
-    + _kv('Catégorie', '<span class="op-pill ' + ((t.categorie === 'interventions') ? 'interventions' : 'controles') + '">' + escHtml(catLabel) + '</span>')
+    + _kv('Catégorie', '<span class="op-pill ' + _maintCatCssFront(t.categorie) + '">' + escHtml(catLabel) + '</span>')
     + _kv('Niveau', '<span class="niv-badge" data-niv="' + t.niveau + '">N' + t.niveau + '</span>')
     + _kv('Intervalle', escHtml(intervalleTxt))
     + _kv('Machine sélectionnée', escHtml(machine))
@@ -3977,6 +4000,22 @@ function saveOpsTypeDetails(e){
 // Vue Maintenance (accueil) : cartes par opération périodique, par machine
 // =========================================================================
 const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
+// Toggle Entretien/Remplacements (v178) — filtre les cartes de la vue
+// Maintenance pour n'afficher qu'une seule des deux catégories à la fois.
+// Les contrôles ne sont JAMAIS visibles dans cette vue.
+const MAINT_CAT_FILTER_KEY = 'mysifa_maint_home_cat_filter_v1';
+
+function getMaintCatFilter(){
+  try{
+    const v = localStorage.getItem(MAINT_CAT_FILTER_KEY);
+    return (v === 'remplacements') ? 'remplacements' : 'entretien';
+  }catch(e){ return 'entretien'; }
+}
+function setMaintCatFilter(c){
+  if(c !== 'entretien' && c !== 'remplacements') return;
+  try{ localStorage.setItem(MAINT_CAT_FILTER_KEY, c); }catch(e){}
+  renderMaintCards();
+}
 
 function getMaintMachine(){
   try{ return localStorage.getItem(MAINT_MACHINE_KEY) || 'Cohésio 1'; }
@@ -4377,25 +4416,46 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
-  // La section "Pièces d'usure" est toujours rendue, indépendamment des codes
-  // périodiques configurés en DB.
-  const wearPartsHtml = _renderWearPartsGroup(machine);
-  // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
-  // exclure des sections par intervalle ci-dessous (sinon les changements
-  // couteaux/contre-couteaux apparaîtraient deux fois).
-  const wearPartCodeIds = new Set();
-  WEARPART_PIECES.forEach(p => {
-    const positions = p.no_position ? ['single'] : ['bande','rive'];
-    positions.forEach(pos => {
-      const c = _findWearPartCode(p.id, pos);
-      if(c && c.code) wearPartCodeIds.add(String(c.code));
-    });
+  // Toggle Entretien/Remplacements (v178) — filtre les cartes pour n'afficher
+  // qu'une seule des deux catégories à la fois. Les contrôles ne sont JAMAIS
+  // visibles ici. Les pièces d'usure ne sont visibles que sur "Remplacements".
+  const catFilter = getMaintCatFilter();
+  document.querySelectorAll('.maint-cat-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-maint-cat') === catFilter);
   });
-  // Filtre les codes avec periodique=OUI (toutes catégories confondues),
-  // en excluant ceux déjà affichés dans la section Pièces d'usure.
-  const baseItems = (OPS_TYPES_STATE.list || []).filter(it =>
-    !!it.periodique && !wearPartCodeIds.has(String(it.id))
-  );
+  const showWearParts = (catFilter === 'remplacements');
+  // La section "Pièces d'usure" est rendue uniquement quand le toggle est
+  // sur "Remplacements" — les pièces d'usure sont par nature des remplacements.
+  const wearPartsHtml = showWearParts ? _renderWearPartsGroup(machine) : '';
+  // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
+  // exclure des sections par intervalle (sinon les changements couteaux/
+  // contre-couteaux apparaîtraient deux fois). Utile seulement quand la
+  // section Pièces d'usure est affichée.
+  const wearPartCodeIds = new Set();
+  if(showWearParts){
+    WEARPART_PIECES.forEach(p => {
+      const positions = p.no_position ? ['single'] : ['bande','rive'];
+      positions.forEach(pos => {
+        const c = _findWearPartCode(p.id, pos);
+        if(c && c.code) wearPartCodeIds.add(String(c.code));
+      });
+    });
+  }
+  // Filtre les codes avec periodique=OUI, exclus ceux déjà affichés dans la
+  // section Pièces d'usure. Toggle Entretien : cartes Nettoyage (DB: entretien
+  // / legacy) + Contrôles périodiques. Toggle Interventions : cartes
+  // Interventions (DB: remplacements) + Pièces d'usure (rendues à part).
+  const baseItems = (OPS_TYPES_STATE.list || []).filter(it => {
+    if(!it.periodique) return false;
+    if(wearPartCodeIds.has(String(it.id))) return false;
+    const cat = it.categorie;
+    if(catFilter === 'entretien'){
+      // Nettoyage (DB: entretien / legacy interventions / suivi) + Contrôles périodiques
+      return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
+    }
+    // catFilter === 'remplacements' : uniquement les cartes Interventions (DB: remplacements)
+    return cat === 'remplacements';
+  });
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
       '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
@@ -4469,7 +4529,7 @@ function renderMaintCards(){
     const groupItems = groups.get(key);
     const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
     const cards = groupItems.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
-      const catLabel = (it.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
+      const catLabel = _maintCatLabelFront(it.categorie);
       let frameCls = 'maint-frame';
       if(overdue){
         frameCls += ' is-overdue';
@@ -4535,7 +4595,7 @@ function renderMaintCards(){
           '</div>';
       }
       // Si freqDays est null (intervalle non reconnu), pas de barre.
-      const catCls = (it.categorie === 'interventions') ? 'interventions' : 'controles';
+      const catCls = _maintCatCssFront(it.categorie);
       const nivNum = parseInt(it.niveau, 10) || 1;
       return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
         '<div class="maint-frame-head">' +
@@ -4773,8 +4833,8 @@ function renderOpsTypes(){
       const overdueBadge = info.overdue
         ? '<span class="row-overdue-badge" title="Intervention en retard">En retard ' + info.daysOverdue + ' j</span>'
         : '';
-      const catLabel = (t.categorie === 'interventions') ? 'Interventions' : 'Contrôles';
-      const catCls = (t.categorie === 'interventions') ? 'interventions' : 'controles';
+      const catLabel = _maintCatLabelFront(t.categorie);
+      const catCls = _maintCatCssFront(t.categorie);
       // dt est ici une date ISO (datetime) issue de la dernière saisie sur la
       // machine sélectionnée. On l'affiche au format JJ/MM/AAAA HH:MM.
       let dtDisplay = '—';
@@ -5920,6 +5980,20 @@ function _fmtDateISO(d){
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
 }
 function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
+// Helpers unifiés pour la typologie 3 catégories (v178, renommage labels v179).
+// Valeurs DB : 'controles', 'entretien', 'remplacements'.
+// Labels UI : Contrôles, Nettoyage, Interventions.
+// 'interventions' (legacy) et 'suivi' (legacy) sont remappés vers 'entretien'.
+function _maintCatLabelFront(cat){
+  if(cat === 'remplacements') return 'Interventions';
+  if(cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
+  return 'Contrôles';
+}
+function _maintCatCssFront(cat){
+  if(cat === 'remplacements') return 'remplacements';
+  if(cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'entretien';
+  return 'controles';
+}
 function _statutLabel(s){
   return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
 }
@@ -6372,7 +6446,7 @@ function opOpenSaisie(eventId){
       // mais la saisie reste unique côté DB (opSubmitOpSaisie utilise op.id).
       wrap.innerHTML = groups.map(g => {
         const opsHtml = g.ops.map(op => {
-          const catLbl = { controles:'Contrôle', interventions:'Intervention', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          const catLbl = { controles:'Contrôle', interventions:'Nettoyage', entretien:'Nettoyage', remplacements:'Intervention', suivi:'Nettoyage' }[op.code_categorie] || op.code_categorie || '';
           const isDone = op.statut === 'termine';
           // Fusion pieces_changees + observations pour affichage : si les 2
           // étaient renseignées avant, on concatène pour ne rien perdre.
@@ -6442,7 +6516,7 @@ async function opSubmitOpSaisie(eventId, opId, btnEl){
     else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
-  // Mise à jour in-place depuis la réponse — cohérent avec opSubmitSingleOp
+  // Mise à jour in-place depuis la réponse — cohérent avec opSubmitSingleOp.
   try{
     const data = await r.json();
     if(data && data.event){
@@ -6727,26 +6801,19 @@ async function opSubmitSingleOp(){
     else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
-  // Réponse : {event: updatedEv}. On met à jour MAINT_STATE.tasks in-place
-  // AVANT de tenter opLoadTasks — comme ça si opLoadTasks 500 pour une
-  // raison quelconque (ex. migration DB pas encore appliquée sur le VPS,
-  // colonne manquante, etc.), la vue reste cohérente avec l'action qu'on
-  // vient de faire au lieu de tout wiper.
+  // Réponse : {event: updatedEv}. Update MAINT_STATE.tasks in-place AVANT
+  // opLoadTasks — si opLoadTasks échoue, la vue reste cohérente.
   try{
     const data = await r.json();
     if(data && data.event){
       const idx = (MAINT_STATE.tasks || []).findIndex(x => x.id === data.event.id);
-      if(idx >= 0){
-        // Merge : on garde les métadonnées du client (operators, etc. déjà
-        // là) mais on remplace ops par la nouvelle version.
-        MAINT_STATE.tasks[idx] = data.event;
-      }
+      if(idx >= 0) MAINT_STATE.tasks[idx] = data.event;
       opRenderTasks();
     }
   }catch(e){}
   if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   opCloseSingleModal();
-  // Refresh en tâche de fond (best-effort) — si ça échoue, la vue est déjà à jour.
+  // Refresh en tâche de fond (best-effort) — si ça échoue, la vue est à jour.
   opLoadTasks().catch(() => {});
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
