@@ -833,6 +833,10 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .op-cat{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
 /* v180 : chip "Libre" pour distinguer les interventions libres dans l'historique */
 .libre-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(96,165,250,.16);color:#3b82f6;margin-left:6px;vertical-align:middle}
+/* v182 Lot 2 : petits boutons inline (renommer + docs) sur les lignes libres de l'historique */
+.libre-inline-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:5px;padding:3px 5px;color:var(--muted);cursor:pointer;transition:background .12s,color .12s,border-color .12s;vertical-align:middle;margin-left:4px}
+.libre-inline-btn:hover{background:var(--bg);color:var(--accent);border-color:var(--border)}
+body[data-maint-role="operator"] .libre-inline-btn{display:none}
 body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 /* v180 : mini-modal Intervention libre + autocomplete */
 .libre-titre-wrap{position:relative}
@@ -3669,7 +3673,12 @@ function renderOps(){
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
-        '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
+        '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + (o._libre && o._code ? ' <button type="button" class="libre-inline-btn" data-libre-rename-inline="' + escAttr(o._code) + '" title="Renommer ce titre libre (impacte toutes les saisies)">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+        '</button>' +
+        ' <button type="button" class="libre-inline-btn" data-libre-docs="' + escAttr(o._code) + '" title="Documents attaches">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>' +
+        '</button>' : '') + '</td>' +
         '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
@@ -3683,6 +3692,19 @@ function renderOps(){
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
+    // v182 Lot 2c/2d : rename + docs pour interventions libres
+    tbody.querySelectorAll('[data-libre-rename-inline]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        libreRenameInline(btn.getAttribute('data-libre-rename-inline'));
+      });
+    });
+    tbody.querySelectorAll('[data-libre-docs]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        libreDocsOpen(btn.getAttribute('data-libre-docs'));
+      });
+    });
   }
   if(count){
     const n = OPS_STATE.list.length;
@@ -7034,6 +7056,131 @@ async function libreSubmit(){
     else alert('Erreur : ' + e.message);
   }finally{
     _libreReset();
+  }
+}
+
+// ─── Lot 2c : renommer inline depuis l'historique ────────────────
+async function libreRenameInline(code){
+  const item = OPS_STATE.list.find(o => o._code === code && o._libre);
+  const currentLabel = item ? item.type : '';
+  const newLabel = prompt('Nouveau titre pour cette intervention libre :\nImpact retroactif sur toutes les saisies qui utilisent ce titre.', currentLabel || '');
+  if(newLabel === null) return;
+  const trimmed = (newLabel || '').trim();
+  if(!trimmed){ if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger'); return; }
+  if(trimmed === currentLabel) return;
+  try{
+    const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method:'PATCH', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label: trimmed}),
+    });
+    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage echoue'); }
+    if(typeof showToast === 'function') showToast('Titre modifie.', 'success');
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+    else if(typeof loadOps === 'function') loadOps();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    else alert('Erreur : ' + e.message);
+  }
+}
+
+// ─── Lot 2d : modal documents attaches a un code ─────────────────
+function libreDocsOpen(code){
+  let overlay = document.getElementById('libre-docs-overlay');
+  if(overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.className = 'op-modal-overlay active';
+  overlay.id = 'libre-docs-overlay';
+  overlay.innerHTML = ''
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:560px">'
+    +   '<div class="op-modal-title">Documents attaches</div>'
+    +   '<div class="op-modal-sub">Code : ' + escHtml(code) + '. Fichiers explicatifs (photos avant/apres, schemas...). 20 Mo max par fichier.</div>'
+    +   '<div id="libre-docs-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;max-height:360px;overflow-y:auto">'
+    +     '<p style="color:var(--muted);font-size:12px;text-align:center">Chargement...</p>'
+    +   '</div>'
+    +   '<input type="file" id="libre-docs-file" style="display:none">'
+    +   '<div class="op-modal-actions">'
+    +     '<button type="button" class="btn" onclick="libreDocsClose()">Fermer</button>'
+    +     '<button type="button" class="btn op-btn-accent" id="libre-docs-add-btn">+ Ajouter un fichier</button>'
+    +   '</div>'
+    + '</div>';
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) libreDocsClose(); });
+  document.body.appendChild(overlay);
+  document.getElementById('libre-docs-add-btn').addEventListener('click', () => {
+    document.getElementById('libre-docs-file').click();
+  });
+  document.getElementById('libre-docs-file').addEventListener('change', (e) => libreDocsUpload(code, e.target.files));
+  libreDocsRefresh(code);
+}
+function libreDocsClose(){
+  const el = document.getElementById('libre-docs-overlay');
+  if(el) el.remove();
+}
+async function libreDocsRefresh(code){
+  const list = document.getElementById('libre-docs-list');
+  if(!list) return;
+  try{
+    const r = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {credentials:'include'});
+    if(!r.ok) throw new Error('Erreur ' + r.status);
+    const d = await r.json();
+    const items = Array.isArray(d.items) ? d.items : [];
+    if(!items.length){
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic;text-align:center">Aucun document attache pour l\u2019instant.</p>';
+      return;
+    }
+    list.innerHTML = items.map(doc => {
+      const sz = doc.size_bytes != null ? (Math.round(doc.size_bytes/1024) + ' Ko') : '';
+      const dt = doc.uploaded_at ? escHtml(doc.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        +   '<div style="flex:1;min-width:0">'
+        +     '<div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(doc.filename) + '</div>'
+        +     '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + sz + (dt ? ' - ' + dt : '') + '</div>'
+        +   '</div>'
+        +   '<a href="/api/maintenance/docs/' + doc.id + '/download" target="_blank" rel="noopener" class="btn btn-sec" style="padding:6px 12px;font-size:12px;text-decoration:none">Ouvrir</a>'
+        +   '<button type="button" class="btn btn-sec" data-libre-doc-del="' + doc.id + '" style="padding:6px 12px;font-size:12px;color:var(--danger)">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    list.querySelectorAll('[data-libre-doc-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if(!confirm('Supprimer ce document ?')) return;
+        const id = btn.getAttribute('data-libre-doc-del');
+        try{
+          const r = await fetch('/api/maintenance/docs/' + id, {method:'DELETE', credentials:'include'});
+          if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Suppression echouee'); }
+          if(typeof showToast === 'function') showToast('Document supprime.', 'success');
+          libreDocsRefresh(code);
+        }catch(e){
+          if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+        }
+      });
+    });
+  }catch(e){
+    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
+  }
+}
+async function libreDocsUpload(code, files){
+  if(!files || !files.length) return;
+  const file = files[0];
+  if(file.size > 20 * 1024 * 1024){
+    if(typeof showToast === 'function') showToast('Fichier trop volumineux (max 20 Mo).', 'danger');
+    return;
+  }
+  const btn = document.getElementById('libre-docs-add-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi...'; }
+  try{
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
+      method:'POST', credentials:'include', body: fd,
+    });
+    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Upload echoue'); }
+    if(typeof showToast === 'function') showToast('Document ajoute.', 'success');
+    document.getElementById('libre-docs-file').value = '';
+    libreDocsRefresh(code);
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '+ Ajouter un fichier'; }
   }
 }
 

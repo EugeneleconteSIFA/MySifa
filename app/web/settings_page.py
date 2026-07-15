@@ -759,6 +759,11 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
+            <button type="button" class="menu-item" data-goto="formations">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Formations & guides</span><span class="mi-desc">Suivi des tutos in-app lus par utilisateur (reset possible).</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
             <button type="button" class="menu-item" data-goto="api">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Clés API</span><span class="mi-desc">Tokens d'intégration externe.</span></span>
@@ -1337,6 +1342,10 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
         Alertes
       </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-libres">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Interventions libres
+      </button>
     </div>
       <div id="maint-subtab-codes" class="maint-subtab">
       <div class="card">
@@ -1419,6 +1428,23 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer (nom, code source…)" oninput="renderAlertsList()">
           </div>
           <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
+      </div>
+      <!-- v182 Lot 2 : Sous-onglet Interventions libres -->
+      <div id="maint-subtab-libres" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Interventions libres</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-sec" id="libres-merge-btn" disabled onclick="libresMergeSelected()" title="Fusionne les 2 titres selectionnes en un seul (les saisies passees sont reaffectees).">Fusionner sélection</button>
+              <span id="libres-selection-count" style="font-size:11px;color:var(--muted)"></span>
+            </div>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Titres saisis ponctuellement par les operateurs, hors catalogue. Coche 2 lignes pour les fusionner ; renomme depuis la ligne pour uniformiser la terminologie ; archive uniquement les titres sans saisie associee.</p>
+          <div class="op-toolbar">
+            <input type="search" id="libres-filter" class="op-filter" placeholder="Filtrer (titre, code…)" oninput="renderLibresList()">
+          </div>
+          <div id="libres-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
       </div>
     </section>
@@ -1773,6 +1799,49 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       </div>
     </section>
 
+    <section id="panel-formations" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Formations &amp; guides in-app</h2>
+            <p class="sub" style="margin:0;font-size:12px">Suivi des tutos lus dans MyQualité. Vous pouvez remettre à zéro un guide pour un utilisateur (il le reverra à sa prochaine visite).</p>
+          </div>
+          <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="fmt-search" placeholder="Rechercher (nom, email, rôle, guide...)" autocomplete="off"
+            style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
+          <select id="fmt-filter-status" style="padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none">
+            <option value="">Tous les statuts</option>
+            <option value="acked">Validé (ack)</option>
+            <option value="completed">Complété (non ack)</option>
+            <option value="in_progress">En cours</option>
+            <option value="open">Ouvert (jamais parcouru)</option>
+            <option value="never">Jamais ouvert</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="fmt-table" style="min-width:820px">
+            <thead>
+              <tr>
+                <th>Utilisateur</th>
+                <th>Rôle</th>
+                <th>Guide</th>
+                <th>Statut</th>
+                <th>Étapes vues</th>
+                <th>Temps passé</th>
+                <th>Ouvertures</th>
+                <th>Ouvert le</th>
+                <th>Validé le</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fmt-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -1981,7 +2050,7 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','updates','audit','fsc','dashboards','api','promote','printers'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','updates','audit','fsc','dashboards','api','promote','printers','formations'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -1999,7 +2068,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -2017,6 +2086,7 @@ loadFournisseursGroupes();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
   if (id === 'printers') initPrintersPanel();
+  if (id === 'formations') loadFormationsAdmin();
   if (id === 'dashboards') renderSettingsDashboards();
   if (id === 'api') loadApiKeys();
   if (id === 'promote') loadPromoteStatus();
@@ -2887,7 +2957,7 @@ async function openEdit(id) {
     '<label class="sub">Rôle</label><select id="ed-role" style="margin-bottom:10px"' + (isDesignatedSup ? ' disabled' : '') + '>' + roleOpts + '</select>' +
     '<div id="ed-op-wrap"><label class="sub">Opérateur lié</label><select id="ed-op" style="margin-bottom:10px">' +
     '<option value="">—</option>' + operators.map(o => '<option value="' + esc(o) + '"' + (u.operateur_lie === o ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select></div>' +
-    '<div id="ed-mac-wrap"><label class="sub">Machine</label><select id="ed-mac" style="margin-bottom:10px">' +
+    '<div id="ed-mac-wrap"><label class="sub" title="Machine par défaut utilisée uniquement si l\'opérateur n\'est pas planifié au Planning RH du jour. Sinon, la machine réelle vient du Planning RH (matin/après-midi/nuit).">Machine par défaut <span style="color:var(--muted);font-weight:400;font-size:11px">(fallback si non planifié RH)</span></label><select id="ed-mac" style="margin-bottom:10px">' +
     '<option value="">—</option>' + machines.map(m => '<option value="' + esc(m.id) + '"' + (String(u.machine_id) === String(m.id) ? ' selected' : '') + '>' + esc(m.nom) + '</option>').join('') + '</select></div>' +
     '<label class="sub" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="ed-act" ' + (Number(u.actif) === 1 ? 'checked' : '') + '> Compte actif</label>' +
     '<label class="sub">Nouveau mot de passe (optionnel)</label><input id="ed-pwd" type="password" style="margin-bottom:10px">' +
@@ -3969,6 +4039,199 @@ async function loadMaintCodes() {
   }
   renderMaintList();
 }
+// ─── Interventions libres (Lot 2) ────────────────────────────────
+// Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
+let _libresItems = [];
+let _libresSelection = new Set();
+
+async function loadLibres() {
+  const listEl = document.getElementById('libres-list');
+  if (!listEl) return;
+  try {
+    const r = await api('/api/maintenance/codes/libres');
+    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    _libresItems = [];
+  }
+  _libresSelection.clear();
+  _updateLibresSelectionUI();
+  renderLibresList();
+}
+
+function _fmtLibreDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+  } catch (e) { return '—'; }
+}
+
+function _updateLibresSelectionUI() {
+  const btn = document.getElementById('libres-merge-btn');
+  const cnt = document.getElementById('libres-selection-count');
+  const n = _libresSelection.size;
+  if (btn) btn.disabled = (n !== 2);
+  if (cnt) {
+    if (n === 0) cnt.textContent = '';
+    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
+    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
+    else cnt.textContent = n + ' selectionnes (max 2)';
+  }
+}
+
+function libresToggleSelection(code, checked) {
+  if (checked) {
+    _libresSelection.add(code);
+    if (_libresSelection.size > 2) {
+      const arr = Array.from(_libresSelection);
+      _libresSelection = new Set(arr.slice(-2));
+      renderLibresList();
+    }
+  } else {
+    _libresSelection.delete(code);
+  }
+  _updateLibresSelectionUI();
+}
+
+function renderLibresList() {
+  const el = document.getElementById('libres-list');
+  if (!el) return;
+  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
+  let items = _libresItems.slice();
+  if (q) {
+    items = items.filter(o =>
+      String(o.label || '').toLowerCase().includes(q) ||
+      String(o.code || '').toLowerCase().includes(q)
+    );
+  }
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
+      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
+    return;
+  }
+  const rows = items.map(o => {
+    const codeEsc = esc(String(o.code));
+    const labelEsc = esc(String(o.label || ''));
+    const checked = _libresSelection.has(o.code) ? ' checked' : '';
+    const usage = o.usage_count;
+    const usageChip = usage > 0
+      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
+    const canDelete = (usage === 0);
+    const delBtn = canDelete
+      ? '<button type="button" class="btn-sm btn-ghost danger" data-libre-del="' + codeEsc + '">Archiver</button>'
+      : '<button type="button" class="btn-sm btn-ghost" disabled title="Fusionne avec un autre titre pour supprimer" style="opacity:.4;cursor:not-allowed">Archiver</button>';
+    return '<tr>' +
+      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
+      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
+      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
+      '<td>' + usageChip + '</td>' +
+      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
+        delBtn +
+      '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
+    '<thead><tr>' +
+      '<th></th>' +
+      '<th>Code</th>' +
+      '<th>Titre</th>' +
+      '<th>Usage</th>' +
+      '<th>Derniere utilisation</th>' +
+      '<th>Cree le</th>' +
+      '<th style="text-align:right">Actions</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div>';
+  // Bind event delegation (checkbox + rename + delete)
+  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
+    });
+  });
+  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-rename');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresRename(code, it.label);
+    });
+  });
+  el.querySelectorAll('[data-libre-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-del');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresDelete(code, it.label);
+    });
+  });
+}
+
+async function libresRename(code, currentLabel) {
+  const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
+  if (newLabel === null) return;
+  const trimmed = (newLabel || '').trim();
+  if (!trimmed) { toast('Titre obligatoire', true); return; }
+  if (trimmed === currentLabel) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method: 'PATCH',
+      body: JSON.stringify({ label: trimmed }),
+    });
+    toast('Titre modifie');
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresDelete(code, label) {
+  if (!confirm('Archiver definitivement "' + label + '" (' + code + ') ?\n\nCette action est reversible uniquement via SQL manuel.')) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Titre archive');
+    _libresSelection.delete(code);
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresMergeSelected() {
+  if (_libresSelection.size !== 2) return;
+  const codes = Array.from(_libresSelection);
+  const items = codes.map(c => _libresItems.find(x => x.code === c)).filter(Boolean);
+  if (items.length !== 2) { toast('Selection invalide', true); return; }
+  const opts = items.map((it, i) => (i + 1) + '. ' + it.label + ' (' + it.usage_count + ' saisie' + (it.usage_count > 1 ? 's' : '') + ')').join('\n');
+  const choice = prompt(
+    'Quel titre garder pour la fusion ?\n\n' + opts + '\n\nSaisis 1 ou 2 :',
+    items[0].usage_count >= items[1].usage_count ? '1' : '2'
+  );
+  if (choice === null) return;
+  const idx = parseInt(choice, 10) - 1;
+  if (idx !== 0 && idx !== 1) { toast('Choix invalide (1 ou 2 attendu)', true); return; }
+  const winner = items[idx];
+  const loser = items[1 - idx];
+  if (!confirm(
+    'Fusionner "' + loser.label + '" (' + loser.usage_count + ' saisie' + (loser.usage_count > 1 ? 's' : '') + ') vers "' + winner.label + '" ?\n\n' +
+    'Toutes les saisies passees de "' + loser.label + '" seront desormais attribuees a "' + winner.label + '".\n' +
+    'Le titre "' + loser.label + '" (' + loser.code + ') sera supprime.'
+  )) return;
+  try {
+    await api('/api/maintenance/codes/libres/merge', {
+      method: 'POST',
+      body: JSON.stringify({ winner_code: winner.code, loser_code: loser.code }),
+    });
+    toast('Fusion effectuee');
+    _libresSelection.clear();
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
 function _maintCatLabel(cat) {
   // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
   // et "remplacements" (UI: Interventions). Labels renommés v179.
@@ -4476,6 +4739,10 @@ document.addEventListener('click', (ev) => {
   document.querySelectorAll('.maint-subtab').forEach(p => {
     p.style.display = (p.id === target) ? '' : 'none';
   });
+  // v182 Lot 2 : charge la liste des libres a la premiere ouverture du sous-onglet
+  if (target === 'maint-subtab-libres' && typeof loadLibres === 'function') {
+    loadLibres();
+  }
 });
 
 // ── Alertes maintenance (gestion super admin) ──────────────────────
@@ -7598,7 +7865,150 @@ async function prDeleteAgent(id) {
 })();
 
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js">
+// ─── Formations & guides in-app (admin) ────────────────────────────
+let _fmtData = null;
+let _fmtSearch = '';
+let _fmtStatus = '';
+
+async function loadFormationsAdmin(){
+  try {
+    const r = await api('/api/guides/admin/overview');
+    if (!r.ok) { toast('Erreur chargement', true); return; }
+    _fmtData = await r.json();
+    renderFormationsAdmin();
+  } catch(e){ toast('Erreur réseau', true); }
+}
+
+function _fmtStatusPill(status){
+  if(status==='acked') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(52,211,153,.15);color:var(--ok);font-size:11px;font-weight:700">✓ Validé</span>';
+  if(status==='completed') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--accent);font-size:11px;font-weight:700">Complété</span>';
+  if(status==='in_progress') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(251,191,36,.15);color:var(--warn);font-size:11px;font-weight:700">En cours</span>';
+  if(status==='open') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.18);color:var(--muted);font-size:11px;font-weight:700">Ouvert</span>';
+  return '<span style="color:var(--muted);font-size:11px">Jamais ouvert</span>';
+}
+
+function _fmtTimeMs(ms){
+  const s = Math.floor((ms||0) / 1000);
+  if(s < 60) return s + 's';
+  const m = Math.floor(s/60); const rs = s%60;
+  if(m < 60) return m + 'min ' + rs + 's';
+  const h = Math.floor(m/60); const rm = m%60;
+  return h + 'h' + String(rm).padStart(2,'0');
+}
+
+function _fmtDate(iso){
+  if(!iso) return '—';
+  try{ const d = new Date(iso.replace(' ','T')); return d.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }catch(e){ return iso; }
+}
+
+// Guides connus (label lisible)
+const _FMT_GUIDES = {
+  'qualite-overview': 'MyQualité — Vue d\'ensemble',
+  'ressources': 'Ressources fournisseurs',
+};
+
+function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
+
+// Rôles utilisateur : liste synthétique
+function _fmtRoleLabel(r){
+  const m = {
+    superadmin: 'Super admin', direction: 'Direction',
+    administration: 'Administration', administration_ventes: 'Admin. ventes',
+    administration_technique: 'Admin. technique', fabrication: 'Fabrication',
+    commercial: 'Commercial', logistique: 'Logistique', expedition: 'Expédition',
+    comptabilite: 'Comptabilité',
+  };
+  return m[r] || r || '—';
+}
+
+function renderFormationsAdmin(){
+  if(!_fmtData) return;
+  const users = _fmtData.users || [];
+  const progress = _fmtData.progress || [];
+  const progByUser = new Map();
+  for(const p of progress){
+    if(!progByUser.has(p.user_id)) progByUser.set(p.user_id, []);
+    progByUser.get(p.user_id).push(p);
+  }
+  // Guides connus, y compris les valeurs presentes dans progress
+  const guideKeys = new Set(Object.keys(_FMT_GUIDES));
+  for(const p of progress) guideKeys.add(p.guide_key);
+  const guides = Array.from(guideKeys);
+
+  const q = _fmtSearch.toLowerCase();
+  const rows = [];
+  for(const u of users){
+    const uProg = progByUser.get(u.id) || [];
+    for(const gk of guides){
+      const p = uProg.find(x => x.guide_key === gk);
+      const status = p ? p.status : 'never';
+      // Filter status
+      if(_fmtStatus && status !== _fmtStatus) continue;
+      const uName = `${u.prenom||''} ${u.nom||''}`.trim() || u.email || ('#'+u.id);
+      const gLabel = _fmtGuideLabel(gk);
+      // Filter search (matche user + role + guide)
+      if(q){
+        const hay = (uName + ' ' + (u.email||'') + ' ' + _fmtRoleLabel(u.role) + ' ' + gLabel + ' ' + gk).toLowerCase();
+        if(!hay.includes(q)) continue;
+      }
+      rows.push({user:u, guide:gk, gLabel, prog:p, status, uName});
+    }
+  }
+
+  const tbody = document.getElementById('fmt-tbody');
+  if(!tbody) return;
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">Aucun résultat</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const p = r.prog;
+    const stepsHtml = p && p.total_steps > 0
+      ? `${p.steps_seen}/${p.total_steps}`
+      : '—';
+    const time = p ? _fmtTimeMs(p.total_time_ms) : '—';
+    const openCount = p ? (p.open_count || 0) : 0;
+    const canReset = !!p;
+    return `<tr>
+      <td><strong>${esc(r.uName)}</strong>${r.user.email?`<div style="font-size:11px;color:var(--muted)">${esc(r.user.email)}</div>`:''}</td>
+      <td style="font-size:12px;color:var(--text2)">${esc(_fmtRoleLabel(r.user.role))}</td>
+      <td>${esc(r.gLabel)}<div style="font-size:10px;color:var(--muted);font-family:ui-monospace,monospace">${esc(r.guide)}</div></td>
+      <td>${_fmtStatusPill(r.status)}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px">${stepsHtml}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px">${time}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px;text-align:center">${openCount}</td>
+      <td style="font-size:11px;color:var(--text2)">${_fmtDate(p && p.opened_at)}</td>
+      <td style="font-size:11px;color:var(--text2)">${_fmtDate(p && p.acknowledged_at)}</td>
+      <td style="text-align:right">${canReset ? `<button type="button" class="btn btn-sec btn-sm" onclick="resetFormation(${r.user.id}, '${esc(r.guide)}', '${esc(r.uName.replace(/'/g,"\\'"))}', '${esc(r.gLabel.replace(/'/g,"\\'"))}')">Reset</button>` : '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function resetFormation(userId, guideKey, uName, gLabel){
+  if(!confirm(`Réinitialiser la progression du guide « ${gLabel} » pour ${uName} ?\n\nL'utilisateur reverra le tuto à sa prochaine visite.`)) return;
+  try {
+    const r = await api('/api/guides/admin/reset', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({user_id: userId, guide_key: guideKey})
+    });
+    if(!r.ok){ toast('Erreur réinitialisation', true); return; }
+    toast('Progression remise à zéro');
+    await loadFormationsAdmin();
+  } catch(e){ toast('Erreur réseau', true); }
+}
+
+// Wire up filtres
+try {
+  const s = document.getElementById('fmt-search');
+  if(s) s.oninput = () => { _fmtSearch = s.value; renderFormationsAdmin(); };
+  const st = document.getElementById('fmt-filter-status');
+  if(st) st.onchange = () => { _fmtStatus = st.value; renderFormationsAdmin(); };
+  const rf = document.getElementById('fmt-refresh');
+  if(rf) rf.onclick = () => loadFormationsAdmin();
+} catch(e){}
+
+</script>
 </body>
 </html>
 """
