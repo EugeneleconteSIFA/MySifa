@@ -37,6 +37,7 @@ def qualite_page(request: Request):
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__IS_QUALITE_ADMIN__", "true" if is_admin else "false")
         .replace("__IS_QUALITE_READONLY__", "true" if is_readonly else "false")
+        .replace("__USER_ROLE__", user.get("role", ""))
     )
     return HTMLResponse(
         content=html,
@@ -630,6 +631,7 @@ const S = {
   refEditQaId: null,         // ID de la question en cours d'édition inline
   isQualiteAdmin: __IS_QUALITE_ADMIN__,
   isQualiteReadonly: __IS_QUALITE_READONLY__,
+  userRole: "__USER_ROLE__",
   // ── Prise en connaissance NC (v163) ─────────────────────────
   // ackServices : liste [{key,label,color}] issue de GET /api/qualite/services
   // myAckService : clé du service NC du user courant (ou null s'il n'en a pas)
@@ -3475,10 +3477,27 @@ document.addEventListener('keydown', function(ev){
     .qguide-close:hover{color:var(--danger);background:rgba(248,113,113,.1)}
     .qguide-progress{height:3px;background:var(--border);width:100%;overflow:hidden}
     .qguide-progress-bar{height:100%;background:linear-gradient(90deg, var(--accent), var(--ok));transition:width .35s cubic-bezier(.4,0,.2,1);border-radius:0 3px 3px 0}
-    .qguide-viewport{position:relative;height:340px;overflow:hidden}
-    .qguide-step{position:absolute;inset:0;padding:36px 32px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;opacity:0;transform:translateX(100%);transition:opacity .3s ease, transform .35s cubic-bezier(.4,0,.2,1)}
-    .qguide-step.active{opacity:1;transform:translateX(0)}
-    .qguide-step.prev{transform:translateX(-100%)}
+    .qguide-viewport{position:relative;min-height:420px;max-height:60vh;overflow:hidden}
+    .qguide-step{position:absolute;inset:0;padding:28px 32px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;opacity:0;transform:translateX(100%);transition:opacity .3s ease, transform .35s cubic-bezier(.4,0,.2,1);overflow-y:auto;pointer-events:none}
+    .qguide-step.active{opacity:1;transform:translateX(0);pointer-events:auto}
+    .qguide-step.from-right{transform:translateX(100%);opacity:0;transition:none}
+    .qguide-step.from-left{transform:translateX(-100%);opacity:0;transition:none}
+    .qguide-step.to-right{transform:translateX(100%);opacity:0}
+    .qguide-step.to-left{transform:translateX(-100%);opacity:0}
+    /* Illustration mockup */
+    .qguide-illu{width:100%;max-width:340px;height:150px;border-radius:12px;background:var(--bg);border:1px solid var(--border);margin-bottom:16px;padding:10px;box-sizing:border-box;overflow:hidden;position:relative}
+    .qguide-illu svg{width:100%;height:100%;display:block}
+    body.light .qguide-illu{background:#f8fafc}
+    /* Task sections dans slide 1 */
+    .qguide-tasks{width:100%;max-width:440px;text-align:left;margin-top:8px;display:flex;flex-direction:column;gap:10px}
+    .qguide-tasks-tit{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 2px}
+    .qguide-svc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+    .qguide-svc-hd{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+    .qguide-svc-hd svg{flex-shrink:0}
+    .qguide-svc-list{margin:0;padding-left:18px;font-size:12px;color:var(--text2);line-height:1.55}
+    .qguide-svc-list li{margin-bottom:2px}
+    .qguide-svc-list li:last-child{margin-bottom:0}
+    body.light .qguide-svc{background:#f8fafc}
     .qguide-icon{width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg, var(--accent-bg), rgba(52,211,153,.12));display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:20px;animation:qguideIconIn .5s cubic-bezier(.34,1.56,.64,1)}
     @keyframes qguideIconIn{0%{opacity:0;transform:scale(.5) rotate(-10deg)}60%{transform:scale(1.15) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
     .qguide-step.active .qguide-icon{animation:qguideIconIn .5s cubic-bezier(.34,1.56,.64,1)}
@@ -3550,42 +3569,248 @@ document.addEventListener('keydown', function(ev){
 
 
 // ─── Guides interactifs (bouton "?" livre) ───────────────────────────────
-const QUALITE_GUIDES = {
-  'ressources': {
-    steps: [
-      {
-        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
-        title: "Un dossier par fournisseur",
-        body: "Cette page centralise <strong>les certifications de tous vos fournisseurs</strong>. Chaque carte = un dossier fournisseur (ou un groupe). Cliquez pour ouvrir et gérer ses certificats."
-      },
-      {
-        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M7 10v4"/><path d="M17 10v4"/><path d="M10 7h4"/><path d="M10 17h4"/></svg>`,
-        title: "Groupes et branches",
-        body: "Un fournisseur qui appartient à un <strong>groupe</strong> (ex. Fedrigoni Italy, France, UK) est regroupé sous une seule carte avec un badge <span class=\"qguide-tag\">Groupe</span>. Cliquez pour voir toutes les branches et gérer les certificats communs."
-      },
-      {
-        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><circle cx="12" cy="10" r="1"/></svg>`,
-        title: "Certifications à deux niveaux",
-        body: "Pour un fournisseur seul, ajoutez ses certifs (ISO, FSC, REACH...). Pour un groupe, choisissez <strong>niveau groupe</strong> (partagé entre toutes les branches) ou <strong>branche spécifique</strong>."
-      },
-      {
-        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
-        title: "Suivi des expirations",
-        body: "Le bandeau du haut liste les certifs <span class=\"qguide-tag\">expirés</span> et ceux <span class=\"qguide-tag\">à 30j</span>. Sur chaque carte, les pastilles colorées résument l'état : vert (valide), orange (bientôt), rouge (expiré), gris (sans date)."
-      },
-      {
-        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a5 5 0 0 0 2.41-4.13 6 6 0 1 0-11 0A5 5 0 0 0 9 14"/></svg>`,
-        title: "Astuces",
-        body: "Filtrez avec la <strong>recherche</strong> par nom de fournisseur ou de groupe. Sur la page fournisseur, utilisez les flèches <strong>← →</strong> pour naviguer, et le bouton <strong>Paramètres</strong> pour éditer les infos (groupe, licence FSC...) sans quitter MyQualité."
-      }
-    ]
-  }
+const QUALITE_MOCKUPS = {
+  cardsGrid: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="8" width="220" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/>
+    <text x="18" y="20" font-size="7" fill="var(--muted)" font-family="Segoe UI">Rechercher un fournisseur…</text>
+    <rect x="238" y="8" width="26" height="18" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/>
+    <text x="248" y="20" font-size="10" fill="var(--accent)" font-family="Segoe UI">?</text>
+    <rect x="10" y="34" width="105" height="52" rx="7" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+    <rect x="10" y="34" width="4" height="52" fill="var(--accent)" rx="1"/>
+    <text x="20" y="46" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Fedrigoni</text>
+    <rect x="72" y="40" width="35" height="9" rx="4" fill="var(--accent-bg)"/>
+    <text x="78" y="47" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE</text>
+    <text x="20" y="58" font-size="6" fill="var(--muted)" font-family="Segoe UI">Italy · France · UK</text>
+    <rect x="20" y="66" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="24" y="73" font-size="5" fill="var(--text2)" font-family="Segoe UI">4 certifs</text>
+    <rect x="48" y="66" width="26" height="10" rx="5" fill="rgba(52,211,153,.15)"/>
+    <text x="52" y="73" font-size="5" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
+    <rect x="122" y="34" width="105" height="52" rx="7" fill="var(--card)" stroke="var(--border)"/>
+    <text x="132" y="46" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Avery</text>
+    <text x="132" y="56" font-size="5" fill="var(--muted)" font-family="ui-monospace">FSC-C004451</text>
+    <rect x="132" y="66" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="136" y="73" font-size="5" fill="var(--text2)" font-family="Segoe UI">1 certif</text>
+    <rect x="160" y="66" width="34" height="10" rx="5" fill="rgba(148,163,184,.2)"/>
+    <text x="164" y="73" font-size="5" fill="var(--muted)" font-weight="700" font-family="Segoe UI">1 sans date</text>
+    <rect x="234" y="34" width="95" height="52" rx="7" fill="var(--card)" stroke="var(--border)"/>
+    <text x="244" y="46" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Ricoh</text>
+    <text x="244" y="56" font-size="5" fill="var(--muted)" font-family="ui-monospace">FSC-C001858</text>
+    <rect x="244" y="66" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="248" y="73" font-size="5" fill="var(--text2)" font-family="Segoe UI">0 certif</text>
+    <rect x="10" y="94" width="105" height="48" rx="7" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
+    <rect x="10" y="94" width="4" height="48" fill="var(--accent)" rx="1"/>
+    <text x="20" y="106" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Frimpeks</text>
+    <rect x="72" y="100" width="35" height="9" rx="4" fill="var(--accent-bg)"/>
+    <text x="78" y="107" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE</text>
+    <text x="20" y="118" font-size="6" fill="var(--muted)" font-family="Segoe UI">Italy · Turkey · UK</text>
+    <rect x="20" y="126" width="30" height="10" rx="5" fill="rgba(251,191,36,.15)"/>
+    <text x="24" y="133" font-size="5" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
+    <rect x="122" y="94" width="207" height="48" rx="7" fill="var(--card)" stroke="var(--border)"/>
+    <text x="132" y="106" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Itasa</text>
+    <text x="132" y="116" font-size="5" fill="var(--muted)" font-family="ui-monospace">FSC-C160893 · AEN-COC-000369</text>
+    <rect x="132" y="126" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="136" y="133" font-size="5" fill="var(--text2)" font-family="Segoe UI">2 certifs</text>
+    <rect x="160" y="126" width="24" height="10" rx="5" fill="rgba(248,113,113,.18)"/>
+    <text x="164" y="133" font-size="5" fill="var(--danger)" font-weight="700" font-family="Segoe UI">1 exp</text>
+  </svg>`,
+  groupCard: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="60" y="20" width="220" height="110" rx="10" fill="var(--card)" stroke="var(--accent)" stroke-width="2"/>
+    <rect x="60" y="20" width="6" height="110" fill="var(--accent)" rx="1"/>
+    <text x="76" y="42" font-size="14" font-weight="800" fill="var(--text)" font-family="Segoe UI">Fedrigoni</text>
+    <rect x="195" y="30" width="75" height="16" rx="8" fill="var(--accent-bg)"/>
+    <text x="205" y="41" font-size="8" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE · 3 branches</text>
+    <rect x="76" y="58" width="55" height="20" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="86" y="72" font-size="9" fill="var(--text2)" font-family="Segoe UI">Italy</text>
+    <rect x="138" y="58" width="55" height="20" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="146" y="72" font-size="9" fill="var(--text2)" font-family="Segoe UI">France</text>
+    <rect x="200" y="58" width="55" height="20" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="215" y="72" font-size="9" fill="var(--text2)" font-family="Segoe UI">UK</text>
+    <rect x="76" y="94" width="60" height="20" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="94" y="108" font-size="9" fill="var(--text2)" font-weight="700" font-family="Segoe UI">6 certifs</text>
+    <rect x="142" y="94" width="60" height="20" rx="10" fill="rgba(52,211,153,.15)"/>
+    <text x="158" y="108" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
+    <rect x="208" y="94" width="60" height="20" rx="10" fill="rgba(251,191,36,.15)"/>
+    <text x="222" y="108" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
+  </svg>`,
+  modalNiveau: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="30" y="12" width="280" height="132" rx="12" fill="var(--card)" stroke="var(--border)" stroke-width="1.5"/>
+    <text x="46" y="30" font-size="10" font-weight="800" fill="var(--text)" font-family="Segoe UI">Ajouter un certificat — Fedrigoni</text>
+    <text x="284" y="30" font-size="12" fill="var(--muted)" font-family="Segoe UI">×</text>
+    <rect x="46" y="44" width="248" height="80" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="54" y="58" font-size="7" fill="var(--muted)" font-weight="700" font-family="Segoe UI">RATTACHER À</text>
+    <rect x="54" y="66" width="232" height="22" rx="5" fill="var(--accent-bg)"/>
+    <circle cx="66" cy="77" r="6" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    <circle cx="66" cy="77" r="3" fill="var(--accent)"/>
+    <text x="80" y="80" font-size="9" fill="var(--text)" font-weight="600" font-family="Segoe UI">Niveau groupe (Fedrigoni)</text>
+    <rect x="54" y="92" width="232" height="22" rx="5" fill="transparent"/>
+    <circle cx="66" cy="103" r="6" fill="none" stroke="var(--muted)" stroke-width="2"/>
+    <text x="80" y="106" font-size="9" fill="var(--text2)" font-family="Segoe UI">Une branche spécifique</text>
+    <rect x="215" y="97" width="60" height="14" rx="4" fill="var(--card)" stroke="var(--border)"/>
+    <text x="221" y="107" font-size="7" fill="var(--text2)" font-family="Segoe UI">Italy ▾</text>
+    <rect x="216" y="128" width="80" height="14" rx="4" fill="var(--accent)"/>
+    <text x="235" y="138" font-size="8" fill="#fff" font-weight="700" font-family="Segoe UI">Ajouter</text>
+  </svg>`,
+  alerts: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="10" width="320" height="40" rx="8" fill="rgba(248,113,113,.12)" stroke="var(--danger)" stroke-width="1.5"/>
+    <text x="22" y="26" font-size="9" font-weight="700" fill="var(--text)" font-family="Segoe UI">2 certificat(s) expiré(s)</text>
+    <text x="22" y="40" font-size="7" fill="var(--text2)" font-family="Segoe UI">Fedrigoni Italy — ISO 14001 · expiré depuis 12j</text>
+    <rect x="10" y="56" width="320" height="40" rx="8" fill="rgba(251,191,36,.12)" stroke="var(--warn)" stroke-width="1.5"/>
+    <text x="22" y="72" font-size="9" font-weight="700" fill="var(--text)" font-family="Segoe UI">3 certificat(s) expirent sous 30 jours</text>
+    <text x="22" y="86" font-size="7" fill="var(--text2)" font-family="Segoe UI">Avery — FSC CoC · dans 18j</text>
+    <g transform="translate(10, 108)">
+      <rect x="0" y="0" width="52" height="20" rx="10" fill="rgba(52,211,153,.15)"/>
+      <text x="10" y="14" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">valide</text>
+      <rect x="60" y="0" width="60" height="20" rx="10" fill="rgba(251,191,36,.15)"/>
+      <text x="76" y="14" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">bientôt</text>
+      <rect x="128" y="0" width="52" height="20" rx="10" fill="rgba(248,113,113,.18)"/>
+      <text x="140" y="14" font-size="9" fill="var(--danger)" font-weight="700" font-family="Segoe UI">expiré</text>
+      <rect x="188" y="0" width="80" height="20" rx="10" fill="rgba(148,163,184,.2)"/>
+      <text x="200" y="14" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">sans date</text>
+    </g>
+  </svg>`,
+  detailHeader: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
+    <rect x="10" y="10" width="60" height="22" rx="5" fill="transparent" stroke="var(--border)"/>
+    <text x="18" y="25" font-size="9" fill="var(--text2)" font-family="Segoe UI">← Retour</text>
+    <rect x="80" y="10" width="90" height="22" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="88" y="25" font-size="12" fill="var(--text2)" font-weight="700" font-family="Segoe UI">←</text>
+    <text x="108" y="24" font-size="8" fill="var(--muted)" font-family="ui-monospace">3 / 12</text>
+    <text x="150" y="25" font-size="12" fill="var(--text2)" font-weight="700" font-family="Segoe UI">→</text>
+    <rect x="200" y="10" width="70" height="22" rx="5" fill="transparent" stroke="var(--border)"/>
+    <circle cx="212" cy="21" r="3" fill="none" stroke="var(--text2)" stroke-width="1.2"/>
+    <text x="222" y="25" font-size="8" fill="var(--text2)" font-family="Segoe UI">Paramètres</text>
+    <rect x="280" y="10" width="50" height="22" rx="5" fill="var(--accent)"/>
+    <text x="288" y="25" font-size="8" fill="#fff" font-weight="700" font-family="Segoe UI">+ Certif</text>
+    <text x="10" y="60" font-size="16" font-weight="800" fill="var(--text)" font-family="Segoe UI">Fedrigoni Italy</text>
+    <rect x="10" y="72" width="90" height="16" rx="8" fill="var(--accent-bg)"/>
+    <text x="20" y="83" font-size="7" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Groupe : Fedrigoni</text>
+    <rect x="106" y="72" width="70" height="16" rx="8" fill="var(--accent-bg)"/>
+    <text x="118" y="83" font-size="7" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Branche : Italy</text>
+    <text x="10" y="105" font-size="8" fill="var(--muted)" font-family="ui-monospace">FSC-C011937 · FCBA-COC-000059</text>
+    <rect x="10" y="115" width="320" height="30" rx="6" fill="var(--card)" stroke="var(--border)"/>
+    <rect x="10" y="115" width="4" height="30" fill="var(--ok)"/>
+    <text x="22" y="128" font-size="9" font-weight="700" fill="var(--text)" font-family="Segoe UI">Certificat ISO 9001 2026</text>
+    <text x="22" y="140" font-size="7" fill="var(--muted)" font-family="Segoe UI">Valide · expire le 15/03/2027</text>
+  </svg>`,
 };
+
+const QUALITE_TASKS_BY_SERVICE = {
+  direction: {
+    label: "Direction",
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 12l4-4 4 4 6-6"/></svg>`,
+    tasks: [
+      "Piloter la démarche qualité (KPIs certifs, taux de couverture)",
+      "Arbitrer les décisions RSE et politique fournisseur",
+      "Valider les certifications critiques (audit, ISO 14001, FSC groupe)",
+    ]
+  },
+  administration: {
+    label: "Administration",
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+    tasks: [
+      "Saisir les certificats reçus (PDF + titre + dates + labels RSE)",
+      "Créer et éditer les fiches fournisseurs (groupe, branche, licence)",
+      "Suivre les expirations depuis le bandeau d'alertes",
+      "Renouveler les certificats avant expiration",
+    ]
+  },
+  fabrication: {
+    label: "Fabrication",
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>`,
+    tasks: [
+      "Consulter les certifs FSC des bobines avant lancement",
+      "Vérifier la validité des certifs matière première",
+    ]
+  },
+  commercial: {
+    label: "Commercial",
+    icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    tasks: [
+      "Consulter les certifs pour répondre aux appels d'offre",
+      "Documenter les capacités environnementales en propositions client",
+    ]
+  },
+};
+
+function _mapRoleToService(role){
+  const r = String(role || "").toLowerCase();
+  if(r === "superadmin" || r === "direction") return "ALL";
+  if(r.startsWith("administration")) return "administration";
+  if(r === "fabrication") return "fabrication";
+  if(r === "commercial") return "commercial";
+  return null;
+}
+
+function _renderTaskSections(){
+  const svc = _mapRoleToService(S.userRole);
+  if(!svc){
+    return `<div class="qguide-tasks">
+      <p class="qguide-tasks-tit">À propos de cette page</p>
+      <div class="qguide-svc">
+        <div class="qguide-svc-hd"><span>Lecture seule</span></div>
+        <ul class="qguide-svc-list"><li>Vous pouvez consulter les certificats fournisseurs et l'état des expirations.</li></ul>
+      </div>
+    </div>`;
+  }
+  const order = svc === "ALL" ? ["direction", "administration", "fabrication", "commercial"] : [svc];
+  const html = order.map(k => {
+    const s = QUALITE_TASKS_BY_SERVICE[k];
+    if(!s) return "";
+    return `<div class="qguide-svc">
+      <div class="qguide-svc-hd">${s.icon}<span>${s.label}</span></div>
+      <ul class="qguide-svc-list">${s.tasks.map(t => `<li>${escHtml(t)}</li>`).join('')}</ul>
+    </div>`;
+  }).join('');
+  return `<div class="qguide-tasks">
+    <p class="qguide-tasks-tit">${svc === "ALL" ? "Ce que fait chaque service ici" : "Ce que vous avez à faire"}</p>
+    ${html}
+  </div>`;
+}
+
+function _qualiteGuides(){
+  return {
+    'ressources': {
+      steps: [
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
+          title: "Ressources fournisseurs",
+          body: "Centralisez ici toutes les certifications de vos fournisseurs.",
+          illu: QUALITE_MOCKUPS.cardsGrid,
+          extra: _renderTaskSections()
+        },
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
+          title: "Groupes et branches",
+          body: "Un fournisseur qui appartient à un <strong>groupe</strong> (ex. Fedrigoni Italy, France, UK) est regroupé sous une seule carte avec un badge <span class=\"qguide-tag\">Groupe</span>. Cliquez pour voir toutes les branches et gérer les certifs communs.",
+          illu: QUALITE_MOCKUPS.groupCard,
+        },
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+          title: "Certifications à deux niveaux",
+          body: "Pour un fournisseur seul, ajoutez ses certifs (ISO, FSC, REACH...). Pour un <strong>groupe</strong>, choisissez le niveau : groupe (partagé entre toutes les branches) ou branche spécifique.",
+          illu: QUALITE_MOCKUPS.modalNiveau,
+        },
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>`,
+          title: "Suivi des expirations",
+          body: "Le bandeau en haut liste les certifs <span class=\"qguide-tag\">expirés</span> et ceux <span class=\"qguide-tag\">à 30j</span>. Chaque carte affiche des pastilles colorées : vert (valide), orange (bientôt), rouge (expiré), gris (sans date).",
+          illu: QUALITE_MOCKUPS.alerts,
+        },
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.09 14a5 5 0 0 0 2.41-4.13 6 6 0 1 0-11 0A5 5 0 0 0 9 14"/></svg>`,
+          title: "Naviguer & éditer sans quitter",
+          body: "Utilisez la <strong>recherche</strong> pour filtrer. Sur la page fournisseur, naviguez avec les flèches <strong>← →</strong> pour passer au suivant, et le bouton <strong>Paramètres</strong> pour éditer (groupe, licence...) sans revenir en arrière.",
+          illu: QUALITE_MOCKUPS.detailHeader,
+        }
+      ]
+    }
+  };
+}
 
 let _qguideState = { key: null, idx: 0 };
 
 function openGuide(key){
-  const g = QUALITE_GUIDES[key];
+  const guides = _qualiteGuides();
+  const g = guides[key];
   if(!g) return;
   _qguideState = { key, idx: 0 };
   const wrap = _refMroot();
@@ -3595,9 +3820,10 @@ function openGuide(key){
       <div class="qguide-progress"><div class="qguide-progress-bar" id="qguide-bar" style="width:${((1/g.steps.length)*100).toFixed(1)}%"></div></div>
       <div class="qguide-viewport" id="qguide-viewport">
         ${g.steps.map((s, i) => `<div class="qguide-step ${i===0?'active':''}" data-idx="${i}">
-          <div class="qguide-icon">${s.icon}</div>
-          <h3 class="qguide-tit" id="qguide-tit">${s.title}</h3>
+          ${s.illu ? `<div class="qguide-illu">${s.illu}</div>` : `<div class="qguide-icon">${s.icon}</div>`}
+          <h3 class="qguide-tit" id="qguide-tit-${i}">${s.title}</h3>
           <p class="qguide-body">${s.body}</p>
+          ${s.extra || ''}
         </div>`).join('')}
       </div>
       <div class="qguide-nav">
@@ -3609,8 +3835,6 @@ function openGuide(key){
       </div>
     </div>
   </div>`;
-
-  // Ecoute clavier
   document.addEventListener('keydown', _qguideKey);
 }
 
@@ -3622,38 +3846,30 @@ function _qguideKey(e){
 }
 
 function navGuide(newIdx){
-  const g = QUALITE_GUIDES[_qguideState.key];
+  const guides = _qualiteGuides();
+  const g = guides[_qguideState.key];
   if(!g) return;
   if(newIdx < 0 || newIdx >= g.steps.length) return;
   const oldIdx = _qguideState.idx;
+  if(newIdx === oldIdx) return;
   const dir = newIdx > oldIdx ? 1 : -1;
   const vp = document.getElementById('qguide-viewport');
   if(!vp) return;
   const steps = vp.querySelectorAll('.qguide-step');
+
   steps.forEach((s, i) => {
-    s.classList.remove('active', 'prev');
+    s.classList.remove('active', 'from-left', 'from-right', 'to-left', 'to-right');
     if(i === newIdx){
-      // Placer temporairement en position d'arrivee (hors ecran cote oppose)
-      s.style.transform = dir > 0 ? 'translateX(100%)' : 'translateX(-100%)';
-      s.style.opacity = '0';
-      s.style.transition = 'none';
-      requestAnimationFrame(() => {
-        s.style.transition = '';
-        s.classList.add('active');
-        s.style.transform = '';
-        s.style.opacity = '';
-      });
+      s.classList.add(dir > 0 ? 'from-right' : 'from-left');
+      void s.offsetWidth;
+      s.classList.remove('from-right', 'from-left');
+      s.classList.add('active');
     } else if(i === oldIdx){
-      s.classList.add(dir > 0 ? 'prev' : '');
-      s.style.transform = dir > 0 ? 'translateX(-100%)' : 'translateX(100%)';
-      s.style.opacity = '0';
-    } else {
-      s.style.transform = '';
-      s.style.opacity = '';
+      s.classList.add(dir > 0 ? 'to-left' : 'to-right');
     }
   });
+
   _qguideState.idx = newIdx;
-  // Mise a jour dots + progress + boutons
   const dots = document.querySelectorAll('.qguide-dot');
   dots.forEach((d, i) => d.classList.toggle('active', i === newIdx));
   const bar = document.getElementById('qguide-bar');
