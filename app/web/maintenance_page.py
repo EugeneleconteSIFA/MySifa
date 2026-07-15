@@ -4177,6 +4177,17 @@ function setWearPartPos(pieceId, pos){
   if(!m[pieceId]) m[pieceId] = {};
   m[pieceId][machine] = pos;
   _saveWearPartMap(m);
+  // Mise a jour DOM DIRECTE des boutons — independante du re-render.
+  // Garantit que le toggle visuel fonctionne meme si renderMaintCards
+  // est bloque par une erreur ou une race async.
+  try{
+    document.querySelectorAll('.maint-wp-btn[data-wp="' + pieceId + '"]').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-pos') === pos);
+    });
+    document.querySelectorAll('.maint-wearpart[data-wearpart="' + pieceId + '"]').forEach(function(s){
+      s.setAttribute('data-wearpart-pos', pos);
+    });
+  }catch(e){ console.warn('[setWearPartPos direct DOM]', e); }
   renderMaintCards();
 }
 // Rend explicite l'export global pour l'inline onclick (défensif).
