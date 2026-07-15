@@ -1850,6 +1850,13 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 <script>
 'use strict';
 
+// v179 fix : MAINT_ROLE hoiste tres tot, sinon init() (fin du 1er script)
+// crash sur ReferenceError quand refreshPlanning est appelee via loadPlanning.
+// La const originale plus bas devient une simple reassignation defensive.
+var MAINT_ROLE = (typeof document !== 'undefined' && document.body && document.body.getAttribute)
+  ? (document.body.getAttribute('data-maint-role') || 'admin')
+  : 'admin';
+
 const S = { me: null };
 
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
@@ -6015,7 +6022,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
    L'état des tâches côté page est stocké dans MAINT_STATE. */
 'use strict';
 
-const MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+// v179 : MAINT_ROLE deja defini au debut du 1er script (var hoiste).
+// Reassignation defensive au cas ou body.data-maint-role aurait change.
+MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
 const MAINT_STATE = {
   tasks: [],
   codes: [],
