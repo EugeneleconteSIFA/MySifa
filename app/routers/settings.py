@@ -1488,6 +1488,15 @@ def _maint_row_to_dict(r) -> dict:
         metrage_ref = r["metrage_ref"]
     except (IndexError, KeyError):
         metrage_ref = None
+    # v180 : libre + usage_count (fallback safe pour DB pas encore migree).
+    try:
+        libre_v = bool(r["libre"])
+    except (IndexError, KeyError):
+        libre_v = False
+    try:
+        usage_v = int(r["usage_count"] or 0)
+    except (IndexError, KeyError, TypeError, ValueError):
+        usage_v = 0
     return {
         "code": r["code"],
         "label": r["label"],
@@ -1496,6 +1505,8 @@ def _maint_row_to_dict(r) -> dict:
         "periodique": bool(r["periodique"]),
         "intervalle": intervalle or "",
         "metrage_ref": metrage_ref or "",
+        "libre": libre_v,
+        "usage_count": usage_v,
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
     }
@@ -1922,15 +1933,31 @@ def _sync_alert_for_code(conn, code: str, label: str, categorie: str, periodique
 
 
 @router.get("/api/maintenance/codes")
-def maintenance_codes_list(request: Request):
-    # Lecture : tout utilisateur connecté (UI maintenance + UI Paramètres).
+def maintenance_codes_list(request: Request, include_libres: int = 0):
+    """Liste des codes maintenance du catalogue standard.
+    Depuis v180, les codes libres (libre=1) sont exclus par defaut. Pour les
+    inclure (ex. panneau admin dedié), passer include_libres=1.
+    """
     get_current_user(request)
     from database import get_db
     with get_db() as conn:
+        # SELECT defensif : libre + usage_count peuvent ne pas exister sur
+        # DB pas encore migree. Le try/except dans _maint_row_to_dict
+        # gere le fallback.
+        cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        has_libre = "libre" in cols
+        has_usage = "usage_count" in cols
+        sel_extra = ""
+        if has_libre: sel_extra += ",libre"
+        if has_usage: sel_extra += ",usage_count"
+        where = ""
+        if has_libre and not include_libres:
+            where = "WHERE libre = 0"
         rows = conn.execute(
-            """SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
-                      created_at,updated_at
+            f"""SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
+                      created_at,updated_at{sel_extra}
                FROM maintenance_codes
+               {where}
                ORDER BY categorie ASC, code ASC"""
         ).fetchall()
         # Enrichissement : nombre de documents attaches par code
@@ -2114,6 +2141,109 @@ def _maint_safe_filename(name: str) -> str:
     name = _ud.normalize("NFKD", name or "").encode("ascii", "ignore").decode("ascii")
     name = _re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._-")
     return name or "fichier"
+
+
+# ─── Endpoints Interventions libres (v180) ─────────────────────────
+# Interventions ponctuelles saisies par l'operateur sans creer de code du
+# catalogue. Chaque titre libre devient un code technique LIB-xxxxxx en
+# base, exclu du catalogue standard (voir maintenance_codes_list).
+
+def _next_libre_code(conn) -> str:
+    """Genere le prochain identifiant LIB-000042. Format numerique sequentiel
+    sur 6 chiffres, base sur MAX(code) existant."""
+    row = conn.execute(
+        "SELECT code FROM maintenance_codes WHERE libre=1 AND code LIKE 'LIB-%' "
+        "ORDER BY code DESC LIMIT 1"
+    ).fetchone()
+    if not row:
+        return "LIB-000001"
+    try:
+        n = int((row["code"] or "").split("-", 1)[1]) + 1
+    except (ValueError, IndexError):
+        n = 1
+    return f"LIB-{n:06d}"
+
+
+@router.get("/api/maintenance/codes/libres/autocomplete")
+def maintenance_libres_autocomplete(request: Request, q: str = "", limit: int = 10):
+    """Autocomplete sur les titres des interventions libres deja saisies.
+    Tri par pertinence : usage_count DESC, puis updated_at DESC."""
+    get_current_user(request)
+    from database import get_db
+    q_norm = (q or "").strip()
+    if len(q_norm) < 1:
+        return {"items": []}
+    limit = max(1, min(int(limit or 10), 50))
+    like = f"%{q_norm}%"
+    with get_db() as conn:
+        cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "libre" not in cols:
+            return {"items": []}
+        has_usage = "usage_count" in cols
+        order = "usage_count DESC, updated_at DESC, code DESC" if has_usage else "updated_at DESC, code DESC"
+        rows = conn.execute(
+            f"""SELECT code, label, niveau, categorie,
+                       {"usage_count" if has_usage else "0 AS usage_count"}
+               FROM maintenance_codes
+               WHERE libre = 1 AND label LIKE ?
+               ORDER BY {order}
+               LIMIT ?""",
+            (like, limit),
+        ).fetchall()
+    items = [
+        {
+            "code": r["code"],
+            "label": r["label"],
+            "niveau": int(r["niveau"] or 1),
+            "categorie": r["categorie"] or "remplacements",
+            "usage_count": int(r["usage_count"] or 0),
+        }
+        for r in rows
+    ]
+    return {"items": items}
+
+
+@router.post("/api/maintenance/codes/libres")
+async def maintenance_libres_create(request: Request):
+    """Cree un code libre a la volee. Body : {label, categorie?, niveau?}.
+    Le code technique (LIB-xxx) est genere par le serveur, jamais fourni par
+    l'operateur. Les defauts sont categorie=remplacements, niveau=1 : la
+    modale de saisie libre ne demande QUE le titre (voir spec Lot 1).
+    """
+    user = get_current_user(request)
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    label = (body.get("label") or "").strip()
+    if not label:
+        raise HTTPException(422, "Titre obligatoire.")
+    if len(label) > 200:
+        label = label[:200]
+    categorie = (body.get("categorie") or "remplacements").strip()
+    if categorie not in ("controles", "entretien", "remplacements"):
+        categorie = "remplacements"
+    try:
+        niveau = int(body.get("niveau") or 1)
+    except (TypeError, ValueError):
+        niveau = 1
+    if niveau < 1 or niveau > 3:
+        niveau = 1
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "libre" not in cols:
+            raise HTTPException(500, "Migration DB manquante (libre column absente).")
+        code = _next_libre_code(conn)
+        conn.execute(
+            """INSERT INTO maintenance_codes
+               (code, label, niveau, categorie, periodique, intervalle,
+                metrage_ref, libre, usage_count, created_at, updated_at)
+               VALUES (?, ?, ?, ?, 0, '', '', 1, 0, ?, ?)""",
+            (code, label, niveau, categorie, now, now),
+        )
+        conn.commit()
+    log_action(user=user, action="CREATE", module="maintenance_libres",
+               target=code, details=f"label={label}")
+    return {"code": code, "label": label, "categorie": categorie, "niveau": niveau}
 
 
 @router.get("/api/maintenance/codes/{code}/docs")
