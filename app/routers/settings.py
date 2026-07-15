@@ -2167,40 +2167,56 @@ def _next_libre_code(conn) -> str:
 @router.get("/api/maintenance/codes/libres/autocomplete")
 def maintenance_libres_autocomplete(request: Request, q: str = "", limit: int = 10):
     """Autocomplete sur les titres des interventions libres deja saisies.
-    Tri par pertinence : usage_count DESC, puis updated_at DESC."""
-    get_current_user(request)
-    from database import get_db
-    q_norm = (q or "").strip()
-    if len(q_norm) < 1:
-        return {"items": []}
-    limit = max(1, min(int(limit or 10), 50))
-    like = f"%{q_norm}%"
-    with get_db() as conn:
-        cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
-        if "libre" not in cols:
+    Tri par pertinence : usage_count DESC, puis updated_at DESC.
+    v182bis : try/except global pour surfacer l'erreur reelle dans les logs et
+    ne jamais bloquer la saisie utilisateur (retour {items: []} en cas d'erreur).
+    """
+    try:
+        get_current_user(request)
+        from database import get_db
+        q_norm = (q or "").strip()
+        if len(q_norm) < 1:
             return {"items": []}
-        has_usage = "usage_count" in cols
-        order = "usage_count DESC, updated_at DESC, code DESC" if has_usage else "updated_at DESC, code DESC"
-        rows = conn.execute(
-            f"""SELECT code, label, niveau, categorie,
-                       {"usage_count" if has_usage else "0 AS usage_count"}
-               FROM maintenance_codes
-               WHERE libre = 1 AND label LIKE ?
-               ORDER BY {order}
-               LIMIT ?""",
-            (like, limit),
-        ).fetchall()
-    items = [
-        {
-            "code": r["code"],
-            "label": r["label"],
-            "niveau": int(r["niveau"] or 1),
-            "categorie": r["categorie"] or "remplacements",
-            "usage_count": int(r["usage_count"] or 0),
-        }
-        for r in rows
-    ]
-    return {"items": items}
+        limit_v = max(1, min(int(limit or 10), 50))
+        like = f"%{q_norm}%"
+        with get_db() as conn:
+            cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+            if "libre" not in cols:
+                return {"items": []}
+            has_usage = "usage_count" in cols
+            if has_usage:
+                sql = ("SELECT code, label, niveau, categorie, usage_count "
+                       "FROM maintenance_codes "
+                       "WHERE libre = 1 AND label LIKE ? "
+                       "ORDER BY usage_count DESC, updated_at DESC, code DESC "
+                       "LIMIT ?")
+            else:
+                sql = ("SELECT code, label, niveau, categorie, 0 AS usage_count "
+                       "FROM maintenance_codes "
+                       "WHERE libre = 1 AND label LIKE ? "
+                       "ORDER BY updated_at DESC, code DESC "
+                       "LIMIT ?")
+            rows = conn.execute(sql, (like, limit_v)).fetchall()
+        items = []
+        for r in rows:
+            try:
+                items.append({
+                    "code": r["code"],
+                    "label": r["label"],
+                    "niveau": int(r["niveau"] or 1),
+                    "categorie": r["categorie"] or "remplacements",
+                    "usage_count": int(r["usage_count"] or 0),
+                })
+            except Exception:
+                continue
+        return {"items": items}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging, traceback
+        logging.error("libres autocomplete FAIL: %s\n%s", e, traceback.format_exc())
+        # Ne bloque pas l'user : retourne liste vide, l'erreur est loggee
+        return {"items": [], "error": str(e)}
 
 
 @router.post("/api/maintenance/codes/libres")
@@ -2241,8 +2257,18 @@ async def maintenance_libres_create(request: Request):
             (code, label, niveau, categorie, now, now),
         )
         conn.commit()
-    log_action(user=user, action="CREATE", module="maintenance_libres",
-               target=code, details=f"label={label}")
+    # v182 fix : log_action attend objet=/ip= (pas target=/details=).
+    try:
+        log_action(
+            user=user,
+            action="CREATE",
+            module="maintenance_libres",
+            objet=f"Code libre {code} - {label}",
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        # L'audit ne doit jamais empecher la creation d'un code libre.
+        pass
     return {"code": code, "label": label, "categorie": categorie, "niveau": niveau}
 
 
