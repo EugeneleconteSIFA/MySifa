@@ -376,7 +376,7 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <nav class="sidebar" id="sidebar">
-    <div class="logo">
+    <div class="logo" style="cursor:pointer" onclick="setView('menu')" title="Menu MyQualité">
       <div class="logo-brand">My<span>Qualité</span></div>
       <div class="logo-sub">by SIFA</div>
     </div>
@@ -821,11 +821,71 @@ function updateUnreadBadges(){
   }
 }
 
+
+// ─── Menu general MyQualite (accessible via clic logo) ───────────────────
+function renderMenuQualite(){
+  const root = document.getElementById('content');
+  if(!root) return;
+  const groups = [
+    {
+      label: "Suivi qualité",
+      desc: "Non-conformités, canaux, audits reçus.",
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>`,
+      items: [
+        {v:'list', title:'Non-conformités', desc:'Suivi des NC internes, clients, fournisseurs et logistiques.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>`, show: S.isQualiteAdmin || S.isQualiteReadonly},
+        {v:'audits-list', title:'Audits client', desc:'Audits reçus, questions et matrice de conformité.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`, show: S.isQualiteAdmin || S.isQualiteReadonly},
+      ]
+    },
+    {
+      label: "Certifications",
+      desc: "Ressources fournisseurs et référentiel RSE.",
+      icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
+      items: [
+        {v:'ressources-list', title:'Ressources fournisseurs', desc:'Dossier par fournisseur (ou groupe) avec ses certificats et alertes.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>`, show: true},
+        {v:'ref-list', title:'Référentiel RSE', desc:'Normes et certifs (définitions, statut SIFA, réponses type).', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`, show: true},
+      ]
+    },
+  ];
+
+  const groupHtml = groups.map(g => {
+    const items = g.items.filter(it => it.show);
+    if(!items.length) return '';
+    return `<div class="qm-group">
+      <div class="qm-group-hd">
+        <span class="qm-ico">${g.icon}</span>
+        <div><div class="qm-group-lbl">${escHtml(g.label)}</div><div class="qm-group-desc">${escHtml(g.desc)}</div></div>
+      </div>
+      <div class="qm-items">${items.map(it => `<button type="button" class="qm-item" onclick="setView('${it.v}')">
+          <span class="qm-item-ico">${it.icon}</span>
+          <span class="qm-item-body"><span class="qm-item-lbl">${escHtml(it.title)}</span><span class="qm-item-desc">${escHtml(it.desc)}</span></span>
+          <svg class="qm-item-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`).join('')}</div>
+    </div>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="qm-hero">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h1 style="margin:0;font-size:24px;color:var(--text)">MyQualité</h1>
+        <button type="button" class="qual-help-btn" data-guide="qualite-overview" onclick="openGuide('qualite-overview')" title="Guide MyQualité" aria-label="Guide MyQualité">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </button>
+      </div>
+      <p style="margin:6px 0 0;color:var(--text2);font-size:13px">Module qualité, certifications et audits. Sélectionnez une section ou utilisez la barre latérale.</p>
+    </div>
+    <div class="qm-grid">${groupHtml}</div>
+  `;
+  _refreshHelpBadges();
+}
+
 // ── Vue Liste ──────────────────────────────────────────────────────
 function setView(v){
   S.view=v;
   document.querySelectorAll('.sidebar .nav-btn').forEach(b=>b.classList.remove('active'));
-  if(v==='list'){
+  if(v==='menu'){
+    document.getElementById('mobile-sub').textContent='MyQualité';
+    renderMenuQualite();
+  } else if(v==='list'){
     const first=document.querySelector('.sidebar .nav-btn');
     if(first) first.classList.add('active');
     document.getElementById('mobile-sub').textContent='Non-conformités';
@@ -3479,15 +3539,35 @@ document.addEventListener('keydown', function(ev){
     /* Guide progress : bouton J'ai compris + hint auto-open */
     .qguide-nav{flex-wrap:wrap}
     .qguide-ack-row{display:flex;justify-content:center;padding:0 24px 16px;background:var(--bg)}
-    .qguide-ack-btn{width:100%;max-width:400px;padding:11px 18px;border-radius:10px;border:none;background:var(--ok);color:var(--btn-fg);font-weight:800;font-size:13px;cursor:pointer;transition:all .18s;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .qguide-ack-btn{width:100%;max-width:400px;padding:12px 18px;border-radius:10px;border:2px solid var(--ok);background:var(--ok);color:var(--btn-fg);font-weight:800;font-size:13px;cursor:pointer;transition:all .18s;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px}
     .qguide-ack-btn:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 6px 16px rgba(52,211,153,.28)}
-    .qguide-ack-btn:disabled{opacity:.35;cursor:not-allowed;background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+    .qguide-ack-btn:disabled{cursor:not-allowed;background:var(--bg);color:var(--warn);border:2px dashed var(--warn);opacity:1;font-weight:700}
+    .qguide-ack-btn:disabled:hover{transform:none;box-shadow:none;filter:none}
+    /* Illustration en bas : marge haute pour separer du texte */
+    .qguide-step .qguide-illu{margin-top:14px;margin-bottom:4px}
     .qguide-ack-info{font-size:11px;color:var(--muted);margin-top:6px;text-align:center;width:100%;font-style:italic}
     .qguide-ack-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:rgba(52,211,153,.15);color:var(--ok);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
     /* Pulse subtile sur bouton help si guide non lu */
     .qual-help-btn.unread{position:relative}
     .qual-help-btn.unread::after{content:"";position:absolute;top:-2px;right:-2px;width:9px;height:9px;background:var(--accent);border-radius:99px;border:2px solid var(--card);animation:helpPulse 2s ease-in-out infinite}
     @keyframes helpPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.7}}
+    /* Menu general MyQualite */
+    .qm-hero{margin-bottom:24px}
+    .qm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+    .qm-group{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px}
+    .qm-group-hd{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+    .qm-ico{width:36px;height:36px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .qm-group-lbl{font-size:14px;font-weight:800;color:var(--text)}
+    .qm-group-desc{font-size:12px;color:var(--muted);margin-top:2px}
+    .qm-items{display:flex;flex-direction:column;gap:6px}
+    .qm-item{display:flex;align-items:center;gap:10px;padding:12px 12px;background:transparent;border:1px solid transparent;border-radius:10px;cursor:pointer;color:var(--text);text-align:left;font-family:inherit;transition:all .15s;width:100%}
+    .qm-item:hover{background:var(--bg);border-color:var(--border)}
+    .qm-item-ico{color:var(--accent);flex-shrink:0}
+    .qm-item-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+    .qm-item-lbl{font-size:13px;font-weight:700;color:var(--text)}
+    .qm-item-desc{font-size:11px;color:var(--muted);line-height:1.4}
+    .qm-item-chev{color:var(--muted);flex-shrink:0;transition:transform .15s}
+    .qm-item:hover .qm-item-chev{transform:translateX(2px);color:var(--accent)}
     /* ─── Guide interactif (bouton livre + modal carrousel) ─── */
     .qual-help-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:var(--accent-bg);color:var(--accent);border:1px solid transparent;cursor:pointer;transition:all .18s;padding:0}
     .qual-help-btn:hover{background:var(--accent);color:var(--btn-fg);transform:translateY(-1px);box-shadow:0 4px 12px rgba(34,211,238,.3)}
@@ -3942,7 +4022,7 @@ function _updateAckButton(){
     btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> J'ai compris — clôturer`;
   } else {
     const remain = total - _bitCount(S._qguideBitmapLocal & full);
-    btn.innerHTML = `J'ai compris <span style="font-weight:normal;opacity:.7;font-size:11px">(${remain} étape${remain>1?'s':''} restante${remain>1?'s':''})</span>`;
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Voir toutes les étapes pour valider <span style="font-weight:600;opacity:.85;font-size:11px;margin-left:4px">(${remain}/${total} restante${remain>1?'s':''})</span>`;
   }
 }
 
@@ -4017,10 +4097,11 @@ function openGuide(key, opts){
       <div class="qguide-progress"><div class="qguide-progress-bar" id="qguide-bar" style="width:${((1/total)*100).toFixed(1)}%"></div></div>
       <div class="qguide-viewport" id="qguide-viewport">
         ${g.steps.map((s, i) => `<div class="qguide-step ${i===0?'active':''}" data-idx="${i}">
-          ${s.illu ? `<div class="qguide-illu">${s.illu}</div>` : `<div class="qguide-icon">${s.icon}</div>`}
+          ${s.icon && !s.illu ? `<div class="qguide-icon">${s.icon}</div>` : ''}
           <h3 class="qguide-tit" id="qguide-tit-${i}">${s.title}</h3>
           <p class="qguide-body">${s.body}</p>
           ${s.extra || ''}
+          ${s.illu ? `<div class="qguide-illu">${s.illu}</div>` : ''}
         </div>`).join('')}
       </div>
       <div class="qguide-nav">

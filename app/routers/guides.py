@@ -155,17 +155,19 @@ def open_guide(body: OpenBody, request: Request):
         if row is None:
             conn.execute(
                 """INSERT INTO user_guide_progress
-                   (user_id, guide_key, total_steps, open_count, opened_at)
-                   VALUES (?,?,?,?,?)""",
-                (user["id"], body.guide_key, body.total_steps, 1, now),
+                   (user_id, guide_key, total_steps, steps_seen_bitmap, open_count, opened_at)
+                   VALUES (?,?,?,?,?,?)""",
+                (user["id"], body.guide_key, body.total_steps, 1, 1, now),
             )
         else:
+            # Marquer step 0 (bit 0) dans le bitmap existant
+            new_bitmap = int(row["steps_seen_bitmap"] or 0) | 1
             conn.execute(
                 """UPDATE user_guide_progress SET
-                   total_steps=?, open_count=open_count+1,
+                   total_steps=?, steps_seen_bitmap=?, open_count=open_count+1,
                    opened_at=COALESCE(opened_at, ?)
                    WHERE user_id=? AND guide_key=?""",
-                (body.total_steps, now, user["id"], body.guide_key),
+                (body.total_steps, new_bitmap, now, user["id"], body.guide_key),
             )
         conn.commit()
     return {"ok": True}
