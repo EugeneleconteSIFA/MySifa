@@ -7865,7 +7865,7 @@ async function prDeleteAgent(id) {
 })();
 
 </script>
-<script src="/static/mysifa_impersonate.js">
+<script>
 // ─── Formations & guides in-app (admin) ────────────────────────────
 let _fmtData = null;
 let _fmtSearch = '';
@@ -8009,6 +8009,7 @@ try {
 } catch(e){}
 
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
 """
