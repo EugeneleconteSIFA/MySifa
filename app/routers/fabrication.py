@@ -398,24 +398,159 @@ def _build_fictif_dossier_dict(no_dossier: str, machine: Optional[dict] = None) 
     }
 
 
+# ─── Machine du jour (Planning RH) ────────────────────────────────────────────
+# Depuis v1.11.0, la machine sur laquelle un opérateur saisit est prioritairement
+# déterminée par le Planning RH (table rh_planning_postes). Cas d'usage :
+# une équipe Cohésio 1 peut être détachée sur Cohésio 2 le temps d'une panne,
+# sans qu'un admin ait à modifier la fiche user.
+#
+# Ordre de résolution :
+#   1. Admin qui surcharge via body.machine_id (comportement historique)
+#   2. wanted_id (switcher opérateur) s'il fait partie des machines RH du jour
+#   3. Machine du créneau courant (matin ≤ 13h / après-midi 13-21h / nuit sinon)
+#   4. Machine unique si un seul créneau planifié aujourd'hui
+#   5. Fallback : effective_machine_id / users.machine_id (mono-machine legacy)
+
+def _current_creneau(now: datetime) -> str:
+    """Créneau selon l'heure Paris. Bornes alignées sur rh_machine_config par défaut."""
+    h = now.hour
+    if 5 <= h < 13:
+        return "matin"
+    if 13 <= h < 21:
+        return "apres_midi"
+    return "nuit"
+
+
+def _iso_semaine(d: date) -> str:
+    """Format identique à rh_planning_postes.semaine : 'YYYY-WNN' (ISO)."""
+    y, w, _ = d.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def _rh_machines_du_jour(conn, user_id, now: datetime) -> list:
+    """Machines RH planifiées aujourd'hui pour cet utilisateur, triées par créneau.
+    Retourne [{machine_id, machine_nom, machine_code, creneau}]. Liste vide si rien.
+    """
+    try:
+        uid = int(user_id) if user_id is not None else None
+    except (TypeError, ValueError):
+        uid = None
+    if not uid:
+        return []
+    today = now.date()
+    semaine = _iso_semaine(today)
+    day_bit = 1 << today.weekday()   # Lun=1, Mar=2, Mer=4, Jeu=8, Ven=16, Sam=32, Dim=64
+    rows = conn.execute(
+        """SELECT p.machine_id,
+                  m.nom  AS machine_nom,
+                  m.code AS machine_code,
+                  p.creneau
+             FROM rh_planning_postes p
+             LEFT JOIN machines m ON m.id = p.machine_id
+            WHERE p.user_id = ?
+              AND p.semaine = ?
+              AND (p.jours & ?) != 0
+              AND p.machine_id IS NOT NULL
+              AND (m.actif = 1 OR m.actif IS NULL)
+            ORDER BY CASE p.creneau
+                       WHEN 'matin'      THEN 0
+                       WHEN 'journee'    THEN 1
+                       WHEN 'apres_midi' THEN 2
+                       WHEN 'nuit'       THEN 3
+                       ELSE 4 END,
+                     m.nom COLLATE NOCASE""",
+        (uid, semaine, day_bit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _suggest_rh_machine_id(machines: list, now: datetime) -> Optional[int]:
+    """Choisit la machine correspondant au créneau courant parmi celles du jour."""
+    if not machines:
+        return None
+    if len(machines) == 1:
+        return machines[0]["machine_id"]
+    cur = _current_creneau(now)
+    for m in machines:
+        if (m.get("creneau") or "") == cur:
+            return m["machine_id"]
+    for m in machines:
+        if (m.get("creneau") or "") == "journee":
+            return m["machine_id"]
+    return machines[0]["machine_id"]
+
+
+def _machine_du_jour(
+    user: dict, conn, *,
+    wanted_id: Optional[int] = None,
+    now: Optional[datetime] = None,
+) -> Optional[int]:
+    """Résout la machine à utiliser pour la saisie d'un opérateur.
+    Voir docstring du bloc pour l'ordre de priorité. Retourne None si rien trouvable.
+    """
+    now = now or datetime.now(_PARIS)
+    machines = _rh_machines_du_jour(conn, user.get("id"), now)
+    if machines:
+        allowed = {m["machine_id"] for m in machines}
+        if wanted_id and wanted_id in allowed:
+            return int(wanted_id)
+        return _suggest_rh_machine_id(machines, now)
+    # Aucune ligne RH aujourd'hui → fallback historique
+    fb = effective_machine_id(user) or user.get("machine_id")
+    try:
+        return int(fb) if fb else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_machine_id_for_read(user: dict, wanted_id, conn) -> Optional[int]:
+    """Comme _machine_du_jour, mais un admin peut librement pointer n'importe
+    quelle machine via wanted_id (utilisé pour les endpoints en lecture :
+    /session, /dossiers, /matieres, historique). L'opérateur reste contraint
+    aux machines de son Planning RH du jour (fallback fiche user sinon)."""
+    try:
+        wanted = int(wanted_id) if wanted_id is not None else None
+    except (TypeError, ValueError):
+        wanted = None
+    if is_admin(user) and wanted:
+        return wanted
+    return _machine_du_jour(user, conn, wanted_id=wanted)
+
+
+def _machines_du_jour_payload(user: dict, conn, wanted_id: Optional[int] = None) -> dict:
+    """Payload standard exposé à MyProd pour alimenter le switcher machine."""
+    now = datetime.now(_PARIS)
+    machines = _rh_machines_du_jour(conn, user.get("id"), now)
+    current_id = _machine_du_jour(user, conn, wanted_id=wanted_id, now=now)
+    return {
+        "machines_du_jour": machines,
+        "machine_id_courant": current_id,
+        "creneau_courant": _current_creneau(now),
+        "fallback_actif": not machines,
+    }
+
+
 def _resolve_machine(user: dict, body: dict, conn) -> dict:
     """
-    Retourne le dict machine pour la saisie.
-    - Opérateur normal : machine liée au compte (machine_id).
-    - Admin sans machine liée : utilise machine_id passé dans le body.
-    - Superadmin en simulation : utilise la machine simulée (effective_machine_id).
+    Retourne le dict machine pour la saisie de production.
+    - Admin : body.machine_id fait foi s'il est fourni (comportement historique).
+    - Opérateur : Planning RH du jour → créneau courant → fallback users.machine_id.
+      body.machine_id est traité comme un « wanted » (opérateur qui a switché
+      manuellement via le picker) et n'est accepté que s'il fait partie des
+      machines RH planifiées aujourd'hui.
     Lève 400 si aucune machine identifiable.
     """
-    # effective_machine_id renvoie la machine simulée si superadmin impersonne,
-    # sinon la machine réelle du compte.
-    machine_id = effective_machine_id(user) or user.get("machine_id")
-
-    # Admin peut surcharger avec le machine_id du body
-    if is_admin(user) and body.get("machine_id"):
+    wanted: Optional[int] = None
+    if body.get("machine_id") is not None:
         try:
-            machine_id = int(body["machine_id"])
+            wanted = int(body["machine_id"])
         except (ValueError, TypeError):
-            pass
+            wanted = None
+
+    if is_admin(user) and wanted:
+        machine_id = wanted
+    else:
+        machine_id = _machine_du_jour(user, conn, wanted_id=wanted)
 
     if not machine_id:
         raise HTTPException(
@@ -483,6 +618,28 @@ def list_machines(request: Request):
     return {"machines": [dict(r) for r in rows]}
 
 
+@router.get("/api/fabrication/machines-du-jour")
+def get_machines_du_jour(request: Request, machine_id: int = None):
+    """Machines RH planifiées aujourd'hui pour l'utilisateur courant.
+    Utilisé par MyProd pour afficher le switcher machine (matin C1 / aprem C2 …).
+    Retourne {machines_du_jour: [...], machine_id_courant, creneau_courant, fallback_actif}.
+    Si fallback_actif=True, l'utilisateur n'a aucune ligne RH aujourd'hui
+    et on retombe sur users.machine_id (comportement mono-machine legacy)."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    with get_db() as conn:
+        payload = _machines_du_jour_payload(user, conn, wanted_id=machine_id)
+        current_id = payload["machine_id_courant"]
+        if current_id:
+            m = conn.execute(
+                "SELECT id, nom, code FROM machines WHERE id=?", (current_id,)
+            ).fetchone()
+            payload["machine_courant"] = dict(m) if m else None
+        else:
+            payload["machine_courant"] = None
+    return payload
+
+
 @router.get("/api/fabrication/fournisseurs-fsc")
 def list_fournisseurs_fsc_fabrication(request: Request):
     """Fournisseurs FSC + infos guide traça (page fabrication, sans passer par /api/stock)."""
@@ -506,7 +663,6 @@ def list_dossiers(request: Request, machine_id: int = None):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = effective_machine_id(user) or machine_id
     q = (request.query_params.get("q") or "").strip()
 
     statut_sql = "pe.statut IN ('attente','en_cours')"
@@ -514,6 +670,7 @@ def list_dossiers(request: Request, machine_id: int = None):
     params: list = []
 
     with get_db() as conn:
+        mid = _pick_machine_id_for_read(user, machine_id, conn)
         if mid:
             where = f"pe.machine_id = ? AND {statut_sql}"
             params.append(mid)
@@ -573,29 +730,35 @@ def get_session(request: Request, machine_id: int = None):
     user = get_current_user(request)
     _check_fab_access(user)
 
-    # machine_id : préférence compte utilisateur, sinon query param (admin)
-    mid = effective_machine_id(user) or machine_id
-    
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
     if not operateur:
         operateur = user.get("nom") or ""
-    
-    # Bloquer uniquement si pas d'opérateur ET pas de machine ET pas admin
-    if not operateur and not mid and not is_admin(user):
-        return {
-            "saisies": [],
-            "etat": "sans_session",
-            "dossier": None,
-            "last_saisie": None,
-            "operateur": "",
-            "machine": None,
-        }
 
     today = _today_prefix()                          # "2026-04-16"
     today_fr = date.today().strftime("%d/%m/%Y")     # "16/04/2026"
 
     with get_db() as conn:
+        # Résolution machine : Planning RH prioritaire, fallback fiche user.
+        # Admin : machine_id (query param) fait foi.
+        mid = _pick_machine_id_for_read(user, machine_id, conn)
+        rh_payload = _machines_du_jour_payload(user, conn, wanted_id=machine_id)
+
+        # Bloquer uniquement si pas d'opérateur ET pas de machine ET pas admin
+        if not operateur and not mid and not is_admin(user):
+            return {
+                "saisies": [],
+                "etat": "sans_session",
+                "dossier": None,
+                "last_saisie": None,
+                "operateur": "",
+                "machine": None,
+                "machines_du_jour": rh_payload["machines_du_jour"],
+                "machine_id_courant": rh_payload["machine_id_courant"],
+                "creneau_courant": rh_payload["creneau_courant"],
+                "fallback_actif": rh_payload["fallback_actif"],
+            }
+
         if operateur:
             # Filtre : format ISO (YYYY-MM-DD…) OU format français (DD/MM/YYYY…)
             # Cherche soit par operateur_lie, soit par nom d'utilisateur
@@ -664,6 +827,10 @@ def get_session(request: Request, machine_id: int = None):
             "last_saisie": saisies[-1] if saisies else None,
             "operateur": operateur,
             "machine": machine,
+            "machines_du_jour": rh_payload["machines_du_jour"],
+            "machine_id_courant": rh_payload["machine_id_courant"],
+            "creneau_courant": rh_payload["creneau_courant"],
+            "fallback_actif": rh_payload["fallback_actif"],
         }
 
 
@@ -1444,13 +1611,13 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
     user = get_current_user(request)
     _check_fab_access(user)
 
-    mid = effective_machine_id(user) or machine_id
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
     if not operateur:
         operateur = user.get("nom") or ""
 
     with get_db() as conn:
+        mid = _pick_machine_id_for_read(user, machine_id, conn)
         select_sql = """
             SELECT
               fmu.*,
@@ -1938,7 +2105,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
-            mid = effective_machine_id(user) or machine_id
+            mid = _pick_machine_id_for_read(user, machine_id, conn)
             where = "1=1"
             params: list = []
             if mid and not is_admin(user):

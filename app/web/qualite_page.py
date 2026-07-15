@@ -3983,7 +3983,9 @@ async function _postGuideHeartbeat(key, stepIdx, totalSteps, deltaMs){
 }
 async function _postGuideAck(key){
   try{
-    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key})});
+    // On envoie le bitmap local : le serveur fusionne (OR) pour eviter les races heartbeat
+    const bmp = S._qguideBitmapLocal | 0;
+    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, client_bitmap: bmp})});
     if(r.ok){
       if(!S._qguideAckedKeys) S._qguideAckedKeys = new Set();
       S._qguideAckedKeys.add(key);
@@ -4156,7 +4158,8 @@ function navGuide(newIdx){
   // Marquer nouvelle etape comme vue + envoyer heartbeat avec delta
   S._qguideBitmapLocal |= (1 << newIdx);
   const delta = _guideCurrentDeltaMs();
-  if(delta > 0 && _qguideState.key){
+  if(_qguideState.key){
+    // Envoi heartbeat systematique (delta peut etre 0 si nav rapide) pour marquer le bit cote serveur
     _postGuideHeartbeat(_qguideState.key, newIdx, total, delta);
   }
   S._qguideLastStepMs = Date.now();

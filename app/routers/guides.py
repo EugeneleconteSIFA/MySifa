@@ -106,6 +106,7 @@ def heartbeat(body: HeartbeatBody, request: Request):
 
 class AckBody(BaseModel):
     guide_key: str
+    client_bitmap: Optional[int] = None  # bitmap local fourni par le front (source plus fiable que le heartbeat async)
 
 
 @router.post("/ack")
@@ -120,16 +121,23 @@ def ack_guide(body: AckBody, request: Request):
         if row is None:
             raise HTTPException(status_code=400, detail="Ouvrez le guide au moins une fois")
         total_steps = int(row["total_steps"] or 0)
-        bitmap = int(row["steps_seen_bitmap"] or 0)
+        server_bitmap = int(row["steps_seen_bitmap"] or 0)
+        # Fusionner avec le bitmap client si fourni : evite les races avec les heartbeats async
+        client_bmp = int(body.client_bitmap or 0)
+        # Clamp sur les bits valides (max total_steps bits)
+        if total_steps > 0:
+            client_bmp = client_bmp & ((1 << total_steps) - 1)
+        merged = server_bitmap | client_bmp
         full_mask = (1 << total_steps) - 1 if total_steps > 0 else 0
-        if total_steps == 0 or (bitmap & full_mask) != full_mask:
+        if total_steps == 0 or (merged & full_mask) != full_mask:
             raise HTTPException(status_code=400, detail="Toutes les etapes doivent avoir ete vues avant")
         conn.execute(
             """UPDATE user_guide_progress SET
+               steps_seen_bitmap=?,
                acknowledged_at=COALESCE(acknowledged_at, ?),
                completed_at=COALESCE(completed_at, ?)
                WHERE user_id=? AND guide_key=?""",
-            (now, now, user["id"], body.guide_key),
+            (merged, now, now, user["id"], body.guide_key),
         )
         conn.commit()
     return {"ok": True, "acknowledged_at": now}
