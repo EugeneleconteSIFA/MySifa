@@ -830,6 +830,19 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:100px}
 .op-code{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.4px;font-family:monospace}
 .op-cat{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+/* v180 : chip "Libre" pour distinguer les interventions libres dans l'historique */
+.libre-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(96,165,250,.16);color:#3b82f6;margin-left:6px;vertical-align:middle}
+body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
+/* v180 : mini-modal Intervention libre + autocomplete */
+.libre-titre-wrap{position:relative}
+.libre-autocomplete-panel{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;margin-top:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.libre-suggestion{padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);transition:background .1s}
+.libre-suggestion:last-child{border-bottom:none}
+.libre-suggestion:hover{background:var(--bg)}
+.libre-suggestion-label{color:var(--text);font-size:13px;font-weight:500}
+.libre-suggestion-count{color:var(--muted);font-size:11px;white-space:nowrap;margin-left:12px}
+.libre-duree-link{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 0;text-align:left;font-family:inherit}
+.libre-duree-link:hover{text-decoration:underline}
 .op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
 .op-cat-interventions,
 .op-cat-entretien{background:rgba(167,139,250,.16);color:#8b5cf6}
@@ -917,6 +930,10 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
     <button type="button" class="nav-btn op-only" onclick="opOpenNewModal()" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px;color:var(--accent)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Enregistrer une opération
+    </button>
+    <button type="button" class="nav-btn op-only" onclick="libreOpenModal()" style="color:#3b82f6">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Intervention libre
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
@@ -1269,6 +1286,14 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
         <div class="filters-panel">
           <div class="filters">
             <div class="filter-group">
+              <label for="filt-operations-kind">Type de saisie</label>
+              <select id="filt-operations-kind" class="filter-input" onchange="renderOps()">
+                <option value="all">Toutes</option>
+                <option value="codes">Codes catalogue</option>
+                <option value="libres">Interventions libres</option>
+              </select>
+            </div>
+            <div class="filter-group">
               <label for="filt-operations-type">Type d'opération</label>
               <select id="filt-operations-type" class="filter-input">
                 <option value="">Tous les types</option>
@@ -1317,6 +1342,10 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
             <div class="ops-list-title">Historique des opérations</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ops-count">0 opération</div>
+              <button type="button" class="ops-btn-add" onclick="libreOpenModal()" style="background:transparent;color:#3b82f6;border:1px solid rgba(59,130,246,.4)" title="Enregistrer une intervention ponctuelle sans creer de code">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Intervention libre
+              </button>
               <button type="button" class="ops-btn-add" onclick="openOpsModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Nouvelle saisie
@@ -3434,6 +3463,7 @@ async function fetchHistoryFromDb(){
       _event_id: h.event_id,
       _op_id: h.op_id,
       _code: h.code,
+      _libre: !!h.libre,   // v180 : flag intervention libre (chip visuel + filtre)
     }));
   }catch(e){ return []; }
 }
@@ -3509,6 +3539,8 @@ function sortOps(field){
 function getOpsFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
   return {
+    // v180 : filtre "kind" : tous / codes / libres (interventions libres)
+    kind:     v('filt-operations-kind') || 'all',
     type:     v('filt-operations-type'),
     operateur:v('filt-operations-operateur'),
     machine:  v('filt-operations-machine'),
@@ -3594,6 +3626,9 @@ function renderOps(){
   }
   // Filter
   let filtered = OPS_STATE.list.filter(o => {
+    // v180 : filtre kind (all / codes / libres)
+    if(f.kind === 'libres' && !o._libre) return false;
+    if(f.kind === 'codes' && o._libre) return false;
     if(f.type && o.type !== f.type) return false;
     if(f.operateur && o.operateur !== f.operateur) return false;
     if(f.machine && o.machine !== f.machine) return false;
@@ -3632,7 +3667,7 @@ function renderOps(){
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
-        '<td>' + escHtml(o.type) + '</td>' +
+        '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
           '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
@@ -6020,6 +6055,42 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
+<!-- v180 : Modal Intervention libre (creation rapide sans passer par le catalogue) -->
+<div class="op-modal-overlay" id="libre-modal" onclick="if(event.target===this) libreCloseModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Intervention libre</div>
+    <div class="op-modal-sub">Enregistre une intervention ponctuelle sans creer de code du catalogue. La date est celle d'aujourd'hui.</div>
+    <div class="op-form-row">
+      <label for="libre-machine">Machine *</label>
+      <select id="libre-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-form-row libre-titre-wrap">
+      <label for="libre-titre">Titre de l'intervention *</label>
+      <input type="text" id="libre-titre" autocomplete="off" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="libreOnTitreInput()">
+      <div class="libre-autocomplete-panel" id="libre-autocomplete-panel" style="display:none"></div>
+    </div>
+    <div class="op-form-row" id="libre-duree-collapsed">
+      <button type="button" class="libre-duree-link" onclick="libreShowDuree()">+ Ajouter une durée (optionnel)</button>
+    </div>
+    <div class="op-form-row" id="libre-duree-expanded" style="display:none">
+      <label for="libre-duree">Durée réelle (min)</label>
+      <input type="number" id="libre-duree" min="0" step="1" placeholder="Optionnel">
+    </div>
+    <div class="op-form-row">
+      <label for="libre-comment">Commentaires</label>
+      <textarea id="libre-comment" rows="3" placeholder="Optionnel — details, pieces changees, remarques..."></textarea>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="libreCloseModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="libreSubmit()">Enregistrer</button>
+    </div>
+  </div>
+</div>
 
 
 <script>
@@ -6794,6 +6865,155 @@ async function opSubmitNew(){
     if(typeof showToast === 'function') showToast('Opération enregistrée.', 'success');
     opCloseNewModal();
     await opLoadTasks();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    else alert('Erreur : ' + e.message);
+  }
+}
+
+// ─── Intervention libre (v180) ────────────────────────────────────
+// Modal minimaliste pour saisir une intervention ponctuelle sans creer
+// de code du catalogue. Autocomplete sur les titres deja utilises pour
+// encourager la reutilisation. Si l'user selectionne une suggestion, on
+// reutilise le code existant ; sinon on cree un nouveau code libre LIB-xxx
+// via POST /api/maintenance/codes/libres.
+let _libreSelectedCode = null;
+let _libreAutocompleteTimer = null;
+
+function libreOpenModal(){
+  _libreSelectedCode = null;
+  const t = document.getElementById('libre-titre');
+  const d = document.getElementById('libre-duree');
+  const c = document.getElementById('libre-comment');
+  if(t) t.value = '';
+  if(d) d.value = '';
+  if(c) c.value = '';
+  const dc = document.getElementById('libre-duree-collapsed');
+  const de = document.getElementById('libre-duree-expanded');
+  if(dc) dc.style.display = '';
+  if(de) de.style.display = 'none';
+  const panel = document.getElementById('libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  // Pre-remplit machine avec la selection courante si disponible
+  try{
+    const m = (typeof getMaintMachine === 'function') ? getMaintMachine()
+            : (typeof _getSelectedMachine === 'function') ? _getSelectedMachine()
+            : 'Cohésio 1';
+    const sel = document.getElementById('libre-machine');
+    if(sel && m) sel.value = m;
+  }catch(e){}
+  document.getElementById('libre-modal').classList.add('active');
+  setTimeout(() => { const el = document.getElementById('libre-titre'); if(el) el.focus(); }, 100);
+}
+function libreCloseModal(){
+  const m = document.getElementById('libre-modal');
+  if(m) m.classList.remove('active');
+}
+function libreShowDuree(){
+  const dc = document.getElementById('libre-duree-collapsed');
+  const de = document.getElementById('libre-duree-expanded');
+  if(dc) dc.style.display = 'none';
+  if(de) de.style.display = '';
+  const d = document.getElementById('libre-duree');
+  if(d) d.focus();
+}
+
+async function libreOnTitreInput(){
+  const t = document.getElementById('libre-titre');
+  const q = (t ? t.value : '').trim();
+  _libreSelectedCode = null; // Reset quand l'user tape
+  clearTimeout(_libreAutocompleteTimer);
+  const panel = document.getElementById('libre-autocomplete-panel');
+  if(q.length < 2){
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    return;
+  }
+  _libreAutocompleteTimer = setTimeout(async () => {
+    try{
+      const r = await fetch('/api/maintenance/codes/libres/autocomplete?q=' + encodeURIComponent(q) + '&limit=8', {credentials:'include'});
+      if(!r.ok) return;
+      const d = await r.json();
+      const items = d.items || [];
+      if(!panel) return;
+      if(!items.length){ panel.innerHTML = ''; panel.style.display = 'none'; return; }
+      panel.innerHTML = items.map(it =>
+        '<div class="libre-suggestion" data-libre-sug="' + escAttr(it.code) + '|' + escAttr(it.label) + '">' +
+          '<span class="libre-suggestion-label">' + escHtml(it.label) + '</span>' +
+          '<span class="libre-suggestion-count">' + it.usage_count + ' saisie' + (it.usage_count > 1 ? 's' : '') + '</span>' +
+        '</div>'
+      ).join('');
+      panel.style.display = '';
+      panel.querySelectorAll('[data-libre-sug]').forEach(el => {
+        el.addEventListener('click', () => {
+          const parts = (el.getAttribute('data-libre-sug') || '').split('|');
+          if(parts.length >= 2) libreSelectSuggestion(parts[0], parts.slice(1).join('|'));
+        });
+      });
+    }catch(e){}
+  }, 220);
+}
+
+function libreSelectSuggestion(code, label){
+  _libreSelectedCode = code;
+  const t = document.getElementById('libre-titre');
+  if(t) t.value = label;
+  const panel = document.getElementById('libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+}
+
+async function libreSubmit(){
+  const titre = (document.getElementById('libre-titre')?.value || '').trim();
+  const machine = document.getElementById('libre-machine')?.value || '';
+  const dureeStr = document.getElementById('libre-duree')?.value || '';
+  const comment = (document.getElementById('libre-comment')?.value || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  if(!titre || !machine){
+    if(typeof showToast === 'function') showToast('Titre et machine sont obligatoires.', 'danger');
+    else alert('Titre et machine sont obligatoires.');
+    return;
+  }
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    return;
+  }
+  try{
+    let code = _libreSelectedCode;
+    // Si aucune suggestion selectionnee, cree un nouveau code libre
+    if(!code){
+      const rNew = await fetch('/api/maintenance/codes/libres', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({label: titre}),
+      });
+      if(!rNew.ok){ const err = await rNew.json().catch(()=>({})); throw new Error(err.detail || 'Creation code libre echouee'); }
+      const dNew = await rNew.json();
+      code = dNew.code;
+    }
+    // Cree l'event non_planifie + PATCH termine (meme flow que opSubmitNew)
+    const today = _fmtDateISO(new Date());
+    const rEv = await fetch('/api/maintenance/events', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        machine, date_prevue: today, source: 'non_planifie',
+        ops: [code], operators: [],
+      }),
+    });
+    if(!rEv.ok){ const err = await rEv.json().catch(()=>({})); throw new Error(err.detail || rEv.status); }
+    const dEv = await rEv.json();
+    const ev = dEv.event;
+    const op = (ev.ops || [])[0];
+    if(!ev || !op) throw new Error('Creneau incomplet retourne par API.');
+    if(typeof _patchOpTermine === 'function'){
+      await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+    }
+    if(typeof showToast === 'function') showToast('Intervention libre enregistree.', 'success');
+    libreCloseModal();
+    // Refresh historique (force bypass cache pour voir la nouvelle entree)
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+    else if(typeof loadOps === 'function') loadOps();
+    // Refresh tasks si operateur
+    if(typeof opLoadTasks === 'function') opLoadTasks().catch(() => {});
   }catch(e){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
