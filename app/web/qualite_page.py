@@ -4499,7 +4499,7 @@ function _qualiteGuides(){
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="14" y2="14"/></svg>`,
           title: "Types de NC & gravités",
-          body: "4 types : <span class="qguide-tag">interne</span> (écart production) · <span class="qguide-tag">client</span> (réclamation) · <span class="qguide-tag">fournisseur</span> (réception non conforme) · <span class="qguide-tag">logistique</span>. La gravité (mineure / majeure / critique) pilote les délais et alertes.",
+          body: `4 types : <span class="qguide-tag">interne</span> (écart production) · <span class="qguide-tag">client</span> (réclamation) · <span class="qguide-tag">fournisseur</span> (réception non conforme) · <span class="qguide-tag">logistique</span>. La gravité (mineure / majeure / critique) pilote les délais et alertes.`,
           illu: QUALITE_MOCKUPS.ncTypesSeverites
         },
         {
@@ -4554,7 +4554,7 @@ function _qualiteGuides(){
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>`,
           title: "4 catégories thématiques",
-          body: "Chaque fiche est classée : <span class="qguide-tag">Environnement</span> (ISO 14001, GHG...), <span class="qguide-tag">Social</span> (Ecovadis, droits humains), <span class="qguide-tag">Traçabilité</span> (FSC, PEFC), <span class="qguide-tag">Sécurité</span> (REACH, SVHC). Filtre par catégorie via les pastilles en haut."
+          body: `Chaque fiche est classée : <span class="qguide-tag">Environnement</span> (ISO 14001, GHG...), <span class="qguide-tag">Social</span> (Ecovadis, droits humains), <span class="qguide-tag">Traçabilité</span> (FSC, PEFC), <span class="qguide-tag">Sécurité</span> (REACH, SVHC). Filtre par catégorie via les pastilles en haut.`
         },
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
