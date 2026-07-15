@@ -759,6 +759,11 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
+            <button type="button" class="menu-item" data-goto="formations">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Formations & guides</span><span class="mi-desc">Suivi des tutos in-app lus par utilisateur (reset possible).</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
             <button type="button" class="menu-item" data-goto="api">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Clés API</span><span class="mi-desc">Tokens d'intégration externe.</span></span>
@@ -1773,6 +1778,49 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       </div>
     </section>
 
+    <section id="panel-formations" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div>
+            <h2 style="margin:0 0 4px">Formations &amp; guides in-app</h2>
+            <p class="sub" style="margin:0;font-size:12px">Suivi des tutos lus dans MyQualité. Vous pouvez remettre à zéro un guide pour un utilisateur (il le reverra à sa prochaine visite).</p>
+          </div>
+          <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="fmt-search" placeholder="Rechercher (nom, email, rôle, guide...)" autocomplete="off"
+            style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
+          <select id="fmt-filter-status" style="padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none">
+            <option value="">Tous les statuts</option>
+            <option value="acked">Validé (ack)</option>
+            <option value="completed">Complété (non ack)</option>
+            <option value="in_progress">En cours</option>
+            <option value="open">Ouvert (jamais parcouru)</option>
+            <option value="never">Jamais ouvert</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table id="fmt-table" style="min-width:820px">
+            <thead>
+              <tr>
+                <th>Utilisateur</th>
+                <th>Rôle</th>
+                <th>Guide</th>
+                <th>Statut</th>
+                <th>Étapes vues</th>
+                <th>Temps passé</th>
+                <th>Ouvertures</th>
+                <th>Ouvert le</th>
+                <th>Validé le</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fmt-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- Modal nouvelle annonce -->
     <div id="upd-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;align-items:center;justify-content:center" class="hidden">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:min(560px,95vw);max-height:90vh;overflow:auto">
@@ -1981,7 +2029,7 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','updates','audit','fsc','dashboards','api','promote','printers'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','updates','audit','fsc','dashboards','api','promote','printers','formations'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -1999,7 +2047,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -2017,6 +2065,7 @@ loadFournisseursGroupes();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
   if (id === 'printers') initPrintersPanel();
+  if (id === 'formations') loadFormationsAdmin();
   if (id === 'dashboards') renderSettingsDashboards();
   if (id === 'api') loadApiKeys();
   if (id === 'promote') loadPromoteStatus();
@@ -7598,7 +7647,150 @@ async function prDeleteAgent(id) {
 })();
 
 </script>
-<script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_impersonate.js">
+// ─── Formations & guides in-app (admin) ────────────────────────────
+let _fmtData = null;
+let _fmtSearch = '';
+let _fmtStatus = '';
+
+async function loadFormationsAdmin(){
+  try {
+    const r = await api('/api/guides/admin/overview');
+    if (!r.ok) { toast('Erreur chargement', true); return; }
+    _fmtData = await r.json();
+    renderFormationsAdmin();
+  } catch(e){ toast('Erreur réseau', true); }
+}
+
+function _fmtStatusPill(status){
+  if(status==='acked') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(52,211,153,.15);color:var(--ok);font-size:11px;font-weight:700">✓ Validé</span>';
+  if(status==='completed') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(34,211,238,.15);color:var(--accent);font-size:11px;font-weight:700">Complété</span>';
+  if(status==='in_progress') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(251,191,36,.15);color:var(--warn);font-size:11px;font-weight:700">En cours</span>';
+  if(status==='open') return '<span style="display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;background:rgba(148,163,184,.18);color:var(--muted);font-size:11px;font-weight:700">Ouvert</span>';
+  return '<span style="color:var(--muted);font-size:11px">Jamais ouvert</span>';
+}
+
+function _fmtTimeMs(ms){
+  const s = Math.floor((ms||0) / 1000);
+  if(s < 60) return s + 's';
+  const m = Math.floor(s/60); const rs = s%60;
+  if(m < 60) return m + 'min ' + rs + 's';
+  const h = Math.floor(m/60); const rm = m%60;
+  return h + 'h' + String(rm).padStart(2,'0');
+}
+
+function _fmtDate(iso){
+  if(!iso) return '—';
+  try{ const d = new Date(iso.replace(' ','T')); return d.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'}); }catch(e){ return iso; }
+}
+
+// Guides connus (label lisible)
+const _FMT_GUIDES = {
+  'qualite-overview': 'MyQualité — Vue d\'ensemble',
+  'ressources': 'Ressources fournisseurs',
+};
+
+function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
+
+// Rôles utilisateur : liste synthétique
+function _fmtRoleLabel(r){
+  const m = {
+    superadmin: 'Super admin', direction: 'Direction',
+    administration: 'Administration', administration_ventes: 'Admin. ventes',
+    administration_technique: 'Admin. technique', fabrication: 'Fabrication',
+    commercial: 'Commercial', logistique: 'Logistique', expedition: 'Expédition',
+    comptabilite: 'Comptabilité',
+  };
+  return m[r] || r || '—';
+}
+
+function renderFormationsAdmin(){
+  if(!_fmtData) return;
+  const users = _fmtData.users || [];
+  const progress = _fmtData.progress || [];
+  const progByUser = new Map();
+  for(const p of progress){
+    if(!progByUser.has(p.user_id)) progByUser.set(p.user_id, []);
+    progByUser.get(p.user_id).push(p);
+  }
+  // Guides connus, y compris les valeurs presentes dans progress
+  const guideKeys = new Set(Object.keys(_FMT_GUIDES));
+  for(const p of progress) guideKeys.add(p.guide_key);
+  const guides = Array.from(guideKeys);
+
+  const q = _fmtSearch.toLowerCase();
+  const rows = [];
+  for(const u of users){
+    const uProg = progByUser.get(u.id) || [];
+    for(const gk of guides){
+      const p = uProg.find(x => x.guide_key === gk);
+      const status = p ? p.status : 'never';
+      // Filter status
+      if(_fmtStatus && status !== _fmtStatus) continue;
+      const uName = `${u.prenom||''} ${u.nom||''}`.trim() || u.email || ('#'+u.id);
+      const gLabel = _fmtGuideLabel(gk);
+      // Filter search (matche user + role + guide)
+      if(q){
+        const hay = (uName + ' ' + (u.email||'') + ' ' + _fmtRoleLabel(u.role) + ' ' + gLabel + ' ' + gk).toLowerCase();
+        if(!hay.includes(q)) continue;
+      }
+      rows.push({user:u, guide:gk, gLabel, prog:p, status, uName});
+    }
+  }
+
+  const tbody = document.getElementById('fmt-tbody');
+  if(!tbody) return;
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">Aucun résultat</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const p = r.prog;
+    const stepsHtml = p && p.total_steps > 0
+      ? `${p.steps_seen}/${p.total_steps}`
+      : '—';
+    const time = p ? _fmtTimeMs(p.total_time_ms) : '—';
+    const openCount = p ? (p.open_count || 0) : 0;
+    const canReset = !!p;
+    return `<tr>
+      <td><strong>${esc(r.uName)}</strong>${r.user.email?`<div style="font-size:11px;color:var(--muted)">${esc(r.user.email)}</div>`:''}</td>
+      <td style="font-size:12px;color:var(--text2)">${esc(_fmtRoleLabel(r.user.role))}</td>
+      <td>${esc(r.gLabel)}<div style="font-size:10px;color:var(--muted);font-family:ui-monospace,monospace">${esc(r.guide)}</div></td>
+      <td>${_fmtStatusPill(r.status)}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px">${stepsHtml}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px">${time}</td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px;text-align:center">${openCount}</td>
+      <td style="font-size:11px;color:var(--text2)">${_fmtDate(p && p.opened_at)}</td>
+      <td style="font-size:11px;color:var(--text2)">${_fmtDate(p && p.acknowledged_at)}</td>
+      <td style="text-align:right">${canReset ? `<button type="button" class="btn btn-sec btn-sm" onclick="resetFormation(${r.user.id}, '${esc(r.guide)}', '${esc(r.uName.replace(/'/g,"\\'"))}', '${esc(r.gLabel.replace(/'/g,"\\'"))}')">Reset</button>` : '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function resetFormation(userId, guideKey, uName, gLabel){
+  if(!confirm(`Réinitialiser la progression du guide « ${gLabel} » pour ${uName} ?\n\nL'utilisateur reverra le tuto à sa prochaine visite.`)) return;
+  try {
+    const r = await api('/api/guides/admin/reset', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({user_id: userId, guide_key: guideKey})
+    });
+    if(!r.ok){ toast('Erreur réinitialisation', true); return; }
+    toast('Progression remise à zéro');
+    await loadFormationsAdmin();
+  } catch(e){ toast('Erreur réseau', true); }
+}
+
+// Wire up filtres
+try {
+  const s = document.getElementById('fmt-search');
+  if(s) s.oninput = () => { _fmtSearch = s.value; renderFormationsAdmin(); };
+  const st = document.getElementById('fmt-filter-status');
+  if(st) st.onchange = () => { _fmtStatus = st.value; renderFormationsAdmin(); };
+  const rf = document.getElementById('fmt-refresh');
+  if(rf) rf.onclick = () => loadFormationsAdmin();
+} catch(e){}
+
+</script>
 </body>
 </html>
 """

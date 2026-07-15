@@ -6665,6 +6665,30 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 180, "fournisseurs_groupe_branche")
 
+    # Migration 181 — Guides in-app : suivi lecture des tutos MyQualite (et
+    # autres modules a venir). Table de progression par (utilisateur, guide).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=181 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS user_guide_progress (
+            user_id INTEGER NOT NULL,
+            guide_key TEXT NOT NULL,
+            total_steps INTEGER NOT NULL DEFAULT 0,
+            steps_seen_bitmap INTEGER NOT NULL DEFAULT 0,
+            total_time_ms INTEGER NOT NULL DEFAULT 0,
+            open_count INTEGER NOT NULL DEFAULT 0,
+            opened_at TEXT,
+            completed_at TEXT,
+            acknowledged_at TEXT,
+            reset_at TEXT,
+            reset_by INTEGER,
+            PRIMARY KEY (user_id, guide_key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reset_by) REFERENCES users(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ugp_user ON user_guide_progress(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ugp_guide ON user_guide_progress(guide_key)")
+        conn.commit()
+        _record_schema_migration(conn, 181, "user_guide_progress")
+
 
 def create_default_admin():
     import bcrypt

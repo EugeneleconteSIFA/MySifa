@@ -84,6 +84,7 @@ from app.routers.rh_coffre import router as rh_coffre_api_router
 from app.web.coffre_page import router as coffre_page_router
 from app.web.rh_coffre_page import router as rh_coffre_page_router
 from app.routers.learning import router as learning_api_router
+from app.routers.guides import router as guides_api_router
 from app.web.learning_page import router as learning_page_router
 from app.routers.print import router as print_router
 
