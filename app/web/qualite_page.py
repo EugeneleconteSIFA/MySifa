@@ -632,6 +632,13 @@ const S = {
   isQualiteAdmin: __IS_QUALITE_ADMIN__,
   isQualiteReadonly: __IS_QUALITE_READONLY__,
   userRole: "__USER_ROLE__",
+  guideProgress: {},           // {guide_key: {total_steps, steps_seen_bitmap, acknowledged_at, ...}}
+  _qguideAckedKeys: null,      // Set des keys deja acked (init a null pour detecter chargement)
+  _qguideOpenedThisSession: null,  // Set des keys deja auto-ouvertes cette session
+  _qguideCurrentKey: null,
+  _qguideStartMs: 0,
+  _qguideLastStepMs: 0,
+  _qguideBitmapLocal: 0,
   // ── Prise en connaissance NC (v163) ─────────────────────────
   // ackServices : liste [{key,label,color}] issue de GET /api/qualite/services
   // myAckService : clé du service NC du user courant (ou null s'il n'en a pas)
@@ -858,6 +865,7 @@ function setView(v){
     document.getElementById('mobile-sub').textContent=S.currentRef?S.currentRef.nom:'Fiche';
     renderRefDetail();
   }
+  maybeAutoOpenGuide(v);
   closeSidebar();
 }
 
@@ -2549,6 +2557,11 @@ async function init(){
   setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);
   // Scan expirations certificats fournisseurs : émet des annonces internes si un bucket vient d'être franchi.
   if(S.isQualiteAdmin){ try{ fetch('/api/qualite/ressources/scan-expirations',{method:'POST',credentials:'include'}); }catch(e){} }
+  // Guides in-app : charger la progression + auto-ouvrir overview si non validé
+  await loadGuideProgress();
+  if(S._qguideAckedKeys && !S._qguideAckedKeys.has('qualite-overview')){
+    setTimeout(() => openGuide('qualite-overview', {autoOpened: true}), 600);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -3463,6 +3476,18 @@ document.addEventListener('keydown', function(ev){
     .four-nav-pos{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding:0 4px;min-width:44px;text-align:center}
     .four-sub-line{display:flex;gap:6px;flex-wrap:wrap}
     .four-sub-chip{font-size:11px;font-weight:600;background:var(--accent-bg);color:var(--accent);padding:3px 10px;border-radius:999px}
+    /* Guide progress : bouton J'ai compris + hint auto-open */
+    .qguide-nav{flex-wrap:wrap}
+    .qguide-ack-row{display:flex;justify-content:center;padding:0 24px 16px;background:var(--bg)}
+    .qguide-ack-btn{width:100%;max-width:400px;padding:11px 18px;border-radius:10px;border:none;background:var(--ok);color:var(--btn-fg);font-weight:800;font-size:13px;cursor:pointer;transition:all .18s;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .qguide-ack-btn:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 6px 16px rgba(52,211,153,.28)}
+    .qguide-ack-btn:disabled{opacity:.35;cursor:not-allowed;background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+    .qguide-ack-info{font-size:11px;color:var(--muted);margin-top:6px;text-align:center;width:100%;font-style:italic}
+    .qguide-ack-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:rgba(52,211,153,.15);color:var(--ok);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+    /* Pulse subtile sur bouton help si guide non lu */
+    .qual-help-btn.unread{position:relative}
+    .qual-help-btn.unread::after{content:"";position:absolute;top:-2px;right:-2px;width:9px;height:9px;background:var(--accent);border-radius:99px;border:2px solid var(--card);animation:helpPulse 2s ease-in-out infinite}
+    @keyframes helpPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.7}}
     /* ─── Guide interactif (bouton livre + modal carrousel) ─── */
     .qual-help-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:var(--accent-bg);color:var(--accent);border:1px solid transparent;cursor:pointer;transition:all .18s;padding:0}
     .qual-help-btn:hover{background:var(--accent);color:var(--btn-fg);transform:translateY(-1px);box-shadow:0 4px 12px rgba(34,211,238,.3)}
@@ -3768,6 +3793,25 @@ function _renderTaskSections(){
 
 function _qualiteGuides(){
   return {
+    'qualite-overview': {
+      steps: [
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>`,
+          title: "Bienvenue dans MyQualité",
+          body: "Le module <strong>Qualité</strong> centralise les non-conformités, les audits client, les certifications fournisseurs et le référentiel RSE. Voici en 3 écrans ce que vous y trouverez."
+        },
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>`,
+          title: "Non-conformités & Audits",
+          body: "Onglet <strong>Non-conformités</strong> : enregistrer, analyser et clôturer les NC internes / clients / fournisseurs. Onglet <strong>Audits client</strong> : suivre les audits reçus (questions, matrice de conformité)."
+        },
+        {
+          icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
+          title: "Ressources & Référentiel",
+          body: "Onglet <strong>Ressources fournisseurs</strong> : dossier par fournisseur avec ses certificats (ISO, FSC, REACH...) et suivi des expirations. Onglet <strong>Référentiel RSE</strong> : bibliothèque des normes/certifs (définition, statut SIFA, réponses type)."
+        },
+      ]
+    },
     'ressources': {
       steps: [
         {
@@ -3806,18 +3850,171 @@ function _qualiteGuides(){
   };
 }
 
-let _qguideState = { key: null, idx: 0 };
+// Mapping vue → guide qui s'ouvre auto la 1ere fois
+const VIEW_TO_GUIDE = {
+  'ressources-list': 'ressources',
+  // Ajouter d'autres vues au fur et a mesure des guides
+};
 
-function openGuide(key){
+async function loadGuideProgress(){
+  try{
+    const r = await api('/api/guides/progress');
+    if(!r.ok) return;
+    const rows = await r.json();
+    S.guideProgress = {};
+    const acked = new Set();
+    for(const row of rows){
+      S.guideProgress[row.guide_key] = row;
+      if(row.acknowledged_at) acked.add(row.guide_key);
+    }
+    S._qguideAckedKeys = acked;
+    S._qguideOpenedThisSession = new Set();
+    _refreshHelpBadges();
+  }catch(e){}
+}
+
+function _refreshHelpBadges(){
+  // Ajouter classe "unread" sur les boutons help des vues non-acked
+  document.querySelectorAll('.qual-help-btn').forEach(btn => {
+    const key = btn.getAttribute('data-guide');
+    if(!key) return;
+    if(S._qguideAckedKeys && S._qguideAckedKeys.has(key)) btn.classList.remove('unread');
+    else btn.classList.add('unread');
+  });
+}
+
+function maybeAutoOpenGuide(viewName){
+  const key = VIEW_TO_GUIDE[viewName];
+  if(!key) return;
+  if(!S._qguideAckedKeys) return; // pas encore charge
+  if(S._qguideAckedKeys.has(key)) return;
+  if(S._qguideOpenedThisSession.has(key)) return;
+  const guides = _qualiteGuides();
+  if(!guides[key]) return;
+  S._qguideOpenedThisSession.add(key);
+  setTimeout(() => openGuide(key, {autoOpened: true}), 400);
+}
+
+async function _postGuideOpen(key, totalSteps){
+  try{ await api('/api/guides/open', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, total_steps: totalSteps})}); }catch(e){}
+}
+async function _postGuideHeartbeat(key, stepIdx, totalSteps, deltaMs){
+  try{ await api('/api/guides/heartbeat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, step_idx: stepIdx, total_steps: totalSteps, delta_ms: deltaMs})}); }catch(e){}
+}
+async function _postGuideAck(key){
+  try{
+    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key})});
+    if(r.ok){
+      if(!S._qguideAckedKeys) S._qguideAckedKeys = new Set();
+      S._qguideAckedKeys.add(key);
+      _refreshHelpBadges();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+function _guideCurrentDeltaMs(){
+  if(!S._qguideLastStepMs) return 0;
+  return Date.now() - S._qguideLastStepMs;
+}
+
+function _guideBitmapFull(totalSteps){
+  return (1 << totalSteps) - 1;
+}
+
+function _updateAckButton(){
+  const btn = document.getElementById('qguide-ack');
+  if(!btn) return;
+  const key = _qguideState.key;
+  if(!key) return;
   const guides = _qualiteGuides();
   const g = guides[key];
   if(!g) return;
+  const total = g.steps.length;
+  const full = _guideBitmapFull(total);
+  const complete = (S._qguideBitmapLocal & full) === full;
+  const alreadyAcked = S._qguideAckedKeys && S._qguideAckedKeys.has(key);
+  btn.disabled = !complete;
+  if(alreadyAcked){
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Déjà validé — fermer`;
+  } else if(complete){
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> J'ai compris — clôturer`;
+  } else {
+    const remain = total - _bitCount(S._qguideBitmapLocal & full);
+    btn.innerHTML = `J'ai compris <span style="font-weight:normal;opacity:.7;font-size:11px">(${remain} étape${remain>1?'s':''} restante${remain>1?'s':''})</span>`;
+  }
+}
+
+function _bitCount(n){
+  n = n >>> 0;
+  let c = 0;
+  while(n){ c += n & 1; n = n >>> 1; }
+  return c;
+}
+
+async function _handleGuideClose(){
+  // Envoi du delta final avant fermeture
+  const key = S._qguideCurrentKey;
+  if(key && S._qguideStartMs){
+    const g = _qualiteGuides()[key];
+    if(g){
+      const delta = _guideCurrentDeltaMs();
+      if(delta > 0){
+        _postGuideHeartbeat(key, _qguideState.idx || 0, g.steps.length, delta);
+      }
+    }
+  }
+  S._qguideCurrentKey = null;
+  S._qguideStartMs = 0;
+  S._qguideLastStepMs = 0;
+  S._qguideBitmapLocal = 0;
+}
+
+async function ackCurrentGuide(){
+  const key = _qguideState.key;
+  if(!key) return;
+  const already = S._qguideAckedKeys && S._qguideAckedKeys.has(key);
+  if(!already){
+    const ok = await _postGuideAck(key);
+    if(!ok){ showToast('Impossible de valider (voyez toutes les étapes)','danger'); return; }
+    showToast('Formation validée ✓','success');
+  }
+  await _handleGuideClose();
+  closeMroot();
+}
+
+let _qguideState = { key: null, idx: 0 };
+
+function openGuide(key, opts){
+  const guides = _qualiteGuides();
+  const g = guides[key];
+  if(!g) return;
+  opts = opts || {};
   _qguideState = { key, idx: 0 };
+  const total = g.steps.length;
+
+  // Initialiser bitmap local depuis le serveur
+  const prog = S.guideProgress && S.guideProgress[key];
+  S._qguideBitmapLocal = prog ? (prog.steps_seen_bitmap | 0) : 0;
+  S._qguideCurrentKey = key;
+  S._qguideStartMs = Date.now();
+  S._qguideLastStepMs = Date.now();
+
+  // Marquer step 0 comme vu localement + envoyer /open
+  S._qguideBitmapLocal |= 1;
+  _postGuideOpen(key, total);
+
+  const alreadyAcked = S._qguideAckedKeys && S._qguideAckedKeys.has(key);
+  const autoHint = opts.autoOpened && !alreadyAcked
+    ? `<div class="qguide-ack-info">Ce guide s'affiche automatiquement à votre première visite.</div>`
+    : (alreadyAcked ? `<div class="qguide-ack-info"><span class="qguide-ack-badge">✓ Validé</span> Vous avez déjà validé ce guide.</div>` : '');
+
   const wrap = _refMroot();
-  wrap.innerHTML = `<div class="qguide-ov" onclick="if(event.target===this)closeMroot()">
+  wrap.innerHTML = `<div class="qguide-ov" onclick="if(event.target===this)_handleGuideClose().then(closeMroot)">
     <div class="qguide" role="dialog" aria-labelledby="qguide-tit">
-      <button type="button" class="qguide-close" aria-label="Fermer" onclick="closeMroot()">×</button>
-      <div class="qguide-progress"><div class="qguide-progress-bar" id="qguide-bar" style="width:${((1/g.steps.length)*100).toFixed(1)}%"></div></div>
+      <button type="button" class="qguide-close" aria-label="Fermer" onclick="_handleGuideClose().then(closeMroot)">×</button>
+      <div class="qguide-progress"><div class="qguide-progress-bar" id="qguide-bar" style="width:${((1/total)*100).toFixed(1)}%"></div></div>
       <div class="qguide-viewport" id="qguide-viewport">
         ${g.steps.map((s, i) => `<div class="qguide-step ${i===0?'active':''}" data-idx="${i}">
           ${s.illu ? `<div class="qguide-illu">${s.illu}</div>` : `<div class="qguide-icon">${s.icon}</div>`}
@@ -3830,11 +4027,16 @@ function openGuide(key){
         <div class="qguide-dots">${g.steps.map((_,i) => `<button type="button" class="qguide-dot ${i===0?'active':''}" data-idx="${i}" onclick="navGuide(${i})" aria-label="Étape ${i+1}"></button>`).join('')}</div>
         <div class="qguide-nav-btns">
           <button type="button" class="qguide-nav-btn" id="qguide-prev" onclick="navGuide(_qguideState.idx-1)" disabled>Précédent</button>
-          <button type="button" class="qguide-nav-btn primary" id="qguide-next" onclick="_qguideState.idx===${g.steps.length-1}?closeMroot():navGuide(_qguideState.idx+1)">Suivant →</button>
+          <button type="button" class="qguide-nav-btn primary" id="qguide-next" onclick="navGuide(_qguideState.idx+1)">Suivant →</button>
         </div>
+      </div>
+      <div class="qguide-ack-row" style="flex-direction:column">
+        <button type="button" class="qguide-ack-btn" id="qguide-ack" onclick="ackCurrentGuide()" disabled></button>
+        ${autoHint}
       </div>
     </div>
   </div>`;
+  _updateAckButton();
   document.addEventListener('keydown', _qguideKey);
 }
 
@@ -3849,7 +4051,8 @@ function navGuide(newIdx){
   const guides = _qualiteGuides();
   const g = guides[_qguideState.key];
   if(!g) return;
-  if(newIdx < 0 || newIdx >= g.steps.length) return;
+  const total = g.steps.length;
+  if(newIdx < 0 || newIdx >= total) return;
   const oldIdx = _qguideState.idx;
   if(newIdx === oldIdx) return;
   const dir = newIdx > oldIdx ? 1 : -1;
@@ -3869,15 +4072,28 @@ function navGuide(newIdx){
     }
   });
 
+  // Marquer nouvelle etape comme vue + envoyer heartbeat avec delta
+  S._qguideBitmapLocal |= (1 << newIdx);
+  const delta = _guideCurrentDeltaMs();
+  if(delta > 0 && _qguideState.key){
+    _postGuideHeartbeat(_qguideState.key, newIdx, total, delta);
+  }
+  S._qguideLastStepMs = Date.now();
+
   _qguideState.idx = newIdx;
   const dots = document.querySelectorAll('.qguide-dot');
   dots.forEach((d, i) => d.classList.toggle('active', i === newIdx));
   const bar = document.getElementById('qguide-bar');
-  if(bar) bar.style.width = (((newIdx+1)/g.steps.length)*100).toFixed(1) + '%';
+  if(bar) bar.style.width = (((newIdx+1)/total)*100).toFixed(1) + '%';
   const prevBtn = document.getElementById('qguide-prev');
   const nextBtn = document.getElementById('qguide-next');
   if(prevBtn) prevBtn.disabled = (newIdx === 0);
-  if(nextBtn) nextBtn.textContent = (newIdx === g.steps.length - 1) ? 'Terminer ✓' : 'Suivant →';
+  if(nextBtn){
+    if(newIdx === total - 1) nextBtn.textContent = 'Dernière étape';
+    else nextBtn.textContent = 'Suivant →';
+    nextBtn.disabled = (newIdx === total - 1);
+  }
+  _updateAckButton();
 }
 
 async function loadRessources(){
@@ -3995,7 +4211,7 @@ function renderRessourcesList(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <h2 style="margin:0;font-size:18px;color:var(--text)">Ressources fournisseurs</h2>
-        <button type="button" class="qual-help-btn" onclick="openGuide('ressources')" title="Guide de la page" aria-label="Guide de la page">
+        <button type="button" class="qual-help-btn" data-guide="ressources" onclick="openGuide('ressources')" title="Guide de la page" aria-label="Guide de la page">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
         </button>
       </div>
