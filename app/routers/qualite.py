@@ -2559,8 +2559,64 @@ def ressources_list_fournisseurs(request: Request):
             })
 
     groupes = sorted(groupes_map.values(), key=lambda x: x["groupe"].lower())
-    return {"groupes": groupes, "fournisseurs": fournisseurs_indep}
+    flat = []
+    for f in fours:
+        key = (f.get("groupe") or f["nom"] or "").lower()
+        flat.append((key, f["id"]))
+    flat.sort(key=lambda x: x[0])
+    order = [fid for _, fid in flat]
+    return {"groupes": groupes, "fournisseurs": fournisseurs_indep, "order": order}
 
+
+
+
+class FournisseurPatchBody(BaseModel):
+    nom: Optional[str] = None
+    licence: Optional[str] = None
+    certificat: Optional[str] = None
+    has_fsc: Optional[bool] = None
+    groupe: Optional[str] = None
+    branche: Optional[str] = None
+
+
+@router.patch("/api/qualite/ressources/fournisseurs/{four_id}")
+def ressources_patch_fournisseur(four_id: int, body: FournisseurPatchBody, request: Request):
+    _require_qualite_access(request)
+    d = body.model_dump(exclude_unset=True)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        sets, vals = [], []
+        if "nom" in d:
+            v = (d["nom"] or "").strip()
+            if not v:
+                raise HTTPException(status_code=400, detail="Nom obligatoire")
+            sets.append("nom=?"); vals.append(v)
+        if "licence" in d:
+            v = (d["licence"] or "").strip() or None
+            sets.append("licence=?"); vals.append(v)
+        if "certificat" in d:
+            v = (d["certificat"] or "").strip() or None
+            sets.append("certificat=?"); vals.append(v)
+        if "has_fsc" in d:
+            sets.append("has_fsc=?"); vals.append(1 if bool(d["has_fsc"]) else 0)
+        if "groupe" in d:
+            v = (d["groupe"] or "").strip() or None
+            sets.append("groupe=?"); vals.append(v)
+        if "branche" in d:
+            v = (d["branche"] or "").strip() or None
+            sets.append("branche=?"); vals.append(v)
+        if sets:
+            vals.append(four_id)
+            try:
+                conn.execute(f"UPDATE fournisseurs_fsc SET {', '.join(sets)} WHERE id=?", vals)
+                conn.commit()
+            except Exception as e:
+                raise HTTPException(status_code=409, detail=f"Erreur : {e}")
+    return ressources_get_fournisseur(four_id, request)
 
 
 # ─── Detail d'un groupe (toutes les branches + certifs agreges) ──────
