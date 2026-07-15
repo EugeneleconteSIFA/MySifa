@@ -638,6 +638,7 @@ const S = {
   // ── Ressources Fournisseurs (v1.6) ─────────────────────────────
   resList: [],                // fournisseurs sans groupe [{id,nom,...,cert_stats:{...}}]
   resGroupes: [],             // groupes agreges [{groupe, branches:[...], stats:{...}}]
+  resOrder: [],               // liste plate d'ids tries alpha (pour prev/next)
   resSearch: '',
   currentRes: null,           // {fournisseur:{...}, certificats:[...]} - vue fournisseur
   currentGroupe: null,        // {groupe, branches:[...], certificats:[...]} - vue groupe
@@ -3451,6 +3452,15 @@ document.addEventListener('keydown', function(ev){
     .res-alert-title{font-weight:700;font-size:13px;color:var(--text);margin-bottom:6px}
     .res-alert-list{font-size:12px;color:var(--text2);line-height:1.6;margin:0;padding-left:18px}
     /* Modal ajout / edition certificat fournisseur */
+    .four-detail-hd{margin-bottom:16px}
+    .four-detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+    .four-detail-lhs{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .four-nav{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px 8px}
+    .four-nav-btn{padding:4px 10px !important;font-size:14px !important;min-width:32px}
+    .four-nav-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+    .four-nav-pos{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding:0 4px;min-width:44px;text-align:center}
+    .four-sub-line{display:flex;gap:6px;flex-wrap:wrap}
+    .four-sub-chip{font-size:11px;font-weight:600;background:var(--accent-bg);color:var(--accent);padding:3px 10px;border-radius:999px}
     .cert-form{display:flex;flex-direction:column;gap:14px}
     .cert-drop{position:relative;display:block;border:2px dashed var(--border);border-radius:10px;padding:22px 16px;text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
     .cert-drop:hover,.cert-drop.over{border-color:var(--accent);background:var(--accent-bg)}
@@ -3510,9 +3520,11 @@ async function loadRessources(){
     if(Array.isArray(data)){
       S.resGroupes = [];
       S.resList = data;
+      S.resOrder = data.map(f=>f.id);
     } else {
       S.resGroupes = data.groupes || [];
       S.resList = data.fournisseurs || [];
+      S.resOrder = data.order || [];
     }
     try{
       const r2 = await api('/api/qualite/ressources/expiration-alerts');
@@ -3578,9 +3590,18 @@ function renderRessourcesList(){
     body = `<div class="aud-emp"><div class="emp-title">${S.resSearch?'Aucun résultat pour « '+escHtml(S.resSearch)+' »':'Aucun fournisseur'}</div>
       <div class="emp-sub">${S.resSearch?'':'Les fournisseurs sont gérés dans les paramètres.'}</div></div>`;
   } else {
-    if(groupes.length){
-      body += `<div class="res-section-tit">Groupes</div>
-      <div class="res-grid">${groupes.map(g=>{
+    // Fusionner groupes et fournisseurs isolés dans une seule liste triée alphabétiquement
+    const items = [];
+    for(const g of groupes){
+      items.push({kind:'groupe', key:(g.groupe||'').toLowerCase(), data:g});
+    }
+    for(const f of list){
+      items.push({kind:'four', key:(f.nom||'').toLowerCase(), data:f});
+    }
+    items.sort((a,b)=>a.key.localeCompare(b.key));
+    body = `<div class="res-grid">${items.map(it=>{
+      if(it.kind==='groupe'){
+        const g = it.data;
         const nb = (g.branches||[]).length;
         return `<div class="res-card res-card-group" onclick="openRessourceGroupe('${encodeURIComponent(g.groupe)}')">
           <div class="res-card-hd">
@@ -3590,18 +3611,15 @@ function renderRessourcesList(){
           <div class="res-card-lic">${(g.branches||[]).slice(0,3).map(b=>escHtml(b.branche||b.nom||'')).join(' · ')}${nb>3?' · +'+(nb-3):''}</div>
           <div class="res-card-stats">${_resPills(g.stats)}</div>
         </div>`;
-      }).join('')}</div>`;
-    }
-    if(list.length){
-      body += `${groupes.length?'<div class="res-section-tit" style="margin-top:18px">Fournisseurs indépendants</div>':''}
-      <div class="res-grid">${list.map(f=>{
+      } else {
+        const f = it.data;
         return `<div class="res-card" onclick="openRessourceFournisseur(${f.id})">
           <div class="res-card-nom">${escHtml(f.nom||'')}</div>
           <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
           <div class="res-card-stats">${_resPills(f.cert_stats)}</div>
         </div>`;
-      }).join('')}</div>`;
-    }
+      }
+    }).join('')}</div>`;
   }
 
   root.innerHTML = `
@@ -3672,22 +3690,156 @@ function renderRessourcesDetail(){
     </div>`;
   }).join('') : '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center">Aucun certificat pour ce fournisseur. Ajoutez-en un pour commencer.</div>';
 
+  // Prev/next : position dans S.resOrder (liste plate alpha de tous les fournisseurs)
+  const order = S.resOrder || [];
+  const idx = order.indexOf(f.id);
+  const prevId = idx > 0 ? order[idx-1] : null;
+  const nextId = (idx >= 0 && idx < order.length-1) ? order[idx+1] : null;
+  const posLabel = idx >= 0 ? (idx+1) + ' / ' + order.length : '';
+
+  // Sous-titre : groupe/branche si applicable
+  let subLine = '';
+  if(f.groupe){
+    subLine = `<span class="four-sub-chip">Groupe : ${escHtml(f.groupe)}</span>${f.branche?`<span class="four-sub-chip">Branche : ${escHtml(f.branche)}</span>`:''}`;
+  }
+
   root.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px">
-      <div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div class="four-detail-hd">
+      <div class="four-detail-top">
+        <div class="four-detail-lhs">
           <button class="btn btn-ghost" onclick="setView('ressources-list')" style="padding:6px 10px;font-size:12px">← Retour</button>
-          <h2 style="margin:0;font-size:18px;color:var(--text)">${escHtml(f.nom||'')}</h2>
+          <div class="four-nav">
+            <button class="btn btn-ghost four-nav-btn" onclick="navPrevFournisseur()" ${prevId?'':'disabled'} title="Fournisseur précédent">←</button>
+            <span class="four-nav-pos">${posLabel}</span>
+            <button class="btn btn-ghost four-nav-btn" onclick="navNextFournisseur()" ${nextId?'':'disabled'} title="Fournisseur suivant">→</button>
+          </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:6px;font-family:ui-monospace,monospace">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
+        <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="openFournisseurSettingsModal(${f.id})" style="padding:8px 12px;font-size:12px" title="Paramètres du fournisseur">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Paramètres
+          </button>
+          <button class="btn btn-accent" onclick="openAddCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+        </div>
       </div>
-      <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-accent" onclick="openAddCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:10px">
+        <h2 style="margin:0;font-size:20px;color:var(--text)">${escHtml(f.nom||'')}</h2>
+        ${subLine ? `<div class="four-sub-line">${subLine}</div>` : ''}
       </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;font-family:ui-monospace,monospace">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
     </div>
     <div class="res-cert-list">${certsHtml}</div>
   `;
 }
+
+// ─── Navigation prev/next fournisseur ──────────────────────────────────────
+async function navPrevFournisseur(){
+  const order = S.resOrder || [];
+  const cur = S.currentRes && S.currentRes.fournisseur && S.currentRes.fournisseur.id;
+  const idx = order.indexOf(cur);
+  if(idx > 0){ await openRessourceFournisseur(order[idx-1]); }
+}
+async function navNextFournisseur(){
+  const order = S.resOrder || [];
+  const cur = S.currentRes && S.currentRes.fournisseur && S.currentRes.fournisseur.id;
+  const idx = order.indexOf(cur);
+  if(idx >= 0 && idx < order.length-1){ await openRessourceFournisseur(order[idx+1]); }
+}
+
+// ─── Modal reglages fournisseur (edition depuis MyQualite) ─────────────────
+function openFournisseurSettingsModal(id){
+  const d = S.currentRes;
+  if(!d) return;
+  const f = d.fournisseur;
+  // Charger la liste des groupes existants pour le datalist
+  const groupesList = new Set();
+  (S.resGroupes||[]).forEach(g => groupesList.add(g.groupe));
+  (S.resList||[]).forEach(x => { if(x.groupe) groupesList.add(x.groupe); });
+  // Aussi via S.currentRes lui-meme
+  if(f.groupe) groupesList.add(f.groupe);
+  const dlOpts = Array.from(groupesList).sort().map(g => `<option value="${escAttr(g)}">`).join('');
+  const hasFsc = f.has_fsc == null ? true : !!f.has_fsc;
+
+  const html = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+    <div class="modal" style="max-width:560px" onclick="event.stopPropagation()">
+      <div class="modal-hd"><h3>Paramètres du fournisseur</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+      <div class="modal-bd" style="max-height:70vh;overflow:auto">
+        <div class="cert-form">
+          <div>
+            <label class="form-label" for="fs-nom">Nom du fournisseur</label>
+            <input type="text" id="fs-nom" class="form-input" value="${escAttr(f.nom||'')}" placeholder="Nom">
+          </div>
+          <div>
+            <label class="cert-niveau-opt" style="background:var(--bg);border:1px solid var(--border);padding:10px 12px;border-radius:10px">
+              <input type="checkbox" id="fs-has-fsc" ${hasFsc?'checked':''} onchange="_toggleFsFsc()" style="accent-color:var(--accent);width:15px;height:15px">
+              <div class="cert-niveau-opt-lbl" style="font-weight:600;color:var(--text)">Fournisseur certifié FSC</div>
+            </label>
+          </div>
+          <div id="fs-fsc-fields" style="display:flex;flex-direction:column;gap:14px;${hasFsc?'':'opacity:.4;pointer-events:none'}">
+            <div>
+              <label class="form-label" for="fs-licence">Licence FSC</label>
+              <input type="text" id="fs-licence" class="form-input" value="${escAttr(f.licence||'')}" placeholder="ex: FSC-C004451">
+            </div>
+            <div>
+              <label class="form-label" for="fs-cert">Certificat FSC</label>
+              <input type="text" id="fs-cert" class="form-input" value="${escAttr(f.certificat||'')}" placeholder="ex: CU-COC-807907">
+            </div>
+          </div>
+          <div style="padding-top:6px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Rattachement groupe</div>
+            <div class="cert-row">
+              <div class="cert-col">
+                <label class="form-label" for="fs-groupe">Groupe (optionnel)</label>
+                <input type="text" id="fs-groupe" class="form-input" value="${escAttr(f.groupe||'')}" placeholder="ex: Fedrigoni" list="fs-groupes-dl">
+                <datalist id="fs-groupes-dl">${dlOpts}</datalist>
+              </div>
+              <div class="cert-col">
+                <label class="form-label" for="fs-branche">Branche</label>
+                <input type="text" id="fs-branche" class="form-input" value="${escAttr(f.branche||'')}" placeholder="ex: Italy">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+        <button class="btn btn-accent" onclick="submitFournisseurSettings(${id})">Enregistrer</button>
+      </div>
+    </div>
+  </div>`;
+  _refMroot().innerHTML = html;
+}
+
+function _toggleFsFsc(){
+  const cbo = document.getElementById('fs-has-fsc');
+  const box = document.getElementById('fs-fsc-fields');
+  if(!cbo || !box) return;
+  box.style.opacity = cbo.checked ? '' : '.4';
+  box.style.pointerEvents = cbo.checked ? '' : 'none';
+}
+
+async function submitFournisseurSettings(id){
+  const nom = document.getElementById('fs-nom').value.trim();
+  const has_fsc = !!document.getElementById('fs-has-fsc').checked;
+  const licence = has_fsc ? document.getElementById('fs-licence').value.trim() : '';
+  const certificat = has_fsc ? document.getElementById('fs-cert').value.trim() : '';
+  const groupe = document.getElementById('fs-groupe').value.trim();
+  const branche = document.getElementById('fs-branche').value.trim();
+  if(!nom){ showToast('Nom obligatoire','danger'); return; }
+  try{
+    const r = await api('/api/qualite/ressources/fournisseurs/'+id, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nom, licence, certificat, has_fsc, groupe, branche})
+    });
+    if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+    S.currentRes = await r.json();
+    closeMroot();
+    renderRessourcesDetail();
+    showToast('Fournisseur mis à jour.','success');
+    loadRessources();
+  }catch(e){ showToast('Erreur réseau','danger'); }
+}
+
 
 function openAddCertModal(){ openCertModal(null); }
 function onCertFileChange(inp){
