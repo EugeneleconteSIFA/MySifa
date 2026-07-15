@@ -366,6 +366,7 @@ app.include_router(rh_coffre_api_router)
 app.include_router(coffre_page_router)
 app.include_router(rh_coffre_page_router)
 app.include_router(learning_api_router)
+app.include_router(guides_api_router)
 app.include_router(learning_page_router)
 app.include_router(print_router)
 
