@@ -396,10 +396,26 @@ def list_fournisseurs(request: Request):
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, licence, certificat, has_fsc, traca_photo_url, traca_explication, traca_exemple_code
+            """SELECT id, nom, licence, certificat, has_fsc, traca_photo_url,
+                      traca_explication, traca_exemple_code, groupe, branche
                FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+@router.get("/api/fournisseurs/groupes")
+def list_fournisseurs_groupes(request: Request):
+    """Liste des groupes distincts existants (pour autocomplete)."""
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT groupe, COUNT(*) AS n FROM fournisseurs_fsc
+               WHERE groupe IS NOT NULL AND TRIM(groupe) <> ''
+               GROUP BY groupe COLLATE NOCASE
+               ORDER BY groupe COLLATE NOCASE ASC"""
+        ).fetchall()
+    return [{"groupe": r["groupe"], "n": r["n"]} for r in rows]
 
 
 @router.post("/api/fournisseurs")
@@ -414,13 +430,15 @@ async def create_fournisseur(request: Request):
     if not has_fsc:
         licence = None
         certificat = None
+    groupe = (body.get("groupe") or "").strip() or None
+    branche = (body.get("branche") or "").strip() or None
     if not nom:
         raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
     with get_db() as conn:
         try:
             cur = conn.execute(
-                "INSERT INTO fournisseurs_fsc (nom, licence, certificat, has_fsc) VALUES (?,?,?,?)",
-                (nom, licence, certificat, has_fsc),
+                "INSERT INTO fournisseurs_fsc (nom, licence, certificat, has_fsc, groupe, branche) VALUES (?,?,?,?,?,?)",
+                (nom, licence, certificat, has_fsc, groupe, branche),
             )
             conn.commit()
             log_action(
@@ -461,12 +479,16 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             certificat = None
         traca_explication = (body.get("traca_explication") or "").strip() or None
         traca_exemple_code = (body.get("traca_exemple_code") or "").strip() or None
+        groupe = body.get("groupe") if "groupe" in body else (ex["groupe"] if "groupe" in ex.keys() else None)
+        branche = body.get("branche") if "branche" in body else (ex["branche"] if "branche" in ex.keys() else None)
+        if isinstance(groupe, str): groupe = groupe.strip() or None
+        if isinstance(branche, str): branche = branche.strip() or None
         try:
             conn.execute(
                 """UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=?, has_fsc=?,
-                       traca_explication=?, traca_exemple_code=?
+                       traca_explication=?, traca_exemple_code=?, groupe=?, branche=?
                    WHERE id=?""",
-                (nom, licence, certificat, has_fsc, traca_explication, traca_exemple_code, fournisseur_id),
+                (nom, licence, certificat, has_fsc, traca_explication, traca_exemple_code, groupe, branche, fournisseur_id),
             )
             conn.commit()
             log_action(

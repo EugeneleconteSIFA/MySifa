@@ -636,9 +636,11 @@ const S = {
   ackServices: [],
   myAckService: null,
   // ── Ressources Fournisseurs (v1.6) ─────────────────────────────
-  resList: [],                // [{id,nom,licence,certificat,cert_stats:{...}}]
+  resList: [],                // fournisseurs sans groupe [{id,nom,...,cert_stats:{...}}]
+  resGroupes: [],             // groupes agreges [{groupe, branches:[...], stats:{...}}]
   resSearch: '',
-  currentRes: null,           // {fournisseur:{...}, certificats:[...]}
+  currentRes: null,           // {fournisseur:{...}, certificats:[...]} - vue fournisseur
+  currentGroupe: null,        // {groupe, branches:[...], certificats:[...]} - vue groupe
   resAlerts: null,            // {expired:[],j30:[],j60:[]}
   // ── Audit matrice (v1.6) ────────────────────────────────────────
   auditMatrice: null,         // {fournisseurs, certifications, cells, resume}
@@ -839,6 +841,10 @@ function setView(v){
     const nav=document.getElementById('nav-ressources'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent=S.currentRes?S.currentRes.fournisseur.nom:'Fournisseur';
     renderRessourcesDetail();
+  } else if(v==='ressources-group'){
+    const nav=document.getElementById('nav-ressources'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent=S.currentGroupe?S.currentGroupe.groupe:'Groupe';
+    renderGroupeDetail();
   } else if(v==='ref-list'){
     const nav=document.getElementById('nav-ref'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent='Référentiel RSE';
@@ -3406,6 +3412,26 @@ document.addEventListener('keydown', function(ev){
     .res-pill.exp{background:rgba(248,113,113,.18);color:var(--danger)}
     .res-pill.nod{background:var(--accent-bg);color:var(--accent)}
     .res-pill.tot{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
+    .res-section-tit{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px 2px}
+    .res-card-group{border-left:3px solid var(--accent)}
+    .res-card-group:hover{border-left-color:var(--accent)}
+    .res-card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px}
+    .res-group-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:999px;flex-shrink:0}
+    .res-branch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .12s}
+    .res-branch-row:hover{border-color:var(--accent)}
+    .res-branch-nom{font-weight:600;color:var(--text);font-size:13px}
+    .res-branch-meta{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;margin-top:2px}
+    .res-branch-stats{display:flex;gap:4px;flex-wrap:wrap}
+    .res-cert-src{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;padding:2px 7px;border-radius:999px;margin-left:6px}
+    .res-cert-src.grp{background:var(--accent-bg);color:var(--accent)}
+    .res-cert-src.brc{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+    .cert-niveau-choice{display:flex;flex-direction:column;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
+    .cert-niveau-opt{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2);transition:.12s}
+    .cert-niveau-opt:hover{background:var(--accent-bg);color:var(--text)}
+    .cert-niveau-opt input[type=radio]{margin:0;accent-color:var(--accent);width:15px;height:15px;flex-shrink:0}
+    .cert-niveau-opt-lbl{flex:1}
+    .cert-niveau-opt-sub{font-size:11px;color:var(--muted);margin-top:2px}
+    .cert-niveau-opt select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;font-family:inherit;margin-left:8px}
     .res-cert-list{display:flex;flex-direction:column;gap:10px}
     .res-cert{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
     .res-cert.expired{border-left:3px solid var(--danger)}
@@ -3479,8 +3505,15 @@ async function loadRessources(){
   try{
     const r = await api('/api/qualite/ressources/fournisseurs');
     if(!r.ok){ showToast('Erreur chargement ressources','danger'); return; }
-    S.resList = await r.json();
-    // Charger aussi les alertes pour le bandeau
+    const data = await r.json();
+    // Retrocompat : ancien format = tableau simple → tout dans resList
+    if(Array.isArray(data)){
+      S.resGroupes = [];
+      S.resList = data;
+    } else {
+      S.resGroupes = data.groupes || [];
+      S.resList = data.fournisseurs || [];
+    }
     try{
       const r2 = await api('/api/qualite/ressources/expiration-alerts');
       if(r2.ok) S.resAlerts = await r2.json();
@@ -3491,15 +3524,38 @@ async function loadRessources(){
 
 function ressourcesFiltered(){
   const q = (S.resSearch||'').trim().toLowerCase();
+  const groupes = S.resGroupes||[];
   const list = S.resList||[];
-  if(!q) return list;
-  return list.filter(f => (f.nom||'').toLowerCase().includes(q) || (f.licence||'').toLowerCase().includes(q));
+  if(!q) return {groupes, list};
+  const fg = groupes.filter(g =>
+    (g.groupe||'').toLowerCase().includes(q) ||
+    (g.branches||[]).some(b => (b.nom||'').toLowerCase().includes(q) || (b.branche||'').toLowerCase().includes(q))
+  );
+  const fl = list.filter(f => (f.nom||'').toLowerCase().includes(q) || (f.licence||'').toLowerCase().includes(q));
+  return {groupes: fg, list: fl};
+}
+
+function _resPills(s){
+  s = s || {total:0,valide:0,soon:0,exp:0,nod:0};
+  // Backward compat : accepte aussi le format ancien avec expire_bientot / expire / sans_date
+  const valide = s.valide||0;
+  const soon = s.soon != null ? s.soon : (s.expire_bientot||0);
+  const exp = s.exp != null ? s.exp : (s.expire||0);
+  const nod = s.nod != null ? s.nod : (s.sans_date||0);
+  const total = s.total != null ? s.total : (valide+soon+exp+nod);
+  const pills = [];
+  pills.push(`<span class="res-pill tot">${total} certif${total>1?'s':''}</span>`);
+  if(valide) pills.push(`<span class="res-pill ok">${valide} valide</span>`);
+  if(soon) pills.push(`<span class="res-pill soon">${soon} bientôt</span>`);
+  if(exp) pills.push(`<span class="res-pill exp">${exp} expiré</span>`);
+  if(nod) pills.push(`<span class="res-pill nod">${nod} sans date</span>`);
+  return pills.join('');
 }
 
 function renderRessourcesList(){
   const ae=document.activeElement;const fid=ae?.id;const cs=ae?.selectionStart;const ce=ae?.selectionEnd;
   const root=document.getElementById('content');
-  const list = ressourcesFiltered();
+  const {groupes, list} = ressourcesFiltered();
 
   // Bandeau alertes
   let alertHtml = '';
@@ -3517,25 +3573,35 @@ function renderRessourcesList(){
     alertHtml = parts.join('');
   }
 
-  let body;
-  if(!list.length){
+  let body = '';
+  if(!groupes.length && !list.length){
     body = `<div class="aud-emp"><div class="emp-title">${S.resSearch?'Aucun résultat pour « '+escHtml(S.resSearch)+' »':'Aucun fournisseur'}</div>
       <div class="emp-sub">${S.resSearch?'':'Les fournisseurs sont gérés dans les paramètres.'}</div></div>`;
   } else {
-    body = `<div class="res-grid">${list.map(f=>{
-      const s = f.cert_stats || {total:0,valide:0,expire_bientot:0,expire:0,sans_date:0};
-      const pills = [];
-      pills.push(`<span class="res-pill tot">${s.total} certif${s.total>1?'s':''}</span>`);
-      if(s.valide) pills.push(`<span class="res-pill ok">${s.valide} valide</span>`);
-      if(s.expire_bientot) pills.push(`<span class="res-pill soon">${s.expire_bientot} bientôt</span>`);
-      if(s.expire) pills.push(`<span class="res-pill exp">${s.expire} expiré</span>`);
-      if(s.sans_date) pills.push(`<span class="res-pill nod">${s.sans_date} sans date</span>`);
-      return `<div class="res-card" onclick="openRessourceFournisseur(${f.id})">
-        <div class="res-card-nom">${escHtml(f.nom||'')}</div>
-        <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
-        <div class="res-card-stats">${pills.join('')}</div>
-      </div>`;
-    }).join('')}</div>`;
+    if(groupes.length){
+      body += `<div class="res-section-tit">Groupes</div>
+      <div class="res-grid">${groupes.map(g=>{
+        const nb = (g.branches||[]).length;
+        return `<div class="res-card res-card-group" onclick="openRessourceGroupe('${encodeURIComponent(g.groupe)}')">
+          <div class="res-card-hd">
+            <div class="res-card-nom">${escHtml(g.groupe||'')}</div>
+            <span class="res-group-badge">Groupe · ${nb} branche${nb>1?'s':''}</span>
+          </div>
+          <div class="res-card-lic">${(g.branches||[]).slice(0,3).map(b=>escHtml(b.branche||b.nom||'')).join(' · ')}${nb>3?' · +'+(nb-3):''}</div>
+          <div class="res-card-stats">${_resPills(g.stats)}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
+    if(list.length){
+      body += `${groupes.length?'<div class="res-section-tit" style="margin-top:18px">Fournisseurs indépendants</div>':''}
+      <div class="res-grid">${list.map(f=>{
+        return `<div class="res-card" onclick="openRessourceFournisseur(${f.id})">
+          <div class="res-card-nom">${escHtml(f.nom||'')}</div>
+          <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
+          <div class="res-card-stats">${_resPills(f.cert_stats)}</div>
+        </div>`;
+      }).join('')}</div>`;
+    }
   }
 
   root.innerHTML = `
@@ -3766,6 +3832,285 @@ async function deleteCert(cid){
     // Recharger le détail
     const rr = await api('/api/qualite/ressources/fournisseurs/'+S.currentRes.fournisseur.id);
     if(rr.ok){ S.currentRes = await rr.json(); renderRessourcesDetail(); showToast('Certificat supprimé.','info'); }
+    loadRessources();
+  }catch(e){ showToast('Erreur réseau','danger'); }
+}
+
+
+// ─── Vue Groupe (multi-branches) ───────────────────────────────────────────
+async function openRessourceGroupe(groupeEnc){
+  try{
+    const r = await api('/api/qualite/ressources/groupes/'+groupeEnc);
+    if(!r.ok){ showToast('Groupe introuvable','danger'); return; }
+    S.currentGroupe = await r.json();
+    setView('ressources-group');
+  }catch(e){ if(e.message!=='unauth') showToast('Erreur réseau','danger'); }
+}
+
+async function refreshCurrentGroupe(){
+  if(!S.currentGroupe) return;
+  try{
+    const r = await api('/api/qualite/ressources/groupes/'+encodeURIComponent(S.currentGroupe.groupe));
+    if(r.ok){ S.currentGroupe = await r.json(); renderGroupeDetail(); }
+  }catch(e){}
+}
+
+function renderGroupeDetail(){
+  const root = document.getElementById('content');
+  const d = S.currentGroupe;
+  if(!d){ root.innerHTML = '<div class="aud-emp"><div class="emp-title">Groupe introuvable</div></div>'; return; }
+  const branches = d.branches || [];
+  const certs = d.certificats || [];
+  const certGroupe = certs.filter(c => c.groupe_ref && String(c.groupe_ref).toLowerCase() === String(d.groupe).toLowerCase());
+  const certBranche = certs.filter(c => !c.groupe_ref);
+
+  function certRow(c){
+    const kind = certKindClass(c.statut);
+    const label = certKindLabel(c.statut);
+    const src = c.groupe_ref
+      ? '<span class="res-cert-src grp">Niveau groupe</span>'
+      : '<span class="res-cert-src brc">Branche · '+escHtml(c.fournisseur_branche || c.fournisseur_nom || '')+'</span>';
+    const tags = (c.fiches||[]).map(fi=>`<span class="res-cert-tag" title="${escAttr(fi.nom||'')}">${escHtml(fi.acronyme||fi.nom||'')}</span>`).join('');
+    return `<div class="res-cert ${kind}">
+      <div class="res-cert-hd">
+        <div style="flex:1;min-width:0">
+          <div class="res-cert-title">${escHtml(c.titre||c.original_name||'Certificat')}${src}</div>
+          <div class="res-cert-meta">
+            ${escHtml(label)}
+            ${c.date_emission?' · émis le '+escHtml(fmtDate(c.date_emission)):''}
+            ${c.date_expiration?' · expire le '+escHtml(fmtDate(c.date_expiration)):''}
+            · déposé le ${escHtml(fmtDate(c.uploaded_at))}${c.uploaded_by_nom?' par '+escHtml(c.uploaded_by_nom):''}
+          </div>
+          ${tags?`<div class="res-cert-tags">${tags}</div>`:''}
+          ${c.commentaire?`<div class="res-cert-com">${escHtml(c.commentaire)}</div>`:''}
+        </div>
+        <div class="res-cert-actions">
+          <a class="btn btn-ghost" href="/api/qualite/ressources/certificats/${c.id}/download" target="_blank" style="padding:6px 10px;font-size:12px">Ouvrir</a>
+          <button type="button" class="btn btn-ghost qual-write" onclick="openEditGroupeCertModal(${c.id})" style="padding:6px 10px;font-size:12px">Modifier</button>
+          <button type="button" class="btn btn-danger qual-write" onclick="deleteGroupeCert(${c.id})" style="padding:6px 10px;font-size:12px">Supprimer</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const certsGroupeHtml = certGroupe.length
+    ? certGroupe.map(certRow).join('')
+    : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Aucun certificat au niveau du groupe.</div>';
+  const certsBrancheHtml = certBranche.length
+    ? certBranche.map(certRow).join('')
+    : '<div style="color:var(--muted);font-size:12px;padding:12px;text-align:center">Aucun certificat rattaché à une branche.</div>';
+
+  const branchesHtml = branches.map(b => {
+    return `<div class="res-branch-row" onclick="openRessourceFournisseur(${b.id})">
+      <div style="min-width:0;flex:1">
+        <div class="res-branch-nom">${escHtml(b.branche || b.nom || '')}</div>
+        <div class="res-branch-meta">${escHtml(b.nom||'')}${b.licence?' · '+escHtml(b.licence):''}</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">Ouvrir →</div>
+    </div>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px">
+      <div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost" onclick="setView('ressources-list')" style="padding:6px 10px;font-size:12px">← Retour</button>
+          <h2 style="margin:0;font-size:18px;color:var(--text)">${escHtml(d.groupe||'')}</h2>
+          <span class="res-group-badge">Groupe · ${branches.length} branche${branches.length>1?'s':''}</span>
+        </div>
+      </div>
+      <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-accent" onclick="openAddGroupeCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div>
+        <div class="res-section-tit">Branches</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${branchesHtml}</div>
+      </div>
+      <div>
+        <div class="res-section-tit">Certificats au niveau du groupe</div>
+        <div class="res-cert-list">${certsGroupeHtml}</div>
+      </div>
+      <div>
+        <div class="res-section-tit">Certificats par branche</div>
+        <div class="res-cert-list">${certsBrancheHtml}</div>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Modal cert dans le contexte groupe ────────────────────────────────────
+function openAddGroupeCertModal(){ openGroupeCertModal(null); }
+function openEditGroupeCertModal(cid){ openGroupeCertModal(cid); }
+
+function openGroupeCertModal(certId){
+  const d = S.currentGroupe;
+  if(!d) return;
+  const cert = certId ? (d.certificats||[]).find(x=>x.id===certId) : null;
+  const branches = d.branches || [];
+  const fichesPromise = (S.refFiches && S.refFiches.length) ? Promise.resolve(S.refFiches) : (async()=>{
+    try{ const r=await api('/api/qualite/ref/fiches?statut_validation=valide'); if(r.ok){ S.refFiches=await r.json(); return S.refFiches; } }catch(e){}
+    return [];
+  })();
+  fichesPromise.then(fiches=>{
+    const selected = new Set((cert && cert.fiches ? cert.fiches.map(x=>x.fiche_id) : []));
+    const optsHtml = fiches.map(fi=>{
+      const chk = selected.has(fi.id) ? 'checked' : '';
+      const acr = fi.acronyme ? `<span class="cert-lbl-acr">${escHtml(fi.acronyme)}</span>` : '';
+      return `<label class="cert-lbl">
+        <input type="checkbox" value="${fi.id}" ${chk} class="cert-fiche-chk">
+        <span class="cert-lbl-txt">${acr}${escHtml(fi.nom)}</span>
+      </label>`;
+    }).join('');
+
+    const niveauInit = cert && cert.groupe_ref ? 'groupe' : 'branche';
+    const brancheInit = cert ? cert.fournisseur_id : (branches[0] ? branches[0].id : '');
+    const branchOptsHtml = branches.map(b => `<option value="${b.id}" ${b.id===brancheInit?'selected':''}>${escHtml(b.branche || b.nom || '')}</option>`).join('');
+
+    const html = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+      <div class="modal" style="max-width:640px" onclick="event.stopPropagation()">
+        <div class="modal-hd"><h3>${cert?'Modifier':'Ajouter'} un certificat — ${escHtml(d.groupe||'')}</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+        <div class="modal-bd" style="max-height:70vh;overflow:auto">
+          <div class="cert-form">
+            <div class="cert-niveau-choice">
+              <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Rattacher à</div>
+              <label class="cert-niveau-opt">
+                <input type="radio" name="cert-niveau" value="groupe" ${niveauInit==='groupe'?'checked':''} onchange="_toggleBrancheSelect()">
+                <div class="cert-niveau-opt-lbl">
+                  Niveau groupe (${escHtml(d.groupe||'')})
+                  <div class="cert-niveau-opt-sub">Le certificat s'applique à toutes les branches du groupe.</div>
+                </div>
+              </label>
+              <label class="cert-niveau-opt">
+                <input type="radio" name="cert-niveau" value="branche" ${niveauInit==='branche'?'checked':''} onchange="_toggleBrancheSelect()">
+                <div class="cert-niveau-opt-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                  <span>Une branche spécifique
+                    <div class="cert-niveau-opt-sub">Uniquement pour la branche sélectionnée.</div>
+                  </span>
+                  <select id="cert-branche-id" ${cert?'disabled':''}>${branchOptsHtml}</select>
+                </div>
+              </label>
+            </div>
+
+            ${cert?`<div class="cert-existing">
+              <div class="cert-existing-l">
+                <span class="cert-existing-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                <span class="cert-existing-nm" title="${escAttr(cert.original_name||'')}">${escHtml(cert.original_name||'')}</span>
+              </div>
+              <span class="cert-existing-sz">${(cert.size_bytes/1024).toFixed(0)} Ko</span>
+            </div>`:`
+            <div>
+              <label class="form-label">Fichier PDF / image</label>
+              <label class="cert-drop" id="cert-drop">
+                <div class="cert-drop-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                <div class="cert-drop-tit" id="cert-drop-tit">Cliquer ou déposer un fichier</div>
+                <div class="cert-drop-hint">PDF, PNG, JPG · max 10 Mo</div>
+                <input type="file" id="cert-file" accept=".pdf,.png,.jpg,.jpeg" onchange="onCertFileChange(this)">
+              </label>
+            </div>`}
+
+            <div>
+              <label class="form-label" for="cert-titre">Titre / intitulé</label>
+              <input type="text" id="cert-titre" class="form-input" value="${escAttr(cert?cert.titre||'':'')}" placeholder="ex. Certificat ISO 9001 2026">
+            </div>
+
+            <div class="cert-row">
+              <div class="cert-col">
+                <label class="form-label" for="cert-emit">Date d'émission</label>
+                <input type="date" id="cert-emit" class="form-input" value="${escAttr(cert?(cert.date_emission||''):'')}">
+              </div>
+              <div class="cert-col">
+                <label class="form-label" for="cert-exp">Date d'expiration</label>
+                <input type="date" id="cert-exp" class="form-input" value="${escAttr(cert?(cert.date_expiration||''):'')}">
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label" for="cert-com">Commentaire</label>
+              <textarea id="cert-com" class="form-textarea" rows="3" placeholder="Notes internes, portée du certificat, remarques…">${escHtml(cert?cert.commentaire||'':'')}</textarea>
+            </div>
+
+            <div>
+              <label class="form-label">Labels / certifications liés (référentiel RSE)</label>
+              <div class="cert-labels-box">
+                ${optsHtml || '<div class="cert-labels-empty">Aucune fiche RSE disponible</div>'}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ft">
+          <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+          <button class="btn btn-accent" onclick="submitGroupeCert(${cert?cert.id:'null'})">${cert?'Enregistrer':'Ajouter'}</button>
+        </div>
+      </div>
+    </div>`;
+    _refMroot().innerHTML = html;
+    _toggleBrancheSelect();
+  });
+}
+
+function _toggleBrancheSelect(){
+  const sel = document.getElementById('cert-branche-id');
+  if(!sel) return;
+  const radioBranche = document.querySelector('input[name="cert-niveau"][value="branche"]');
+  const isBranche = radioBranche && radioBranche.checked;
+  // Meme en mode groupe, on garde le select pour la creation (fournisseur_id obligatoire cote POST)
+  sel.style.opacity = isBranche ? '1' : '0.55';
+}
+
+async function submitGroupeCert(certId){
+  const titre = document.getElementById('cert-titre').value.trim();
+  const emit = document.getElementById('cert-emit').value;
+  const exp = document.getElementById('cert-exp').value;
+  const com = document.getElementById('cert-com').value.trim();
+  const fiche_ids = Array.from(document.querySelectorAll('.cert-fiche-chk:checked')).map(el=>Number(el.value));
+  const niveauEl = document.querySelector('input[name="cert-niveau"]:checked');
+  const niveau = niveauEl ? niveauEl.value : 'branche';
+  if(certId){
+    try{
+      const r = await api('/api/qualite/ressources/certificats/'+certId, {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({titre, date_emission: emit, date_expiration: exp, commentaire: com, fiche_ids, niveau})
+      });
+      if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
+      closeMroot();
+      await refreshCurrentGroupe();
+      showToast('Certificat mis à jour.','success');
+    }catch(e){ showToast('Erreur réseau','danger'); }
+  } else {
+    const fileInput = document.getElementById('cert-file');
+    if(!fileInput || !fileInput.files.length){ showToast('Sélectionnez un fichier','danger'); return; }
+    const sel = document.getElementById('cert-branche-id');
+    const brancheId = sel ? Number(sel.value) : (S.currentGroupe.branches[0] && S.currentGroupe.branches[0].id);
+    if(!brancheId){ showToast('Aucune branche disponible','danger'); return; }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    fd.append('titre', titre);
+    fd.append('date_emission', emit);
+    fd.append('date_expiration', exp);
+    fd.append('commentaire', com);
+    fd.append('fiche_ids', fiche_ids.join(','));
+    fd.append('niveau', niveau);
+    try{
+      const r = await api('/api/qualite/ressources/fournisseurs/'+brancheId+'/certificats', {method:'POST', body: fd});
+      if(!r.ok){ showToast('Erreur envoi','danger'); return; }
+      closeMroot();
+      await refreshCurrentGroupe();
+      showToast('Certificat ajouté.','success');
+      loadRessources();
+    }catch(e){ showToast('Erreur réseau','danger'); }
+  }
+}
+
+async function deleteGroupeCert(cid){
+  if(!confirm('Supprimer ce certificat ? Cette action est définitive.')) return;
+  try{
+    const r = await api('/api/qualite/ressources/certificats/'+cid, {method:'DELETE'});
+    if(!r.ok){ showToast('Erreur suppression','danger'); return; }
+    await refreshCurrentGroupe();
+    showToast('Certificat supprimé.','info');
     loadRessources();
   }catch(e){ showToast('Erreur réseau','danger'); }
 }
