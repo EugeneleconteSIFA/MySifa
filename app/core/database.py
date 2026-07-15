@@ -6554,6 +6554,22 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 177, "rh_machine_config")
 
+    # v178 — Codes maintenance : scinde la catégorie "interventions" en deux
+    # nouvelles catégories "entretien" et "remplacements". Les deux gardent
+    # exactement les mêmes propriétés que l'ancienne "interventions"
+    # (apparition dans la section Maintenance, saisie dans une session, etc.).
+    # Migration des données existantes : tous les codes "interventions" (et
+    # les legacy "suivi") sont déplacés vers "entretien" par défaut. L'admin
+    # peut ensuite reclasser certains codes vers "remplacements" via
+    # Paramètres → Maintenance.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=178 LIMIT 1").fetchone():
+        conn.execute(
+            "UPDATE maintenance_codes SET categorie='entretien' "
+            "WHERE categorie IN ('interventions', 'suivi')"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 178, "maintenance_codes_split_interventions")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

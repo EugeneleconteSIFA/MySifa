@@ -2945,13 +2945,24 @@ async function submitCaseModal(e){
   try{
     if(editId){
       // PATCH horaires + sync ops (avec machines) + sync operators.
+      // Sync operators/ops D'ABORD (indépendant des metas) — comme ça, même
+      // si le PATCH meta échoue (ex. colonne nom pas encore migrée), les
+      // opérateurs assignés et les ops modifiées passent quand même.
+      let syncError = null;
+      try{
+        await _syncEventOpsAndOperators(editId, wantedOps, operatorIds);
+      }catch(e){ syncError = e; }
+      // PATCH meta (date/heures/nom)
       const rMeta = await fetch('/api/maintenance/events/' + encodeURIComponent(editId), {
         method:'PATCH', credentials:'include',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ date_prevue: _PENDING_CASE.iso, heure_debut: start, heure_fin: end, nom }),
       });
-      if(!rMeta.ok){ throw new Error('Meta update failed'); }
-      await _syncEventOpsAndOperators(editId, wantedOps, operatorIds);
+      if(!rMeta.ok){
+        const err = await rMeta.json().catch(() => ({}));
+        throw new Error(err.detail || ('PATCH meta failed (' + rMeta.status + ')'));
+      }
+      if(syncError) throw syncError;
       showToast('Créneau mis à jour.', 'info');
     } else {
       const rNew = await fetch('/api/maintenance/events', {
@@ -5940,21 +5951,40 @@ async function admFetchOperators(){
 
 async function opLoadTasks(){
   if(MAINT_ROLE !== 'operator') return;
-  // Utilise le MÊME endpoint que le planning (/api/maintenance/events) et
-  // filtre côté client par appartenance au groupe : garantit la cohérence
-  // absolue entre « Mes tâches » et « Planning personnel ».
   const today = new Date();
   const in60 = new Date(); in60.setDate(today.getDate() + 60);
   const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
               '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
   const r = await fetch(url, { credentials:'include', cache: 'no-store' });
-  if(!r.ok){ MAINT_STATE.tasks = []; opRenderTasks(); return; }
+  if(!r.ok){
+    // NE PAS wiper : garde la version en mémoire pour éviter que la vue
+    // se vide brutalement si l'endpoint 500 temporairement (ex. schema DB
+    // pas encore migré). Log pour diagnostic.
+    console.warn('[opLoadTasks] fetch KO status=', r.status, '— MAINT_STATE.tasks conservé.');
+    return;
+  }
   const data = await r.json();
-  const meId = (S && S.me) ? S.me.id : null;
+  const meRaw = (S && S.me) ? S.me.id : null;
+  // Coerce en Number pour éviter les mismatches int/string entre session et
+  // opérateurs renvoyés par le backend.
+  const meId = meRaw != null ? Number(meRaw) : null;
   const events = data.events || [];
-  MAINT_STATE.tasks = meId
-    ? events.filter(ev => (ev.operators || []).some(o => o.id === meId))
+  // Filtre robuste : garde un event si l'user est dans le groupe (comparaison
+  // via ==) OU s'il en est le créateur (fallback pour les cas où les operators
+  // n'auraient pas été synchronisés côté serveur).
+  MAINT_STATE.tasks = meId != null
+    ? events.filter(ev => {
+        const inGroup = (ev.operators || []).some(o => Number(o.id) === meId);
+        const isCreator = Number(ev.created_by) === meId;
+        return inGroup || isCreator;
+      })
     : [];
+  // Diagnostic : trace en console si un event a été filtré out alors qu'il
+  // devrait apparaître (utile pour debug remote via DevTools).
+  if(events.length && !MAINT_STATE.tasks.length){
+    console.warn('[opLoadTasks] Tous les events filtrés out. meId=', meId,
+                 'events=', events.map(ev => ({ id: ev.id, created_by: ev.created_by, operators: ev.operators })));
+  }
   opRenderTasks();
 }
 
@@ -6412,8 +6442,17 @@ async function opSubmitOpSaisie(eventId, opId, btnEl){
     else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
+  // Mise à jour in-place depuis la réponse — cohérent avec opSubmitSingleOp
+  try{
+    const data = await r.json();
+    if(data && data.event){
+      const idx = (MAINT_STATE.tasks || []).findIndex(x => x.id === data.event.id);
+      if(idx >= 0) MAINT_STATE.tasks[idx] = data.event;
+      opRenderTasks();
+    }
+  }catch(e){}
   if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
-  await opLoadTasks();
+  opLoadTasks().catch(() => {});
   // Re-render du modal avec les données à jour (nouveau statut termine).
   opOpenSaisie(eventId);
 }
@@ -6688,9 +6727,27 @@ async function opSubmitSingleOp(){
     else alert('Erreur : ' + (err.detail || r.status));
     return;
   }
+  // Réponse : {event: updatedEv}. On met à jour MAINT_STATE.tasks in-place
+  // AVANT de tenter opLoadTasks — comme ça si opLoadTasks 500 pour une
+  // raison quelconque (ex. migration DB pas encore appliquée sur le VPS,
+  // colonne manquante, etc.), la vue reste cohérente avec l'action qu'on
+  // vient de faire au lieu de tout wiper.
+  try{
+    const data = await r.json();
+    if(data && data.event){
+      const idx = (MAINT_STATE.tasks || []).findIndex(x => x.id === data.event.id);
+      if(idx >= 0){
+        // Merge : on garde les métadonnées du client (operators, etc. déjà
+        // là) mais on remplace ops par la nouvelle version.
+        MAINT_STATE.tasks[idx] = data.event;
+      }
+      opRenderTasks();
+    }
+  }catch(e){}
   if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   opCloseSingleModal();
-  await opLoadTasks();
+  // Refresh en tâche de fond (best-effort) — si ça échoue, la vue est déjà à jour.
+  opLoadTasks().catch(() => {});
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
 

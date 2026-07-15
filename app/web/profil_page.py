@@ -1028,11 +1028,11 @@ function bgAnimToggleHtml(){
   const on=getPrefs().bgAnim!==false;
   return `<div class="bg-anim-row">
     <div>
-      <div class="bg-anim-label">Fond animé</div>
-      <div class="bg-anim-sub">Points et brume en arrière-plan</div>
+      <div class="bg-anim-label">Activer / désactiver les animations</div>
+      <div class="bg-anim-sub">Points et brume en arrière-plan, train d'icônes sur la page de connexion</div>
     </div>
     <button type="button" class="toggle-switch${on?' on':''}" role="switch" aria-checked="${on?'true':'false'}"
-      aria-label="Fond animé" onclick="toggleBgAnim()">
+      aria-label="Activer / désactiver les animations" onclick="toggleBgAnim()">
       <span class="toggle-knob"></span>
     </button>
   </div>`;
@@ -1123,7 +1123,7 @@ function renderPrefs(){
           ${modeCard('light', ICO_SUN,  'Clair',  'Fond blanc')}
         </div>
       </div>
-      <h2 style="margin-top:20px">Fond animé</h2>
+      <h2 style="margin-top:20px">Activer / désactiver les animations</h2>
       <div class="pref-section">
         ${bgAnimToggleHtml()}
       </div>
@@ -1420,6 +1420,7 @@ document.getElementById('btn-logout').onclick=async()=>{
     if(location.hash.startsWith('#cal-'))openCalColorFromHash();
   }catch(e){
     if(e.message!=='auth'){
+
       document.getElementById('pane-info').innerHTML='<div class="card"><p style="color:var(--muted);font-size:13px">Impossible de charger le profil.</p></div>';
     }
   }

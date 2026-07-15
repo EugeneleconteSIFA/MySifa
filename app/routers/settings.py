@@ -1489,8 +1489,12 @@ def _normalize_maint_payload(body: dict) -> dict:
     if niveau < 1 or niveau > 3:
         raise HTTPException(422, "Niveau invalide (1-3).")
     categorie = (body.get("categorie") or "controles").strip()
-    if categorie not in ("controles", "interventions", "suivi"):
+    # Depuis v178, "interventions" est scindée en "entretien" et "remplacements".
+    # Les valeurs legacy ("interventions", "suivi") sont normalisées vers "entretien".
+    if categorie not in ("controles", "entretien", "remplacements", "interventions", "suivi"):
         categorie = "controles"
+    if categorie in ("interventions", "suivi"):
+        categorie = "entretien"
     periodique = 1 if body.get("periodique") else 0
     # Intervalle de temps : texte libre, ignore si non periodique
     intervalle = (body.get("intervalle") or "").strip()

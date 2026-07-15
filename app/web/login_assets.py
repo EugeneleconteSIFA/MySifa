@@ -126,6 +126,27 @@ body.light .login-wagon-tile:hover{
 @media (prefers-reduced-motion: reduce){
   .login-train-layer{display:none}
 }
+/* Toggle animations sur la page de login : cache le train et le fond animé.
+   Réutilise la classe body.bg-anim-off gérée par MySifaTheme (préférence bgAnim). */
+body.bg-anim-off .login-train-layer{display:none}
+/* Barre haut-droite qui regroupe le bouton d'animations et le bouton de thème.
+   .login-theme-btn conserve son style ; on lève juste son position:fixed pour
+   qu'il coule dans le flex container. */
+.login-topbar{position:fixed;top:18px;right:18px;z-index:10;
+  display:inline-flex;align-items:center;gap:10px}
+.login-topbar .login-theme-btn,
+.login-topbar .login-anim-btn{position:static}
+.login-anim-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);cursor:pointer;
+  font-size:12px;font-family:inherit;font-weight:600;
+  transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
+.login-anim-btn:hover{color:var(--accent);border-color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 18px rgba(34,211,238,.14)}
+body.light .login-anim-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+.login-anim-btn .anim-ico{display:inline-flex;align-items:center;line-height:1}
+@media (max-width:480px){.login-anim-btn .anim-label{display:none}}
 """
 
 LOGIN_MAIN_JS = r"""
@@ -168,12 +189,31 @@ function renderLogin(){
     h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
     h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
   );
+  // Bouton toggle animations (train + fond animé) sur la page de connexion.
+  // Utilise la même préférence bgAnim que Mon profil → l'état est partagé.
+  let _animOn=true;
+  try{ _animOn=MySifaTheme.loadPrefs().bgAnim!==false; }catch(e){}
+  const animBtn=h('button',{type:'button',className:'login-anim-btn',
+    'aria-label':'Activer / désactiver les animations','aria-pressed':(_animOn?'true':'false'),
+    onClick:()=>{
+      try{
+        const _p=MySifaTheme.loadPrefs();
+        const _next=_p.bgAnim===false;   // si off → on rallume, sinon on éteint
+        MySifaTheme.setPrefs({bgAnim:_next});
+        MySifaTheme.applyPrefs({mode:_p.mode,palette:'mysifa',style:'defaut',bgAnim:_next});
+      }catch(e){}
+      render();
+    }},
+    h('span',{className:'anim-ico'},iconEl(_animOn?'activity':'eye-off',16)),
+    h('span',{className:'anim-label'},_animOn?'Animations':'Animations off')
+  );
+  const topbar=h('div',{className:'login-topbar'},animBtn,themeBtn);
   const trainLayer=h('div',{className:'login-train-layer',id:'login-train-layer'});
   // Démarre l'animation train juste après le mount (attend que le layer soit dans le DOM).
   setTimeout(startLoginTrainAnimation,60);
   return h('div',{className:'login-page'},
     trainLayer,
-    themeBtn,
+    topbar,
     h('div',{className:'login-box'},
       h('div',{className:'login-logo'},
         h('div',{className:'brand'},'__APP_NAME_PREFIX__',h('span',null,'__APP_NAME_SUFFIX__')),
@@ -259,6 +299,7 @@ function startLoginTrainAnimation(){
     const tip=document.createElement('span');
     tip.className='login-wagon-tip';
     tip.innerHTML='<span class="tip-desc">'+escHtmlLocal(APPS[name].desc)+'</span>';
+
     // Pause / reprise du train + agrandissement + apparition tip via CSS
     tile.addEventListener('mouseenter',()=>{
       layer.classList.add('paused');layer._paused=true;
