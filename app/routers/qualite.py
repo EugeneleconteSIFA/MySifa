@@ -10,7 +10,7 @@ import shutil
 from datetime import datetime
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
@@ -2493,29 +2493,192 @@ def _cert_row_to_dict(row) -> dict:
 
 @router.get("/api/qualite/ressources/fournisseurs")
 def ressources_list_fournisseurs(request: Request):
+    """Retourne 2 listes agregees pour la vue Ressources :
+       - groupes : un item par groupe existant, avec stats agregees sur toutes les branches
+       - fournisseurs : fournisseurs sans groupe (traites individuellement)
+    Chaque item porte : id (pour fournisseurs) ou groupe (pour groupes),
+    label, sub-label, stats {total, valide, soon, exp, nod}.
+    """
     _require_qualite_view(request)
     with get_db() as conn:
-        four_rows = conn.execute(
-            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"
-        ).fetchall()
-        # Charger tous les certificats en une passe puis agréger
+        # Charger fournisseurs + certifs en 2 requetes puis agreger
+        fours = [dict(r) for r in conn.execute(
+            """SELECT id, nom, licence, certificat, groupe, branche
+               FROM fournisseurs_fsc
+               ORDER BY groupe COLLATE NOCASE ASC, nom COLLATE NOCASE ASC"""
+        ).fetchall()]
+        # Charger toutes les dates d'expiration + groupe_ref
         cert_rows = conn.execute(
-            "SELECT fournisseur_id, date_expiration FROM qualite_fournisseur_certificats"
+            """SELECT fournisseur_id, date_expiration, groupe_ref
+               FROM qualite_fournisseur_certificats"""
         ).fetchall()
-    by_four = {}
-    for r in cert_rows:
-        fid = r["fournisseur_id"]
-        s = _compute_cert_status(r["date_expiration"])
-        d = by_four.setdefault(fid, {"total": 0, "valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
-        d["total"] += 1
-        d[s] += 1
-    out = []
-    for row in four_rows:
-        f = dict(row)
-        stats = by_four.get(f["id"], {"total": 0, "valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
-        f["cert_stats"] = stats
-        out.append(f)
-    return out
+        certs_by_four = {}
+        for cr in cert_rows:
+            certs_by_four.setdefault(cr["fournisseur_id"], []).append({
+                "date_expiration": cr["date_expiration"],
+                "groupe_ref": cr["groupe_ref"],
+            })
+
+    def _stats(cert_list):
+        s = {"total": 0, "valide": 0, "soon": 0, "exp": 0, "nod": 0}
+        for c in cert_list:
+            s["total"] += 1
+            st = _compute_cert_status(c["date_expiration"])
+            if st == "valide": s["valide"] += 1
+            elif st == "expire_bientot": s["soon"] += 1
+            elif st == "expire": s["exp"] += 1
+            elif st == "sans_date": s["nod"] += 1
+        return s
+
+    # Separer groupes vs fournisseurs isolés
+    groupes_map = {}
+    fournisseurs_indep = []
+    for f in fours:
+        f_certs = certs_by_four.get(f["id"], [])
+        f_stats = _stats(f_certs)
+        g = (f.get("groupe") or "").strip()
+        if g:
+            if g not in groupes_map:
+                groupes_map[g] = {
+                    "groupe": g,
+                    "branches": [],
+                    "stats": {"total": 0, "valide": 0, "soon": 0, "exp": 0, "nod": 0},
+                }
+            groupes_map[g]["branches"].append({
+                "id": f["id"], "nom": f["nom"], "branche": f.get("branche"),
+                "licence": f.get("licence"), "certificat": f.get("certificat"),
+                "cert_stats": f_stats,
+            })
+            for k in ("total", "valide", "soon", "exp", "nod"):
+                groupes_map[g]["stats"][k] += f_stats[k]
+        else:
+            fournisseurs_indep.append({
+                "id": f["id"], "nom": f["nom"],
+                "licence": f.get("licence"), "certificat": f.get("certificat"),
+                "cert_stats": f_stats,
+            })
+
+    groupes = sorted(groupes_map.values(), key=lambda x: x["groupe"].lower())
+    flat = []
+    for f in fours:
+        key = (f.get("groupe") or f["nom"] or "").lower()
+        flat.append((key, f["id"]))
+    flat.sort(key=lambda x: x[0])
+    order = [fid for _, fid in flat]
+    return {"groupes": groupes, "fournisseurs": fournisseurs_indep, "order": order}
+
+
+
+
+class FournisseurPatchBody(BaseModel):
+    nom: Optional[str] = None
+    licence: Optional[str] = None
+    certificat: Optional[str] = None
+    has_fsc: Optional[bool] = None
+    groupe: Optional[str] = None
+    branche: Optional[str] = None
+
+
+@router.patch("/api/qualite/ressources/fournisseurs/{four_id}")
+def ressources_patch_fournisseur(four_id: int, body: FournisseurPatchBody, request: Request):
+    _require_qualite_access(request)
+    d = body.model_dump(exclude_unset=True)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+        sets, vals = [], []
+        if "nom" in d:
+            v = (d["nom"] or "").strip()
+            if not v:
+                raise HTTPException(status_code=400, detail="Nom obligatoire")
+            sets.append("nom=?"); vals.append(v)
+        if "licence" in d:
+            v = (d["licence"] or "").strip() or None
+            sets.append("licence=?"); vals.append(v)
+        if "certificat" in d:
+            v = (d["certificat"] or "").strip() or None
+            sets.append("certificat=?"); vals.append(v)
+        if "has_fsc" in d:
+            sets.append("has_fsc=?"); vals.append(1 if bool(d["has_fsc"]) else 0)
+        if "groupe" in d:
+            v = (d["groupe"] or "").strip() or None
+            sets.append("groupe=?"); vals.append(v)
+        if "branche" in d:
+            v = (d["branche"] or "").strip() or None
+            sets.append("branche=?"); vals.append(v)
+        if sets:
+            vals.append(four_id)
+            try:
+                conn.execute(f"UPDATE fournisseurs_fsc SET {', '.join(sets)} WHERE id=?", vals)
+                conn.commit()
+            except Exception as e:
+                raise HTTPException(status_code=409, detail=f"Erreur : {e}")
+    return ressources_get_fournisseur(four_id, request)
+
+
+# ─── Detail d'un groupe (toutes les branches + certifs agreges) ──────
+@router.get("/api/qualite/ressources/groupes/{groupe_nom:path}")
+def ressources_get_groupe(groupe_nom: str, request: Request):
+    _require_qualite_view(request)
+    g = (groupe_nom or "").strip()
+    if not g:
+        raise HTTPException(status_code=400, detail="Nom de groupe requis")
+    with get_db() as conn:
+        branches = [dict(r) for r in conn.execute(
+            """SELECT id, nom, licence, certificat, branche, groupe
+               FROM fournisseurs_fsc
+               WHERE LOWER(TRIM(groupe)) = LOWER(?)
+               ORDER BY branche COLLATE NOCASE ASC, nom COLLATE NOCASE ASC""",
+            (g,),
+        ).fetchall()]
+        if not branches:
+            raise HTTPException(status_code=404, detail="Groupe introuvable")
+        b_ids = [b["id"] for b in branches]
+        qmarks = ",".join(["?"] * len(b_ids))
+        certs = conn.execute(
+            f"""SELECT c.*, u.nom AS uploaded_by_nom, f.nom AS fournisseur_nom, f.branche AS fournisseur_branche
+                FROM qualite_fournisseur_certificats c
+                LEFT JOIN users u ON u.id = c.uploaded_by
+                LEFT JOIN fournisseurs_fsc f ON f.id = c.fournisseur_id
+                WHERE c.fournisseur_id IN ({qmarks})
+                ORDER BY COALESCE(c.date_expiration, c.uploaded_at) DESC, c.id DESC""",
+            b_ids,
+        ).fetchall()
+        certs = [_cert_row_to_dict(r) for r in certs]
+        # Charger fiches liees
+        if certs:
+            ids = [c["id"] for c in certs]
+            qm = ",".join(["?"] * len(ids))
+            links = conn.execute(
+                f"""SELECT l.certificat_id, l.fiche_id, f.nom AS fiche_nom, f.acronyme AS fiche_acronyme, f.slug AS fiche_slug, f.categorie AS fiche_categorie
+                    FROM qualite_fournisseur_certificat_fiches l
+                    JOIN qualite_ref_fiches f ON f.id = l.fiche_id
+                    WHERE l.certificat_id IN ({qm})""",
+                ids,
+            ).fetchall()
+            by_cert = {}
+            for lk in links:
+                by_cert.setdefault(lk["certificat_id"], []).append({
+                    "fiche_id": lk["fiche_id"], "nom": lk["fiche_nom"],
+                    "acronyme": lk["fiche_acronyme"], "slug": lk["fiche_slug"],
+                    "categorie": lk["fiche_categorie"],
+                })
+            for c in certs:
+                c["fiches"] = by_cert.get(c["id"], [])
+        # Ajouter fournisseur_nom + fournisseur_branche depuis la query
+        for c in certs:
+            fb = next((b for b in branches if b["id"] == c["fournisseur_id"]), None)
+            if fb:
+                c["fournisseur_nom"] = fb["nom"]
+                c["fournisseur_branche"] = fb.get("branche")
+    return {
+        "groupe": g,
+        "branches": branches,
+        "certificats": certs,
+    }
 
 
 # ─── Détail d'un fournisseur (avec certificats + fiches liées) ───────
@@ -2573,11 +2736,12 @@ async def ressources_upload_certificat(
     four_id: int,
     request: Request,
     file: UploadFile = File(...),
-    titre: str = "",
-    date_emission: str = "",
-    date_expiration: str = "",
-    commentaire: str = "",
-    fiche_ids: str = "",
+    titre: str = Form(""),
+    date_emission: str = Form(""),
+    date_expiration: str = Form(""),
+    commentaire: str = Form(""),
+    fiche_ids: str = Form(""),
+    niveau: str = Form("branche"),
 ):
     user = _require_qualite_access(request)
     if not file.filename:
@@ -2595,18 +2759,26 @@ async def ressources_upload_certificat(
         with open(dest, "wb") as f:
             shutil.copyfileobj(file.file, f)
         size = os.path.getsize(dest)
+        # Determiner groupe_ref selon niveau demande
+        groupe_ref = None
+        if (niveau or "").strip().lower() == "groupe":
+            fr = conn.execute(
+                "SELECT groupe FROM fournisseurs_fsc WHERE id=?", (four_id,)
+            ).fetchone()
+            g = (fr["groupe"] or "").strip() if fr and "groupe" in fr.keys() and fr["groupe"] else ""
+            groupe_ref = g or None
         conn.execute(
             """INSERT INTO qualite_fournisseur_certificats
                (fournisseur_id, filename, original_name, mime_type, size_bytes,
-                titre, date_emission, date_expiration, commentaire, uploaded_at, uploaded_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                titre, date_emission, date_expiration, commentaire, uploaded_at, uploaded_by, groupe_ref)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 four_id, filename, original, file.content_type or None, size,
                 (titre or "").strip(),
                 (date_emission or "").strip() or None,
                 (date_expiration or "").strip() or None,
                 (commentaire or "").strip(),
-                _now(), user["id"],
+                _now(), user["id"], groupe_ref,
             ),
         )
         cert_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
@@ -2640,6 +2812,7 @@ class CertPatchBody(BaseModel):
     date_expiration: Optional[str] = None
     commentaire: Optional[str] = None
     fiche_ids: Optional[List[int]] = None
+    niveau: Optional[str] = None  # 'branche' | 'groupe' — met a jour groupe_ref
 
 
 @router.patch("/api/qualite/ressources/certificats/{cert_id}")
@@ -2666,6 +2839,17 @@ def ressources_patch_certificat(cert_id: int, body: CertPatchBody, request: Requ
             conn.execute("DELETE FROM qualite_cert_expiration_annonces WHERE certificat_id=?", (cert_id,))
         if "commentaire" in d:
             sets.append("commentaire=?"); vals.append((d["commentaire"] or "").strip())
+        if "niveau" in d:
+            niv = (d["niveau"] or "").strip().lower()
+            if niv == "groupe":
+                fr = conn.execute(
+                    """SELECT f.groupe FROM fournisseurs_fsc f
+                       WHERE f.id=?""", (row["fournisseur_id"],),
+                ).fetchone()
+                g = (fr["groupe"] or "").strip() if fr and "groupe" in fr.keys() and fr["groupe"] else ""
+                sets.append("groupe_ref=?"); vals.append(g or None)
+            else:
+                sets.append("groupe_ref=?"); vals.append(None)
         if sets:
             vals.append(cert_id)
             conn.execute(f"UPDATE qualite_fournisseur_certificats SET {', '.join(sets)} WHERE id=?", vals)
