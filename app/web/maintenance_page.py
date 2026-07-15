@@ -531,10 +531,12 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .maint-frame{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-height:180px;transition:border-color .15s,box-shadow .15s}
 .maint-frame .maint-frame-stats{flex:1}
 .maint-frame-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border)}
-.maint-frame-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-frame-title{font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.4px;line-height:1.3}
 .maint-frame-subtitle{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.maint-frame-badges{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-.maint-frame-cat-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border:1px solid transparent;white-space:nowrap}
+.maint-frame-badges{display:flex;flex-direction:row;align-items:center;gap:6px;flex-shrink:0;opacity:.72;transition:opacity .15s}
+.maint-frame:hover .maint-frame-badges{opacity:1}
+.maint-frame-cat-pill{display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border:1px solid transparent;white-space:nowrap}
+.maint-frame-badges .niv-badge{font-size:9px;padding:2px 6px;font-weight:600}
 .maint-frame-cat-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
 .maint-frame-cat-pill.interventions,
 .maint-frame-cat-pill.entretien{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
@@ -545,11 +547,11 @@ body.light .maint-frame-cat-pill.entretien{color:#7c3aed;background:rgba(124,58,
 body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234,88,12,.10);border-color:rgba(234,88,12,.35)}
 .maint-frame-body{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;color:var(--muted);font-size:12px;font-style:italic}
 .maint-frames-empty{padding:32px;color:var(--muted);font-size:13px;text-align:center;background:var(--card);border:1px dashed var(--border);border-radius:14px}
-.maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:18px 20px}
-.maint-frame-stat{display:flex;flex-direction:column;gap:4px;min-width:0}
-.maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.maint-frame-stat-value{font-size:14px;color:var(--text);font-weight:600;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic}
+.maint-frame-stats{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:20px 22px 16px}
+.maint-frame-stat{display:flex;flex-direction:column;gap:6px;min-width:0}
+.maint-frame-stat-label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.maint-frame-stat-value{font-size:22px;color:var(--accent);font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.2px}
+.maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic;font-size:18px}
 .maint-frame-progress{padding:0 20px 12px}
 .maint-frame-progress-track{height:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
 .maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
@@ -969,7 +971,7 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
           <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien</button>
-            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Remplacements</button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions</button>
           </div>
           <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
         </div>
@@ -4429,17 +4431,20 @@ function renderMaintCards(){
       });
     });
   }
-  // Filtre les codes avec periodique=OUI : contrôles exclus (jamais visibles
-  // dans cette vue), puis on ne garde que la catégorie sélectionnée par le
-  // toggle (Entretien OU Remplacements). Legacy 'interventions' traité comme
-  // 'entretien'. Exclut les codes déjà affichés dans la section Pièces d'usure.
+  // Filtre les codes avec periodique=OUI, exclus ceux déjà affichés dans la
+  // section Pièces d'usure. Toggle Entretien : cartes Nettoyage (DB: entretien
+  // / legacy) + Contrôles périodiques. Toggle Interventions : cartes
+  // Interventions (DB: remplacements) + Pièces d'usure (rendues à part).
   const baseItems = (OPS_TYPES_STATE.list || []).filter(it => {
     if(!it.periodique) return false;
     if(wearPartCodeIds.has(String(it.id))) return false;
     const cat = it.categorie;
-    if(cat === 'controles') return false;
-    const norm = (cat === 'remplacements') ? 'remplacements' : 'entretien';
-    return norm === catFilter;
+    if(catFilter === 'entretien'){
+      // Nettoyage (DB: entretien / legacy interventions / suivi) + Contrôles périodiques
+      return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
+    }
+    // catFilter === 'remplacements' : uniquement les cartes Interventions (DB: remplacements)
+    return cat === 'remplacements';
   });
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
@@ -5965,11 +5970,13 @@ function _fmtDateISO(d){
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
 }
 function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
-// Helpers unifiés pour la typologie 3 catégories (v178).
-// 'interventions' et 'suivi' (legacy) sont remappés vers 'entretien' à l'affichage.
+// Helpers unifiés pour la typologie 3 catégories (v178, renommage labels v179).
+// Valeurs DB : 'controles', 'entretien', 'remplacements'.
+// Labels UI : Contrôles, Nettoyage, Interventions.
+// 'interventions' (legacy) et 'suivi' (legacy) sont remappés vers 'entretien'.
 function _maintCatLabelFront(cat){
-  if(cat === 'remplacements') return 'Remplacements';
-  if(cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Entretien';
+  if(cat === 'remplacements') return 'Interventions';
+  if(cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
   return 'Contrôles';
 }
 function _maintCatCssFront(cat){
@@ -6423,7 +6430,7 @@ function opOpenSaisie(eventId){
       // mais la saisie reste unique côté DB (opSubmitOpSaisie utilise op.id).
       wrap.innerHTML = groups.map(g => {
         const opsHtml = g.ops.map(op => {
-          const catLbl = { controles:'Contrôle', interventions:'Entretien', entretien:'Entretien', remplacements:'Remplacement', suivi:'Suivi' }[op.code_categorie] || op.code_categorie || '';
+          const catLbl = { controles:'Contrôle', interventions:'Nettoyage', entretien:'Nettoyage', remplacements:'Intervention', suivi:'Nettoyage' }[op.code_categorie] || op.code_categorie || '';
           const isDone = op.statut === 'termine';
           // Fusion pieces_changees + observations pour affichage : si les 2
           // étaient renseignées avant, on concatène pour ne rien perdre.
