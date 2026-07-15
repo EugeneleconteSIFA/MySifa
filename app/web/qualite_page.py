@@ -3461,6 +3461,43 @@ document.addEventListener('keydown', function(ev){
     .four-nav-pos{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding:0 4px;min-width:44px;text-align:center}
     .four-sub-line{display:flex;gap:6px;flex-wrap:wrap}
     .four-sub-chip{font-size:11px;font-weight:600;background:var(--accent-bg);color:var(--accent);padding:3px 10px;border-radius:999px}
+    /* ─── Guide interactif (bouton livre + modal carrousel) ─── */
+    .qual-help-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:10px;background:var(--accent-bg);color:var(--accent);border:1px solid transparent;cursor:pointer;transition:all .18s;padding:0}
+    .qual-help-btn:hover{background:var(--accent);color:var(--btn-fg);transform:translateY(-1px);box-shadow:0 4px 12px rgba(34,211,238,.3)}
+    .qual-help-btn:active{transform:translateY(0)}
+    .qual-help-btn svg{transition:transform .3s cubic-bezier(.4,0,.2,1)}
+    .qual-help-btn:hover svg{transform:rotate(-6deg) scale(1.08)}
+    .qguide-ov{position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;animation:qguideOvIn .2s ease-out}
+    @keyframes qguideOvIn{from{opacity:0}to{opacity:1}}
+    .qguide{background:var(--card);border:1px solid var(--border);border-radius:20px;width:100%;max-width:520px;position:relative;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);animation:qguideIn .28s cubic-bezier(.34,1.56,.64,1)}
+    @keyframes qguideIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    .qguide-close{position:absolute;top:14px;right:14px;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:6px 10px;border-radius:8px;transition:.15s;z-index:5}
+    .qguide-close:hover{color:var(--danger);background:rgba(248,113,113,.1)}
+    .qguide-progress{height:3px;background:var(--border);width:100%;overflow:hidden}
+    .qguide-progress-bar{height:100%;background:linear-gradient(90deg, var(--accent), var(--ok));transition:width .35s cubic-bezier(.4,0,.2,1);border-radius:0 3px 3px 0}
+    .qguide-viewport{position:relative;height:340px;overflow:hidden}
+    .qguide-step{position:absolute;inset:0;padding:36px 32px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;opacity:0;transform:translateX(100%);transition:opacity .3s ease, transform .35s cubic-bezier(.4,0,.2,1)}
+    .qguide-step.active{opacity:1;transform:translateX(0)}
+    .qguide-step.prev{transform:translateX(-100%)}
+    .qguide-icon{width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg, var(--accent-bg), rgba(52,211,153,.12));display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:20px;animation:qguideIconIn .5s cubic-bezier(.34,1.56,.64,1)}
+    @keyframes qguideIconIn{0%{opacity:0;transform:scale(.5) rotate(-10deg)}60%{transform:scale(1.15) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+    .qguide-step.active .qguide-icon{animation:qguideIconIn .5s cubic-bezier(.34,1.56,.64,1)}
+    .qguide-tit{font-size:20px;font-weight:800;color:var(--text);margin:0 0 10px;line-height:1.2}
+    .qguide-body{font-size:13px;color:var(--text2);line-height:1.65;max-width:400px;margin:0}
+    .qguide-body strong{color:var(--text);font-weight:700}
+    .qguide-body .qguide-tag{display:inline-flex;align-items:center;gap:4px;background:var(--accent-bg);color:var(--accent);font-weight:600;padding:1px 8px;border-radius:6px;font-size:11px;margin:0 2px}
+    .qguide-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 24px 20px;gap:12px;border-top:1px solid var(--border);background:var(--bg)}
+    .qguide-dots{display:flex;gap:6px}
+    .qguide-dot{width:8px;height:8px;border-radius:99px;background:var(--border);cursor:pointer;transition:all .2s;border:none;padding:0}
+    .qguide-dot.active{background:var(--accent);width:22px}
+    .qguide-dot:hover:not(.active){background:var(--muted)}
+    .qguide-nav-btns{display:flex;gap:8px}
+    .qguide-nav-btn{padding:8px 16px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;font-size:12px;cursor:pointer;transition:all .15s;font-family:inherit}
+    .qguide-nav-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+    .qguide-nav-btn:disabled{opacity:.4;cursor:not-allowed}
+    .qguide-nav-btn.primary{background:var(--accent);color:var(--btn-fg);border-color:var(--accent)}
+    .qguide-nav-btn.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    body.light .qguide-icon{background:linear-gradient(135deg, rgba(8,145,178,.12), rgba(16,185,129,.08))}
     .cert-form{display:flex;flex-direction:column;gap:14px}
     .cert-drop{position:relative;display:block;border:2px dashed var(--border);border-radius:10px;padding:22px 16px;text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
     .cert-drop:hover,.cert-drop.over{border-color:var(--accent);background:var(--accent-bg)}
@@ -3510,6 +3547,122 @@ document.addEventListener('keydown', function(ev){
   `;
   document.head.appendChild(st);
 })();
+
+
+// ─── Guides interactifs (bouton "?" livre) ───────────────────────────────
+const QUALITE_GUIDES = {
+  'ressources': {
+    steps: [
+      {
+        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
+        title: "Un dossier par fournisseur",
+        body: "Cette page centralise <strong>les certifications de tous vos fournisseurs</strong>. Chaque carte = un dossier fournisseur (ou un groupe). Cliquez pour ouvrir et gérer ses certificats."
+      },
+      {
+        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M7 10v4"/><path d="M17 10v4"/><path d="M10 7h4"/><path d="M10 17h4"/></svg>`,
+        title: "Groupes et branches",
+        body: "Un fournisseur qui appartient à un <strong>groupe</strong> (ex. Fedrigoni Italy, France, UK) est regroupé sous une seule carte avec un badge <span class=\"qguide-tag\">Groupe</span>. Cliquez pour voir toutes les branches et gérer les certificats communs."
+      },
+      {
+        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><circle cx="12" cy="10" r="1"/></svg>`,
+        title: "Certifications à deux niveaux",
+        body: "Pour un fournisseur seul, ajoutez ses certifs (ISO, FSC, REACH...). Pour un groupe, choisissez <strong>niveau groupe</strong> (partagé entre toutes les branches) ou <strong>branche spécifique</strong>."
+      },
+      {
+        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+        title: "Suivi des expirations",
+        body: "Le bandeau du haut liste les certifs <span class=\"qguide-tag\">expirés</span> et ceux <span class=\"qguide-tag\">à 30j</span>. Sur chaque carte, les pastilles colorées résument l'état : vert (valide), orange (bientôt), rouge (expiré), gris (sans date)."
+      },
+      {
+        icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14a5 5 0 0 0 2.41-4.13 6 6 0 1 0-11 0A5 5 0 0 0 9 14"/></svg>`,
+        title: "Astuces",
+        body: "Filtrez avec la <strong>recherche</strong> par nom de fournisseur ou de groupe. Sur la page fournisseur, utilisez les flèches <strong>← →</strong> pour naviguer, et le bouton <strong>Paramètres</strong> pour éditer les infos (groupe, licence FSC...) sans quitter MyQualité."
+      }
+    ]
+  }
+};
+
+let _qguideState = { key: null, idx: 0 };
+
+function openGuide(key){
+  const g = QUALITE_GUIDES[key];
+  if(!g) return;
+  _qguideState = { key, idx: 0 };
+  const wrap = _refMroot();
+  wrap.innerHTML = `<div class="qguide-ov" onclick="if(event.target===this)closeMroot()">
+    <div class="qguide" role="dialog" aria-labelledby="qguide-tit">
+      <button type="button" class="qguide-close" aria-label="Fermer" onclick="closeMroot()">×</button>
+      <div class="qguide-progress"><div class="qguide-progress-bar" id="qguide-bar" style="width:${((1/g.steps.length)*100).toFixed(1)}%"></div></div>
+      <div class="qguide-viewport" id="qguide-viewport">
+        ${g.steps.map((s, i) => `<div class="qguide-step ${i===0?'active':''}" data-idx="${i}">
+          <div class="qguide-icon">${s.icon}</div>
+          <h3 class="qguide-tit" id="qguide-tit">${s.title}</h3>
+          <p class="qguide-body">${s.body}</p>
+        </div>`).join('')}
+      </div>
+      <div class="qguide-nav">
+        <div class="qguide-dots">${g.steps.map((_,i) => `<button type="button" class="qguide-dot ${i===0?'active':''}" data-idx="${i}" onclick="navGuide(${i})" aria-label="Étape ${i+1}"></button>`).join('')}</div>
+        <div class="qguide-nav-btns">
+          <button type="button" class="qguide-nav-btn" id="qguide-prev" onclick="navGuide(_qguideState.idx-1)" disabled>Précédent</button>
+          <button type="button" class="qguide-nav-btn primary" id="qguide-next" onclick="_qguideState.idx===${g.steps.length-1}?closeMroot():navGuide(_qguideState.idx+1)">Suivant →</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // Ecoute clavier
+  document.addEventListener('keydown', _qguideKey);
+}
+
+function _qguideKey(e){
+  if(!document.querySelector('.qguide-ov')) { document.removeEventListener('keydown', _qguideKey); return; }
+  if(e.key === 'Escape'){ closeMroot(); document.removeEventListener('keydown', _qguideKey); }
+  else if(e.key === 'ArrowRight'){ navGuide(_qguideState.idx+1); }
+  else if(e.key === 'ArrowLeft'){ navGuide(_qguideState.idx-1); }
+}
+
+function navGuide(newIdx){
+  const g = QUALITE_GUIDES[_qguideState.key];
+  if(!g) return;
+  if(newIdx < 0 || newIdx >= g.steps.length) return;
+  const oldIdx = _qguideState.idx;
+  const dir = newIdx > oldIdx ? 1 : -1;
+  const vp = document.getElementById('qguide-viewport');
+  if(!vp) return;
+  const steps = vp.querySelectorAll('.qguide-step');
+  steps.forEach((s, i) => {
+    s.classList.remove('active', 'prev');
+    if(i === newIdx){
+      // Placer temporairement en position d'arrivee (hors ecran cote oppose)
+      s.style.transform = dir > 0 ? 'translateX(100%)' : 'translateX(-100%)';
+      s.style.opacity = '0';
+      s.style.transition = 'none';
+      requestAnimationFrame(() => {
+        s.style.transition = '';
+        s.classList.add('active');
+        s.style.transform = '';
+        s.style.opacity = '';
+      });
+    } else if(i === oldIdx){
+      s.classList.add(dir > 0 ? 'prev' : '');
+      s.style.transform = dir > 0 ? 'translateX(-100%)' : 'translateX(100%)';
+      s.style.opacity = '0';
+    } else {
+      s.style.transform = '';
+      s.style.opacity = '';
+    }
+  });
+  _qguideState.idx = newIdx;
+  // Mise a jour dots + progress + boutons
+  const dots = document.querySelectorAll('.qguide-dot');
+  dots.forEach((d, i) => d.classList.toggle('active', i === newIdx));
+  const bar = document.getElementById('qguide-bar');
+  if(bar) bar.style.width = (((newIdx+1)/g.steps.length)*100).toFixed(1) + '%';
+  const prevBtn = document.getElementById('qguide-prev');
+  const nextBtn = document.getElementById('qguide-next');
+  if(prevBtn) prevBtn.disabled = (newIdx === 0);
+  if(nextBtn) nextBtn.textContent = (newIdx === g.steps.length - 1) ? 'Terminer ✓' : 'Suivant →';
+}
 
 async function loadRessources(){
   try{
@@ -3624,7 +3777,12 @@ function renderRessourcesList(){
 
   root.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
-      <h2 style="margin:0;font-size:18px;color:var(--text)">Ressources fournisseurs</h2>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:18px;color:var(--text)">Ressources fournisseurs</h2>
+        <button type="button" class="qual-help-btn" onclick="openGuide('ressources')" title="Guide de la page" aria-label="Guide de la page">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        </button>
+      </div>
       <div style="font-size:12px;color:var(--muted)">Un dossier par fournisseur · Certificats & labels</div>
     </div>
     ${alertHtml}
