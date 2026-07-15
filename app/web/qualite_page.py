@@ -3530,7 +3530,13 @@ document.addEventListener('keydown', function(ev){
     .four-detail-hd{margin-bottom:16px}
     .four-detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .four-detail-lhs{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .four-nav{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px 8px}
+    .four-detail-top > .four-detail-lhs > .btn-ghost,
+    .four-detail-top > .qual-write > .btn-ghost{background:var(--card);color:var(--text);border-color:var(--border)}
+    .four-detail-top > .four-detail-lhs > .btn-ghost:hover,
+    .four-detail-top > .qual-write > .btn-ghost:hover{background:var(--card);border-color:var(--accent);color:var(--accent)}
+    .four-nav{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px 8px}
+    .four-nav .four-nav-btn{background:transparent;color:var(--text);border-color:transparent}
+    .four-nav .four-nav-btn:hover:not(:disabled){background:var(--bg);border-color:var(--border);color:var(--accent)}
     .four-nav-btn{padding:4px 10px !important;font-size:14px !important;min-width:32px}
     .four-nav-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
     .four-nav-pos{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding:0 4px;min-width:44px;text-align:center}
