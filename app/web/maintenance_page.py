@@ -4179,6 +4179,26 @@ function setWearPartPos(pieceId, pos){
   _saveWearPartMap(m);
   renderMaintCards();
 }
+// Rend explicite l'export global pour l'inline onclick (défensif).
+try{ window.setWearPartPos = setWearPartPos; }catch(e){}
+// Event delegation de secours : si l'inline onclick est bloqué (CSP,
+// extension navigateur, script injecté), la délégation prend le relais.
+// Sur .maint-wp-btn avec data-wp + data-pos, on lit les attributs et on
+// dispatch. Une seule fois, sur document, pour éviter les doublons.
+(function _installWearPartDelegation(){
+  if(window.__mysifa_wp_deleg_installed) return;
+  window.__mysifa_wp_deleg_installed = true;
+  document.addEventListener('click', function(e){
+    const btn = e.target && e.target.closest ? e.target.closest('.maint-wp-btn') : null;
+    if(!btn) return;
+    const pieceId = btn.getAttribute('data-wp');
+    const pos = btn.getAttribute('data-pos');
+    if(!pieceId || !pos) return;
+    // Empêche double appel si l'inline onclick a déjà tourné (idempotent :
+    // setWearPartPos ne fait qu'écrire le même state en localStorage).
+    try{ setWearPartPos(pieceId, pos); }catch(err){ console.warn('[wearpart deleg]', err); }
+  });
+})();
 // Références d'usure (temps & métrage) — état localStorage :
 //   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
 const WEARPART_REFS_KEY = 'mysifa_maint_wearparts_refs_v1';
