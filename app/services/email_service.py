@@ -646,6 +646,97 @@ def email_expe_reponse_recue(
     return subject, body
 
 
+def email_expe_devis_confirmation(
+    *,
+    demande: dict,
+    reponse: dict,
+    depart: dict,
+    user: dict,
+) -> tuple[str, str]:
+    """Sujet et corps HTML — confirmation transporteur : sa proposition de
+    devis a été retenue, voici le récap de la mission. Envoyé au transporteur
+    après clic sur « Retenir » côté MyExpé.
+    """
+    cp = (demande.get("code_postal_destination") or "—").strip()
+    ref_dem = (demande.get("reference") or "").strip()
+    client = (demande.get("client") or depart.get("client") or "").strip()
+    type_envoi = (demande.get("type_envoi") or "").strip()
+    poids = demande.get("poids_total_kg")
+    nb_pal = demande.get("nb_palette")
+    contraintes = (demande.get("contraintes") or "").strip()
+    date_enl = (depart.get("date_enlevement") or "").strip()[:10]
+    nom_trp = (reponse.get("nom_transporteur") or "Transporteur").strip()
+    prix = reponse.get("prix")
+    delai = reponse.get("delai_jours")
+    commentaire = (reponse.get("commentaire") or "").strip()
+    user_nom = (
+        user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
+    )
+
+    detail_rows: list[tuple[str, str]] = []
+    if ref_dem:
+        detail_rows.append(("Référence devis", _esc(ref_dem)))
+    if client:
+        detail_rows.append(("Client final", _esc(client)))
+    detail_rows.append(("Destination (CP)", f"<strong style=\"color:#0f172a\">{_esc(cp)}</strong>"))
+    if date_enl:
+        detail_rows.append(("Date d'enlèvement prévue", _esc(date_enl)))
+    if type_envoi:
+        detail_rows.append(("Type d'envoi", _esc(type_envoi)))
+    if poids not in (None, ""):
+        detail_rows.append(("Poids total", f"{_esc(poids)} kg"))
+    if nb_pal not in (None, ""):
+        detail_rows.append(("Nombre de palettes", _esc(nb_pal)))
+    if prix not in (None, ""):
+        try:
+            prix_s = f"{float(prix):.2f} €"
+        except (TypeError, ValueError):
+            prix_s = _esc(prix)
+        detail_rows.append(("Prix retenu", f"<strong style=\"color:#0f172a\">{prix_s}</strong>"))
+    if delai not in (None, ""):
+        try:
+            delai_s = f"J+{int(delai)}"
+        except (TypeError, ValueError):
+            delai_s = _esc(delai)
+        detail_rows.append(("Délai annoncé", _esc(delai_s)))
+    if contraintes:
+        detail_rows.append(("Contraintes", _esc(contraintes)))
+    if commentaire:
+        detail_rows.append(("Votre commentaire", _esc(commentaire)))
+
+    detail_table = _email_detail_table(detail_rows)
+
+    inner = f"""
+    <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">
+      Bonjour {_esc(nom_trp)},
+    </p>
+    <p style="margin:0 0 18px;font-size:14px;color:#475569;line-height:1.65">
+      Nous vous confirmons que votre proposition a été
+      <strong style="color:#0891b2">retenue</strong> pour le transport ci-dessous.
+      Merci de bien vouloir organiser l'enlèvement selon les modalités indiquées et
+      de nous confirmer la prise en charge par retour de mail.
+    </p>
+    {detail_table}
+    <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
+      Cordialement,<br>
+      <strong style="color:#0f172a;font-size:14px">{_esc(user_nom)}</strong><br>
+      Service Expéditions — SIFA
+    </p>"""
+
+    subject = f"Confirmation transport SIFA — {cp}"
+    if ref_dem:
+        subject = f"Confirmation transport SIFA — {ref_dem} — {cp}"
+
+    body = email_mysifa_layout(
+        subtitle="Proposition retenue",
+        body_html=inner,
+        cta_href=None,
+        cta_label=None,
+        footer_contact=True,
+    )
+    return subject, body
+
+
 def send_email(
     to: str | list[str],
     subject: str,

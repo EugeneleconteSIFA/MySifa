@@ -6376,6 +6376,28 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 171, "print_module_tables")
 
+    # v172 — MyExpé : traçabilité des départs issus d'un devis retenu
+    # (source_devis_reponse_id + source_devis_demande_id pour afficher un badge
+    #  « à partir d'un devis » sur les lignes de départ et dans l'historique).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=172 LIMIT 1").fetchone():
+        cols = {
+            r[1] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()
+        }
+        if "source_devis_reponse_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_reponse_id INTEGER"
+            )
+        if "source_devis_demande_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_demande_id INTEGER"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis "
+            "ON expe_departs(source_devis_reponse_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 172, "expe_departs_source_devis")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
