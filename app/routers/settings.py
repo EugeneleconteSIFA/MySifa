@@ -2248,6 +2248,22 @@ async def maintenance_libres_create(request: Request):
         cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
         if "libre" not in cols:
             raise HTTPException(500, "Migration DB manquante (libre column absente).")
+        # v182bis : dedup exact-match sur label. Si un code libre avec exactement
+        # le meme label existe deja, on le reutilise au lieu d'en creer un nouveau.
+        # Evite les LIB-xxx orphelins en cas de double-click / retry frontend.
+        existing = conn.execute(
+            "SELECT code, label, niveau, categorie FROM maintenance_codes "
+            "WHERE libre = 1 AND label = ? LIMIT 1",
+            (label,),
+        ).fetchone()
+        if existing:
+            return {
+                "code": existing["code"],
+                "label": existing["label"],
+                "categorie": existing["categorie"] or "remplacements",
+                "niveau": int(existing["niveau"] or 1),
+                "reused": True,
+            }
         code = _next_libre_code(conn)
         conn.execute(
             """INSERT INTO maintenance_codes

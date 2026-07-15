@@ -6961,7 +6961,28 @@ function libreSelectSuggestion(code, label){
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
 }
 
+let _libreSubmitInFlight = false;
 async function libreSubmit(){
+  // v182bis : anti-double-click. Un seul submit a la fois, sinon on cree
+  // des LIB-xxx orphelins a chaque re-click pendant l'attente reseau.
+  if(_libreSubmitInFlight) return;
+  _libreSubmitInFlight = true;
+  const submitBtn = document.querySelector('#libre-modal .op-btn-accent');
+  if(submitBtn){
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.6';
+    submitBtn.style.cursor = 'wait';
+    submitBtn.textContent = 'Enregistrement...';
+  }
+  const _libreReset = () => {
+    _libreSubmitInFlight = false;
+    if(submitBtn){
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '';
+      submitBtn.style.cursor = '';
+      submitBtn.textContent = 'Enregistrer';
+    }
+  };
   const titre = (document.getElementById('libre-titre')?.value || '').trim();
   const machine = document.getElementById('libre-machine')?.value || '';
   const dureeStr = document.getElementById('libre-duree')?.value || '';
@@ -6970,15 +6991,18 @@ async function libreSubmit(){
   if(!titre || !machine){
     if(typeof showToast === 'function') showToast('Titre et machine sont obligatoires.', 'danger');
     else alert('Titre et machine sont obligatoires.');
+    _libreReset();
     return;
   }
   if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
     if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    _libreReset();
     return;
   }
   try{
     let code = _libreSelectedCode;
-    // Si aucune suggestion selectionnee, cree un nouveau code libre
+    // Si aucune suggestion selectionnee, cree ou reutilise un code libre
+    // (dedup exact-match cote backend depuis v182bis).
     if(!code){
       const rNew = await fetch('/api/maintenance/codes/libres', {
         method:'POST', credentials:'include',
@@ -7017,6 +7041,8 @@ async function libreSubmit(){
   }catch(e){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
+  }finally{
+    _libreReset();
   }
 }
 
