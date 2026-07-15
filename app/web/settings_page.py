@@ -161,6 +161,8 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
 .op-pill.autre{color:var(--muted);border-color:var(--border);background:rgba(148,163,184,.08)}
 .op-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
 .op-pill.interventions{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.op-pill.entretien{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.op-pill.remplacements{color:#fb923c;border-color:rgba(251,146,60,.4);background:rgba(251,146,60,.12)}
 .op-req{font-size:11px;font-weight:600;color:var(--muted)}
 .fsc-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
 @media(max-width:1000px){.fsc-kpi-grid{grid-template-columns:repeat(2,1fr)}}
@@ -1032,7 +1034,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
           </div>
         </div>
-        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en deux catégories : Contrôles et Interventions.</p>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en trois catégories : Contrôles, Entretien et Remplacements.</p>
         <div id="maint-form-wrap" class="hidden op-form-panel">
           <h3 id="maint-form-title">Nouveau code</h3>
           <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
@@ -1045,7 +1047,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             </select>
             <select id="maint-categorie" onchange="_maintTogglePeriodiqueUI()">
               <option value="controles">Contrôles</option>
-              <option value="interventions">Interventions</option>
+              <option value="entretien">Entretien</option>
+              <option value="remplacements">Remplacements</option>
             </select>
             <select id="maint-periodique" onchange="_maintTogglePeriodiqueUI()">
               <option value="oui">Périodique : OUI</option>
@@ -3229,9 +3232,10 @@ async function loadMaintCodes() {
   renderMaintList();
 }
 function _maintCatLabel(cat) {
-  // 'suivi' (catégorie supprimée) traité comme 'interventions' pour les codes
-  // qui ont survécu à la migration.
-  if (cat === 'interventions' || cat === 'suivi') return 'Interventions';
+  // Depuis v178 : "interventions" est scindée en "entretien" et "remplacements".
+  // 'interventions' et 'suivi' (legacy) sont remappés vers "Entretien" à l'affichage.
+  if (cat === 'remplacements') return 'Remplacements';
+  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Entretien';
   return 'Contrôles';
 }
 let _lastAckByCode = {};
@@ -3263,10 +3267,17 @@ function renderMaintList() {
         String(o.metrage_ref || '').toLowerCase().includes(q);
     });
   }
-  // Ordre des catégories : Contrôles → Interventions (les codes 'suivi'
-  // legacy sont remappés en interventions à l'affichage).
-  const _normCat = (c) => (c === 'interventions' || c === 'suivi') ? 'interventions' : 'controles';
-  const _catOrder = (c) => (_normCat(c) === 'controles' ? 0 : 1);
+  // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
+  // legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'affichage.
+  const _normCat = (c) => {
+    if (c === 'remplacements') return 'remplacements';
+    if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
+    return 'controles';
+  };
+  const _catOrder = (c) => {
+    const n = _normCat(c);
+    return n === 'controles' ? 0 : (n === 'entretien' ? 1 : 2);
+  };
   items.sort((a, b) => {
     const da = _catOrder(a.categorie);
     const db = _catOrder(b.categorie);
@@ -3279,10 +3290,10 @@ function renderMaintList() {
     el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
     return;
   }
-  const byCat = { controles: [], interventions: [] };
+  const byCat = { controles: [], entretien: [], remplacements: [] };
   items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
   let body = '';
-  ['controles', 'interventions'].forEach(cat => {
+  ['controles', 'entretien', 'remplacements'].forEach(cat => {
     if (!byCat[cat].length) return;
     body += '<tr class="op-cat-row"><td colspan="10">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
@@ -3458,9 +3469,12 @@ function openMaintForm(code) {
     document.getElementById('maint-label').value = o.label || '';
     document.getElementById('maint-niveau').value = String(o.niveau || 1);
     if (catSel) {
-      // Codes existants en 'suivi' (avant la suppression de la catégorie) sont
-      // remappés visuellement vers 'interventions' à l'édition.
-      const c = (o.categorie === 'interventions' || o.categorie === 'suivi') ? 'interventions' : 'controles';
+      // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+      // Codes legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'édition.
+      let c;
+      if (o.categorie === 'remplacements') c = 'remplacements';
+      else if (o.categorie === 'entretien' || o.categorie === 'interventions' || o.categorie === 'suivi') c = 'entretien';
+      else c = 'controles';
       catSel.value = c;
     }
     if (perSel) perSel.value = o.periodique ? 'oui' : 'non';
@@ -3555,7 +3569,9 @@ async function _maintTriggerDocPicker() {
     if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
     const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
     const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-    const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
+    const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
+      ? rawCat
+      : (rawCat === 'interventions' ? 'entretien' : 'controles');
     const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
     const periodique = (rawPer === 'oui');
     const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
@@ -3660,7 +3676,11 @@ async function saveMaintForm() {
   const label = (document.getElementById('maint-label').value || '').trim();
   const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
   const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-  const categorie = (rawCat === 'interventions') ? 'interventions' : 'controles';
+  // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+  // Legacy 'interventions' est remappée vers 'entretien' pour rester compat.
+  const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
+    ? rawCat
+    : (rawCat === 'interventions' ? 'entretien' : 'controles');
   const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
   const periodique = (rawPer === 'oui');
   const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
