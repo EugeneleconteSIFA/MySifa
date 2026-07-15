@@ -631,6 +631,9 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <input type="text" id="cf-nom" placeholder="Nom du fournisseur" autocomplete="off">
             <input type="text" id="cf-licence" placeholder="Code Licence FSC (ex: FSC-C004451)" autocomplete="off">
             <input type="text" id="cf-certificat" placeholder="Code Certificat FSC (ex: CU-COC-807907)" autocomplete="off">
+            <input type="text" id="cf-groupe" placeholder="Groupe (ex: Fedrigoni) — optionnel" autocomplete="off" list="four-groupes-dl">
+            <input type="text" id="cf-branche" placeholder="Branche du groupe (ex: Italy) — optionnel" autocomplete="off">
+            <datalist id="four-groupes-dl"></datalist>
           </div>
           <label style="display:inline-flex;align-items:center;gap:8px;margin:8px 0 12px;font-size:13px;color:var(--text);cursor:pointer">
             <input type="checkbox" id="cf-has-fsc" checked style="width:16px;height:16px;cursor:pointer">
@@ -1672,6 +1675,7 @@ function setTab(id) {
   });
   syncSettingsPageHead(id);
   if (id === 'fournisseurs') loadFournisseurs();
+loadFournisseursGroupes();
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
   if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
@@ -2699,21 +2703,36 @@ document.getElementById('cf-go').onclick = async () => {
   const licence = document.getElementById('cf-licence').value.trim();
   const certificat = document.getElementById('cf-certificat').value.trim();
   const has_fsc = !!(document.getElementById('cf-has-fsc') || {}).checked;
+  const groupe = (document.getElementById('cf-groupe')?.value || '').trim();
+  const branche = (document.getElementById('cf-branche')?.value || '').trim();
   if (!nom) return toast('Nom du fournisseur requis', true);
   try {
     await api('/api/fournisseurs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, licence, certificat, has_fsc }),
+      body: JSON.stringify({ nom, licence, certificat, has_fsc, groupe, branche }),
     });
     toast('Fournisseur ajouté');
     document.getElementById('cf-nom').value = '';
     document.getElementById('cf-licence').value = '';
     document.getElementById('cf-certificat').value = '';
     const cbo = document.getElementById('cf-has-fsc'); if (cbo) cbo.checked = true;
+    const cg = document.getElementById('cf-groupe'); if(cg) cg.value = '';
+    const cb = document.getElementById('cf-branche'); if(cb) cb.value = '';
     await loadFournisseurs();
+    await loadFournisseursGroupes();
   } catch (e) { toast(e.message, true); }
 };
+
+async function loadFournisseursGroupes(){
+  try{
+    const r = await api('/api/fournisseurs/groupes');
+    if(!r.ok) return;
+    const groupes = await r.json();
+    const dl = document.getElementById('four-groupes-dl');
+    if(dl) dl.innerHTML = groupes.map(g => `<option value="${esc(g.groupe)}">`).join('');
+  }catch(e){}
+}
 
 async function openEditFournisseur(id) {
   const f = fournisseursAll.find(x => x.id === id);
@@ -2731,6 +2750,12 @@ async function openEditFournisseur(id) {
     '<div id="ef-fsc-fields" style="' + (hasFscInit ? '' : 'opacity:.4;pointer-events:none') + '">' +
     '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
     '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
+    '</div>' +
+    '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
+    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Rattachement à un groupe</p>' +
+    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Si ce fournisseur est une branche d\'un groupe (ex: Fedrigoni Italy → groupe Fedrigoni, branche Italy).</p>' +
+    '<label class="sub">Groupe</label><input id="ef-groupe" value="' + esc(f.groupe || '') + '" style="margin-bottom:10px" placeholder="ex: Fedrigoni" list="four-groupes-dl">' +
+    '<label class="sub">Branche</label><input id="ef-branche" value="' + esc(f.branche || '') + '" style="margin-bottom:10px" placeholder="ex: Italy">' +
     '</div>' +
     '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
     '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Code-barre de traçabilité</p>' +
@@ -2832,6 +2857,8 @@ async function openEditFournisseur(id) {
       has_fsc,
       traca_explication: expEl.value.trim(),
       traca_exemple_code: codeEl.value.trim(),
+      groupe: (dlg.querySelector('#ef-groupe')?.value || '').trim(),
+      branche: (dlg.querySelector('#ef-branche')?.value || '').trim(),
     };
     if (!body.nom) return toast('Nom requis', true);
     try {
@@ -2848,7 +2875,10 @@ async function openEditFournisseur(id) {
         fi.licence = body.licence || null;
         fi.certificat = body.certificat || null;
         fi.has_fsc = body.has_fsc ? 1 : 0;
+        fi.groupe = body.groupe || null;
+        fi.branche = body.branche || null;
       }
+      await loadFournisseursGroupes();
       toast('Fournisseur mis à jour');
       backdrop.remove();
       await loadFournisseurs();

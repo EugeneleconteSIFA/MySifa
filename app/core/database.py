@@ -6642,6 +6642,29 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 179, "maintenance_event_ops_split_per_machine")
 
+    # Migration 180 — Fournisseurs : notion de groupe (multi-branches).
+    # Ajoute deux colonnes texte libres sur fournisseurs_fsc :
+    #   - groupe : nom du groupe parent (ex: "Fedrigoni"). NULL si independant.
+    #   - branche : nom de la branche/division dans le groupe (ex: "Italy").
+    # Ajoute une colonne groupe_ref sur qualite_fournisseur_certificats :
+    #   NULL = certif attache a la branche (fournisseur_id).
+    #   valeur = nom du groupe → certif partage entre toutes les branches du groupe.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=180 LIMIT 1").fetchone():
+        cols_four = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "groupe" not in cols_four:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN groupe TEXT")
+        if "branche" not in cols_four:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN branche TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseurs_groupe ON fournisseurs_fsc(groupe)")
+
+        cols_cert = {r[1] for r in conn.execute("PRAGMA table_info(qualite_fournisseur_certificats)").fetchall()}
+        if "groupe_ref" not in cols_cert:
+            conn.execute("ALTER TABLE qualite_fournisseur_certificats ADD COLUMN groupe_ref TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_qualite_cert_groupe_ref ON qualite_fournisseur_certificats(groupe_ref)")
+
+        conn.commit()
+        _record_schema_migration(conn, 180, "fournisseurs_groupe_branche")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
