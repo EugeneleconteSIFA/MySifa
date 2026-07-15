@@ -3530,7 +3530,13 @@ document.addEventListener('keydown', function(ev){
     .four-detail-hd{margin-bottom:16px}
     .four-detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .four-detail-lhs{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .four-nav{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px 8px}
+    .four-detail-top > .four-detail-lhs > .btn-ghost,
+    .four-detail-top > .qual-write > .btn-ghost{background:var(--card);color:var(--text);border-color:var(--border)}
+    .four-detail-top > .four-detail-lhs > .btn-ghost:hover,
+    .four-detail-top > .qual-write > .btn-ghost:hover{background:var(--card);border-color:var(--accent);color:var(--accent)}
+    .four-nav{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px 8px}
+    .four-nav .four-nav-btn{background:transparent;color:var(--text);border-color:transparent}
+    .four-nav .four-nav-btn:hover:not(:disabled){background:var(--bg);border-color:var(--border);color:var(--accent)}
     .four-nav-btn{padding:4px 10px !important;font-size:14px !important;min-width:32px}
     .four-nav-btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
     .four-nav-pos{font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;padding:0 4px;min-width:44px;text-align:center}
@@ -3539,9 +3545,11 @@ document.addEventListener('keydown', function(ev){
     /* Guide progress : bouton J'ai compris + hint auto-open */
     .qguide-nav{flex-wrap:wrap}
     .qguide-ack-row{display:flex;justify-content:center;padding:0 24px 16px;background:var(--bg)}
-    .qguide-ack-btn{width:100%;max-width:400px;padding:12px 18px;border-radius:10px;border:2px solid var(--ok);background:var(--ok);color:var(--btn-fg);font-weight:800;font-size:13px;cursor:pointer;transition:all .18s;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .qguide-ack-btn{width:100%;max-width:400px;padding:12px 18px;border-radius:10px;border:1.5px solid var(--ok);background:var(--ok);color:var(--btn-fg);font-weight:800;font-size:13px;cursor:pointer;transition:all .18s;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px}
     .qguide-ack-btn:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 6px 16px rgba(52,211,153,.28)}
-    .qguide-ack-btn:disabled{cursor:not-allowed;background:var(--bg);color:var(--warn);border:2px dashed var(--warn);opacity:1;font-weight:700}
+    .qguide-ack-btn:disabled{cursor:not-allowed;background:var(--bg);color:var(--text2);border:1.5px solid var(--border);opacity:1;font-weight:600;gap:10px}
+    .qguide-ack-btn:disabled .qguide-ack-lock{color:var(--muted);flex-shrink:0;display:inline-flex;align-items:center}
+    .qguide-ack-btn:disabled .qguide-ack-chip{margin-left:auto;background:var(--card);color:var(--muted);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid var(--border);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
     .qguide-ack-btn:disabled:hover{transform:none;box-shadow:none;filter:none}
     /* Illustration en bas : marge haute pour separer du texte */
     .qguide-step .qguide-illu{margin-top:14px;margin-bottom:4px}
@@ -3983,9 +3991,11 @@ async function _postGuideHeartbeat(key, stepIdx, totalSteps, deltaMs){
 }
 async function _postGuideAck(key){
   try{
-    // On envoie le bitmap local : le serveur fusionne (OR) pour eviter les races heartbeat
+    // On envoie bitmap + total_steps du front : le serveur fusionne et fait confiance au front pour le total
     const bmp = S._qguideBitmapLocal | 0;
-    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, client_bitmap: bmp})});
+    const guides = _qualiteGuides();
+    const totalSteps = (guides[key] && guides[key].steps) ? guides[key].steps.length : 0;
+    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, client_bitmap: bmp, client_total_steps: totalSteps})});
     if(r.ok){
       if(!S._qguideAckedKeys) S._qguideAckedKeys = new Set();
       S._qguideAckedKeys.add(key);
@@ -4024,7 +4034,8 @@ function _updateAckButton(){
     btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> J'ai compris — clôturer`;
   } else {
     const remain = total - _bitCount(S._qguideBitmapLocal & full);
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Voir toutes les étapes pour valider <span style="font-weight:600;opacity:.85;font-size:11px;margin-left:4px">(${remain}/${total} restante${remain>1?'s':''})</span>`;
+    const seen = total - remain;
+    btn.innerHTML = `<span class="qguide-ack-lock"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span><span>Voyez toutes les étapes pour valider</span><span class="qguide-ack-chip">${seen}/${total}</span>`;
   }
 }
 
