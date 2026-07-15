@@ -661,6 +661,7 @@ body:not(.light) .last-intervention-status.ok{color:#4ade80}
 .ops-table tr:last-child td{border-bottom:none}
 .ops-table tr:hover td{background:var(--bg)}
 .ops-table .col-comment{max-width:340px;white-space:pre-wrap;color:var(--text2);font-size:12.5px;word-break:break-word}
+.ops-table .col-duree{white-space:nowrap;color:var(--text2);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
 .ops-table .col-date{color:var(--muted);font-size:12px;white-space:nowrap}
 .ops-table .col-actions{white-space:nowrap;text-align:right}
 .ops-row-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:.15s;display:inline-flex;align-items:center;margin-left:2px}
@@ -1360,6 +1361,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
                   <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">↕</span></th>
                   <th data-sort="operateur" onclick="sortOps('operateur')">Opérateur<span class="sort-ico">↕</span></th>
                   <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
+                  <th data-sort="duree_reelle_min" onclick="sortOps('duree_reelle_min')" style="width:80px">Durée<span class="sort-ico">↕</span></th>
                   <th>Commentaires</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -3660,7 +3662,7 @@ function renderOps(){
     const msg = isFiltered
       ? 'Aucune opération ne correspond aux filtres.'
       : 'Aucune opération enregistrée. Cliquez sur « Nouvelle saisie » pour commencer.';
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
     const rows = filtered.map(o =>
       '<tr>' +
@@ -3668,6 +3670,7 @@ function renderOps(){
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
         '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
+        '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
           '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
@@ -6074,12 +6077,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <input type="text" id="libre-titre" autocomplete="off" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="libreOnTitreInput()">
       <div class="libre-autocomplete-panel" id="libre-autocomplete-panel" style="display:none"></div>
     </div>
-    <div class="op-form-row" id="libre-duree-collapsed">
-      <button type="button" class="libre-duree-link" onclick="libreShowDuree()">+ Ajouter une durée (optionnel)</button>
-    </div>
-    <div class="op-form-row" id="libre-duree-expanded" style="display:none">
-      <label for="libre-duree">Durée réelle (min)</label>
-      <input type="number" id="libre-duree" min="0" step="1" placeholder="Optionnel">
+    <div class="op-form-row">
+      <label for="libre-duree">Durée (min)</label>
+      <input type="number" id="libre-duree" min="0" step="1" placeholder="Optionnel — durée de l'intervention en minutes">
     </div>
     <div class="op-form-row">
       <label for="libre-comment">Commentaires</label>
@@ -6888,10 +6888,6 @@ function libreOpenModal(){
   if(t) t.value = '';
   if(d) d.value = '';
   if(c) c.value = '';
-  const dc = document.getElementById('libre-duree-collapsed');
-  const de = document.getElementById('libre-duree-expanded');
-  if(dc) dc.style.display = '';
-  if(de) de.style.display = 'none';
   const panel = document.getElementById('libre-autocomplete-panel');
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   // Pre-remplit machine avec la selection courante si disponible
@@ -6909,14 +6905,9 @@ function libreCloseModal(){
   const m = document.getElementById('libre-modal');
   if(m) m.classList.remove('active');
 }
-function libreShowDuree(){
-  const dc = document.getElementById('libre-duree-collapsed');
-  const de = document.getElementById('libre-duree-expanded');
-  if(dc) dc.style.display = 'none';
-  if(de) de.style.display = '';
-  const d = document.getElementById('libre-duree');
-  if(d) d.focus();
-}
+// v182ter : la duree est desormais toujours visible dans la modal.
+// libreShowDuree conservee en no-op pour compat.
+function libreShowDuree(){}
 
 async function libreOnTitreInput(){
   const t = document.getElementById('libre-titre');
