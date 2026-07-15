@@ -474,12 +474,21 @@ def create_event(body: EventCreateBody, request: Request):
              template_id, user["id"], now),
         )
         event_id = cur.lastrowid
+        # v179 : une op multi-machines = N lignes (une par machine). Chaque ligne
+        # a son propre statut → validation indépendante par (op, machine).
         for code, mcsv in ops_specs:
-            conn.execute(
-                """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
-                   VALUES (?, ?, ?, ?)""",
-                (event_id, code, mcsv, now),
-            )
+            machines_for_op = _machines_csv_to_list(mcsv) or [None]
+            for m in machines_for_op:
+                single_csv = _machines_list_to_csv([m]) if m else None
+                try:
+                    conn.execute(
+                        """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
+                           VALUES (?, ?, ?, ?)""",
+                        (event_id, code, single_csv, now),
+                    )
+                except Exception as e:
+                    # UNIQUE(event_id, code, machines_csv) : doublon silencieux (rare, mais safe).
+                    pass
         for oid in operator_ids:
             conn.execute(
                 "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
@@ -550,14 +559,33 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
         if not conn.execute("SELECT 1 FROM maintenance_codes WHERE code=?", (body.code,)).fetchone():
             raise HTTPException(status_code=400, detail=f"code inconnu: {body.code}")
-        if conn.execute("SELECT 1 FROM maintenance_event_ops WHERE event_id=? AND code=?",
-                         (event_id, body.code)).fetchone():
-            raise HTTPException(status_code=400, detail="Op déjà présente dans ce créneau")
-        machines_csv = _machines_list_to_csv(body.machines) if body.machines else None
-        conn.execute(
-            "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at) VALUES (?, ?, ?, ?)",
-            (event_id, body.code, machines_csv, _now_paris_iso()),
-        )
+        # v179 : une op multi-machines = N lignes. On boucle sur chaque machine
+        # et on skip celles déjà présentes (idempotent). Erreur si TOUTES déjà là.
+        wanted_machines = list(body.machines) if body.machines else [None]
+        inserted = 0
+        now = _now_paris_iso()
+        for m in wanted_machines:
+            single_csv = _machines_list_to_csv([m]) if m else None
+            # Check existant pour ce couple (code, machine)
+            if single_csv is None:
+                exists = conn.execute(
+                    "SELECT 1 FROM maintenance_event_ops WHERE event_id=? AND code=? AND machines_csv IS NULL",
+                    (event_id, body.code),
+                ).fetchone()
+            else:
+                exists = conn.execute(
+                    "SELECT 1 FROM maintenance_event_ops WHERE event_id=? AND code=? AND machines_csv=?",
+                    (event_id, body.code, single_csv),
+                ).fetchone()
+            if exists:
+                continue
+            conn.execute(
+                "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at) VALUES (?, ?, ?, ?)",
+                (event_id, body.code, single_csv, now),
+            )
+            inserted += 1
+        if inserted == 0:
+            raise HTTPException(status_code=400, detail="Op déjà présente sur toutes les machines demandées")
         _recompute_event_machine(conn, event_id)
         conn.commit()
         ev = _load_event_full(conn, event_id)

@@ -1850,6 +1850,13 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 <script>
 'use strict';
 
+// v179 fix : MAINT_ROLE hoiste tres tot, sinon init() (fin du 1er script)
+// crash sur ReferenceError quand refreshPlanning est appelee via loadPlanning.
+// La const originale plus bas devient une simple reassignation defensive.
+var MAINT_ROLE = (typeof document !== 'undefined' && document.body && document.body.getAttribute)
+  ? (document.body.getAttribute('data-maint-role') || 'admin')
+  : 'admin';
+
 const S = { me: null };
 
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
@@ -2064,8 +2071,14 @@ function _apiEventToClient(ev){
 }
 
 async function refreshPlanning(){
-  // Pré-charge les templates en tâche de fond (pour le badge « depuis modèle »).
-  if(MAINT_ROLE === 'admin' && TEMPLATES_STATE.list === null){
+  // Pre-charge les templates en tache de fond (pour le badge "depuis modele").
+  // v179 fix : TEMPLATES_STATE et loadTemplates sont definis dans un <script>
+  // block ulterieur — ne pas crasher si pas encore disponibles au moment ou
+  // init() appelle loadPlanning() puis refreshPlanning().
+  if(MAINT_ROLE === 'admin'
+     && typeof TEMPLATES_STATE !== 'undefined'
+     && TEMPLATES_STATE && TEMPLATES_STATE.list === null
+     && typeof loadTemplates === 'function'){
     loadTemplates().catch(() => {});
   }
 
@@ -2620,7 +2633,7 @@ function openPlanningDetailsModal(events){
     // Badge template si le créneau vient d'un modèle
     let tmplBadge = '';
     if(ev.template_id){
-      const tmpl = (TEMPLATES_STATE.list || []).find(t => t.id === ev.template_id);
+      const tmpl = (typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE ? (TEMPLATES_STATE.list || []) : []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
       tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
@@ -3022,47 +3035,58 @@ function _sameMachineSet(a, b){
 }
 
 async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
-  // wantedOps : [{code, machines:[...]}]
+  // v179 : chaque row DB = 1 op × 1 machine (split per-machine).
+  // wantedOps depuis le modal admin est encore au format {code, machines:[N]}.
+  // On l'EXPLODE en entries {code, machine} pour comparer 1-pour-1 avec les
+  // rows DB (chacune ayant 1 seule machine).
   const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '?_=' + Date.now(),
                        { credentials:'include', cache: 'no-store' });
   if(!r.ok) return;
   const d = await r.json();
   const ev = d.event || {};
   const currentOps = ev.ops || [];
-  const wantedByCode = new Map(wantedOps.map(o => [o.code, o]));
-  const currentByCode = new Map(currentOps.map(o => [o.code, o]));
 
-  // Ops à ajouter (dans wanted mais pas dans current) → POST avec machines.
+  // EXPLODE : {code, machines:[Coh1, Coh2]} devient 2 entries {code, machine:"Coh1"} + {code, machine:"Coh2"}
+  const wantedExploded = [];
   for(const w of wantedOps){
-    if(!currentByCode.has(w.code)){
+    const ms = Array.isArray(w.machines) && w.machines.length ? w.machines : [null];
+    for(const m of ms){
+      wantedExploded.push({ code: w.code, machine: m });
+    }
+  }
+
+  // Clé unique = code + '@@' + machine (utilise '' si machine null)
+  const keyOf = (code, machine) => String(code) + '@@' + (machine || '');
+  const wantedKeys = new Set(wantedExploded.map(w => keyOf(w.code, w.machine)));
+
+  // currentOps a machines:[singleMachine] après split. On dérive la clé pareil.
+  const currentByKey = new Map();
+  for(const op of currentOps){
+    const machine = (Array.isArray(op.machines) && op.machines.length) ? op.machines[0] : null;
+    currentByKey.set(keyOf(op.code, machine), op);
+  }
+
+  // Ops à ajouter (wanted mais pas current) → POST avec 1 seule machine
+  for(const w of wantedExploded){
+    const k = keyOf(w.code, w.machine);
+    if(!currentByKey.has(k)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code: w.code, machines: w.machines }),
+        body: JSON.stringify({ code: w.code, machines: w.machine ? [w.machine] : [] }),
       });
     }
   }
-  // Ops à supprimer (dans current mais pas dans wanted).
-  for(const op of currentOps){
-    if(!wantedByCode.has(op.code)){
+  // Ops à supprimer (current mais pas wanted)
+  for(const [k, op] of currentByKey){
+    if(!wantedKeys.has(k)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
         method:'DELETE', credentials:'include',
       });
     }
   }
-  // Ops restées : si les machines ont changé, PATCH.
-  for(const op of currentOps){
-    const w = wantedByCode.get(op.code);
-    if(!w) continue;
-    const curMach = Array.isArray(op.machines) ? op.machines : [];
-    if(!_sameMachineSet(curMach, w.machines)){
-      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
-        method:'PATCH', credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ machines: w.machines }),
-      });
-    }
-  }
+  // Pas de PATCH machines : chaque row est déjà à 1 machine, si on veut changer
+  // la machine c'est une DELETE + POST (géré ci-dessus).
 
   // Operators
   const currentOperators = ev.operators || [];
@@ -4177,8 +4201,45 @@ function setWearPartPos(pieceId, pos){
   if(!m[pieceId]) m[pieceId] = {};
   m[pieceId][machine] = pos;
   _saveWearPartMap(m);
+  // Mise a jour DOM DIRECTE des boutons — independante du re-render.
+  // Garantit que le toggle visuel fonctionne meme si renderMaintCards
+  // est bloque par une erreur ou une race async.
+  try{
+    document.querySelectorAll('.maint-wp-btn[data-wp="' + pieceId + '"]').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-pos') === pos);
+    });
+    document.querySelectorAll('.maint-wearpart[data-wearpart="' + pieceId + '"]').forEach(function(s){
+      s.setAttribute('data-wearpart-pos', pos);
+    });
+  }catch(e){ console.warn('[setWearPartPos direct DOM]', e); }
   renderMaintCards();
 }
+// Rend explicite l'export global pour l'inline onclick (défensif).
+try{ window.setWearPartPos = setWearPartPos; }catch(e){}
+// Event delegation de secours : si l'inline onclick est bloqué (CSP,
+// extension navigateur, script injecté), la délégation prend le relais.
+// Sur .maint-wp-btn avec data-wp + data-pos, on lit les attributs et on
+// dispatch. Une seule fois, sur document, pour éviter les doublons.
+// Event delegation robuste sur .maint-wp-btn (Bande/Rive des pieces d'usure).
+// Handler en phase CAPTURE + BUBBLE pour maximiser la reception du click,
+// meme si un autre listener tente de stopPropagation en amont.
+// Log console explicite pour diagnostic si le click ne fonctionne pas.
+(function _installWearPartDelegation(){
+  if(window.__mysifa_wp_deleg_installed) return;
+  window.__mysifa_wp_deleg_installed = true;
+  const handler = function(e){
+    const btn = e.target && e.target.closest ? e.target.closest('.maint-wp-btn') : null;
+    if(!btn) return;
+    const pieceId = btn.getAttribute('data-wp');
+    const pos = btn.getAttribute('data-pos');
+    console.log('[wearpart click]', pieceId, pos, 'phase:', e.eventPhase);
+    if(!pieceId || !pos) return;
+    e.preventDefault();
+    try{ setWearPartPos(pieceId, pos); }catch(err){ console.error('[wearpart handler]', err); }
+  };
+  document.addEventListener('click', handler, true);
+  document.addEventListener('click', handler, false);
+})();
 // Références d'usure (temps & métrage) — état localStorage :
 //   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
 const WEARPART_REFS_KEY = 'mysifa_maint_wearparts_refs_v1';
@@ -4275,7 +4336,7 @@ function _renderWearPartsGroup(machine){
     }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
-      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
+      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
     };
     const tabsHtml = p.no_position
       ? ''
@@ -5967,7 +6028,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
    L'état des tâches côté page est stocké dans MAINT_STATE. */
 'use strict';
 
-const MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+// v179 : MAINT_ROLE deja defini au debut du 1er script (var hoiste).
+// Reassignation defensive au cas ou body.data-maint-role aurait change.
+MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
 const MAINT_STATE = {
   tasks: [],
   codes: [],
