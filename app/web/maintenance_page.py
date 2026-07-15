@@ -3022,47 +3022,58 @@ function _sameMachineSet(a, b){
 }
 
 async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
-  // wantedOps : [{code, machines:[...]}]
+  // v179 : chaque row DB = 1 op × 1 machine (split per-machine).
+  // wantedOps depuis le modal admin est encore au format {code, machines:[N]}.
+  // On l'EXPLODE en entries {code, machine} pour comparer 1-pour-1 avec les
+  // rows DB (chacune ayant 1 seule machine).
   const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '?_=' + Date.now(),
                        { credentials:'include', cache: 'no-store' });
   if(!r.ok) return;
   const d = await r.json();
   const ev = d.event || {};
   const currentOps = ev.ops || [];
-  const wantedByCode = new Map(wantedOps.map(o => [o.code, o]));
-  const currentByCode = new Map(currentOps.map(o => [o.code, o]));
 
-  // Ops à ajouter (dans wanted mais pas dans current) → POST avec machines.
+  // EXPLODE : {code, machines:[Coh1, Coh2]} devient 2 entries {code, machine:"Coh1"} + {code, machine:"Coh2"}
+  const wantedExploded = [];
   for(const w of wantedOps){
-    if(!currentByCode.has(w.code)){
+    const ms = Array.isArray(w.machines) && w.machines.length ? w.machines : [null];
+    for(const m of ms){
+      wantedExploded.push({ code: w.code, machine: m });
+    }
+  }
+
+  // Clé unique = code + '@@' + machine (utilise '' si machine null)
+  const keyOf = (code, machine) => String(code) + '@@' + (machine || '');
+  const wantedKeys = new Set(wantedExploded.map(w => keyOf(w.code, w.machine)));
+
+  // currentOps a machines:[singleMachine] après split. On dérive la clé pareil.
+  const currentByKey = new Map();
+  for(const op of currentOps){
+    const machine = (Array.isArray(op.machines) && op.machines.length) ? op.machines[0] : null;
+    currentByKey.set(keyOf(op.code, machine), op);
+  }
+
+  // Ops à ajouter (wanted mais pas current) → POST avec 1 seule machine
+  for(const w of wantedExploded){
+    const k = keyOf(w.code, w.machine);
+    if(!currentByKey.has(k)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code: w.code, machines: w.machines }),
+        body: JSON.stringify({ code: w.code, machines: w.machine ? [w.machine] : [] }),
       });
     }
   }
-  // Ops à supprimer (dans current mais pas dans wanted).
-  for(const op of currentOps){
-    if(!wantedByCode.has(op.code)){
+  // Ops à supprimer (current mais pas wanted)
+  for(const [k, op] of currentByKey){
+    if(!wantedKeys.has(k)){
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
         method:'DELETE', credentials:'include',
       });
     }
   }
-  // Ops restées : si les machines ont changé, PATCH.
-  for(const op of currentOps){
-    const w = wantedByCode.get(op.code);
-    if(!w) continue;
-    const curMach = Array.isArray(op.machines) ? op.machines : [];
-    if(!_sameMachineSet(curMach, w.machines)){
-      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + op.id, {
-        method:'PATCH', credentials:'include',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ machines: w.machines }),
-      });
-    }
-  }
+  // Pas de PATCH machines : chaque row est déjà à 1 machine, si on veut changer
+  // la machine c'est une DELETE + POST (géré ci-dessus).
 
   // Operators
   const currentOperators = ev.operators || [];
