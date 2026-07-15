@@ -2227,7 +2227,12 @@ async def maintenance_libres_create(request: Request):
     modale de saisie libre ne demande QUE le titre (voir spec Lot 1).
     """
     user = get_current_user(request)
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
     label = (body.get("label") or "").strip()
     if not label:
         raise HTTPException(422, "Titre obligatoire.")
@@ -2332,7 +2337,12 @@ async def maintenance_libres_merge(request: Request):
     est additionne, le loser est supprime. Operation reversible uniquement
     via restore SQL manuel — a annoncer explicitement cote UI."""
     user = _require_maint_writer(request)
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
     winner_code = (body.get("winner_code") or "").strip()
     loser_code = (body.get("loser_code") or "").strip()
     if not winner_code or not loser_code:
@@ -2388,7 +2398,12 @@ async def maintenance_libres_rename(code: str, request: Request):
     titre (elles stockent le code, pas le label). Utilise soit depuis
     Parametres > Interventions libres, soit inline depuis l'historique."""
     user = _require_maint_writer(request)
-    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
     new_label = (body.get("label") or "").strip()
     if not new_label:
         raise HTTPException(422, "Titre obligatoire.")
