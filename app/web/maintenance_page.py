@@ -225,14 +225,14 @@ body.sb-open .sidebar-overlay{display:block}
 .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
 .filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.filter-input{background:#ffffff;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:#0f172a;font-size:13px;font-family:inherit;outline:none;min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;min-width:168px}
+.filter-input{background:#ffffff;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:#0f172a;font-size:13px;font-family:inherit;outline:none;min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;min-width:132px}
 .filter-input::placeholder{color:#64748b}
 .filter-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.filters .filter-input[type=date]{min-width:148px;padding:9px 12px;font-size:12px;color:#0f172a}
+.filters .filter-input[type=date]{min-width:128px;padding:9px 10px;font-size:12px;color:#0f172a}
 .filters .filter-input[type=date]::-webkit-calendar-picker-indicator{filter:none;opacity:.6}
 select.filter-input{appearance:none;background-color:#ffffff;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer;color:#0f172a}
 select.filter-input option{background:#ffffff;color:#0f172a}
-.filters-apply-btn{background:var(--accent);color:var(--accent-fg,var(--bg));border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;min-height:40px;cursor:pointer;font-family:inherit;align-self:flex-end;transition:filter .15s,box-shadow .15s,transform .05s}
+.filters-apply-btn{background:var(--accent);color:var(--accent-fg,var(--bg));border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;min-height:40px;cursor:pointer;font-family:inherit;align-self:flex-end;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px var(--accent-bg)}
 .filters-apply-btn:active{transform:translateY(1px)}
 .filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
@@ -1347,7 +1347,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
             <div class="ops-list-title">Historique des opérations</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ops-count">0 opération</div>
-              <button type="button" class="ops-btn-add" onclick="libreOpenModal()" style="background:transparent;color:#3b82f6;border:1px solid rgba(59,130,246,.4)" title="Enregistrer une intervention ponctuelle sans creer de code">
+              <button type="button" class="ops-btn-add" onclick="libreOpenModal()" title="Enregistrer une intervention ponctuelle sans creer de code">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 Intervention libre
               </button>
@@ -3682,7 +3682,13 @@ function renderOps(){
         '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
-          '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
+          // v182 fix : pour une intervention libre, l'edit standard n'a pas de sens
+          // (le type est un code LIB-xxx absent de OPS_TYPES_STATE). On redirige
+          // vers le rename inline qui manipule le titre via l'endpoint dedie.
+          (o._libre && o._code
+            ? '<button type="button" class="ops-row-btn edit" data-libre-edit-btn="' + escAttr(o._code) + '" title="Renommer ce titre libre">'
+            : '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">'
+          ) +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
           '</button>' +
           '<button type="button" class="ops-row-btn del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
@@ -3703,6 +3709,12 @@ function renderOps(){
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         libreDocsOpen(btn.getAttribute('data-libre-docs'));
+      });
+    });
+    tbody.querySelectorAll('[data-libre-edit-btn]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        libreRenameInline(btn.getAttribute('data-libre-edit-btn'));
       });
     });
   }
