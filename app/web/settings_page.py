@@ -1046,7 +1046,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
           </div>
         </div>
-        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en trois catégories : Contrôles, Entretien et Remplacements.</p>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en trois catégories : Contrôles, Nettoyage et Interventions.</p>
         <div id="maint-form-wrap" class="hidden op-form-panel">
           <h3 id="maint-form-title">Nouveau code</h3>
           <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
@@ -1059,8 +1059,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
             </select>
             <select id="maint-categorie" onchange="_maintTogglePeriodiqueUI()">
               <option value="controles">Contrôles</option>
-              <option value="entretien">Entretien</option>
-              <option value="remplacements">Remplacements</option>
+              <option value="entretien">Nettoyage</option>
+              <option value="remplacements">Interventions</option>
             </select>
             <select id="maint-periodique" onchange="_maintTogglePeriodiqueUI()">
               <option value="oui">Périodique : OUI</option>
@@ -3416,10 +3416,11 @@ async function loadMaintCodes() {
   renderMaintList();
 }
 function _maintCatLabel(cat) {
-  // Depuis v178 : "interventions" est scindée en "entretien" et "remplacements".
-  // 'interventions' et 'suivi' (legacy) sont remappés vers "Entretien" à l'affichage.
-  if (cat === 'remplacements') return 'Remplacements';
-  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Entretien';
+  // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
+  // et "remplacements" (UI: Interventions). Labels renommés v179.
+  // 'interventions' et 'suivi' (legacy) sont remappés vers Nettoyage à l'affichage.
+  if (cat === 'remplacements') return 'Interventions';
+  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
   return 'Contrôles';
 }
 let _lastAckByCode = {};
