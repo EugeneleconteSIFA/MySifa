@@ -107,6 +107,7 @@ def heartbeat(body: HeartbeatBody, request: Request):
 class AckBody(BaseModel):
     guide_key: str
     client_bitmap: Optional[int] = None  # bitmap local fourni par le front (source plus fiable que le heartbeat async)
+    client_total_steps: Optional[int] = None  # nb total d'etapes cote front (fallback si DB stale)
 
 
 @router.post("/ack")
@@ -120,24 +121,33 @@ def ack_guide(body: AckBody, request: Request):
         ).fetchone()
         if row is None:
             raise HTTPException(status_code=400, detail="Ouvrez le guide au moins une fois")
-        total_steps = int(row["total_steps"] or 0)
+        server_total_steps = int(row["total_steps"] or 0)
+        client_total_steps = int(body.client_total_steps or 0)
+        # Utiliser le total_steps le plus recent : si le front en fournit un, on lui fait confiance
+        # (evite les cas ou la DB a un total_steps stale et bloque l'ack)
+        total_steps = client_total_steps if client_total_steps > 0 else server_total_steps
+        if total_steps <= 0 or total_steps > 64:
+            raise HTTPException(status_code=400, detail="total_steps invalide en DB")
         server_bitmap = int(row["steps_seen_bitmap"] or 0)
-        # Fusionner avec le bitmap client si fourni : evite les races avec les heartbeats async
         client_bmp = int(body.client_bitmap or 0)
-        # Clamp sur les bits valides (max total_steps bits)
-        if total_steps > 0:
-            client_bmp = client_bmp & ((1 << total_steps) - 1)
+        full_mask = (1 << total_steps) - 1
+        # Clamp sur les bits valides
+        client_bmp = client_bmp & full_mask
+        server_bitmap = server_bitmap & full_mask
         merged = server_bitmap | client_bmp
-        full_mask = (1 << total_steps) - 1 if total_steps > 0 else 0
-        if total_steps == 0 or (merged & full_mask) != full_mask:
-            raise HTTPException(status_code=400, detail="Toutes les etapes doivent avoir ete vues avant")
+        if (merged & full_mask) != full_mask:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Toutes les etapes doivent avoir ete vues (client={bin(client_bmp)}, server={bin(server_bitmap)}, expected={bin(full_mask)}, total={total_steps})"
+            )
         conn.execute(
             """UPDATE user_guide_progress SET
+               total_steps=?,
                steps_seen_bitmap=?,
                acknowledged_at=COALESCE(acknowledged_at, ?),
                completed_at=COALESCE(completed_at, ?)
                WHERE user_id=? AND guide_key=?""",
-            (merged, now, now, user["id"], body.guide_key),
+            (total_steps, merged, now, now, user["id"], body.guide_key),
         )
         conn.commit()
     return {"ok": True, "acknowledged_at": now}
@@ -189,7 +199,7 @@ def admin_overview(request: Request):
     _require_admin(request)
     with get_db() as conn:
         users = [dict(r) for r in conn.execute(
-            """SELECT id, nom, prenom, email, role FROM users
+            """SELECT id, nom, email, role FROM users
                WHERE (actif IS NULL OR actif=1)
                ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()]
