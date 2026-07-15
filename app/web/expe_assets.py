@@ -2811,6 +2811,9 @@ EXPE_MAIN_CSS = r"""
 .expe-pal-eur-badge--en_attente{background:rgba(251,191,36,.18);color:var(--warn)}
 .expe-pal-eur-badge--retournee{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
 .expe-pal-eur-badge--perdue{background:rgba(248,113,113,.18);color:var(--danger)}
+/* Badge — départ créé depuis un devis retenu (traçabilité) */
+.expe-badge-devis{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);vertical-align:middle}
+.expe-badge-devis-wrap{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .expe-pal-eur-acts-cell{white-space:nowrap;text-align:right}
 .expe-pal-eur-acts{display:inline-flex;gap:4px;justify-content:flex-end}
 .expe-pal-eur-act{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;
@@ -4059,7 +4062,7 @@ function renderExpeSuiviDeparts(){
       h('td',{title:dateEnl},dateEnl),
       h('td',{title:r.affreteurs||''},r.affreteurs||'—'),
       h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-      h('td',{title:r.client||''},r.client||'—'),
+      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
       h('td',{style:{fontSize:'12px'},title:r.code_postal_destination||''},r.code_postal_destination||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
@@ -4111,6 +4114,11 @@ function renderExpeSuiviDeparts(){
   return h('div',null,topBar,listCard);
 }
 
+function expeDevisBadge(r){
+  if(!r||!r.source_devis_reponse_id) return null;
+  return h('span',{className:'expe-badge-devis',title:'Départ créé automatiquement à partir d’un devis retenu'},'issu d’un devis');
+}
+
 function renderExpeHistoriqueDeparts(){
   const qInp=h('input',{
     id:'expe-hist-search',
@@ -4137,7 +4145,7 @@ function renderExpeHistoriqueDeparts(){
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'},title:(r.validated_at||'')},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
     h('td',{title:(r.date_enlevement||'').slice(0,10)},(r.date_enlevement||'').slice(0,10)),
-    h('td',{title:r.client||''},r.client||'—'),
+    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),
