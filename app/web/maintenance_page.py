@@ -2071,8 +2071,14 @@ function _apiEventToClient(ev){
 }
 
 async function refreshPlanning(){
-  // Pré-charge les templates en tâche de fond (pour le badge « depuis modèle »).
-  if(MAINT_ROLE === 'admin' && TEMPLATES_STATE.list === null){
+  // Pre-charge les templates en tache de fond (pour le badge "depuis modele").
+  // v179 fix : TEMPLATES_STATE et loadTemplates sont definis dans un <script>
+  // block ulterieur — ne pas crasher si pas encore disponibles au moment ou
+  // init() appelle loadPlanning() puis refreshPlanning().
+  if(MAINT_ROLE === 'admin'
+     && typeof TEMPLATES_STATE !== 'undefined'
+     && TEMPLATES_STATE && TEMPLATES_STATE.list === null
+     && typeof loadTemplates === 'function'){
     loadTemplates().catch(() => {});
   }
 
@@ -2627,7 +2633,7 @@ function openPlanningDetailsModal(events){
     // Badge template si le créneau vient d'un modèle
     let tmplBadge = '';
     if(ev.template_id){
-      const tmpl = (TEMPLATES_STATE.list || []).find(t => t.id === ev.template_id);
+      const tmpl = (typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE ? (TEMPLATES_STATE.list || []) : []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
       tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
