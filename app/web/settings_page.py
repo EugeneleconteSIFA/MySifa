@@ -1342,6 +1342,10 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
         Alertes
       </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-libres">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Interventions libres
+      </button>
     </div>
       <div id="maint-subtab-codes" class="maint-subtab">
       <div class="card">
@@ -1424,6 +1428,23 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer (nom, code source…)" oninput="renderAlertsList()">
           </div>
           <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
+      </div>
+      <!-- v182 Lot 2 : Sous-onglet Interventions libres -->
+      <div id="maint-subtab-libres" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Interventions libres</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-sec" id="libres-merge-btn" disabled onclick="libresMergeSelected()" title="Fusionne les 2 titres selectionnes en un seul (les saisies passees sont reaffectees).">Fusionner sélection</button>
+              <span id="libres-selection-count" style="font-size:11px;color:var(--muted)"></span>
+            </div>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Titres saisis ponctuellement par les operateurs, hors catalogue. Coche 2 lignes pour les fusionner ; renomme depuis la ligne pour uniformiser la terminologie ; archive uniquement les titres sans saisie associee.</p>
+          <div class="op-toolbar">
+            <input type="search" id="libres-filter" class="op-filter" placeholder="Filtrer (titre, code…)" oninput="renderLibresList()">
+          </div>
+          <div id="libres-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
       </div>
     </section>
@@ -4018,6 +4039,199 @@ async function loadMaintCodes() {
   }
   renderMaintList();
 }
+// ─── Interventions libres (Lot 2) ────────────────────────────────
+// Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
+let _libresItems = [];
+let _libresSelection = new Set();
+
+async function loadLibres() {
+  const listEl = document.getElementById('libres-list');
+  if (!listEl) return;
+  try {
+    const r = await api('/api/maintenance/codes/libres');
+    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    _libresItems = [];
+  }
+  _libresSelection.clear();
+  _updateLibresSelectionUI();
+  renderLibresList();
+}
+
+function _fmtLibreDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+  } catch (e) { return '—'; }
+}
+
+function _updateLibresSelectionUI() {
+  const btn = document.getElementById('libres-merge-btn');
+  const cnt = document.getElementById('libres-selection-count');
+  const n = _libresSelection.size;
+  if (btn) btn.disabled = (n !== 2);
+  if (cnt) {
+    if (n === 0) cnt.textContent = '';
+    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
+    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
+    else cnt.textContent = n + ' selectionnes (max 2)';
+  }
+}
+
+function libresToggleSelection(code, checked) {
+  if (checked) {
+    _libresSelection.add(code);
+    if (_libresSelection.size > 2) {
+      const arr = Array.from(_libresSelection);
+      _libresSelection = new Set(arr.slice(-2));
+      renderLibresList();
+    }
+  } else {
+    _libresSelection.delete(code);
+  }
+  _updateLibresSelectionUI();
+}
+
+function renderLibresList() {
+  const el = document.getElementById('libres-list');
+  if (!el) return;
+  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
+  let items = _libresItems.slice();
+  if (q) {
+    items = items.filter(o =>
+      String(o.label || '').toLowerCase().includes(q) ||
+      String(o.code || '').toLowerCase().includes(q)
+    );
+  }
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
+      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
+    return;
+  }
+  const rows = items.map(o => {
+    const codeEsc = esc(String(o.code));
+    const labelEsc = esc(String(o.label || ''));
+    const checked = _libresSelection.has(o.code) ? ' checked' : '';
+    const usage = o.usage_count;
+    const usageChip = usage > 0
+      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
+    const canDelete = (usage === 0);
+    const delBtn = canDelete
+      ? '<button type="button" class="btn-sm btn-ghost danger" data-libre-del="' + codeEsc + '">Archiver</button>'
+      : '<button type="button" class="btn-sm btn-ghost" disabled title="Fusionne avec un autre titre pour supprimer" style="opacity:.4;cursor:not-allowed">Archiver</button>';
+    return '<tr>' +
+      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
+      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
+      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
+      '<td>' + usageChip + '</td>' +
+      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
+        delBtn +
+      '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
+    '<thead><tr>' +
+      '<th></th>' +
+      '<th>Code</th>' +
+      '<th>Titre</th>' +
+      '<th>Usage</th>' +
+      '<th>Derniere utilisation</th>' +
+      '<th>Cree le</th>' +
+      '<th style="text-align:right">Actions</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div>';
+  // Bind event delegation (checkbox + rename + delete)
+  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
+    });
+  });
+  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-rename');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresRename(code, it.label);
+    });
+  });
+  el.querySelectorAll('[data-libre-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-del');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresDelete(code, it.label);
+    });
+  });
+}
+
+async function libresRename(code, currentLabel) {
+  const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
+  if (newLabel === null) return;
+  const trimmed = (newLabel || '').trim();
+  if (!trimmed) { toast('Titre obligatoire', true); return; }
+  if (trimmed === currentLabel) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method: 'PATCH',
+      body: JSON.stringify({ label: trimmed }),
+    });
+    toast('Titre modifie');
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresDelete(code, label) {
+  if (!confirm('Archiver definitivement "' + label + '" (' + code + ') ?\n\nCette action est reversible uniquement via SQL manuel.')) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Titre archive');
+    _libresSelection.delete(code);
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresMergeSelected() {
+  if (_libresSelection.size !== 2) return;
+  const codes = Array.from(_libresSelection);
+  const items = codes.map(c => _libresItems.find(x => x.code === c)).filter(Boolean);
+  if (items.length !== 2) { toast('Selection invalide', true); return; }
+  const opts = items.map((it, i) => (i + 1) + '. ' + it.label + ' (' + it.usage_count + ' saisie' + (it.usage_count > 1 ? 's' : '') + ')').join('\n');
+  const choice = prompt(
+    'Quel titre garder pour la fusion ?\n\n' + opts + '\n\nSaisis 1 ou 2 :',
+    items[0].usage_count >= items[1].usage_count ? '1' : '2'
+  );
+  if (choice === null) return;
+  const idx = parseInt(choice, 10) - 1;
+  if (idx !== 0 && idx !== 1) { toast('Choix invalide (1 ou 2 attendu)', true); return; }
+  const winner = items[idx];
+  const loser = items[1 - idx];
+  if (!confirm(
+    'Fusionner "' + loser.label + '" (' + loser.usage_count + ' saisie' + (loser.usage_count > 1 ? 's' : '') + ') vers "' + winner.label + '" ?\n\n' +
+    'Toutes les saisies passees de "' + loser.label + '" seront desormais attribuees a "' + winner.label + '".\n' +
+    'Le titre "' + loser.label + '" (' + loser.code + ') sera supprime.'
+  )) return;
+  try {
+    await api('/api/maintenance/codes/libres/merge', {
+      method: 'POST',
+      body: JSON.stringify({ winner_code: winner.code, loser_code: loser.code }),
+    });
+    toast('Fusion effectuee');
+    _libresSelection.clear();
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
 function _maintCatLabel(cat) {
   // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
   // et "remplacements" (UI: Interventions). Labels renommés v179.
@@ -4525,6 +4739,10 @@ document.addEventListener('click', (ev) => {
   document.querySelectorAll('.maint-subtab').forEach(p => {
     p.style.display = (p.id === target) ? '' : 'none';
   });
+  // v182 Lot 2 : charge la liste des libres a la premiere ouverture du sous-onglet
+  if (target === 'maint-subtab-libres' && typeof loadLibres === 'function') {
+    loadLibres();
+  }
 });
 
 // ── Alertes maintenance (gestion super admin) ──────────────────────
@@ -7647,7 +7865,7 @@ async function prDeleteAgent(id) {
 })();
 
 </script>
-<script src="/static/mysifa_impersonate.js">
+<script>
 // ─── Formations & guides in-app (admin) ────────────────────────────
 let _fmtData = null;
 let _fmtSearch = '';
@@ -7791,6 +8009,7 @@ try {
 } catch(e){}
 
 </script>
+<script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
 """
