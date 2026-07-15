@@ -6570,6 +6570,78 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 178, "maintenance_codes_split_interventions")
 
+    # Migration 179 — MyMaintenance : validation indépendante par (op, machine).
+    # Avant : une op multi-machines = 1 ligne dans maintenance_event_ops avec
+    # machines_csv = "Coh1 · Coh2" et 1 statut partagé → marquer termine sur
+    # une machine hidden la task des 2.
+    # Après : split en N lignes (une par machine), chacune avec son statut,
+    # durée, commentaires, done_at, done_by indépendants.
+    # Change aussi la contrainte UNIQUE(event_id, code) -> UNIQUE(event_id, code, machines_csv)
+    # pour permettre le même code sur plusieurs machines dans un créneau.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=179 LIMIT 1").fetchone():
+        # 1. Nouvelle table avec contrainte ajustée
+        conn.execute("""CREATE TABLE IF NOT EXISTS maintenance_event_ops_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id INTEGER NOT NULL,
+            code TEXT NOT NULL,
+            machines_csv TEXT,
+            statut TEXT NOT NULL DEFAULT 'a_faire',
+            duree_reelle_min INTEGER,
+            pieces_changees TEXT,
+            observations TEXT,
+            photos_json TEXT,
+            done_at TEXT,
+            done_by INTEGER,
+            updated_by INTEGER,
+            updated_at TEXT,
+            FOREIGN KEY (event_id) REFERENCES maintenance_events(id) ON DELETE CASCADE,
+            FOREIGN KEY (code) REFERENCES maintenance_codes(code),
+            FOREIGN KEY (done_by) REFERENCES users(id),
+            FOREIGN KEY (updated_by) REFERENCES users(id),
+            UNIQUE (event_id, code, machines_csv)
+        )""")
+
+        # 2. Backfill : split chaque row par machine
+        SEP = " · "  # meme separateur que _MACHINES_SEP cote router
+        rows = conn.execute(
+            """SELECT o.id, o.event_id, o.code, o.machines_csv, o.statut,
+                      o.duree_reelle_min, o.pieces_changees, o.observations,
+                      o.photos_json, o.done_at, o.done_by, o.updated_by, o.updated_at,
+                      e.machine AS ev_machine
+               FROM maintenance_event_ops o
+               JOIN maintenance_events e ON e.id = o.event_id"""
+        ).fetchall()
+        for r in rows:
+            base = (r["machines_csv"] or "").strip() or (r["ev_machine"] or "").strip()
+            machines = [p.strip() for p in base.split(SEP) if p.strip()] if base else [None]
+            for m in (machines or [None]):
+                m_csv = m if m else None
+                try:
+                    conn.execute(
+                        """INSERT INTO maintenance_event_ops_new
+                           (event_id, code, machines_csv, statut, duree_reelle_min,
+                            pieces_changees, observations, photos_json, done_at,
+                            done_by, updated_by, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (r["event_id"], r["code"], m_csv, r["statut"],
+                         r["duree_reelle_min"], r["pieces_changees"], r["observations"],
+                         r["photos_json"], r["done_at"], r["done_by"],
+                         r["updated_by"], r["updated_at"]),
+                    )
+                except Exception:
+                    # Doublon (event_id, code, machines_csv) ignoré par prudence.
+                    pass
+
+        # 3. Bascule ancienne <-> nouvelle
+        conn.execute("DROP TABLE maintenance_event_ops")
+        conn.execute("ALTER TABLE maintenance_event_ops_new RENAME TO maintenance_event_ops")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_event_ops_event  ON maintenance_event_ops(event_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_event_ops_code   ON maintenance_event_ops(code)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_event_ops_statut ON maintenance_event_ops(statut)")
+
+        conn.commit()
+        _record_schema_migration(conn, 179, "maintenance_event_ops_split_per_machine")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
