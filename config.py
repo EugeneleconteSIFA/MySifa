@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "1.11.1"
+APP_VERSION = "2.0.1"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -450,4 +450,69 @@ def load_operations():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-        except FileNotFoundEr
+        except FileNotFoundError as e:
+            raise RuntimeError(f"Fichier manquant : {path}") from e
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"JSON invalide : {path} — {e}") from e
+        try:
+            validate_operations_config(data)
+        except ValueError as e:
+            raise RuntimeError(f"operations.json : {e}") from e
+        return data
+
+
+def refresh_operations_cache():
+    """Recharge OPERATION_SEVERITY après modification en base."""
+    global OPERATION_SEVERITY
+    OPERATION_SEVERITY = load_operations()
+    return OPERATION_SEVERITY
+
+
+OPERATION_SEVERITY = load_operations()
+
+def classify_operation(op_str):
+    if not op_str:
+        return {"code": "", "label": str(op_str), "severity": "info", "category": "autre"}
+    op_clean = str(op_str).strip()
+    match = re.match(r'^(\d+)', op_clean)
+    if match:
+        code = match.group(1)
+        info = OPERATION_SEVERITY.get(code, {"severity": "info", "label": op_clean, "category": "autre"})
+        return {"code": code, **info}
+    return {"code": "", "label": op_clean, "severity": "info", "category": "autre"}
+
+
+# URL de base (pour construire les liens dans les emails)
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+# Domaine public prod (liens portail / emails) — surcharge via PUBLIC_BASE_URL ou BASE_URL
+PUBLIC_BASE_URL_DEFAULT = "https://www.mysifa.com"
+
+
+def public_base_url() -> str:
+    """URL absolue pour liens emails et portail (jamais localhost si non configuré)."""
+    raw = (
+        os.getenv("PUBLIC_BASE_URL")
+        or os.getenv("BASE_URL")
+        or PUBLIC_BASE_URL_DEFAULT
+    ).strip().rstrip("/")
+    low = raw.lower()
+    if not raw or "localhost" in low or "127.0.0.1" in low:
+        return PUBLIC_BASE_URL_DEFAULT.rstrip("/")
+    return raw
+
+# ─── Chat (GIPHY) ─────────────────────────────────────────────────
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
+
+# ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# ─── MyTraduction (DeepL) ─────────────────────────────────────────
+# Clé API DeepL — obtenue sur https://www.deepl.com/pro-api
+# Le suffixe ":fx" indique la Free API (500k caractères/mois).
+# Sans suffixe = Pro API (URL différente, quota selon plan).
+DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
+# URL API DeepL — Free ou Pro (surchargée par .env si besoin)
+DEEPL_API_URL = os.getenv(
+    "DEEPL_API_URL",
+    "https://api-free.deepl.com/v2" if DEEPL_API_KEY.endswith(":fx") else "https://api.deepl.com/v2",
+)
