@@ -7873,11 +7873,10 @@ let _fmtStatus = '';
 
 async function loadFormationsAdmin(){
   try {
-    const r = await api('/api/guides/admin/overview');
-    if (!r.ok) { toast('Erreur chargement', true); return; }
-    _fmtData = await r.json();
+    // api() dans settings_page retourne le JSON parse directement (pas un Response)
+    _fmtData = await api('/api/guides/admin/overview');
     renderFormationsAdmin();
-  } catch(e){ toast('Erreur réseau', true); }
+  } catch(e){ toast('Erreur chargement : ' + (e.message||''), true); }
 }
 
 function _fmtStatusPill(status){
@@ -7988,14 +7987,13 @@ function renderFormationsAdmin(){
 async function resetFormation(userId, guideKey, uName, gLabel){
   if(!confirm(`Réinitialiser la progression du guide « ${gLabel} » pour ${uName} ?\n\nL'utilisateur reverra le tuto à sa prochaine visite.`)) return;
   try {
-    const r = await api('/api/guides/admin/reset', {
+    await api('/api/guides/admin/reset', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({user_id: userId, guide_key: guideKey})
     });
-    if(!r.ok){ toast('Erreur réinitialisation', true); return; }
     toast('Progression remise à zéro');
     await loadFormationsAdmin();
-  } catch(e){ toast('Erreur réseau', true); }
+  } catch(e){ toast('Erreur réinitialisation : ' + (e.message||''), true); }
 }
 
 // Wire up filtres
