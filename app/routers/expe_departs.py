@@ -21,7 +21,11 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
-from app.services.email_service import email_expe_rfq_transport, send_email
+from app.services.email_service import (
+    email_expe_devis_confirmation,
+    email_expe_rfq_transport,
+    send_email,
+)
 from config import public_base_url
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
@@ -2940,7 +2944,18 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
 
 @router.post("/devis/reponses/{reponse_id}/retenir")
 def retenir_reponse_devis(request: Request, reponse_id: int):
-    _require_expe_write(request)
+    """Retient une proposition de devis :
+      1. Marque la réponse `retenue` et les autres `refusee`, clôture la demande.
+      2. Crée automatiquement un départ pré-rempli (date = aujourd'hui,
+         transporteur / CP / poids / palettes issus du devis).
+      3. Envoie un email de confirmation au transporteur retenu, en CC service
+         expéditions et reply-to l'utilisateur qui valide.
+    """
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    today = _today_paris_iso()
+    email_user = (user.get("email") or user.get("identifiant") or "").strip() or None
+
     with get_db() as conn:
         rep = conn.execute(
             "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
@@ -2948,6 +2963,14 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
         if not rep:
             raise HTTPException(status_code=404, detail="Réponse introuvable")
         demande_id = rep["demande_id"]
+        demande_row = conn.execute(
+            "SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)
+        ).fetchone()
+        if not demande_row:
+            raise HTTPException(status_code=404, detail="Demande introuvable")
+        demande = dict(demande_row)
+        rep_d = dict(rep)
+
         conn.execute(
             """
             UPDATE expe_devis_reponses SET statut='refusee'
@@ -2963,8 +2986,76 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
             "UPDATE expe_demandes_devis SET statut='cloturee' WHERE id=?",
             (demande_id,),
         )
+
+        cur = conn.execute(
+            """INSERT INTO expe_departs (
+                date_enlevement, transporteur, transporteur_id, client,
+                code_postal_destination, nb_palette, poids_total_kg,
+                statut, created_at, created_by_email,
+                source_devis_reponse_id, source_devis_demande_id
+            ) VALUES (?,?,?,?,?,?,?, 'en_attente', ?, ?, ?, ?)""",
+            (
+                today,
+                rep_d.get("nom_transporteur"),
+                rep_d.get("transporteur_id"),
+                demande.get("client"),
+                demande.get("code_postal_destination"),
+                demande.get("nb_palette"),
+                demande.get("poids_total_kg"),
+                now,
+                email_user,
+                reponse_id,
+                demande_id,
+            ),
+        )
+        depart_id = cur.lastrowid
+        depart_row = conn.execute(
+            f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
+        ).fetchone()
         conn.commit()
-    return {"statut": "cloturee", "retenu": reponse_id}
+
+    depart_dict = _depart_dict(depart_row) if depart_row else {}
+
+    dest_email = (rep_d.get("destinataire_email") or "").strip()
+    email_sent = False
+    if dest_email and "@" in dest_email:
+        try:
+            subject, body_html = email_expe_devis_confirmation(
+                demande=demande, reponse=rep_d, depart=depart_dict, user=user
+            )
+            email_sent = bool(send_email(
+                to=dest_email,
+                subject=subject,
+                html_body=body_html,
+                reply_to=email_user,
+                cc=EXPE_DEVIS_CC,
+            ))
+        except Exception:
+            email_sent = False
+
+    try:
+        log_action(
+            user=user,
+            action="CREATE",
+            module="expe",
+            objet=(
+                f"Départ #{depart_id} créé depuis devis #{demande_id} "
+                f"(réponse #{reponse_id}) · email transporteur "
+                f"{'OK' if email_sent else 'KO'}"
+            ),
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+
+    return {
+        "statut": "cloturee",
+        "retenu": reponse_id,
+        "depart_id": depart_id,
+        "depart": depart_dict,
+        "email_envoye": email_sent,
+        "email_destinataire": dest_email or None,
+    }
 
 
 @router.post("/devis/demandes/{demande_id}/cloturer")

@@ -3424,6 +3424,34 @@ document.addEventListener('keydown', function(ev){
     .res-alert-box.exp{background:rgba(248,113,113,.12);border-color:var(--danger)}
     .res-alert-title{font-weight:700;font-size:13px;color:var(--text);margin-bottom:6px}
     .res-alert-list{font-size:12px;color:var(--text2);line-height:1.6;margin:0;padding-left:18px}
+    /* Modal ajout / edition certificat fournisseur */
+    .cert-form{display:flex;flex-direction:column;gap:14px}
+    .cert-drop{position:relative;display:block;border:2px dashed var(--border);border-radius:10px;padding:22px 16px;text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s}
+    .cert-drop:hover,.cert-drop.over{border-color:var(--accent);background:var(--accent-bg)}
+    .cert-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+    .cert-drop-ic{display:flex;justify-content:center;color:var(--muted);margin-bottom:6px;transition:color .15s}
+    .cert-drop:hover .cert-drop-ic,.cert-drop.over .cert-drop-ic,.cert-drop.filled .cert-drop-ic{color:var(--accent)}
+    .cert-drop-tit{font-weight:600;color:var(--text);font-size:13px;line-height:1.4}
+    .cert-drop-hint{font-size:11px;color:var(--muted);margin-top:2px}
+    .cert-drop.filled{border-style:solid;border-color:var(--accent);background:var(--accent-bg)}
+    .cert-drop.filled .cert-drop-tit{color:var(--accent)}
+    .cert-existing{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px;color:var(--text2);flex-wrap:wrap}
+    .cert-existing-l{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+    .cert-existing-ic{color:var(--accent);flex-shrink:0;display:flex}
+    .cert-existing-nm{color:var(--text);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cert-existing-sz{color:var(--muted);font-size:11px;flex-shrink:0}
+    .cert-row{display:flex;gap:12px;flex-wrap:wrap}
+    .cert-row > .cert-col{flex:1;min-width:180px}
+    .cert-labels-box{max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:6px;background:var(--bg);display:flex;flex-direction:column;gap:2px}
+    .cert-labels-empty{color:var(--muted);font-size:12px;padding:16px;text-align:center}
+    .cert-lbl{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2);transition:background .12s,color .12s;user-select:none}
+    .cert-lbl:hover{background:var(--accent-bg);color:var(--text)}
+    .cert-lbl input[type=checkbox]{margin:0;accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex-shrink:0}
+    .cert-lbl-txt{flex:1;line-height:1.4}
+    .cert-lbl-acr{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--text);margin-right:6px}
+    body.light .cert-drop{background:#f8fafc}
+    body.light .cert-existing{background:#f8fafc}
+    body.light .cert-labels-box{background:#f8fafc}
     /* Matrice */
     .matrice-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--border);border-radius:12px}
     .matrice{border-collapse:separate;border-spacing:0;width:100%;font-size:12px}
@@ -3596,6 +3624,19 @@ function renderRessourcesDetail(){
 }
 
 function openAddCertModal(){ openCertModal(null); }
+function onCertFileChange(inp){
+  const drop = document.getElementById('cert-drop');
+  const tit = document.getElementById('cert-drop-tit');
+  if(!drop || !tit) return;
+  if(inp.files && inp.files.length){
+    const f = inp.files[0];
+    drop.classList.add('filled');
+    tit.textContent = f.name + ' · ' + (f.size/1024).toFixed(0) + ' Ko';
+  } else {
+    drop.classList.remove('filled');
+    tit.textContent = 'Cliquer ou déposer un fichier';
+  }
+}
 function openEditCertModal(cid){ openCertModal(cid); }
 
 function openCertModal(certId){
@@ -3611,44 +3652,61 @@ function openCertModal(certId){
     const selected = new Set((cert && cert.fiches ? cert.fiches.map(x=>x.fiche_id) : []));
     const optsHtml = fiches.map(fi=>{
       const chk = selected.has(fi.id) ? 'checked' : '';
-      const lbl = fi.acronyme ? (fi.acronyme+' — '+fi.nom) : fi.nom;
-      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text2)">
+      const acr = fi.acronyme ? `<span class="cert-lbl-acr">${escHtml(fi.acronyme)}</span>` : '';
+      return `<label class="cert-lbl">
         <input type="checkbox" value="${fi.id}" ${chk} class="cert-fiche-chk">
-        <span>${escHtml(lbl)}</span>
+        <span class="cert-lbl-txt">${acr}${escHtml(fi.nom)}</span>
       </label>`;
     }).join('');
 
     const html = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
-      <div class="modal" style="max-width:640px">
+      <div class="modal" style="max-width:640px" onclick="event.stopPropagation()">
         <div class="modal-hd"><h3>${cert?'Modifier':'Ajouter'} un certificat</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
         <div class="modal-bd" style="max-height:70vh;overflow:auto">
-          ${cert?`<div style="margin-bottom:12px;padding:10px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text2)"><strong>${escHtml(cert.original_name)}</strong> · ${(cert.size_bytes/1024).toFixed(0)} Ko</div>`:`
-          <div class="aud-info-cell" style="margin-bottom:12px">
-            <div class="aud-info-label">Fichier PDF / image</div>
-            <input type="file" id="cert-file" accept=".pdf,.png,.jpg,.jpeg" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-          </div>`}
-          <div class="aud-info-cell" style="margin-bottom:12px">
-            <div class="aud-info-label">Titre / intitulé</div>
-            <input type="text" id="cert-titre" value="${escAttr(cert?cert.titre||'':'')}" placeholder="ex. Certificat ISO 9001 2026" style="width:100%">
-          </div>
-          <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-            <div class="aud-info-cell" style="flex:1;min-width:180px">
-              <div class="aud-info-label">Date d'émission</div>
-              <input type="date" id="cert-emit" value="${escAttr(cert?(cert.date_emission||''):'')}" style="width:100%">
+          <div class="cert-form">
+            ${cert?`<div class="cert-existing">
+              <div class="cert-existing-l">
+                <span class="cert-existing-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                <span class="cert-existing-nm" title="${escAttr(cert.original_name||'')}">${escHtml(cert.original_name||'')}</span>
+              </div>
+              <span class="cert-existing-sz">${(cert.size_bytes/1024).toFixed(0)} Ko</span>
+            </div>`:`
+            <div>
+              <label class="form-label">Fichier PDF / image</label>
+              <label class="cert-drop" id="cert-drop">
+                <div class="cert-drop-ic"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+                <div class="cert-drop-tit" id="cert-drop-tit">Cliquer ou déposer un fichier</div>
+                <div class="cert-drop-hint">PDF, PNG, JPG · max 10 Mo</div>
+                <input type="file" id="cert-file" accept=".pdf,.png,.jpg,.jpeg" onchange="onCertFileChange(this)">
+              </label>
+            </div>`}
+
+            <div>
+              <label class="form-label" for="cert-titre">Titre / intitulé</label>
+              <input type="text" id="cert-titre" class="form-input" value="${escAttr(cert?cert.titre||'':'')}" placeholder="ex. Certificat ISO 9001 2026">
             </div>
-            <div class="aud-info-cell" style="flex:1;min-width:180px">
-              <div class="aud-info-label">Date d'expiration</div>
-              <input type="date" id="cert-exp" value="${escAttr(cert?(cert.date_expiration||''):'')}" style="width:100%">
+
+            <div class="cert-row">
+              <div class="cert-col">
+                <label class="form-label" for="cert-emit">Date d'émission</label>
+                <input type="date" id="cert-emit" class="form-input" value="${escAttr(cert?(cert.date_emission||''):'')}">
+              </div>
+              <div class="cert-col">
+                <label class="form-label" for="cert-exp">Date d'expiration</label>
+                <input type="date" id="cert-exp" class="form-input" value="${escAttr(cert?(cert.date_expiration||''):'')}">
+              </div>
             </div>
-          </div>
-          <div class="aud-info-cell" style="margin-bottom:12px">
-            <div class="aud-info-label">Commentaire</div>
-            <textarea id="cert-com" rows="3" style="width:100%">${escHtml(cert?cert.commentaire||'':'')}</textarea>
-          </div>
-          <div class="aud-info-cell">
-            <div class="aud-info-label">Labels / certifications liés (référentiel RSE)</div>
-            <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--bg)">
-              ${optsHtml || '<div style="color:var(--muted);font-size:12px;padding:10px">Aucune fiche RSE disponible</div>'}
+
+            <div>
+              <label class="form-label" for="cert-com">Commentaire</label>
+              <textarea id="cert-com" class="form-textarea" rows="3" placeholder="Notes internes, portée du certificat, remarques…">${escHtml(cert?cert.commentaire||'':'')}</textarea>
+            </div>
+
+            <div>
+              <label class="form-label">Labels / certifications liés (référentiel RSE)</label>
+              <div class="cert-labels-box">
+                ${optsHtml || '<div class="cert-labels-empty">Aucune fiche RSE disponible</div>'}
+              </div>
             </div>
           </div>
         </div>
