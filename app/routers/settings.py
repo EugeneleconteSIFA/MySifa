@@ -2288,6 +2288,177 @@ async def maintenance_libres_create(request: Request):
     return {"code": code, "label": label, "categorie": categorie, "niveau": niveau}
 
 
+# ─── Lot 2 : Endpoints admin curation libres ─────────────────────────
+
+@router.get("/api/maintenance/codes/libres")
+def maintenance_libres_list(request: Request):
+    """Liste tous les codes libres avec metadata etendue (usage_count, last_used_at).
+    Pour le panneau Parametres > Maintenance > Interventions libres.
+    """
+    _require_maint_writer(request)
+    from database import get_db
+    with get_db() as conn:
+        cols = {c["name"] for c in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "libre" not in cols:
+            return {"items": []}
+        has_usage = "usage_count" in cols
+        sel_usage = "COALESCE(c.usage_count, 0) AS usage_count" if has_usage else "0 AS usage_count"
+        rows = conn.execute(
+            f"""SELECT c.code, c.label, c.niveau, c.categorie,
+                       {sel_usage},
+                       c.created_at, c.updated_at,
+                       (SELECT MAX(o.done_at) FROM maintenance_event_ops o WHERE o.code = c.code) AS last_used_at
+                FROM maintenance_codes c
+                WHERE c.libre = 1
+                ORDER BY usage_count DESC, c.updated_at DESC"""
+        ).fetchall()
+    items = [{
+        "code": r["code"],
+        "label": r["label"],
+        "niveau": int(r["niveau"] or 1),
+        "categorie": r["categorie"] or "remplacements",
+        "usage_count": int(r["usage_count"] or 0),
+        "created_at": r["created_at"],
+        "updated_at": r["updated_at"],
+        "last_used_at": r["last_used_at"],
+    } for r in rows]
+    return {"items": items}
+
+
+@router.post("/api/maintenance/codes/libres/merge")
+async def maintenance_libres_merge(request: Request):
+    """Fusionne deux codes libres. Body : {winner_code, loser_code}.
+    Toutes les ops liees au loser sont reassignees au winner, usage_count
+    est additionne, le loser est supprime. Operation reversible uniquement
+    via restore SQL manuel — a annoncer explicitement cote UI."""
+    user = _require_maint_writer(request)
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    winner_code = (body.get("winner_code") or "").strip()
+    loser_code = (body.get("loser_code") or "").strip()
+    if not winner_code or not loser_code:
+        raise HTTPException(422, "winner_code et loser_code obligatoires.")
+    if winner_code == loser_code:
+        raise HTTPException(400, "Les deux codes doivent etre differents.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        w = conn.execute(
+            "SELECT libre, label, COALESCE(usage_count, 0) AS usage_count "
+            "FROM maintenance_codes WHERE code = ?",
+            (winner_code,),
+        ).fetchone()
+        l = conn.execute(
+            "SELECT libre, label, COALESCE(usage_count, 0) AS usage_count "
+            "FROM maintenance_codes WHERE code = ?",
+            (loser_code,),
+        ).fetchone()
+        if not w or not l:
+            raise HTTPException(404, "Un des codes est introuvable.")
+        if not w["libre"] or not l["libre"]:
+            raise HTTPException(400, "La fusion ne fonctionne qu'entre deux codes libres.")
+        # 1. Reassigne les ops
+        conn.execute(
+            "UPDATE maintenance_event_ops SET code = ? WHERE code = ?",
+            (winner_code, loser_code),
+        )
+        # 2. Additionne usage_count
+        new_usage = int(w["usage_count"] or 0) + int(l["usage_count"] or 0)
+        conn.execute(
+            "UPDATE maintenance_codes SET usage_count = ?, updated_at = ? WHERE code = ?",
+            (new_usage, now, winner_code),
+        )
+        # 3. Supprime le loser
+        conn.execute("DELETE FROM maintenance_codes WHERE code = ?", (loser_code,))
+        conn.commit()
+    try:
+        log_action(
+            user=user, action="MERGE", module="maintenance_libres",
+            objet=f"Fusion {loser_code} ({l['label']}) -> {winner_code} ({w['label']})",
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"winner": winner_code, "loser_removed": loser_code, "new_usage_count": new_usage}
+
+
+@router.patch("/api/maintenance/codes/libres/{code}")
+async def maintenance_libres_rename(code: str, request: Request):
+    """Renomme un code libre. Impact retroactif automatique : toutes les
+    saisies passees referencant ce code refletent immediatement le nouveau
+    titre (elles stockent le code, pas le label). Utilise soit depuis
+    Parametres > Interventions libres, soit inline depuis l'historique."""
+    user = _require_maint_writer(request)
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    new_label = (body.get("label") or "").strip()
+    if not new_label:
+        raise HTTPException(422, "Titre obligatoire.")
+    if len(new_label) > 200:
+        new_label = new_label[:200]
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT libre, label FROM maintenance_codes WHERE code = ?", (code,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Code introuvable.")
+        if not row["libre"]:
+            raise HTTPException(400, "Ce code n'est pas une intervention libre.")
+        old_label = row["label"]
+        conn.execute(
+            "UPDATE maintenance_codes SET label = ?, updated_at = ? WHERE code = ?",
+            (new_label, now, code),
+        )
+        conn.commit()
+    try:
+        log_action(
+            user=user, action="UPDATE", module="maintenance_libres",
+            objet=f"Renomme {code} : {old_label} -> {new_label}",
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"code": code, "label": new_label}
+
+
+@router.delete("/api/maintenance/codes/libres/{code}")
+def maintenance_libres_delete(code: str, request: Request):
+    """Supprime un code libre non utilise (usage_count = 0 ET aucune op liee).
+    Sinon 409 avec message explicite invitant a fusionner."""
+    user = _require_maint_writer(request)
+    from database import get_db
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT libre, label, COALESCE(usage_count, 0) AS usage_count "
+            "FROM maintenance_codes WHERE code = ?",
+            (code,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Code introuvable.")
+        if not row["libre"]:
+            raise HTTPException(400, "Ce code n'est pas une intervention libre.")
+        real_usage = conn.execute(
+            "SELECT COUNT(*) AS n FROM maintenance_event_ops WHERE code = ?", (code,)
+        ).fetchone()["n"]
+        eff = max(int(row["usage_count"] or 0), int(real_usage or 0))
+        if eff > 0:
+            raise HTTPException(
+                409,
+                f"Ce code a {eff} saisie(s) associee(s). Fusionne-le avec un autre titre au lieu de l'archiver.",
+            )
+        conn.execute("DELETE FROM maintenance_codes WHERE code = ?", (code,))
+        conn.commit()
+    try:
+        log_action(
+            user=user, action="DELETE", module="maintenance_libres",
+            objet=f"Archive {code} - {row['label']}",
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"deleted": code}
+
+
 @router.get("/api/maintenance/codes/{code}/docs")
 def maintenance_code_docs_list(code: str, request: Request):
     """Liste les documents attaches a un code maintenance."""
