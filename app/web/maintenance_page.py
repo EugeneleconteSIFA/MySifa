@@ -6084,7 +6084,11 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <div class="op-modal-overlay" id="libre-modal" onclick="if(event.target===this) libreCloseModal()">
   <div class="op-modal" role="dialog" aria-modal="true">
     <div class="op-modal-title">Intervention libre</div>
-    <div class="op-modal-sub">Enregistre une intervention ponctuelle sans creer de code du catalogue. La date est celle d'aujourd'hui.</div>
+    <div class="op-modal-sub">Enregistre une intervention ponctuelle sans creer de code du catalogue.</div>
+    <div class="op-form-row">
+      <label for="libre-date">Date de l'intervention *</label>
+      <input type="date" id="libre-date">
+    </div>
     <div class="op-form-row">
       <label for="libre-machine">Machine *</label>
       <select id="libre-machine">
@@ -6907,9 +6911,12 @@ function libreOpenModal(){
   const t = document.getElementById('libre-titre');
   const d = document.getElementById('libre-duree');
   const c = document.getElementById('libre-comment');
+  const dateEl = document.getElementById('libre-date');
   if(t) t.value = '';
   if(d) d.value = '';
   if(c) c.value = '';
+  // v182 Lot 2 : date pre-remplie a aujourd'hui, modifiable par l'operateur
+  if(dateEl && typeof _fmtDateISO === 'function') dateEl.value = _fmtDateISO(new Date());
   const panel = document.getElementById('libre-autocomplete-panel');
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   // Pre-remplit machine avec la selection courante si disponible
@@ -6998,12 +7005,13 @@ async function libreSubmit(){
   };
   const titre = (document.getElementById('libre-titre')?.value || '').trim();
   const machine = document.getElementById('libre-machine')?.value || '';
+  const dateVal = (document.getElementById('libre-date')?.value || '').trim();
   const dureeStr = document.getElementById('libre-duree')?.value || '';
   const comment = (document.getElementById('libre-comment')?.value || '').trim();
   const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
-  if(!titre || !machine){
-    if(typeof showToast === 'function') showToast('Titre et machine sont obligatoires.', 'danger');
-    else alert('Titre et machine sont obligatoires.');
+  if(!titre || !machine || !dateVal){
+    if(typeof showToast === 'function') showToast('Date, titre et machine sont obligatoires.', 'danger');
+    else alert('Date, titre et machine sont obligatoires.');
     _libreReset();
     return;
   }
@@ -7026,13 +7034,13 @@ async function libreSubmit(){
       const dNew = await rNew.json();
       code = dNew.code;
     }
-    // Cree l'event non_planifie + PATCH termine (meme flow que opSubmitNew)
-    const today = _fmtDateISO(new Date());
+    // Cree l'event non_planifie + PATCH termine (meme flow que opSubmitNew).
+    // v182 Lot 2 : date_prevue = dateVal saisie par l'operateur (defaut aujourd'hui).
     const rEv = await fetch('/api/maintenance/events', {
       method:'POST', credentials:'include',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
-        machine, date_prevue: today, source: 'non_planifie',
+        machine, date_prevue: dateVal, source: 'non_planifie',
         ops: [code], operators: [],
       }),
     });
