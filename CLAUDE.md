@@ -735,6 +735,55 @@ Contraintes techniques :
 - Les illustrations sont des **mini-mockups fidèles** de la page, pas des
   icônes abstraites.
 
+**Pièges à éviter (retours d'expérience)**
+
+Cinq bugs concrets rencontrés en construisant le premier guide, qu'il faut
+éviter dans les modules suivants :
+
+1. **`main.py` : import + `include_router` obligatoires.** L'import
+   `from app.routers.guides import router as guides_api_router` **ne
+   suffit pas**. Il faut aussi `app.include_router(guides_api_router)`
+   sinon toutes les routes `/api/guides/*` renvoient un 404 silencieux
+   côté front (aucune trace côté serveur, aucun message côté client).
+   Vérifier les deux points à chaque nouveau router.
+
+2. **Contenu JS entre `<script src="…">` et `</script>` : ignoré.**
+   Un tag `<script>` avec attribut `src` ne peut pas contenir de code
+   inline — le browser charge le fichier externe et ignore tout ce qu'il
+   y a entre les balises. Si un patch insère des fonctions à cet
+   endroit-là par erreur, elles ne seront jamais définies et un
+   `ReferenceError` remontera quand elles seront appelées. Injecter le
+   code inline **avant** ou **après** le tag `<script src=…>`, dans son
+   propre bloc `<script>…</script>`.
+
+3. **Le helper `api()` change selon le module.** Dans
+   `qualite_page.py`, `api(path, opts)` retourne l'objet `Response` de
+   `fetch` — le front doit tester `if (!r.ok)` puis appeler
+   `await r.json()`. Dans `settings_page.py`, `api(path, opts)` retourne
+   déjà **le JSON parsé** et **throw sur HTTP != 2xx** — le front doit
+   faire `_var = await api(...)` dans un `try/catch`. Copier-coller un
+   pattern d'un module à l'autre sans lire les 4 lignes de `async
+   function api(...)` provoque un « erreur chargement » alors que le
+   serveur renvoie 200. Vérifier `api()` à chaque changement de module.
+
+4. **La table `users` n'a pas de colonne `prenom`.** Elle a `id`, `nom`
+   (nom complet), `email`, `role`, `password_hash`, `operateur_lie`,
+   `actif`, `created_at`, `last_login`. Un `SELECT ..., prenom, ...`
+   fait planter la requête SQL en 500. Utiliser `nom` seul dans le
+   backend, et côté front construire l'affichage en défensif
+   (``${u.prenom||''} ${u.nom||''}``.trim() supporte les 2 formats).
+
+5. **Ack robuste — envoyer bitmap ET total_steps depuis le front.** Les
+   `heartbeats` du suivi de progression sont *fire-and-forget* (POST
+   asynchrones sans `await`). Ils peuvent arriver au serveur **après**
+   l'appel `/ack`. Pour éviter cette race condition, le front envoie
+   toujours dans le body de `/ack` : `{guide_key, client_bitmap,
+   client_total_steps}`. Le serveur fait `merged = server_bitmap |
+   client_bmp` et fait confiance au `client_total_steps` (auto-heal
+   d'une éventuelle row DB avec un `total_steps` stale d'une ancienne
+   version du guide). Reproduire ce pattern pour tout nouveau système
+   de progression : bitmap + total côté front, fusion côté serveur.
+
 **Infra existante — rien à re-écrire**
 
 Le système est complet côté infra ; ajouter un guide ne demande que du
