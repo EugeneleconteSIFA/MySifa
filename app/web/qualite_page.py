@@ -3983,9 +3983,11 @@ async function _postGuideHeartbeat(key, stepIdx, totalSteps, deltaMs){
 }
 async function _postGuideAck(key){
   try{
-    // On envoie le bitmap local : le serveur fusionne (OR) pour eviter les races heartbeat
+    // On envoie bitmap + total_steps du front : le serveur fusionne et fait confiance au front pour le total
     const bmp = S._qguideBitmapLocal | 0;
-    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, client_bitmap: bmp})});
+    const guides = _qualiteGuides();
+    const totalSteps = (guides[key] && guides[key].steps) ? guides[key].steps.length : 0;
+    const r = await api('/api/guides/ack', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({guide_key:key, client_bitmap: bmp, client_total_steps: totalSteps})});
     if(r.ok){
       if(!S._qguideAckedKeys) S._qguideAckedKeys = new Set();
       S._qguideAckedKeys.add(key);
