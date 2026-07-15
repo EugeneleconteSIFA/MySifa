@@ -4196,19 +4196,25 @@ try{ window.setWearPartPos = setWearPartPos; }catch(e){}
 // extension navigateur, script injecté), la délégation prend le relais.
 // Sur .maint-wp-btn avec data-wp + data-pos, on lit les attributs et on
 // dispatch. Une seule fois, sur document, pour éviter les doublons.
+// Event delegation robuste sur .maint-wp-btn (Bande/Rive des pieces d'usure).
+// Handler en phase CAPTURE + BUBBLE pour maximiser la reception du click,
+// meme si un autre listener tente de stopPropagation en amont.
+// Log console explicite pour diagnostic si le click ne fonctionne pas.
 (function _installWearPartDelegation(){
   if(window.__mysifa_wp_deleg_installed) return;
   window.__mysifa_wp_deleg_installed = true;
-  document.addEventListener('click', function(e){
+  const handler = function(e){
     const btn = e.target && e.target.closest ? e.target.closest('.maint-wp-btn') : null;
     if(!btn) return;
     const pieceId = btn.getAttribute('data-wp');
     const pos = btn.getAttribute('data-pos');
+    console.log('[wearpart click]', pieceId, pos, 'phase:', e.eventPhase);
     if(!pieceId || !pos) return;
-    // Empêche double appel si l'inline onclick a déjà tourné (idempotent :
-    // setWearPartPos ne fait qu'écrire le même state en localStorage).
-    try{ setWearPartPos(pieceId, pos); }catch(err){ console.warn('[wearpart deleg]', err); }
-  });
+    e.preventDefault();
+    try{ setWearPartPos(pieceId, pos); }catch(err){ console.error('[wearpart handler]', err); }
+  };
+  document.addEventListener('click', handler, true);
+  document.addEventListener('click', handler, false);
 })();
 // Références d'usure (temps & métrage) — état localStorage :
 //   { "<piece>": { "<machine>": { "<position>": { temps: "...", metrage: "..." } } } }
@@ -4306,7 +4312,7 @@ function _renderWearPartsGroup(machine){
     }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
-      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '" onclick="setWearPartPos(\'' + escAttr(p.id) + '\',\'' + value + '\')">' + label + '</button>';
+      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
     };
     const tabsHtml = p.no_position
       ? ''
