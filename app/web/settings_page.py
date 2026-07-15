@@ -7905,6 +7905,9 @@ function _fmtDate(iso){
 const _FMT_GUIDES = {
   'qualite-overview': 'MyQualité — Vue d\'ensemble',
   'ressources': 'Ressources fournisseurs',
+  'nc-list': 'MyQualité — Non-conformités',
+  'audits': 'MyQualité — Audits client',
+  'ref-rse': 'MyQualité — Référentiel RSE',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
