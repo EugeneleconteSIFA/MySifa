@@ -199,7 +199,7 @@ def admin_overview(request: Request):
     _require_admin(request)
     with get_db() as conn:
         users = [dict(r) for r in conn.execute(
-            """SELECT id, nom, prenom, email, role FROM users
+            """SELECT id, nom, email, role FROM users
                WHERE (actif IS NULL OR actif=1)
                ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()]
