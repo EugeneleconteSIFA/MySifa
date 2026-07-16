@@ -3,7 +3,10 @@ Route : /maintenance
 
 Contrôle d'accès multi-rôle :
 - Admin (accès complet) : superadmin, direction, administration.
-- Opérateur (vue « Mes tâches ») : rôle fabrication.
+- Opérateur (vue « Mes tâches ») : rôle fabrication, uniquement quand le flag
+  global MAINTENANCE_OPEN_BETA est activé dans .env. Sert à ouvrir
+  progressivement le module aux opérateurs sur v1 (staging) avant la promotion
+  en prod, sans exposer l'interface encore incomplète à toute l'usine.
 Le rôle effectif (admin / operator) est injecté dans le tag racine via
 l'attribut data-maint-role, ce qui permet au CSS et au JS de la page de
 basculer l'affichage entre les vues admin et opérateur sans deux templates
@@ -20,31 +23,32 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
-    ROLE_ADMINISTRATION_VENTES,
-    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
+    MAINTENANCE_OPEN_BETA,
 )
 
-_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_ADMINISTRATION_VENTES, ROLE_ADMINISTRATION_TECHNIQUE}
+_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
 
 
 def _get_maintenance_role(user: dict) -> Optional[str]:
     """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
 
     - 'admin'    : superadmin, direction, administration.
-    - 'operator' : fabrication.
+    - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
     - None       : pas d'accès (déclencher access_denied_response).
 
     Utilise `effective_role()` pour respecter l'impersonation : un superadmin
     qui simule un rôle `fabrication` doit voir la vue opérateur, pas celle
-    d'admin.
+    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée —
+    elle court-circuitait l'impersonation en renvoyant 'admin' même quand
+    le rôle simulé était différent.
     """
     if not user:
         return None
     role = effective_role(user)
     if role in _MAINTENANCE_ADMIN_ROLES:
         return "admin"
-    if role == ROLE_FABRICATION:
+    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
         return "operator"
     return None
 
@@ -4106,12 +4110,38 @@ async function _libreEditPersist(original, changes){
     });
     if(!r2.ok){ const err = await r2.json().catch(()=>({})); throw new Error(err.detail || 'PATCH event échoué'); }
   }
-  // 3. PATCH op : commentaire (observations)
+  // 3. PATCH op : commentaire (observations) + done_at (v2.2.5).
+  //    Fix : la date_saisie affichée dans l'historique = done_at || date_prevue.
+  //    Comme les libres sont marqués termine à la création, done_at est set →
+  //    modifier seulement date_prevue est invisible. On PATCH aussi done_at.
   const newComment = (changes.commentaire || '').trim();
+  const opPatch = {};
   if(newComment !== (original.commentaire || '')){
+    opPatch.observations = newComment;
+  }
+  if(newDateIso){
+    // Convertit en ISO Paris (YYYY-MM-DDTHH:MM:SS local) — même format que
+    // _now_paris_iso() côté backend.
+    try{
+      const d = new Date(newDateIso);
+      if(!isNaN(d.getTime())){
+        const pad = n => (n < 10 ? '0' + n : '' + n);
+        const doneAtLocal = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+          'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        // Compare avec done_at déjà en DB : la trace originale reflète la
+        // date_saisie affichée (done_at || date_prevue). On skip le PATCH si
+        // pas de changement effectif.
+        const originalDoneAt = (original._done_at || original.date_saisie || '').slice(0, 19);
+        if(doneAtLocal !== originalDoneAt){
+          opPatch.done_at = doneAtLocal;
+        }
+      }
+    }catch(e){}
+  }
+  if(Object.keys(opPatch).length){
     const r3 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,
-      body: JSON.stringify({observations: newComment}),
+      body: JSON.stringify(opPatch),
     });
     if(!r3.ok){ const err = await r3.json().catch(()=>({})); throw new Error(err.detail || 'PATCH op échoué'); }
   }
