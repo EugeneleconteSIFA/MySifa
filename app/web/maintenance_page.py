@@ -865,6 +865,9 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .libre-suggestion-count{color:var(--muted);font-size:11px;white-space:nowrap;margin-left:12px}
 .libre-duree-link{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 0;text-align:left;font-family:inherit}
 .libre-duree-link:hover{text-decoration:underline}
+/* v2 : lien de switch entre modes Catalogue / Inhabituelle dans op-modal-new */
+.op-new-mode-link{display:inline-block;margin-top:8px;color:var(--accent);font-size:12px;text-decoration:none;font-family:inherit}
+.op-new-mode-link:hover{text-decoration:underline}
 .op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
 .op-cat-interventions,
 .op-cat-entretien{background:rgba(167,139,250,.16);color:#8b5cf6}
@@ -953,10 +956,8 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Enregistrer une opération
     </button>
-    <button type="button" class="nav-btn op-only" onclick="libreOpenModal()" style="color:#3b82f6">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-      Intervention libre
-    </button>
+    <!-- v2 : bouton "Intervention libre" fusionné dans "Enregistrer une opération"
+         (mode Inhabituelle accessible via lien dans le modal). -->
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
         <span class="mysifa-back-preamble">← Retour </span>
@@ -6269,10 +6270,13 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
     <div class="op-form-row" id="op-new-code-row">
       <label for="op-new-code">Code opération *</label>
       <select id="op-new-code"></select>
+      <a href="javascript:void(0)" id="op-new-switch-libre" class="op-new-mode-link" onclick="opSwitchMode('inhabituelle')">Pas dans la liste ? Décrire une intervention inhabituelle</a>
     </div>
-    <div class="op-form-row" id="op-new-titre-libre-row" style="display:none">
+    <div class="op-form-row libre-titre-wrap" id="op-new-titre-libre-row" style="display:none">
       <label for="op-new-titre-libre">Titre de l'intervention *</label>
-      <input type="text" id="op-new-titre-libre" maxlength="200" placeholder="Ex : Remplacement joint pompe hydraulique">
+      <input type="text" id="op-new-titre-libre" autocomplete="off" maxlength="200" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="opNewLibreOnInput()">
+      <div class="libre-autocomplete-panel" id="op-new-libre-autocomplete-panel" style="display:none"></div>
+      <a href="javascript:void(0)" id="op-new-switch-catalogue" class="op-new-mode-link" onclick="opSwitchMode('catalogue')">← Revenir au catalogue</a>
     </div>
     <div class="op-form-row">
       <label for="op-new-duree">Durée réelle (min)</label>
@@ -6942,21 +6946,95 @@ function _opResetModalFields(){
 async function opOpenNewModal(){
   await opFetchCodes();
   MAINT_STATE.editingEventId = null;
+  MAINT_STATE.editingIsLibre = false;
+  MAINT_STATE.newModalMode = 'catalogue';  // v2 : mode par défaut
+  MAINT_STATE.newLibreSelectedCode = null; // code catalogue si suggéré par autocomplete
   const sel = document.getElementById('op-new-code');
   sel.innerHTML = MAINT_STATE.codes.map(c =>
     `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
   ).join('');
   document.getElementById('op-modal-new-title').textContent = 'Enregistrer une opération';
-  document.getElementById('op-modal-new-sub').textContent = 'Enregistre une opération de maintenance déjà effectuée. Elle sera marquée « Terminée » et rattachée à la machine sélectionnée.';
+  document.getElementById('op-modal-new-sub').textContent = 'Choisis une opération dans le catalogue. Si elle ne s\'y trouve pas, décris une intervention inhabituelle.';
   document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
   _opResetModalFields();
-  // Pré-remplit avec la machine actuellement sélectionnée dans "Mes tâches".
+  // Reset visibilité par mode Catalogue
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(codeRow) codeRow.style.display = '';
+  if(titreRow) titreRow.style.display = 'none';
+  const titreEl = document.getElementById('op-new-titre-libre');
+  if(titreEl) titreEl.value = '';
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  // Pré-remplit avec la machine sélectionnée dans Mes tâches
   try{
     const currentMach = _getSelectedMachine();
     const machEl = document.getElementById('op-new-machine');
     if(machEl && currentMach) machEl.value = currentMach;
   }catch(e){}
   document.getElementById('op-modal-new').classList.add('active');
+}
+
+// v2 : switch entre modes Catalogue et Inhabituelle dans le modal fusionné.
+function opSwitchMode(mode){
+  MAINT_STATE.newModalMode = mode;
+  MAINT_STATE.newLibreSelectedCode = null;
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(mode === 'inhabituelle'){
+    if(codeRow) codeRow.style.display = 'none';
+    if(titreRow) titreRow.style.display = '';
+    setTimeout(() => { const el = document.getElementById('op-new-titre-libre'); if(el) el.focus(); }, 60);
+  } else {
+    if(codeRow) codeRow.style.display = '';
+    if(titreRow) titreRow.style.display = 'none';
+    const panel = document.getElementById('op-new-libre-autocomplete-panel');
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  }
+}
+
+// v2 : autocomplete côté modal fusionné (sur le champ titre libre).
+//   Duplique la logique de libreOnTitreInput mais scopée sur op-new-* ids.
+let _opNewLibreTimer = null;
+async function opNewLibreOnInput(){
+  const t = document.getElementById('op-new-titre-libre');
+  const q = (t ? t.value : '').trim();
+  MAINT_STATE.newLibreSelectedCode = null;
+  clearTimeout(_opNewLibreTimer);
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(q.length < 2){
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    return;
+  }
+  _opNewLibreTimer = setTimeout(async () => {
+    try{
+      const r = await fetch('/api/maintenance/codes/libres/autocomplete?q=' + encodeURIComponent(q) + '&limit=8', {credentials:'include'});
+      if(!r.ok){ if(panel){ panel.style.display='none'; } return; }
+      const d = await r.json();
+      const suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+      if(!suggestions.length){
+        if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+        return;
+      }
+      panel.innerHTML = suggestions.map(s =>
+        '<div class="libre-suggestion" onclick="opNewLibreSelectSuggestion(\'' + escAttr(s.code) + '\', \'' + escAttr(s.label) + '\')">' +
+          '<span class="libre-suggestion-label">' + escHtml(s.label) + '</span>' +
+          '<span class="libre-suggestion-count">' + escHtml(s.code) + '</span>' +
+        '</div>'
+      ).join('');
+      panel.style.display = 'block';
+    }catch(e){
+      if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    }
+  }, 220);
+}
+
+function opNewLibreSelectSuggestion(code, label){
+  MAINT_STATE.newLibreSelectedCode = code;
+  const t = document.getElementById('op-new-titre-libre');
+  if(t) t.value = label;
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
 }
 
 async function opOpenEditModal(eventId){
@@ -7024,11 +7102,15 @@ async function opOpenEditModal(eventId){
 function opCloseNewModal(){
   MAINT_STATE.editingEventId = null;
   MAINT_STATE.editingIsLibre = false;
+  MAINT_STATE.newModalMode = 'catalogue';
+  MAINT_STATE.newLibreSelectedCode = null;
   // Reset visibilité par défaut : code visible, titre libre caché
   const codeRow = document.getElementById('op-new-code-row');
   const titreRow = document.getElementById('op-new-titre-libre-row');
   if(codeRow) codeRow.style.display = '';
   if(titreRow) titreRow.style.display = 'none';
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   document.getElementById('op-modal-new').classList.remove('active');
 }
 
@@ -7058,16 +7140,22 @@ async function opSubmitNew(){
   const comment = (document.getElementById('op-new-comment').value || '').trim();
   const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
 
+  // v2 : mode création détecte MAINT_STATE.newModalMode.
+  //      mode édition détecte MAINT_STATE.editingIsLibre.
+  const editingIdForValid = MAINT_STATE.editingEventId;
+  const isCreationInhabituelle = (editingIdForValid == null) && (MAINT_STATE.newModalMode === 'inhabituelle');
+  const isCreationCatalogue    = (editingIdForValid == null) && !isCreationInhabituelle;
+
   // Validation champs obligatoires selon mode
   if(!dateVal || !machine){
     if(typeof showToast === 'function') showToast('Date et machine sont obligatoires.', 'danger');
     return;
   }
-  if(isLibreEdit && !titreLibre){
+  if((isLibreEdit || isCreationInhabituelle) && !titreLibre){
     if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger');
     return;
   }
-  if(!isLibreEdit && !code){
+  if(isCreationCatalogue && !code){
     if(typeof showToast === 'function') showToast('Code opération obligatoire.', 'danger');
     return;
   }
@@ -7160,14 +7248,32 @@ async function opSubmitNew(){
     return;
   }
 
-  // ─── Mode création
+  // ─── Mode création (Catalogue ou Inhabituelle)
   try{
-    // 1. POST /events → crée l'event non_planifie avec 1 op (statut a_faire par défaut)
+    // 1. Résout le code final. En mode Inhabituelle, on crée (ou réutilise
+    //    par dedup exact match backend) un LIB-xxx à partir du titre.
+    let codeFinal = code;
+    if(isCreationInhabituelle){
+      // Si une suggestion catalogue a été cliquée → utilise ce code direct.
+      if(MAINT_STATE.newLibreSelectedCode){
+        codeFinal = MAINT_STATE.newLibreSelectedCode;
+      } else {
+        const rNew = await fetch('/api/maintenance/codes/libres', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({label: titreLibre}),
+        });
+        if(!rNew.ok){ const err = await rNew.json().catch(()=>({})); throw new Error(err.detail || 'Création code libre échouée'); }
+        const dNew = await rNew.json();
+        codeFinal = dNew.code;
+      }
+    }
+    // 2. POST /events → crée l'event non_planifie avec 1 op
     const body = {
       machine,
       date_prevue: dateVal,
       source: 'non_planifie',
-      ops: [code],
+      ops: [codeFinal],
       operators: [],  // Le serveur forcera l'user courant.
     };
     const r = await fetch('/api/maintenance/events', {
@@ -7180,11 +7286,12 @@ async function opSubmitNew(){
     const ev = data.event;
     const op = (ev.ops || [])[0];
     if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-    // 2. PATCH op → statut termine + durée + observations (déclenche done_at côté back)
+    // 3. PATCH op → statut termine + durée + observations
     await _patchOpTermine(ev.id, op.id, dureeMin, comment);
-    if(typeof showToast === 'function') showToast('Opération enregistrée.', 'success');
+    if(typeof showToast === 'function') showToast(isCreationInhabituelle ? 'Intervention libre enregistrée.' : 'Opération enregistrée.', 'success');
     opCloseNewModal();
     await opLoadTasks();
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
   }catch(e){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
