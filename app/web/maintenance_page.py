@@ -853,7 +853,6 @@ body.light .op-op-consignes-chip{border-color:rgba(8,145,178,.28)}
 .ops-detail-header{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
 .ops-detail-title-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .ops-detail-title{font-size:16px;font-weight:700;color:var(--text)}
-.ops-detail-code-line{font-size:11px;color:var(--muted);font-family:monospace}
 .ops-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px;margin-bottom:16px}
 .ops-detail-cell{display:flex;flex-direction:column;gap:3px}
 .ops-detail-cell-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
@@ -4118,31 +4117,6 @@ function openOpsHistoryDetail(id){
   const isLibre = !!o._libre;
   const isPlanifie = o._event_source === 'planifie';
   const chipLibre = isLibre ? '<span class="libre-chip">Libre</span>' : '';
-  const codeLine = '<code style="background:var(--bg);padding:2px 8px;border-radius:6px;font-size:11px;color:var(--muted)">' + escHtml(o._code || '—') + '</code>';
-
-  // Créneau parent
-  let creneauBlock = '';
-  if(isPlanifie){
-    const nomLine = (o._event_nom && o._event_nom.trim())
-      ? '<div style="font-size:15px;font-weight:700;color:var(--text)">' + escHtml(o._event_nom) + '</div>'
-      : '';
-    const horaires = (o._event_heure_debut && o._event_heure_fin)
-      ? escHtml(o._event_heure_debut) + ' – ' + escHtml(o._event_heure_fin)
-      : 'Sans créneau horaire';
-    const dateLine = escHtml(fmtDate(o._event_date_prevue));
-    creneauBlock =
-      '<div class="ops-detail-section">' +
-        '<div class="ops-detail-section-label">Créneau parent</div>' +
-        nomLine +
-        '<div style="font-size:13px;color:var(--text2)">' + dateLine + ' · ' + horaires + '</div>' +
-      '</div>';
-  } else {
-    creneauBlock =
-      '<div class="ops-detail-section">' +
-        '<div class="ops-detail-section-label">Type</div>' +
-        '<div style="font-size:14px;font-weight:600;color:var(--text)">Intervention non planifiée</div>' +
-      '</div>';
-  }
 
   // Consignes
   const consignesBlock = (o.consignes || '').trim()
@@ -4182,12 +4156,7 @@ function openOpsHistoryDetail(id){
       value: escHtml(o._updated_by_nom) + ' <span style="color:var(--muted)">· le ' + escHtml(fmtDate(o._updated_at)) + '</span>',
     });
   }
-  if(o._created_by_nom && isPlanifie){
-    traceRows.push({
-      label: 'Créneau créé par',
-      value: escHtml(o._created_by_nom) + (o._event_created_at ? ' <span style="color:var(--muted)">· le ' + escHtml(fmtDate(o._event_created_at)) + '</span>' : ''),
-    });
-  }
+  // "Créneau créé par" retiré avec le bloc Créneau parent (v2.2.3).
   const traceBlock = traceRows.length
     ? '<div class="ops-detail-section">' +
         '<div class="ops-detail-section-label">Traçabilité</div>' +
@@ -4216,7 +4185,6 @@ function openOpsHistoryDetail(id){
             '<div class="ops-detail-title">' + escHtml(o.type || '—') + '</div>' +
             chipLibre +
           '</div>' +
-          '<div class="ops-detail-code-line">' + codeLine + '</div>' +
         '</div>' +
         '<div class="ops-detail-grid">' +
           '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Date de saisie</span><span class="ops-detail-cell-value">' + escHtml(fmtDate(o.date_saisie)) + '</span></div>' +
@@ -4224,7 +4192,6 @@ function openOpsHistoryDetail(id){
           '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Opérateur</span><span class="ops-detail-cell-value">' + escHtml(o.operateur || '—') + '</span></div>' +
           '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Durée réelle</span><span class="ops-detail-cell-value">' + dureeStr + '</span></div>' +
         '</div>' +
-        creneauBlock +
         consignesBlock +
         commentBlock +
         piecesBlock +
