@@ -113,7 +113,7 @@
   let S = {
     // Routing / session
     app: HAS_INITIAL_APP ? INITIAL_APP : 'login',
-    page: 'production',
+    page: 'menu',
     subPage: 'kpis',          // 'kpis' | 'saisies' | 'erreurs'
     user: null,
     sidebarOpen: false,
@@ -6873,6 +6873,7 @@ function renderProdKpis(){
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
       }
+      try{ initProdGuides(S.user && S.user.role).then(prodMaybeAutoOpenGuide); }catch(e){}
     }else{
       S.user = null;
       S.app = 'login';
@@ -7030,6 +7031,7 @@ function renderProdKpis(){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
     }
     render();
+    try{ prodMaybeAutoOpenGuide(); }catch(e){}
   }
 
   // ── 13. renderLogin / renderSidebar ────────────────────────────────
@@ -7077,11 +7079,17 @@ function renderProdKpis(){
   }
 
   function renderSidebar(){
+    if(!document.getElementById('myprod-logo-hover-css')){
+      var _ls = document.createElement('style'); _ls.id = 'myprod-logo-hover-css';
+      _ls.textContent = '.sidebar .logo{cursor:pointer;border-radius:10px;padding:4px 6px;margin:-4px -6px 0;transition:background .15s}.sidebar .logo:hover{background:var(--accent-bg)}.sidebar .logo:hover .logo-brand{color:var(--accent)}';
+      document.head.appendChild(_ls);
+    }
     const admin = isAdmin(S.user);
     const comptaPlan = isComptaPlanning(S.user);
     const items = comptaPlan
       ? (canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : [])
       : [
+          {key: 'menu', label: 'Accueil', icon: 'home'},
           ...(canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : []),
           {key: 'production', label: 'Production', icon: 'wrench'},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
@@ -7090,7 +7098,7 @@ function renderProdKpis(){
         ];
     const isLight = document.body.classList.contains('light');
     return h('nav', {className: 'sidebar'},
-      h('div', {className: 'logo'},
+      h('div', {className: 'logo', title: 'Accueil MyProd', onClick: () => { S.sidebarOpen = false; set({page: 'menu'}); nav(); }},
         h('div', {className: 'logo-brand'}, 'My', h('span', null, 'Prod')),
         h('div', {className: 'logo-sub'}, 'by SIFA')
       ),
@@ -7146,6 +7154,50 @@ function renderProdKpis(){
   // \u00c9tape 2f : pas connect\u00e9 -> renderLogin ; connect\u00e9 -> sidebar + main vide.
   // Les sous-pages MyProd (Production, Historique, etc.) seront ajout\u00e9es aux
   // \u00e9tapes 2g \u00e0 2l.
+  // ── Page d'accueil MyProd (menu général) ───────────────────────────
+  function ensureProdMenuStyle(){
+    if(document.getElementById('myprod-menu-css')) return;
+    var s = document.createElement('style');
+    s.id = 'myprod-menu-css';
+    s.textContent =
+      '.myprod-menu{max-width:960px}'
+      + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
+      + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
+      + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
+      + '.myprod-tile-ic{width:44px;height:44px;border-radius:12px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}'
+      + '.myprod-tile-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}'
+      + '.myprod-tile-lbl{font-size:15px;font-weight:800;color:var(--text)}'
+      + '.myprod-tile-desc{font-size:12px;color:var(--muted);line-height:1.45}'
+      + '.myprod-tile-chev{color:var(--muted);flex-shrink:0;transition:transform .15s,color .15s}'
+      + '.myprod-tile:hover .myprod-tile-chev{transform:translateX(3px);color:var(--accent)}';
+    document.head.appendChild(s);
+  }
+
+  function renderProdMenu(){
+    ensureProdMenuStyle();
+    var u = S.user;
+    var tiles = [];
+    tiles.push({icon:'wrench', label:'Production', desc:'KPIs, saisies et qualité de saisie', go:function(){ set({page:'production', subPage:'kpis'}); nav(); }});
+    tiles.push({icon:'layers', label:'Traçabilité', desc:'Matières utilisées par dossier', go:function(){ set({page:'traceabilite'}); nav(); }});
+    if(isAdmin(u)) tiles.push({icon:'trending-up', label:'Rentabilité', desc:'Comparaison devis / réel par dossier', go:function(){ set({page:'rentabilite'}); nav(); }});
+    if(canAccessOfTab()) tiles.push({icon:'file', label:'Fiches + OF', desc:'Import PDF et consultation des OF', go:function(){ set({page:'of'}); nav(); }});
+    if(canPlanningNav(u)) tiles.push({icon:'calendar', label:'Planning machine', desc:'Ordonnancement des dossiers par machine', go:function(){ window.location.href='/planning'; }});
+
+    var grid = h('div', {className:'myprod-tiles'},
+      tiles.map(function(t){
+        var card = h('button', {type:'button', className:'myprod-tile', title:t.label, onClick:t.go});
+        card.appendChild(h('div', {className:'myprod-tile-ic'}, iconEl(t.icon, 20)));
+        card.appendChild(h('div', {className:'myprod-tile-body'},
+          h('div', {className:'myprod-tile-lbl'}, t.label),
+          h('div', {className:'myprod-tile-desc'}, t.desc)
+        ));
+        card.appendChild(h('div', {className:'myprod-tile-chev'}, iconEl('arrow-right', 16)));
+        return card;
+      })
+    );
+    return h('div', {className:'myprod-menu'}, grid);
+  }
+
   function render(){
     const root = document.getElementById('root');
     if(!root) return;
@@ -7176,7 +7228,11 @@ function renderProdKpis(){
     let pageContent;
     let pageTitle = 'MyProd';
     let pageSubtitle = 'Page standalone';
-    if(S.page === 'production'){
+    if(S.page === 'menu'){
+      pageTitle = 'MyProd';
+      pageSubtitle = 'Saisie de production, traçabilité et rentabilité';
+      pageContent = renderProdMenu();
+    }else if(S.page === 'production'){
       pageTitle = (S.subPage === 'saisies' ? 'Saisies' :
                    S.subPage === 'erreurs' ? 'Historique & Erreurs' :
                    'Production');
@@ -7315,6 +7371,63 @@ function renderProdKpis(){
   // Les fonctions sont mises en `window` pour que les étapes 2f+ puissent
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
+  // ── Guides in-app MyProd (moteur partagé mysifa_guide_engine.js) ─────
+  var PROD_VIEW_GUIDE = {
+    menu: 'myprod-overview',
+    production: 'myprod-production',
+    traceabilite: 'myprod-tracabilite',
+    rentabilite: 'myprod-rentabilite',
+    of: 'myprod-of'
+  };
+
+  var PROD_GUIDES = {
+    'myprod-overview': { steps: [
+      {
+        icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+        title: 'Bienvenue dans MyProd',
+        body: 'MyProd centralise le <strong>suivi de production</strong> : ce que les opérateurs saisissent, les matières consommées par dossier et la rentabilité réelle face au devis. Cette page d\'accueil donne accès à chaque espace.',
+        extra: '<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Suivre les KPIs de production et la qualité de saisie.</li><li>Consulter et corriger les saisies opérateur.</li><li>Voir les matières utilisées par dossier (traçabilité).</li><li>Comparer le réel au devis (rentabilité) et gérer les fiches + OF.</li></ul></div></div>'
+      },
+      {
+        title: 'La page d\'accueil et la navigation',
+        body: 'Chaque <span class="mguide-hl">tuile</span> ouvre un espace de MyProd. La barre latérale reprend les mêmes accès, et le logo <strong>MyProd</strong> ramène toujours ici. Le contenu s\'adapte à votre rôle : vous ne voyez que les espaces autorisés.',
+        illu: '<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="8" width="70" height="156" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="20" y="26" font-size="11" fill="var(--text)" font-weight="800">My<tspan fill="var(--accent)">Prod</tspan></text><rect x="16" y="40" width="54" height="16" rx="4" fill="var(--accent-bg)"/><rect x="16" y="60" width="54" height="16" rx="4" fill="transparent" stroke="var(--border)"/><rect x="16" y="80" width="54" height="16" rx="4" fill="transparent" stroke="var(--border)"/><rect x="94" y="16" width="238" height="20" rx="5" fill="transparent"/><text x="94" y="30" font-size="13" fill="var(--text)" font-weight="800">MyProd</text><rect x="94" y="46" width="112" height="52" rx="10" fill="var(--card)" stroke="var(--accent)"/><rect x="104" y="58" width="26" height="26" rx="7" fill="var(--accent-bg)"/><text x="138" y="70" font-size="10" fill="var(--text)" font-weight="700">Production</text><text x="138" y="83" font-size="8" fill="var(--muted)">KPIs &amp; saisies</text><rect x="214" y="46" width="112" height="52" rx="10" fill="var(--card)" stroke="var(--border)"/><rect x="224" y="58" width="26" height="26" rx="7" fill="var(--accent-bg)"/><text x="258" y="70" font-size="10" fill="var(--text)" font-weight="700">Traçabilité</text><text x="258" y="83" font-size="8" fill="var(--muted)">matières</text><rect x="94" y="106" width="112" height="52" rx="10" fill="var(--card)" stroke="var(--border)"/><rect x="104" y="118" width="26" height="26" rx="7" fill="var(--accent-bg)"/><text x="138" y="130" font-size="10" fill="var(--text)" font-weight="700">Rentabilité</text><text x="138" y="143" font-size="8" fill="var(--muted)">devis / réel</text><rect x="214" y="106" width="112" height="52" rx="10" fill="var(--card)" stroke="var(--border)"/><rect x="224" y="118" width="26" height="26" rx="7" fill="var(--accent-bg)"/><text x="258" y="130" font-size="10" fill="var(--text)" font-weight="700">Fiches + OF</text><text x="258" y="143" font-size="8" fill="var(--muted)">import PDF</text></svg>'
+      },
+      {
+        title: 'Production — KPIs, saisies et erreurs',
+        body: 'L\'espace <strong>Production</strong> a trois sous-onglets : <span class="mguide-tag">KPIs</span> temps et quantités, <span class="mguide-tag">Saisies</span> pour consulter et corriger, <span class="mguide-tag">Erreurs</span> pour le Sanity Score et les incidents. Les filtres en haut ciblent une période, un opérateur ou un dossier.',
+        illu: '<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="10" width="70" height="22" rx="6" fill="var(--accent)"/><text x="43" y="25" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">KPIs</text><rect x="84" y="10" width="70" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="119" y="25" font-size="10" fill="var(--text2)" text-anchor="middle">Saisies</text><rect x="160" y="10" width="70" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="195" y="25" font-size="10" fill="var(--text2)" text-anchor="middle">Erreurs</text><rect x="8" y="44" width="102" height="52" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="18" y="62" font-size="9" fill="var(--muted)">Temps total</text><text x="18" y="82" font-size="17" fill="var(--accent)" font-weight="800">128 h</text><rect x="118" y="44" width="102" height="52" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="128" y="62" font-size="9" fill="var(--muted)">Quantité</text><text x="128" y="82" font-size="17" fill="var(--text)" font-weight="800">42 300</text><rect x="228" y="44" width="104" height="52" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="238" y="62" font-size="9" fill="var(--muted)">Sanity Score</text><text x="238" y="82" font-size="17" fill="var(--ok,#34d399)" font-weight="800">96%</text><rect x="8" y="108" width="324" height="18" rx="5" fill="var(--bg)" stroke="var(--border)"/><rect x="8" y="132" width="324" height="18" rx="5" fill="var(--bg)" stroke="var(--border)"/></svg>'
+      },
+      {
+        title: 'Traçabilité — matières par dossier',
+        body: 'L\'espace <strong>Traçabilité</strong> montre, pour chaque dossier, les <span class="mguide-hl">matières consommées</span> et leurs lots. Indispensable pour répondre à une demande client ou un audit : on remonte du dossier jusqu\'aux matières premières.',
+        illu: '<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="12" width="150" height="26" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="18" y="29" font-size="10" fill="var(--accent)" font-weight="700">DOS-4821 · Client A</text><path d="M60 38 L60 54" stroke="var(--border)" stroke-width="1.5"/><rect x="30" y="56" width="128" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="40" y="71" font-size="9" fill="var(--text2)">Papier 90g · lot P-2231</text><rect x="30" y="84" width="128" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="40" y="99" font-size="9" fill="var(--text2)">Encre bleue · lot E-118</text><rect x="30" y="112" width="128" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="40" y="127" font-size="9" fill="var(--text2)">Colle · lot C-07</text><rect x="182" y="40" width="150" height="100" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="192" y="60" font-size="10" fill="var(--muted)">Du dossier livré</text><text x="192" y="78" font-size="10" fill="var(--text)" font-weight="700">jusqu\'aux lots</text><text x="192" y="96" font-size="10" fill="var(--text)" font-weight="700">de matières premières</text><path d="M200 112 L300 112" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" marker-end="url(#tr)"/><defs><marker id="tr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--accent)"/></marker></defs></svg>'
+      },
+      {
+        title: 'Rentabilité et Fiches + OF',
+        body: '<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. <strong>Fiches + OF</strong> importe les ordres de fabrication (PDF) et les rattache aux dossiers. Ces deux espaces sont réservés selon votre rôle.',
+        illu: '<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><text x="8" y="20" font-size="10" fill="var(--text)" font-weight="800">Rentabilité — DOS-4821</text><text x="18" y="44" font-size="9" fill="var(--muted)">Devis</text><rect x="60" y="34" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="34" width="120" height="14" rx="4" fill="var(--accent)"/><text x="210" y="45" font-size="9" fill="var(--text2)">1 250 €</text><text x="18" y="66" font-size="9" fill="var(--muted)">Réel</text><rect x="60" y="56" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="56" width="134" height="14" rx="4" fill="var(--ok,#34d399)"/><text x="210" y="67" font-size="9" fill="var(--text2)">1 390 €</text><line x1="8" y1="86" x2="332" y2="86" stroke="var(--border)"/><text x="8" y="106" font-size="10" fill="var(--text)" font-weight="800">Fiches + OF</text><rect x="8" y="116" width="150" height="44" rx="8" fill="var(--card)" stroke="var(--border)"/><rect x="18" y="126" width="24" height="30" rx="4" fill="var(--accent-bg)"/><text x="34" y="145" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="800">PDF</text><text x="52" y="136" font-size="9" fill="var(--text)" font-weight="700">OF-2231.pdf</text><text x="52" y="150" font-size="8" fill="var(--muted)">rattaché à DOS-4821</text><rect x="170" y="116" width="162" height="44" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="251" y="142" font-size="9" fill="var(--muted)" text-anchor="middle">Glissez un PDF pour l\'importer</text></svg>'
+      }
+    ]}
+  };
+
+  function initProdGuides(role){
+    try{
+      if(!window.MySifaGuides) return Promise.resolve();
+      MySifaGuides.configure({role: role || ''});
+      MySifaGuides.registerMany(PROD_GUIDES);
+      return MySifaGuides.boot();
+    }catch(e){ return Promise.resolve(); }
+  }
+
+  function prodMaybeAutoOpenGuide(){
+    try{
+      if(!window.MySifaGuides) return;
+      var k = PROD_VIEW_GUIDE[S.page];
+      if(k) MySifaGuides.autoOpen(k);
+    }catch(e){}
+  }
+
   window.__MYSIFA_PROD_STANDALONE__ = {
     stage: '2l',
     description: 'Onglet Fiches + OF (final)',

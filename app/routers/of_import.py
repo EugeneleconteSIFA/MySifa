@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+from contextlib import nullcontext
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Optional
@@ -938,7 +940,7 @@ _OF_SELECT_COLS = (
 )
 
 
-def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = None):
+def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = None, conn=None):
     """Lookup OF en cascade — distingue match certain vs ambigu.
 
     Retourne un tuple (certain_row_or_None, candidates_list).
@@ -979,7 +981,10 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
     except Exception:
         normalize_ref_produit = None
 
-    with get_db() as c:
+    # conn fourni par l'appelant (boucles) : on le réutilise au lieu d'ouvrir
+    # une connexion SQLite par appel — c'était la cause des ~600 ms du badge
+    # of-link-pending (une connexion + cascade de requêtes PAR dossier).
+    with (nullcontext(conn) if conn is not None else get_db()) as c:
         # Phase 1 : exact match en cascade
         for cand in dict.fromkeys(candidates_exact):
             r = c.execute(
@@ -1109,7 +1114,7 @@ def admin_relink_of(request: Request):
             if not ref_norm and normalize_ref_produit is not None:
                 ref_norm = normalize_ref_produit(row["ref_produit"])
 
-            certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm)
+            certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm, conn=conn)
 
             if certain:
                 relinked += 1
@@ -1208,7 +1213,7 @@ def _iter_pending_planning_rows(conn):
         if not ref_norm and normalize_ref_produit is not None:
             ref_norm = normalize_ref_produit(row["ref_produit"])
 
-        certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm)
+        certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm, conn=conn)
         if certain:
             continue
         if not candidates or len(candidates) < 2:
@@ -1216,17 +1221,36 @@ def _iter_pending_planning_rows(conn):
         yield row, ref_norm, candidates
 
 
+_PENDING_COUNT_TTL = 60  # secondes — le badge tolère un léger retard
+_pending_count_cache: dict = {"at": 0.0, "data": None}
+
+
+def _invalidate_pending_count_cache() -> None:
+    _pending_count_cache["at"] = 0.0
+
+
 @router.get("/api/admin/of-link-pending/count")
 def admin_of_link_pending_count(request: Request):
-    """Badge unifié : ambigus (à arbitrer) + dossiers sans aucun OF (à associer)."""
+    """Badge unifié : ambigus (à arbitrer) + dossiers sans aucun OF (à associer).
+
+    Résultat global (pas par utilisateur) → cache process 60 s : le calcul des
+    ambigus reste coûteux (cascade de lookups par dossier non lié) et le badge
+    est rechargé à chaque affichage du portail par chaque admin.
+    """
     _require_of_access(request)
+    now = time.monotonic()
+    if _pending_count_cache["data"] is not None and now - _pending_count_cache["at"] < _PENDING_COUNT_TTL:
+        return _pending_count_cache["data"]
     ambigus = 0
     sans_of = 0
     with get_db() as conn:
         for _ in _iter_pending_planning_rows(conn):
             ambigus += 1
         sans_of = conn.execute(_DOSSIERS_SANS_OF_COUNT_SQL).fetchone()[0]
-    return {"count": ambigus + sans_of, "ambigus": ambigus, "sans_of": sans_of}
+    data = {"count": ambigus + sans_of, "ambigus": ambigus, "sans_of": sans_of}
+    _pending_count_cache["data"] = data
+    _pending_count_cache["at"] = now
+    return data
 
 
 @router.get("/api/admin/of-link-pending")
@@ -1248,6 +1272,7 @@ def admin_of_link_pending(request: Request):
 
 @router.post("/api/admin/link-planning-of")
 async def admin_link_planning_of(request: Request):
+    _invalidate_pending_count_cache()
     _require_of_access(request)
     try:
         body = await request.json()

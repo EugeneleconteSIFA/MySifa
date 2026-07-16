@@ -86,6 +86,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 <script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 </body>
