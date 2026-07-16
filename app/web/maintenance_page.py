@@ -834,6 +834,14 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .case-ops-row-done-badge{margin-left:10px;background:rgba(52,211,153,.16);color:var(--success,#34d399);border-radius:5px;padding:2px 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
 /* v2 : dropdown machine unique dans le modal case */
 .case-ops-machine-select{min-width:180px;max-width:220px;padding:6px 10px;font-size:13px;font-weight:600}
+/* v2 : ligne op mode Libre dans le picker admin */
+.case-op-libre-wrap{position:relative;flex:1}
+.case-op-libre-titre{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:13px}
+.case-op-libre-titre:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.case-op-libre-autocomplete{position:absolute;top:100%;left:0;right:0;margin-top:4px;z-index:20;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.15)}
+.case-op-mode-link{display:inline-block;margin-top:6px;color:var(--accent);font-size:12px;text-decoration:none;font-family:inherit}
+.case-op-mode-link:hover{text-decoration:underline}
+.case-ops-row-mode{padding-left:2px}
 body.light .case-ops-row-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,transparent 100%)}
 body.light .case-ops-row-done-badge{background:rgba(5,150,105,.16);color:#059669}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
@@ -2980,11 +2988,21 @@ function closeCaseModal(){
 const CASE_MACHINES_LIST = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 
 function addCaseOp(){
-  if(!OPS_TYPES_STATE.list.length){
-    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
-    return;
-  }
-  _CASE_OPS.push({ _op_id: null, opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
+  // v2 : mode Catalogue par défaut, avec possibilité de switch vers Libre.
+  // On laisse ajouter même sans catalogue (l'admin pourra créer une libre).
+  _CASE_OPS.push({
+    _op_id: null,
+    _mode: 'catalogue',        // 'catalogue' | 'libre'
+    _libreTitre: '',           // titre saisi en mode libre
+    _libreCodeResolved: null,  // LIB-xxx si résolu via autocomplete
+    opTypeId: '',
+    opName: '',
+    opNiveau: null,
+    opFreq: '',
+    machines: [],
+    _op_ids_by_machine: {},
+    _statuts_by_machine: {},
+  });
   renderCaseOpsList();
   // Focus le dernier select
   setTimeout(() => {
@@ -3035,6 +3053,93 @@ function removeCaseOp(idx){
   _CASE_OPS.splice(idx, 1);
   renderCaseOpsList();
 }
+// v2 : switch entre Catalogue et Libre pour une op de la modal case admin
+function switchCaseOpMode(idx, mode){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._mode = (mode === 'libre') ? 'libre' : 'catalogue';
+  if(cur._mode === 'catalogue'){
+    // Reset les champs libres, préserve les machines
+    cur._libreTitre = '';
+    cur._libreCodeResolved = null;
+    cur.opTypeId = '';
+    cur.opName = '';
+    cur.opNiveau = null;
+    cur.opFreq = '';
+  } else {
+    // Reset le catalogue si on switch en libre
+    cur.opTypeId = '';
+    cur.opName = '';
+    cur.opNiveau = null;
+    cur.opFreq = '';
+  }
+  renderCaseOpsList();
+  // Focus le champ pertinent après re-render
+  setTimeout(() => {
+    const list = document.getElementById('case-mod-ops-list');
+    if(!list) return;
+    if(mode === 'libre'){
+      const el = list.querySelector('.case-op-libre-titre[data-idx="' + idx + '"]');
+      if(el) el.focus();
+    } else {
+      const el = list.querySelector('select.case-op-catalogue-select[data-idx="' + idx + '"]');
+      if(el) el.focus();
+    }
+  }, 60);
+}
+// v2 : update titre libre d'une op (from oninput)
+function updateCaseOpLibreTitre(idx, value){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._libreTitre = value || '';
+  cur._libreCodeResolved = null;  // reset la suggestion si l'user retape
+  // opName reflète le titre libre pour affichage propre au submit
+  cur.opName = cur._libreTitre;
+}
+// v2 : autocomplete pour le champ titre libre (per-row)
+const _caseOpLibreTimers = {};
+async function caseOpLibreAutocompleteInput(idx){
+  updateCaseOpLibreTitre(idx, (document.querySelector('.case-op-libre-titre[data-idx="' + idx + '"]') || {}).value || '');
+  clearTimeout(_caseOpLibreTimers[idx]);
+  const panel = document.querySelector('.case-op-libre-autocomplete[data-idx="' + idx + '"]');
+  const q = (_CASE_OPS[idx] && _CASE_OPS[idx]._libreTitre || '').trim();
+  if(q.length < 2){
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    return;
+  }
+  _caseOpLibreTimers[idx] = setTimeout(async () => {
+    try{
+      const r = await fetch('/api/maintenance/codes/libres/autocomplete?q=' + encodeURIComponent(q) + '&limit=8', { credentials:'include' });
+      if(!r.ok){ if(panel){ panel.style.display='none'; } return; }
+      const d = await r.json();
+      const suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+      if(!suggestions.length){
+        if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+        return;
+      }
+      panel.innerHTML = suggestions.map(s =>
+        '<div class="libre-suggestion" onclick="caseOpLibreSelectSuggestion(' + idx + ', \'' + escAttr(s.code) + '\', \'' + escAttr(s.label) + '\')">' +
+          '<span class="libre-suggestion-label">' + escHtml(s.label) + '</span>' +
+          '<span class="libre-suggestion-count">' + escHtml(s.code) + '</span>' +
+        '</div>'
+      ).join('');
+      panel.style.display = 'block';
+    }catch(e){
+      if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    }
+  }, 220);
+}
+function caseOpLibreSelectSuggestion(idx, code, label){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._libreTitre = label;
+  cur._libreCodeResolved = code;  // sera utilisé au submit sans re-créer
+  cur.opName = label;
+  const input = document.querySelector('.case-op-libre-titre[data-idx="' + idx + '"]');
+  if(input) input.value = label;
+  const panel = document.querySelector('.case-op-libre-autocomplete[data-idx="' + idx + '"]');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+}
 function renderCaseOpsList(){
   const list = document.getElementById('case-mod-ops-list');
   if(!list) return;
@@ -3073,14 +3178,8 @@ function renderCaseOpsList(){
       '</div>';
     }
 
-    // Rendu ÉDITABLE : op non termine sur toutes ses machines. Multi-select via chips.
-    const options = '<option value="">Sélectionner une opération…</option>' +
-      OPS_TYPES_STATE.list.map(t =>
-        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
-          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
-          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
-        '</option>'
-      ).join('');
+    // Rendu ÉDITABLE : distingue mode Catalogue et Libre.
+    const mode = op._mode || 'catalogue';
     const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
     const chips = CASE_MACHINES_LIST.map(m => {
       const active = machSet.has(m);
@@ -3088,13 +3187,40 @@ function renderCaseOpsList(){
         escHtml(m) +
       '</button>';
     }).join('');
+    const delBtn = '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+    '</button>';
+
+    let pickerHtml;
+    if(mode === 'libre'){
+      const libreTitre = op._libreTitre || '';
+      pickerHtml =
+        '<div class="case-op-libre-wrap" style="flex:1;position:relative">' +
+          '<input type="text" class="ops-input case-op-libre-titre" data-idx="' + idx + '" ' +
+            'value="' + escAttr(libreTitre) + '" maxlength="200" autocomplete="off" ' +
+            'placeholder="Ex : Contrôle vibrations moteur — intervention ponctuelle" ' +
+            'oninput="caseOpLibreAutocompleteInput(' + idx + ')">' +
+          '<div class="libre-autocomplete-panel case-op-libre-autocomplete" data-idx="' + idx + '" style="display:none"></div>' +
+        '</div>';
+    } else {
+      const options = '<option value="">Sélectionner une opération…</option>' +
+        OPS_TYPES_STATE.list.map(t =>
+          '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+            escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+            (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+          '</option>'
+        ).join('');
+      pickerHtml =
+        '<select class="ops-select case-op-catalogue-select" data-idx="' + idx + '" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>';
+    }
+    const modeSwitchLink = (mode === 'libre')
+      ? '<a href="javascript:void(0)" class="case-op-mode-link" onclick="switchCaseOpMode(' + idx + ', \'catalogue\')">← Choisir dans le catalogue</a>'
+      : '<a href="javascript:void(0)" class="case-op-mode-link" onclick="switchCaseOpMode(' + idx + ', \'libre\')">Pas dans la liste ? Décrire une intervention libre</a>';
     return '<div class="case-ops-row" data-idx="' + idx + '">' +
       '<div class="case-ops-row-top">' +
-        '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
-        '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-        '</button>' +
+        pickerHtml + delBtn +
       '</div>' +
+      '<div class="case-ops-row-mode">' + modeSwitchLink + '</div>' +
       '<div class="case-ops-machines">' +
         '<span class="case-ops-machines-label">Machine(s)</span>' +
         chips +
@@ -3112,16 +3238,58 @@ async function submitCaseModal(e){
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
-  // v2 : on inclut TOUTES les ops (y compris termine) dans wantedOps pour
-  //      que _syncEventOpsAndOperators ne les supprime pas — elles doivent
-  //      persister à l'identique.
+
+  // v2 : Résolution des ops libres AVANT de construire wantedOps.
+  //      Pour chaque _CASE_OPS en mode 'libre' sans code déjà résolu, on
+  //      POST /api/maintenance/codes/libres avec le titre → récupère le code
+  //      LIB-xxx (dedup exact-match backend). L'opTypeId est ensuite renseigné
+  //      comme n'importe quel code catalogue pour le reste du flow.
+  try{
+    for(const op of _CASE_OPS){
+      if((op._mode || 'catalogue') !== 'libre') continue;
+      const titre = (op._libreTitre || '').trim();
+      if(!titre) continue;  // skip vides
+      if(op._libreCodeResolved){
+        // Suggestion catalogue/libre sélectionnée via autocomplete
+        op.opTypeId = op._libreCodeResolved;
+        op.opName = op.opName || titre;
+      } else {
+        const rNew = await fetch('/api/maintenance/codes/libres', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({label: titre}),
+        });
+        if(!rNew.ok){
+          const err = await rNew.json().catch(()=>({}));
+          showToast('Création code libre échouée : ' + (err.detail || rNew.status), 'danger');
+          return;
+        }
+        const dNew = await rNew.json();
+        op.opTypeId = dNew.code;
+        op.opName = titre;
+      }
+    }
+  }catch(e){
+    showToast('Erreur résolution libre : ' + (e.message || e), 'danger');
+    return;
+  }
+
   // v2 : on inclut TOUTES les ops (y compris termine) dans wantedOps pour
   //      que _syncEventOpsAndOperators ne les supprime pas.
   const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
     code: o.opTypeId,
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
   }));
-  if(!wantedOps.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  if(!wantedOps.length){
+    // Sépare le message si l'user avait des libres sans titre
+    const hadUntitledLibres = _CASE_OPS.some(o => (o._mode === 'libre') && !(o._libreTitre || '').trim());
+    if(hadUntitledLibres){
+      showToast('Complète le titre des interventions libres avant de valider.', 'danger');
+    } else {
+      showToast('Ajoutez au moins une opération.', 'danger');
+    }
+    return;
+  }
   // Chaque op doit être attribuée à au moins une machine.
   const missing = wantedOps.find(o => !o.machines.length);
   if(missing){
