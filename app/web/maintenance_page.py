@@ -3206,19 +3206,20 @@ function openOpsModal(editId){
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
   // v182 fix : pour un libre, on injecte son titre comme option syntetique
-  // dans le dropdown Type afin que la validation passe. Le titre reste
-  // modifiable directement dans le champ (input text superpose).
-  const typeSel = document.getElementById('ops-type');
-  if(editing && editing._libre && editing.type && typeSel){
-    // Ajoute l'option seulement si pas deja presente
-    if(!Array.from(typeSel.options).some(o => o.value === editing.type)){
-      const opt = document.createElement('option');
-      opt.value = editing.type;
-      opt.textContent = editing.type + ' (Libre)';
-      opt.dataset.libreSynth = '1';
-      typeSel.insertBefore(opt, typeSel.firstChild.nextSibling);
+  // dans le dropdown Type afin que la validation passe (defensif : try/catch).
+  try{
+    const typeSel = document.getElementById('ops-type');
+    if(editing && editing._libre && editing.type && typeSel){
+      const has = Array.from(typeSel.options).some(o => o.value === editing.type);
+      if(!has){
+        const opt = document.createElement('option');
+        opt.value = editing.type;
+        opt.textContent = editing.type + ' (Libre)';
+        try{ opt.dataset.libreSynth = '1'; }catch(e){}
+        typeSel.appendChild(opt);
+      }
     }
-  }
+  }catch(e){ console.warn('[openOpsModal libre synth]', e); }
   // Titre & label bouton selon le mode (édition vs création)
   const titleEl = document.getElementById('ops-modal-title');
   if(titleEl) titleEl.textContent = editing ? 'Modifier l\'opération' : 'Nouvelle opération';
