@@ -1,0 +1,184 @@
+====================================================================
+MYSIFA — CHECKLIST DES TUTOS / GUIDES IN-APP A PREVOIR
+Généré le 2026-07-16  (maj périmetre 2026-07-16)
+====================================================================
+
+Légende
+  [ ]  a faire
+  [x]  déja livré
+  [~]  onglets a recenser sur la page avant rédaction
+  [S]  stand by (hors périmetre pour le moment)
+
+Rappel structure d'un guide (voir CLAUDE.md > "Guides in-app") :
+  - 4 a 6 étapes, étape 1 = intro page + bullets "ce que vous avez a
+    faire" déclinés par service (dict *_TASKS_BY_SERVICE)
+  - icone SVG stroke (jamais d'emoji)
+  - illustration SVG = mini-mockup fidele de la page
+  - brancher : entrée dict guides + VIEW_TO_GUIDE + bouton "?" + _FMT_GUIDES
+
+====================================================================
+1. PORTAIL D'ACCUEIL
+====================================================================
+[ ] Tuto général UNIQUE — reprend tout ce qu'on trouve dans MySifa
+    (organisation des tuiles apps, recherche globale, dashboards
+    épinglés, tuiles haut-droite, navigation générale de l'outil)
+
+====================================================================
+2. MYPROD  (/prod)  — Saisie de production opérateur
+====================================================================
+[ ] Tuto général — MyProd  (page général a créer)
+[~] + 1 tuto par page/onglet — recenser les pages sur MyProd avant
+    rédaction (saisie, liste dossiers, timeline, historique…)
+
+====================================================================
+3. PLANNING MACHINE  (/planning)
+====================================================================
+[ ] Tuto UNIQUE — Planning machine (un seul guide couvrant vues
+    1w/2w/4w, fiche dossier, drag & drop)
+
+====================================================================
+4. PLANNING RH  (/planning-rh)
+====================================================================
+[ ] Tuto général — Planning RH
+[ ] Onglet — Planning
+[ ] Onglet — Atelier
+[ ] Onglet — RH
+[ ] Onglet — Congés
+
+====================================================================
+5. MYSTOCK  (/stock)
+====================================================================
+[ ] Tuto général — MyStock  (page général a créer)
+[ ] Onglet — Dashboard
+[ ] Onglet — Matieres
+[ ] Onglet — Produits finis
+[ ] Onglet — Production
+[ ] Onglet — Inventaire
+[ ] Onglet — Traçabilité (traca)
+
+====================================================================
+6. MYCOMPTA  (/compta)
+====================================================================
+[ ] Tuto UNIQUE — MyCompta (un seul guide)
+
+====================================================================
+7. MYEXPE  (/expe)  — Gestion des départs
+--------------------------------------------------------------------
+(non précisé dans le nouveau périmetre — a statuer)
+====================================================================
+[~] A statuer : général seul ou général + onglets ?
+
+====================================================================
+8. PRICING  (/pricing)
+====================================================================
+[S] Stand by
+
+====================================================================
+9. MYQUALITE  (/qualite)   *** guides déja en place ***
+====================================================================
+[x] Tuto général — MyQualité (qualite-overview)
+[x] Onglet — Ressources fournisseurs
+[x] Onglet — Non-conformités
+[x] Onglet — Audits client
+[x] Onglet — Référentiel RSE
+    -> module de référence pour tous les autres guides
+
+====================================================================
+10. MAINTENANCE
+====================================================================
+[ ] Tuto général — Maintenance  (page général a créer)
+[ ] Onglet — Maintenance (interventions)
+[ ] Onglet — Opérations
+[ ] Onglet — Contrôles
+[ ] Onglet — Planning maintenance
+[ ] Onglet — Op-planning
+[ ] Onglet — Op-tasks
+[ ] Onglet — Personnel / habilitations
+[ ] Onglet — Historique
+    (un seul tuto par onglet)
+
+====================================================================
+11. MYAO  — Appels d'offre
+====================================================================
+[ ] Tuto UNIQUE — MyAO (un seul guide général)
+
+====================================================================
+12. MYBAT  (/bat)
+====================================================================
+[ ] Tuto UNIQUE — MyBAT (un seul guide général)
+
+====================================================================
+13. MYPRINT
+====================================================================
+[ ] Tuto UNIQUE — MyPrint (un seul guide général)
+
+====================================================================
+14. PAIE  (/paie)
+====================================================================
+[S] Stand by (on laisse pour le moment)
+
+====================================================================
+15. COFFRE (documents RH salarié)
+====================================================================
+[ ] Tuto UNIQUE — Coffre (un seul guide)
+
+====================================================================
+16. COFFRE RH (vue RH / gestionnaire)
+====================================================================
+[ ] Tuto UNIQUE — Coffre RH (un seul guide)
+
+====================================================================
+17. CALENDRIER
+====================================================================
+[S] Stand by
+
+====================================================================
+18. LEARNING
+====================================================================
+[S] Stand by
+
+====================================================================
+19. MESSAGERIE  (/messages)
+====================================================================
+[ ] Tuto UNIQUE — Messagerie (un seul guide général)
+
+====================================================================
+20. CHATBOT IA (assistant)
+====================================================================
+[ ] Tuto UNIQUE — Assistant IA (un seul guide général)
+
+====================================================================
+21. MON PROFIL  (/profil)
+====================================================================
+[ ] Tuto UNIQUE — Mon profil (un seul guide général)
+
+====================================================================
+22. PARAMETRES  (/settings)   — super admin
+====================================================================
+[ ] Tuto UNIQUE — Paramètres (un seul guide général)
+
+====================================================================
+NON PRECISE DANS LE PERIMETRE (a statuer)
+====================================================================
+[~] MyExpé  — général seul ou général + onglets ?
+[~] Rapports / Reports  — a inclure ou stand by ?
+[~] Tuiles haut-droite hors profil/paramètres/messagerie (theme,
+    déconnexion) — pas de tuto prévu a priori
+
+====================================================================
+RECAP DES TUTOS A PRODUIRE
+====================================================================
+Généraux "page a créer" : MyProd, MyStock, Maintenance
+Tutos UNIQUES (général seul) : Portail, Planning machine, MyCompta,
+   MyAO, MyBAT, MyPrint, Coffre, Coffre RH, Messagerie, Chatbot,
+   Mon profil, Paramètres  (12)
+Général + onglets : MyProd, Planning RH, MyStock, Maintenance
+Déja livrés : MyQualité (5)
+Stand by : Pricing, Paie, Calendrier, Learning
+
+Priorité suggérée (cf. CLAUDE.md — machines + opérations d'abord) :
+  1) MyProd + Planning machine + Planning RH
+  2) MyStock + Maintenance
+  3) Portail + Messagerie + Chatbot IA + Mon profil + Paramètres
+  4) MyCompta + MyAO + MyBAT + MyPrint
+  5) Coffre + Coffre RH

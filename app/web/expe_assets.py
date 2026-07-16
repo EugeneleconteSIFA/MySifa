@@ -502,6 +502,12 @@ function closeTransporteurModal(){
   T.modalTab='fiche';
   T.tarifs_lignes=[];
   T.tarifs_frais=[];
+  // Reprise du modal envoi devis si on est venu de la (bouton Nouveau transporteur).
+  if(S._resumeDevisEnvoi){
+    const r=S._resumeDevisEnvoi;
+    S._resumeDevisEnvoi=null;
+    S.expeDevisModal={type:'envoi',demandeId:r.demandeId,checks:r.checks||{}};
+  }
   render();
 }
 
@@ -776,8 +782,16 @@ async function saveTransporteur(){
       await uploadTarif(saved.id,T.tarifFile);
     }
     T.saving=false;
+    // Si on revient sur le modal envoi devis, pre-cocher le nouveau transporteur.
+    const wasFromDevis=!!S._resumeDevisEnvoi;
+    const newTrpId=saved&&saved.id?Number(saved.id):null;
     closeTransporteurModal();
     await loadTransporteurs();
+    if(wasFromDevis&&newTrpId&&S.expeDevisModal&&S.expeDevisModal.type==='envoi'){
+      if(!S.expeDevisModal.checks)S.expeDevisModal.checks={};
+      S.expeDevisModal.checks['t'+newTrpId]={checked:true,kind:'actif',id:newTrpId};
+      render();
+    }
   }catch(e){
     T.saving=false;
     showToast(e.message||'Enregistrement impossible','danger');
@@ -1757,14 +1771,25 @@ async function retenirReponse(reponseId,demandeId){
   if(!confirm('Retenir ce transporteur et clôturer la demande ?'))return;
   try{
     const res=await api('/api/expe/devis/reponses/'+reponseId+'/retenir',{method:'POST'});
-    showToast('Transporteur retenu. Demande clôturée.','success');
-    if(res&&res.email_envoye){
-      showToast('Email de confirmation envoyé à '+(res.email_destinataire||'—'),'info');
-    }else if(res){
-      showToast('Email de confirmation non envoyé ('+(res.email_error||'raison inconnue')+')','danger');
-    }
+    let msg='Transporteur retenu. Départ créé dans Suivi des départs.';
+    if(res&&res.email_envoye)msg+=' Email envoyé à '+(res.email_destinataire||'—')+'.';
+    else if(res&&res.email_error)msg+=' Email non envoyé ('+res.email_error+').';
+    showToast(msg,'success');
     fermerExpeDevisModal();
-    await chargerDemandes();
+    // Bascule sur l'onglet Suivi des départs pour montrer le nouveau départ,
+    // avec highlight temporaire de la ligne (badge « issu d'un devis » visible).
+    const newDepartId=res&&res.depart_id?Number(res.depart_id):null;
+    S.expeDepartHighlightId=newDepartId;
+    set({expeTab:'suivi_departs',expeDepartSubTab:'jour'});
+    await loadExpeDepartJour();
+    if(newDepartId){
+      setTimeout(()=>{
+        if(S.expeDepartHighlightId===newDepartId){
+          S.expeDepartHighlightId=null;
+          render();
+        }
+      },6000);
+    }
   }catch(e){
     showToast(e.message||'Erreur','danger');
   }
@@ -2047,8 +2072,14 @@ function renderExpeDevisModal(){
     );
     const newTrpBtn=h('button',{type:'button',className:'btn-ghost',
       style:{fontSize:'12px',color:'var(--accent)',padding:'6px 10px',border:'1px dashed var(--accent)',borderRadius:'8px',cursor:'pointer',background:'transparent'},
-      onClick:()=>{openTransporteurModal(null);},
-      title:'Creer un nouveau transporteur (le modal d\'envoi reste ouvert derriere)'
+      onClick:()=>{
+        // Le modal envoi (z=12100) masque le modal transporteur (z=12000) :
+        // on ferme l'envoi mais on sauve l'etat pour reprise apres creation.
+        S._resumeDevisEnvoi={demandeId:m.demandeId,checks:m.checks};
+        set({expeDevisModal:null});
+        openTransporteurModal(null);
+      },
+      title:'Creer un nouveau transporteur — le modal d\'envoi se rouvrira apres creation'
     },iconEl('plus',12),' Nouveau transporteur');
     const actionsBar=h('div',{style:{display:'flex',justifyContent:'flex-end',margin:'8px 0'}},newTrpBtn);
     box.appendChild(masterRow);
@@ -2857,7 +2888,7 @@ EXPE_MAIN_CSS = r"""
 .expe-pal-eur-badge--retournee{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
 .expe-pal-eur-badge--perdue{background:rgba(248,113,113,.18);color:var(--danger)}
 /* Badge — départ créé depuis un devis retenu (traçabilité) */
-.expe-badge-devis{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);vertical-align:middle}
+.expe-badge-devis{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);vertical-align:middle;cursor:pointer;transition:background .15s,transform .1s;font-family:inherit}.expe-badge-devis:hover{background:color-mix(in srgb,var(--accent) 30%,transparent)}.expe-badge-devis:active{transform:scale(.96)}@keyframes expeDepartFlash{0%{background:color-mix(in srgb,var(--accent) 45%,transparent);box-shadow:inset 0 0 0 2px var(--accent)}40%{background:color-mix(in srgb,var(--accent) 25%,transparent);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent)}100%{background:transparent;box-shadow:none}}.expe-depart-hl td{animation:expeDepartFlash 5.5s ease-out both}
 .expe-badge-devis-wrap{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .expe-pal-eur-acts-cell{white-space:nowrap;text-align:right}
 .expe-pal-eur-acts{display:inline-flex;gap:4px;justify-content:flex-end}
@@ -4103,7 +4134,8 @@ function renderExpeSuiviDeparts(){
       );
       prevDate=dateEnl;
     }
-    bodyRows.push(h('tr',null,
+    const isHl=S.expeDepartHighlightId&&Number(S.expeDepartHighlightId)===Number(r.id);
+    bodyRows.push(h('tr',{className:isHl?'expe-depart-hl':null},
       h('td',{title:dateEnl},dateEnl),
       h('td',{title:r.affreteurs||''},r.affreteurs||'—'),
       h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
@@ -4161,7 +4193,22 @@ function renderExpeSuiviDeparts(){
 
 function expeDevisBadge(r){
   if(!r||!r.source_devis_reponse_id) return null;
-  return h('span',{className:'expe-badge-devis',title:'Départ créé automatiquement à partir d’un devis retenu'},'issu d’un devis');
+  const demandeId=r.source_devis_demande_id;
+  const canOpen=!!demandeId;
+  const tip=canOpen
+    ? 'Départ créé depuis un devis retenu — cliquer pour rouvrir la demande source'
+    : 'Départ créé automatiquement à partir d’un devis retenu';
+  return h('button',{
+    type:'button',
+    className:'expe-badge-devis',
+    title:tip,
+    onClick:e=>{
+      e.stopPropagation();
+      if(!canOpen)return;
+      set({expeTab:'devis'});
+      setTimeout(()=>void ouvrirDetailDemande(demandeId),50);
+    }
+  },'issu d’un devis');
 }
 
 function renderExpeHistoriqueDeparts(){
