@@ -117,11 +117,14 @@ def _require_admin(request: Request) -> dict:
 
 
 def _can_operator_manage_event(event: dict, user_id: int) -> bool:
-    """Un opérateur peut modifier/supprimer un event qu'il a créé (peu importe
-    la source). Depuis le "Nouvelle tâche" côté opérateur, il peut créer des
-    events planifie avec N ops → il doit pouvoir les gérer ensuite.
+    """Un opérateur peut modifier/supprimer un event qu'il a créé, mais
+    uniquement de source non_planifie (interventions déclarées via les
+    boutons "Enregistrer une opération" ou "Intervention libre").
+    Les créneaux planifie sont réservés à l'admin.
     Sert de garde pour les endpoints PATCH/DELETE/ops côté opérateur."""
     if not event:
+        return False
+    if event.get("source") != "non_planifie":
         return False
     return event.get("created_by") == user_id
 
@@ -380,48 +383,21 @@ def create_event(body: EventCreateBody, request: Request):
     operator_ids = list(dict.fromkeys(body.operators))
 
     if maint_role == "operator":
-        # v163+ : l'opérateur peut créer soit une saisie rapide (non_planifie,
-        # 1 code, self forcé — flow "Enregistrer une opération"), soit un
-        # créneau planifie complet (N ops, N machines, N operators — flow
-        # "Nouvelle tâche"). On détecte le mode via body.source.
-        if src not in _VALID_SOURCES:
-            raise HTTPException(status_code=400, detail=f"source invalide: {src}")
-        if src == "non_planifie":
-            heure_debut = None
-            heure_fin = None
-            operator_ids = [user["id"]]
-            if len(ops_specs) != 1:
-                raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
-            if not body.machine:
-                raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
-            ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
-            event_machine = body.machine
-        else:
-            # source=planifie côté opérateur : mêmes règles qu'admin, sauf que
-            # self doit être dans les opérateurs assignés (garde-fou anti-abus).
-            heure_debut = body.heure_debut
-            heure_fin = body.heure_fin
-            if not ops_specs:
-                raise HTTPException(status_code=400, detail="Au moins un code d'opération est requis")
-            if user["id"] not in operator_ids:
-                operator_ids = list(dict.fromkeys([user["id"]] + operator_ids))
-            normalized = []
-            machines_union = []
-            for code, mcsv in ops_specs:
-                if not mcsv:
-                    if body.machine:
-                        mcsv = _machines_list_to_csv([body.machine])
-                    else:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"L'opération {code} doit être attribuée à au moins une machine",
-                        )
-                normalized.append((code, mcsv))
-                for m in _machines_csv_to_list(mcsv):
-                    if m not in machines_union:
-                        machines_union.append(m)
-            ops_specs = normalized
-            event_machine = _machines_list_to_csv(machines_union) or (body.machine or "")
+        # L'opérateur ne peut créer QUE des interventions non_planifie (single
+        # op, self forcé) via les boutons "Enregistrer une opération" ou
+        # "Intervention libre". La création de créneaux planifiés est réservée
+        # à l'admin. On force source=non_planifie côté serveur pour blinder
+        # contre les requêtes forgées.
+        src = "non_planifie"
+        heure_debut = None
+        heure_fin = None
+        operator_ids = [user["id"]]
+        if len(ops_specs) != 1:
+            raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
+        if not body.machine:
+            raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
+        ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
+        event_machine = body.machine
     else:
         if src not in _VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"source invalide: {src}")
