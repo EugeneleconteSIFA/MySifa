@@ -834,12 +834,19 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-mini-btn{width:24px;height:24px;padding:0;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
 .op-op-card-mini-btn:hover{color:var(--text);border-color:var(--accent);background:var(--bg)}
 .op-op-card-mini-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
-/* v185 : icône info consignes sur cartes op */
-.op-op-card-info-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;background:var(--accent-bg);color:var(--accent);border:none;border-radius:50%;cursor:pointer;transition:background .15s,color .15s;margin-left:auto}
-.op-op-card-info-btn:hover{background:var(--accent);color:var(--accent-fg)}
-/* v185 : panneau consignes (mini-modal + intégré au single-op modal) */
+/* v185 : chip Consignes de l'admin, cliquable, sous le titre de la carte op */
+.op-op-consignes-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.28);border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s;align-self:flex-start;text-align:left}
+.op-op-consignes-chip:hover{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+body.light .op-op-consignes-chip{border-color:rgba(8,145,178,.28)}
+/* v185 : label + panneau consignes (dans single-op modal) */
 .op-consignes-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:12px}
 .op-consignes-panel{background:var(--bg);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;color:var(--text2);font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:16px}
+/* v185 : mini-modal consignes — plus compact que le single-op modal */
+.op-consignes-modal{position:relative;max-width:420px;width:92vw;padding:18px 20px 20px 20px}
+.op-consignes-modal .op-modal-close{position:absolute;top:10px;right:10px;width:28px;height:28px}
+.op-consignes-modal-title{font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;padding-right:32px}
+.op-consignes-modal-sub{font-size:12px;color:var(--muted);margin-bottom:12px;padding-right:32px}
+.op-consignes-modal .op-consignes-panel{margin-bottom:0;font-size:14px}
 .col-consignes{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)}
 /* Modal Modifier créneau : lignes ops déjà effectuées (read-only) */
 .case-ops-row-done{background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,transparent 100%);border-left:3px solid var(--success,#34d399);padding:10px 12px;border-radius:8px;margin-bottom:8px}
@@ -6984,21 +6991,22 @@ function _renderOpCardIndividual(op, ev){
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>` : '';
-  // v185 : icône info + panneau si consignes admin présentes
+  // v185 : chip consignes cliquable sous le titre, plus visible qu'une icône dans le head
   const consignes = (op.consignes || '').trim();
   const hasConsignes = consignes.length > 0;
-  const infoBtn = hasConsignes
-    ? `<button type="button" class="op-op-card-info-btn" title="Voir les consignes" onclick="event.stopPropagation();opShowConsignes(${ev.id}, ${op.id})">
-         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+  const consignesChip = hasConsignes
+    ? `<button type="button" class="op-op-consignes-chip" onclick="event.stopPropagation();opShowConsignes(${ev.id}, ${op.id})">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+         <span>Consignes de l'admin</span>
        </button>`
     : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
-      ${infoBtn}
     </div>
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
+    ${consignesChip}
     <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
       ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
     </button>
@@ -7018,12 +7026,12 @@ function opShowConsignes(eventId, opId){
   overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
   const machineLabel = (op.machines && op.machines[0]) || ev.machine || '';
   overlay.innerHTML =
-    '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;position:relative;padding-top:24px">' +
+    '<div class="op-modal op-consignes-modal" role="dialog" aria-modal="true">' +
       '<button type="button" class="op-modal-close" aria-label="Fermer" onclick="this.closest(\'.op-modal-overlay\').remove()">' +
-        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
       '</button>' +
-      '<div class="op-modal-title">Consignes de l\'admin</div>' +
-      '<div class="op-modal-sub">' + escHtml((op.code_label || op.code) + (machineLabel ? ' · ' + machineLabel : '')) + '</div>' +
+      '<div class="op-consignes-modal-title">Consignes de l\'admin</div>' +
+      '<div class="op-consignes-modal-sub">' + escHtml((op.code_label || op.code) + (machineLabel ? ' · ' + machineLabel : '')) + '</div>' +
       '<div class="op-consignes-panel">' + escHtml(op.consignes) + '</div>' +
     '</div>';
   document.body.appendChild(overlay);
