@@ -3565,14 +3565,23 @@ async function _libreEditPersist(original, changes){
   const opId = original._op_id;
   const code = original._code;
   const jsonHeaders = {'Content-Type':'application/json'};
-  // 1. Rename titre si change
+  // 1. Rename titre si change — MAIS on skip si le nouveau titre correspond
+  // a un code standard du catalogue (l'user a clique par megarde une option
+  // standard dans le dropdown Type). Ce cas est un no-op pour proteger
+  // l'integrite du titre libre.
   const newTitle = (changes.titre || '').trim();
-  if(newTitle && newTitle !== (original.type || '')){
+  const isStandardCode = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+    ? OPS_TYPES_STATE.list.some(t => (t.nom || '') === newTitle)
+    : false;
+  if(newTitle && newTitle !== (original.type || '') && !isStandardCode){
     const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,
       body: JSON.stringify({label: newTitle}),
     });
     if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage échoué'); }
+  }else if(isStandardCode && newTitle !== (original.type || '')){
+    // Toast avertissement (non-bloquant)
+    if(typeof showToast === 'function') showToast('Le titre libre a ete conserve (le type choisi correspondait a un code standard). Utilise Parametres > Interventions libres pour renommer.', 'warn');
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -3729,7 +3738,24 @@ function renderOps(){
   // Sort
   const dir = OPS_STATE.sortDir === 'asc' ? 1 : -1;
   const sf = OPS_STATE.sortBy;
+  // v182 fix bug tri : pour date_saisie, on compare via Date.parse (les
+  // valeurs mixent parfois ISO complet et YYYY-MM-DD selon done_at/date_prevue,
+  // le sort string donne alors un ordre incorrect).
   filtered.sort((a,b) => {
+    if(sf === 'date_saisie'){
+      const ta = Date.parse(a[sf] || '') || 0;
+      const tb = Date.parse(b[sf] || '') || 0;
+      if(ta < tb) return -1*dir;
+      if(ta > tb) return  1*dir;
+      return 0;
+    }
+    if(sf === 'duree_reelle_min'){
+      const na = a[sf] != null ? Number(a[sf]) : -Infinity;
+      const nb = b[sf] != null ? Number(b[sf]) : -Infinity;
+      if(na < nb) return -1*dir;
+      if(na > nb) return  1*dir;
+      return 0;
+    }
     const av = (a[sf] != null ? a[sf] : '').toString().toLowerCase();
     const bv = (b[sf] != null ? b[sf] : '').toString().toLowerCase();
     if(av < bv) return -1*dir;
