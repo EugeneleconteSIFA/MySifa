@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
 from app.services.audit_service import log_action
+from app.services import pricing_bridge
 from config import (
     STOCK_EMPLACEMENT_AU_SOL,
     STOCK_EMPLACEMENT_AU_SOL_LABEL,
@@ -5282,6 +5283,24 @@ async def update_valorisation(matiere_id: int, request: Request):
                     (matiere_id, prix_avant, prix, note, now, user_id, user_name),
                 )
             conn.commit()
+        # Sync automatique vers /pricing (mc_material) si la matière est
+        # appairée. Non bloquant : toute erreur de sync est loguée mais ne
+        # fait pas échouer la mise à jour valorisation.
+        try:
+            pricing_bridge.sync_mp_to_mc(
+                conn,
+                matiere_id,
+                actor_id=user_id,
+                actor_name=user_name,
+                source_note="MyStock valorisation",
+            )
+            conn.commit()
+        except Exception as _sync_err:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "pricing_bridge.sync_mp_to_mc a échoué pour mp_id=%s : %s",
+                matiere_id, _sync_err,
+            )
         items = _valorisation_query(conn)
         can_see_usd = _user_can_see_valorisation_usd(user)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0

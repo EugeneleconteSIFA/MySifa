@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from config import ROLES_PRICING_WRITE
@@ -63,6 +63,7 @@ from app.services.pricing.schemas import (
 from app.services.pricing.export_pdf import build_product_pdf
 from app.services.pricing.export_xlsx import build_products_workbook
 from app.services.pricing.types import PricingProduct
+from app.services import pricing_bridge
 
 router = APIRouter(tags=["pricing"])
 
@@ -695,6 +696,25 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
                 created_by=user.get("id"),
             )
         conn.commit()
+        # Sync automatique vers MyStock (matieres_premieres) si un prix a
+        # bougé et qu'un mp est appairé sur ce mc_material. Non bloquant.
+        if price_changed:
+            try:
+                actor_name = (user.get("nom") or user.get("email") or "").strip() or None
+                pricing_bridge.sync_mc_to_mp(
+                    conn,
+                    material_id,
+                    actor_id=user.get("id"),
+                    actor_name=actor_name,
+                    source_note="Coûts matières",
+                )
+                conn.commit()
+            except Exception as _sync_err:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "pricing_bridge.sync_mc_to_mp a échoué pour mc_id=%s : %s",
+                    material_id, _sync_err,
+                )
         row = fetch_material(conn, material_id)
         settings = load_pricing_settings(conn)
         return _material_out(row, settings=settings, with_computed=True)
@@ -1023,3 +1043,82 @@ def preview_product_cost(request: Request, body: ProductPreviewIn):
             sell_price_eur_m2=result.sell_price_eur_m2,
             components=components,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bridge MyStock <-> /pricing : appairage manuel + listes orphelines
+# (Round 2 — cf. app/services/pricing_bridge.py pour la logique)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/pricing/bridge/orphans")
+def bridge_orphans(request: Request):
+    """
+    Retourne :
+      - `mp` : matières MyStock actives ayant un pricing_role mais non
+               appairées à un mc_material (à appairer côté direction).
+      - `mc` : matières mc_material actives non référencées par aucun mp.
+    Utilisé par l'écran de rapprochement dans Paramètres.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        return {
+            "mp": pricing_bridge.list_orphaned_mp(conn),
+            "mc": pricing_bridge.list_orphaned_mc(conn),
+        }
+
+
+@router.get("/api/pricing/bridge/suggest/{mp_id}")
+def bridge_suggest(request: Request, mp_id: int):
+    """
+    Propositions de mc_material pour appairer une matière MyStock donnée.
+    Trié par pertinence : match exact appellation, puis nom, puis catégorie.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        return {"suggestions": pricing_bridge.suggest_matches(conn, mp_id, limit=8)}
+
+
+@router.post("/api/pricing/bridge/link")
+def bridge_link(request: Request, body: dict = Body(...)):
+    """
+    Appaire une matieres_premieres à un mc_material.
+    Body : { mp_id: int, mc_id: int }
+
+    Copie automatiquement les caractéristiques pricing (poids, base,
+    container, taxe, import) depuis mc_material vers matieres_premieres
+    sans écraser les valeurs déjà saisies côté MyStock.
+    """
+    _require_write(request)
+    try:
+        mp_id = int(body.get("mp_id"))
+        mc_id = int(body.get("mc_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="mp_id et mc_id entiers requis")
+    with get_db() as conn:
+        result = pricing_bridge.link_matiere(conn, mp_id, mc_id)
+        if not result.get("ok"):
+            raise HTTPException(status_code=404, detail=result.get("reason", "Appairage impossible"))
+        conn.commit()
+        # Sync immédiate : pousse le prix côté qui a la valeur la plus récente.
+        # On tente les deux sens ; celui qui n'a rien à faire retournera
+        # {synced: False, reason: 'prix identique'} — silencieux.
+        actor_name = (request.state.user.get("nom") if hasattr(request.state, "user") else None) or None
+        try:
+            pricing_bridge.sync_mp_to_mc(conn, mp_id, source_note="Appairage manuel")
+            conn.commit()
+        except Exception:
+            pass
+    return result
+
+
+@router.delete("/api/pricing/bridge/link/{mp_id}")
+def bridge_unlink(request: Request, mp_id: int):
+    """Casse le lien d'une matière MyStock avec son mc_material."""
+    _require_write(request)
+    with get_db() as conn:
+        result = pricing_bridge.unlink_matiere(conn, mp_id)
+        if not result.get("ok"):
+            raise HTTPException(status_code=404, detail="Matière introuvable ou non appairée")
+        conn.commit()
+    return result

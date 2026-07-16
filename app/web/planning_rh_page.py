@@ -1619,7 +1619,7 @@ function renderHeader(){
 
   const isRHView = (S.view==='rh');
   hdr.innerHTML=`
-    <div class="rh-hdr-title">${titleSuffix}</div>
+    <div class="rh-hdr-title" style="display:flex;align-items:center;gap:10px">${titleSuffix}${(window.MySifaGuides?MySifaGuides.bookBtn((S.user&&!S.isEditor&&!S.isReadOnlyAdmin)?'planningrh-operator':'planningrh-overview'):'')}</div>
     <div class="rh-hdr-right">
       ${!isRHView?`<div class="rh-hdr-nav-row">
         <div class="rh-wk-nav">
@@ -3121,86 +3121,33 @@ const PLANNINGRH_GUIDES = {
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
       title: 'Planning RH',
-      body: `Planning RH gère <strong>l'affectation du personnel</strong> et les <strong>congés</strong>. Selon votre rôle, vous planifiez l'atelier, suivez les demandes de congés ou consultez les soldes de tous les services.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Affecter le personnel aux postes et machines, semaine par semaine.</li><li>Enregistrer et valider les demandes de congés.</li><li>Suivre les soldes de congés par employé (vue RH).</li><li>Chaque employé consulte sa propre semaine en lecture seule.</li></ul></div></div>`
+      body: `Planning RH gère <strong>l'affectation du personnel</strong> et les <strong>congés</strong>. Deux vues en haut — <span class="mguide-tag">Atelier</span> et <span class="mguide-tag">RH</span> — chacune avec ses onglets <span class="mguide-hl">Planning</span> et <span class="mguide-hl">Congés</span>. La vue RH n'apparaît que pour les profils habilités.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Affecter le personnel aux postes, semaine par semaine.</li><li>Enregistrer et valider les demandes de congés.</li><li>Ajuster les soldes de congés par employé.</li></ul></div></div>`
     },
     {
-      title: 'Deux vues : Atelier et RH',
-      body: `En haut, un sélecteur bascule entre <span class="mguide-tag">Atelier</span> (affectation aux postes) et <span class="mguide-tag">RH</span> (congés & soldes, tous services). Chaque vue a ses sous-onglets <span class="mguide-hl">Planning</span> et <span class="mguide-hl">Congés</span>. La vue RH n'apparaît que pour les profils habilités.`,
+      title: 'Grille, congés et soldes',
+      body: `Dans <strong>Atelier › Planning</strong>, cliquez une cellule pour affecter une personne à un poste. Dans <strong>Congés</strong>, validez ou refusez les demandes — un congé validé se répercute sur le planning et le solde. La <strong>vue RH</strong> réunit les soldes de tous les services. Chaque employé, lui, voit sa propre semaine en lecture seule.`,
       illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="8" y="12" width="150" height="30" rx="8" fill="var(--bg)" stroke="var(--border)"/>
-        <rect x="12" y="16" width="71" height="22" rx="6" fill="var(--accent)"/>
-        <text x="47" y="31" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">Atelier</text>
-        <text x="120" y="31" font-size="10" fill="var(--text2)" text-anchor="middle">RH</text>
-        <rect x="8" y="52" width="96" height="24" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
-        <text x="56" y="68" font-size="10" fill="var(--accent)" font-weight="700" text-anchor="middle">Planning</text>
-        <rect x="110" y="52" width="96" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/>
-        <text x="158" y="68" font-size="10" fill="var(--text2)" text-anchor="middle">Congés</text>
-        <rect x="8" y="86" width="324" height="78" rx="9" fill="var(--card)" stroke="var(--border)"/>
-        <text x="20" y="108" font-size="10" fill="var(--muted)">Vue Atelier › onglet Planning :</text>
-        <text x="20" y="126" font-size="11" fill="var(--text)" font-weight="700">la grille d'affectation du personnel</text>
-        <text x="20" y="146" font-size="10" fill="var(--muted)">Vue RH › congés &amp; soldes de tous les services</text>
-      </svg>`
-    },
-    {
-      title: 'Planning atelier — la grille',
-      body: `L'onglet <strong>Planning</strong> affiche une grille <span class="mguide-hl">semaines × postes</span> (Cohésio 1, Cohésio 2, DSI, Repiquage…). On y place les personnes sur les créneaux. Les flèches et le sélecteur <span class="mguide-tag">1 / 2 / 4 sem.</span> changent la période affichée.`,
-      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="8" y="10" width="46" height="18" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="31" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">Poste</text>
-        <text x="80" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S12</text>
-        <text x="140" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S13</text>
-        <text x="200" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S14</text>
-        <text x="262" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S15</text>
-        <g font-size="9">
-          <rect x="8" y="32" width="46" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="12" y="48" fill="var(--text2)">Cohésio 1</text>
-          <rect x="58" y="32" width="52" height="26" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="84" y="48" fill="var(--accent)" text-anchor="middle" font-weight="700">Dupont</text>
-          <rect x="116" y="32" width="52" height="26" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="142" y="48" fill="var(--accent)" text-anchor="middle" font-weight="700">Dupont</text>
-          <rect x="174" y="32" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-          <rect x="232" y="32" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-          <rect x="8" y="62" width="46" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="12" y="78" fill="var(--text2)">DSI</text>
-          <rect x="58" y="62" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-          <rect x="116" y="62" width="52" height="26" rx="4" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/><text x="142" y="78" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Martin</text>
-          <rect x="174" y="62" width="52" height="26" rx="4" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/><text x="200" y="78" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Martin</text>
-          <rect x="232" y="62" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+        <rect x="8" y="12" width="150" height="28" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+        <rect x="12" y="16" width="71" height="20" rx="6" fill="var(--accent)"/><text x="47" y="30" font-size="9" fill="#fff" font-weight="700" text-anchor="middle">Atelier</text>
+        <text x="120" y="30" font-size="9" fill="var(--text2)" text-anchor="middle">RH</text>
+        <rect x="166" y="12" width="80" height="28" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="206" y="30" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">Planning</text>
+        <rect x="250" y="12" width="80" height="28" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="290" y="30" font-size="9" fill="var(--text2)" text-anchor="middle">Congés</text>
+        <g font-size="8">
+          <rect x="8" y="50" width="46" height="18" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="12" y="63" fill="var(--muted)">Poste</text>
+          <text x="80" y="63" fill="var(--muted)" text-anchor="middle">S12</text><text x="140" y="63" fill="var(--muted)" text-anchor="middle">S13</text><text x="200" y="63" fill="var(--muted)" text-anchor="middle">S14</text>
+          <rect x="8" y="70" width="46" height="24" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="12" y="85" fill="var(--text2)">Cohésio 1</text>
+          <rect x="58" y="70" width="52" height="24" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="84" y="85" fill="var(--accent)" text-anchor="middle" font-weight="700">Dupont</text>
+          <rect x="116" y="70" width="52" height="24" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="142" y="85" fill="var(--accent)" text-anchor="middle" font-weight="700">Dupont</text>
+          <rect x="174" y="70" width="52" height="24" rx="4" fill="var(--bg)" stroke="var(--border)"/>
         </g>
-        <rect x="214" y="100" width="52" height="20" rx="6" fill="var(--accent)"/><text x="240" y="114" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">2 sem.</text>
-        <rect x="270" y="100" width="30" height="20" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="285" y="114" font-size="9" fill="var(--text2)" text-anchor="middle">4</text>
-        <text x="12" y="140" font-size="10" fill="var(--muted)">Cliquez une cellule pour affecter une personne à un créneau.</text>
-      </svg>`
-    },
-    {
-      title: 'Congés — demandes et validation',
-      body: `L'onglet <strong>Congés</strong> liste les demandes par année : dates, note, <span class="mguide-hl">statut</span>. Les configurateurs valident ou refusent, et chaque congé validé se répercute sur le planning et sur le <strong>solde</strong> de l'employé.`,
-      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="8" y="10" width="324" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-        <text x="16" y="25" font-size="9" fill="var(--muted)">Employé</text><text x="120" y="25" font-size="9" fill="var(--muted)">Du → Au</text><text x="230" y="25" font-size="9" fill="var(--muted)">Statut</text><text x="290" y="25" font-size="9" fill="var(--muted)">Actions</text>
-        <g font-size="9">
-          <rect x="8" y="36" width="324" height="26" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="52" fill="var(--text)" font-weight="600">Dupont</text><text x="120" y="52" fill="var(--text2)">12/07 → 19/07</text>
-          <rect x="222" y="41" width="54" height="16" rx="8" fill="rgba(52,211,153,.15)"/><text x="249" y="53" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Validé</text>
-          <rect x="8" y="66" width="324" height="26" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="82" fill="var(--text)" font-weight="600">Martin</text><text x="120" y="82" fill="var(--text2)">05/08 → 09/08</text>
-          <rect x="222" y="71" width="54" height="16" rx="8" fill="rgba(251,191,36,.2)"/><text x="249" y="83" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">En attente</text>
-          <rect x="284" y="70" width="20" height="18" rx="4" fill="var(--accent-bg)"/><text x="294" y="83" fill="var(--accent)" text-anchor="middle" font-weight="700">✓</text>
-          <rect x="308" y="70" width="20" height="18" rx="4" fill="rgba(248,113,113,.15)"/><text x="318" y="83" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="700">×</text>
-        </g>
-        <text x="12" y="118" font-size="10" fill="var(--muted)">Valider une demande met à jour le planning et le solde.</text>
-      </svg>`
-    },
-    {
-      title: 'Vue RH — soldes de congés',
-      body: `La <strong>vue RH</strong> réunit les congés et les <span class="mguide-hl">soldes</span> de <strong>tous les services</strong> pour l'année choisie. Réservée aux profils RH/direction, elle sert de tableau de bord central pour la gestion des congés de l'entreprise.`,
-      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <text x="8" y="20" font-size="11" fill="var(--text)" font-weight="800">Soldes congés 2026 · Tous les services</text>
-        <rect x="8" y="30" width="324" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-        <text x="16" y="44" font-size="9" fill="var(--muted)">Employé</text><text x="150" y="44" font-size="9" fill="var(--muted)">Service</text><text x="240" y="44" font-size="9" fill="var(--muted)">Acquis</text><text x="290" y="44" font-size="9" fill="var(--muted)">Restant</text>
-        <g font-size="9">
-          <rect x="8" y="54" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="69" fill="var(--text)" font-weight="600">Dupont</text><text x="150" y="69" fill="var(--text2)">Fabrication</text><text x="252" y="69" fill="var(--text2)" text-anchor="middle">25</text><text x="302" y="69" fill="var(--accent)" text-anchor="middle" font-weight="700">12</text>
-          <rect x="8" y="82" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="97" fill="var(--text)" font-weight="600">Martin</text><text x="150" y="97" fill="var(--text2)">Logistique</text><text x="252" y="97" fill="var(--text2)" text-anchor="middle">25</text><text x="302" y="97" fill="var(--accent)" text-anchor="middle" font-weight="700">18</text>
-          <rect x="8" y="110" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="125" fill="var(--text)" font-weight="600">Bernard</text><text x="150" y="125" fill="var(--text2)">Expédition</text><text x="252" y="125" fill="var(--text2)" text-anchor="middle">25</text><text x="302" y="125" fill="var(--accent)" text-anchor="middle" font-weight="700">7</text>
-        </g>
-        <text x="12" y="152" font-size="10" fill="var(--muted)">Un coup d'œil sur les congés de toute l'entreprise.</text>
+        <rect x="8" y="104" width="324" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="16" y="118" font-size="9" fill="var(--muted)">Vue RH · soldes tous services</text>
+        <g font-size="8"><rect x="8" y="128" width="324" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/><text x="16" y="141" fill="var(--text)">Dupont · Fabrication</text><text x="316" y="141" fill="var(--accent)" text-anchor="end" font-weight="700">restant 12</text>
+        <rect x="8" y="150" width="324" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/><text x="16" y="163" fill="var(--text)">Martin · Logistique</text><text x="316" y="163" fill="var(--accent)" text-anchor="end" font-weight="700">restant 18</text></g>
       </svg>`
     }
   ]},
+
   'planningrh-operator': { steps: [
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
