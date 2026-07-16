@@ -98,7 +98,11 @@ body.sb-open .sidebar-overlay{display:block}
 .main{flex:1;overflow-y:auto;display:flex;flex-direction:column;position:relative}
 
 /* ── Sidebar elements ── */
-.logo{padding:0 8px;margin-bottom:28px}
+.logo{padding:8px;margin-bottom:20px;border-radius:10px;transition:background .15s,transform .15s;user-select:none}
+.logo:hover{background:var(--accent-bg)}
+.logo:hover .logo-brand{color:var(--accent)}
+.logo:hover .logo-brand span{color:var(--text)}
+.logo:active{transform:scale(.98)}
 .logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px;position:relative}
@@ -3759,24 +3763,58 @@ cardsGrid: `<svg viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg">
     <rect x="394" y="152" width="60" height="14" rx="7" fill="rgba(148,163,184,.2)"/>
     <text x="404" y="162" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">7 sans date</text>
   </svg>`,
-  groupCard: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
-    <rect x="60" y="20" width="220" height="110" rx="10" fill="var(--card)" stroke="var(--accent)" stroke-width="2"/>
-    <rect x="60" y="20" width="6" height="110" fill="var(--accent)" rx="1"/>
-    <text x="76" y="42" font-size="14" font-weight="800" fill="var(--text)" font-family="Segoe UI">Fedrigoni</text>
-    <rect x="195" y="30" width="75" height="16" rx="8" fill="var(--accent-bg)"/>
-    <text x="205" y="41" font-size="8" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE · 3 branches</text>
-    <rect x="76" y="58" width="55" height="20" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="86" y="72" font-size="9" fill="var(--text2)" font-family="Segoe UI">Italy</text>
-    <rect x="138" y="58" width="55" height="20" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="146" y="72" font-size="9" fill="var(--text2)" font-family="Segoe UI">France</text>
-    <rect x="200" y="58" width="55" height="20" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="215" y="72" font-size="9" fill="var(--text2)" font-family="Segoe UI">UK</text>
-    <rect x="76" y="94" width="60" height="20" rx="10" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="94" y="108" font-size="9" fill="var(--text2)" font-weight="700" font-family="Segoe UI">6 certifs</text>
-    <rect x="142" y="94" width="60" height="20" rx="10" fill="rgba(52,211,153,.15)"/>
-    <text x="158" y="108" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
-    <rect x="208" y="94" width="60" height="20" rx="10" fill="rgba(251,191,36,.15)"/>
-    <text x="222" y="108" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
+  groupCard: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+    <text x="14" y="24" font-size="12" fill="var(--muted)" font-weight="700" font-family="Segoe UI" letter-spacing=".5">SANS GROUPE</text>
+    <text x="14" y="40" font-size="10" fill="var(--danger)" font-family="Segoe UI">3 cartes séparées · relations invisibles</text>
+    <g opacity="0.85">
+      <rect x="14" y="52" width="240" height="60" rx="8" fill="var(--card)" stroke="var(--border)"/>
+      <text x="26" y="70" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Frimpeks Italy</text>
+      <text x="26" y="84" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C164660 · INT-COC-001611</text>
+      <rect x="26" y="92" width="52" height="14" rx="7" fill="rgba(52,211,153,.15)"/>
+      <text x="34" y="102" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">2 valide</text>
+      <rect x="14" y="118" width="240" height="60" rx="8" fill="var(--card)" stroke="var(--border)"/>
+      <text x="26" y="136" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Frimpeks Turkey</text>
+      <text x="26" y="150" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C129558 · NEO-COC-129558</text>
+      <rect x="26" y="158" width="60" height="14" rx="7" fill="rgba(251,191,36,.15)"/>
+      <text x="34" y="168" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
+      <rect x="14" y="184" width="240" height="60" rx="8" fill="var(--card)" stroke="var(--border)"/>
+      <text x="26" y="202" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Frimpeks UK</text>
+      <text x="26" y="216" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C160714 · INT-COC-002144</text>
+      <rect x="26" y="224" width="52" height="14" rx="7" fill="rgba(148,163,184,.2)"/>
+      <text x="34" y="234" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">2 sans date</text>
+    </g>
+    <text x="14" y="266" font-size="10" fill="var(--muted)" font-family="Segoe UI" font-style="italic">On ne voit pas que ce sont</text>
+    <text x="14" y="280" font-size="10" fill="var(--muted)" font-family="Segoe UI" font-style="italic">3 branches du même groupe.</text>
+    <g transform="translate(268, 130)">
+      <circle cx="16" cy="16" r="16" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"/>
+      <path d="M 8 16 L 24 16 M 20 12 L 24 16 L 20 20" stroke="var(--accent)" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="-6" y="52" font-size="10" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Regroupé</text>
+    </g>
+    <text x="316" y="24" font-size="12" fill="var(--accent)" font-weight="700" font-family="Segoe UI" letter-spacing=".5">AVEC GROUPE</text>
+    <text x="316" y="40" font-size="10" fill="var(--ok)" font-family="Segoe UI">1 carte · vision consolidée</text>
+    <rect x="316" y="52" width="270" height="192" rx="12" fill="var(--card)" stroke="var(--accent)" stroke-width="2.5"/>
+    <rect x="316" y="52" width="6" height="192" fill="var(--accent)"/>
+    <text x="336" y="80" font-size="18" fill="var(--text)" font-weight="800" font-family="Segoe UI">Frimpeks</text>
+    <rect x="470" y="62" width="98" height="22" rx="11" fill="var(--accent-bg)"/>
+    <text x="484" y="77" font-size="11" fill="var(--accent)" font-weight="800" font-family="Segoe UI">GROUPE · 3 branches</text>
+    <text x="336" y="105" font-size="11" fill="var(--muted)" font-family="Segoe UI" font-weight="700">3 branches :</text>
+    <rect x="336" y="112" width="76" height="24" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="356" y="128" font-size="11" fill="var(--text2)" font-family="Segoe UI">Italy</text>
+    <rect x="420" y="112" width="76" height="24" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="436" y="128" font-size="11" fill="var(--text2)" font-family="Segoe UI">Turkey</text>
+    <rect x="504" y="112" width="76" height="24" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="527" y="128" font-size="11" fill="var(--text2)" font-family="Segoe UI">UK</text>
+    <text x="336" y="158" font-size="11" fill="var(--muted)" font-family="Segoe UI" font-weight="700">Stats consolidées :</text>
+    <rect x="336" y="166" width="76" height="26" rx="13" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="355" y="184" font-size="12" fill="var(--text2)" font-weight="800" font-family="Segoe UI">6 certifs</text>
+    <rect x="420" y="166" width="76" height="26" rx="13" fill="rgba(52,211,153,.18)"/>
+    <text x="440" y="184" font-size="12" fill="var(--ok)" font-weight="800" font-family="Segoe UI">4 valide</text>
+    <rect x="504" y="166" width="76" height="26" rx="13" fill="rgba(251,191,36,.18)"/>
+    <text x="524" y="184" font-size="12" fill="var(--warn)" font-weight="800" font-family="Segoe UI">2 bientôt</text>
+    <rect x="336" y="204" width="244" height="30" rx="6" fill="var(--accent-bg)"/>
+    <text x="346" y="223" font-size="11" fill="var(--accent)" font-weight="700" font-family="Segoe UI">→ Certifs partageables au niveau groupe</text>
+    <text x="316" y="266" font-size="10" fill="var(--muted)" font-family="Segoe UI" font-style="italic">Clic sur la carte → page détail avec</text>
+    <text x="316" y="280" font-size="10" fill="var(--muted)" font-family="Segoe UI" font-style="italic">toutes les branches et certifs groupe/branche.</text>
   </svg>`,
   modalNiveau: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
     <rect x="30" y="12" width="280" height="132" rx="12" fill="var(--card)" stroke="var(--border)" stroke-width="1.5"/>
@@ -4534,7 +4572,7 @@ function _qualiteGuides(){
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
           title: "Groupes et branches",
-          body: "Un fournisseur qui appartient à un <strong>groupe</strong> (ex. Fedrigoni Italy, France, UK) est regroupé sous une seule carte avec un badge <span class=\"qguide-tag\">Groupe</span>. Cliquez pour voir toutes les branches et gérer les certifs communs.",
+          body: `Les fournisseurs qui font partie d'un même <span class="qguide-hl">groupe</span> (ex. <strong>Fedrigoni</strong> Italy/France/UK ou <strong>Frimpeks</strong> Italy/Turkey/UK) sont automatiquement <strong>regroupés sous une carte unique</strong> avec un badge <span class="qguide-hl">GROUPE · N branches</span> et des stats consolidées. Cliquez pour ouvrir la page groupe et gérer les certifs communs à toutes les branches.`,
           illu: QUALITE_MOCKUPS.groupCard,
         },
         {
