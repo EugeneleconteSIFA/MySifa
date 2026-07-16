@@ -5696,8 +5696,8 @@ Ressources :
     # concrète d'une opération de maintenance (contrôle ou intervention) à
     # réaliser sur une machine, à une date donnée, par un opérateur donné.
     # L'admin maintenance (Loïc) crée ces tâches depuis la vue Planning et les
-    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`, si le flag
-    # MAINTENANCE_OPEN_BETA est actif) les voient dans leur vue « Mes tâches »
+    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`) les
+    # voient dans leur vue « Mes tâches »
     # et les complètent en fin de journée (durée réelle, pièces changées,
     # observations, photos, statut final).
     #
