@@ -834,6 +834,13 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-mini-btn{width:24px;height:24px;padding:0;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
 .op-op-card-mini-btn:hover{color:var(--text);border-color:var(--accent);background:var(--bg)}
 .op-op-card-mini-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+/* v185 : icône info consignes sur cartes op */
+.op-op-card-info-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;background:var(--accent-bg);color:var(--accent);border:none;border-radius:50%;cursor:pointer;transition:background .15s,color .15s;margin-left:auto}
+.op-op-card-info-btn:hover{background:var(--accent);color:var(--accent-fg)}
+/* v185 : panneau consignes (mini-modal + intégré au single-op modal) */
+.op-consignes-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:12px}
+.op-consignes-panel{background:var(--bg);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;color:var(--text2);font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:16px}
+.col-consignes{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)}
 /* Modal Modifier créneau : lignes ops déjà effectuées (read-only) */
 .case-ops-row-done{background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,transparent 100%);border-left:3px solid var(--success,#34d399);padding:10px 12px;border-radius:8px;margin-bottom:8px}
 .case-ops-row-done .case-ops-row-done-label{display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);flex:1}
@@ -848,6 +855,12 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .case-op-mode-link{display:inline-block;margin-top:6px;color:var(--accent);font-size:12px;text-decoration:none;font-family:inherit}
 .case-op-mode-link:hover{text-decoration:underline}
 .case-ops-row-mode{padding-left:2px}
+/* v185 : consignes admin sur les rows d'op */
+.case-ops-consignes{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.case-op-consignes-toggle{font-size:12px}
+.case-op-consignes-textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;resize:vertical;min-height:70px;margin-top:8px;transition:border-color .15s}
+.case-op-consignes-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.case-op-consignes-preview{margin-top:6px;padding:8px 12px;background:var(--bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;color:var(--text2);font-size:12px;font-style:italic;line-height:1.4;white-space:pre-wrap}
 body.light .case-ops-row-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,transparent 100%)}
 body.light .case-ops-row-done-badge{background:rgba(5,150,105,.16);color:#059669}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
@@ -1425,6 +1438,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
                   <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
                   <th data-sort="duree_reelle_min" onclick="sortOps('duree_reelle_min')" style="width:80px">Durée<span class="sort-ico">↕</span></th>
                   <th>Commentaires</th>
+                  <th>Consignes</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -2142,6 +2156,7 @@ function _apiEventToClient(ev){
       done_at: o.done_at,
       done_by: o.done_by,
       updated_by: o.updated_by,
+      consignes: o.consignes || '',
     };
   });
   return {
@@ -2968,6 +2983,12 @@ function _openCaseModalInner(opts){
         machines: [],
         _op_ids_by_machine: {},
         _statuts_by_machine: {},
+        // v185 : consignes admin (peut être vide). Prend la 1re rencontrée
+        //   pour ce code (comportement raisonnable si machines multiples).
+        //   Après édition, on PATCH toutes les rows du code avec la nouvelle valeur.
+        consignes: (o.consignes || '').trim(),
+        _consignes_original: (o.consignes || '').trim(),
+        _consignes_open: !!((o.consignes || '').trim()),  // panel déplié si non vide
       });
     }
     const entry = _byCode.get(key);
@@ -3036,6 +3057,10 @@ function addCaseOp(){
     machines: [],
     _op_ids_by_machine: {},
     _statuts_by_machine: {},
+    // v185 : consignes admin
+    consignes: '',
+    _consignes_original: '',
+    _consignes_open: false,
   });
   renderCaseOpsList();
   // Focus le dernier select
@@ -3163,6 +3188,23 @@ async function caseOpLibreAutocompleteInput(idx){
     }
   }, 220);
 }
+// v185 : toggle affichage du bloc consignes pour une op de la modal case
+function toggleCaseOpConsignes(idx){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._consignes_open = !cur._consignes_open;
+  renderCaseOpsList();
+  if(cur._consignes_open){
+    setTimeout(() => {
+      const el = document.querySelector('.case-op-consignes-textarea[data-idx="' + idx + '"]');
+      if(el) el.focus();
+    }, 60);
+  }
+}
+function updateCaseOpConsignes(idx, value){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  _CASE_OPS[idx].consignes = value || '';
+}
 function caseOpLibreSelectSuggestion(idx, code, label){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
   const cur = _CASE_OPS[idx];
@@ -3250,6 +3292,30 @@ function renderCaseOpsList(){
     const modeSwitchLink = (mode === 'libre')
       ? '<a href="javascript:void(0)" class="case-op-mode-link" onclick="switchCaseOpMode(' + idx + ', \'catalogue\')">← Choisir dans le catalogue</a>'
       : '<a href="javascript:void(0)" class="case-op-mode-link" onclick="switchCaseOpMode(' + idx + ', \'libre\')">Pas dans la liste ? Décrire une intervention libre</a>';
+    // v185 : bloc consignes admin (collapsé par défaut)
+    const consignesOpen = !!op._consignes_open;
+    const consignesVal = op.consignes || '';
+    const consignesHasContent = consignesVal.trim().length > 0;
+    const consignesToggleLabel = consignesOpen
+      ? '× Retirer les consignes'
+      : (consignesHasContent ? '✎ Modifier les consignes' : '+ Ajouter des consignes');
+    let consignesHtml = '<div class="case-ops-consignes">' +
+      '<a href="javascript:void(0)" class="case-op-mode-link case-op-consignes-toggle" onclick="toggleCaseOpConsignes(' + idx + ')">' +
+        consignesToggleLabel +
+      '</a>';
+    if(consignesOpen){
+      consignesHtml +=
+        '<textarea class="case-op-consignes-textarea" data-idx="' + idx + '" rows="3" ' +
+          'placeholder="Instructions spécifiques pour cette opération (visibles par l\'opérateur avant validation)" ' +
+          'oninput="updateCaseOpConsignes(' + idx + ', this.value)">' +
+          escHtml(consignesVal) +
+        '</textarea>';
+    } else if(consignesHasContent){
+      // Aperçu compact quand fermé mais rempli
+      const preview = consignesVal.length > 100 ? (consignesVal.slice(0, 100) + '…') : consignesVal;
+      consignesHtml += '<div class="case-op-consignes-preview">' + escHtml(preview) + '</div>';
+    }
+    consignesHtml += '</div>';
     return '<div class="case-ops-row" data-idx="' + idx + '">' +
       '<div class="case-ops-row-top">' +
         pickerHtml + delBtn +
@@ -3259,6 +3325,7 @@ function renderCaseOpsList(){
         '<span class="case-ops-machines-label">Machine(s)</span>' +
         chips +
       '</div>' +
+      consignesHtml +
     '</div>';
   }).join('');
 }
@@ -3332,6 +3399,7 @@ async function submitCaseModal(e){
   const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
     code: o.opTypeId,
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    consignes: (o.consignes || '').trim(),  // v185
   }));
   if(!wantedOps.length){
     // Sépare le message si l'user avait des libres sans titre
@@ -3440,11 +3508,12 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
   const currentOps = ev.ops || [];
 
   // EXPLODE : {code, machines:[Coh1, Coh2]} devient 2 entries {code, machine:"Coh1"} + {code, machine:"Coh2"}
+  //   v185 : propage aussi consignes (partagées entre les machines d'un même code)
   const wantedExploded = [];
   for(const w of wantedOps){
     const ms = Array.isArray(w.machines) && w.machines.length ? w.machines : [null];
     for(const m of ms){
-      wantedExploded.push({ code: w.code, machine: m });
+      wantedExploded.push({ code: w.code, machine: m, consignes: w.consignes || '' });
     }
   }
 
@@ -3459,14 +3528,16 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
     currentByKey.set(keyOf(op.code, machine), op);
   }
 
-  // Ops à ajouter (wanted mais pas current) → POST avec 1 seule machine
+  // Ops à ajouter (wanted mais pas current) → POST avec 1 seule machine + consignes
   for(const w of wantedExploded){
     const k = keyOf(w.code, w.machine);
     if(!currentByKey.has(k)){
+      const postBody = { code: w.code, machines: w.machine ? [w.machine] : [] };
+      if(w.consignes) postBody.consignes = w.consignes;
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code: w.code, machines: w.machine ? [w.machine] : [] }),
+        body: JSON.stringify(postBody),
       });
     }
   }
@@ -3478,8 +3549,26 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
       });
     }
   }
-  // Pas de PATCH machines : chaque row est déjà à 1 machine, si on veut changer
-  // la machine c'est une DELETE + POST (géré ci-dessus).
+  // v185 : PATCH consignes sur les rows existantes si elles ont changé
+  //   (les rows nouvellement POST ont déjà les consignes intégrées ci-dessus)
+  const currentConsignesByKey = new Map();
+  for(const op of currentOps){
+    const machine = (Array.isArray(op.machines) && op.machines.length) ? op.machines[0] : null;
+    currentConsignesByKey.set(keyOf(op.code, machine), { opId: op.id, consignes: (op.consignes || '').trim() });
+  }
+  for(const w of wantedExploded){
+    const k = keyOf(w.code, w.machine);
+    const cur = currentConsignesByKey.get(k);
+    if(!cur) continue;  // sera ajouté au prochain sync (ligne nouvelle)
+    const wantedConsignes = (w.consignes || '').trim();
+    if(wantedConsignes !== cur.consignes){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + cur.opId, {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ consignes: wantedConsignes }),
+      });
+    }
+  }
 
   // Operators
   const currentOperators = ev.operators || [];
@@ -3836,6 +3925,7 @@ async function fetchHistoryFromDb(){
       operateur: h.operateur || '',
       type: h.type || '',
       commentaire: h.commentaire || '',
+      consignes: h.consignes || '',  // v185 : consignes admin
       date_saisie: h.date_saisie || '',
       duree_reelle_min: h.duree_reelle_min || null,
       _source: 'db',   // marqueur : ne peut pas être edited/deleted côté localStorage
@@ -4131,16 +4221,22 @@ function renderOps(){
     const msg = isFiltered
       ? 'Aucune opération ne correspond aux filtres.'
       : 'Aucune opération enregistrée. Cliquez sur « Nouvelle saisie » pour commencer.';
-    tbody.innerHTML = '<tr><td colspan="7" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = filtered.map(o =>
-      '<tr>' +
+    const rows = filtered.map(o => {
+      // v185 : consignes admin — truncate visuel + tooltip si long
+      const cons = (o.consignes || '').trim();
+      const consTd = cons
+        ? '<td class="col-consignes" title="' + escAttr(cons) + '">' + escHtml(cons.length > 60 ? cons.slice(0,60) + '…' : cons) + '</td>'
+        : '<td class="col-consignes"><span style="color:var(--muted)">—</span></td>';
+      return '<tr>' +
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
         '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
         '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
+        consTd +
         '<td class="col-actions">' +
           '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
@@ -4149,8 +4245,8 @@ function renderOps(){
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
           '</button>' +
         '</td>' +
-      '</tr>'
-    );
+      '</tr>';
+    });
     tbody.innerHTML = rows.join('');
   }
   if(count){
@@ -6479,6 +6575,10 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
     <div class="op-modal-sub" id="op-single-sub">—</div>
     <div class="op-single-op-title" id="op-single-code-line">—</div>
     <div class="op-single-op-name" id="op-single-name">—</div>
+    <div id="op-single-consignes-block" style="display:none">
+      <div class="op-consignes-label">Consignes de l'admin</div>
+      <div class="op-consignes-panel" id="op-single-consignes-text">—</div>
+    </div>
     <div class="op-form-row">
       <label for="op-single-duree">Durée réelle (min)</label>
       <input type="number" id="op-single-duree" min="0" step="1" placeholder="Optionnel">
@@ -6884,10 +6984,19 @@ function _renderOpCardIndividual(op, ev){
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>` : '';
+  // v185 : icône info + panneau si consignes admin présentes
+  const consignes = (op.consignes || '').trim();
+  const hasConsignes = consignes.length > 0;
+  const infoBtn = hasConsignes
+    ? `<button type="button" class="op-op-card-info-btn" title="Voir les consignes" onclick="event.stopPropagation();opShowConsignes(${ev.id}, ${op.id})">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+       </button>`
+    : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
+      ${infoBtn}
     </div>
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
     <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
@@ -6895,6 +7004,29 @@ function _renderOpCardIndividual(op, ev){
     </button>
     ${actionsHtml}
   </div>`;
+}
+
+// v185 : affiche les consignes admin d'une op dans un mini-modal
+function opShowConsignes(eventId, opId){
+  const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
+  if(!ev) return;
+  const op = (ev.ops || []).find(o => o.id === opId);
+  if(!op || !op.consignes) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'op-modal-overlay active';
+  overlay.style.zIndex = '1600';
+  overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+  const machineLabel = (op.machines && op.machines[0]) || ev.machine || '';
+  overlay.innerHTML =
+    '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;position:relative;padding-top:24px">' +
+      '<button type="button" class="op-modal-close" aria-label="Fermer" onclick="this.closest(\'.op-modal-overlay\').remove()">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>' +
+      '<div class="op-modal-title">Consignes de l\'admin</div>' +
+      '<div class="op-modal-sub">' + escHtml((op.code_label || op.code) + (machineLabel ? ' · ' + machineLabel : '')) + '</div>' +
+      '<div class="op-consignes-panel">' + escHtml(op.consignes) + '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
 }
 
 // Rendu d'une boîte créneau (source=planifie).
@@ -7864,6 +7996,18 @@ function opOpenSingleOpModal(eventId, opId){
   document.getElementById('op-single-sub').textContent = 'Créneau ' + timeLabel + ' · ' + (ev.machine || '');
   document.getElementById('op-single-code-line').textContent = 'Code ' + op.code;
   document.getElementById('op-single-name').textContent = op.code_label || '—';
+  // v185 : consignes admin affichées au-dessus des champs
+  const consignesBlock = document.getElementById('op-single-consignes-block');
+  if(consignesBlock){
+    const c = (op.consignes || '').trim();
+    if(c){
+      consignesBlock.style.display = '';
+      const panel = document.getElementById('op-single-consignes-text');
+      if(panel) panel.textContent = c;
+    } else {
+      consignesBlock.style.display = 'none';
+    }
+  }
   document.getElementById('op-single-duree').value = op.duree_reelle_min || '';
   const prev = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
   document.getElementById('op-single-comment').value = prev;
