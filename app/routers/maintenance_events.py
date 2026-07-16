@@ -11,7 +11,8 @@ Modèle : voir migration v158 dans app/core/database.py, complétée v162
 
 Contrôle d'accès :
 - Admin (superadmin, direction, administration) : CRUD complet.
-- Opérateur (fabrication) : peut :
+- Opérateur (fabrication) : accès uniquement si le flag global
+  `MAINTENANCE_OPEN_BETA` est actif dans .env. Peut :
   - Lire les events où il est dans le groupe (endpoint `/my-tasks`).
   - Mettre à jour statut/saisie d'une op **si** il est dans le groupe.
   - Créer un event `source=non_planifie` avec lui-même comme seul opérateur.
@@ -29,9 +30,8 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
-    ROLE_ADMINISTRATION_VENTES,
-    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
+    MAINTENANCE_OPEN_BETA,
 )
 
 
@@ -40,7 +40,7 @@ router = APIRouter(tags=["maintenance-events"])
 
 # ─── Constantes / helpers ─────────────────────────────────────────
 
-_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_ADMINISTRATION_VENTES, ROLE_ADMINISTRATION_TECHNIQUE}
+_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
 _PARIS = ZoneInfo("Europe/Paris")
 
 _VALID_STATUTS = {"a_faire", "en_cours", "termine", "reporte"}
@@ -96,7 +96,7 @@ def _get_maintenance_role(user: dict) -> Optional[str]:
     role = effective_role(user)
     if role in _ADMIN_ROLES:
         return "admin"
-    if role == ROLE_FABRICATION:
+    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
         return "operator"
     return None
 
@@ -277,6 +277,10 @@ class OpUpdateBody(BaseModel):
     machines: Optional[List[str]] = None
     # v185 : consignes admin (empty string autorisée pour effacer)
     consignes: Optional[str] = None
+    # v2.2.5 : override du done_at (l'admin peut ajuster la date de saisie
+    # historique d'une op déjà terminée). Format ISO Paris (YYYY-MM-DDTHH:MM:SS
+    # ou avec .SSSZ). Si fourni, écrase la valeur actuelle.
+    done_at: Optional[str] = None
 
 
 class OperatorAddBody(BaseModel):
