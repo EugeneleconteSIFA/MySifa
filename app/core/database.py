@@ -6738,6 +6738,97 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 184, "cleanup_operator_planifie_creneaux")
 
+    # Migration 185 — Système de gestion des accès database-driven.
+    # Deux tables : role_access_defaults (référentiel rôle × app × module,
+    # modifiable dans Paramètres) et user_access_overrides (surcharges par
+    # utilisateur, même granularité). Niveau 4 valeurs : none / read / write
+    # / admin (ordinal, admin >= write >= read >= none). module_id = '_app'
+    # = accès général à l'appli, sinon nom d'onglet (sous-module).
+    # Seed depuis default_app_access_for_role (aucune régression). La colonne
+    # legacy users.access_overrides (JSON) est copiée vers user_access_overrides
+    # puis conservée en fallback ; sera droppée dans une migration ultérieure.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=185 LIMIT 1").fetchone():
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS role_access_defaults ("
+            "role TEXT NOT NULL, app_id TEXT NOT NULL, "
+            "module_id TEXT NOT NULL DEFAULT '_app', "
+            "level TEXT NOT NULL DEFAULT 'none', "
+            "updated_at TEXT, updated_by TEXT, "
+            "PRIMARY KEY (role, app_id, module_id))"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rad_lookup ON role_access_defaults(role, app_id)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_access_overrides ("
+            "user_id INTEGER NOT NULL, app_id TEXT NOT NULL, "
+            "module_id TEXT NOT NULL DEFAULT '_app', "
+            "level TEXT NOT NULL DEFAULT 'none', "
+            "updated_at TEXT, updated_by TEXT, "
+            "PRIMARY KEY (user_id, app_id, module_id), "
+            "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_uao_lookup ON user_access_overrides(user_id, app_id)")
+
+        from config import (
+            ASSIGNABLE_ROLES as _AR,
+            ROLE_SUPERADMIN as _SA,
+            ROLE_COMMERCIAL as _C,
+            ROLE_DIRECTION as _D,
+            ROLES_ADMINISTRATION_ALL as _RAA,
+            default_app_access_for_role as _daafr,
+        )
+        now184 = datetime.now().isoformat()
+        _APP_IDS_184 = ["prod", "planning", "planning_rh", "stock", "compta",
+                        "expe", "pricing", "fabrication", "qualite", "settings"]
+
+        def _seed_lvl_184(role, app_id, legacy):
+            if role == _SA:
+                return "admin"
+            if app_id == "qualite":
+                if role in ({_D} | _RAA):
+                    return "write"
+                if role == _C:
+                    return "read"
+                return "none"
+            return "write" if legacy.get(app_id) else "none"
+
+        for role in list(_AR) + [_SA]:
+            legacy = _daafr(role)
+            for app_id in _APP_IDS_184:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_access_defaults "
+                    "(role, app_id, module_id, level, updated_at, updated_by) "
+                    "VALUES (?, ?, '_app', ?, ?, 'seed_v184')",
+                    (role, app_id, _seed_lvl_184(role, app_id, legacy), now184),
+                )
+
+        rows184 = conn.execute(
+            "SELECT id, access_overrides FROM users "
+            "WHERE access_overrides IS NOT NULL AND access_overrides != ''"
+        ).fetchall()
+        for r in rows184:
+            raw = r["access_overrides"]
+            try:
+                data = json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            for app_id, val in data.items():
+                if not isinstance(val, bool):
+                    continue
+                key = "pricing" if app_id == "devis" else app_id
+                if key not in _APP_IDS_184:
+                    continue
+                conn.execute(
+                    "INSERT OR IGNORE INTO user_access_overrides "
+                    "(user_id, app_id, module_id, level, updated_at, updated_by) "
+                    "VALUES (?, ?, '_app', ?, ?, 'migration_v184')",
+                    (r["id"], key, "write" if val else "none", now184),
+                )
+
+        conn.commit()
+        _record_schema_migration(conn, 185, "access_control_tables_and_seed")
+
 
 def create_default_admin():
     import bcrypt
