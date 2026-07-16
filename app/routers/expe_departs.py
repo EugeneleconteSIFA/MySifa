@@ -3016,8 +3016,30 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
 
     depart_dict = _depart_dict(depart_row) if depart_row else {}
 
+    # Destinataire principal = adresse a laquelle la demande a ete envoyee.
+    # Fallback : si le champ est vide (reponse creee manuellement via
+    # "Saisir reponse" ou reponse portail sans email persiste), on retombe
+    # sur les contact_emails du transporteur pour ne pas silencieusement
+    # sauter la confirmation.
     dest_email = (rep_d.get("destinataire_email") or "").strip()
+    if not (dest_email and "@" in dest_email):
+        trp_id = rep_d.get("transporteur_id")
+        if trp_id:
+            with get_db() as conn:
+                trow = conn.execute(
+                    "SELECT contact_email, contact_emails FROM expe_transporteurs WHERE id=?",
+                    (trp_id,),
+                ).fetchone()
+            if trow:
+                addrs = _normalize_emails(trow["contact_emails"])
+                if not addrs:
+                    fb = (trow["contact_email"] or "").strip()
+                    if fb and "@" in fb:
+                        addrs = [fb]
+                if addrs:
+                    dest_email = addrs[0]
     email_sent = False
+    email_error: str | None = None
     if dest_email and "@" in dest_email:
         try:
             subject, body_html = email_expe_devis_confirmation(
@@ -3030,8 +3052,13 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
                 reply_to=email_user,
                 cc=EXPE_DEVIS_CC,
             ))
-        except Exception:
+            if not email_sent:
+                email_error = "send_email_returned_false"
+        except Exception as _e:  # noqa: BLE001
             email_sent = False
+            email_error = f"{type(_e).__name__}: {_e}"[:200]
+    else:
+        email_error = "destinataire_email_absent"
 
     try:
         log_action(
@@ -3055,6 +3082,7 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
         "depart": depart_dict,
         "email_envoye": email_sent,
         "email_destinataire": dest_email or None,
+        "email_error": email_error,
     }
 
 

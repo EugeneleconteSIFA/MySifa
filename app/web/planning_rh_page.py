@@ -2170,7 +2170,7 @@ function buildCongesTab(){
   const soldesSection=document.createElement('div'); soldesSection.className='rh-section print-target';
   soldesSection.innerHTML=`
     <div class="rh-section-hdr">
-      <span class="rh-section-title">${icon('users',13)} Soldes congés ${S.annee}</span>
+      <span class="rh-section-title">${icon('users',13)} Soldes congés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
       ${S.isEditor?`<button class="rh-icon-btn" onclick="openSoldeModal(null)">
         ${icon('edit',12)} Modifier un solde
       </button>`:''}
@@ -2184,14 +2184,14 @@ function buildCongesTab(){
   </tr></thead>`;
   const stbody=document.createElement('tbody');
   if(!S.soldes.length){
-    stbody.innerHTML=`<tr><td colspan="${S.isEditor?6:5}" class="rh-empty">Aucun employé planifiable — vérifiez les rôles utilisateurs</td></tr>`;
+    stbody.innerHTML=`<tr><td colspan="${S.isEditor?6:5}" class="rh-empty">${S.view==='rh'?'Aucun employé actif trouvé':'Aucun employé planifiable — vérifiez les rôles utilisateurs'}</td></tr>`;
   }else{
     S.soldes.forEach(s=>{
       const pctCP=s.quota_cp>0?Math.min(100,s.poses_cp/s.quota_cp*100):0;
       const fillCls=pctCP>=100?'danger':pctCP>=80?'warn':'';
       const tr=document.createElement('tr');
       tr.innerHTML=`
-        <td style="font-weight:600">${s.user_nom}</td>
+        <td style="font-weight:600">${s.user_nom}${S.view==='rh'&&s.user_role?` <span style="color:var(--muted);font-weight:400;font-size:11px">· ${s.user_role}</span>`:''}</td>
         <td>${s.quota_cp}j</td>
         <td><span class="rh-badge cp">${s.poses_cp}j</span></td>
         <td onclick="openSoldeModal(${s.user_id})" style="cursor:pointer" title="Cliquer pour modifier">
@@ -2223,7 +2223,7 @@ function buildCongesTab(){
           <label>Employé *</label>
           <select onchange="S.congeForm.user_id=this.value">
             <option value="">Sélectionner…</option>
-            ${S.personnel.map(p=>`<option value="${p.id}"${S.congeForm.user_id==p.id?' selected':''}>${p.nom}</option>`).join('')}
+            ${S.personnel.map(p=>`<option value="${p.id}"${S.congeForm.user_id==p.id?' selected':''}>${S.view==='rh'&&p.role?'['+p.role+'] ':''}${p.nom}</option>`).join('')}
           </select>
         </div>
         <div class="rh-field" style="margin:0">
@@ -2263,7 +2263,7 @@ function buildCongesTab(){
   const listSection=document.createElement('div'); listSection.className='rh-section print-target';
   listSection.innerHTML=`
     <div class="rh-section-hdr">
-      <span class="rh-section-title">${icon('umbrella',13)} Congés posés ${S.annee}</span>
+      <span class="rh-section-title">${icon('umbrella',13)} Congés posés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
     </div>
   `;
   const congesThisYear=S.conges.filter(c=>{
@@ -2283,7 +2283,7 @@ function buildCongesTab(){
     congesThisYear.forEach(c=>{
       const tr=document.createElement('tr');
       tr.innerHTML=`
-        <td style="font-weight:600">${c.user_nom}</td>
+        <td style="font-weight:600">${c.user_nom}${S.view==='rh'&&c.user_role?` <span style="color:var(--muted);font-weight:400;font-size:11px">· ${c.user_role}</span>`:''}</td>
         <td>${fmtDateFull(c.date_debut)}</td>
         <td>${fmtDateFull(c.date_fin)}</td>
         <td><strong>${c.nb_jours}j</strong></td>
@@ -2327,7 +2327,7 @@ function buildSoldeModal(){
       <label>Employé *</label>
       <select onchange="S.soldeForm.user_id=this.value">
         <option value="">Sélectionner…</option>
-        ${S.personnel.map(p=>`<option value="${p.id}"${S.soldeForm.user_id==p.id?' selected':''}>${p.nom}</option>`).join('')}
+        ${S.personnel.map(p=>`<option value="${p.id}"${S.soldeForm.user_id==p.id?' selected':''}>${S.view==='rh'&&p.role?'['+p.role+'] ':''}${p.nom}</option>`).join('')}
       </select>
     </div>
     <div class="rh-field">

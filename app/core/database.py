@@ -6689,6 +6689,34 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 181, "user_guide_progress")
 
+    # Migration 183 — MyExpé : lier un départ au devis retenu qui l'a genere.
+    # Corrige le 500 sur POST /api/expe/devis/reponses/{id}/retenir qui inserait
+    # deux colonnes inexistantes (source_devis_reponse_id, source_devis_demande_id)
+    # dans expe_departs. La 182 est deja reservee cote staging pour
+    # maintenance_codes_libre_and_usage_count.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=183 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "source_devis_reponse_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_reponse_id INTEGER "
+                "REFERENCES expe_devis_reponses(id)"
+            )
+        if "source_devis_demande_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_demande_id INTEGER "
+                "REFERENCES expe_demandes_devis(id)"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis_reponse "
+            "ON expe_departs(source_devis_reponse_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis_demande "
+            "ON expe_departs(source_devis_demande_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 183, "expe_departs_source_devis_link")
+
 
 def create_default_admin():
     import bcrypt
