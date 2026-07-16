@@ -74,6 +74,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/motion.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 </head>
