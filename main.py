@@ -1,7 +1,9 @@
 """
 MyProd by SIFA — v0.5.0
 """
+import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
 import re
@@ -12,7 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT
+from config import APP_TITLE, APP_VERSION, HOST, PORT, BASE_DIR, ENV_NAME, IS_STAGING, UPLOADS_ROOT, SLOW_REQUEST_MS
 from app.web.html import render_frontend_html
 
 from routers.auth       import router as auth_router
@@ -154,6 +156,30 @@ async def no_cache_planning(request: Request, call_next):
         # Assets statiques : cache navigateur 24h. Les fichiers qui changent
         # utilisent un querystring de version (?v=N) pour invalider.
         response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
+
+
+_slow_logger = logging.getLogger("mysifa.slow")
+
+
+@app.middleware("http")
+async def log_slow_requests(request: Request, call_next):
+    """Trace les requetes lentes (> SLOW_REQUEST_MS) dans le journal systemd.
+
+    Mesure le temps applicatif (routing + handler + DB). Ne logge ni cookie,
+    ni token, ni body — uniquement methode, chemin, statut et duree.
+    Consultation : journalctl -u mysifa | grep "requete lente"
+    """
+    if not SLOW_REQUEST_MS:
+        return await call_next(request)
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    dur_ms = (time.perf_counter() - t0) * 1000
+    if dur_ms >= SLOW_REQUEST_MS:
+        _slow_logger.warning(
+            "requete lente : %s %s -> %s en %.0f ms",
+            request.method, request.url.path, response.status_code, dur_ms,
+        )
     return response
 
 

@@ -47,6 +47,10 @@ APP_VERSION = "2.0.5"
 # Nom affiché en wordmark, titres, footers.
 APP_NAME = os.getenv("APP_NAME", "MySifa")
 
+# Seuil (ms) au-dela duquel une requete HTTP est loggee comme lente
+# (middleware log_slow_requests dans main.py). 0 = desactive.
+SLOW_REQUEST_MS = int(os.getenv("SLOW_REQUEST_MS", "500"))
+
 # Indice de coupure du wordmark pour l'affichage bicolore. Ex. :
 #   "MySifa" + APP_SPLIT=2 → "My" (couleur principale) + "Sifa" (accent)
 #   "Kernse" + APP_SPLIT=1 → "K"  + "ernse"
