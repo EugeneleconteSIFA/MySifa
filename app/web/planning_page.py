@@ -66,6 +66,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/motion.css">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -94,47 +95,10 @@ body.light{
 }
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.app{display:flex;min-height:100vh}
-.sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
-.sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
-body.sb-open .sidebar-overlay{display:block}
-/* topbar mobile : mysifa_mobile_topbar.css */
-.logo{padding:0 8px;margin-bottom:32px}
-.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
-.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
-.nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
-.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+/* Sidebar / logo / nav-btn / topbar / responsive : déplacés dans mysifa_myprod_shell.css (PR 1 « unifier MyProd »). */
 .tip-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
 .tip-col-hdr{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--accent)}
 @media (max-width:540px){.tip-cols{grid-template-columns:1fr}}
-.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
-.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
-.nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
-.nav-btn--mysifa-portal:hover .mysifa-back-brand{color:var(--text)}
-.nav-btn--mysifa-portal:hover .mysifa-back-accent{color:var(--accent)}
-.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
-.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
-.mysifa-back-accent{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-ico{display:inline-flex;align-items:center;justify-content:center}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.theme-btn .theme-ico{font-size:14px;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-@media (display-mode: standalone), (max-width: 900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
-.main{flex:1;padding:28px;overflow-y:auto}
 .planning-container{max-width:1400px;margin:0 auto}
 
 /* Contact support (messagerie interne) */
@@ -656,6 +620,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
+<script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
@@ -1675,7 +1640,7 @@ function planningUserChipHtml(){
 }
 function renderSidebar(){
   if(!ME){
-    return `<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
+    return `<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
       <div style="padding:10px 12px;color:var(--muted);font-size:12px">Chargement…</div>
       <div class="sidebar-bottom">
         <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>
@@ -1694,7 +1659,7 @@ function renderSidebar(){
     ]),
   ];
   const isLight=document.body.classList.contains("light");
-  return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
+  return`<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>{
       const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
         ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
@@ -5001,6 +4966,87 @@ async function submitDefaults(){
   await load();
 }
 
+// ─── Guide in-app Planning machine (moteur partagé mysifa_guides.js) ───
+const PLANNING_GUIDES = {
+  'planning-overview': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><rect x="7" y="13" width="4" height="5" rx="1" fill="currentColor" stroke="none"/></svg>`,
+      title: 'Planning machine',
+      body: `Le planning organise les <strong>dossiers de production par machine</strong> sur un axe de temps. Chaque machine a sa propre timeline ; les dossiers s'y enchaînent dans l'ordre où ils seront produits.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Choisir une machine et un horizon (semaine, 2 ou 4 semaines).</li><li>Lire l'enchaînement des dossiers sur la timeline.</li><li>Réordonner les dossiers par glisser-déposer.</li><li>Ajuster les horaires d'un jour et gérer les jours off.</li></ul></div></div>`
+    },
+    {
+      title: 'Choisir la machine et l\'horizon',
+      body: `La <span class="mguide-hl">machine</span> se choisit dans le menu latéral (Cohésio 1, Cohésio 2, DSI, Repiquage). En haut de la timeline, l'<span class="mguide-hl">horizon</span> : <span class="mguide-tag">Semaine</span> <span class="mguide-tag">2 semaines</span> <span class="mguide-tag">4 semaines</span>, et les flèches naviguent de période en période.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="10" width="88" height="152" rx="8" fill="var(--card)" stroke="var(--border)"/>
+        <text x="18" y="27" font-size="8" fill="var(--muted)">MACHINE</text>
+        <rect x="14" y="32" width="76" height="22" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="22" y="47" font-size="9" fill="var(--accent)" font-weight="700">Cohésio 1</text>
+        <rect x="14" y="58" width="76" height="22" rx="6" fill="transparent" stroke="var(--border)"/><text x="22" y="73" font-size="9" fill="var(--text2)">Cohésio 2</text>
+        <rect x="14" y="84" width="76" height="22" rx="6" fill="transparent" stroke="var(--border)"/><text x="22" y="99" font-size="9" fill="var(--text2)">DSI</text>
+        <rect x="14" y="110" width="76" height="22" rx="6" fill="transparent" stroke="var(--border)"/><text x="22" y="125" font-size="9" fill="var(--text2)">Repiquage</text>
+        <text x="108" y="26" font-size="8" fill="var(--muted)">HORIZON</text>
+        <rect x="108" y="32" width="62" height="24" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="139" y="48" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">Semaine</text>
+        <rect x="170" y="32" width="76" height="24" fill="var(--card)" stroke="var(--border)"/><text x="208" y="48" font-size="9" fill="var(--text2)" text-anchor="middle">2 semaines</text>
+        <rect x="246" y="32" width="76" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="284" y="48" font-size="9" fill="var(--text2)" text-anchor="middle">4 semaines</text>
+        <rect x="108" y="66" width="26" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="121" y="83" font-size="12" fill="var(--text2)" text-anchor="middle">&#9664;</text>
+        <rect x="136" y="66" width="132" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="202" y="82" font-size="9" fill="var(--text)" text-anchor="middle" font-weight="700">Semaine 12 · 2026</text>
+        <rect x="270" y="66" width="26" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="283" y="83" font-size="12" fill="var(--text2)" text-anchor="middle">&#9654;</text>
+        <text x="108" y="112" font-size="9" fill="var(--muted)">La machine et l'horizon sont mémorisés</text>
+        <text x="108" y="126" font-size="9" fill="var(--muted)">d'une visite à l'autre.</text>
+      </svg>`
+    },
+    {
+      title: 'Lire un dossier dans la timeline',
+      body: `Chaque <strong>barre</strong> est un dossier, posée sur les jours travaillés ; sa largeur reflète la durée. Le badge <span class="mguide-tag">Xh · N dossiers</span> résume la charge. Le dossier <span class="mguide-hl">en cours</span> est mis en avant.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="232" y="8" width="100" height="18" rx="9" fill="var(--accent-bg)"/><text x="282" y="21" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">48h · 6 dossiers</text>
+        <g font-size="8" fill="var(--muted)"><text x="34" y="40">Lun</text><text x="90" y="40">Mar</text><text x="146" y="40">Mer</text><text x="202" y="40">Jeu</text><text x="258" y="40">Ven</text></g>
+        <rect x="14" y="46" width="312" height="112" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+        <g stroke="var(--border)"><line x1="70" y1="46" x2="70" y2="158"/><line x1="126" y1="46" x2="126" y2="158"/><line x1="182" y1="46" x2="182" y2="158"/><line x1="238" y1="46" x2="238" y2="158"/><line x1="294" y1="46" x2="294" y2="158"/></g>
+        <rect x="20" y="56" width="98" height="32" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2"/><text x="69" y="73" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4821 · Client A</text><text x="69" y="84" font-size="7" fill="#cbd5e1" text-anchor="middle">en cours</text>
+        <rect x="124" y="96" width="150" height="30" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="199" y="115" font-size="9" fill="#e2e8f0" text-anchor="middle" font-weight="700">DOS-4822 · Client B</text>
+        <rect x="46" y="132" width="92" height="20" rx="6" fill="#0f172a" stroke="var(--border)" opacity="0.75"/><text x="92" y="146" font-size="8" fill="#94a3b8" text-anchor="middle">DOS-4790 · terminé</text>
+      </svg>`
+    },
+    {
+      title: 'Réordonner par glisser-déposer',
+      body: `Attrapez une barre et <span class="mguide-hl">glissez-la</span> pour changer l'ordre de passage ; une poignée <span class="mguide-tag">&#8660;</span> à droite permet d'ajuster la durée. Le planning se recale automatiquement autour du dossier en cours.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="14" y="28" width="312" height="116" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+        <g stroke="var(--border)"><line x1="92" y1="28" x2="92" y2="144"/><line x1="170" y1="28" x2="170" y2="144"/><line x1="248" y1="28" x2="248" y2="144"/></g>
+        <rect x="24" y="42" width="86" height="28" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="67" y="60" font-size="9" fill="#e2e8f0" text-anchor="middle">DOS-4790</text>
+        <rect x="150" y="88" width="120" height="32" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 3"/><text x="205" y="107" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4822</text>
+        <circle cx="264" cy="104" r="8" fill="var(--accent)"/><text x="264" y="108" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="800">&#8660;</text>
+        <path d="M120 96 L148 100" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" marker-end="url(#pdr)"/>
+        <defs><marker id="pdr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--accent)"/></marker></defs>
+        <text x="18" y="162" font-size="10" fill="var(--muted)">Glissez pour réordonner · poignée droite pour la durée.</text>
+      </svg>`
+    },
+    {
+      title: 'Horaires, jours off et recherche',
+      body: `L'icône <span class="mguide-tag">&#9881;</span> de chaque semaine règle les <strong>horaires</strong> et les <strong>jours off</strong> (exclus du calcul). La <span class="mguide-hl">recherche timeline</span> retrouve un dossier par client, OF ou référence produit.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="14" y="10" width="190" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="24" y="25" font-size="9" fill="var(--text)" font-weight="700">Semaine 12 · 16–22 mars</text>
+        <rect x="210" y="10" width="26" height="22" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="223" y="26" font-size="12" fill="var(--accent)" text-anchor="middle">&#9881;</text>
+        <rect x="14" y="42" width="72" height="66" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="50" y="58" font-size="8" fill="var(--muted)" text-anchor="middle" font-weight="700">Vendredi</text><rect x="22" y="66" width="56" height="20" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="50" y="80" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">06:00–14:00</text>
+        <rect x="94" y="42" width="72" height="66" rx="7" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="130" y="58" font-size="8" fill="var(--muted)" text-anchor="middle" font-weight="700">Samedi</text><text x="130" y="82" font-size="8" fill="var(--muted)" text-anchor="middle">Jour off</text>
+        <rect x="174" y="42" width="152" height="66" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="184" y="58" font-size="8" fill="var(--muted)">Réglages horaires par défaut</text><rect x="184" y="66" width="132" height="16" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="184" y="86" width="90" height="16" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+        <rect x="14" y="120" width="312" height="26" rx="7" fill="var(--bg)" stroke="var(--border)"/><circle cx="30" cy="133" r="6" fill="none" stroke="var(--muted)" stroke-width="1.6"/><path d="M34 137 L39 142" stroke="var(--muted)" stroke-width="1.6" stroke-linecap="round"/><text x="46" y="137" font-size="9" fill="var(--muted)">Rechercher dans la timeline (client, OF, réf produit…)</text>
+      </svg>`
+    }
+  ]}
+};
+
+function initPlanningGuides(){
+  try{
+    if(!window.MySifaGuides) return;
+    MySifaGuides.configure({role:(window.__MYSIFA_ROLE__||"")});
+    MySifaGuides.registerMany(PLANNING_GUIDES);
+    MySifaGuides.boot().then(function(){ MySifaGuides.autoOpen('planning-overview'); });
+  }catch(e){}
+}
+
 async function boot(){
   document.body.classList.add("has-topbar");
   try{ render(); }catch(e){}
@@ -5067,6 +5113,7 @@ async function boot(){
   }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();
+  try{ initPlanningGuides(); }catch(e){}
   // Actualise le dossier actif + allonge le slot en_cours toutes les 30 s
   setInterval(async()=>{
     if(!MID) return;

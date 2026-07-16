@@ -8,11 +8,22 @@ Fixes:
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from config import APP_ORG_NAME
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 router = APIRouter()
+
+
+def _js_escape(s: str) -> str:
+    """Escape pour usage dans une string JS single-quotée."""
+    return (
+        s.replace("\\", "\\\\")
+         .replace("'", "\\'")
+         .replace("\n", "\\n")
+         .replace("\r", "")
+    )
 
 
 @router.get("/stock", response_class=HTMLResponse)
@@ -30,9 +41,11 @@ def stock_page(request: Request):
             pass  # autorisé → accès limité au traça dans le JS
         else:
             return access_denied_response("MyStock")
+    # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
+    html = STOCK_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
     # Important: prevent iOS/PWA from serving stale HTML/JS.
     return HTMLResponse(
-        content=STOCK_HTML,
+        content=html,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",
@@ -95,7 +108,7 @@ input,select{font-family:inherit}
   display:flex;flex-direction:column;flex-shrink:0;height:100vh;min-height:100vh;
   position:sticky;top:0;overflow:hidden}
 .sidebar::-webkit-scrollbar{width:0}
-.sidebar-logo{padding:20px 16px 8px;flex-shrink:0}.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
+.sidebar-logo{padding:20px 16px 8px;flex-shrink:0;cursor:pointer;border-radius:10px;transition:background .15s}.sidebar-logo:hover{background:var(--accent-bg)}.sidebar-logo:hover .logo-brand{color:var(--accent)}.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
@@ -1793,6 +1806,7 @@ body.light .recep-print-title{color:#059669}
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
+<script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
@@ -3467,7 +3481,7 @@ function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove(
 function goToTab(tab) {
   // Accès restreints selon le mode
   if (S.tracaOnly && tab !== 'traca') return;
-  if (S.fabStockMode && !['production','matieres','historique','traca','plan-entrepot'].includes(tab)) return;
+  if (S.fabStockMode && !['menu','production','matieres','historique','traca','plan-entrepot'].includes(tab)) return;
   // Arrêter la caméra si on quitte l'onglet réception
   if (tab !== 'reception' && S.recepScanning) recepStopCamera();
   S.tab = tab; S.selProduit = null; S.selEmpl = null; S.selMatiere = null; S.searchResults = null; S.showAddForm = false;
@@ -3502,6 +3516,7 @@ function goToTab(tab) {
   updateNavActive();
   stockSyncUrl();
   renderContent();
+  try{ stockMaybeAutoOpenGuide(); }catch(e){}
   if (tab === 'dashboard') loadDashboard();
   else if (tab === 'referentiel') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
@@ -12808,6 +12823,11 @@ function renderContent() {
     return;
   }
 
+  if (S.tab === 'menu') {
+    area.innerHTML = '';
+    area.appendChild(buildStockMenu());
+    return;
+  }
   if (S.tab === 'produits-finis') {
     renderProduitsFinisView();
     return;
@@ -17052,7 +17072,7 @@ function render() {
   const layout = el('div', { cls:'app-layout' });
   const isLight = document.body.classList.contains('light');
   const sidebar = el('div', { cls:'sidebar' },
-    el('div', { cls:'sidebar-logo' },
+    el('div', { cls:'sidebar-logo', title:'Accueil MyStock', on:{ click:()=>goToTab('menu') } },
       el('div', { cls:'logo-brand' }, 'My', el('span',null,'Stock')),
       el('div', { cls:'logo-sub' }, 'by __APP_ORG_NAME__')
     ),
@@ -17239,6 +17259,384 @@ function render() {
   if(window.MySifaDock&&typeof window.MySifaDock.layout==='function')window.MySifaDock.layout();
 }
 
+// ── Page d'accueil MyStock (menu général, accessible via le logo) ──
+function ensureStockMenuStyle(){
+  if(document.getElementById('mystock-menu-css')) return;
+  var s=document.createElement('style'); s.id='mystock-menu-css';
+  s.textContent='.mystock-menu{max-width:1000px;margin:0 auto;padding:10px 4px}'
+   +'.mystock-menu-h{font-size:20px;font-weight:800;color:var(--text);margin:4px 0 2px}'
+   +'.mystock-menu-sub{font-size:13px;color:var(--muted);margin-bottom:8px}'
+   +'.mystock-menu-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
+   +'.mystock-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
+   +'.mystock-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
+   +'.mystock-tile-ic{width:44px;height:44px;border-radius:12px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}'
+   +'.mystock-tile-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}'
+   +'.mystock-tile-lbl{font-size:15px;font-weight:800;color:var(--text)}'
+   +'.mystock-tile-desc{font-size:12px;color:var(--muted);line-height:1.45}'
+   +'.mystock-tile-chev{color:var(--muted);flex-shrink:0;transition:transform .15s,color .15s}'
+   +'.mystock-tile:hover .mystock-tile-chev{transform:translateX(3px);color:var(--accent)}';
+  document.head.appendChild(s);
+}
+function buildStockMenu(){
+  ensureStockMenuStyle();
+  var role=(S.user&&S.user.role)||'';
+  var isAdm=['superadmin','direction','administration','administration_ventes','administration_technique'].indexOf(role)!==-1;
+  var tiles=[];
+  if(S.fabStockMode){
+    tiles.push({ic:'cpu',lbl:'Production',desc:'Sorties matière et suivi de production',go:'production'});
+    tiles.push({ic:'layers',lbl:'Matières premières',desc:'Stock matière et mouvements',go:'matieres'});
+    tiles.push({ic:'clock',lbl:'Outils',desc:'Historique, étiquettes traça, plan entrepôt',go:'historique'});
+  } else {
+    tiles.push({ic:'grid',lbl:'Tableau de bord',desc:'Vue d\'ensemble et alertes de stock',go:'dashboard'});
+    tiles.push({ic:'layers',lbl:'Matières premières',desc:'Matières, réception et inventaire matière',go:'matieres'});
+    tiles.push({ic:'package',lbl:'Produits',desc:'Produits finis, négoce et référentiel',go:'produits-finis'});
+    if(isAdm) tiles.push({ic:'euro',lbl:'Contrôle',desc:'Monitoring ERP et valorisation du stock',go:'monitoring'});
+    tiles.push({ic:'clock',lbl:'Outils',desc:'Historique, étiquettes traça, plan entrepôt',go:'historique'});
+  }
+  var grid=el('div',{cls:'mystock-menu-tiles'}, tiles.map(function(t){
+    return el('button',{cls:'mystock-tile', title:t.lbl, on:{click:function(){ goToTab(t.go); }}},
+      el('div',{cls:'mystock-tile-ic'}, iconEl(t.ic,20)),
+      el('div',{cls:'mystock-tile-body'},
+        el('div',{cls:'mystock-tile-lbl'}, t.lbl),
+        el('div',{cls:'mystock-tile-desc'}, t.desc)
+      ),
+      el('div',{cls:'mystock-tile-chev'}, iconEl('chevron-right',18))
+    );
+  }));
+  return el('div',{cls:'mystock-menu'},
+    el('div',{cls:'mystock-menu-h'},'MyStock'),
+    el('div',{cls:'mystock-menu-sub'},'Stocks, mouvements et emplacements'),
+    grid
+  );
+}
+
+// ─── Guides in-app MyStock (moteur partagé mysifa_guides.js) ───
+var STOCK_TAB_GUIDE = {
+  menu: 'mystock-overview',
+  dashboard: 'mystock-dashboard',
+  matieres: 'mystock-matieres', reception: 'mystock-matieres', 'matieres-inventaire': 'mystock-matieres',
+  'produits-finis': 'mystock-produits', negoce: 'mystock-produits', referentiel: 'mystock-produits', inventaire: 'mystock-produits',
+  monitoring: 'mystock-controle', valorisation: 'mystock-controle',
+  historique: 'mystock-outils', traca: 'mystock-outils', 'plan-entrepot': 'mystock-outils',
+  production: 'mystock-production'
+};
+
+var STOCK_GUIDES = {
+  'mystock-overview': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+      title: 'Bienvenue dans MyStock',
+      body: `MyStock suit vos <strong>stocks</strong> — matières premières et produits — leurs <strong>mouvements</strong> et leurs <strong>emplacements</strong>. La navigation est organisée par sections dans la barre latérale.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Consulter le stock des matières et des produits finis.</li><li>Enregistrer réceptions, sorties et mouvements.</li><li>Faire les inventaires et suivre les écarts.</li><li>Imprimer les étiquettes de traçabilité.</li></ul></div></div>`
+    },
+    {
+      title: 'La page d\'accueil et les sections',
+      body: `Chaque <span class="mguide-hl">tuile</span> ouvre une section. La barre latérale reprend les mêmes accès, groupés : <span class="mguide-tag">Matières premières</span> <span class="mguide-tag">Produits</span> <span class="mguide-tag">Contrôle</span> <span class="mguide-tag">Outils</span>. Le logo <strong>MyStock</strong> ramène à l'accueil.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="6" y="6" width="96" height="166" rx="8" fill="var(--card)" stroke="var(--border)"/>
+        <text x="16" y="24" font-size="11" fill="var(--text)" font-weight="800">My<tspan fill="var(--accent)">Stock</tspan></text>
+        <rect x="14" y="32" width="80" height="15" rx="4" fill="var(--accent-bg)"/><text x="20" y="43" font-size="8" fill="var(--accent)" font-weight="700">Tableau de bord</text>
+        <text x="14" y="59" font-size="7" fill="var(--muted)">MATIÈRES PREMIÈRES</text>
+        <rect x="14" y="63" width="80" height="13" rx="3" fill="transparent" stroke="var(--border)"/><text x="20" y="73" font-size="7.5" fill="var(--text2)">Matières premières</text>
+        <rect x="14" y="78" width="80" height="13" rx="3" fill="transparent" stroke="var(--border)"/><text x="20" y="88" font-size="7.5" fill="var(--text2)">Réception matière</text>
+        <text x="14" y="103" font-size="7" fill="var(--muted)">PRODUITS</text>
+        <rect x="14" y="107" width="80" height="13" rx="3" fill="transparent" stroke="var(--border)"/><text x="20" y="117" font-size="7.5" fill="var(--text2)">Produits finis</text>
+        <rect x="14" y="122" width="80" height="13" rx="3" fill="transparent" stroke="var(--border)"/><text x="20" y="132" font-size="7.5" fill="var(--text2)">Produits de négoce</text>
+        <text x="14" y="151" font-size="7" fill="var(--muted)">OUTILS</text>
+        <rect x="14" y="155" width="80" height="13" rx="3" fill="transparent" stroke="var(--border)"/><text x="20" y="165" font-size="7.5" fill="var(--text2)">Historique</text>
+        <text x="112" y="24" font-size="13" fill="var(--text)" font-weight="800">Tableau de bord</text>
+        <rect x="112" y="34" width="66" height="40" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="120" y="49" font-size="7" fill="var(--warn,#fbbf24)">MP à approv.</text><text x="120" y="66" font-size="15" fill="var(--warn,#fbbf24)" font-weight="800">4</text>
+        <rect x="184" y="34" width="66" height="40" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="192" y="49" font-size="7" fill="var(--accent)">À expédier</text><text x="192" y="66" font-size="15" fill="var(--accent)" font-weight="800">12</text>
+        <rect x="256" y="34" width="76" height="40" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="264" y="49" font-size="7" fill="var(--muted)">En stock</text><text x="264" y="66" font-size="15" fill="var(--text)" font-weight="800">312</text>
+        <rect x="112" y="82" width="220" height="88" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="122" y="98" font-size="9" fill="var(--text)" font-weight="700">Stock par emplacement</text>
+        <rect x="122" y="106" width="200" height="16" rx="4" fill="var(--bg)"/><rect x="122" y="126" width="200" height="16" rx="4" fill="var(--bg)"/><rect x="122" y="146" width="200" height="16" rx="4" fill="var(--bg)"/>
+      </svg>`
+    },
+    {
+      title: 'Deux pôles : matières et produits',
+      body: `Le stock se lit sur deux niveaux : les <strong>matières premières</strong> (ce qui entre) et les <strong>produits</strong> finis ou de négoce (ce qui sort). Chaque fiche affiche les <span class="mguide-hl">quantités</span>, les <span class="mguide-hl">emplacements</span> et l'historique des mouvements.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="8" width="160" height="162" rx="9" fill="var(--card)" stroke="var(--border)"/>
+        <text x="18" y="26" font-size="11" fill="var(--text)" font-weight="800">Matières premières</text><text x="18" y="39" font-size="8" fill="var(--muted)">stock par catégorie</text>
+        <g font-size="8"><rect x="16" y="46" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="60" fill="var(--text2)">Papier 90g</text><text x="150" y="60" fill="var(--accent)" text-anchor="end" font-weight="700">1 240 kg</text>
+        <rect x="16" y="72" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="86" fill="var(--text2)">Encre bleue</text><text x="150" y="86" fill="var(--accent)" text-anchor="end" font-weight="700">84 kg</text>
+        <rect x="16" y="98" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="112" fill="var(--text2)">Mandrin 76</text><text x="150" y="112" fill="var(--accent)" text-anchor="end" font-weight="700">620 u</text>
+        <rect x="16" y="124" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="138" fill="var(--text2)">Colle</text><text x="150" y="138" fill="var(--warn,#fbbf24)" text-anchor="end" font-weight="700">22 kg</text></g>
+        <rect x="172" y="8" width="160" height="162" rx="9" fill="var(--card)" stroke="var(--border)"/>
+        <text x="182" y="26" font-size="11" fill="var(--text)" font-weight="800">Produits finis</text><text x="182" y="39" font-size="8" fill="var(--muted)">stock par référence</text>
+        <g font-size="8"><rect x="180" y="46" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="188" y="60" fill="var(--text2)">REF-1201</text><text x="316" y="60" fill="var(--accent)" text-anchor="end" font-weight="700">5 pal.</text>
+        <rect x="180" y="72" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="188" y="86" fill="var(--text2)">REF-1202</text><text x="316" y="86" fill="var(--accent)" text-anchor="end" font-weight="700">2 pal.</text>
+        <rect x="180" y="98" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="188" y="112" fill="var(--text2)">REF-1330</text><text x="316" y="112" fill="var(--accent)" text-anchor="end" font-weight="700">11 cart.</text>
+        <rect x="180" y="124" width="144" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="188" y="138" fill="var(--text2)">REF-1402</text><text x="316" y="138" fill="var(--accent)" text-anchor="end" font-weight="700">8 pal.</text></g>
+      </svg>`
+    },
+    {
+      title: 'Mouvements, inventaire et traçabilité',
+      body: `Tout ce qui bouge est tracé : <strong>réceptions</strong>, <strong>sorties</strong>, transferts. Les <strong>inventaires</strong> corrigent les écarts, la section <strong>Contrôle</strong> réconcilie avec l'ERP et valorise le stock, et les <strong>étiquettes traça</strong> assurent le suivi jusqu'au lot.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Historique des mouvements</text><text x="14" y="35" font-size="8" fill="var(--muted)">toutes les entrées et sorties</text>
+        <rect x="250" y="10" width="80" height="22" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="290" y="25" font-size="8" fill="var(--text2)" text-anchor="middle">Filtres</text>
+        <rect x="14" y="44" width="312" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="22" y="58" font-size="8" fill="var(--muted)">Date</text><text x="110" y="58" font-size="8" fill="var(--muted)">Type</text><text x="200" y="58" font-size="8" fill="var(--muted)">Article</text><text x="290" y="58" font-size="8" fill="var(--muted)">Qté</text>
+        <g font-size="8"><rect x="14" y="68" width="312" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="82" fill="var(--text2)">14/07 09:12</text><rect x="102" y="72" width="52" height="14" rx="7" fill="rgba(52,211,153,.15)"/><text x="128" y="82" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Entrée</text><text x="200" y="82" fill="var(--text2)">Papier 90g</text><text x="316" y="82" fill="var(--ok,#34d399)" text-anchor="end" font-weight="700">+300</text>
+        <rect x="14" y="94" width="312" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="108" fill="var(--text2)">12/07 15:40</text><rect x="102" y="98" width="52" height="14" rx="7" fill="rgba(248,113,113,.15)"/><text x="128" y="108" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="700">Sortie</text><text x="200" y="108" fill="var(--text2)">REF-1201</text><text x="316" y="108" fill="var(--danger,#f87171)" text-anchor="end" font-weight="700">-1 pal</text>
+        <rect x="14" y="120" width="312" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="134" fill="var(--text2)">12/07 11:05</text><rect x="102" y="124" width="60" height="14" rx="7" fill="var(--accent-bg)"/><text x="132" y="134" fill="var(--accent)" text-anchor="middle" font-weight="700">Transfert</text><text x="200" y="134" fill="var(--text2)">A-12 &#8594; B-04</text></g>
+        <rect x="14" y="150" width="150" height="20" rx="6" fill="rgba(251,191,36,.12)"/><text x="24" y="164" font-size="8" fill="var(--warn,#fbbf24)" font-weight="700">Inventaire · écart -8</text>
+        <rect x="176" y="150" width="150" height="20" rx="6" fill="var(--accent-bg)"/><text x="186" y="164" font-size="8" fill="var(--accent)" font-weight="700">Étiquette traça · lot P-2231</text>
+      </svg>`
+    }
+  ]},
+
+  'mystock-dashboard': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
+      title: 'Tableau de bord',
+      body: `Le tableau de bord donne la <strong>photo du stock</strong> en un coup d'œil : indicateurs clés, alertes de niveau et accès rapides aux actions courantes.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette page</div><ul class="mguide-svc-list"><li>Repérer les MP à approvisionner et les références à expédier.</li><li>Voir le stock par emplacement.</li><li>Accéder vite aux actions fréquentes.</li></ul></div></div>`
+    },
+    {
+      title: 'Indicateurs et alertes',
+      body: `Les <span class="mguide-hl">cartes du haut</span> résument l'essentiel : <span class="mguide-tag">MP à approvisionner</span>, <span class="mguide-tag">Références à expédier</span>, <span class="mguide-tag">Références en stock</span>. Les niveaux critiques ressortent en couleur pour être traités en priorité.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="24" font-size="13" fill="var(--text)" font-weight="800">Tableau de bord</text>
+        <rect x="14" y="36" width="100" height="54" rx="9" fill="var(--card)" stroke="var(--warn,#fbbf24)"/><text x="24" y="55" font-size="9" fill="var(--warn,#fbbf24)">MP à approvisionner</text><text x="24" y="80" font-size="22" fill="var(--warn,#fbbf24)" font-weight="800">4</text>
+        <rect x="120" y="36" width="100" height="54" rx="9" fill="var(--card)" stroke="var(--accent)"/><text x="130" y="55" font-size="9" fill="var(--accent)">Réf. à expédier</text><text x="130" y="80" font-size="22" fill="var(--accent)" font-weight="800">12</text>
+        <rect x="226" y="36" width="106" height="54" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="236" y="55" font-size="9" fill="var(--muted)">Réf. en stock</text><text x="236" y="80" font-size="22" fill="var(--text)" font-weight="800">312</text>
+        <rect x="14" y="100" width="318" height="30" rx="8" fill="rgba(251,191,36,.1)" stroke="var(--warn,#fbbf24)"/><text x="26" y="119" font-size="9" fill="var(--warn,#fbbf24)" font-weight="700">4 matières sous le seuil d'alerte</text>
+        <rect x="14" y="138" width="318" height="30" rx="8" fill="rgba(248,113,113,.08)" stroke="var(--danger,#f87171)"/><text x="26" y="157" font-size="9" fill="var(--danger,#f87171)" font-weight="700">2 fiches produit incomplètes</text>
+      </svg>`
+    },
+    {
+      title: 'Stock par emplacement et accès rapides',
+      body: `Le tableau <strong>Stock par emplacement</strong> montre où se trouve chaque référence. Depuis le tableau de bord, on lance aussi les actions fréquentes : <span class="mguide-hl">ajouter un produit fini</span>, aller à une matière, ouvrir un inventaire.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="14" y="12" width="318" height="96" rx="9" fill="var(--card)" stroke="var(--border)"/>
+        <text x="24" y="30" font-size="10" fill="var(--text)" font-weight="700">Stock par emplacement</text>
+        <rect x="24" y="38" width="298" height="18" rx="4" fill="var(--bg)"/><text x="32" y="51" font-size="8" fill="var(--muted)">Emplacement</text><text x="200" y="51" font-size="8" fill="var(--muted)">Référence</text><text x="300" y="51" font-size="8" fill="var(--muted)">Qté</text>
+        <g font-size="8"><rect x="24" y="60" width="298" height="18" rx="4" fill="var(--bg)"/><text x="32" y="73" fill="var(--text2)">A-12</text><text x="200" y="73" fill="var(--text2)">REF-1201</text><text x="314" y="73" fill="var(--accent)" text-anchor="end" font-weight="700">3</text>
+        <rect x="24" y="82" width="298" height="18" rx="4" fill="var(--bg)"/><text x="32" y="95" fill="var(--text2)">B-04</text><text x="200" y="95" fill="var(--text2)">REF-1202</text><text x="314" y="95" fill="var(--accent)" text-anchor="end" font-weight="700">2</text></g>
+        <rect x="14" y="120" width="150" height="46" rx="10" fill="var(--accent)"/><text x="89" y="147" font-size="10" fill="#fff" text-anchor="middle" font-weight="700">+ Produit fini</text>
+        <rect x="172" y="120" width="76" height="46" rx="10" fill="var(--card)" stroke="var(--border)"/><text x="210" y="147" font-size="9" fill="var(--text)" text-anchor="middle" font-weight="700">Matières</text>
+        <rect x="256" y="120" width="76" height="46" rx="10" fill="var(--card)" stroke="var(--border)"/><text x="294" y="147" font-size="9" fill="var(--text)" text-anchor="middle" font-weight="700">Inventaire</text>
+      </svg>`
+    }
+  ]},
+
+  'mystock-matieres': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+      title: 'Matières premières',
+      body: `Cette section gère les <strong>matières premières</strong> : leur stock, leur <strong>réception</strong> à l'entrée et leur <strong>inventaire</strong>. Trois onglets : Matières premières, Réception matière, Inventaire matière.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Consulter le stock matière par catégorie.</li><li>Réceptionner les livraisons fournisseurs.</li><li>Compter et ajuster l'inventaire matière.</li></ul></div></div>`
+    },
+    {
+      title: 'La fiche matière',
+      body: `Chaque matière (papier, encre, colle, mandrin…) a une fiche avec sa <span class="mguide-hl">quantité en stock</span>, sa catégorie et ses mouvements. Une matière sous son <span class="mguide-tag">seuil</span> remonte en alerte sur le tableau de bord.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Matières premières</text><text x="14" y="35" font-size="8" fill="var(--muted)">stock par catégorie</text>
+        <rect x="244" y="10" width="88" height="22" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="288" y="25" font-size="8" fill="var(--text2)" text-anchor="middle">Gérer les réf.</text>
+        <rect x="14" y="44" width="318" height="52" rx="9" fill="var(--card)" stroke="var(--accent)"/>
+        <text x="24" y="62" font-size="11" fill="var(--text)" font-weight="800">Papier 90g · Carton</text><text x="24" y="76" font-size="8" fill="var(--muted)">Fournisseur : Papeterie X</text>
+        <text x="316" y="60" font-size="8" fill="var(--muted)" text-anchor="end">En stock</text><text x="316" y="78" font-size="15" fill="var(--accent)" text-anchor="end" font-weight="800">1 240 kg</text>
+        <rect x="24" y="84" width="90" height="16" rx="8" fill="rgba(251,191,36,.15)"/><text x="69" y="96" font-size="8" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">Seuil : 200 kg</text>
+        <rect x="14" y="104" width="318" height="18" rx="4" fill="var(--bg)"/><text x="22" y="117" font-size="8" fill="var(--muted)">Date</text><text x="120" y="117" font-size="8" fill="var(--muted)">Mouvement</text><text x="300" y="117" font-size="8" fill="var(--muted)">Qté</text>
+        <g font-size="8"><rect x="14" y="126" width="318" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/><text x="22" y="139" fill="var(--text2)">14/07</text><text x="120" y="139" fill="var(--ok,#34d399)">Réception</text><text x="316" y="139" fill="var(--ok,#34d399)" text-anchor="end" font-weight="700">+300 kg</text>
+        <rect x="14" y="148" width="318" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/><text x="22" y="161" fill="var(--text2)">12/07</text><text x="120" y="161" fill="var(--danger,#f87171)">Sortie prod</text><text x="316" y="161" fill="var(--danger,#f87171)" text-anchor="end" font-weight="700">-120 kg</text></g>
+      </svg>`
+    },
+    {
+      title: 'Réception et inventaire',
+      body: `L'onglet <strong>Réception</strong> enregistre les livraisons fournisseurs (<span class="mguide-hl">scan</span> du code possible) : chaque entrée met à jour le stock. L'onglet <strong>Inventaire matière</strong> compare ensuite le stock <span class="mguide-hl">théorique</span> au <span class="mguide-hl">compté</span> et la validation ajuste l'écart.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="10" y="12" width="156" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="20" y="30" font-size="10" fill="var(--text)" font-weight="800">Réception</text>
+        <rect x="24" y="40" width="128" height="34" rx="6" fill="var(--bg)" stroke="var(--accent)"/><g stroke="var(--text)" stroke-width="1.3"><line x1="40" y1="47" x2="40" y2="67"/><line x1="46" y1="47" x2="46" y2="67"/><line x1="53" y1="47" x2="53" y2="67"/><line x1="62" y1="47" x2="62" y2="67"/><line x1="72" y1="47" x2="72" y2="67"/><line x1="84" y1="47" x2="84" y2="67"/><line x1="96" y1="47" x2="96" y2="67"/><line x1="108" y1="47" x2="108" y2="67"/><line x1="120" y1="47" x2="120" y2="67"/><line x1="134" y1="47" x2="134" y2="67"/></g>
+        <text x="88" y="88" font-size="8" fill="var(--muted)" text-anchor="middle">scanner le code</text>
+        <rect x="24" y="96" width="128" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="32" y="110" font-size="8" fill="var(--text2)">Papier 90g · +300 kg</text>
+        <rect x="24" y="126" width="128" height="28" rx="7" fill="var(--accent)"/><text x="88" y="144" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Valider la réception</text>
+        <rect x="174" y="12" width="156" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="184" y="30" font-size="10" fill="var(--text)" font-weight="800">Inventaire matière</text>
+        <rect x="184" y="38" width="136" height="16" rx="4" fill="var(--bg)"/><text x="190" y="50" font-size="7" fill="var(--muted)">Matière</text><text x="256" y="50" font-size="7" fill="var(--muted)">Théo</text><text x="290" y="50" font-size="7" fill="var(--muted)">Compté</text>
+        <g font-size="8"><rect x="184" y="58" width="136" height="22" rx="4" fill="var(--bg)"/><text x="190" y="72" fill="var(--text2)">Papier</text><text x="266" y="72" fill="var(--text2)" text-anchor="middle">1240</text><rect x="286" y="61" width="30" height="16" rx="3" fill="var(--card)" stroke="var(--accent)"/><text x="301" y="72" fill="var(--text)" text-anchor="middle">1232</text></g>
+        <text x="184" y="98" font-size="9" fill="var(--danger,#f87171)" font-weight="700">Écart : -8 kg</text>
+        <rect x="184" y="126" width="136" height="28" rx="7" fill="var(--accent)"/><text x="252" y="144" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Valider l'inventaire</text>
+      </svg>`
+    }
+  ]},
+
+  'mystock-produits': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+      title: 'Produits',
+      body: `Cette section couvre les <strong>produits finis</strong>, les <strong>produits de négoce</strong>, le <strong>référentiel</strong> et l'<strong>inventaire produit</strong>. C'est le stock de sortie, prêt à expédier.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Suivre le stock de produits finis et leurs emplacements.</li><li>Gérer les produits de négoce.</li><li>Tenir le référentiel et faire l'inventaire produit.</li></ul></div></div>`
+    },
+    {
+      title: 'Produits finis',
+      body: `Chaque produit fini a une fiche : <span class="mguide-hl">quantité</span>, <span class="mguide-hl">emplacements</span> (palettes, cartons) et mouvements. On y enregistre les entrées de production et les sorties à l'expédition.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Produits finis</text><text x="14" y="35" font-size="8" fill="var(--muted)">stock par référence</text>
+        <rect x="14" y="44" width="318" height="48" rx="9" fill="var(--card)" stroke="var(--accent)"/>
+        <text x="24" y="63" font-size="11" fill="var(--text)" font-weight="800">REF-1201 · Étiquette adhésive</text><text x="24" y="78" font-size="8" fill="var(--muted)">Client : Bunsch</text>
+        <text x="316" y="62" font-size="8" fill="var(--muted)" text-anchor="end">Stock</text><text x="316" y="80" font-size="15" fill="var(--accent)" text-anchor="end" font-weight="800">5 pal.</text>
+        <text x="14" y="112" font-size="9" fill="var(--text)" font-weight="700">Emplacements</text>
+        <rect x="14" y="120" width="100" height="42" rx="8" fill="var(--bg)" stroke="var(--border)"/><text x="64" y="138" font-size="9" fill="var(--text2)" text-anchor="middle">A-12</text><text x="64" y="152" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">3 palettes</text>
+        <rect x="120" y="120" width="100" height="42" rx="8" fill="var(--bg)" stroke="var(--border)"/><text x="170" y="138" font-size="9" fill="var(--text2)" text-anchor="middle">B-04</text><text x="170" y="152" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">2 palettes</text>
+        <rect x="226" y="120" width="106" height="42" rx="8" fill="rgba(52,211,153,.1)" stroke="var(--ok,#34d399)"/><text x="279" y="138" font-size="9" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">+ Entrée</text><text x="279" y="152" font-size="8" fill="var(--muted)" text-anchor="middle">production</text>
+      </svg>`
+    },
+    {
+      title: 'Négoce et référentiel',
+      body: `Les <strong>produits de négoce</strong> (achetés-revendus) ont leur propre onglet. Le <strong>référentiel</strong> tient la liste des références et des clients. On peut aussi y <span class="mguide-hl">modifier l'unité</span> d'un produit (kg, palette, unité, mètre…) — la base propre sur laquelle s'appuient fiches et mouvements.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="11" fill="var(--text)" font-weight="800">Produits de négoce</text>
+        <g font-size="8"><rect x="14" y="30" width="318" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="24" y="44" fill="var(--text2)">NG-880 · Ruban adhésif</text><text x="316" y="44" fill="var(--accent)" text-anchor="end" font-weight="700">340 u.</text>
+        <rect x="14" y="56" width="318" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="24" y="70" fill="var(--text2)">NG-902 · Film étirable</text><text x="316" y="70" fill="var(--accent)" text-anchor="end" font-weight="700">120 u.</text></g>
+        <text x="14" y="100" font-size="11" fill="var(--text)" font-weight="800">Référentiel</text>
+        <rect x="14" y="108" width="200" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="24" y="127" font-size="9" fill="var(--text2)">Unité :</text>
+        <rect x="70" y="114" width="60" height="18" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="100" y="126" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">palette</text>
+        <rect x="134" y="114" width="40" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="154" y="126" font-size="8" fill="var(--text2)" text-anchor="middle">kg</text>
+        <rect x="222" y="108" width="110" height="30" rx="7" fill="var(--accent)"/><text x="277" y="127" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Modifier l'unité</text>
+        <text x="14" y="158" font-size="8" fill="var(--muted)">L'unité choisie s'applique aux quantités et aux mouvements.</text>
+      </svg>`
+    },
+    {
+      title: 'Inventaire produit',
+      body: `L'onglet <strong>Inventaire produit</strong> fonctionne comme l'inventaire matière : on compte le réel par emplacement, l'<span class="mguide-hl">écart</span> apparaît, et la validation ajuste le stock. À faire régulièrement pour garder des chiffres fiables.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Inventaire produit</text>
+        <rect x="14" y="32" width="318" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="22" y="46" font-size="8" fill="var(--muted)">Référence · Empl.</text><text x="196" y="46" font-size="8" fill="var(--muted)">Théo.</text><text x="250" y="46" font-size="8" fill="var(--muted)">Compté</text><text x="310" y="46" font-size="8" fill="var(--muted)">Écart</text>
+        <g font-size="8"><rect x="14" y="56" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="71" fill="var(--text)">REF-1201 · A-12</text><text x="204" y="71" fill="var(--text2)" text-anchor="middle">3</text><rect x="234" y="60" width="40" height="16" rx="3" fill="var(--bg)" stroke="var(--accent)"/><text x="254" y="71" fill="var(--text)" text-anchor="middle">3</text><text x="318" y="71" fill="var(--ok,#34d399)" text-anchor="end" font-weight="700">0</text>
+        <rect x="14" y="84" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="99" fill="var(--text)">REF-1330 · C-01</text><text x="204" y="99" fill="var(--text2)" text-anchor="middle">11</text><rect x="234" y="88" width="40" height="16" rx="3" fill="var(--bg)" stroke="var(--accent)"/><text x="254" y="99" fill="var(--text)" text-anchor="middle">10</text><text x="318" y="99" fill="var(--danger,#f87171)" text-anchor="end" font-weight="700">-1</text></g>
+        <rect x="200" y="120" width="132" height="30" rx="8" fill="var(--accent)"/><text x="266" y="139" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Valider l'inventaire</text>
+        <text x="14" y="139" font-size="9" fill="var(--muted)">La validation ajuste le stock</text><text x="14" y="152" font-size="9" fill="var(--muted)">aux quantités comptées.</text>
+      </svg>`
+    }
+  ]},
+
+  'mystock-controle': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>`,
+      title: 'Contrôle',
+      body: `La section <strong>Contrôle</strong> (réservée à l'encadrement) réunit le <strong>Monitoring</strong> — réconciliation avec l'ERP — et la <strong>Valorisation</strong> du stock en euros. C'est le regard de pilotage sur la fiabilité et la valeur.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Comparer le stock MySifa au stock ERP.</li><li>Repérer les écarts et les références sans correspondance.</li><li>Valoriser le stock par catégorie.</li></ul></div></div>`
+    },
+    {
+      title: 'Monitoring — réconciliation ERP',
+      body: `<span class="mguide-tag">En cours de développement</span> Le <strong>Monitoring</strong> importera un état ERP et le comparera au stock MySifa. Les lignes se classeront par <span class="mguide-hl">statut</span> : concordant, écart, ou <span class="mguide-tag">sans correspondance</span>, pour traiter d'abord les anomalies.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Monitoring</text>
+        <rect x="230" y="10" width="102" height="20" rx="9" fill="rgba(251,191,36,.15)" stroke="var(--warn,#fbbf24)"/><text x="281" y="24" font-size="8" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">En développement</text>
+        <rect x="14" y="36" width="156" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="24" y="53" font-size="9" fill="var(--text2)">MySifa : 312 réf.</text>
+        <rect x="176" y="36" width="156" height="26" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="186" y="53" font-size="9" fill="var(--text2)">ERP : 315 réf.</text>
+        <g font-size="8" opacity="0.85"><rect x="14" y="70" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="76" width="66" height="14" rx="7" fill="rgba(52,211,153,.15)"/><text x="55" y="87" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Concordant</text><text x="100" y="87" fill="var(--text2)">REF-1201 · 3 = 3</text>
+        <rect x="14" y="98" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="104" width="44" height="14" rx="7" fill="rgba(251,191,36,.2)"/><text x="44" y="115" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">Écart</text><text x="100" y="115" fill="var(--text2)">REF-1330 · 11 &#8800; 10</text>
+        <rect x="14" y="126" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><rect x="22" y="132" width="92" height="14" rx="7" fill="rgba(248,113,113,.15)"/><text x="68" y="143" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="700">Sans corresp.</text><text x="122" y="143" fill="var(--text2)">REF-1402 (ERP seul)</text></g>
+      </svg>`
+    },
+    {
+      title: 'Valorisation du stock',
+      body: `La <strong>Valorisation</strong> chiffre le stock en <span class="mguide-hl">euros</span>, par catégorie et sous-section. On trie, on filtre, on exporte — utile pour la clôture comptable et le pilotage.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Valorisation</text>
+        <rect x="14" y="32" width="318" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="22" y="46" font-size="8" fill="var(--muted)">Catégorie</text><text x="210" y="46" font-size="8" fill="var(--muted)">Quantité</text><text x="300" y="46" font-size="8" fill="var(--muted)">Valeur</text>
+        <g font-size="8"><rect x="14" y="56" width="318" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="70" fill="var(--text)">Papier</text><text x="230" y="70" fill="var(--text2)" text-anchor="middle">8 200 kg</text><text x="318" y="70" fill="var(--accent)" text-anchor="end" font-weight="700">92 k€</text>
+        <rect x="14" y="80" width="318" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="94" fill="var(--text)">Produits finis</text><text x="230" y="94" fill="var(--text2)" text-anchor="middle">1 480 pal.</text><text x="318" y="94" fill="var(--accent)" text-anchor="end" font-weight="700">124 k€</text>
+        <rect x="14" y="104" width="318" height="22" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="118" fill="var(--text)">Négoce</text><text x="230" y="118" fill="var(--text2)" text-anchor="middle">460 u.</text><text x="318" y="118" fill="var(--accent)" text-anchor="end" font-weight="700">32 k€</text></g>
+        <rect x="14" y="132" width="318" height="30" rx="7" fill="var(--accent-bg)"/><text x="24" y="151" font-size="10" fill="var(--text)" font-weight="800">Total stock</text><text x="318" y="151" font-size="12" fill="var(--accent)" text-anchor="end" font-weight="800">248 k€</text>
+      </svg>`
+    }
+  ]},
+
+  'mystock-outils': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+      title: 'Outils',
+      body: `La section <strong>Outils</strong> regroupe l'<strong>historique des mouvements</strong>, l'impression des <strong>étiquettes de traçabilité</strong> et le <strong>plan d'entrepôt</strong>. De quoi retrouver, tracer et situer le stock.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Retrouver un mouvement dans l'historique.</li><li>Imprimer les étiquettes de traçabilité.</li><li>Situer un emplacement sur le plan d'entrepôt.</li></ul></div></div>`
+    },
+    {
+      title: 'Historique des mouvements',
+      body: `L'<strong>historique</strong> liste toutes les entrées et sorties, filtrables par date, matière ou produit. C'est la mémoire du stock : qui a bougé quoi, quand et de combien.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Historique des mouvements</text>
+        <rect x="248" y="10" width="84" height="22" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="290" y="25" font-size="8" fill="var(--text2)" text-anchor="middle">Filtres</text>
+        <text x="14" y="48" font-size="9" fill="var(--muted)">Mouvements de la semaine</text>
+        <g font-size="8"><rect x="14" y="54" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="69" fill="var(--text2)">14/07 09:12</text><rect x="102" y="59" width="52" height="14" rx="7" fill="rgba(52,211,153,.15)"/><text x="128" y="69" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Entrée</text><text x="176" y="69" fill="var(--text2)">Papier 90g</text><text x="318" y="69" fill="var(--ok,#34d399)" text-anchor="end" font-weight="700">+300</text>
+        <rect x="14" y="82" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="97" fill="var(--text2)">12/07 15:40</text><rect x="102" y="87" width="52" height="14" rx="7" fill="rgba(248,113,113,.15)"/><text x="128" y="97" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="700">Sortie</text><text x="176" y="97" fill="var(--text2)">REF-1201</text><text x="318" y="97" fill="var(--danger,#f87171)" text-anchor="end" font-weight="700">-1 pal</text>
+        <rect x="14" y="110" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="125" fill="var(--text2)">12/07 11:05</text><rect x="102" y="115" width="60" height="14" rx="7" fill="var(--accent-bg)"/><text x="132" y="125" fill="var(--accent)" text-anchor="middle" font-weight="700">Transfert</text><text x="176" y="125" fill="var(--text2)">A-12 &#8594; B-04</text>
+        <rect x="14" y="138" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="153" fill="var(--text2)">11/07 08:20</text><rect x="102" y="143" width="52" height="14" rx="7" fill="rgba(52,211,153,.15)"/><text x="128" y="153" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Entrée</text><text x="176" y="153" fill="var(--text2)">Encre bleue</text><text x="318" y="153" fill="var(--ok,#34d399)" text-anchor="end" font-weight="700">+20</text></g>
+      </svg>`
+    },
+    {
+      title: 'Étiquettes traça et plan d\'entrepôt',
+      body: `Les <strong>étiquettes de traçabilité</strong> s'impriment depuis un poste (code-barres, lot). Le <strong>plan d'entrepôt</strong> situe visuellement les emplacements pour ranger et retrouver vite une palette.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="10" y="12" width="150" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="20" y="30" font-size="9" fill="var(--text)" font-weight="700">Sélectionner un poste</text>
+        <rect x="20" y="38" width="60" height="44" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="50" y="58" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">DSI</text><text x="50" y="72" font-size="8" fill="var(--muted)" text-anchor="middle">12 étiq.</text>
+        <rect x="88" y="38" width="60" height="44" rx="8" fill="var(--bg)" stroke="var(--border)"/><text x="118" y="58" font-size="9" fill="var(--text2)" text-anchor="middle">Repiquage</text>
+        <rect x="20" y="90" width="128" height="42" rx="6" fill="var(--bg)" stroke="var(--border)"/><g stroke="var(--text)" stroke-width="1.3"><line x1="30" y1="98" x2="30" y2="120"/><line x1="36" y1="98" x2="36" y2="120"/><line x1="43" y1="98" x2="43" y2="120"/><line x1="52" y1="98" x2="52" y2="120"/><line x1="62" y1="98" x2="62" y2="120"/><line x1="74" y1="98" x2="74" y2="120"/><line x1="86" y1="98" x2="86" y2="120"/><line x1="98" y1="98" x2="98" y2="120"/><line x1="112" y1="98" x2="112" y2="120"/></g><text x="84" y="130" font-size="7" fill="var(--muted)" text-anchor="middle">REF-1201 · lot P-2231</text>
+        <rect x="40" y="140" width="88" height="20" rx="6" fill="var(--accent)"/><text x="84" y="154" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Imprimer</text>
+        <rect x="168" y="12" width="162" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="178" y="30" font-size="9" fill="var(--text)" font-weight="700">Plan d'entrepôt</text>
+        <rect x="178" y="38" width="44" height="46" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="200" y="65" font-size="10" fill="var(--accent)" text-anchor="middle" font-weight="700">A</text>
+        <rect x="230" y="38" width="44" height="46" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="252" y="65" font-size="10" fill="var(--text2)" text-anchor="middle">B</text>
+        <rect x="282" y="38" width="40" height="46" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="302" y="65" font-size="10" fill="var(--text2)" text-anchor="middle">C</text>
+        <rect x="178" y="92" width="44" height="46" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="200" y="119" font-size="10" fill="var(--text2)" text-anchor="middle">D</text>
+        <rect x="230" y="92" width="92" height="46" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="276" y="119" font-size="8" fill="var(--text2)" text-anchor="middle">Quai expédition</text>
+        <text x="178" y="156" font-size="8" fill="var(--muted)">Cliquez une zone pour voir son stock.</text>
+      </svg>`
+    }
+  ]},
+
+  'mystock-production': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>`,
+      title: 'Production (mode fabrication)',
+      body: `Pour les équipes de <strong>fabrication</strong>, MyStock s'ouvre sur une vue dédiée <strong>Production</strong> : les matières à sortir pour les dossiers en cours, en accès simplifié et lecture guidée.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette vue</div><ul class="mguide-svc-list"><li>Voir les matières nécessaires à la production.</li><li>Enregistrer les sorties matière.</li><li>Consulter l'historique et imprimer les étiquettes.</li></ul></div></div>`
+    },
+    {
+      title: 'Sorties matière',
+      body: `Depuis la vue Production, on déclare les <strong>sorties de matière</strong> consommées par un dossier. Chaque sortie décrémente le stock et alimente la <span class="mguide-hl">traçabilité</span> du produit fabriqué.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="14" y="12" width="318" height="30" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="24" y="31" font-size="10" fill="var(--accent)" font-weight="700">Dossier DOS-4821 · en production</text>
+        <text x="14" y="60" font-size="10" fill="var(--text)" font-weight="700">Matières à sortir</text>
+        <g font-size="8"><rect x="14" y="68" width="318" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="24" y="84" fill="var(--text2)">Papier 90g</text><rect x="228" y="72" width="50" height="18" rx="4" fill="var(--bg)" stroke="var(--accent)"/><text x="253" y="84" fill="var(--text)" text-anchor="middle">120 kg</text><rect x="288" y="71" width="40" height="20" rx="6" fill="var(--danger,#f87171)"/><text x="308" y="85" fill="#fff" text-anchor="middle" font-weight="800">-</text>
+        <rect x="14" y="98" width="318" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="24" y="114" fill="var(--text2)">Encre bleue</text><rect x="228" y="102" width="50" height="18" rx="4" fill="var(--bg)" stroke="var(--accent)"/><text x="253" y="114" fill="var(--text)" text-anchor="middle">4 kg</text><rect x="288" y="101" width="40" height="20" rx="6" fill="var(--danger,#f87171)"/><text x="308" y="115" fill="#fff" text-anchor="middle" font-weight="800">-</text></g>
+        <rect x="200" y="134" width="132" height="30" rx="8" fill="var(--accent)"/><text x="266" y="153" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Valider les sorties</text>
+      </svg>`
+    },
+    {
+      title: 'Suivi et étiquettes',
+      body: `La vue Production donne aussi accès à l'<strong>historique</strong> des sorties et aux <strong>étiquettes traça</strong>, sans quitter l'écran. La modification du référentiel reste réservée aux profils habilités.`,
+      illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="10" y="12" width="162" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="20" y="30" font-size="10" fill="var(--text)" font-weight="700">Historique sorties</text>
+        <g font-size="8"><rect x="20" y="40" width="142" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="28" y="54" fill="var(--text2)">14/07 · Papier -120</text>
+        <rect x="20" y="66" width="142" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="28" y="80" fill="var(--text2)">14/07 · Encre -4</text>
+        <rect x="20" y="92" width="142" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="28" y="106" fill="var(--text2)">13/07 · Colle -6</text></g>
+        <rect x="180" y="12" width="150" height="154" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="190" y="30" font-size="10" fill="var(--text)" font-weight="700">Étiquette traça</text>
+        <rect x="200" y="42" width="110" height="50" rx="6" fill="var(--bg)" stroke="var(--border)"/><g stroke="var(--text)" stroke-width="1.3"><line x1="210" y1="50" x2="210" y2="84"/><line x1="216" y1="50" x2="216" y2="84"/><line x1="223" y1="50" x2="223" y2="84"/><line x1="232" y1="50" x2="232" y2="84"/><line x1="242" y1="50" x2="242" y2="84"/><line x1="254" y1="50" x2="254" y2="84"/><line x1="266" y1="50" x2="266" y2="84"/><line x1="278" y1="50" x2="278" y2="84"/><line x1="290" y1="50" x2="290" y2="84"/><line x1="300" y1="50" x2="300" y2="84"/></g><text x="255" y="108" font-size="8" fill="var(--text2)" text-anchor="middle">Lot P-2231</text>
+        <rect x="220" y="122" width="70" height="24" rx="6" fill="var(--accent)"/><text x="255" y="138" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">Imprimer</text>
+      </svg>`
+    }
+  ]}
+};
+
+function stockMaybeAutoOpenGuide(){
+  try{ if(!window.MySifaGuides) return; var k = STOCK_TAB_GUIDE[S.tab]; if(k) MySifaGuides.autoOpen(k); }catch(e){}
+}
+function initStockGuides(){
+  try{
+    if(!window.MySifaGuides) return;
+    MySifaGuides.configure({role:(window.__MYSIFA_ROLE__||'')});
+    MySifaGuides.registerMany(STOCK_GUIDES);
+    MySifaGuides.boot().then(function(){ try{ MySifaGuides.autoOpen('mystock-overview'); }catch(e){} });
+  }catch(e){}
+}
+
 async function init() {
   document.body.classList.add('has-topbar','mysifa-app-stock');
   const user = await api('/api/auth/me').catch(()=>null);
@@ -17292,7 +17690,7 @@ async function init() {
   // Forcer onglet initial selon le mode d'accès restreint
   if (S.tracaOnly) S.tab = 'traca';
   if (S.fabStockMode) {
-    if (!['production','matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
+    if (!['menu','production','matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
   }
   render();
   if (S.tab === 'traca') { /* rien à charger */ }
@@ -17319,6 +17717,7 @@ async function init() {
   }
   // Charger le compteur d'alertes inventaire en arrière-plan (badge sidebar)
   if (!S.tracaOnly && !S.fabStockMode) loadInvAlertCountBackground();
+  try{ initStockGuides(); }catch(e){}
 }
 
 init();

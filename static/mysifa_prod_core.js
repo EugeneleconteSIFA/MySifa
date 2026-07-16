@@ -6873,6 +6873,7 @@ function renderProdKpis(){
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
       }
+      try{ initProdGuides(S.user && S.user.role).then(function(){ try{ MySifaGuides.autoOpen('myprod-overview'); }catch(e){} }); }catch(e){}
     }else{
       S.user = null;
       S.app = 'login';
@@ -7030,6 +7031,7 @@ function renderProdKpis(){
       console.warn('[mysifa_prod_core] nav() erreur:', e && e.message);
     }
     render();
+    try{ prodMaybeAutoOpenGuide(); }catch(e){}
   }
 
   // ── 13. renderLogin / renderSidebar ────────────────────────────────
@@ -7077,6 +7079,8 @@ function renderProdKpis(){
   }
 
   function renderSidebar(){
+    // Le style du logo (cliquable + hover + espacement 32px) vit dans
+    // mysifa_myprod_shell.css depuis la PR 1 « unifier MyProd ».
     const admin = isAdmin(S.user);
     const comptaPlan = isComptaPlanning(S.user);
     const items = comptaPlan
@@ -7090,7 +7094,7 @@ function renderProdKpis(){
         ];
     const isLight = document.body.classList.contains('light');
     return h('nav', {className: 'sidebar'},
-      h('div', {className: 'logo'},
+      h('div', {className: 'logo', title: 'Accueil MyProd', onClick: () => { S.sidebarOpen = false; set({page: 'menu'}); nav(); }},
         h('div', {className: 'logo-brand'}, 'My', h('span', null, 'Prod')),
         h('div', {className: 'logo-sub'}, 'by SIFA')
       ),
@@ -7146,6 +7150,50 @@ function renderProdKpis(){
   // \u00c9tape 2f : pas connect\u00e9 -> renderLogin ; connect\u00e9 -> sidebar + main vide.
   // Les sous-pages MyProd (Production, Historique, etc.) seront ajout\u00e9es aux
   // \u00e9tapes 2g \u00e0 2l.
+  // ── Page d'accueil MyProd (menu général) ───────────────────────────
+  function ensureProdMenuStyle(){
+    if(document.getElementById('myprod-menu-css')) return;
+    var s = document.createElement('style');
+    s.id = 'myprod-menu-css';
+    s.textContent =
+      '.myprod-menu{max-width:960px}'
+      + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
+      + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
+      + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
+      + '.myprod-tile-ic{width:44px;height:44px;border-radius:12px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}'
+      + '.myprod-tile-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}'
+      + '.myprod-tile-lbl{font-size:15px;font-weight:800;color:var(--text)}'
+      + '.myprod-tile-desc{font-size:12px;color:var(--muted);line-height:1.45}'
+      + '.myprod-tile-chev{color:var(--muted);flex-shrink:0;transition:transform .15s,color .15s}'
+      + '.myprod-tile:hover .myprod-tile-chev{transform:translateX(3px);color:var(--accent)}';
+    document.head.appendChild(s);
+  }
+
+  function renderProdMenu(){
+    ensureProdMenuStyle();
+    var u = S.user;
+    var tiles = [];
+    tiles.push({icon:'wrench', label:'Production', desc:'KPIs, saisies et qualité de saisie', go:function(){ set({page:'production', subPage:'kpis'}); nav(); }});
+    tiles.push({icon:'layers', label:'Traçabilité', desc:'Matières utilisées par dossier', go:function(){ set({page:'traceabilite'}); nav(); }});
+    if(isAdmin(u)) tiles.push({icon:'trending-up', label:'Rentabilité', desc:'Comparaison devis / réel par dossier', go:function(){ set({page:'rentabilite'}); nav(); }});
+    if(canAccessOfTab()) tiles.push({icon:'file', label:'Fiches + OF', desc:'Import PDF et consultation des OF', go:function(){ set({page:'of'}); nav(); }});
+    if(canPlanningNav(u)) tiles.push({icon:'calendar', label:'Planning machine', desc:'Ordonnancement des dossiers par machine', go:function(){ window.location.href='/planning'; }});
+
+    var grid = h('div', {className:'myprod-tiles'},
+      tiles.map(function(t){
+        var card = h('button', {type:'button', className:'myprod-tile', title:t.label, onClick:t.go});
+        card.appendChild(h('div', {className:'myprod-tile-ic'}, iconEl(t.icon, 20)));
+        card.appendChild(h('div', {className:'myprod-tile-body'},
+          h('div', {className:'myprod-tile-lbl'}, t.label),
+          h('div', {className:'myprod-tile-desc'}, t.desc)
+        ));
+        card.appendChild(h('div', {className:'myprod-tile-chev'}, iconEl('arrow-right', 16)));
+        return card;
+      })
+    );
+    return h('div', {className:'myprod-menu'}, grid);
+  }
+
   function render(){
     const root = document.getElementById('root');
     if(!root) return;
@@ -7176,7 +7224,11 @@ function renderProdKpis(){
     let pageContent;
     let pageTitle = 'MyProd';
     let pageSubtitle = 'Page standalone';
-    if(S.page === 'production'){
+    if(S.page === 'menu'){
+      pageTitle = 'MyProd';
+      pageSubtitle = 'Saisie de production, traçabilité et rentabilité';
+      pageContent = renderProdMenu();
+    }else if(S.page === 'production'){
       pageTitle = (S.subPage === 'saisies' ? 'Saisies' :
                    S.subPage === 'erreurs' ? 'Historique & Erreurs' :
                    'Production');
@@ -7315,6 +7367,92 @@ function renderProdKpis(){
   // Les fonctions sont mises en `window` pour que les étapes 2f+ puissent
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
+  // ── Guides in-app MyProd (moteur partagé mysifa_guides.js) ─────
+  var PROD_VIEW_GUIDE = {
+    production: 'myprod-production',
+    traceabilite: 'myprod-tracabilite',
+    rentabilite: 'myprod-rentabilite',
+    of: 'myprod-of'
+  };
+
+  var PROD_GUIDES = {
+    'myprod-overview': { steps: [
+      {
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+        title: 'Bienvenue dans MyProd',
+        body: `MyProd centralise le <strong>suivi de production</strong> : ce que les opérateurs saisissent, les matières consommées par dossier et la rentabilité réelle face au devis. Vous arrivez sur la <strong>Production</strong> ; la barre latérale et le logo mènent aux autres espaces.`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Suivre les KPIs de production et la qualité de saisie.</li><li>Consulter et corriger les saisies opérateur.</li><li>Voir les matières utilisées par dossier (traçabilité).</li><li>Comparer le réel au devis et gérer les fiches + OF.</li></ul></div></div>`
+      },
+      {
+        title: 'Production — KPIs, saisies et erreurs',
+        body: `La <strong>Production</strong> est l'écran d'accueil, avec trois sous-onglets : <span class="mguide-tag">KPIs</span> (temps de calage et de production, métrage, vitesse, dossiers, qualité de saisie), <span class="mguide-tag">Saisies</span> (consulter, corriger et importer les saisies opérateur) et <span class="mguide-tag">Erreurs</span> (Sanity Score, incidents et erreurs de saisie). Les filtres en haut ciblent une période, un opérateur ou un dossier.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+          <rect x="8" y="8" width="74" height="22" rx="6" fill="var(--accent)"/><text x="45" y="23" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">KPIs</text>
+          <rect x="86" y="8" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="123" y="23" font-size="10" fill="var(--text2)" text-anchor="middle">Saisies</text>
+          <rect x="164" y="8" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="201" y="23" font-size="10" fill="var(--text2)" text-anchor="middle">Erreurs</text>
+          <rect x="8" y="40" width="102" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="18" y="57" font-size="9" fill="var(--muted)">Dossiers produits</text><text x="18" y="78" font-size="16" fill="var(--accent)" font-weight="800">42</text>
+          <rect x="118" y="40" width="102" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="128" y="57" font-size="9" fill="var(--muted)">Métrage</text><text x="128" y="78" font-size="15" fill="var(--text)" font-weight="800">128 500 m</text>
+          <rect x="228" y="40" width="104" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="238" y="57" font-size="9" fill="var(--muted)">Vitesse</text><text x="238" y="78" font-size="15" fill="var(--text)" font-weight="800">210 m/min</text>
+          <rect x="8" y="94" width="324" height="66" rx="9" fill="var(--bg)" stroke="var(--border)"/>
+          <text x="18" y="112" font-size="9" fill="var(--muted)">Qualité de saisie — Sanity Score</text>
+          <rect x="18" y="120" width="96" height="30" rx="7" fill="rgba(248,113,113,.12)" stroke="var(--danger,#f87171)"/><text x="66" y="132" font-size="8" fill="var(--danger,#f87171)" text-anchor="middle">Critique</text><text x="66" y="146" font-size="13" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="800">1</text>
+          <rect x="122" y="120" width="96" height="30" rx="7" fill="rgba(251,191,36,.14)" stroke="var(--warn,#fbbf24)"/><text x="170" y="132" font-size="8" fill="var(--warn,#fbbf24)" text-anchor="middle">Attention</text><text x="170" y="146" font-size="13" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="800">6</text>
+          <rect x="226" y="120" width="98" height="30" rx="7" fill="rgba(52,211,153,.14)" stroke="var(--ok,#34d399)"/><text x="275" y="132" font-size="8" fill="var(--ok,#34d399)" text-anchor="middle">Normal</text><text x="275" y="146" font-size="13" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="800">318</text>
+        </svg>`
+      },
+      {
+        title: 'Traçabilité — matières par dossier',
+        body: `La <strong>Traçabilité</strong> relie chaque dossier aux <span class="mguide-hl">matières consommées</span> et à leur <span class="mguide-hl">lot</span>. En partant d'un dossier livré, on retrouve exactement quelles matières premières y sont entrées — indispensable pour une demande client ou un audit.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+          <rect x="8" y="10" width="324" height="34" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/>
+          <text x="20" y="27" font-size="11" fill="var(--accent)" font-weight="800">DOS-4821 · Client A</text>
+          <text x="20" y="40" font-size="8" fill="var(--muted)">Traçabilité matières</text>
+          <g font-size="10">
+            <rect x="8" y="52" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="20" y="71" fill="var(--text)">Papier 90g</text><rect x="236" y="58" width="88" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="280" y="71" fill="var(--text2)" text-anchor="middle" font-size="9">lot P-2231</text>
+            <rect x="8" y="88" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="20" y="107" fill="var(--text)">Encre bleue</text><rect x="236" y="94" width="88" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="280" y="107" fill="var(--text2)" text-anchor="middle" font-size="9">lot E-118</text>
+            <rect x="8" y="124" width="324" height="30" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="20" y="143" fill="var(--text)">Colle</text><rect x="236" y="130" width="88" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/><text x="280" y="143" fill="var(--text2)" text-anchor="middle" font-size="9">lot C-07</text>
+          </g>
+        </svg>`
+      },
+      {
+        title: 'Rentabilité et Fiches + OF',
+        body: `<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. <strong>Fiches + OF</strong> importe les ordres de fabrication (PDF) et les rattache aux dossiers. Ces deux espaces sont réservés selon votre rôle.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><text x="8" y="20" font-size="10" fill="var(--text)" font-weight="800">Rentabilité — DOS-4821</text><text x="18" y="44" font-size="9" fill="var(--muted)">Devis</text><rect x="60" y="34" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="34" width="120" height="14" rx="4" fill="var(--accent)"/><text x="210" y="45" font-size="9" fill="var(--text2)">1 250 €</text><text x="18" y="66" font-size="9" fill="var(--muted)">Réel</text><rect x="60" y="56" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="56" width="134" height="14" rx="4" fill="var(--ok,#34d399)"/><text x="210" y="67" font-size="9" fill="var(--text2)">1 390 €</text><line x1="8" y1="86" x2="332" y2="86" stroke="var(--border)"/><text x="8" y="106" font-size="10" fill="var(--text)" font-weight="800">Fiches + OF</text><rect x="8" y="116" width="150" height="44" rx="8" fill="var(--card)" stroke="var(--border)"/><rect x="18" y="126" width="24" height="30" rx="4" fill="var(--accent-bg)"/><text x="34" y="145" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="800">PDF</text><text x="52" y="136" font-size="9" fill="var(--text)" font-weight="700">OF-2231.pdf</text><text x="52" y="150" font-size="8" fill="var(--muted)">rattaché à DOS-4821</text><rect x="170" y="116" width="162" height="44" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="251" y="142" font-size="9" fill="var(--muted)" text-anchor="middle">Glissez un PDF pour l'importer</text></svg>`
+      },
+      {
+        title: 'Planning de production',
+        body: `Le <strong>Planning machine</strong> ordonne les dossiers par machine et par semaine : ce qui est <span class="mguide-hl">en cours</span>, en attente ou terminé, réordonnable par glisser-déposer. On y accède depuis la tuile <span class="mguide-tag">Planning</span> du menu ou le lien latéral.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+          <text x="8" y="22" font-size="11" fill="var(--text)" font-weight="800">Planning · Cohésio 1</text>
+          <rect x="232" y="8" width="100" height="18" rx="9" fill="var(--accent-bg)"/><text x="282" y="21" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">48h · 6 dossiers</text>
+          <g font-size="8" fill="var(--muted)"><text x="34" y="44">Lun</text><text x="90" y="44">Mar</text><text x="146" y="44">Mer</text><text x="202" y="44">Jeu</text><text x="258" y="44">Ven</text></g>
+          <rect x="14" y="50" width="312" height="108" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+          <g stroke="var(--border)"><line x1="70" y1="50" x2="70" y2="158"/><line x1="126" y1="50" x2="126" y2="158"/><line x1="182" y1="50" x2="182" y2="158"/><line x1="238" y1="50" x2="238" y2="158"/><line x1="294" y1="50" x2="294" y2="158"/></g>
+          <rect x="20" y="60" width="98" height="30" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2"/><text x="69" y="77" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4821</text><text x="69" y="87" font-size="7" fill="#cbd5e1" text-anchor="middle">en cours</text>
+          <rect x="124" y="98" width="150" height="28" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="199" y="116" font-size="9" fill="#e2e8f0" text-anchor="middle" font-weight="700">DOS-4822 · en attente</text>
+          <rect x="46" y="132" width="92" height="20" rx="6" fill="#0f172a" stroke="var(--border)" opacity="0.75"/><text x="92" y="146" font-size="8" fill="#94a3b8" text-anchor="middle">DOS-4790 · terminé</text>
+        </svg>`
+      }
+    ]}
+  };
+
+  function initProdGuides(role){
+    try{
+      if(!window.MySifaGuides) return Promise.resolve();
+      MySifaGuides.configure({role: role || ''});
+      MySifaGuides.registerMany(PROD_GUIDES);
+      return MySifaGuides.boot();
+    }catch(e){ return Promise.resolve(); }
+  }
+
+  function prodMaybeAutoOpenGuide(){
+    try{
+      if(!window.MySifaGuides) return;
+      var k = PROD_VIEW_GUIDE[S.page];
+      if(k) MySifaGuides.autoOpen(k);
+    }catch(e){}
+  }
+
   window.__MYSIFA_PROD_STANDALONE__ = {
     stage: '2l',
     description: 'Onglet Fiches + OF (final)',

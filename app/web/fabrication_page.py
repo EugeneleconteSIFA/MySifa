@@ -7,11 +7,22 @@ Page standalone (architecture identique à stock_page.py).
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from config import APP_ORG_NAME
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 router = APIRouter()
+
+
+def _js_escape(s: str) -> str:
+    """Escape pour usage dans une string JS single-quotée."""
+    return (
+        s.replace("\\", "\\\\")
+         .replace("'", "\\'")
+         .replace("\n", "\\n")
+         .replace("\r", "")
+    )
 
 
 @router.get("/fabrication", response_class=HTMLResponse)
@@ -24,8 +35,10 @@ def fabrication_page(request: Request):
         raise
     if not (is_fabrication(user) or is_admin(user)):
         return access_denied_response("Saisie Production")
+    # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
+    html = FABRICATION_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
     return HTMLResponse(
-        content=FABRICATION_HTML,
+        content=html,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",

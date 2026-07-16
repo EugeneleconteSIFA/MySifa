@@ -24,6 +24,8 @@ from config import (
     ROLES_EXPE_WRITE,
     ASSIGNABLE_ROLES,
     default_app_access_for_role,
+    LEVEL_ORDER,
+    APPS_CATALOG,
 )
 
 # MyCalendrier — accès page (pas de rôle rh en base). Inclut le rôle legacy
@@ -192,6 +194,11 @@ def user_has_app_access(user: dict, app: str) -> bool:
 
     Utilise effective_role : quand un superadmin joue un rôle simulé, l'accès reflète
     le rôle simulé. Paramètres reste réservé au superadmin réel (chemin de sortie).
+
+    Depuis la migration 184, délégué à user_can(user, app, '_app', 'read') qui lit
+    les tables role_access_defaults / user_access_overrides. Fallback sur l'ancien
+    système (colonne users.access_overrides + default_app_access_for_role) si la
+    nouvelle table est vide (transition douce).
     """
     if app == "settings":
         # /settings doit rester accessible au vrai superadmin même en impersonation
@@ -199,11 +206,105 @@ def user_has_app_access(user: dict, app: str) -> bool:
         return (user.get("real_role") or user.get("role")) == ROLE_SUPERADMIN
     if app == "devis":
         app = "pricing"
+    return user_can(user, app, "_app", "read")
+
+
+# ─── Contrôle d'accès database-driven (migration 184) ─────────────
+# Nouveau système : lecture des tables role_access_defaults + user_access_overrides.
+# Priorité : user (app, module) → user (app, _app) → role (app, module) → role
+# (app, _app) → fallback legacy default_app_access_for_role → 'none'.
+# Cache par process d'une map par-utilisateur : rechargée à chaque request via
+# _prime_access_map (attaché à user).
+
+def _load_access_map(user_id: int, role: str) -> dict:
+    """Charge la carte d'accès effective d'un utilisateur en un seul aller-retour DB.
+
+    Retourne un dict indexé par tuple (app_id, module_id) → level, où les
+    surcharges utilisateur priment sur les défauts de rôle.
+    """
+    out: dict = {}
+    try:
+        with get_db() as conn:
+            for row in conn.execute(
+                "SELECT app_id, module_id, level FROM role_access_defaults WHERE role=?",
+                (role,),
+            ).fetchall():
+                out[(row["app_id"], row["module_id"])] = row["level"]
+            for row in conn.execute(
+                "SELECT app_id, module_id, level FROM user_access_overrides WHERE user_id=?",
+                (user_id,),
+            ).fetchall():
+                out[(row["app_id"], row["module_id"])] = row["level"]
+    except Exception:
+        # Tables absentes (dev sans migration jouée) : on retombe sur legacy.
+        return out
+    return out
+
+
+def _prime_access_map(user: dict) -> dict:
+    """Attache/renvoie user['_access_map'] en le calculant à la demande."""
+    if not user:
+        return {}
+    m = user.get("_access_map")
+    if m is not None:
+        return m
     role = effective_role(user)
-    if app == "pricing" and role not in ROLES_PRICING:
+    m = _load_access_map(user["id"], role)
+    user["_access_map"] = m
+    return m
+
+
+def user_access_level(user: dict, app: str, module: str = "_app") -> str:
+    """Niveau effectif (none/read/write/admin) pour (app, module).
+
+    - Superadmin : 'admin' partout sauf en impersonation (rôle simulé alors).
+    - Paramètres : 'admin' pour le superadmin réel, 'none' sinon.
+    - Fallback legacy : si la nouvelle table est vide, retombe sur
+      default_app_access_for_role (bool → 'write' / 'none').
+    """
+    if not user:
+        return "none"
+    if app == "settings":
+        return "admin" if (user.get("real_role") or user.get("role")) == ROLE_SUPERADMIN else "none"
+    if app == "devis":
+        app = "pricing"
+    role = effective_role(user)
+    if role == ROLE_SUPERADMIN:
+        return "admin"
+    m = _prime_access_map(user)
+    # Ordre de résolution : (app, module) → (app, _app)
+    if (app, module) in m:
+        return m[(app, module)]
+    if module != "_app" and (app, "_app") in m:
+        return m[(app, "_app")]
+    # Fallback legacy : ancienne colonne users.access_overrides + role defaults.
+    try:
+        legacy = merged_app_access(role, user.get("access_overrides"))
+        return "write" if legacy.get(app) else "none"
+    except Exception:
+        return "none"
+
+
+def user_can(user: dict, app: str, module: str = "_app", min_level: str = "read") -> bool:
+    """True si user a au moins `min_level` sur (app, module). Base des contrôles d'accès."""
+    if not user:
         return False
-    acc = merged_app_access(role, user.get("access_overrides"))
-    return bool(acc.get(app))
+    lvl = user_access_level(user, app, module)
+    return LEVEL_ORDER.get(lvl, 0) >= LEVEL_ORDER.get(min_level, 1)
+
+
+def build_user_access_map(user: dict) -> dict:
+    """Sérialisation pour /api/auth/me : {app_id: {module_id: level}}.
+
+    Utilisé par le front pour cacher/griser les onglets et boutons.
+    """
+    out: dict = {}
+    for app in APPS_CATALOG:
+        app_id = app["id"]
+        out[app_id] = {"_app": user_access_level(user, app_id, "_app")}
+        for m in app.get("modules", []):
+            out[app_id][m["id"]] = user_access_level(user, app_id, m["id"])
+    return out
 
 
 def user_can_write_expe(user: dict) -> bool:

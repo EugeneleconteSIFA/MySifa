@@ -74,6 +74,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/motion.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 </head>
@@ -86,6 +87,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 </div>
 <script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 </body>

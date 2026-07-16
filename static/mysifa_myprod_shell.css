@@ -1,0 +1,144 @@
+/* ────────────────────────────────────────────────────────────────────
+ * MySifa — MyProd shell (partagé entre /prod et /planning)
+ *
+ * Source de vérité unique pour la sidebar, le logo MyProd, les
+ * nav-btn, le header de page (h1 + subtitle + spacing), la topbar
+ * mobile, les sous-onglets (nav-tabs), le bandeau staging et le toast
+ * de TOUT le module MyProd. Chargé AVANT les feuilles spécifiques de
+ * chaque page (mysifa_prod_core.css sur /prod, styles inline sur
+ * /planning). Ne redéfinit pas les variables de thème (voir
+ * mysifa_theme.css).
+ *
+ * PR 1 du chantier « unifier MyProd » (voir CLAUDE.md). Toute modif
+ * du shell touche automatiquement /prod ET /planning — c'est le but.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ── Layout app + main + container ──────────────────────────────── */
+.app{position:relative;z-index:1;display:flex;min-height:100vh}
+.main{flex:1;padding:28px;overflow-y:auto}
+.container{max-width:1200px;margin:0 auto}
+h1{font-size:22px;font-weight:700;margin-bottom:4px}
+.subtitle{font-size:13px;color:var(--muted);margin-bottom:24px}
+
+/* ── Bandeau staging v1 (rouge fin permanent) ───────────────────── */
+.staging-bandeau{position:fixed;top:0;left:0;right:0;height:24px;background:#dc2626;color:#fff;
+  font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  z-index:9999;font-family:'Segoe UI',system-ui,sans-serif;
+  box-shadow:0 1px 6px rgba(220,38,38,.4)}
+.staging-bandeau::before{content:"●";color:#fef2f2;font-size:9px;line-height:1}
+body.has-staging-bandeau{padding-top:24px}
+body.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}
+body.has-staging-bandeau .mobile-topbar{top:24px}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
+.sidebar::-webkit-scrollbar{width:0}
+.sidebar{scrollbar-width:none}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:8999}
+body.sb-open .sidebar-overlay{display:block}
+
+/* ── Logo MyProd (toujours cliquable → menu MyProd) ─────────────── */
+/*
+ * Comportement voulu : le logo est un « bouton d'accueil MyProd ».
+ * Sur /prod le onClick est câblé côté JS (set({page:'menu'})). Sur
+ * /planning le handler renvoie vers /prod (location.href='/prod').
+ * Le style ci-dessous garantit le feedback visuel (cursor + hover)
+ * partout — plus besoin d'injecter du CSS dynamique dans le JS.
+ * L'espace de 32px sous le logo (avant la première nav-btn) est
+ * préservé par la combinaison padding 6px + margin-bottom 26px.
+ */
+.sidebar .logo{
+  padding:6px 8px;
+  margin:0 0 26px;
+  border-radius:8px;
+  cursor:pointer;
+  transition:background .15s, color .15s;
+}
+.sidebar .logo:hover{background:var(--accent-bg)}
+.sidebar .logo:hover .logo-brand{color:var(--accent)}
+.logo-brand{font-size:15px;font-weight:800;transition:color .15s}
+.logo-brand span{color:var(--accent)}
+.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+
+/* ── Nav buttons (sidebar) ──────────────────────────────────────── */
+.nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:background .15s,color .15s,box-shadow .2s;margin-bottom:2px}
+.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+.nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(34,211,238,.25),0 0 18px rgba(34,211,238,.15)}
+body.light .nav-btn:hover:not(.active){box-shadow:0 0 0 1px rgba(8,145,178,.32),0 0 16px rgba(8,145,178,.12)}
+
+/* ── Retour MySifa (portail) ────────────────────────────────────── */
+.back-mysifa{
+  border:none!important;
+  background:transparent!important;
+  font-weight:400!important;
+  color:var(--text2)!important;
+  padding:8px 10px!important;
+}
+.back-mysifa:hover{color:var(--text)!important;background:transparent!important}
+.back-mysifa .wm{font-weight:800;color:var(--text)}
+.back-mysifa .wm span{color:var(--accent)}
+.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
+.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
+.nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
+.nav-btn--mysifa-portal:hover .mysifa-back-brand{color:var(--text)}
+.nav-btn--mysifa-portal:hover .mysifa-back-accent{color:var(--accent)}
+.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
+.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
+.mysifa-back-accent{color:var(--accent)}
+
+/* ── Bas de sidebar (user, thème, support, logout, version) ─────── */
+.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
+.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
+.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
+.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.user-chip .uc-profil{font-size:10px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:4px}
+
+.theme-btn,.logout-btn,.support-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:background .15s,color .15s,border-color .15s,box-shadow .2s}
+.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px rgba(34,211,238,.22),0 0 20px rgba(34,211,238,.14)}
+body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rgba(8,145,178,.12)}
+.theme-btn .theme-ico{font-size:14px;line-height:1}
+.theme-btn .theme-label{white-space:nowrap}
+.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.support-btn .support-ico{display:inline-flex;align-items:center;justify-content:center}
+.logout-btn{border:none}
+.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 18px rgba(248,113,113,.12)}
+
+.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
+
+/* ── Topbar mobile ──────────────────────────────────────────────── */
+.mobile-topbar{display:none;position:sticky;top:0;z-index:50;background:var(--card);
+  border-bottom:1px solid var(--border);padding:10px 12px;align-items:center;gap:10px}
+.mobile-topbar-title{font-size:14px;font-weight:700;color:var(--text)}
+.mobile-topbar-sub{font-size:11px;color:var(--muted)}
+.mobile-menu-btn,.mobile-home-btn{
+  background:transparent;border:1px solid var(--border);border-radius:8px;
+  padding:6px 8px;color:var(--text);cursor:pointer;font-family:inherit;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.mobile-home-btn{margin-left:auto}
+
+/* ── Sous-onglets de page (nav-tabs) ────────────────────────────── */
+.nav-tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border)}
+.nav-tab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;
+  color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;
+  transition:all .15s;margin-bottom:-1px}
+.nav-tab:hover{color:var(--text);background:var(--accent-bg)}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+
+/* ── Responsive (mobile / tablette portrait) ─────────────────────── */
+@media (max-width: 900px){
+  .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:9000;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+  body.sb-open .sidebar{transform:translateX(0)}
+  .main{padding:18px}
+  .mobile-topbar{display:flex}
+}
+@media (display-mode: standalone), (max-width: 900px){
+  .theme-btn .theme-label{display:none}
+  .theme-btn{justify-content:center}
+}
+
+/* ── Toast ──────────────────────────────────────────────────────── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:14px 20px;box-shadow:0 10px 30px rgba(0,0,0,.45);
+  z-index:9500;font-size:13px;color:var(--text);max-width:380px}

@@ -117,11 +117,14 @@ def _require_admin(request: Request) -> dict:
 
 
 def _can_operator_manage_event(event: dict, user_id: int) -> bool:
-    """Un opérateur peut modifier/supprimer un event qu'il a créé (peu importe
-    la source). Depuis le "Nouvelle tâche" côté opérateur, il peut créer des
-    events planifie avec N ops → il doit pouvoir les gérer ensuite.
+    """Un opérateur peut modifier/supprimer un event qu'il a créé, mais
+    uniquement de source non_planifie (interventions déclarées via les
+    boutons "Enregistrer une opération" ou "Intervention libre").
+    Les créneaux planifie sont réservés à l'admin.
     Sert de garde pour les endpoints PATCH/DELETE/ops côté opérateur."""
     if not event:
+        return False
+    if event.get("source") != "non_planifie":
         return False
     return event.get("created_by") == user_id
 
@@ -162,7 +165,7 @@ def _load_event_full(conn, event_id: int) -> Optional[dict]:
     ops = conn.execute(
         """SELECT o.id, o.code, o.statut, o.duree_reelle_min, o.pieces_changees,
                   o.observations, o.photos_json, o.done_at, o.done_by,
-                  o.updated_by, o.updated_at, o.machines_csv,
+                  o.updated_by, o.updated_at, o.machines_csv, o.consignes,
                   c.label     AS code_label,
                   c.categorie AS code_categorie
            FROM maintenance_event_ops o
@@ -261,6 +264,8 @@ class EventUpdateBody(BaseModel):
 class OpAddBody(BaseModel):
     code: str
     machines: Optional[List[str]] = None
+    # v185 : consignes admin optionnelles à la création d'une op
+    consignes: Optional[str] = None
 
 
 class OpUpdateBody(BaseModel):
@@ -270,6 +275,8 @@ class OpUpdateBody(BaseModel):
     observations: Optional[str] = None
     photos_json: Optional[str] = None
     machines: Optional[List[str]] = None
+    # v185 : consignes admin (empty string autorisée pour effacer)
+    consignes: Optional[str] = None
 
 
 class OperatorAddBody(BaseModel):
@@ -380,48 +387,21 @@ def create_event(body: EventCreateBody, request: Request):
     operator_ids = list(dict.fromkeys(body.operators))
 
     if maint_role == "operator":
-        # v163+ : l'opérateur peut créer soit une saisie rapide (non_planifie,
-        # 1 code, self forcé — flow "Enregistrer une opération"), soit un
-        # créneau planifie complet (N ops, N machines, N operators — flow
-        # "Nouvelle tâche"). On détecte le mode via body.source.
-        if src not in _VALID_SOURCES:
-            raise HTTPException(status_code=400, detail=f"source invalide: {src}")
-        if src == "non_planifie":
-            heure_debut = None
-            heure_fin = None
-            operator_ids = [user["id"]]
-            if len(ops_specs) != 1:
-                raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
-            if not body.machine:
-                raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
-            ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
-            event_machine = body.machine
-        else:
-            # source=planifie côté opérateur : mêmes règles qu'admin, sauf que
-            # self doit être dans les opérateurs assignés (garde-fou anti-abus).
-            heure_debut = body.heure_debut
-            heure_fin = body.heure_fin
-            if not ops_specs:
-                raise HTTPException(status_code=400, detail="Au moins un code d'opération est requis")
-            if user["id"] not in operator_ids:
-                operator_ids = list(dict.fromkeys([user["id"]] + operator_ids))
-            normalized = []
-            machines_union = []
-            for code, mcsv in ops_specs:
-                if not mcsv:
-                    if body.machine:
-                        mcsv = _machines_list_to_csv([body.machine])
-                    else:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"L'opération {code} doit être attribuée à au moins une machine",
-                        )
-                normalized.append((code, mcsv))
-                for m in _machines_csv_to_list(mcsv):
-                    if m not in machines_union:
-                        machines_union.append(m)
-            ops_specs = normalized
-            event_machine = _machines_list_to_csv(machines_union) or (body.machine or "")
+        # L'opérateur ne peut créer QUE des interventions non_planifie (single
+        # op, self forcé) via les boutons "Enregistrer une opération" ou
+        # "Intervention libre". La création de créneaux planifiés est réservée
+        # à l'admin. On force source=non_planifie côté serveur pour blinder
+        # contre les requêtes forgées.
+        src = "non_planifie"
+        heure_debut = None
+        heure_fin = None
+        operator_ids = [user["id"]]
+        if len(ops_specs) != 1:
+            raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
+        if not body.machine:
+            raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
+        ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
+        event_machine = body.machine
     else:
         if src not in _VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"source invalide: {src}")
@@ -457,6 +437,15 @@ def create_event(body: EventCreateBody, request: Request):
         for code, _mcsv in ops_specs:
             if not conn.execute("SELECT 1 FROM maintenance_codes WHERE code=?", (code,)).fetchone():
                 raise HTTPException(status_code=400, detail=f"code inconnu: {code}")
+        # Auto-assign : si admin crée un créneau planifié sans assigner
+        # d'opérateurs, on assigne par défaut tous les users role=fabrication
+        # actifs. Sinon un créneau vide d'opérateurs est inutile.
+        # (Le mode opérateur assigne toujours self ou la liste passée.)
+        if maint_role == "admin" and src == "planifie" and not operator_ids:
+            operator_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM users WHERE role = ? AND actif = 1",
+                (ROLE_FABRICATION,),
+            ).fetchall()]
         # Vérif opérateurs
         for oid in operator_ids:
             if not conn.execute("SELECT 1 FROM users WHERE id=?", (oid,)).fetchone():
@@ -579,9 +568,10 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
                 ).fetchone()
             if exists:
                 continue
+            # v185 : consignes si fournies à la création
             conn.execute(
-                "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at) VALUES (?, ?, ?, ?)",
-                (event_id, body.code, single_csv, now),
+                "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, consignes, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (event_id, body.code, single_csv, (body.consignes or None) if body.consignes else None, now),
             )
             inserted += 1
         if inserted == 0:
@@ -613,7 +603,8 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         updates = {}
         machines_touched = False
         for k, v in body.model_dump(exclude_unset=True).items():
-            if v is None: continue
+            # v185 : consignes accepte empty string (pour effacer les consignes)
+            if v is None and k != "consignes": continue
             if k == "statut" and v not in _VALID_STATUTS:
                 raise HTTPException(status_code=400, detail=f"statut invalide: {v}")
             if k == "machines":
@@ -844,6 +835,9 @@ def get_history(
                        e.id             AS event_id,
                        e.machine        AS machine,
                        e.nom            AS event_nom,
+                       e.heure_debut    AS event_heure_debut,
+                       e.heure_fin      AS event_heure_fin,
+                       o.consignes      AS consignes,
                        o.machines_csv   AS op_machines_csv,
                        o.code           AS code,
                        c.label          AS code_label,
@@ -854,15 +848,20 @@ def get_history(
                        o.done_at        AS done_at,
                        o.done_by        AS done_by,
                        ub.nom           AS done_by_nom,
+                       o.updated_at     AS updated_at,
+                       o.updated_by     AS updated_by,
+                       uu.nom           AS updated_by_nom,
                        e.date_prevue    AS date_prevue,
                        e.created_by     AS created_by,
                        uc.nom           AS created_by_nom,
+                       e.created_at     AS event_created_at,
                        e.source         AS source
                 FROM maintenance_event_ops o
                 JOIN maintenance_events e ON e.id = o.event_id
                 LEFT JOIN maintenance_codes c ON c.code = o.code
                 LEFT JOIN users ub ON ub.id = o.done_by
                 LEFT JOIN users uc ON uc.id = e.created_by
+                LEFT JOIN users uu ON uu.id = o.updated_by
                 WHERE {" AND ".join(where)}
                 ORDER BY COALESCE(o.done_at, e.date_prevue) DESC, o.id DESC
                 LIMIT 2000""",
@@ -883,6 +882,8 @@ def get_history(
         # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
         d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
         d["type"] = d.get("code_label") or d.get("code") or ""
+        # Flag libre : détection LIB-xxx (compat avec _libre côté client)
+        d["libre"] = bool(d.get("code") and str(d["code"]).startswith("LIB-"))
         out.append(d)
     return {"history": out}
 

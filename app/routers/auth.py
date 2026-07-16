@@ -358,6 +358,14 @@ def me(request: Request):
     d["app_access"] = merged_app_access(eff_role, ov_raw)
     # real_app_access exposé au cas où le front en a besoin (bandeau, debug, etc.).
     d["real_app_access"] = merged_app_access(real_role, ov_raw)
+    # Nouvelle map d'accès database-driven (migration 184) : {app_id: {module_id: level}}.
+    # Utilisée par le front pour cacher/griser les onglets et actions selon le niveau
+    # (none/read/write/admin). Coexiste avec app_access (bool) pour rétro-compat.
+    try:
+        from services.auth_service import build_user_access_map
+        d["access_map"] = build_user_access_map(user)
+    except Exception:
+        d["access_map"] = {}
     d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
     return d
 

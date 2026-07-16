@@ -103,6 +103,14 @@ def _register_udfs(conn: sqlite3.Connection) -> None:
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
+    # WAL : les lecteurs ne sont plus bloqués par les écritures (mode persistant,
+    # stocké dans le fichier DB — le PRAGMA à chaque connexion est sans coût).
+    # synchronous=NORMAL : suffisant en WAL (fsync au checkpoint, pas à chaque tx).
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.OperationalError:
+        pass  # DB en lecture seule ou FS sans support WAL : on ne bloque pas
     _register_udfs(conn)
     _ensure_schema(conn)
     try:
@@ -6716,6 +6724,123 @@ Ressources :
         )
         conn.commit()
         _record_schema_migration(conn, 183, "expe_departs_source_devis_link")
+
+    # Migration 184 — MyMaintenance : nettoyage one-shot des créneaux planifie
+    # créés historiquement par des opérateurs via l'ancien flow "Nouvelle tâche"
+    # (feature retirée). Désormais seul l'admin peut créer des créneaux planifie.
+    # CASCADE via FK : supprime aussi les ops rattachées et les operators.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=184 LIMIT 1").fetchone():
+        conn.execute(
+            """DELETE FROM maintenance_events
+               WHERE source = 'planifie'
+               AND created_by IN (SELECT id FROM users WHERE role = 'fabrication')"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 184, "cleanup_operator_planifie_creneaux")
+
+    # Migration 185 — MyMaintenance : consignes admin par op planifiée.
+    # L'admin peut ajouter des instructions/détails textuels sur chaque op
+    # d'un créneau. Nullable, pas de valeur par défaut. Le champ est propre
+    # à chaque row (une op sur Coh1 et la même sur Coh2 = 2 rows = 2 champs
+    # consignes indépendants). Visibles côté opérateur (icône i + panneau)
+    # et dans l'historique admin.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=185 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
+        if "consignes" not in cols:
+            conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN consignes TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 185, "maintenance_event_ops_consignes")
+
+    # Migration 186 — Système de gestion des accès database-driven.
+    # Deux tables : role_access_defaults (référentiel rôle × app × module,
+    # modifiable dans Paramètres) et user_access_overrides (surcharges par
+    # utilisateur, même granularité). Niveau 4 valeurs : none / read / write
+    # / admin (ordinal, admin >= write >= read >= none). module_id = '_app'
+    # = accès général à l'appli, sinon nom d'onglet (sous-module).
+    # Seed depuis default_app_access_for_role (aucune régression). La colonne
+    # legacy users.access_overrides (JSON) est copiée vers user_access_overrides
+    # puis conservée en fallback ; sera droppée dans une migration ultérieure.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=186 LIMIT 1").fetchone():
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS role_access_defaults ("
+            "role TEXT NOT NULL, app_id TEXT NOT NULL, "
+            "module_id TEXT NOT NULL DEFAULT '_app', "
+            "level TEXT NOT NULL DEFAULT 'none', "
+            "updated_at TEXT, updated_by TEXT, "
+            "PRIMARY KEY (role, app_id, module_id))"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rad_lookup ON role_access_defaults(role, app_id)")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS user_access_overrides ("
+            "user_id INTEGER NOT NULL, app_id TEXT NOT NULL, "
+            "module_id TEXT NOT NULL DEFAULT '_app', "
+            "level TEXT NOT NULL DEFAULT 'none', "
+            "updated_at TEXT, updated_by TEXT, "
+            "PRIMARY KEY (user_id, app_id, module_id), "
+            "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE)"
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_uao_lookup ON user_access_overrides(user_id, app_id)")
+
+        from config import (
+            ASSIGNABLE_ROLES as _AR,
+            ROLE_SUPERADMIN as _SA,
+            ROLE_COMMERCIAL as _C,
+            ROLE_DIRECTION as _D,
+            ROLES_ADMINISTRATION_ALL as _RAA,
+            default_app_access_for_role as _daafr,
+        )
+        now184 = datetime.now().isoformat()
+        _APP_IDS_184 = ["prod", "planning", "planning_rh", "stock", "compta",
+                        "expe", "pricing", "fabrication", "qualite", "settings"]
+
+        def _seed_lvl_184(role, app_id, legacy):
+            if role == _SA:
+                return "admin"
+            if app_id == "qualite":
+                if role in ({_D} | _RAA):
+                    return "write"
+                if role == _C:
+                    return "read"
+                return "none"
+            return "write" if legacy.get(app_id) else "none"
+
+        for role in list(_AR) + [_SA]:
+            legacy = _daafr(role)
+            for app_id in _APP_IDS_184:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_access_defaults "
+                    "(role, app_id, module_id, level, updated_at, updated_by) "
+                    "VALUES (?, ?, '_app', ?, ?, 'seed_v184')",
+                    (role, app_id, _seed_lvl_184(role, app_id, legacy), now184),
+                )
+
+        rows184 = conn.execute(
+            "SELECT id, access_overrides FROM users "
+            "WHERE access_overrides IS NOT NULL AND access_overrides != ''"
+        ).fetchall()
+        for r in rows184:
+            raw = r["access_overrides"]
+            try:
+                data = json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            for app_id, val in data.items():
+                if not isinstance(val, bool):
+                    continue
+                key = "pricing" if app_id == "devis" else app_id
+                if key not in _APP_IDS_184:
+                    continue
+                conn.execute(
+                    "INSERT OR IGNORE INTO user_access_overrides "
+                    "(user_id, app_id, module_id, level, updated_at, updated_by) "
+                    "VALUES (?, ?, '_app', ?, ?, 'migration_v184')",
+                    (r["id"], key, "write" if val else "none", now184),
+                )
+
+        conn.commit()
+        _record_schema_migration(conn, 186, "access_control_tables_and_seed")
 
 
 def create_default_admin():

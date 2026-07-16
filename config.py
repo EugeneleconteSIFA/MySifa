@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.2.4"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -46,6 +46,10 @@ APP_VERSION = "2.0.1"
 
 # Nom affiché en wordmark, titres, footers.
 APP_NAME = os.getenv("APP_NAME", "MySifa")
+
+# Seuil (ms) au-dela duquel une requete HTTP est loggee comme lente
+# (middleware log_slow_requests dans main.py). 0 = desactive.
+SLOW_REQUEST_MS = int(os.getenv("SLOW_REQUEST_MS", "500"))
 
 # Indice de coupure du wordmark pour l'affichage bicolore. Ex. :
 #   "MySifa" + APP_SPLIT=2 → "My" (couleur principale) + "Sifa" (accent)
@@ -243,6 +247,96 @@ ROLES_SETTINGS = {ROLE_SUPERADMIN}
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
+
+# ─── Contrôle d'accès database-driven (migration 184) ────────────
+# 4 niveaux ordinaux — admin >= write >= read >= none. Utilisé partout où le
+# code testait auparavant `role in ROLES_STOCK` etc. Voir user_can() dans
+# services/auth_service.py. La granularité est (app, module) : module_id
+# vaut '_app' pour l'accès général à l'appli, sinon nom d'onglet.
+ACCESS_LEVELS = ("none", "read", "write", "admin")
+LEVEL_ORDER = {"none": 0, "read": 1, "write": 2, "admin": 3}
+LEVEL_LABELS = {
+    "none": "Aucun accès",
+    "read": "Lecture",
+    "write": "Écriture",
+    "admin": "Admin (actions sensibles)",
+}
+
+# Catalogue des applications et de leurs sous-modules (onglets). Édité ici,
+# lu partout : matrice d'accès, référentiel rôles, endpoints Paramètres,
+# helper user_can. Ordre = ordre d'affichage dans la matrice. `modules` vide
+# = une seule vue, pas de granularité de sous-module possible.
+APPS_CATALOG = [
+    {"id": "prod", "label": "MyProd", "modules": [
+        {"id": "production", "label": "Production"},
+        {"id": "traceabilite", "label": "Traçabilité"},
+        {"id": "rentabilite", "label": "Rentabilité"},
+        {"id": "of", "label": "Fiches + OF"},
+    ]},
+    {"id": "planning", "label": "Planning machine", "modules": []},
+    {"id": "planning_rh", "label": "Planning RH", "modules": [
+        {"id": "atelier", "label": "Planning atelier"},
+        {"id": "conges", "label": "Congés / RH"},
+    ]},
+    {"id": "stock", "label": "MyStock", "modules": [
+        {"id": "dashboard", "label": "Tableau de bord"},
+        {"id": "produits-finis", "label": "Produits finis"},
+        {"id": "matieres", "label": "Matières premières"},
+        {"id": "inventaire", "label": "Inventaire produit"},
+        {"id": "matieres-inventaire", "label": "Inventaire matière"},
+        {"id": "reception", "label": "Réception matière"},
+        {"id": "traca", "label": "Étiquettes traça"},
+        {"id": "historique", "label": "Historique mouvements"},
+        {"id": "plan-entrepot", "label": "Plan entrepôt"},
+        {"id": "negoce", "label": "Produits de négoce"},
+        {"id": "referentiel", "label": "Référentiel"},
+        {"id": "monitoring", "label": "Monitoring"},
+        {"id": "valorisation", "label": "Valorisation"},
+    ]},
+    {"id": "compta", "label": "MyCompta", "modules": [
+        {"id": "factor", "label": "Factor"},
+        {"id": "acheteurs", "label": "Acheteurs"},
+        {"id": "comptes", "label": "Comptes"},
+        {"id": "banques", "label": "Banques"},
+        {"id": "cession", "label": "Cession"},
+        {"id": "paie", "label": "Paie"},
+    ]},
+    {"id": "expe", "label": "MyExpé", "modules": [
+        {"id": "suivi_departs", "label": "Départs"},
+        {"id": "palettes_europe", "label": "Palettes Europe"},
+        {"id": "comparateur", "label": "Comparateur tarifs"},
+        {"id": "devis", "label": "Devis transporteurs"},
+        {"id": "poids", "label": "Calcul poids"},
+        {"id": "transporteurs", "label": "Transporteurs"},
+        {"id": "prospects", "label": "Prospects"},
+    ]},
+    {"id": "pricing", "label": "Pricing", "modules": []},
+    {"id": "fabrication", "label": "Fabrication (opérateurs)", "modules": []},
+    {"id": "qualite", "label": "MyQualité", "modules": [
+        {"id": "list", "label": "Non-conformités"},
+        {"id": "audits-list", "label": "Audits"},
+        {"id": "ressources-list", "label": "Ressources"},
+        {"id": "ref-list", "label": "Référentiel"},
+    ]},
+    {"id": "settings", "label": "Paramètres", "modules": []},
+]
+
+# Index de recherche rapide : {app_id: {module_id: label}}
+_APP_MODULE_INDEX = {}
+for _a in APPS_CATALOG:
+    _APP_MODULE_INDEX[_a["id"]] = {"_app": _a["label"]}
+    for _m in _a.get("modules", []):
+        _APP_MODULE_INDEX[_a["id"]][_m["id"]] = _m["label"]
+
+
+def app_module_label(app_id: str, module_id: str = "_app") -> str:
+    """Label lisible d'un couple (app, module) — fallback sur l'id si inconnu."""
+    return _APP_MODULE_INDEX.get(app_id, {}).get(module_id) or module_id
+
+
+def is_known_app_module(app_id: str, module_id: str = "_app") -> bool:
+    """True si (app, module) est référencé dans APPS_CATALOG."""
+    return module_id in _APP_MODULE_INDEX.get(app_id, {})
 
 # Rôles assignables lors de la création / édition d'utilisateurs (hors super admin).
 # Le rôle legacy `administration` n'est plus proposé : le super admin choisit désormais

@@ -375,7 +375,15 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
 /* Modale Créneau : section liste d'opérations */
-.case-modal-card{max-width:640px;width:92vw}
+.case-modal-card{max-width:640px;width:92vw;max-height:92vh;display:flex;flex-direction:column}
+/* Le <form> est intercalé entre .modal-card et .modal-body → doit propager
+   le flex column pour que .modal-body puisse scroll et .modal-foot rester
+   collé en bas. Sans ça, le contenu déborde et les boutons Enregistrer/Annuler
+   sortent de l'écran (bug observé v2.1.5). */
+.case-modal-card > form{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.case-modal-card .modal-body{overflow-y:auto;flex:1;min-height:0}
+.case-modal-card .modal-foot{flex-shrink:0}
+.case-ops-list{max-height:none}
 .case-ops-section{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
 .case-ops-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .case-ops-add-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .12s;letter-spacing:.2px}
@@ -793,6 +801,108 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 /* ── Modal single-op saisie ─────────────────────────────────────── */
 .op-single-op-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .op-single-op-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px}
+/* Legacy compat pour l'ancienne classe (au cas où utilisée ailleurs) */
+.btn-op-cancel-validation{background:transparent;color:var(--danger);border:1px solid var(--danger);font-weight:600}
+.btn-op-cancel-validation:hover{background:var(--danger);color:#fff}
+/* v2 : actions harmonisées du modal single-op (3 boutons alignés, même
+   hauteur, hiérarchie visuelle claire) */
+.op-single-actions{align-items:center;gap:8px}
+/* v2 : croix de fermeture en haut à droite du modal single-op */
+.op-modal-close{position:absolute;top:14px;right:14px;width:32px;height:32px;padding:0;border:none;border-radius:8px;background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.op-modal-close:hover{background:var(--bg);color:var(--text)}
+.op-modal-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* padding supérieur du modal pour éviter que la croix chevauche le titre */
+.op-modal[role="dialog"]{padding-top:24px}
+.op-single-actions-spacer{flex:1}
+.op-single-actions .btn{min-height:40px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s,color .15s,border-color .15s,filter .15s}
+/* Bouton destructif : outline rouge, discret mais reconnaissable */
+.btn-danger-outline{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.btn-danger-outline:hover{background:var(--danger);color:#fff}
+/* Bouton ghost : transparent, subtil (secondaire) */
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--bg);color:var(--text);border-color:var(--muted)}
+/* Bouton primaire : filled accent (déjà existant, on force la cohérence) */
+.op-single-actions .btn.op-btn-accent{background:var(--accent);color:var(--accent-fg);border:1px solid var(--accent);font-weight:700}
+.op-single-actions .btn.op-btn-accent:hover{filter:brightness(1.08)}
+@media(max-width:520px){
+  .op-single-actions{flex-wrap:wrap}
+  .op-single-actions-spacer{display:none}
+  .op-single-actions .btn{flex:1;min-width:0}
+}
+/* Actions Modifier/Supprimer sur cartes op individuelles (interventions non-programmées) */
+.op-op-card-footer-actions{display:flex;justify-content:flex-end;gap:4px;margin-top:2px}
+.op-op-card-mini-btn{width:24px;height:24px;padding:0;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
+.op-op-card-mini-btn:hover{color:var(--text);border-color:var(--accent);background:var(--bg)}
+.op-op-card-mini-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+/* v185 : chip Consignes de l'admin, cliquable, sous le titre de la carte op */
+.op-op-consignes-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.28);border-radius:8px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s;align-self:flex-start;text-align:left}
+.op-op-consignes-chip:hover{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+body.light .op-op-consignes-chip{border-color:rgba(8,145,178,.28)}
+/* v185 : label + panneau consignes (dans single-op modal) */
+.op-consignes-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:12px}
+.op-consignes-panel{background:var(--bg);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:10px 14px;color:var(--text2);font-size:13px;line-height:1.5;white-space:pre-wrap;margin-bottom:16px}
+/* v185 : mini-modal consignes — plus compact que le single-op modal */
+.op-consignes-modal{position:relative;max-width:420px;width:92vw;padding:18px 20px 20px 20px}
+.op-consignes-modal .op-modal-close{position:absolute;top:10px;right:10px;width:28px;height:28px}
+.op-consignes-modal-title{font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;padding-right:32px}
+.op-consignes-modal-sub{font-size:12px;color:var(--muted);margin-bottom:12px;padding-right:32px}
+.op-consignes-modal .op-consignes-panel{margin-bottom:0;font-size:14px}
+.col-consignes{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)}
+/* v2 : modal détails historique ops */
+.ops-detail-modal .modal-body{padding:20px 22px 22px}
+/* Hero : titre + icône accent */
+.ops-detail-hero{display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:16px;background:linear-gradient(135deg,var(--accent-bg) 0%,transparent 100%);border:1px solid rgba(34,211,238,.22);border-radius:12px}
+.ops-detail-hero-icon{flex-shrink:0;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-fg);border-radius:12px;box-shadow:0 4px 12px rgba(34,211,238,.25)}
+.ops-detail-hero-body{flex:1;min-width:0}
+.ops-detail-hero-chips{margin-top:4px}
+.ops-detail-title{font-size:17px;font-weight:800;color:var(--text);line-height:1.3}
+body.light .ops-detail-hero{border-color:rgba(8,145,178,.22)}
+/* Grille récap avec fond léger */
+.ops-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.ops-detail-cell{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-right:1px solid var(--border)}
+.ops-detail-cell:nth-child(2n){border-right:none}
+.ops-detail-cell:nth-child(-n+2){border-bottom:1px solid var(--border)}
+.ops-detail-cell-label{font-size:10px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.ops-detail-cell-value{font-size:14px;font-weight:600;color:var(--text)}
+/* Blocs colorés distincts pour consignes / commentaires / pièces */
+.ops-detail-block{margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid transparent}
+.ops-detail-block-head{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.ops-detail-block-body{padding:12px 14px;background:var(--card);font-size:13px;line-height:1.55;color:var(--text2);white-space:pre-wrap}
+.ops-detail-block--consignes{border-color:rgba(34,211,238,.35)}
+.ops-detail-block--consignes .ops-detail-block-head{background:rgba(34,211,238,.14);color:var(--accent)}
+.ops-detail-block--comment{border-color:rgba(251,191,36,.35)}
+.ops-detail-block--comment .ops-detail-block-head{background:rgba(251,191,36,.14);color:var(--warn)}
+.ops-detail-block--pieces{border-color:rgba(167,139,250,.35)}
+.ops-detail-block--pieces .ops-detail-block-head{background:rgba(167,139,250,.14);color:#8b5cf6}
+body.light .ops-detail-block--pieces .ops-detail-block-head{color:#7c3aed}
+body.light .ops-detail-block--comment .ops-detail-block-head{color:#b45309}
+@media(max-width:560px){
+  .ops-detail-grid{grid-template-columns:1fr}
+  .ops-detail-cell{border-right:none !important;border-bottom:1px solid var(--border)}
+  .ops-detail-cell:last-child{border-bottom:none}
+}
+/* Modal Modifier créneau : lignes ops déjà effectuées (read-only) */
+.case-ops-row-done{background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,transparent 100%);border-left:3px solid var(--success,#34d399);padding:10px 12px;border-radius:8px;margin-bottom:8px}
+.case-ops-row-done .case-ops-row-done-label{display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);flex:1}
+.case-ops-row-done-badge{margin-left:10px;background:rgba(52,211,153,.16);color:var(--success,#34d399);border-radius:5px;padding:2px 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+/* v2 : dropdown machine unique dans le modal case */
+.case-ops-machine-select{min-width:180px;max-width:220px;padding:6px 10px;font-size:13px;font-weight:600}
+/* v2 : ligne op mode Libre dans le picker admin */
+.case-op-libre-wrap{position:relative;flex:1}
+.case-op-libre-titre{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:13px}
+.case-op-libre-titre:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.case-op-libre-autocomplete{position:absolute;top:100%;left:0;right:0;margin-top:4px;z-index:20;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.15)}
+.case-op-mode-link{display:inline-block;margin-top:6px;color:var(--accent);font-size:12px;text-decoration:none;font-family:inherit}
+.case-op-mode-link:hover{text-decoration:underline}
+.case-ops-row-mode{padding-left:2px}
+/* v185 : consignes admin sur les rows d'op */
+.case-ops-consignes{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.case-op-consignes-toggle{font-size:12px}
+.case-op-consignes-textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:13px;line-height:1.5;resize:vertical;min-height:70px;margin-top:8px;transition:border-color .15s}
+.case-op-consignes-textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.case-op-consignes-preview{margin-top:6px;padding:8px 12px;background:var(--bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;color:var(--text2);font-size:12px;font-style:italic;line-height:1.4;white-space:pre-wrap}
+body.light .case-ops-row-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,transparent 100%)}
+body.light .case-ops-row-done-badge{background:rgba(5,150,105,.16);color:#059669}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -848,6 +958,9 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .libre-suggestion-count{color:var(--muted);font-size:11px;white-space:nowrap;margin-left:12px}
 .libre-duree-link{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 0;text-align:left;font-family:inherit}
 .libre-duree-link:hover{text-decoration:underline}
+/* v2 : lien de switch entre modes Catalogue / Inhabituelle dans op-modal-new */
+.op-new-mode-link{display:inline-block;margin-top:8px;color:var(--accent);font-size:12px;text-decoration:none;font-family:inherit}
+.op-new-mode-link:hover{text-decoration:underline}
 .op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
 .op-cat-interventions,
 .op-cat-entretien{background:rgba(167,139,250,.16);color:#8b5cf6}
@@ -936,10 +1049,8 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Enregistrer une opération
     </button>
-    <button type="button" class="nav-btn op-only" onclick="libreOpenModal()" style="color:#3b82f6">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-      Intervention libre
-    </button>
+    <!-- v2 : bouton "Intervention libre" fusionné dans "Enregistrer une opération"
+         (mode Inhabituelle accessible via lien dans le modal). -->
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
         <span class="mysifa-back-preamble">← Retour </span>
@@ -1367,6 +1478,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
                   <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
                   <th data-sort="duree_reelle_min" onclick="sortOps('duree_reelle_min')" style="width:80px">Durée<span class="sort-ico">↕</span></th>
                   <th>Commentaires</th>
+                  <th>Consignes</th>
                   <th aria-label="Actions"></th>
                 </tr>
               </thead>
@@ -1444,12 +1556,9 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
             <div class="page-subtitle" id="op-tasks-count">—</div>
           </div>
           <div class="op-actions">
-            <button type="button" class="btn op-btn-accent" onclick="opOpenNewTaskModal()">
-              <span class="btn-ico">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </span>
-              Nouvelle tâche
-            </button>
+            <!-- v2 : bouton "Nouvelle tâche" retiré. La création de tâches se
+                 fait via "Enregistrer une opération" ou "Intervention libre"
+                 dans la sidebar. Les créneaux planifiés sont gérés par l'admin. -->
           </div>
         </div>
         <div class="op-tabs" role="tablist">
@@ -2087,6 +2196,7 @@ function _apiEventToClient(ev){
       done_at: o.done_at,
       done_by: o.done_by,
       updated_by: o.updated_by,
+      consignes: o.consignes || '',
     };
   });
   return {
@@ -2651,14 +2761,33 @@ function openPlanningDetailsModal(events){
       (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
     });
     const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
-    const opsHtml = ops.length
-      ? ops.map(op => {
-          const machChips = (op.machines || []).map(m =>
+    // v2 : regroupe les rows dupliquées (même code sur N machines après split)
+    //      en 1 ligne par code, avec l'union des machines sous forme de chips.
+    const _grouped = new Map();
+    for(const op of ops){
+      const key = op.opTypeId || op._op_id || op.opName || Math.random();
+      if(!_grouped.has(key)){
+        _grouped.set(key, {
+          opName:   op.opName || '—',
+          opNiveau: op.opNiveau || null,
+          opFreq:   op.opFreq || '',
+          machines: [],
+        });
+      }
+      const entry = _grouped.get(key);
+      for(const m of (op.machines || [])){
+        if(!entry.machines.includes(m)) entry.machines.push(m);
+      }
+    }
+    const groupedOps = Array.from(_grouped.values());
+    const opsHtml = groupedOps.length
+      ? groupedOps.map(op => {
+          const machChips = op.machines.map(m =>
             '<span class="plan-det-case-op-mach">' + escHtml(m) + '</span>'
           ).join('');
           return '<div class="plan-det-case-op">' +
             '<span class="plan-det-case-op-bullet"></span>' +
-            '<span class="plan-det-case-op-name">' + escHtml(op.opName || '—') + '</span>' +
+            '<span class="plan-det-case-op-name">' + escHtml(op.opName) + '</span>' +
             (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
             (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
             (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
@@ -2850,14 +2979,67 @@ function _openCaseModalInner(opts){
   opts = opts || {};
   if(!opts.iso){ showToast('Date manquante.', 'danger'); return; }
   _PENDING_CASE = { editId: opts.editId || null, iso: opts.iso };
-  _CASE_OPS = (opts.operations || []).map(o => ({
-    _op_id:   o._op_id || null,
-    opTypeId: o.opTypeId || '',
-    opName:   o.opName   || '',
-    opNiveau: o.opNiveau || null,
-    opFreq:   o.opFreq   || '',
-    machines: Array.isArray(o.machines) ? o.machines.slice() : [],
-  }));
+  // v2 : merge des rows DB par code pour affichage groupé.
+  //   Après le split per-machine, une op X sur [Coh1, Coh2] = 2 rows DB.
+  //   Pour l'admin dans la modal, on regroupe : 1 seule ligne avec chips
+  //   [Coh1] [Coh2] cochés. Le sync backend explode ensuite.
+  //   _op_ids_by_machine et _statuts_by_machine : trackent l'origine DB
+  //   de chaque machine pour DELETE ciblé + lock des chips termine.
+  const rawOps = Array.isArray(opts.operations) ? opts.operations : [];
+  const _byCode = new Map();
+  const _emptyRows = [];
+  for(const o of rawOps){
+    if(!o.opTypeId){
+      // Ligne vide fraîchement ajoutée via "+ Ajouter une opération"
+      _emptyRows.push({
+        _op_id: null,
+        opTypeId: '',
+        opName: '',
+        opNiveau: null,
+        opFreq: '',
+        machines: [],
+        _op_ids_by_machine: {},
+        _statuts_by_machine: {},
+      });
+      continue;
+    }
+    const key = o.opTypeId;
+    if(!_byCode.has(key)){
+      // v2 : détecte les codes LIB-xxx pour pré-charger la row en mode Libre.
+      //      _originalLibreCode / _originalLibreTitre permettent de savoir si
+      //      le titre a été modifié au submit → PATCH /libres au lieu de POST.
+      const isLibreCode = o.opTypeId && String(o.opTypeId).startsWith('LIB-');
+      _byCode.set(key, {
+        _op_id: null,  // legacy compat
+        _mode: isLibreCode ? 'libre' : 'catalogue',
+        _libreTitre: isLibreCode ? (o.opName || '') : '',
+        _libreCodeResolved: isLibreCode ? o.opTypeId : null,
+        _originalLibreCode: isLibreCode ? o.opTypeId : null,
+        _originalLibreTitre: isLibreCode ? (o.opName || '') : '',
+        opTypeId: o.opTypeId,
+        opName:   o.opName   || '',
+        opNiveau: o.opNiveau || null,
+        opFreq:   o.opFreq   || '',
+        machines: [],
+        _op_ids_by_machine: {},
+        _statuts_by_machine: {},
+        // v185 : consignes admin (peut être vide). Prend la 1re rencontrée
+        //   pour ce code (comportement raisonnable si machines multiples).
+        //   Après édition, on PATCH toutes les rows du code avec la nouvelle valeur.
+        consignes: (o.consignes || '').trim(),
+        _consignes_original: (o.consignes || '').trim(),
+        _consignes_open: !!((o.consignes || '').trim()),  // panel déplié si non vide
+      });
+    }
+    const entry = _byCode.get(key);
+    const m = (Array.isArray(o.machines) && o.machines.length) ? o.machines[0] : null;
+    if(m && !entry.machines.includes(m)){
+      entry.machines.push(m);
+      entry._op_ids_by_machine[m] = o._op_id || null;
+      entry._statuts_by_machine[m] = o.statut || o._statut || 'a_faire';
+    }
+  }
+  _CASE_OPS = Array.from(_byCode.values()).concat(_emptyRows);
   const m = document.getElementById('planning-case-modal');
   if(!m) return;
   const dtEl = document.getElementById('case-mod-date');
@@ -2901,11 +3083,25 @@ function closeCaseModal(){
 const CASE_MACHINES_LIST = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 
 function addCaseOp(){
-  if(!OPS_TYPES_STATE.list.length){
-    showToast('Aucune opération dans la liste. Ajoutez-en d\'abord dans "Liste d\'opérations de maintenance".', 'danger');
-    return;
-  }
-  _CASE_OPS.push({ _op_id: null, opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
+  // v2 : mode Catalogue par défaut, avec possibilité de switch vers Libre.
+  // On laisse ajouter même sans catalogue (l'admin pourra créer une libre).
+  _CASE_OPS.push({
+    _op_id: null,
+    _mode: 'catalogue',        // 'catalogue' | 'libre'
+    _libreTitre: '',           // titre saisi en mode libre
+    _libreCodeResolved: null,  // LIB-xxx si résolu via autocomplete
+    opTypeId: '',
+    opName: '',
+    opNiveau: null,
+    opFreq: '',
+    machines: [],
+    _op_ids_by_machine: {},
+    _statuts_by_machine: {},
+    // v185 : consignes admin
+    consignes: '',
+    _consignes_original: '',
+    _consignes_open: false,
+  });
   renderCaseOpsList();
   // Focus le dernier select
   setTimeout(() => {
@@ -2943,10 +3139,122 @@ function toggleCaseOpMachine(idx, machine){
   cur.machines = list;
   renderCaseOpsList();
 }
+// v2 : setter (une seule machine par op après le split 1:1) — remplace le
+// toggle sur les 4 chips par un dropdown unique dans la modal.
+function setCaseOpMachine(idx, machine){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur.machines = machine ? [machine] : [];
+  renderCaseOpsList();
+}
 function removeCaseOp(idx){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
   _CASE_OPS.splice(idx, 1);
   renderCaseOpsList();
+}
+// v2 : switch entre Catalogue et Libre pour une op de la modal case admin
+function switchCaseOpMode(idx, mode){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._mode = (mode === 'libre') ? 'libre' : 'catalogue';
+  if(cur._mode === 'catalogue'){
+    // Reset les champs libres, préserve les machines
+    cur._libreTitre = '';
+    cur._libreCodeResolved = null;
+    cur.opTypeId = '';
+    cur.opName = '';
+    cur.opNiveau = null;
+    cur.opFreq = '';
+  } else {
+    // Reset le catalogue si on switch en libre
+    cur.opTypeId = '';
+    cur.opName = '';
+    cur.opNiveau = null;
+    cur.opFreq = '';
+  }
+  renderCaseOpsList();
+  // Focus le champ pertinent après re-render
+  setTimeout(() => {
+    const list = document.getElementById('case-mod-ops-list');
+    if(!list) return;
+    if(mode === 'libre'){
+      const el = list.querySelector('.case-op-libre-titre[data-idx="' + idx + '"]');
+      if(el) el.focus();
+    } else {
+      const el = list.querySelector('select.case-op-catalogue-select[data-idx="' + idx + '"]');
+      if(el) el.focus();
+    }
+  }, 60);
+}
+// v2 : update titre libre d'une op (from oninput)
+function updateCaseOpLibreTitre(idx, value){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._libreTitre = value || '';
+  cur._libreCodeResolved = null;  // reset la suggestion si l'user retape
+  // opName reflète le titre libre pour affichage propre au submit
+  cur.opName = cur._libreTitre;
+}
+// v2 : autocomplete pour le champ titre libre (per-row)
+const _caseOpLibreTimers = {};
+async function caseOpLibreAutocompleteInput(idx){
+  updateCaseOpLibreTitre(idx, (document.querySelector('.case-op-libre-titre[data-idx="' + idx + '"]') || {}).value || '');
+  clearTimeout(_caseOpLibreTimers[idx]);
+  const panel = document.querySelector('.case-op-libre-autocomplete[data-idx="' + idx + '"]');
+  const q = (_CASE_OPS[idx] && _CASE_OPS[idx]._libreTitre || '').trim();
+  if(q.length < 2){
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    return;
+  }
+  _caseOpLibreTimers[idx] = setTimeout(async () => {
+    try{
+      const r = await fetch('/api/maintenance/codes/libres/autocomplete?q=' + encodeURIComponent(q) + '&limit=8', { credentials:'include' });
+      if(!r.ok){ if(panel){ panel.style.display='none'; } return; }
+      const d = await r.json();
+      const suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+      if(!suggestions.length){
+        if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+        return;
+      }
+      panel.innerHTML = suggestions.map(s =>
+        '<div class="libre-suggestion" onclick="caseOpLibreSelectSuggestion(' + idx + ', \'' + escAttr(s.code) + '\', \'' + escAttr(s.label) + '\')">' +
+          '<span class="libre-suggestion-label">' + escHtml(s.label) + '</span>' +
+          '<span class="libre-suggestion-count">' + escHtml(s.code) + '</span>' +
+        '</div>'
+      ).join('');
+      panel.style.display = 'block';
+    }catch(e){
+      if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    }
+  }, 220);
+}
+// v185 : toggle affichage du bloc consignes pour une op de la modal case
+function toggleCaseOpConsignes(idx){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._consignes_open = !cur._consignes_open;
+  renderCaseOpsList();
+  if(cur._consignes_open){
+    setTimeout(() => {
+      const el = document.querySelector('.case-op-consignes-textarea[data-idx="' + idx + '"]');
+      if(el) el.focus();
+    }, 60);
+  }
+}
+function updateCaseOpConsignes(idx, value){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  _CASE_OPS[idx].consignes = value || '';
+}
+function caseOpLibreSelectSuggestion(idx, code, label){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur._libreTitre = label;
+  cur._libreCodeResolved = code;  // sera utilisé au submit sans re-créer
+  cur.opName = label;
+  const input = document.querySelector('.case-op-libre-titre[data-idx="' + idx + '"]');
+  if(input) input.value = label;
+  const panel = document.querySelector('.case-op-libre-autocomplete[data-idx="' + idx + '"]');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
 }
 function renderCaseOpsList(){
   const list = document.getElementById('case-mod-ops-list');
@@ -2956,13 +3264,38 @@ function renderCaseOpsList(){
     return;
   }
   list.innerHTML = _CASE_OPS.map((op, idx) => {
-    const options = '<option value="">Sélectionner une opération…</option>' +
-      OPS_TYPES_STATE.list.map(t =>
-        '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
-          escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
-          (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
-        '</option>'
-      ).join('');
+    // v2 : détecte si au moins une machine de cette op (regroupée par code)
+    // est termine → ligne entière read-only pour éviter les états incohérents.
+    const statuts = op._statuts_by_machine || {};
+    const anyDone = Object.values(statuts).some(s => s === 'termine');
+
+    // Rendu READ-ONLY : op déjà (au moins partiellement) effectuée sur une machine.
+    if(anyDone && op.opTypeId){
+      const opName = op.opName || (OPS_TYPES_STATE.list.find(t => t.id === op.opTypeId) || {}).nom || op.opTypeId || '—';
+      const nivBadge = op.opNiveau ? ' (N' + op.opNiveau + ')' : '';
+      // Chips figées : chaque machine assignée est affichée. Icône ✓ pour celles termine.
+      const chipsDone = (op.machines || []).map(m => {
+        const isMachDone = statuts[m] === 'termine';
+        const doneIco = isMachDone ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+        return '<span class="case-mach-chip active" style="cursor:default;opacity:.85">' + doneIco + escHtml(m) + '</span>';
+      }).join('');
+      return '<div class="case-ops-row case-ops-row-done" data-idx="' + idx + '">' +
+        '<div class="case-ops-row-top">' +
+          '<div class="case-ops-row-done-label">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;color:var(--success,#34d399)"><polyline points="20 6 9 17 4 12"/></svg>' +
+            escHtml(opName) + nivBadge +
+            '<span class="case-ops-row-done-badge">Effectué</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="case-ops-machines">' +
+          '<span class="case-ops-machines-label">Machine(s)</span>' +
+          chipsDone +
+        '</div>' +
+      '</div>';
+    }
+
+    // Rendu ÉDITABLE : distingue mode Catalogue et Libre.
+    const mode = op._mode || 'catalogue';
     const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
     const chips = CASE_MACHINES_LIST.map(m => {
       const active = machSet.has(m);
@@ -2970,17 +3303,69 @@ function renderCaseOpsList(){
         escHtml(m) +
       '</button>';
     }).join('');
+    const delBtn = '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+    '</button>';
+
+    let pickerHtml;
+    if(mode === 'libre'){
+      const libreTitre = op._libreTitre || '';
+      pickerHtml =
+        '<div class="case-op-libre-wrap" style="flex:1;position:relative">' +
+          '<input type="text" class="ops-input case-op-libre-titre" data-idx="' + idx + '" ' +
+            'value="' + escAttr(libreTitre) + '" maxlength="200" autocomplete="off" ' +
+            'placeholder="Ex : Contrôle vibrations moteur — intervention ponctuelle" ' +
+            'oninput="caseOpLibreAutocompleteInput(' + idx + ')">' +
+          '<div class="libre-autocomplete-panel case-op-libre-autocomplete" data-idx="' + idx + '" style="display:none"></div>' +
+        '</div>';
+    } else {
+      const options = '<option value="">Sélectionner une opération…</option>' +
+        OPS_TYPES_STATE.list.map(t =>
+          '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+            escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
+            (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
+          '</option>'
+        ).join('');
+      pickerHtml =
+        '<select class="ops-select case-op-catalogue-select" data-idx="' + idx + '" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>';
+    }
+    const modeSwitchLink = (mode === 'libre')
+      ? '<a href="javascript:void(0)" class="case-op-mode-link" onclick="switchCaseOpMode(' + idx + ', \'catalogue\')">← Choisir dans le catalogue</a>'
+      : '<a href="javascript:void(0)" class="case-op-mode-link" onclick="switchCaseOpMode(' + idx + ', \'libre\')">Pas dans la liste ? Décrire une intervention libre</a>';
+    // v185 : bloc consignes admin (collapsé par défaut)
+    const consignesOpen = !!op._consignes_open;
+    const consignesVal = op.consignes || '';
+    const consignesHasContent = consignesVal.trim().length > 0;
+    const consignesToggleLabel = consignesOpen
+      ? '× Retirer les consignes'
+      : (consignesHasContent ? '✎ Modifier les consignes' : '+ Ajouter des consignes');
+    let consignesHtml = '<div class="case-ops-consignes">' +
+      '<a href="javascript:void(0)" class="case-op-mode-link case-op-consignes-toggle" onclick="toggleCaseOpConsignes(' + idx + ')">' +
+        consignesToggleLabel +
+      '</a>';
+    if(consignesOpen){
+      consignesHtml +=
+        '<textarea class="case-op-consignes-textarea" data-idx="' + idx + '" rows="3" ' +
+          'placeholder="Instructions spécifiques pour cette opération (visibles par l\'opérateur avant validation)" ' +
+          'oninput="updateCaseOpConsignes(' + idx + ', this.value)">' +
+          escHtml(consignesVal) +
+        '</textarea>';
+    } else if(consignesHasContent){
+      // Aperçu compact quand fermé mais rempli
+      const preview = consignesVal.length > 100 ? (consignesVal.slice(0, 100) + '…') : consignesVal;
+      consignesHtml += '<div class="case-op-consignes-preview">' + escHtml(preview) + '</div>';
+    }
+    consignesHtml += '</div>';
     return '<div class="case-ops-row" data-idx="' + idx + '">' +
       '<div class="case-ops-row-top">' +
-        '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
-        '<button type="button" class="case-ops-row-del" onclick="removeCaseOp(' + idx + ')" title="Retirer cette opération" aria-label="Retirer">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-        '</button>' +
+        pickerHtml + delBtn +
       '</div>' +
+      '<div class="case-ops-row-mode">' + modeSwitchLink + '</div>' +
       '<div class="case-ops-machines">' +
         '<span class="case-ops-machines-label">Machine(s)</span>' +
         chips +
       '</div>' +
+      consignesHtml +
     '</div>';
   }).join('');
 }
@@ -2994,16 +3379,97 @@ async function submitCaseModal(e){
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
+
+  // v2 : Résolution des ops libres AVANT de construire wantedOps.
+  //      Pour chaque _CASE_OPS en mode 'libre' sans code déjà résolu, on
+  //      POST /api/maintenance/codes/libres avec le titre → récupère le code
+  //      LIB-xxx (dedup exact-match backend). L'opTypeId est ensuite renseigné
+  //      comme n'importe quel code catalogue pour le reste du flow.
+  try{
+    for(const op of _CASE_OPS){
+      if((op._mode || 'catalogue') !== 'libre') continue;
+      const titre = (op._libreTitre || '').trim();
+      if(!titre) continue;  // skip vides
+      if(op._originalLibreCode){
+        // LIB préexistante (édition d'un créneau) : conserve le code, PATCH le
+        // titre s'il a changé (impact rétroactif sur tous les événements
+        // utilisant ce même code, comportement backend actuel).
+        if(titre !== (op._originalLibreTitre || '')){
+          const rPatch = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(op._originalLibreCode), {
+            method:'PATCH', credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({label: titre}),
+          });
+          if(!rPatch.ok){
+            const err = await rPatch.json().catch(()=>({}));
+            showToast('Renommage libre échoué : ' + (err.detail || rPatch.status), 'danger');
+            return;
+          }
+        }
+        op.opTypeId = op._originalLibreCode;
+        op.opName = titre;
+      } else if(op._libreCodeResolved){
+        // Autocomplete pick : code existant réutilisé, pas besoin de créer
+        op.opTypeId = op._libreCodeResolved;
+        op.opName = op.opName || titre;
+      } else {
+        // Nouvelle libre : POST /codes/libres (dedup exact-match backend)
+        const rNew = await fetch('/api/maintenance/codes/libres', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({label: titre}),
+        });
+        if(!rNew.ok){
+          const err = await rNew.json().catch(()=>({}));
+          showToast('Création code libre échouée : ' + (err.detail || rNew.status), 'danger');
+          return;
+        }
+        const dNew = await rNew.json();
+        op.opTypeId = dNew.code;
+        op.opName = titre;
+      }
+    }
+  }catch(e){
+    showToast('Erreur résolution libre : ' + (e.message || e), 'danger');
+    return;
+  }
+
+  // v2 : on inclut TOUTES les ops (y compris termine) dans wantedOps pour
+  //      que _syncEventOpsAndOperators ne les supprime pas.
   const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
     code: o.opTypeId,
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    consignes: (o.consignes || '').trim(),  // v185
   }));
-  if(!wantedOps.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
+  if(!wantedOps.length){
+    // Sépare le message si l'user avait des libres sans titre
+    const hadUntitledLibres = _CASE_OPS.some(o => (o._mode === 'libre') && !(o._libreTitre || '').trim());
+    if(hadUntitledLibres){
+      showToast('Complète le titre des interventions libres avant de valider.', 'danger');
+    } else {
+      showToast('Ajoutez au moins une opération.', 'danger');
+    }
+    return;
+  }
   // Chaque op doit être attribuée à au moins une machine.
   const missing = wantedOps.find(o => !o.machines.length);
   if(missing){
-    showToast('Attribuez au moins une machine à chaque opération.', 'danger');
+    const missName = (OPS_TYPES_STATE.list.find(t => t.id === missing.code) || {}).nom || missing.code;
+    showToast('« ' + missName + ' » : sélectionne une machine avant de valider.', 'danger');
     return;
+  }
+  // Détection duplicate (op X + machine Y déjà présente dans le créneau).
+  const seenPairs = new Map();  // key = "code@@machine" → name
+  for(const w of wantedOps){
+    for(const m of w.machines){
+      const k = String(w.code) + '@@' + String(m);
+      if(seenPairs.has(k)){
+        const nm = (OPS_TYPES_STATE.list.find(t => t.id === w.code) || {}).nom || w.code;
+        showToast('« ' + nm + ' » est déjà présente sur ' + m + ' dans ce créneau. Une même opération ne peut être ajoutée qu\'une seule fois par machine.', 'danger');
+        return;
+      }
+      seenPairs.set(k, w.code);
+    }
   }
   const operatorIds = (_CASE_OPERATORS || []).map(o => o.id);
 
@@ -3082,11 +3548,12 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
   const currentOps = ev.ops || [];
 
   // EXPLODE : {code, machines:[Coh1, Coh2]} devient 2 entries {code, machine:"Coh1"} + {code, machine:"Coh2"}
+  //   v185 : propage aussi consignes (partagées entre les machines d'un même code)
   const wantedExploded = [];
   for(const w of wantedOps){
     const ms = Array.isArray(w.machines) && w.machines.length ? w.machines : [null];
     for(const m of ms){
-      wantedExploded.push({ code: w.code, machine: m });
+      wantedExploded.push({ code: w.code, machine: m, consignes: w.consignes || '' });
     }
   }
 
@@ -3101,14 +3568,16 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
     currentByKey.set(keyOf(op.code, machine), op);
   }
 
-  // Ops à ajouter (wanted mais pas current) → POST avec 1 seule machine
+  // Ops à ajouter (wanted mais pas current) → POST avec 1 seule machine + consignes
   for(const w of wantedExploded){
     const k = keyOf(w.code, w.machine);
     if(!currentByKey.has(k)){
+      const postBody = { code: w.code, machines: w.machine ? [w.machine] : [] };
+      if(w.consignes) postBody.consignes = w.consignes;
       await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ code: w.code, machines: w.machine ? [w.machine] : [] }),
+        body: JSON.stringify(postBody),
       });
     }
   }
@@ -3120,8 +3589,26 @@ async function _syncEventOpsAndOperators(eventId, wantedOps, wantedOperatorIds){
       });
     }
   }
-  // Pas de PATCH machines : chaque row est déjà à 1 machine, si on veut changer
-  // la machine c'est une DELETE + POST (géré ci-dessus).
+  // v185 : PATCH consignes sur les rows existantes si elles ont changé
+  //   (les rows nouvellement POST ont déjà les consignes intégrées ci-dessus)
+  const currentConsignesByKey = new Map();
+  for(const op of currentOps){
+    const machine = (Array.isArray(op.machines) && op.machines.length) ? op.machines[0] : null;
+    currentConsignesByKey.set(keyOf(op.code, machine), { opId: op.id, consignes: (op.consignes || '').trim() });
+  }
+  for(const w of wantedExploded){
+    const k = keyOf(w.code, w.machine);
+    const cur = currentConsignesByKey.get(k);
+    if(!cur) continue;  // sera ajouté au prochain sync (ligne nouvelle)
+    const wantedConsignes = (w.consignes || '').trim();
+    if(wantedConsignes !== cur.consignes){
+      await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + cur.opId, {
+        method:'PATCH', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ consignes: wantedConsignes }),
+      });
+    }
+  }
 
   // Operators
   const currentOperators = ev.operators || [];
@@ -3478,13 +3965,30 @@ async function fetchHistoryFromDb(){
       operateur: h.operateur || '',
       type: h.type || '',
       commentaire: h.commentaire || '',
+      consignes: h.consignes || '',
       date_saisie: h.date_saisie || '',
       duree_reelle_min: h.duree_reelle_min || null,
-      _source: 'db',   // marqueur : ne peut pas être edited/deleted côté localStorage
+      _source: 'db',
       _event_id: h.event_id,
       _op_id: h.op_id,
       _code: h.code,
-      _libre: !!h.libre,   // v180 : flag intervention libre (chip visuel + filtre)
+      _libre: !!h.libre,
+      // v2 : contexte enrichi pour modal détails (double-clic)
+      _event_nom: h.event_nom || '',
+      _event_heure_debut: h.event_heure_debut || '',
+      _event_heure_fin: h.event_heure_fin || '',
+      _event_date_prevue: h.date_prevue || '',
+      _event_source: h.source || '',
+      _event_created_at: h.event_created_at || '',
+      _done_at: h.done_at || '',
+      _done_by: h.done_by || null,
+      _done_by_nom: h.done_by_nom || '',
+      _updated_at: h.updated_at || '',
+      _updated_by: h.updated_by || null,
+      _updated_by_nom: h.updated_by_nom || '',
+      _created_by: h.created_by || null,
+      _created_by_nom: h.created_by_nom || '',
+      _pieces_changees: h.pieces_changees || '',
     }));
   }catch(e){ return []; }
 }
@@ -3565,14 +4069,23 @@ async function _libreEditPersist(original, changes){
   const opId = original._op_id;
   const code = original._code;
   const jsonHeaders = {'Content-Type':'application/json'};
-  // 1. Rename titre si change
+  // 1. Rename titre si change — MAIS on skip si le nouveau titre correspond
+  // a un code standard du catalogue (l'user a clique par megarde une option
+  // standard dans le dropdown Type). Ce cas est un no-op pour proteger
+  // l'integrite du titre libre.
   const newTitle = (changes.titre || '').trim();
-  if(newTitle && newTitle !== (original.type || '')){
+  const isStandardCode = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+    ? OPS_TYPES_STATE.list.some(t => (t.nom || '') === newTitle)
+    : false;
+  if(newTitle && newTitle !== (original.type || '') && !isStandardCode){
     const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,
       body: JSON.stringify({label: newTitle}),
     });
     if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage échoué'); }
+  }else if(isStandardCode && newTitle !== (original.type || '')){
+    // Toast avertissement (non-bloquant)
+    if(typeof showToast === 'function') showToast('Le titre libre a ete conserve (le type choisi correspondait a un code standard). Utilise Parametres > Interventions libres pour renommer.', 'warn');
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -3606,6 +4119,92 @@ async function _libreEditPersist(original, changes){
     });
     if(!r3.ok){ const err = await r3.json().catch(()=>({})); throw new Error(err.detail || 'PATCH op échoué'); }
   }
+}
+
+// v2 : modal read-only "Détails de l'opération" (double-clic sur ligne historique)
+function openOpsHistoryDetail(id){
+  const o = (OPS_STATE.list || []).find(x => String(x.id) === String(id));
+  if(!o){ if(typeof showToast === 'function') showToast('Ligne introuvable.', 'danger'); return; }
+  const overlay = document.createElement('div');
+  overlay.className = 'op-modal-overlay active';
+  overlay.style.zIndex = '1600';
+  overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+
+  const isLibre = !!o._libre;
+  const isPlanifie = o._event_source === 'planifie';
+  const chipLibre = isLibre ? '<span class="libre-chip">Libre</span>' : '';
+
+  // Consignes admin — bloc accent (cyan)
+  const consignesBlock = (o.consignes || '').trim()
+    ? '<div class="ops-detail-block ops-detail-block--consignes">' +
+        '<div class="ops-detail-block-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+          '<span>Consignes de l\'admin</span>' +
+        '</div>' +
+        '<div class="ops-detail-block-body">' + escHtml(o.consignes) + '</div>' +
+      '</div>'
+    : '';
+
+  // Commentaires opérateur — bloc warn (jaune-orangé)
+  const commentBlock = (o.commentaire || '').trim()
+    ? '<div class="ops-detail-block ops-detail-block--comment">' +
+        '<div class="ops-detail-block-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+          '<span>Commentaires de l\'opérateur</span>' +
+        '</div>' +
+        '<div class="ops-detail-block-body">' + escHtml(o.commentaire) + '</div>' +
+      '</div>'
+    : '';
+
+  // Pièces changées — bloc violet (legacy)
+  const piecesBlock = (o._pieces_changees || '').trim()
+    ? '<div class="ops-detail-block ops-detail-block--pieces">' +
+        '<div class="ops-detail-block-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>' +
+          '<span>Pièces changées</span>' +
+        '</div>' +
+        '<div class="ops-detail-block-body">' + escHtml(o._pieces_changees) + '</div>' +
+      '</div>'
+    : '';
+
+  // Ligne récap principale
+  const dureeStr = (o.duree_reelle_min != null && o.duree_reelle_min !== '')
+    ? escHtml(o.duree_reelle_min + ' min')
+    : '<span style="color:var(--muted)">Non renseignée</span>';
+
+  overlay.innerHTML =
+    '<div class="modal-card ops-detail-modal" role="dialog" aria-modal="true" style="max-width:560px;width:92vw">' +
+      '<div class="modal-head">' +
+        '<div class="modal-title">Détails de l\'opération</div>' +
+        '<button type="button" class="modal-close" aria-label="Fermer" onclick="this.closest(\'.op-modal-overlay\').remove()">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="modal-body">' +
+        '<div class="ops-detail-hero">' +
+          '<div class="ops-detail-hero-icon">' +
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>' +
+          '</div>' +
+          '<div class="ops-detail-hero-body">' +
+            '<div class="ops-detail-title">' + escHtml(o.type || '—') + '</div>' +
+            (chipLibre ? '<div class="ops-detail-hero-chips">' + chipLibre + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="ops-detail-grid">' +
+          '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Date de saisie</span><span class="ops-detail-cell-value">' + escHtml(fmtDate(o.date_saisie)) + '</span></div>' +
+          '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Machine</span><span class="ops-detail-cell-value">' + escHtml(o.machine || '—') + '</span></div>' +
+          '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Opérateur</span><span class="ops-detail-cell-value">' + escHtml(o.operateur || '—') + '</span></div>' +
+          '<div class="ops-detail-cell"><span class="ops-detail-cell-label">Durée réelle</span><span class="ops-detail-cell-value">' + dureeStr + '</span></div>' +
+        '</div>' +
+        consignesBlock +
+        commentBlock +
+        piecesBlock +
+      '</div>' +
+      '<div class="modal-foot">' +
+        '<button type="button" class="modal-btn-ghost" onclick="this.closest(\'.op-modal-overlay\').remove()">Fermer</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
 }
 
 function deleteOp(id){
@@ -3729,7 +4328,24 @@ function renderOps(){
   // Sort
   const dir = OPS_STATE.sortDir === 'asc' ? 1 : -1;
   const sf = OPS_STATE.sortBy;
+  // v182 fix bug tri : pour date_saisie, on compare via Date.parse (les
+  // valeurs mixent parfois ISO complet et YYYY-MM-DD selon done_at/date_prevue,
+  // le sort string donne alors un ordre incorrect).
   filtered.sort((a,b) => {
+    if(sf === 'date_saisie'){
+      const ta = Date.parse(a[sf] || '') || 0;
+      const tb = Date.parse(b[sf] || '') || 0;
+      if(ta < tb) return -1*dir;
+      if(ta > tb) return  1*dir;
+      return 0;
+    }
+    if(sf === 'duree_reelle_min'){
+      const na = a[sf] != null ? Number(a[sf]) : -Infinity;
+      const nb = b[sf] != null ? Number(b[sf]) : -Infinity;
+      if(na < nb) return -1*dir;
+      if(na > nb) return  1*dir;
+      return 0;
+    }
     const av = (a[sf] != null ? a[sf] : '').toString().toLowerCase();
     const bv = (b[sf] != null ? b[sf] : '').toString().toLowerCase();
     if(av < bv) return -1*dir;
@@ -3747,16 +4363,26 @@ function renderOps(){
     const msg = isFiltered
       ? 'Aucune opération ne correspond aux filtres.'
       : 'Aucune opération enregistrée. Cliquez sur « Nouvelle saisie » pour commencer.';
-    tbody.innerHTML = '<tr><td colspan="7" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = filtered.map(o =>
-      '<tr>' +
+    const rows = filtered.map(o => {
+      // v185 : consignes admin — truncate visuel + tooltip si long
+      const cons = (o.consignes || '').trim();
+      const consTd = cons
+        ? '<td class="col-consignes" title="' + escAttr(cons) + '">' + escHtml(cons.length > 60 ? cons.slice(0,60) + '…' : cons) + '</td>'
+        : '<td class="col-consignes"><span style="color:var(--muted)">—</span></td>';
+      // v2 : double-clic sur la ligne → modal détails (comme historique contrôles)
+      const dblAttr = o._source === 'db'
+        ? ' ondblclick="openOpsHistoryDetail(\'' + escAttr(String(o.id)) + '\')" style="cursor:pointer" title="Double-clic pour voir le détail complet"'
+        : '';
+      return '<tr' + dblAttr + '>' +
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
         '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
         '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
+        consTd +
         '<td class="col-actions">' +
           '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
@@ -3765,8 +4391,8 @@ function renderOps(){
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
           '</button>' +
         '</td>' +
-      '</tr>'
-    );
+      '</tr>';
+    });
     tbody.innerHTML = rows.join('');
   }
   if(count){
@@ -6084,13 +6710,21 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
-<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée -->
+<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée
+     (ou modifier / annuler une opération déjà validée) -->
 <div class="op-modal-overlay" id="op-modal-single" onclick="if(event.target===this) opCloseSingleModal()">
-  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px">
-    <div class="op-modal-title">Marquer comme terminée</div>
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;position:relative">
+    <button type="button" class="op-modal-close" aria-label="Fermer" onclick="opCloseSingleModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="op-modal-title" id="op-single-title">Marquer comme terminée</div>
     <div class="op-modal-sub" id="op-single-sub">—</div>
     <div class="op-single-op-title" id="op-single-code-line">—</div>
     <div class="op-single-op-name" id="op-single-name">—</div>
+    <div id="op-single-consignes-block" style="display:none">
+      <div class="op-consignes-label">Consignes de l'admin</div>
+      <div class="op-consignes-panel" id="op-single-consignes-text">—</div>
+    </div>
     <div class="op-form-row">
       <label for="op-single-duree">Durée réelle (min)</label>
       <input type="number" id="op-single-duree" min="0" step="1" placeholder="Optionnel">
@@ -6099,9 +6733,10 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <label for="op-single-comment">Commentaires</label>
       <textarea id="op-single-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
     </div>
-    <div class="op-modal-actions">
-      <button type="button" class="btn" onclick="opCloseSingleModal()">Annuler</button>
-      <button type="button" class="btn op-btn-accent" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
+    <div class="op-modal-actions op-single-actions">
+      <button type="button" class="btn btn-danger-outline" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">Annuler la validation</button>
+      <span class="op-single-actions-spacer"></span>
+      <button type="button" class="btn op-btn-accent" id="op-single-submit" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
     </div>
   </div>
 </div>
@@ -6124,9 +6759,16 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
         <option value="Repiquage">Repiquage</option>
       </select>
     </div>
-    <div class="op-form-row">
+    <div class="op-form-row" id="op-new-code-row">
       <label for="op-new-code">Code opération *</label>
       <select id="op-new-code"></select>
+      <a href="javascript:void(0)" id="op-new-switch-libre" class="op-new-mode-link" onclick="opSwitchMode('inhabituelle')">Pas dans la liste ? Décrire une intervention inhabituelle</a>
+    </div>
+    <div class="op-form-row libre-titre-wrap" id="op-new-titre-libre-row" style="display:none">
+      <label for="op-new-titre-libre">Titre de l'intervention *</label>
+      <input type="text" id="op-new-titre-libre" autocomplete="off" maxlength="200" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="opNewLibreOnInput()">
+      <div class="libre-autocomplete-panel" id="op-new-libre-autocomplete-panel" style="display:none"></div>
+      <a href="javascript:void(0)" id="op-new-switch-catalogue" class="op-new-mode-link" onclick="opSwitchMode('catalogue')">← Revenir au catalogue</a>
     </div>
     <div class="op-form-row">
       <label for="op-new-duree">Durée réelle (min)</label>
@@ -6474,16 +7116,64 @@ function _bucketsForMachine(events, machine, showTermine){
 function _renderOpCardIndividual(op, ev){
   const isDone = op.statut === 'termine';
   const statusLabel = _statutLabel(op.statut);
+  // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
+  // non_planifie créées par l'user courant (interventions déclarées via
+  // "Enregistrer une opération").
+  const meId = (S && S.me) ? S.me.id : null;
+  const canManage = (ev.source === 'non_planifie') && (meId != null) && (ev.created_by === meId);
+  const actionsHtml = canManage ? `
+    <div class="op-op-card-footer-actions">
+      <button type="button" class="op-op-card-mini-btn" title="Modifier l'intervention" onclick="event.stopPropagation();opOpenEditModal(${ev.id})">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
+      <button type="button" class="op-op-card-mini-btn danger" title="Supprimer l'intervention" onclick="event.stopPropagation();opDeleteEvent(${ev.id})">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>` : '';
+  // v185 : chip consignes cliquable sous le titre, plus visible qu'une icône dans le head
+  const consignes = (op.consignes || '').trim();
+  const hasConsignes = consignes.length > 0;
+  const consignesChip = hasConsignes
+    ? `<button type="button" class="op-op-consignes-chip" onclick="event.stopPropagation();opShowConsignes(${ev.id}, ${op.id})">
+         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+         <span>Consignes de l'admin</span>
+       </button>`
+    : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
     </div>
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
+    ${consignesChip}
     <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
       ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
     </button>
+    ${actionsHtml}
   </div>`;
+}
+
+// v185 : affiche les consignes admin d'une op dans un mini-modal
+function opShowConsignes(eventId, opId){
+  const ev = (MAINT_STATE.tasks || []).find(x => x.id === eventId);
+  if(!ev) return;
+  const op = (ev.ops || []).find(o => o.id === opId);
+  if(!op || !op.consignes) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'op-modal-overlay active';
+  overlay.style.zIndex = '1600';
+  overlay.onclick = (e) => { if(e.target === overlay) overlay.remove(); };
+  const machineLabel = (op.machines && op.machines[0]) || ev.machine || '';
+  overlay.innerHTML =
+    '<div class="op-modal op-consignes-modal" role="dialog" aria-modal="true">' +
+      '<button type="button" class="op-modal-close" aria-label="Fermer" onclick="this.closest(\'.op-modal-overlay\').remove()">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>' +
+      '<div class="op-consignes-modal-title">Consignes de l\'admin</div>' +
+      '<div class="op-consignes-modal-sub">' + escHtml((op.code_label || op.code) + (machineLabel ? ' · ' + machineLabel : '')) + '</div>' +
+      '<div class="op-consignes-panel">' + escHtml(op.consignes) + '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
 }
 
 // Rendu d'une boîte créneau (source=planifie).
@@ -6781,21 +7471,95 @@ function _opResetModalFields(){
 async function opOpenNewModal(){
   await opFetchCodes();
   MAINT_STATE.editingEventId = null;
+  MAINT_STATE.editingIsLibre = false;
+  MAINT_STATE.newModalMode = 'catalogue';  // v2 : mode par défaut
+  MAINT_STATE.newLibreSelectedCode = null; // code catalogue si suggéré par autocomplete
   const sel = document.getElementById('op-new-code');
   sel.innerHTML = MAINT_STATE.codes.map(c =>
     `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
   ).join('');
   document.getElementById('op-modal-new-title').textContent = 'Enregistrer une opération';
-  document.getElementById('op-modal-new-sub').textContent = 'Enregistre une opération de maintenance déjà effectuée. Elle sera marquée « Terminée » et rattachée à la machine sélectionnée.';
+  document.getElementById('op-modal-new-sub').textContent = 'Choisis une opération dans le catalogue. Si elle ne s\'y trouve pas, décris une intervention inhabituelle.';
   document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
   _opResetModalFields();
-  // Pré-remplit avec la machine actuellement sélectionnée dans "Mes tâches".
+  // Reset visibilité par mode Catalogue
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(codeRow) codeRow.style.display = '';
+  if(titreRow) titreRow.style.display = 'none';
+  const titreEl = document.getElementById('op-new-titre-libre');
+  if(titreEl) titreEl.value = '';
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  // Pré-remplit avec la machine sélectionnée dans Mes tâches
   try{
     const currentMach = _getSelectedMachine();
     const machEl = document.getElementById('op-new-machine');
     if(machEl && currentMach) machEl.value = currentMach;
   }catch(e){}
   document.getElementById('op-modal-new').classList.add('active');
+}
+
+// v2 : switch entre modes Catalogue et Inhabituelle dans le modal fusionné.
+function opSwitchMode(mode){
+  MAINT_STATE.newModalMode = mode;
+  MAINT_STATE.newLibreSelectedCode = null;
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(mode === 'inhabituelle'){
+    if(codeRow) codeRow.style.display = 'none';
+    if(titreRow) titreRow.style.display = '';
+    setTimeout(() => { const el = document.getElementById('op-new-titre-libre'); if(el) el.focus(); }, 60);
+  } else {
+    if(codeRow) codeRow.style.display = '';
+    if(titreRow) titreRow.style.display = 'none';
+    const panel = document.getElementById('op-new-libre-autocomplete-panel');
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  }
+}
+
+// v2 : autocomplete côté modal fusionné (sur le champ titre libre).
+//   Duplique la logique de libreOnTitreInput mais scopée sur op-new-* ids.
+let _opNewLibreTimer = null;
+async function opNewLibreOnInput(){
+  const t = document.getElementById('op-new-titre-libre');
+  const q = (t ? t.value : '').trim();
+  MAINT_STATE.newLibreSelectedCode = null;
+  clearTimeout(_opNewLibreTimer);
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(q.length < 2){
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    return;
+  }
+  _opNewLibreTimer = setTimeout(async () => {
+    try{
+      const r = await fetch('/api/maintenance/codes/libres/autocomplete?q=' + encodeURIComponent(q) + '&limit=8', {credentials:'include'});
+      if(!r.ok){ if(panel){ panel.style.display='none'; } return; }
+      const d = await r.json();
+      const suggestions = Array.isArray(d.suggestions) ? d.suggestions : [];
+      if(!suggestions.length){
+        if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+        return;
+      }
+      panel.innerHTML = suggestions.map(s =>
+        '<div class="libre-suggestion" onclick="opNewLibreSelectSuggestion(\'' + escAttr(s.code) + '\', \'' + escAttr(s.label) + '\')">' +
+          '<span class="libre-suggestion-label">' + escHtml(s.label) + '</span>' +
+          '<span class="libre-suggestion-count">' + escHtml(s.code) + '</span>' +
+        '</div>'
+      ).join('');
+      panel.style.display = 'block';
+    }catch(e){
+      if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    }
+  }, 220);
+}
+
+function opNewLibreSelectSuggestion(code, label){
+  MAINT_STATE.newLibreSelectedCode = code;
+  const t = document.getElementById('op-new-titre-libre');
+  if(t) t.value = label;
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
 }
 
 async function opOpenEditModal(eventId){
@@ -6807,39 +7571,71 @@ async function opOpenEditModal(eventId){
     else alert('Vous ne pouvez modifier que vos propres interventions.');
     return;
   }
-  // Créneau planifie (créé via "Nouvelle tâche") → ouvre le modal admin riche.
-  // On synchronise PLANNING_STATE d'abord (openCaseModal y cherche l'event).
+  // v2 : l'opérateur ne peut plus gérer les créneaux planifie (feature
+  // "Nouvelle tâche" retirée). Les vieux planifie opérateurs ont été
+  // nettoyés par la migration 184. Si un tel event apparaît encore
+  // (edge case), on bloque avec un message clair.
   if(ev.source === 'planifie'){
-    try{ await refreshPlanning(); }catch(e){}
-    await openCaseModal({ editId: ev.id, iso: ev.date_prevue, defaultHour: 8 });
+    if(typeof showToast === 'function') showToast('Les créneaux planifiés sont gérés par l\'administrateur.', 'danger');
+    else alert('Les créneaux planifiés sont gérés par l\'administrateur.');
     return;
   }
   // Créneau non_planifie → modal simple (édition d'une saisie rapide).
-  await opFetchCodes();
-  MAINT_STATE.editingEventId = eventId;
-  const sel = document.getElementById('op-new-code');
-  sel.innerHTML = MAINT_STATE.codes.map(c =>
-    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
-  ).join('');
-  // Pré-remplit avec les valeurs actuelles
   const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+  const isLibre = !!(currentOp && currentOp.code && String(currentOp.code).startsWith('LIB-'));
+  MAINT_STATE.editingEventId = eventId;
+  MAINT_STATE.editingIsLibre = isLibre;  // flag lu par opSubmitNew
+
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  const sel = document.getElementById('op-new-code');
+  const titreEl = document.getElementById('op-new-titre-libre');
+
+  if(isLibre){
+    // Mode libre : cache le dropdown code, montre le champ titre texte.
+    if(codeRow) codeRow.style.display = 'none';
+    if(titreRow) titreRow.style.display = '';
+    if(titreEl) titreEl.value = currentOp.code_label || '';
+  } else {
+    // Mode code standard : dropdown code, cache titre.
+    if(codeRow) codeRow.style.display = '';
+    if(titreRow) titreRow.style.display = 'none';
+    await opFetchCodes();
+    sel.innerHTML = MAINT_STATE.codes.map(c =>
+      `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+    ).join('');
+    if(currentOp && currentOp.code) sel.value = currentOp.code;
+  }
+
+  // Pré-remplit date/machine/durée/commentaires (communs)
   const dateEl = document.getElementById('op-new-date');
   if(dateEl) dateEl.value = ev.date_prevue || _fmtDateISO(new Date());
   const machineEl = document.getElementById('op-new-machine');
   if(machineEl && ev.machine) machineEl.value = ev.machine;
-  if(currentOp && currentOp.code) sel.value = currentOp.code;
   const dureeEl = document.getElementById('op-new-duree');
   if(dureeEl) dureeEl.value = (currentOp && currentOp.duree_reelle_min != null) ? currentOp.duree_reelle_min : '';
   const commEl = document.getElementById('op-new-comment');
   if(commEl) commEl.value = (currentOp && currentOp.observations) ? currentOp.observations : '';
-  document.getElementById('op-modal-new-title').textContent = 'Modifier l\'opération';
-  document.getElementById('op-modal-new-sub').textContent = 'Ajuste la date, la machine, le code ou les informations complémentaires.';
+  document.getElementById('op-modal-new-title').textContent = isLibre ? 'Modifier l\'intervention libre' : 'Modifier l\'opération';
+  document.getElementById('op-modal-new-sub').textContent = isLibre
+    ? 'Ajuste le titre, la date, la machine ou les informations complémentaires.'
+    : 'Ajuste la date, la machine, le code ou les informations complémentaires.';
   document.getElementById('op-modal-new-submit').textContent = 'Enregistrer les modifications';
   document.getElementById('op-modal-new').classList.add('active');
 }
 
 function opCloseNewModal(){
   MAINT_STATE.editingEventId = null;
+  MAINT_STATE.editingIsLibre = false;
+  MAINT_STATE.newModalMode = 'catalogue';
+  MAINT_STATE.newLibreSelectedCode = null;
+  // Reset visibilité par défaut : code visible, titre libre caché
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(codeRow) codeRow.style.display = '';
+  if(titreRow) titreRow.style.display = 'none';
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   document.getElementById('op-modal-new').classList.remove('active');
 }
 
@@ -6862,14 +7658,30 @@ async function _patchOpTermine(eventId, opId, dureeMin, comment){
 async function opSubmitNew(){
   const dateVal = document.getElementById('op-new-date').value;
   const machine = document.getElementById('op-new-machine').value;
+  const isLibreEdit = !!MAINT_STATE.editingIsLibre;
+  const titreLibre = (document.getElementById('op-new-titre-libre').value || '').trim();
   const code = document.getElementById('op-new-code').value;
   const dureeStr = document.getElementById('op-new-duree').value;
   const comment = (document.getElementById('op-new-comment').value || '').trim();
   const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
 
-  if(!dateVal || !machine || !code){
-    if(typeof showToast === 'function') showToast('Date, machine et code sont obligatoires.', 'danger');
-    else alert('Date, machine et code sont obligatoires.');
+  // v2 : mode création détecte MAINT_STATE.newModalMode.
+  //      mode édition détecte MAINT_STATE.editingIsLibre.
+  const editingIdForValid = MAINT_STATE.editingEventId;
+  const isCreationInhabituelle = (editingIdForValid == null) && (MAINT_STATE.newModalMode === 'inhabituelle');
+  const isCreationCatalogue    = (editingIdForValid == null) && !isCreationInhabituelle;
+
+  // Validation champs obligatoires selon mode
+  if(!dateVal || !machine){
+    if(typeof showToast === 'function') showToast('Date et machine sont obligatoires.', 'danger');
+    return;
+  }
+  if((isLibreEdit || isCreationInhabituelle) && !titreLibre){
+    if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger');
+    return;
+  }
+  if(isCreationCatalogue && !code){
+    if(typeof showToast === 'function') showToast('Code opération obligatoire.', 'danger');
     return;
   }
   if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
@@ -6882,8 +7694,23 @@ async function opSubmitNew(){
     // ─── Mode édition
     const ev = (MAINT_STATE.tasks || []).find(x => x.id === editingId);
     if(!ev){ opCloseNewModal(); return; }
+    const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+    const wasTermine = !!(currentOp && currentOp.statut === 'termine');
     try{
-      // PATCH event : machine et/ou date si changées
+      // 1. PATCH /libres/{code} si titre libre change
+      if(isLibreEdit && currentOp && currentOp.code){
+        const currentTitre = (currentOp.code_label || '').trim();
+        if(titreLibre !== currentTitre){
+          const rTitre = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(currentOp.code), {
+            method:'PATCH', credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({label: titreLibre}),
+          });
+          if(!rTitre.ok){ const err = await rTitre.json().catch(()=>({})); throw new Error(err.detail || 'Renommage titre échoué'); }
+        }
+      }
+
+      // 2. PATCH event : machine et/ou date si changées
       const evPatch = {};
       if((ev.machine || '') !== machine) evPatch.machine = machine;
       if((ev.date_prevue || '') !== dateVal) evPatch.date_prevue = dateVal;
@@ -6895,10 +7722,10 @@ async function opSubmitNew(){
         });
         if(!r1.ok){ const err = await r1.json().catch(()=>({})); throw new Error(err.detail || r1.status); }
       }
-      const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+
+      // 3. Si code standard change (impossible en mode libre), replace op
       let opId = currentOp ? currentOp.id : null;
-      // Si le code change, on remplace l'op (delete + add)
-      if(!currentOp || currentOp.code !== code){
+      if(!isLibreEdit && (!currentOp || currentOp.code !== code)){
         if(opId != null){
           const rDel = await fetch('/api/maintenance/events/' + editingId + '/ops/' + opId, {
             method:'DELETE', credentials:'include',
@@ -6915,13 +7742,30 @@ async function opSubmitNew(){
         const newOp = (dataAdd.event && dataAdd.event.ops || []).find(o => o.code === code);
         opId = newOp ? newOp.id : opId;
       }
-      // PATCH op : force termine + durée + observations
+
+      // 4. PATCH op : durée + observations. Statut SEULEMENT si l'op était déjà termine
+      //    (préserve statut a_faire pour les interventions modifiées avant validation).
       if(opId != null){
-        await _patchOpTermine(editingId, opId, dureeMin, comment);
+        if(wasTermine){
+          await _patchOpTermine(editingId, opId, dureeMin, comment);
+        } else {
+          const patchBody = {};
+          if(dureeMin != null && !Number.isNaN(dureeMin)) patchBody.duree_reelle_min = dureeMin;
+          if(comment) patchBody.observations = comment;
+          if(Object.keys(patchBody).length){
+            const r4 = await fetch('/api/maintenance/events/' + editingId + '/ops/' + opId, {
+              method:'PATCH', credentials:'include',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify(patchBody),
+            });
+            if(!r4.ok){ const err = await r4.json().catch(()=>({})); throw new Error(err.detail || r4.status); }
+          }
+        }
       }
-      if(typeof showToast === 'function') showToast('Opération mise à jour.', 'success');
+      if(typeof showToast === 'function') showToast(isLibreEdit ? 'Intervention libre mise à jour.' : 'Opération mise à jour.', 'success');
       opCloseNewModal();
       await opLoadTasks();
+      if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
     }catch(e){
       if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
       else alert('Erreur : ' + e.message);
@@ -6929,14 +7773,32 @@ async function opSubmitNew(){
     return;
   }
 
-  // ─── Mode création
+  // ─── Mode création (Catalogue ou Inhabituelle)
   try{
-    // 1. POST /events → crée l'event non_planifie avec 1 op (statut a_faire par défaut)
+    // 1. Résout le code final. En mode Inhabituelle, on crée (ou réutilise
+    //    par dedup exact match backend) un LIB-xxx à partir du titre.
+    let codeFinal = code;
+    if(isCreationInhabituelle){
+      // Si une suggestion catalogue a été cliquée → utilise ce code direct.
+      if(MAINT_STATE.newLibreSelectedCode){
+        codeFinal = MAINT_STATE.newLibreSelectedCode;
+      } else {
+        const rNew = await fetch('/api/maintenance/codes/libres', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({label: titreLibre}),
+        });
+        if(!rNew.ok){ const err = await rNew.json().catch(()=>({})); throw new Error(err.detail || 'Création code libre échouée'); }
+        const dNew = await rNew.json();
+        codeFinal = dNew.code;
+      }
+    }
+    // 2. POST /events → crée l'event non_planifie avec 1 op
     const body = {
       machine,
       date_prevue: dateVal,
       source: 'non_planifie',
-      ops: [code],
+      ops: [codeFinal],
       operators: [],  // Le serveur forcera l'user courant.
     };
     const r = await fetch('/api/maintenance/events', {
@@ -6949,11 +7811,12 @@ async function opSubmitNew(){
     const ev = data.event;
     const op = (ev.ops || [])[0];
     if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-    // 2. PATCH op → statut termine + durée + observations (déclenche done_at côté back)
+    // 3. PATCH op → statut termine + durée + observations
     await _patchOpTermine(ev.id, op.id, dureeMin, comment);
-    if(typeof showToast === 'function') showToast('Opération enregistrée.', 'success');
+    if(typeof showToast === 'function') showToast(isCreationInhabituelle ? 'Intervention libre enregistrée.' : 'Opération enregistrée.', 'success');
     opCloseNewModal();
     await opLoadTasks();
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
   }catch(e){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
@@ -7256,18 +8119,13 @@ async function libreDocsUpload(code, files){
 }
 
 async function opOpenNewTaskModal(){
-  // Ouvre le modal admin "planning-case-modal" côté opérateur pour créer
-  // une tâche riche (N ops, N machines, N opérateurs, plage horaire).
-  // Le backend forcera l'inclusion de self dans les opérateurs (garde-fou).
-  const today = _fmtDateISO(new Date());
-  const now = new Date();
-  const defaultHour = Math.max(6, Math.min(18, now.getHours()));
-  // Pré-remplit self dans _CASE_OPERATORS pour cohérence UX (le backend le
-  // rajoutera de toute façon, mais c'est plus clair côté formulaire).
-  if(S && S.me){
-    _CASE_OPERATORS = [{ id: S.me.id, nom: S.me.name || S.me.nom || 'Moi' }];
+  // v2 : fonctionnalité "Nouvelle tâche" retirée côté opérateur. La création
+  // de tâches passe par "Enregistrer une opération" ou "Intervention libre".
+  // Fonction gardée en no-op au cas où un onclick=... la référence encore.
+  console.warn('[opOpenNewTaskModal] Fonctionnalité retirée. Utilise Enregistrer une opération ou Intervention libre.');
+  if(typeof showToast === 'function'){
+    showToast('La création de tâches se fait via "Enregistrer une opération" ou "Intervention libre".', 'info');
   }
-  await openCaseModal({ iso: today, defaultHour });
 }
 
 // ── Modal single-op : marquer UNE op d'un créneau comme terminée ─────
@@ -7278,17 +8136,36 @@ function opOpenSingleOpModal(eventId, opId){
   if(!ev){ return; }
   const op = (ev.ops || []).find(o => o.id === opId);
   if(!op){ return; }
-  MAINT_STATE.singleOpTarget = { eventId, opId };
+  MAINT_STATE.singleOpTarget = { eventId, opId, _wasDone: (op.statut === 'termine') };
   const timeLabel = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)
     : 'Sans créneau';
   document.getElementById('op-single-sub').textContent = 'Créneau ' + timeLabel + ' · ' + (ev.machine || '');
   document.getElementById('op-single-code-line').textContent = 'Code ' + op.code;
   document.getElementById('op-single-name').textContent = op.code_label || '—';
+  // v185 : consignes admin affichées au-dessus des champs
+  const consignesBlock = document.getElementById('op-single-consignes-block');
+  if(consignesBlock){
+    const c = (op.consignes || '').trim();
+    if(c){
+      consignesBlock.style.display = '';
+      const panel = document.getElementById('op-single-consignes-text');
+      if(panel) panel.textContent = c;
+    } else {
+      consignesBlock.style.display = 'none';
+    }
+  }
   document.getElementById('op-single-duree').value = op.duree_reelle_min || '';
-  // Fusion pièces + observations si les 2 existaient historiquement.
   const prev = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
   document.getElementById('op-single-comment').value = prev;
+  // Adapte le titre + submit + visibilité du bouton "Annuler la validation" selon statut
+  const isDone = op.statut === 'termine';
+  const titleEl = document.getElementById('op-single-title');
+  const submitEl = document.getElementById('op-single-submit');
+  const cancelValEl = document.getElementById('op-single-cancel-validation');
+  if(titleEl) titleEl.textContent = isDone ? 'Opération terminée' : 'Marquer comme terminée';
+  if(submitEl) submitEl.textContent = isDone ? 'Enregistrer les modifications' : 'Marquer comme terminée';
+  if(cancelValEl) cancelValEl.style.display = isDone ? '' : 'none';
   document.getElementById('op-modal-single').classList.add('active');
 }
 
@@ -7332,6 +8209,37 @@ async function opSubmitSingleOp(){
   if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   opCloseSingleModal();
   // Refresh en tâche de fond (best-effort) — si ça échoue, la vue est à jour.
+  opLoadTasks().catch(() => {});
+  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+}
+
+// ── Annule la saisie d'une op déjà terminée ────────────────────────
+//   Statut termine -> a_faire. Efface done_at/by, durée, commentaires,
+//   pièces changées. La ligne dans l'historique disparaît automatiquement
+//   (get_history filtre sur statut='termine').
+async function opCancelValidation(){
+  const tgt = MAINT_STATE.singleOpTarget;
+  if(!tgt){ opCloseSingleModal(); return; }
+  if(!confirm("Annuler la validation de cette opération ?\n\nLa tâche reviendra dans la liste des tâches à faire et la ligne d'historique correspondante sera effacée. Cette action est définitive.")) return;
+  const r = await fetch('/api/maintenance/events/' + tgt.eventId + '/ops/' + tgt.opId + '/reset', {
+    method:'POST', credentials:'include',
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  try{
+    const data = await r.json();
+    if(data && data.event){
+      const idx = (MAINT_STATE.tasks || []).findIndex(x => x.id === data.event.id);
+      if(idx >= 0) MAINT_STATE.tasks[idx] = data.event;
+      opRenderTasks();
+    }
+  }catch(e){}
+  if(typeof showToast === 'function') showToast('Validation annulée. Tâche remise à faire.', 'info');
+  opCloseSingleModal();
   opLoadTasks().catch(() => {});
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
