@@ -795,6 +795,12 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-single-op-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px}
 .btn-op-cancel-validation{background:transparent;color:var(--danger);border:1px solid var(--danger);font-weight:600}
 .btn-op-cancel-validation:hover{background:var(--danger);color:#fff}
+/* Actions Modifier/Supprimer sur cartes op individuelles (interventions non-programmées) */
+.op-op-card-actions{position:absolute;top:8px;right:8px;display:inline-flex;gap:4px;z-index:2}
+.op-op-card-actions button{width:26px;height:26px;padding:0;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
+.op-op-card-actions button:hover{color:var(--text);border-color:var(--accent)}
+.op-op-card-actions button.danger:hover{color:var(--danger);border-color:var(--danger);background:transparent}
+.op-op-card:has(.op-op-card-actions) .op-op-card-head{padding-right:64px}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -6508,7 +6514,22 @@ function _bucketsForMachine(events, machine, showTermine){
 function _renderOpCardIndividual(op, ev){
   const isDone = op.statut === 'termine';
   const statusLabel = _statutLabel(op.statut);
+  // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
+  // non_planifie créées par l'user courant (interventions déclarées via
+  // le bouton "Enregistrer une opération" côté opérateur).
+  const meId = (S && S.me) ? S.me.id : null;
+  const canManage = (ev.source === 'non_planifie') && (meId != null) && (ev.created_by === meId);
+  const actionsHtml = canManage ? `
+    <div class="op-op-card-actions">
+      <button type="button" title="Modifier l'intervention" onclick="event.stopPropagation();opOpenEditModal(${ev.id})">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
+      <button type="button" class="danger" title="Supprimer l'intervention" onclick="event.stopPropagation();opDeleteEvent(${ev.id})">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>` : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
+    ${actionsHtml}
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
