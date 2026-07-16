@@ -835,6 +835,8 @@ def get_history(
                        e.id             AS event_id,
                        e.machine        AS machine,
                        e.nom            AS event_nom,
+                       e.heure_debut    AS event_heure_debut,
+                       e.heure_fin      AS event_heure_fin,
                        o.consignes      AS consignes,
                        o.machines_csv   AS op_machines_csv,
                        o.code           AS code,
@@ -846,15 +848,20 @@ def get_history(
                        o.done_at        AS done_at,
                        o.done_by        AS done_by,
                        ub.nom           AS done_by_nom,
+                       o.updated_at     AS updated_at,
+                       o.updated_by     AS updated_by,
+                       uu.nom           AS updated_by_nom,
                        e.date_prevue    AS date_prevue,
                        e.created_by     AS created_by,
                        uc.nom           AS created_by_nom,
+                       e.created_at     AS event_created_at,
                        e.source         AS source
                 FROM maintenance_event_ops o
                 JOIN maintenance_events e ON e.id = o.event_id
                 LEFT JOIN maintenance_codes c ON c.code = o.code
                 LEFT JOIN users ub ON ub.id = o.done_by
                 LEFT JOIN users uc ON uc.id = e.created_by
+                LEFT JOIN users uu ON uu.id = o.updated_by
                 WHERE {" AND ".join(where)}
                 ORDER BY COALESCE(o.done_at, e.date_prevue) DESC, o.id DESC
                 LIMIT 2000""",
@@ -875,6 +882,8 @@ def get_history(
         # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
         d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
         d["type"] = d.get("code_label") or d.get("code") or ""
+        # Flag libre : détection LIB-xxx (compat avec _libre côté client)
+        d["libre"] = bool(d.get("code") and str(d["code"]).startswith("LIB-"))
         out.append(d)
     return {"history": out}
 
