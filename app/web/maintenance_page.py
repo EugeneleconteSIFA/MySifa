@@ -3198,6 +3198,13 @@ function openOpsModal(editId){
       showToast('Opération introuvable.', 'danger');
       return;
     }
+    // v182 fix : les interventions libres sont editees via l'endpoint dedie
+    // (rename du titre). Le modal standard demanderait un type d'operation
+    // qui n'existe pas dans OPS_TYPES_STATE pour les libres.
+    if(editing._libre && editing._code && typeof libreRenameInline === 'function'){
+      libreRenameInline(editing._code);
+      return;
+    }
   }
   _opsEditingId = editing ? editing.id : null;
 
@@ -3673,22 +3680,11 @@ function renderOps(){
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
-        '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + (o._libre && o._code ? ' <button type="button" class="libre-inline-btn" data-libre-rename-inline="' + escAttr(o._code) + '" title="Renommer ce titre libre (impacte toutes les saisies)">' +
-          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-        '</button>' +
-        ' <button type="button" class="libre-inline-btn" data-libre-docs="' + escAttr(o._code) + '" title="Documents attaches">' +
-          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>' +
-        '</button>' : '') + '</td>' +
+        '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
         '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
-          // v182 fix : pour une intervention libre, l'edit standard n'a pas de sens
-          // (le type est un code LIB-xxx absent de OPS_TYPES_STATE). On redirige
-          // vers le rename inline qui manipule le titre via l'endpoint dedie.
-          (o._libre && o._code
-            ? '<button type="button" class="ops-row-btn edit" data-libre-edit-btn="' + escAttr(o._code) + '" title="Renommer ce titre libre">'
-            : '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">'
-          ) +
+          '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
           '</button>' +
           '<button type="button" class="ops-row-btn del" onclick="deleteOp(\'' + escAttr(o.id) + '\')" title="Supprimer">' +
@@ -3698,25 +3694,6 @@ function renderOps(){
       '</tr>'
     );
     tbody.innerHTML = rows.join('');
-    // v182 Lot 2c/2d : rename + docs pour interventions libres
-    tbody.querySelectorAll('[data-libre-rename-inline]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        libreRenameInline(btn.getAttribute('data-libre-rename-inline'));
-      });
-    });
-    tbody.querySelectorAll('[data-libre-docs]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        libreDocsOpen(btn.getAttribute('data-libre-docs'));
-      });
-    });
-    tbody.querySelectorAll('[data-libre-edit-btn]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        libreRenameInline(btn.getAttribute('data-libre-edit-btn'));
-      });
-    });
   }
   if(count){
     const n = OPS_STATE.list.length;
