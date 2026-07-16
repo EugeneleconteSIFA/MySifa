@@ -515,13 +515,4 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 # ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# ─── MyTraduction (DeepL) ─────────────────────────────────────────
-# Clé API DeepL — obtenue sur https://www.deepl.com/pro-api
-# Le suffixe ":fx" indique la Free API (500k caractères/mois).
-# Sans suffixe = Pro API (URL différente, quota selon plan).
-DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
-# URL API DeepL — Free ou Pro (surchargée par .env si besoin)
-DEEPL_API_URL = os.getenv(
-    "DEEPL_API_URL",
-    "https://api-free.deepl.com/v2" if DEEPL_API_KEY.endswith(":fx") else "https://api.deepl.com/v2",
-)
+# ─── MyTradu

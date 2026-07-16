@@ -6712,6 +6712,33 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 182, "maintenance_codes_libre_and_usage_count")
 
+    # Migration 183 — MyExpé : lier un départ au devis retenu qui l'a genere.
+    # Corrige le 500 sur POST /api/expe/devis/reponses/{id}/retenir qui inserait
+    # deux colonnes inexistantes (source_devis_reponse_id, source_devis_demande_id)
+    # dans expe_departs.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=183 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "source_devis_reponse_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_reponse_id INTEGER "
+                "REFERENCES expe_devis_reponses(id)"
+            )
+        if "source_devis_demande_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_demande_id INTEGER "
+                "REFERENCES expe_demandes_devis(id)"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis_reponse "
+            "ON expe_departs(source_devis_reponse_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis_demande "
+            "ON expe_departs(source_devis_demande_id)"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 183, "expe_departs_source_devis_link")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
@@ -6729,102 +6756,4 @@ def is_duplicate(conn, operateur, date_operation, operation_code, no_dossier):
     row = conn.execute(
         """SELECT id FROM production_data
            WHERE operateur=? AND date_operation=? AND operation_code=?
-             AND COALESCE(no_dossier,'')=COALESCE(?,'') LIMIT 1""",
-        (operateur, date_operation, operation_code, no_dossier)
-    ).fetchone()
-    return row is not None
-
-
-# ─── Helpers parsing ──────────────────────────────────────────────
-def parse_french_number(val):
-    if val is None:
-        return 0
-    s = str(val).strip()
-    if not s:
-        return 0
-    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
-    try:
-        return float(s)
-    except ValueError:
-        return 0
-
-
-def parse_datetime(val):
-    if not val:
-        return None
-    s = str(val).strip().rstrip('C').strip()
-    for fmt in ("%d/%m/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(s, fmt)
-        except ValueError:
-            continue
-    return None
-
-
-def fmt_duration(minutes):
-    if minutes is None or minutes < 0:
-        return "-"
-    h = int(minutes) // 60
-    m = int(minutes) % 60
-    return f"{h}h {m:02d}min" if h > 0 else f"{m}min"
-
-
-def parse_file(file_bytes, filename):
-    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    if ext == "csv":
-        for encoding in ["utf-8", "latin-1", "cp1252"]:
-            for sep in [";", ",", "\t"]:
-                try:
-                    df = pd.read_csv(io.BytesIO(file_bytes), encoding=encoding, sep=sep, dtype=str)
-                    if len(df.columns) > 3:
-                        return df
-                except Exception:
-                    continue
-        return pd.read_csv(io.BytesIO(file_bytes), dtype=str)
-    elif ext in ("xls", "xlsx", "xlsm"):
-        return pd.read_excel(io.BytesIO(file_bytes), dtype=str)
-    else:
-        raise ValueError(f"Format non supporté: .{ext}")
-
-
-COLUMN_MAP = {
-    "opérateur": "operateur", "operateur": "operateur",
-    "date et heure d'opération": "date_operation",
-    "date et heure d'operation": "date_operation",
-    "opération": "operation", "operation": "operation",
-    "service": "service", "machine": "machine",
-    "no dossier": "no_dossier", "n° dossier": "no_dossier",
-    "client": "client",
-    "désignation produit": "designation",
-    "designation produit": "designation",
-    "désignation produit ": "designation",
-    "quantité à traiter": "quantite_a_traiter",
-    "quantite a traiter": "quantite_a_traiter",
-    "quantité traitée": "quantite_traitee",
-    "quantite traitee": "quantite_traitee",
-    "no cde": "no_cde",
-    "date exp.p.": "date_exp", "date exp": "date_exp",
-    "date liv.p.": "date_liv", "date liv": "date_liv",
-    "type dossier": "type_dossier",
-}
-
-
-def map_columns(df):
-    mapped = {}
-    for col in df.columns:
-        key = col.strip().lower()
-        if key in COLUMN_MAP:
-            mapped[col] = COLUMN_MAP[key]
-    return mapped
-
-
-init_db()
-create_default_admin()
-
-try:
-    from config import refresh_operations_cache
-
-    refresh_operations_cache()
-except Exception:
-    pass
+             AND

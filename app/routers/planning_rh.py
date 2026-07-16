@@ -1071,3 +1071,33 @@ async def set_machine_config(machine_id: int, request: Request):
         pass
 
     return {"ok": True, "machine_id": machine_id}
+
+                   mode_alternance=excluded.mode_alternance,
+                   updated_at=datetime('now')""",
+            (
+                machine_id, matin_actif, matin_debut, matin_fin,
+                aprem_actif, aprem_debut, aprem_fin,
+                nuit_actif, nuit_debut, nuit_fin,
+                mode,
+            ),
+        )
+        conn.commit()
+
+    try:
+        log_action(
+            user=editor,
+            action="UPDATE",
+            module="planning_rh",
+            objet=f"Config équipes machine {mac['nom']}",
+            detail={
+                "matin": {"actif": matin_actif, "debut": matin_debut, "fin": matin_fin},
+                "aprem": {"actif": aprem_actif, "debut": aprem_debut, "fin": aprem_fin},
+                "nuit":  {"actif": nuit_actif,  "debut": nuit_debut,  "fin": nuit_fin},
+                "mode_alternance": mode,
+            },
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+
+    return {"ok": True, "machine_id": machine_id}
