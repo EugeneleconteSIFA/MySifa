@@ -1182,7 +1182,7 @@ function renderPortal(){
   // Rapport hebdo : intégré comme 4e onglet dans MyProd → Production (pas de tuile portail séparée).
   const isCoffreRH = isSuper || urole === 'comptabilite';
   const _uident = (S.user && S.user.identifiant) ? String(S.user.identifiant).trim().toLowerCase() : '';
-  const isMaintenance = isSuper || (urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)) || (urole === 'fabrication' && window.__MAINT_OPEN_BETA__);
+  const isMaintenance = isSuper || (urole && ['direction','administration','administration_ventes','administration_technique','fabrication'].includes(urole));
   const isLight=document.body.classList.contains('light');
 
   const order=(S.user&&Array.isArray(S.user.portal_apps_order))?S.user.portal_apps_order:[];
