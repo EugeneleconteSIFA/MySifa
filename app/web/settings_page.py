@@ -559,6 +559,10 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
       </button>
+      <button type="button" class="nav-btn" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
+        Appairage matières
+      </button>
       <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -715,6 +719,11 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <button type="button" class="menu-item" data-goto="importations">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Importations</span><span class="mi-desc">Grilles tarifaires transporteurs, historiques.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="bridge">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Appairage matières</span><span class="mi-desc">Rapprocher les références MyStock avec Coûts matières.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -1337,6 +1346,32 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </form>
         <div id="importations-error" class="sub" style="display:none;color:var(--danger);font-size:13px;padding:12px 0"></div>
+      </div>
+    </section>
+
+    <section id="panel-bridge" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px">
+          <div>
+            <h2 style="margin:0 0 4px">Appairage matières — MyStock ↔ Coûts matières</h2>
+            <p class="sub" style="margin:0;font-size:12px">Rapprochement des références opérationnelles (MyStock) avec les matières du module Coûts matières. Un appairage permet la synchronisation automatique des prix dans les deux sens.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="button" class="btn btn-sec" id="bridge-refresh" title="Recharger">Actualiser</button>
+          </div>
+        </div>
+
+        <div id="bridge-summary" class="sub" style="display:flex;flex-wrap:wrap;gap:16px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:12px">
+          <span>Chargement…</span>
+        </div>
+
+        <div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Matières MyStock non appairées</div>
+        <div id="bridge-orphans-mp" style="display:flex;flex-direction:column;gap:6px"></div>
+        <p id="bridge-orphans-mp-empty" class="sub" style="display:none;margin:12px 0 0;font-size:13px">Toutes les matières MyStock avec un rôle pricing sont déjà appairées.</p>
+
+        <div style="margin:22px 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Matières Coûts matières sans référence MyStock</div>
+        <div id="bridge-orphans-mc" style="display:flex;flex-direction:column;gap:6px"></div>
+        <p id="bridge-orphans-mc-empty" class="sub" style="display:none;margin:12px 0 0;font-size:13px">Toutes les matières Coûts matières sont référencées côté MyStock.</p>
       </div>
     </section>
 
@@ -2089,7 +2124,7 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','updates','audit','fsc','dashboards','api','promote','printers','formations'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -2107,7 +2142,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -2121,6 +2156,7 @@ loadFournisseursGroupes();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
   if (id === 'importations') initImportationsPanel();
+  if (id === 'bridge') initBridgePanel();
   if (id === 'updates') loadUpdates();
   if (id === 'audit') loadAuditLogs();
   if (id === 'fsc') initFscPanel();
@@ -8184,6 +8220,198 @@ try {
   const rf = document.getElementById('fmt-refresh');
   if(rf) rf.onclick = () => loadFormationsAdmin();
 } catch(e){}
+
+
+// ─── Appairage matières (bridge MyStock <-> Coûts matières) ────────────
+let _bridgeCache = null;
+
+async function initBridgePanel() {
+  const btn = document.getElementById('bridge-refresh');
+  if (btn && !btn._wired) {
+    btn._wired = true;
+    btn.addEventListener('click', () => loadBridge(true));
+  }
+  await loadBridge(false);
+}
+
+async function loadBridge(force) {
+  const sum = document.getElementById('bridge-summary');
+  if (sum) sum.innerHTML = '<span>Chargement…</span>';
+  try {
+    const r = await fetch('/api/pricing/bridge/orphans', { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _bridgeCache = await r.json();
+  } catch (e) {
+    if (sum) sum.innerHTML = '<span style="color:var(--danger)">Erreur de chargement : ' + (e && e.message || e) + '</span>';
+    return;
+  }
+  renderBridge();
+}
+
+function renderBridge() {
+  const data = _bridgeCache || { mp: [], mc: [] };
+  const sum = document.getElementById('bridge-summary');
+  if (sum) {
+    sum.innerHTML =
+      '<span><strong>' + data.mp.length + '</strong> matière(s) MyStock à appairer</span>' +
+      '<span style="color:var(--muted)">·</span>' +
+      '<span><strong>' + data.mc.length + '</strong> matière(s) Coûts matières sans référence MyStock</span>';
+  }
+  _renderBridgeMpList(data.mp);
+  _renderBridgeMcList(data.mc);
+}
+
+function _bridgeEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function _renderBridgeMpList(items) {
+  const host = document.getElementById('bridge-orphans-mp');
+  const empty = document.getElementById('bridge-orphans-mp-empty');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!items || items.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  items.forEach(mp => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px';
+    row.innerHTML =
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:13px;color:var(--text)">' + _bridgeEsc(mp.reference) + ' — ' + _bridgeEsc(mp.designation) + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">' +
+          _bridgeEsc(mp.categorie) + (mp.pricing_role ? ' · rôle ' + _bridgeEsc(mp.pricing_role) : '') +
+          (mp.sous_section ? ' · ' + _bridgeEsc(mp.sous_section) : '') +
+          (mp.couleur ? ' · ' + _bridgeEsc(mp.couleur) : '') +
+        '</div>' +
+      '</div>' +
+      '<button type="button" class="btn btn-sec" data-mp-id="' + mp.id + '">Rapprocher…</button>';
+    row.querySelector('button').addEventListener('click', () => openBridgeSuggestModal(mp));
+    host.appendChild(row);
+  });
+}
+
+function _renderBridgeMcList(items) {
+  const host = document.getElementById('bridge-orphans-mc');
+  const empty = document.getElementById('bridge-orphans-mc-empty');
+  if (!host) return;
+  host.innerHTML = '';
+  if (!items || items.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  items.forEach(mc => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px';
+    const price = (mc.unit_price != null) ? (Number(mc.unit_price).toFixed(4) + ' ' + (mc.price_currency || 'EUR') + '/' + (mc.price_basis === 'PER_M2' ? 'm²' : 'kg')) : '—';
+    row.innerHTML =
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:13px;color:var(--text)">' + _bridgeEsc(mc.name) + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">' +
+          _bridgeEsc(mc.category_code) +
+          (mc.appellation_code ? ' · code ' + _bridgeEsc(mc.appellation_code) : '') +
+          ' · ' + price +
+        '</div>' +
+      '</div>' +
+      '<span class="sub" style="font-size:11px;color:var(--muted)">Aucun mp lié</span>';
+    host.appendChild(row);
+  });
+}
+
+async function openBridgeSuggestModal(mp) {
+  const root = document.getElementById('modal-root') || document.body;
+  root.innerHTML = '';
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
+  modal.innerHTML =
+    '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:640px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column">' +
+      '<div style="padding:16px 18px;border-bottom:1px solid var(--border)">' +
+        '<div style="font-weight:700;font-size:15px;color:var(--text)">Appairer avec une matière Coûts matières</div>' +
+        '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + _bridgeEsc(mp.reference) + ' — ' + _bridgeEsc(mp.designation) + '</div>' +
+      '</div>' +
+      '<div id="bridge-sugg-body" style="flex:1;overflow:auto;padding:12px 18px">' +
+        '<div class="sub" style="font-size:13px;color:var(--muted)">Chargement des propositions…</div>' +
+      '</div>' +
+      '<div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">' +
+        '<button type="button" class="btn btn-sec" id="bridge-sugg-close">Annuler</button>' +
+      '</div>' +
+    '</div>';
+  root.appendChild(modal);
+  modal.querySelector('#bridge-sugg-close').addEventListener('click', () => { root.innerHTML = ''; });
+  modal.addEventListener('click', (e) => { if (e.target === modal) root.innerHTML = ''; });
+
+  let sugg = [];
+  try {
+    const r = await fetch('/api/pricing/bridge/suggest/' + mp.id, { credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    sugg = data.suggestions || [];
+  } catch (e) {
+    modal.querySelector('#bridge-sugg-body').innerHTML = '<div class="sub" style="color:var(--danger);font-size:13px">Erreur : ' + _bridgeEsc(e && e.message || e) + '</div>';
+    return;
+  }
+  const body = modal.querySelector('#bridge-sugg-body');
+  if (sugg.length === 0) {
+    body.innerHTML = '<div class="sub" style="font-size:13px">Aucune proposition automatique. Vous devez créer la matière côté Coûts matières ou renommer la référence MyStock pour qu\'un rapprochement soit possible.</div>';
+    return;
+  }
+  body.innerHTML = '';
+  sugg.forEach(s => {
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:6px';
+    const price = (s.unit_price != null) ? (Number(s.unit_price).toFixed(4) + ' ' + (s.price_currency || 'EUR') + '/' + (s.price_basis === 'PER_M2' ? 'm²' : 'kg')) : '—';
+    item.innerHTML =
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:13px;color:var(--text)">' + _bridgeEsc(s.name) + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + _bridgeEsc(s.category_code) + (s.appellation_code ? ' · code ' + _bridgeEsc(s.appellation_code) : '') + ' · ' + price + '</div>' +
+      '</div>' +
+      '<button type="button" class="btn" data-mc-id="' + s.id + '">Appairer</button>';
+    item.querySelector('button').addEventListener('click', async () => {
+      await linkBridge(mp.id, s.id);
+      root.innerHTML = '';
+    });
+    body.appendChild(item);
+  });
+}
+
+async function linkBridge(mp_id, mc_id) {
+  try {
+    const r = await fetch('/api/pricing/bridge/link', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mp_id, mc_id }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error(err || ('HTTP ' + r.status));
+    }
+    if (typeof showToast === 'function') showToast('Appairage enregistré.', 'success');
+    await loadBridge(true);
+  } catch (e) {
+    if (typeof showToast === 'function') showToast('Erreur : ' + (e && e.message || e), 'danger');
+    else alert('Erreur : ' + (e && e.message || e));
+  }
+}
+
+async function unlinkBridge(mp_id) {
+  if (!confirm('Casser le lien avec Coûts matières ? Les caractéristiques déjà copiées côté MyStock restent.')) return;
+  try {
+    const r = await fetch('/api/pricing/bridge/link/' + mp_id, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (typeof showToast === 'function') showToast('Lien supprimé.', 'success');
+    await loadBridge(true);
+  } catch (e) {
+    if (typeof showToast === 'function') showToast('Erreur : ' + (e && e.message || e), 'danger');
+    else alert('Erreur : ' + (e && e.message || e));
+  }
+}
 
 </script>
 <script src="/static/mysifa_impersonate.js"></script>
