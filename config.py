@@ -304,15 +304,24 @@ NC_ACK_RESET_FIELDS = frozenset({
 })
 
 # Planning RH (Personnel)
-ROLES_PLANNING_RH_VIEW  = {
+# -- Deux vues distinctes --
+#   * ATELIER : planning postes + conges du personnel fabrication / logistique.
+#     Vue historique -- inchangee. Editable par direction / superadmin (+ overrides).
+#   * RH      : gestion des conges / soldes de TOUS les employes actifs.
+#     Nouvelle vue -- utilisee par comptabilite / direction / superadmin (edition).
+ROLES_PLANNING_RH_ATELIER_VIEW = {
     ROLE_DIRECTION,
     ROLE_FABRICATION,
     ROLE_LOGISTIQUE,
     ROLE_EXPEDITION,
-    ROLE_COMPTABILITE,
     ROLE_SUPERADMIN,
 } | ROLES_ADMINISTRATION_ALL
-ROLES_PLANNING_RH_EDIT  = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_PLANNING_RH_ATELIER_EDIT = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_PLANNING_RH_HR_VIEW = {ROLE_COMPTABILITE, ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_PLANNING_RH_HR_EDIT = {ROLE_COMPTABILITE, ROLE_DIRECTION, ROLE_SUPERADMIN}
+# Aliases historiques -- union des deux vues pour l'acces a l'application.
+ROLES_PLANNING_RH_VIEW  = ROLES_PLANNING_RH_ATELIER_VIEW | ROLES_PLANNING_RH_HR_VIEW
+ROLES_PLANNING_RH_EDIT  = ROLES_PLANNING_RH_ATELIER_EDIT | ROLES_PLANNING_RH_HR_EDIT
 ROLES_PLANNING_RH_STAFF = {ROLE_FABRICATION, ROLE_LOGISTIQUE}
 
 # Profils utilisateurs exclus du planning RH (comparaison sur nom normalisé : trim + minuscules).
@@ -503,6 +512,8 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 
 # ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# ─── MyTradu
 
 # ─── MyTraduction (DeepL) ─────────────────────────────────────────
 # Clé API DeepL — obtenue sur https://www.deepl.com/pro-api

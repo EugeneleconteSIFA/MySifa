@@ -12,48 +12,107 @@ from fastapi import APIRouter, Request, HTTPException
 from app.services.audit_service import log_action
 from database import get_db
 from app.services.auth_service import get_current_user
-from config import ROLES_PLANNING_RH_VIEW, ROLES_PLANNING_RH_EDIT, PLANNING_RH_EXCLUDED_NOMS
+from config import (
+    ROLES_PLANNING_RH_VIEW,
+    ROLES_PLANNING_RH_EDIT,
+    ROLES_PLANNING_RH_ATELIER_VIEW,
+    ROLES_PLANNING_RH_ATELIER_EDIT,
+    ROLES_PLANNING_RH_HR_VIEW,
+    ROLES_PLANNING_RH_HR_EDIT,
+    PLANNING_RH_EXCLUDED_NOMS,
+)
 
 router = APIRouter(prefix="/api/rh", tags=["planning_rh"])
 
 
 # ── Helpers accès ────────────────────────────────────────────────
-def _require_view(request: Request) -> dict:
-    user = get_current_user(request)
-    # Check role OR planning_rh override
-    has_override = False
+# Deux vues distinctes exposées par ce module :
+#   * "atelier" : planning postes + congés du personnel fabrication/logistique.
+#     Vue historique — inchangée. Éditable par direction/superadmin (+ overrides
+#     et Manuel Lesaffre en accès explicite).
+#   * "rh"      : gestion des congés/soldes de TOUS les employés actifs.
+#     Nouvelle vue — comptabilité/direction/superadmin en édition.
+#
+# Les helpers acceptent un paramètre `scope` qui bascule les rôles vérifiés.
+# Les endpoints qui manipulent des congés/soldes acceptent scope depuis la
+# query/body ; ceux qui manipulent des postes/machines restent en atelier.
+
+def _has_planning_rh_override(user: dict) -> bool:
     overrides_raw = user.get("access_overrides")
-    if overrides_raw:
-        try:
-            import json
-            overrides = json.loads(overrides_raw) if isinstance(overrides_raw, str) else overrides_raw
-            has_override = overrides.get("planning_rh") is True
-        except:
-            pass
-    if user.get("role") not in ROLES_PLANNING_RH_VIEW and not has_override:
-        raise HTTPException(403, "Accès non autorisé au planning RH")
+    if not overrides_raw:
+        return False
+    try:
+        import json
+        overrides = json.loads(overrides_raw) if isinstance(overrides_raw, str) else overrides_raw
+        return overrides.get("planning_rh") is True
+    except Exception:
+        return False
+
+
+def _norm_scope(scope) -> str:
+    s = str(scope or "").strip().lower()
+    return "rh" if s in ("rh", "hr") else "atelier"
+
+
+def _require_atelier_view(request: Request) -> dict:
+    user = get_current_user(request)
+    if user.get("role") not in ROLES_PLANNING_RH_ATELIER_VIEW and not _has_planning_rh_override(user):
+        raise HTTPException(403, "Accès non autorisé au planning RH atelier")
     return user
 
 
-def _require_edit(request: Request) -> dict:
+def _require_atelier_edit(request: Request) -> dict:
     user = get_current_user(request)
-    # Check role OR planning_rh override
-    has_override = False
     email = (user.get("email") or "").strip().lower()
-    overrides_raw = user.get("access_overrides")
-    if overrides_raw:
-        try:
-            import json
-            overrides = json.loads(overrides_raw) if isinstance(overrides_raw, str) else overrides_raw
-            has_override = overrides.get("planning_rh") is True
-        except:
-            pass
-    # Manuel Lessafre : accès édition explicite (même si rôle opérateur)
     if email == "mlesaffre@sifa.pro":
         return user
-    if user.get("role") not in ROLES_PLANNING_RH_EDIT and not has_override:
-        raise HTTPException(403, "Modification réservée aux configurateurs (direction / superadmin)")
+    if user.get("role") not in ROLES_PLANNING_RH_ATELIER_EDIT and not _has_planning_rh_override(user):
+        raise HTTPException(403, "Modification atelier réservée aux configurateurs (direction / superadmin)")
     return user
+
+
+def _require_hr_view(request: Request) -> dict:
+    user = get_current_user(request)
+    if user.get("role") not in ROLES_PLANNING_RH_HR_VIEW:
+        raise HTTPException(403, "Accès non autorisé à la vue RH")
+    return user
+
+
+def _require_hr_edit(request: Request) -> dict:
+    user = get_current_user(request)
+    if user.get("role") not in ROLES_PLANNING_RH_HR_EDIT:
+        raise HTTPException(403, "Modification RH réservée à la comptabilité / direction / superadmin")
+    return user
+
+
+def _require_view(request: Request, scope: str = "atelier") -> dict:
+    """Vue portée : 'atelier' (défaut) ou 'rh'."""
+    return _require_hr_view(request) if _norm_scope(scope) == "rh" else _require_atelier_view(request)
+
+
+def _require_edit(request: Request, scope: str = "atelier") -> dict:
+    """Écriture portée : 'atelier' (postes/planning) ou 'rh' (congés/soldes tous services)."""
+    return _require_hr_edit(request) if _norm_scope(scope) == "rh" else _require_atelier_edit(request)
+
+
+def _require_conge_edit(request: Request) -> dict:
+    """Écriture congé/solde : accessible aux éditeurs atelier OU RH.
+
+    Direction/superadmin ont les deux permissions ; comptabilité n'a que RH ;
+    Manuel Lesaffre (opérateur avec exception) garde l'accès atelier.
+    """
+    user = get_current_user(request)
+    role = user.get("role")
+    email = (user.get("email") or "").strip().lower()
+    if email == "mlesaffre@sifa.pro":
+        return user
+    if (
+        role in ROLES_PLANNING_RH_ATELIER_EDIT
+        or role in ROLES_PLANNING_RH_HR_EDIT
+        or _has_planning_rh_override(user)
+    ):
+        return user
+    raise HTTPException(403, "Modification réservée à la direction, la comptabilité ou un superadmin")
 
 
 def _week_bounds(semaine: str):
@@ -137,25 +196,42 @@ def _assert_planning_rh_user_allowed(conn, user_id: int) -> None:
 
 # ── Personnel planifiable ────────────────────────────────────────
 @router.get("/personnel")
-def get_personnel(request: Request):
-    _require_view(request)
+def get_personnel(request: Request, scope: str = "atelier"):
+    """Renvoie le personnel visible selon la vue.
+
+    * scope='atelier' (défaut) : fabrication + logistique + Manuel Lesaffre.
+      Comportement historique — utilisé par la grille postes.
+    * scope='rh' : TOUS les utilisateurs actifs (tous services). Utilisé par
+      la vue RH pour poser des congés à n'importe quel employé.
+    """
+    scope = _norm_scope(scope)
+    _require_view(request, scope=scope)
     staff_filter, staff_params = _planning_rh_staff_sql_filter()
     with get_db() as conn:
-        rows = conn.execute(
-            f"""SELECT id, nom, email, role, machine_id, actif
-               FROM users
-               WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro')
-                 AND actif = 1{staff_filter}
-               ORDER BY nom COLLATE NOCASE""",
-            staff_params,
-        ).fetchall()
-    return {"personnel": [dict(r) for r in rows]}
+        if scope == "rh":
+            rows = conn.execute(
+                f"""SELECT id, nom, email, role, machine_id, actif
+                   FROM users
+                   WHERE actif = 1{staff_filter}
+                   ORDER BY role COLLATE NOCASE, nom COLLATE NOCASE""",
+                staff_params,
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""SELECT id, nom, email, role, machine_id, actif
+                   FROM users
+                   WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro')
+                     AND actif = 1{staff_filter}
+                   ORDER BY nom COLLATE NOCASE""",
+                staff_params,
+            ).fetchall()
+    return {"personnel": _filter_planning_rh_user_rows(rows)}
 
 
 @router.get("/machines")
 def get_machines(request: Request):
     """Machines actives (pour résoudre machine_id sans accès MyProd › Planning)."""
-    _require_view(request)
+    _require_atelier_view(request)
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, code, nom FROM machines WHERE actif = 1 ORDER BY nom COLLATE NOCASE"
@@ -186,7 +262,7 @@ def _samedi_prod_travaille(conn, machine_id: int, semaine: str) -> tuple[str, bo
 @router.get("/samedi-prod-travaille")
 def get_samedi_prod_travaille(request: Request, machine_id: int, semaine: str):
     """Vérifie si le samedi de la semaine est ouvré dans le planning de production."""
-    _require_view(request)
+    _require_atelier_view(request)
     with get_db() as conn:
         m = conn.execute(
             "SELECT id FROM machines WHERE id=? AND actif=1", (machine_id,)
@@ -202,14 +278,14 @@ def get_samedi_prod_travaille(request: Request, machine_id: int, semaine: str):
     }
 
 
-# ── Planning : affectations hebdomadaires ────────────────────────
+# ── Planning : affectations hebdomadaires (atelier uniquement) ──
 @router.get("/planning")
 def get_planning(
     request: Request,
     from_week: Optional[str] = None,
     to_week: Optional[str] = None,
 ):
-    user = _require_view(request)
+    user = _require_atelier_view(request)
     role = user.get("role")
 
     with get_db() as conn:
@@ -247,7 +323,7 @@ def get_planning(
 
 @router.post("/planning")
 async def create_planning(request: Request):
-    editor = _require_edit(request)
+    editor = _require_atelier_edit(request)
     body = await request.json()
 
     user_id    = body.get("user_id")
@@ -431,7 +507,7 @@ async def create_planning(request: Request):
 
 @router.delete("/planning/{plan_id}")
 def delete_planning(plan_id: int, request: Request):
-    editor = _require_edit(request)
+    editor = _require_atelier_edit(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT id FROM rh_planning_postes WHERE id = ?", (plan_id,)
@@ -453,7 +529,7 @@ def delete_planning(plan_id: int, request: Request):
 @router.put("/planning/{plan_id}")
 async def update_planning_jours(plan_id: int, request: Request):
     """Met à jour le bitmask jours d'une affectation existante."""
-    editor = _require_edit(request)
+    editor = _require_atelier_edit(request)
     body = await request.json()
 
     jours = body.get("jours")
@@ -518,10 +594,17 @@ def get_conges(
     request: Request,
     user_id: Optional[int] = None,
     annee: Optional[int] = None,
+    scope: str = "atelier",
 ):
-    _require_view(request)
+    """Liste les congés selon la portée demandée.
+
+    * scope='atelier' (défaut) : congés du personnel fabrication/logistique.
+    * scope='rh' : congés de TOUS les employés actifs (tous services).
+    """
+    scope = _norm_scope(scope)
+    _require_view(request, scope=scope)
     with get_db() as conn:
-        q = """SELECT c.id, c.user_id, u.nom AS user_nom,
+        q = """SELECT c.id, c.user_id, u.nom AS user_nom, u.role AS user_role,
                       c.date_debut, c.date_fin, c.nb_jours,
                       c.type_conge, c.note, c.statut,
                       c.created_by, c.created_at
@@ -537,6 +620,10 @@ def get_conges(
                 "(strftime('%Y', c.date_debut) = ? OR strftime('%Y', c.date_fin) = ?)"
             )
             params.extend([str(annee), str(annee)])
+        if scope == "atelier":
+            conds.append(
+                "(u.role IN ('fabrication','logistique') OR u.email = 'mlesaffre@sifa.pro')"
+            )
         if conds:
             q += " WHERE " + " AND ".join(conds)
         q += " ORDER BY c.date_debut DESC"
@@ -546,7 +633,7 @@ def get_conges(
 
 @router.post("/conges")
 async def create_conge(request: Request):
-    editor = _require_edit(request)
+    editor = _require_conge_edit(request)
     body = await request.json()
 
     user_id    = body.get("user_id")
@@ -641,7 +728,7 @@ async def create_conge(request: Request):
 
 @router.put("/conges/{conge_id}")
 async def update_conge(conge_id: int, request: Request):
-    editor = _require_edit(request)
+    editor = _require_conge_edit(request)
     body = await request.json()
 
     with get_db() as conn:
@@ -682,7 +769,7 @@ async def update_conge(conge_id: int, request: Request):
 
 @router.delete("/conges/{conge_id}")
 def delete_conge(conge_id: int, request: Request):
-    editor = _require_edit(request)
+    editor = _require_conge_edit(request)
     with get_db() as conn:
         row = conn.execute(
             "SELECT id FROM rh_conges WHERE id = ?", (conge_id,)
@@ -703,19 +790,33 @@ def delete_conge(conge_id: int, request: Request):
 
 # ── Soldes congés ────────────────────────────────────────────────
 @router.get("/soldes")
-def get_soldes(request: Request, annee: Optional[int] = None):
-    _require_view(request)
+def get_soldes(request: Request, annee: Optional[int] = None, scope: str = "atelier"):
+    """Soldes congés selon la portée.
+
+    * scope='atelier' (défaut) : personnel fabrication/logistique.
+    * scope='rh' : tous les employés actifs (tous services).
+    """
+    scope = _norm_scope(scope)
+    _require_view(request, scope=scope)
     year = annee or datetime.now().year
 
     staff_filter, staff_params = _planning_rh_staff_sql_filter()
     with get_db() as conn:
-        staff = conn.execute(
-            f"""SELECT id, nom FROM users
-               WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro')
-                 AND actif = 1{staff_filter}
-               ORDER BY nom COLLATE NOCASE""",
-            staff_params,
-        ).fetchall()
+        if scope == "rh":
+            staff = conn.execute(
+                f"""SELECT id, nom, role FROM users
+                   WHERE actif = 1{staff_filter}
+                   ORDER BY role COLLATE NOCASE, nom COLLATE NOCASE""",
+                staff_params,
+            ).fetchall()
+        else:
+            staff = conn.execute(
+                f"""SELECT id, nom, role FROM users
+                   WHERE (role IN ('fabrication','logistique') OR email = 'mlesaffre@sifa.pro')
+                     AND actif = 1{staff_filter}
+                   ORDER BY nom COLLATE NOCASE""",
+                staff_params,
+            ).fetchall()
 
         soldes_raw = conn.execute(
             "SELECT * FROM rh_conges_soldes WHERE annee = ?", (year,)
@@ -748,6 +849,7 @@ def get_soldes(request: Request, annee: Optional[int] = None):
             result.append({
                 "user_id":       uid,
                 "user_nom":      s["nom"],
+                "user_role":     s["role"] if "role" in s.keys() else None,
                 "annee":         year,
                 "quota_cp":      quota_cp,
                 "quota_rtt":     quota_rtt,
@@ -766,7 +868,7 @@ def get_soldes(request: Request, annee: Optional[int] = None):
 
 @router.put("/soldes")
 async def update_solde(request: Request):
-    editor = _require_edit(request)
+    editor = _require_conge_edit(request)
     body = await request.json()
 
     user_id   = body.get("user_id")
@@ -843,7 +945,7 @@ def list_machine_configs(request: Request):
     Format : {"configs": [ { machine_id, nom, matin_actif, ... }, ... ]}
     Les machines sans ligne dans rh_machine_config renvoient les défauts.
     """
-    _require_view(request)
+    _require_atelier_view(request)
     with get_db() as conn:
         machines = conn.execute(
             "SELECT id, nom FROM machines WHERE actif=1 ORDER BY nom"
@@ -889,7 +991,7 @@ async def set_machine_config(machine_id: int, request: Request):
       nuit_actif, nuit_debut, nuit_fin
       mode_alternance : 'identique' | 'alterne'
     """
-    editor = _require_edit(request)
+    editor = _require_atelier_edit(request)
     body = await request.json()
     if not isinstance(body, dict):
         raise HTTPException(400, "Body invalide")

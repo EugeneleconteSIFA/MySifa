@@ -3599,38 +3599,40 @@ document.addEventListener('keydown', function(ev){
     .qual-help-btn:hover svg{transform:rotate(-6deg) scale(1.08)}
     .qguide-ov{position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px;animation:qguideOvIn .2s ease-out}
     @keyframes qguideOvIn{from{opacity:0}to{opacity:1}}
-    .qguide{background:var(--card);border:1px solid var(--border);border-radius:20px;width:100%;max-width:520px;position:relative;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);animation:qguideIn .28s cubic-bezier(.34,1.56,.64,1)}
+    .qguide{background:var(--card);border:1px solid var(--border);border-radius:20px;width:100%;max-width:820px;position:relative;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);animation:qguideIn .28s cubic-bezier(.34,1.56,.64,1)}
     @keyframes qguideIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
     .qguide-close{position:absolute;top:14px;right:14px;background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:6px 10px;border-radius:8px;transition:.15s;z-index:5}
     .qguide-close:hover{color:var(--danger);background:rgba(248,113,113,.1)}
     .qguide-progress{height:3px;background:var(--border);width:100%;overflow:hidden}
     .qguide-progress-bar{height:100%;background:linear-gradient(90deg, var(--accent), var(--ok));transition:width .35s cubic-bezier(.4,0,.2,1);border-radius:0 3px 3px 0}
-    .qguide-viewport{position:relative;min-height:420px;max-height:60vh;overflow:hidden}
-    .qguide-step{position:absolute;inset:0;padding:28px 32px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;opacity:0;transform:translateX(100%);transition:opacity .3s ease, transform .35s cubic-bezier(.4,0,.2,1);overflow-y:auto;pointer-events:none}
+    .qguide-viewport{position:relative;min-height:460px;max-height:65vh;overflow:hidden}
+    .qguide-step{position:absolute;inset:0;padding:32px 44px 24px;display:flex;flex-direction:column;align-items:center;text-align:center;opacity:0;transform:translateX(100%);transition:opacity .3s ease, transform .35s cubic-bezier(.4,0,.2,1);overflow-y:auto;pointer-events:none}
     .qguide-step.active{opacity:1;transform:translateX(0);pointer-events:auto}
     .qguide-step.from-right{transform:translateX(100%);opacity:0;transition:none}
     .qguide-step.from-left{transform:translateX(-100%);opacity:0;transition:none}
     .qguide-step.to-right{transform:translateX(100%);opacity:0}
     .qguide-step.to-left{transform:translateX(-100%);opacity:0}
     /* Illustration mockup */
-    .qguide-illu{width:100%;max-width:340px;height:150px;border-radius:12px;background:var(--bg);border:1px solid var(--border);margin-bottom:16px;padding:10px;box-sizing:border-box;overflow:hidden;position:relative}
+    .qguide-illu{width:100%;max-width:660px;height:330px;border-radius:14px;background:var(--bg);border:1px solid var(--border);margin-bottom:18px;padding:14px;box-sizing:border-box;overflow:hidden;position:relative;box-shadow:inset 0 1px 2px rgba(0,0,0,.05)}
     .qguide-illu svg{width:100%;height:100%;display:block}
     body.light .qguide-illu{background:#f8fafc}
     /* Task sections dans slide 1 */
-    .qguide-tasks{width:100%;max-width:440px;text-align:left;margin-top:8px;display:flex;flex-direction:column;gap:10px}
-    .qguide-tasks-tit{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 2px}
-    .qguide-svc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
-    .qguide-svc-hd{font-size:12px;font-weight:700;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:6px}
-    .qguide-svc-hd svg{flex-shrink:0}
-    .qguide-svc-list{margin:0;padding-left:18px;font-size:12px;color:var(--text2);line-height:1.55}
-    .qguide-svc-list li{margin-bottom:2px}
+    .qguide-tasks{width:100%;max-width:600px;text-align:left;margin-top:10px;display:flex;flex-direction:column;gap:12px}
+    .qguide-tasks-tit{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 4px}
+    .qguide-svc{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+    .qguide-svc-hd{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:7px}
+    .qguide-svc-hd svg{flex-shrink:0;width:14px;height:14px}
+    .qguide-svc-list{margin:0;padding-left:20px;font-size:13px;color:var(--text2);line-height:1.6}
+    .qguide-svc-list li{margin-bottom:3px}
     .qguide-svc-list li:last-child{margin-bottom:0}
     body.light .qguide-svc{background:#f8fafc}
     .qguide-icon{width:80px;height:80px;border-radius:20px;background:linear-gradient(135deg, var(--accent-bg), rgba(52,211,153,.12));display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:20px;animation:qguideIconIn .5s cubic-bezier(.34,1.56,.64,1)}
     @keyframes qguideIconIn{0%{opacity:0;transform:scale(.5) rotate(-10deg)}60%{transform:scale(1.15) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
     .qguide-step.active .qguide-icon{animation:qguideIconIn .5s cubic-bezier(.34,1.56,.64,1)}
-    .qguide-tit{font-size:20px;font-weight:800;color:var(--text);margin:0 0 10px;line-height:1.2}
-    .qguide-body{font-size:13px;color:var(--text2);line-height:1.65;max-width:400px;margin:0}
+    .qguide-tit{font-size:24px;font-weight:800;color:var(--text);margin:0 0 14px;line-height:1.25;letter-spacing:-.2px}
+    .qguide-body{font-size:16px;color:var(--text2);line-height:1.75;max-width:640px;margin:0}
+    .qguide-body strong{color:var(--text);font-weight:700}
+    .qguide-body .qguide-hl{color:var(--accent);font-weight:700;background:var(--accent-bg);padding:1px 7px;border-radius:6px;font-size:14.5px}
     .qguide-body strong{color:var(--text);font-weight:700}
     .qguide-body .qguide-tag{display:inline-flex;align-items:center;gap:4px;background:var(--accent-bg);color:var(--accent);font-weight:600;padding:1px 8px;border-radius:6px;font-size:11px;margin:0 2px}
     .qguide-nav{display:flex;justify-content:space-between;align-items:center;padding:14px 24px 20px;gap:12px;border-top:1px solid var(--border);background:var(--bg)}
@@ -3698,48 +3700,64 @@ document.addEventListener('keydown', function(ev){
 
 // ─── Guides interactifs (bouton "?" livre) ───────────────────────────────
 const QUALITE_MOCKUPS = {
-  cardsGrid: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
-    <rect x="10" y="8" width="220" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/>
-    <text x="18" y="20" font-size="7" fill="var(--muted)" font-family="Segoe UI">Rechercher un fournisseur…</text>
-    <rect x="238" y="8" width="26" height="18" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/>
-    <text x="248" y="20" font-size="10" fill="var(--accent)" font-family="Segoe UI">?</text>
-    <rect x="10" y="34" width="105" height="52" rx="7" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
-    <rect x="10" y="34" width="4" height="52" fill="var(--accent)" rx="1"/>
-    <text x="20" y="46" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Fedrigoni</text>
-    <rect x="72" y="40" width="35" height="9" rx="4" fill="var(--accent-bg)"/>
-    <text x="78" y="47" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE</text>
-    <text x="20" y="58" font-size="6" fill="var(--muted)" font-family="Segoe UI">Italy · France · UK</text>
-    <rect x="20" y="66" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="24" y="73" font-size="5" fill="var(--text2)" font-family="Segoe UI">4 certifs</text>
-    <rect x="48" y="66" width="26" height="10" rx="5" fill="rgba(52,211,153,.15)"/>
-    <text x="52" y="73" font-size="5" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
-    <rect x="122" y="34" width="105" height="52" rx="7" fill="var(--card)" stroke="var(--border)"/>
-    <text x="132" y="46" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Avery</text>
-    <text x="132" y="56" font-size="5" fill="var(--muted)" font-family="ui-monospace">FSC-C004451</text>
-    <rect x="132" y="66" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="136" y="73" font-size="5" fill="var(--text2)" font-family="Segoe UI">1 certif</text>
-    <rect x="160" y="66" width="34" height="10" rx="5" fill="rgba(148,163,184,.2)"/>
-    <text x="164" y="73" font-size="5" fill="var(--muted)" font-weight="700" font-family="Segoe UI">1 sans date</text>
-    <rect x="234" y="34" width="95" height="52" rx="7" fill="var(--card)" stroke="var(--border)"/>
-    <text x="244" y="46" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Ricoh</text>
-    <text x="244" y="56" font-size="5" fill="var(--muted)" font-family="ui-monospace">FSC-C001858</text>
-    <rect x="244" y="66" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="248" y="73" font-size="5" fill="var(--text2)" font-family="Segoe UI">0 certif</text>
-    <rect x="10" y="94" width="105" height="48" rx="7" fill="var(--card)" stroke="var(--accent)" stroke-width="1.5"/>
-    <rect x="10" y="94" width="4" height="48" fill="var(--accent)" rx="1"/>
-    <text x="20" y="106" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Frimpeks</text>
-    <rect x="72" y="100" width="35" height="9" rx="4" fill="var(--accent-bg)"/>
-    <text x="78" y="107" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE</text>
-    <text x="20" y="118" font-size="6" fill="var(--muted)" font-family="Segoe UI">Italy · Turkey · UK</text>
-    <rect x="20" y="126" width="30" height="10" rx="5" fill="rgba(251,191,36,.15)"/>
-    <text x="24" y="133" font-size="5" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
-    <rect x="122" y="94" width="207" height="48" rx="7" fill="var(--card)" stroke="var(--border)"/>
-    <text x="132" y="106" font-size="7" font-weight="700" fill="var(--text)" font-family="Segoe UI">Itasa</text>
-    <text x="132" y="116" font-size="5" fill="var(--muted)" font-family="ui-monospace">FSC-C160893 · AEN-COC-000369</text>
-    <rect x="132" y="126" width="24" height="10" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-    <text x="136" y="133" font-size="5" fill="var(--text2)" font-family="Segoe UI">2 certifs</text>
-    <rect x="160" y="126" width="24" height="10" rx="5" fill="rgba(248,113,113,.18)"/>
-    <text x="164" y="133" font-size="5" fill="var(--danger)" font-weight="700" font-family="Segoe UI">1 exp</text>
+cardsGrid: `<svg viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg">
+    <!-- Header -->
+    <text x="14" y="20" font-size="14" fill="var(--text)" font-weight="800" font-family="Segoe UI">Ressources fournisseurs</text>
+    <text x="14" y="34" font-size="10" fill="var(--muted)" font-family="Segoe UI">Un dossier par fournisseur · Certificats &amp; labels</text>
+    <!-- Toolbar -->
+    <rect x="14" y="42" width="330" height="26" rx="6" fill="var(--card)" stroke="var(--border)"/>
+    <text x="24" y="60" font-size="11" fill="var(--muted)" font-family="Segoe UI">Rechercher un fournisseur...</text>
+    <rect x="352" y="42" width="52" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="366" y="60" font-size="11" fill="var(--text2)" font-family="Segoe UI">Tri ▾</text>
+    <rect x="412" y="42" width="54" height="26" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
+    <text x="428" y="60" font-size="13" fill="var(--accent)" font-weight="800" font-family="Segoe UI">?</text>
+    <!-- Grid 3 cols x 2 rows -->
+    <!-- Card 1: groupe Fedrigoni -->
+    <rect x="14" y="78" width="148" height="60" rx="10" fill="var(--card)" stroke="var(--accent)" stroke-width="2"/>
+    <rect x="14" y="78" width="4" height="60" fill="var(--accent)" rx="1"/>
+    <text x="28" y="95" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Fedrigoni</text>
+    <rect x="100" y="83" width="56" height="15" rx="7" fill="var(--accent-bg)"/>
+    <text x="107" y="94" font-size="8" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE · 3</text>
+    <text x="28" y="112" font-size="9" fill="var(--muted)" font-family="Segoe UI">Italy · France · UK</text>
+    <rect x="28" y="120" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="36" y="130" font-size="9" fill="var(--text2)" font-weight="700" font-family="Segoe UI">6 certifs</text>
+    <rect x="72" y="120" width="42" height="14" rx="7" fill="rgba(52,211,153,.15)"/>
+    <text x="80" y="130" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
+    <!-- Card 2: Avery -->
+    <rect x="166" y="78" width="148" height="60" rx="10" fill="var(--card)" stroke="var(--border)"/>
+    <text x="180" y="95" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Avery</text>
+    <text x="180" y="110" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C004451</text>
+    <rect x="180" y="120" width="40" height="14" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="188" y="130" font-size="9" fill="var(--text2)" font-weight="700" font-family="Segoe UI">1 certif</text>
+    <rect x="224" y="120" width="60" height="14" rx="7" fill="rgba(148,163,184,.2)"/>
+    <text x="232" y="130" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">1 sans date</text>
+    <!-- Card 3: groupe Frimpeks -->
+    <rect x="318" y="78" width="148" height="60" rx="10" fill="var(--card)" stroke="var(--accent)" stroke-width="2"/>
+    <rect x="318" y="78" width="4" height="60" fill="var(--accent)" rx="1"/>
+    <text x="332" y="95" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Frimpeks</text>
+    <rect x="410" y="83" width="52" height="15" rx="7" fill="var(--accent-bg)"/>
+    <text x="416" y="94" font-size="8" fill="var(--accent)" font-weight="700" font-family="Segoe UI">GROUPE · 3</text>
+    <text x="332" y="112" font-size="9" fill="var(--muted)" font-family="Segoe UI">Italy · Turkey · UK</text>
+    <rect x="332" y="120" width="52" height="14" rx="7" fill="rgba(251,191,36,.15)"/>
+    <text x="342" y="130" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
+    <!-- Card 4: Itasa -->
+    <rect x="14" y="145" width="148" height="45" rx="10" fill="var(--card)" stroke="var(--border)"/>
+    <text x="28" y="162" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Itasa</text>
+    <text x="28" y="176" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C160893</text>
+    <rect x="90" y="152" width="44" height="14" rx="7" fill="rgba(248,113,113,.18)"/>
+    <text x="99" y="162" font-size="9" fill="var(--danger)" font-weight="700" font-family="Segoe UI">1 expiré</text>
+    <!-- Card 5: Ricoh -->
+    <rect x="166" y="145" width="148" height="45" rx="10" fill="var(--card)" stroke="var(--border)"/>
+    <text x="180" y="162" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Ricoh</text>
+    <text x="180" y="176" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C001858</text>
+    <rect x="242" y="152" width="52" height="14" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="252" y="162" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">0 certif</text>
+    <!-- Card 6: Kanzan -->
+    <rect x="318" y="145" width="148" height="45" rx="10" fill="var(--card)" stroke="var(--border)"/>
+    <text x="332" y="162" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Kanzan</text>
+    <text x="332" y="176" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C007179</text>
+    <rect x="394" y="152" width="60" height="14" rx="7" fill="rgba(148,163,184,.2)"/>
+    <text x="404" y="162" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">7 sans date</text>
   </svg>`,
   groupCard: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
     <rect x="60" y="20" width="220" height="110" rx="10" fill="var(--card)" stroke="var(--accent)" stroke-width="2"/>
@@ -3820,139 +3838,191 @@ const QUALITE_MOCKUPS = {
     <text x="22" y="140" font-size="7" fill="var(--muted)" font-family="Segoe UI">Valide · expire le 15/03/2027</text>
   </svg>`,
   // === Overview MyQualite ===
-  ovWelcome: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
-    <rect x="20" y="15" width="300" height="30" rx="6" fill="var(--card)" stroke="var(--border)"/>
-    <text x="30" y="34" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">My<tspan fill="var(--accent)">Qualité</tspan></text>
-    <rect x="240" y="22" width="70" height="16" rx="8" fill="var(--accent-bg)"/>
-    <text x="255" y="33" font-size="8" fill="var(--accent)" font-weight="700" font-family="Segoe UI">4 sections</text>
-    <g>
-      <rect x="20" y="55" width="70" height="85" rx="7" fill="var(--card)" stroke="var(--border)"/>
-      <circle cx="35" cy="72" r="7" fill="var(--danger)"/>
-      <text x="47" y="76" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">NC</text>
-      <text x="27" y="98" font-size="6" fill="var(--muted)" font-family="Segoe UI">Non-conformités</text>
-      <rect x="27" y="105" width="30" height="10" rx="4" fill="rgba(248,113,113,.15)"/>
-      <text x="32" y="112" font-size="5" fill="var(--danger)" font-weight="700" font-family="Segoe UI">12 ouvertes</text>
-      <rect x="27" y="119" width="45" height="10" rx="4" fill="var(--accent-bg)"/>
-      <text x="32" y="126" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">5 en analyse</text>
-    </g>
-    <g>
-      <rect x="100" y="55" width="70" height="85" rx="7" fill="var(--card)" stroke="var(--border)"/>
-      <rect x="112" y="66" width="46" height="16" rx="2" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-      <line x1="115" y1="72" x2="153" y2="72" stroke="var(--muted)" stroke-width="1"/>
-      <line x1="115" y1="76" x2="145" y2="76" stroke="var(--muted)" stroke-width="1"/>
-      <text x="107" y="98" font-size="6" fill="var(--muted)" font-family="Segoe UI">Audits client</text>
-      <rect x="107" y="105" width="55" height="10" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="112" y="112" font-size="5" fill="var(--text2)" font-family="Segoe UI">3 audits actifs</text>
-      <rect x="107" y="119" width="50" height="10" rx="4" fill="rgba(251,191,36,.15)"/>
-      <text x="112" y="126" font-size="5" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 questions</text>
-    </g>
-    <g>
-      <rect x="180" y="55" width="70" height="85" rx="7" fill="var(--card)" stroke="var(--border)"/>
-      <path d="M 195 68 L 195 82 L 220 82 L 227 74 L 220 68 Z" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
-      <text x="182" y="98" font-size="6" fill="var(--muted)" font-family="Segoe UI">Ressources fourn.</text>
-      <rect x="187" y="105" width="55" height="10" rx="4" fill="rgba(52,211,153,.15)"/>
-      <text x="192" y="112" font-size="5" fill="var(--ok)" font-weight="700" font-family="Segoe UI">32 fournisseurs</text>
-      <rect x="187" y="119" width="45" height="10" rx="4" fill="var(--accent-bg)"/>
-      <text x="192" y="126" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">18 certifs</text>
-    </g>
-    <g>
-      <rect x="260" y="55" width="60" height="85" rx="7" fill="var(--card)" stroke="var(--border)"/>
-      <rect x="269" y="66" width="14" height="18" rx="1" fill="none" stroke="var(--accent)" stroke-width="1.3"/>
-      <rect x="287" y="66" width="14" height="18" rx="1" fill="none" stroke="var(--accent)" stroke-width="1.3"/>
-      <text x="264" y="98" font-size="6" fill="var(--muted)" font-family="Segoe UI">Référentiel RSE</text>
-      <rect x="267" y="105" width="45" height="10" rx="4" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="272" y="112" font-size="5" fill="var(--text2)" font-family="Segoe UI">28 fiches</text>
-      <rect x="267" y="119" width="45" height="10" rx="4" fill="var(--accent-bg)"/>
-      <text x="272" y="126" font-size="5" fill="var(--accent)" font-weight="700" font-family="Segoe UI">4 catégories</text>
-    </g>
-  </svg>`,
-  ovNcAudits: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
-    <rect x="10" y="10" width="160" height="130" rx="10" fill="var(--card)" stroke="var(--border)"/>
-    <text x="22" y="28" font-size="11" fill="var(--text)" font-weight="800" font-family="Segoe UI">Non-conformités</text>
-    <g>
-      <rect x="20" y="40" width="140" height="24" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-      <rect x="20" y="40" width="3" height="24" fill="var(--danger)"/>
-      <text x="30" y="52" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">NC-2026-0142</text>
-      <text x="30" y="61" font-size="6" fill="var(--muted)" font-family="Segoe UI">Client · Errepi · en analyse</text>
-    </g>
-    <g>
-      <rect x="20" y="68" width="140" height="24" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-      <rect x="20" y="68" width="3" height="24" fill="var(--warn)"/>
-      <text x="30" y="80" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">NC-2026-0141</text>
-      <text x="30" y="89" font-size="6" fill="var(--muted)" font-family="Segoe UI">Fournisseur · Feys · action</text>
-    </g>
-    <g>
-      <rect x="20" y="96" width="140" height="24" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-      <rect x="20" y="96" width="3" height="24" fill="var(--ok)"/>
-      <text x="30" y="108" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">NC-2026-0140</text>
-      <text x="30" y="117" font-size="6" fill="var(--muted)" font-family="Segoe UI">Interne · clôturée</text>
-    </g>
-    <rect x="180" y="10" width="150" height="130" rx="10" fill="var(--card)" stroke="var(--border)"/>
-    <text x="192" y="28" font-size="11" fill="var(--text)" font-weight="800" font-family="Segoe UI">Audits client</text>
-    <g>
-      <rect x="190" y="40" width="130" height="34" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="200" y="53" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">Ecovadis 2026</text>
-      <text x="200" y="63" font-size="6" fill="var(--muted)" font-family="Segoe UI">18/22 questions</text>
-      <rect x="200" y="66" width="90" height="4" rx="2" fill="var(--border)"/>
-      <rect x="200" y="66" width="74" height="4" rx="2" fill="var(--accent)"/>
-    </g>
-    <g>
-      <rect x="190" y="78" width="130" height="34" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="200" y="91" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">FSC audit annuel</text>
-      <text x="200" y="101" font-size="6" fill="var(--muted)" font-family="Segoe UI">Matrice 12 fourn. × 8 certifs</text>
-      <rect x="200" y="104" width="90" height="4" rx="2" fill="var(--border)"/>
-      <rect x="200" y="104" width="45" height="4" rx="2" fill="var(--warn)"/>
-    </g>
-  </svg>`,
-  ovResRef: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
-    <rect x="10" y="10" width="160" height="130" rx="10" fill="var(--card)" stroke="var(--border)"/>
-    <text x="22" y="28" font-size="11" fill="var(--text)" font-weight="800" font-family="Segoe UI">Ressources fournisseurs</text>
-    <g>
-      <rect x="20" y="40" width="65" height="42" rx="6" fill="var(--bg)" stroke="var(--accent)" stroke-width="1.5"/>
-      <rect x="20" y="40" width="3" height="42" fill="var(--accent)"/>
-      <text x="28" y="54" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">Fedrigoni</text>
-      <text x="28" y="63" font-size="5" fill="var(--muted)" font-family="Segoe UI">3 branches</text>
-      <rect x="28" y="68" width="25" height="8" rx="4" fill="rgba(52,211,153,.15)"/>
-      <text x="32" y="74" font-size="5" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
-    </g>
-    <g>
-      <rect x="90" y="40" width="70" height="42" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="100" y="54" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">Avery</text>
-      <text x="100" y="63" font-size="5" fill="var(--muted)" font-family="Segoe UI">FSC-C004451</text>
-      <rect x="100" y="68" width="35" height="8" rx="4" fill="rgba(148,163,184,.2)"/>
-      <text x="104" y="74" font-size="5" fill="var(--muted)" font-weight="700" font-family="Segoe UI">1 sans date</text>
-    </g>
-    <g>
-      <rect x="20" y="88" width="140" height="42" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="28" y="102" font-size="8" fill="var(--text)" font-weight="700" font-family="Segoe UI">Itasa</text>
-      <text x="28" y="111" font-size="5" fill="var(--muted)" font-family="Segoe UI">FSC-C160893</text>
-      <rect x="28" y="116" width="25" height="8" rx="4" fill="rgba(248,113,113,.18)"/>
-      <text x="32" y="122" font-size="5" fill="var(--danger)" font-weight="700" font-family="Segoe UI">1 exp</text>
-    </g>
-    <rect x="180" y="10" width="150" height="130" rx="10" fill="var(--card)" stroke="var(--border)"/>
-    <text x="192" y="28" font-size="11" fill="var(--text)" font-weight="800" font-family="Segoe UI">Référentiel RSE</text>
-    <g>
-      <rect x="190" y="40" width="60" height="30" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="197" y="52" font-size="7" fill="var(--text)" font-weight="700" font-family="Segoe UI">ISO 14001</text>
-      <text x="197" y="61" font-size="5" fill="var(--muted)" font-family="Segoe UI">Environnement</text>
-    </g>
-    <g>
-      <rect x="255" y="40" width="60" height="30" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="262" y="52" font-size="7" fill="var(--text)" font-weight="700" font-family="Segoe UI">REACH</text>
-      <text x="262" y="61" font-size="5" fill="var(--muted)" font-family="Segoe UI">Sécurité</text>
-    </g>
-    <g>
-      <rect x="190" y="76" width="60" height="30" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="197" y="88" font-size="7" fill="var(--text)" font-weight="700" font-family="Segoe UI">FSC / PEFC</text>
-      <text x="197" y="97" font-size="5" fill="var(--muted)" font-family="Segoe UI">Traçabilité</text>
-    </g>
-    <g>
-      <rect x="255" y="76" width="60" height="30" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-      <text x="262" y="88" font-size="7" fill="var(--text)" font-weight="700" font-family="Segoe UI">Ecovadis</text>
-      <text x="262" y="97" font-size="5" fill="var(--muted)" font-family="Segoe UI">Social</text>
-    </g>
-    <text x="192" y="122" font-size="6" fill="var(--muted)" font-family="Segoe UI">28 fiches · Q/R type pour AO</text>
-  </svg>`,
+ovWelcome: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="86" height="300" fill="var(--card)" stroke="var(--border)"/>
+  <text x="12" y="26" font-size="14" fill="var(--text)" font-weight="800" font-family="Segoe UI">My<tspan fill="var(--accent)">Qualité</tspan></text>
+  <text x="12" y="40" font-size="9" fill="var(--muted)" font-family="Segoe UI" letter-spacing="1">BY SIFA</text>
+  <rect x="8" y="54" width="72" height="26" rx="6" fill="var(--accent-bg)"/>
+  <text x="20" y="71" font-size="10" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Non-conf.</text>
+  <rect x="8" y="84" width="72" height="26" rx="6" fill="transparent"/>
+  <text x="20" y="101" font-size="10" fill="var(--text2)" font-family="Segoe UI">Canaux</text>
+  <rect x="8" y="114" width="72" height="26" rx="6" fill="transparent"/>
+  <text x="20" y="131" font-size="10" fill="var(--text2)" font-family="Segoe UI">Audits</text>
+  <rect x="8" y="144" width="72" height="26" rx="6" fill="transparent"/>
+  <text x="20" y="161" font-size="10" fill="var(--text2)" font-family="Segoe UI">Ressources</text>
+  <rect x="8" y="174" width="72" height="26" rx="6" fill="transparent"/>
+  <text x="20" y="191" font-size="10" fill="var(--text2)" font-family="Segoe UI">Référentiel</text>
+  <text x="102" y="30" font-size="20" fill="var(--text)" font-weight="800" font-family="Segoe UI">MyQualité</text>
+  <rect x="240" y="14" width="26" height="22" rx="6" fill="var(--accent-bg)"/>
+  <text x="248" y="30" font-size="12" fill="var(--accent)" font-weight="800" font-family="Segoe UI">?</text>
+  <text x="102" y="50" font-size="12" fill="var(--muted)" font-family="Segoe UI">Sélectionnez une section ou utilisez la barre latérale.</text>
+  <g>
+    <rect x="102" y="62" width="240" height="112" rx="12" fill="var(--card)" stroke="var(--border)"/>
+    <rect x="112" y="72" width="30" height="30" rx="8" fill="var(--accent-bg)"/>
+    <circle cx="127" cy="87" r="8" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+    <path d="M 123 87 L 126 90 L 132 84" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="150" y="86" font-size="14" fill="var(--text)" font-weight="800" font-family="Segoe UI">Suivi qualité</text>
+    <text x="150" y="100" font-size="11" fill="var(--muted)" font-family="Segoe UI">NC, canaux, audits reçus.</text>
+    <rect x="112" y="112" width="220" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="122" y="129" font-size="12" fill="var(--text)" font-weight="700" font-family="Segoe UI">Non-conformités</text>
+    <text x="316" y="129" font-size="12" fill="var(--muted)" font-family="Segoe UI">›</text>
+    <rect x="112" y="142" width="220" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="122" y="159" font-size="12" fill="var(--text)" font-weight="700" font-family="Segoe UI">Audits client</text>
+    <text x="316" y="159" font-size="12" fill="var(--muted)" font-family="Segoe UI">›</text>
+  </g>
+  <g>
+    <rect x="354" y="62" width="238" height="112" rx="12" fill="var(--card)" stroke="var(--border)"/>
+    <rect x="364" y="72" width="30" height="30" rx="8" fill="var(--accent-bg)"/>
+    <path d="M 372 84 h 16 l 4 4 v 8 h -20 z" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
+    <text x="402" y="86" font-size="14" fill="var(--text)" font-weight="800" font-family="Segoe UI">Certifications</text>
+    <text x="402" y="100" font-size="11" fill="var(--muted)" font-family="Segoe UI">Ressources fourn. + référentiel.</text>
+    <rect x="364" y="112" width="220" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="374" y="129" font-size="12" fill="var(--text)" font-weight="700" font-family="Segoe UI">Ressources fournisseurs</text>
+    <text x="568" y="129" font-size="12" fill="var(--muted)" font-family="Segoe UI">›</text>
+    <rect x="364" y="142" width="220" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+    <text x="374" y="159" font-size="12" fill="var(--text)" font-weight="700" font-family="Segoe UI">Référentiel RSE</text>
+    <text x="568" y="159" font-size="12" fill="var(--muted)" font-family="Segoe UI">›</text>
+  </g>
+  <rect x="102" y="184" width="490" height="60" rx="10" fill="var(--card)" stroke="var(--border)"/>
+  <text x="112" y="205" font-size="11" fill="var(--muted)" font-family="Segoe UI" font-weight="700" letter-spacing=".5">EN UN COUP D'ŒIL</text>
+  <text x="112" y="230" font-size="20" fill="var(--danger)" font-weight="800" font-family="Segoe UI">12</text>
+  <text x="142" y="230" font-size="11" fill="var(--text2)" font-family="Segoe UI">NC ouvertes</text>
+  <text x="242" y="230" font-size="20" fill="var(--accent)" font-weight="800" font-family="Segoe UI">3</text>
+  <text x="258" y="230" font-size="11" fill="var(--text2)" font-family="Segoe UI">audits actifs</text>
+  <text x="352" y="230" font-size="20" fill="var(--ok)" font-weight="800" font-family="Segoe UI">32</text>
+  <text x="382" y="230" font-size="11" fill="var(--text2)" font-family="Segoe UI">fournisseurs</text>
+  <text x="472" y="230" font-size="20" fill="var(--warn)" font-weight="800" font-family="Segoe UI">2</text>
+  <text x="492" y="230" font-size="11" fill="var(--text2)" font-family="Segoe UI">certifs à 30j</text>
+  <text x="112" y="260" font-size="10" fill="var(--muted)" font-family="Segoe UI">28 fiches RSE · 18 certifs actifs · dernière NC il y a 2h</text>
+</svg>`,
+ovNcAudits: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+  <rect x="14" y="8" width="290" height="284" rx="12" fill="var(--card)" stroke="var(--border)"/>
+  <text x="28" y="34" font-size="18" fill="var(--text)" font-weight="800" font-family="Segoe UI">Non-<tspan fill="var(--accent)">conformités</tspan></text>
+  <text x="28" y="52" font-size="11" fill="var(--muted)" font-family="Segoe UI">142 NC · 12 ouvertes · 5 en analyse</text>
+  <rect x="26" y="62" width="52" height="22" rx="11" fill="var(--accent-bg)" stroke="var(--accent)"/>
+  <text x="40" y="77" font-size="11" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Tous</text>
+  <rect x="82" y="62" width="62" height="22" rx="11" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="96" y="77" font-size="11" fill="var(--text2)" font-family="Segoe UI">Ouvertes</text>
+  <rect x="148" y="62" width="64" height="22" rx="11" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="163" y="77" font-size="11" fill="var(--text2)" font-family="Segoe UI">Analyse</text>
+  <rect x="26" y="94" width="252" height="48" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+  <rect x="26" y="94" width="4" height="48" fill="var(--danger)"/>
+  <text x="40" y="112" font-size="11" fill="var(--accent)" font-weight="700" font-family="ui-monospace,Menlo,monospace">NC-2026-0142</text>
+  <rect x="132" y="102" width="46" height="15" rx="4" fill="rgba(248,113,113,.18)"/>
+  <text x="141" y="113" font-size="9" fill="var(--danger)" font-weight="700" font-family="Segoe UI">Ouverte</text>
+  <rect x="182" y="102" width="50" height="15" rx="4" fill="rgba(251,191,36,.15)"/>
+  <text x="191" y="113" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">Majeure</text>
+  <text x="40" y="132" font-size="11" fill="var(--text)" font-weight="700" font-family="Segoe UI">Étiquettes décollées cartons</text>
+  <rect x="26" y="150" width="252" height="48" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+  <rect x="26" y="150" width="4" height="48" fill="var(--warn)"/>
+  <text x="40" y="168" font-size="11" fill="var(--accent)" font-weight="700" font-family="ui-monospace,Menlo,monospace">NC-2026-0141</text>
+  <rect x="132" y="158" width="60" height="15" rx="4" fill="var(--accent-bg)"/>
+  <text x="141" y="169" font-size="9" fill="var(--accent)" font-weight="700" font-family="Segoe UI">En analyse</text>
+  <text x="40" y="188" font-size="11" fill="var(--text)" font-weight="700" font-family="Segoe UI">Support non conforme · Feys</text>
+  <rect x="26" y="206" width="252" height="48" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+  <rect x="26" y="206" width="4" height="48" fill="var(--ok)"/>
+  <text x="40" y="224" font-size="11" fill="var(--accent)" font-weight="700" font-family="ui-monospace,Menlo,monospace">NC-2026-0140</text>
+  <rect x="132" y="214" width="52" height="15" rx="4" fill="rgba(52,211,153,.15)"/>
+  <text x="141" y="225" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">Clôturée</text>
+  <text x="40" y="244" font-size="11" fill="var(--text)" font-weight="700" font-family="Segoe UI">Rebut découpe · Interne</text>
+  <text x="26" y="278" font-size="10" fill="var(--muted)" font-family="Segoe UI">4 types · Interne · Client · Fournisseur · Logistique</text>
+  <rect x="314" y="8" width="272" height="284" rx="12" fill="var(--card)" stroke="var(--border)"/>
+  <text x="328" y="34" font-size="18" fill="var(--text)" font-weight="800" font-family="Segoe UI">Audits <tspan fill="var(--accent)">client</tspan></text>
+  <text x="328" y="52" font-size="11" fill="var(--muted)" font-family="Segoe UI">3 audits actifs · matrice de conformité</text>
+  <rect x="326" y="66" width="248" height="94" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="338" y="86" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">Ecovadis 2026</text>
+  <rect x="440" y="72" width="70" height="18" rx="4" fill="var(--accent-bg)"/>
+  <text x="450" y="85" font-size="10" fill="var(--accent)" font-weight="700" font-family="Segoe UI">En cours</text>
+  <text x="338" y="104" font-size="10" fill="var(--muted)" font-family="Segoe UI">Client · Errepi · 12/04/2026 · 1 auditeur</text>
+  <text x="338" y="122" font-size="10" fill="var(--text2)" font-family="Segoe UI">18 / 22 questions répondues</text>
+  <rect x="338" y="128" width="224" height="7" rx="3.5" fill="var(--border)"/>
+  <rect x="338" y="128" width="184" height="7" rx="3.5" fill="var(--accent)"/>
+  <text x="338" y="150" font-size="10" fill="var(--accent)" font-weight="700" font-family="Segoe UI">82% répondu</text>
+  <rect x="326" y="168" width="248" height="94" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="338" y="188" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">FSC audit annuel</text>
+  <rect x="454" y="174" width="70" height="18" rx="4" fill="rgba(251,191,36,.18)"/>
+  <text x="466" y="187" font-size="10" fill="var(--warn)" font-weight="700" font-family="Segoe UI">Urgent</text>
+  <text x="338" y="206" font-size="10" fill="var(--muted)" font-family="Segoe UI">Client · Bunsch · 05/06/2026</text>
+  <text x="338" y="224" font-size="10" fill="var(--text2)" font-family="Segoe UI">Matrice 12 fourn. × 8 certifs</text>
+  <rect x="338" y="230" width="224" height="7" rx="3.5" fill="var(--border)"/>
+  <rect x="338" y="230" width="102" height="7" rx="3.5" fill="var(--warn)"/>
+  <text x="338" y="252" font-size="10" fill="var(--warn)" font-weight="700" font-family="Segoe UI">46% répondu · 2 NC critiques</text>
+  <text x="326" y="280" font-size="10" fill="var(--muted)" font-family="Segoe UI">Onglets : Fichiers · Infos · Matrice · Échanges</text>
+</svg>`,
+ovResRef: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+  <rect x="14" y="8" width="290" height="284" rx="12" fill="var(--card)" stroke="var(--border)"/>
+  <text x="28" y="34" font-size="17" fill="var(--text)" font-weight="800" font-family="Segoe UI">Ressources fournisseurs</text>
+  <text x="28" y="52" font-size="11" fill="var(--muted)" font-family="Segoe UI">Un dossier par fournisseur · certificats</text>
+  <rect x="26" y="62" width="252" height="34" rx="6" fill="rgba(248,113,113,.12)" stroke="var(--danger)" stroke-width="1"/>
+  <text x="36" y="79" font-size="11" fill="var(--danger)" font-weight="700" font-family="Segoe UI">1 certificat expiré</text>
+  <text x="36" y="91" font-size="9" fill="var(--text2)" font-family="Segoe UI">Itasa — REACH · expiré depuis 12j</text>
+  <rect x="26" y="106" width="252" height="60" rx="10" fill="var(--bg)" stroke="var(--accent)" stroke-width="2"/>
+  <rect x="26" y="106" width="5" height="60" fill="var(--accent)"/>
+  <text x="42" y="126" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">Fedrigoni</text>
+  <rect x="128" y="112" width="70" height="18" rx="9" fill="var(--accent-bg)"/>
+  <text x="138" y="125" font-size="10" fill="var(--accent)" font-weight="800" font-family="Segoe UI">GROUPE · 3</text>
+  <text x="42" y="144" font-size="10" fill="var(--muted)" font-family="Segoe UI">Italy · France · UK</text>
+  <rect x="42" y="150" width="52" height="16" rx="8" fill="var(--card)" stroke="var(--border)"/>
+  <text x="52" y="162" font-size="10" fill="var(--text2)" font-weight="700" font-family="Segoe UI">6 certifs</text>
+  <rect x="98" y="150" width="52" height="16" rx="8" fill="rgba(52,211,153,.15)"/>
+  <text x="107" y="162" font-size="10" fill="var(--ok)" font-weight="700" font-family="Segoe UI">4 valide</text>
+  <rect x="154" y="150" width="60" height="16" rx="8" fill="rgba(251,191,36,.15)"/>
+  <text x="164" y="162" font-size="10" fill="var(--warn)" font-weight="700" font-family="Segoe UI">2 bientôt</text>
+  <rect x="26" y="174" width="124" height="52" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="38" y="192" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Avery</text>
+  <text x="38" y="206" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C004451</text>
+  <rect x="38" y="212" width="70" height="14" rx="7" fill="rgba(148,163,184,.2)"/>
+  <text x="47" y="222" font-size="9" fill="var(--muted)" font-weight="700" font-family="Segoe UI">1 sans date</text>
+  <rect x="154" y="174" width="124" height="52" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="166" y="192" font-size="12" fill="var(--text)" font-weight="800" font-family="Segoe UI">Itasa</text>
+  <text x="166" y="206" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">FSC-C160893</text>
+  <rect x="166" y="212" width="46" height="14" rx="7" fill="rgba(248,113,113,.18)"/>
+  <text x="175" y="222" font-size="9" fill="var(--danger)" font-weight="700" font-family="Segoe UI">1 expiré</text>
+  <text x="26" y="245" font-size="10" fill="var(--muted)" font-family="Segoe UI">32 fournisseurs · 18 certifs · 4 groupes</text>
+  <rect x="26" y="253" width="252" height="30" rx="6" fill="var(--card)" stroke="var(--border)"/>
+  <text x="36" y="272" font-size="10" fill="var(--text2)" font-family="Segoe UI">Ouvrir un fournisseur → prev/next + Paramètres</text>
+  <rect x="314" y="8" width="272" height="284" rx="12" fill="var(--card)" stroke="var(--border)"/>
+  <text x="328" y="34" font-size="17" fill="var(--text)" font-weight="800" font-family="Segoe UI">Référentiel RSE</text>
+  <text x="328" y="52" font-size="11" fill="var(--muted)" font-family="Segoe UI">Bibliothèque de normes · réponses type</text>
+  <rect x="326" y="62" width="248" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="336" y="79" font-size="11" fill="var(--muted)" font-family="Segoe UI">Rechercher... (raccourci /)</text>
+  <text x="560" y="79" font-size="10" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">/</text>
+  <rect x="326" y="94" width="50" height="18" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/>
+  <text x="342" y="107" font-size="10" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Tous</text>
+  <rect x="380" y="94" width="66" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/>
+  <circle cx="390" cy="103" r="3.5" fill="var(--ok)"/>
+  <text x="399" y="107" font-size="10" fill="var(--text2)" font-family="Segoe UI">Environ.</text>
+  <rect x="450" y="94" width="52" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/>
+  <circle cx="460" cy="103" r="3.5" fill="var(--accent)"/>
+  <text x="469" y="107" font-size="10" fill="var(--text2)" font-family="Segoe UI">Social</text>
+  <rect x="506" y="94" width="66" height="18" rx="9" fill="var(--bg)" stroke="var(--border)"/>
+  <circle cx="516" cy="103" r="3.5" fill="var(--warn)"/>
+  <text x="524" y="107" font-size="10" fill="var(--text2)" font-family="Segoe UI">Traçab.</text>
+  <rect x="326" y="120" width="120" height="76" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="338" y="140" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">ISO 14001</text>
+  <text x="338" y="152" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">ISO14001</text>
+  <rect x="338" y="158" width="80" height="16" rx="4" fill="rgba(52,211,153,.12)"/>
+  <text x="344" y="169" font-size="9" fill="var(--ok)" font-weight="700" font-family="Segoe UI">Environnement</text>
+  <text x="338" y="188" font-size="9" fill="var(--text2)" font-family="Segoe UI">Système management env.</text>
+  <rect x="454" y="120" width="120" height="76" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="466" y="140" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">REACH</text>
+  <text x="466" y="152" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">EC1907/2006</text>
+  <rect x="466" y="158" width="60" height="16" rx="4" fill="rgba(248,113,113,.15)"/>
+  <text x="474" y="169" font-size="9" fill="var(--danger)" font-weight="700" font-family="Segoe UI">Sécurité</text>
+  <text x="466" y="188" font-size="9" fill="var(--text2)" font-family="Segoe UI">Substances SVHC</text>
+  <rect x="326" y="204" width="120" height="76" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="338" y="224" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">FSC / PEFC</text>
+  <text x="338" y="236" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">CoC</text>
+  <rect x="338" y="242" width="66" height="16" rx="4" fill="rgba(251,191,36,.15)"/>
+  <text x="346" y="253" font-size="9" fill="var(--warn)" font-weight="700" font-family="Segoe UI">Traçabilité</text>
+  <text x="338" y="272" font-size="9" fill="var(--text2)" font-family="Segoe UI">Chaîne de contrôle bois</text>
+  <rect x="454" y="204" width="120" height="76" rx="10" fill="var(--bg)" stroke="var(--border)"/>
+  <text x="466" y="224" font-size="13" fill="var(--text)" font-weight="800" font-family="Segoe UI">Ecovadis</text>
+  <text x="466" y="236" font-size="9" fill="var(--muted)" font-family="ui-monospace,Menlo,monospace">CSR score</text>
+  <rect x="466" y="242" width="46" height="16" rx="4" fill="var(--accent-bg)"/>
+  <text x="474" y="253" font-size="9" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Social</text>
+  <text x="466" y="272" font-size="9" fill="var(--text2)" font-family="Segoe UI">Score 62/100</text>
+</svg>`,
   // === Mockups NC ===
   ncGrid: `<svg viewBox="0 0 340 150" xmlns="http://www.w3.org/2000/svg">
     <rect x="10" y="8" width="180" height="18" rx="4" fill="var(--card)" stroke="var(--border)"/>
@@ -4435,19 +4505,19 @@ function _qualiteGuides(){
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>`,
           title: "Bienvenue dans MyQualité",
-          body: "Le module <strong>Qualité</strong> centralise les non-conformités, les audits client, les certifications fournisseurs et le référentiel RSE. Voici en 3 écrans ce que vous y trouverez.",
+          body: `Le module <strong>MyQualité</strong> centralise <span class="qguide-hl">4 sections</span> : non-conformités, audits client, ressources fournisseurs et référentiel RSE. Cliquez sur le logo pour revenir à ce menu à tout moment. Voici en 3 écrans ce que vous y trouverez.`,
           illu: QUALITE_MOCKUPS.ovWelcome
         },
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/><line x1="7" y1="17" x2="12" y2="17"/></svg>`,
           title: "Non-conformités & Audits",
-          body: "Onglet <strong>Non-conformités</strong> : enregistrer, analyser et clôturer les NC internes / clients / fournisseurs. Onglet <strong>Audits client</strong> : suivre les audits reçus (questions, matrice de conformité).",
+          body: `L'onglet <span class="qguide-hl">Non-conformités</span> permet d'enregistrer, analyser et clôturer les écarts qualité — <strong>4 types</strong> (interne, client, fournisseur, logistique) × <strong>3 gravités</strong> (mineure, majeure, critique) et un cycle de vie en 5 étapes. L'onglet <span class="qguide-hl">Audits client</span> gère les audits reçus (Ecovadis, FSC…) avec leurs questions, preuves et matrice de conformité fournisseurs.`,
           illu: QUALITE_MOCKUPS.ovNcAudits
         },
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
           title: "Ressources & Référentiel",
-          body: "Onglet <strong>Ressources fournisseurs</strong> : dossier par fournisseur avec ses certificats (ISO, FSC, REACH...) et suivi des expirations. Onglet <strong>Référentiel RSE</strong> : bibliothèque des normes/certifs (définition, statut SIFA, réponses type).",
+          body: `L'onglet <span class="qguide-hl">Ressources fournisseurs</span> centralise <strong>un dossier par fournisseur</strong> avec ses certificats (ISO, FSC, REACH…) et le suivi des expirations. Les fournisseurs d'un même <strong>groupe</strong> (ex. Fedrigoni Italy/France/UK) sont regroupés sous une seule carte. L'onglet <span class="qguide-hl">Référentiel RSE</span> est la <strong>bibliothèque des normes</strong> avec définitions, statut SIFA et réponses type prêtes pour les appels d'offre.`,
           illu: QUALITE_MOCKUPS.ovResRef
         },
       ]

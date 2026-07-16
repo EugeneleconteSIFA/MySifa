@@ -110,6 +110,16 @@ body.sb-open .sidebar-overlay{display:block}
   font-family:inherit;transition:all .15s;margin-bottom:2px;text-align:left;
 }
 .rh-nav-btn:hover,.rh-nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+/* View toggle Atelier / RH (visible seulement si l'utilisateur a les deux accès) */
+.rh-view-toggle{display:flex;gap:0;padding:2px;margin:0 0 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.rh-view-toggle-btn{
+  flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 10px;border:none;border-radius:8px;background:transparent;
+  color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;
+  transition:all .15s;letter-spacing:.2px;
+}
+.rh-view-toggle-btn:hover{color:var(--text)}
+.rh-view-toggle-btn.active{background:var(--accent-bg);color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .rh-user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
 .rh-user-chip .ucn{font-size:12px;font-weight:600;color:var(--text)}
 .rh-user-chip .ucr{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
@@ -898,6 +908,11 @@ function congeJoursBitmask(userId, ws){
 const S = {
   user: null, isEditor: false, tab: 'planning',
   isReadOnlyAdmin: false,
+  // Deux vues distinctes : 'atelier' (planning postes + congés fabrication/logistique)
+  // ou 'rh' (congés + soldes de TOUS les employés — comptabilité / direction / superadmin).
+  view: 'atelier',
+  hasAtelier: false, hasRH: false,
+  canEditAtelier: false, canEditRH: false,
   viewRange: 2, baseOffset: 0, detailMode: false,
   machines: [], personnel: [], planning: [], conges: [], soldes: [],
   annee: new Date().getFullYear(),
@@ -1047,26 +1062,43 @@ async function loadMachines(){
 async function loadData(){
   S.loading=true; render();
   try{
+    const scope = (S.view==='rh') ? 'rh' : 'atelier';
     const weeks=getWeeksToShow();
     const from=weeks[0]; const to=weeks[weeks.length-1];
-    const [pers,plan,conges,mcfgs]=await Promise.all([
-      api('/personnel').catch(()=>({personnel:[]})),
-      api(`/planning?from_week=${from}&to_week=${to}`).catch(()=>({planning:[]})),
-      api('/conges').catch(()=>({conges:[]})),
-      api('/machine-configs').catch(()=>({configs:[]})),
-    ]);
-    S.personnel=pers?.personnel||[];
-    S.planning=plan?.planning||[];
-    S.conges=conges?.conges||[];
-    S.machineConfigs=mcfgs?.configs||[];
-    S.machineConfigsLoaded=true;
+    if(scope==='rh'){
+      // Vue RH : personnel + congés de tous les employés. Pas de planning postes ni de config machines.
+      const [pers,conges]=await Promise.all([
+        api('/personnel?scope=rh').catch(()=>({personnel:[]})),
+        api('/conges?scope=rh').catch(()=>({conges:[]})),
+      ]);
+      S.personnel=pers?.personnel||[];
+      S.planning=[];
+      S.conges=conges?.conges||[];
+      // Congés est la seule vue possible en RH → forcer le tab courant
+      if(S.tab!=='conges') S.tab='conges';
+    } else {
+      const [pers,plan,conges,mcfgs]=await Promise.all([
+        api('/personnel').catch(()=>({personnel:[]})),
+        api(`/planning?from_week=${from}&to_week=${to}`).catch(()=>({planning:[]})),
+        api('/conges').catch(()=>({conges:[]})),
+        api('/machine-configs').catch(()=>({configs:[]})),
+      ]);
+      S.personnel=pers?.personnel||[];
+      S.planning=plan?.planning||[];
+      S.conges=conges?.conges||[];
+      S.machineConfigs=mcfgs?.configs||[];
+      S.machineConfigsLoaded=true;
+    }
   }catch(e){toast('Erreur chargement : '+e.message,'error');}
   S.loading=false; render();
 }
 
 async function loadSoldes(){
-  try{const d=await api(`/soldes?annee=${S.annee}`);if(d)S.soldes=d.soldes||[];}
-  catch(e){toast('Erreur soldes : '+e.message,'error');}
+  try{
+    const scope = (S.view==='rh') ? 'rh' : 'atelier';
+    const d=await api(`/soldes?annee=${S.annee}&scope=${scope}`);
+    if(d)S.soldes=d.soldes||[];
+  } catch(e){toast('Erreur soldes : '+e.message,'error');}
   render();
 }
 
@@ -1309,10 +1341,66 @@ async function loadMe(){
     }
     const hasPlanningRHOverride = d.access_overrides && d.access_overrides.planning_rh === true;
     const email = String(d.email||'').trim().toLowerCase();
-    S.isEditor=(['direction','superadmin'].includes(d.role) || hasPlanningRHOverride || email==='mlesaffre@sifa.pro');
-    S.isReadOnlyAdmin = (['administration','administration_ventes','administration_technique','comptabilite'].includes(d.role)) && !S.isEditor;
+    const role = d.role || '';
+
+    // — Rôles atelier (vue historique) —
+    const ATELIER_VIEW_ROLES = ['direction','fabrication','logistique','expedition','superadmin',
+                                 'administration','administration_ventes','administration_technique'];
+    const ATELIER_EDIT_ROLES = ['direction','superadmin'];
+    const isMlesaffre = (email==='mlesaffre@sifa.pro');
+    S.hasAtelier = ATELIER_VIEW_ROLES.includes(role) || hasPlanningRHOverride || isMlesaffre;
+    S.canEditAtelier = ATELIER_EDIT_ROLES.includes(role) || hasPlanningRHOverride || isMlesaffre;
+
+    // — Rôles vue RH (nouvelle) : gestion des congés de tous les employés —
+    const HR_VIEW_ROLES = ['comptabilite','direction','superadmin'];
+    const HR_EDIT_ROLES = ['comptabilite','direction','superadmin'];
+    S.hasRH = HR_VIEW_ROLES.includes(role);
+    S.canEditRH = HR_EDIT_ROLES.includes(role);
+
+    // Vue par défaut : atelier si dispo, sinon RH (comptabilité tombera d'office ici).
+    // On respecte un choix mémorisé si l'utilisateur a les deux accès.
+    let stored=null; try{ stored=localStorage.getItem('mysifa.planning_rh.view'); }catch(_){}
+    if(S.hasAtelier && S.hasRH){
+      S.view = (stored==='rh' || stored==='atelier') ? stored : 'atelier';
+    } else if(S.hasAtelier){
+      S.view = 'atelier';
+    } else if(S.hasRH){
+      S.view = 'rh';
+    } else {
+      S.view = 'atelier';
+    }
+    _applyViewPermissions();
   }}
   catch(e){}
+}
+
+// Bascule S.isEditor / S.isReadOnlyAdmin selon la vue courante.
+// Les composants de rendu existants lisent S.isEditor — on l'aligne à chaque bascule.
+function _applyViewPermissions(){
+  const role = (S.user&&S.user.role)||'';
+  if(S.view==='rh'){
+    S.isEditor = S.canEditRH;
+    S.isReadOnlyAdmin = S.hasRH && !S.canEditRH;
+    if(S.tab==='planning') S.tab='conges';
+  } else {
+    S.isEditor = S.canEditAtelier;
+    const isAdminRole = ['administration','administration_ventes','administration_technique','comptabilite'].includes(role);
+    S.isReadOnlyAdmin = isAdminRole && S.hasAtelier && !S.canEditAtelier;
+  }
+}
+
+// Bascule la vue Atelier ↔ RH et recharge les données de la vue cible.
+async function switchView(target){
+  if(target!==S.view && (target==='atelier'||target==='rh')){
+    if(target==='atelier' && !S.hasAtelier) return;
+    if(target==='rh' && !S.hasRH) return;
+    S.view=target;
+    try{ localStorage.setItem('mysifa.planning_rh.view', target); }catch(_){}
+    _applyViewPermissions();
+    render();
+    await loadData();
+    if(S.tab==='conges') await loadSoldes();
+  }
 }
 
 // ── Rendu principal ────────────────────────────────────
@@ -1390,7 +1478,7 @@ function renderMobileTopbar(){
   const bar=document.getElementById('rh-mobile-topbar');
   if(!bar)return;
   const isOp=S.user&&!S.isEditor&&!S.isReadOnlyAdmin;
-  const sub=isOp?'Ma semaine':(S.tab==='conges'?'Congés':'Planning');
+  const sub=isOp?'Ma semaine':(S.view==='rh'?'RH · Congés & soldes':(S.tab==='conges'?'Congés':'Planning'));
   const toolbar=window.innerWidth<=900?rhMobileToolbarHtml():'';
   bar.innerHTML=`
     <div class="rh-mobile-topbar-row">
@@ -1446,12 +1534,30 @@ function renderSidebar(){
   if(!nav||!bot)return;
   const isOp=S.user&&!S.isEditor;
 
+  const showBoth = S.hasAtelier && S.hasRH;
+  const viewToggle = showBoth ? `
+    <div class="rh-view-toggle" role="group" aria-label="Basculer entre les vues">
+      <button type="button" class="rh-view-toggle-btn${S.view==='atelier'?' active':''}" onclick="switchView('atelier')">
+        ${icon('calendar',12)} Atelier
+      </button>
+      <button type="button" class="rh-view-toggle-btn${S.view==='rh'?' active':''}" onclick="switchView('rh')">
+        ${icon('users',12)} RH
+      </button>
+    </div>
+  ` : '';
+
+  // Vue Atelier : Planning + Congés (comportement historique)
+  // Vue RH     : Congés uniquement (soldes intégrés dans la même page)
+  const showPlanningTab = (S.view==='atelier');
+  const showCongesTab = (S.view==='rh') || S.isEditor || S.isReadOnlyAdmin;
+
   nav.innerHTML=`
-    <button class="rh-nav-btn${S.tab==='planning'?' active':''}" onclick="setTab('planning')">
+    ${viewToggle}
+    ${showPlanningTab?`<button class="rh-nav-btn${S.tab==='planning'?' active':''}" onclick="setTab('planning')">
       ${icon('calendar',14)} Planning
-    </button>
-    ${(S.isEditor||S.isReadOnlyAdmin)?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
-      ${icon('umbrella',14)} Congés
+    </button>`:''}
+    ${showCongesTab?`<button class="rh-nav-btn${S.tab==='conges'?' active':''}" onclick="setTab('conges')">
+      ${icon('umbrella',14)} Congés${S.view==='rh'?' & soldes':''}
     </button>`:''}
   `;
 
@@ -1508,11 +1614,13 @@ function renderHeader(){
 
   const weeks=getWeeksToShow();
   const rangeLabel=weeks.length===1?fmtWeekLong(weeks[0]):`${fmtWeekLabel(weeks[0])} → ${fmtWeekLabel(weeks[weeks.length-1])}`;
+  const titleSuffix = (S.view==='rh') ? '<span>RH</span> · Congés & soldes' : 'Planning <span>RH</span>';
 
+  const isRHView = (S.view==='rh');
   hdr.innerHTML=`
-    <div class="rh-hdr-title">Planning <span>RH</span></div>
+    <div class="rh-hdr-title">${titleSuffix}</div>
     <div class="rh-hdr-right">
-      <div class="rh-hdr-nav-row">
+      ${!isRHView?`<div class="rh-hdr-nav-row">
         <div class="rh-wk-nav">
           <button type="button" onclick="navWeeks(-S.viewRange)" title="Période précédente">${icon('chevron_left',14)}</button>
           <button type="button" class="rh-wk-today" onclick="navWeeks(0)">Aujourd'hui</button>
@@ -1530,7 +1638,7 @@ function renderHeader(){
       <span class="rh-hdr-range">${rangeLabel}</span>
       <div class="rh-range-tabs">
         ${rhDesktopRangeOpts().map(n=>`<button type="button" class="rh-range-tab${S.viewRange===n?' active':''}" onclick="setRange(${n})">${n} sem.</button>`).join('')}
-      </div>
+      </div>`:''}
       ${S.tab==='conges'?`
         <select class="rh-annee-sel" onchange="changeAnnee(this.value)">
           ${[S.annee-1,S.annee,S.annee+1].map(y=>`<option value="${y}"${y===S.annee?' selected':''}>${y}</option>`).join('')}
@@ -1549,6 +1657,8 @@ function renderContent(){
   if(!c)return;
   if(S.loading){c.innerHTML=`<div class="rh-loading"><div class="rh-spinner"></div> Chargement…</div>`;renderModals();return;}
   if(!S.isEditor && !S.isReadOnlyAdmin){c.innerHTML='';c.appendChild(buildOperatorView());renderModals();return;}
+  // Vue RH : pas de planning postes -> forcer conges
+  if(S.view==='rh' && S.tab==='planning') S.tab='conges';
   if(S.tab==='planning'){c.innerHTML='';c.appendChild(buildPlanningGrid());}
   else if(S.tab==='conges'){c.innerHTML='';c.appendChild(buildCongesTab());}
   renderModals();
@@ -2060,7 +2170,7 @@ function buildCongesTab(){
   const soldesSection=document.createElement('div'); soldesSection.className='rh-section print-target';
   soldesSection.innerHTML=`
     <div class="rh-section-hdr">
-      <span class="rh-section-title">${icon('users',13)} Soldes congés ${S.annee}</span>
+      <span class="rh-section-title">${icon('users',13)} Soldes congés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
       ${S.isEditor?`<button class="rh-icon-btn" onclick="openSoldeModal(null)">
         ${icon('edit',12)} Modifier un solde
       </button>`:''}
@@ -2074,14 +2184,14 @@ function buildCongesTab(){
   </tr></thead>`;
   const stbody=document.createElement('tbody');
   if(!S.soldes.length){
-    stbody.innerHTML=`<tr><td colspan="${S.isEditor?6:5}" class="rh-empty">Aucun employé planifiable — vérifiez les rôles utilisateurs</td></tr>`;
+    stbody.innerHTML=`<tr><td colspan="${S.isEditor?6:5}" class="rh-empty">${S.view==='rh'?'Aucun employé actif trouvé':'Aucun employé planifiable — vérifiez les rôles utilisateurs'}</td></tr>`;
   }else{
     S.soldes.forEach(s=>{
       const pctCP=s.quota_cp>0?Math.min(100,s.poses_cp/s.quota_cp*100):0;
       const fillCls=pctCP>=100?'danger':pctCP>=80?'warn':'';
       const tr=document.createElement('tr');
       tr.innerHTML=`
-        <td style="font-weight:600">${s.user_nom}</td>
+        <td style="font-weight:600">${s.user_nom}${S.view==='rh'&&s.user_role?` <span style="color:var(--muted);font-weight:400;font-size:11px">· ${s.user_role}</span>`:''}</td>
         <td>${s.quota_cp}j</td>
         <td><span class="rh-badge cp">${s.poses_cp}j</span></td>
         <td onclick="openSoldeModal(${s.user_id})" style="cursor:pointer" title="Cliquer pour modifier">
@@ -2113,7 +2223,7 @@ function buildCongesTab(){
           <label>Employé *</label>
           <select onchange="S.congeForm.user_id=this.value">
             <option value="">Sélectionner…</option>
-            ${S.personnel.map(p=>`<option value="${p.id}"${S.congeForm.user_id==p.id?' selected':''}>${p.nom}</option>`).join('')}
+            ${S.personnel.map(p=>`<option value="${p.id}"${S.congeForm.user_id==p.id?' selected':''}>${S.view==='rh'&&p.role?'['+p.role+'] ':''}${p.nom}</option>`).join('')}
           </select>
         </div>
         <div class="rh-field" style="margin:0">
@@ -2153,7 +2263,7 @@ function buildCongesTab(){
   const listSection=document.createElement('div'); listSection.className='rh-section print-target';
   listSection.innerHTML=`
     <div class="rh-section-hdr">
-      <span class="rh-section-title">${icon('umbrella',13)} Congés posés ${S.annee}</span>
+      <span class="rh-section-title">${icon('umbrella',13)} Congés posés ${S.annee}${S.view==='rh'?' · Tous les services':''}</span>
     </div>
   `;
   const congesThisYear=S.conges.filter(c=>{
@@ -2173,7 +2283,7 @@ function buildCongesTab(){
     congesThisYear.forEach(c=>{
       const tr=document.createElement('tr');
       tr.innerHTML=`
-        <td style="font-weight:600">${c.user_nom}</td>
+        <td style="font-weight:600">${c.user_nom}${S.view==='rh'&&c.user_role?` <span style="color:var(--muted);font-weight:400;font-size:11px">· ${c.user_role}</span>`:''}</td>
         <td>${fmtDateFull(c.date_debut)}</td>
         <td>${fmtDateFull(c.date_fin)}</td>
         <td><strong>${c.nb_jours}j</strong></td>
@@ -2217,7 +2327,7 @@ function buildSoldeModal(){
       <label>Employé *</label>
       <select onchange="S.soldeForm.user_id=this.value">
         <option value="">Sélectionner…</option>
-        ${S.personnel.map(p=>`<option value="${p.id}"${S.soldeForm.user_id==p.id?' selected':''}>${p.nom}</option>`).join('')}
+        ${S.personnel.map(p=>`<option value="${p.id}"${S.soldeForm.user_id==p.id?' selected':''}>${S.view==='rh'&&p.role?'['+p.role+'] ':''}${p.nom}</option>`).join('')}
       </select>
     </div>
     <div class="rh-field">
@@ -2567,6 +2677,8 @@ function toast(msg,type='success'){
 
 // ── Actions ────────────────────────────────────────────
 function setTab(t){
+  // La vue RH ne propose que l'onglet Congés — bloquer la bascule vers Planning
+  if(S.view==='rh' && t==='planning') t='conges';
   S.tab=t;
   closeSidebar();
   if(t==='conges'&&!S.soldes.length)loadSoldes();
@@ -3005,8 +3117,9 @@ function printConges(){
 // ── Init ───────────────────────────────────────────────
 (async()=>{
   await loadMe();
+  if(S.view==='rh'){ S.tab='conges'; }
   if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=2; else S.viewRange=1;
-  await loadMachines();
+  if(S.view!=='rh'){ await loadMachines(); }
   await loadData();
   if(S.tab==='conges')await loadSoldes();
 })();

@@ -1756,8 +1756,13 @@ async function validerSaisieReponse(reponseId,demandeId){
 async function retenirReponse(reponseId,demandeId){
   if(!confirm('Retenir ce transporteur et clôturer la demande ?'))return;
   try{
-    await api('/api/expe/devis/reponses/'+reponseId+'/retenir',{method:'POST'});
+    const res=await api('/api/expe/devis/reponses/'+reponseId+'/retenir',{method:'POST'});
     showToast('Transporteur retenu. Demande clôturée.','success');
+    if(res&&res.email_envoye){
+      showToast('Email de confirmation envoyé à '+(res.email_destinataire||'—'),'info');
+    }else if(res){
+      showToast('Email de confirmation non envoyé ('+(res.email_error||'raison inconnue')+')','danger');
+    }
     fermerExpeDevisModal();
     await chargerDemandes();
   }catch(e){
@@ -1963,7 +1968,7 @@ function renderExpeDevisModal(){
     if(d.statut==='ouverte'&&expeCanWrite()){
       box.appendChild(h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}},
         h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'),
-        h('button',{type:'button',className:'btn',style:{color:'var(--danger)',borderColor:'var(--danger)'},
+        h('button',{type:'button',className:'btn btn-ghost',style:{color:'var(--danger)',borderColor:'var(--danger)',background:'transparent'},
           title:'Clôturer cette demande (déplace dans l’historique)',
           onClick:()=>void cloturerDemande(d.id)},iconEl('check-circle',12),' Clôturer')
       ));
@@ -2008,13 +2013,53 @@ function renderExpeDevisModal(){
       'Reply-To : votre email · copie ',
       h('strong',null,'expeditions@sifa.pro')
     ));
+    // Barre d'actions : maitre-checkbox (tout selectionner / tout deselectionner)
+    // + bouton "Nouveau transporteur" qui ouvre le modal d'ajout (le modal envoi
+    // reste ouvert derriere, l'utilisateur y revient apres avoir sauvegarde).
+    const allKeys=[];
+    trps.forEach(t=>allKeys.push('t'+t.id));
+    prospects.forEach(pp=>allKeys.push('p'+pp.id));
+    const allChecked=allKeys.length>0&&allKeys.every(k=>m.checks[k]&&m.checks[k].checked);
+    const noneChecked=allKeys.every(k=>!m.checks[k]||!m.checks[k].checked);
+    const masterCb=h('input',{type:'checkbox'});
+    masterCb.checked=allChecked;
+    masterCb.indeterminate=!allChecked&&!noneChecked;
+    masterCb.addEventListener('change',e=>{
+      const val=!!e.target.checked;
+      // Initialise les entrees manquantes puis force le nouvel etat.
+      trps.forEach(t=>{
+        const k='t'+t.id;
+        if(m.checks[k]==null)m.checks[k]={checked:val,kind:'actif',id:t.id};
+        else m.checks[k].checked=val;
+      });
+      prospects.forEach(pp=>{
+        const k='p'+pp.id;
+        if(m.checks[k]==null)m.checks[k]={checked:val,kind:'prospect',nom:pp.nom,email:pp.contact_email};
+        else m.checks[k].checked=val;
+      });
+      render();
+    });
+    const masterLbl=allChecked?'Tout desselectionner':'Tout selectionner';
+    const masterRow=h('label',{className:'expe-devis-envoi-row',style:{background:'var(--accent-bg)',borderRadius:'8px',fontWeight:'700'}},
+      masterCb,
+      h('span',{style:{fontSize:'13px',color:'var(--text)'}},masterLbl),
+      h('span',{style:{fontSize:'11px',color:'var(--muted)',marginLeft:'auto'}},allKeys.length+' destinataire'+(allKeys.length>1?'s':''))
+    );
+    const newTrpBtn=h('button',{type:'button',className:'btn-ghost',
+      style:{fontSize:'12px',color:'var(--accent)',padding:'6px 10px',border:'1px dashed var(--accent)',borderRadius:'8px',cursor:'pointer',background:'transparent'},
+      onClick:()=>{openTransporteurModal(null);},
+      title:'Creer un nouveau transporteur (le modal d\'envoi reste ouvert derriere)'
+    },iconEl('plus',12),' Nouveau transporteur');
+    const actionsBar=h('div',{style:{display:'flex',justifyContent:'flex-end',margin:'8px 0'}},newTrpBtn);
+    box.appendChild(masterRow);
+    box.appendChild(actionsBar);
     const list=h('div',{className:'expe-devis-envoi-list'});
     trps.forEach(t=>{
       const key='t'+t.id;
       if(m.checks[key]==null)m.checks[key]={checked:true,kind:'actif',id:t.id};
       const cb=h('input',{type:'checkbox'});
       cb.checked=!!m.checks[key].checked;
-      cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;});
+      cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;render();});
       const ems=expeTrpReadEmails(t);
       const emailsLabel=ems.length<=1?ems[0]:ems[0]+' (+'+(ems.length-1)+')';
       list.appendChild(h('label',{className:'expe-devis-envoi-row',title:ems.join(', ')},
@@ -2030,7 +2075,7 @@ function renderExpeDevisModal(){
         if(m.checks[key]==null)m.checks[key]={checked:false,kind:'prospect',nom:p.nom,email:p.contact_email};
         const cb=h('input',{type:'checkbox'});
         cb.checked=!!m.checks[key].checked;
-        cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;});
+        cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;render();});
         list.appendChild(h('label',{className:'expe-devis-envoi-row'},
           cb,
           h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(p.nom)),

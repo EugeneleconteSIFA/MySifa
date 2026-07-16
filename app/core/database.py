@@ -6688,29 +6688,35 @@ Ressources :
         conn.execute("CREATE INDEX IF NOT EXISTS idx_ugp_guide ON user_guide_progress(guide_key)")
         conn.commit()
         _record_schema_migration(conn, 181, "user_guide_progress")
-    # Migration 182 — Codes maintenance : interventions libres (one-shot).
-    # Ajoute deux colonnes sur maintenance_codes :
-    # - libre INTEGER DEFAULT 0 : flag qui distingue les codes libres des
-    #   codes du catalogue standard. Un code libre est cree a la volee par
-    #   l'operateur pour une intervention ponctuelle (remplacement joint,
-    #   changement de reglage, etc.) sans passer par Parametres > Maintenance.
-    #   Il est exclu du catalogue principal, de la vue Maintenance et du
-    #   selecteur de la modale de saisie standard. Il n'apparait que dans
-    #   l'historique (avec un chip visuel distinct) et dans l'onglet dedie
-    #   des parametres.
-    # - usage_count INTEGER DEFAULT 0 : nombre de saisies rattachees au code.
-    #   Sert a trier l'autocomplete par pertinence et a bloquer la suppression
-    #   d'un code libre encore utilise. Incremente cote router au marquage
-    #   "termine" d'une op.
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=182 LIMIT 1").fetchone():
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
-        if "libre" not in cols:
-            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN libre INTEGER NOT NULL DEFAULT 0")
-        if "usage_count" not in cols:
-            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0")
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_codes_libre ON maintenance_codes(libre)")
+
+    # Migration 183 — MyExpé : lier un départ au devis retenu qui l'a genere.
+    # Corrige le 500 sur POST /api/expe/devis/reponses/{id}/retenir qui inserait
+    # deux colonnes inexistantes (source_devis_reponse_id, source_devis_demande_id)
+    # dans expe_departs. La 182 est deja reservee cote staging pour
+    # maintenance_codes_libre_and_usage_count.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=183 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "source_devis_reponse_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_reponse_id INTEGER "
+                "REFERENCES expe_devis_reponses(id)"
+            )
+        if "source_devis_demande_id" not in cols:
+            conn.execute(
+                "ALTER TABLE expe_departs ADD COLUMN source_devis_demande_id INTEGER "
+                "REFERENCES expe_demandes_devis(id)"
+            )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis_reponse "
+            "ON expe_departs(source_devis_reponse_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_source_devis_demande "
+            "ON expe_departs(source_devis_demande_id)"
+        )
         conn.commit()
-        _record_schema_migration(conn, 182, "maintenance_codes_libre_and_usage_count")
+        _record_schema_migration(conn, 183, "expe_departs_source_devis_link")
+
 
 def create_default_admin():
     import bcrypt

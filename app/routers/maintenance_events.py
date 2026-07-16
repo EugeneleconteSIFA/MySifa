@@ -601,7 +601,7 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT event_id, statut, done_at, code FROM maintenance_event_ops WHERE id=?",
+            "SELECT event_id, statut, done_at FROM maintenance_event_ops WHERE id=?",
             (op_id,),
         ).fetchone()
         if not row or row["event_id"] != event_id:
@@ -630,27 +630,13 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         updates["updated_by"] = user["id"]
         updates["updated_at"] = now
         # Pose done_at + done_by au moment où l'op passe à termine.
-        # v180 : incremente usage_count sur le code au premier passage a termine.
-        first_termine = False
         if updates.get("statut") == "termine" and not row["done_at"]:
             updates["done_at"] = now
             updates["done_by"] = user["id"]
-            first_termine = True
 
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_event_ops SET {set_clause} WHERE id=?",
                      list(updates.values()) + [op_id])
-        # v180 : incremente usage_count sur le code (defensif : colonne peut ne
-        # pas exister sur DB pas encore migree).
-        if first_termine and row["code"]:
-            try:
-                conn.execute(
-                    "UPDATE maintenance_codes SET usage_count = COALESCE(usage_count, 0) + 1 "
-                    "WHERE code = ?",
-                    (row["code"],),
-                )
-            except Exception:
-                pass
         if machines_touched:
             _recompute_event_machine(conn, event_id)
         conn.commit()
@@ -674,6 +660,49 @@ def delete_op(event_id: int, op_id: int, request: Request):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
         conn.execute("DELETE FROM maintenance_event_ops WHERE id=?", (op_id,))
         _recompute_event_machine(conn, event_id)
+        conn.commit()
+        ev = _load_event_full(conn, event_id)
+    return {"event": ev}
+
+
+@router.post("/api/maintenance/events/{event_id}/ops/{op_id}/reset")
+def reset_op(event_id: int, op_id: int, request: Request):
+    """Annule la saisie d'une op (statut termine -> a_faire).
+    - Efface done_at, done_by, duree_reelle_min, pieces_changees, observations.
+    - Trace updated_by / updated_at (traçabilité minimale de l'annulation).
+    - Perms : admin partout. Opérateur si dans le groupe assigné du créneau
+      (identique à update_op) OU s'il a créé l'event.
+    - La ligne dans l'historique (get_history) disparaît automatiquement puisque
+      elle est filtrée par statut='termine'."""
+    user, maint_role = _require_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT event_id, statut FROM maintenance_event_ops WHERE id=?",
+            (op_id,),
+        ).fetchone()
+        if not row or row["event_id"] != event_id:
+            raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        # Perms opérateur : dans le groupe OU créateur (cf. update_op / _can_operator_manage_event)
+        if maint_role == "operator":
+            ev_check = _load_event_full(conn, event_id)
+            in_group = _user_in_group(conn, event_id, user["id"])
+            is_owner = _can_operator_manage_event(ev_check, user["id"])
+            if not (in_group or is_owner):
+                raise HTTPException(status_code=403, detail="Vous n'êtes pas autorisé à annuler cette saisie")
+        now = _now_paris_iso()
+        conn.execute(
+            """UPDATE maintenance_event_ops
+               SET statut='a_faire',
+                   duree_reelle_min=NULL,
+                   pieces_changees=NULL,
+                   observations=NULL,
+                   done_at=NULL,
+                   done_by=NULL,
+                   updated_by=?,
+                   updated_at=?
+               WHERE id=?""",
+            (user["id"], now, op_id),
+        )
         conn.commit()
         ev = _load_event_full(conn, event_id)
     return {"event": ev}
@@ -819,7 +848,6 @@ def get_history(
                        o.code           AS code,
                        c.label          AS code_label,
                        c.categorie      AS categorie,
-                       COALESCE(c.libre, 0) AS code_libre,
                        o.duree_reelle_min AS duree_reelle_min,
                        o.observations   AS commentaire,
                        o.pieces_changees AS pieces_changees,
@@ -855,7 +883,6 @@ def get_history(
         # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
         d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
         d["type"] = d.get("code_label") or d.get("code") or ""
-        d["libre"] = bool(d.pop("code_libre", 0) or 0)
         out.append(d)
     return {"history": out}
 
