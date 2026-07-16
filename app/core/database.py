@@ -6738,7 +6738,20 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 184, "cleanup_operator_planifie_creneaux")
 
-    # Migration 185 — Système de gestion des accès database-driven.
+    # Migration 185 — MyMaintenance : consignes admin par op planifiée.
+    # L'admin peut ajouter des instructions/détails textuels sur chaque op
+    # d'un créneau. Nullable, pas de valeur par défaut. Le champ est propre
+    # à chaque row (une op sur Coh1 et la même sur Coh2 = 2 rows = 2 champs
+    # consignes indépendants). Visibles côté opérateur (icône i + panneau)
+    # et dans l'historique admin.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=185 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
+        if "consignes" not in cols:
+            conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN consignes TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 185, "maintenance_event_ops_consignes")
+
+    # Migration 186 — Système de gestion des accès database-driven.
     # Deux tables : role_access_defaults (référentiel rôle × app × module,
     # modifiable dans Paramètres) et user_access_overrides (surcharges par
     # utilisateur, même granularité). Niveau 4 valeurs : none / read / write
@@ -6747,7 +6760,7 @@ Ressources :
     # Seed depuis default_app_access_for_role (aucune régression). La colonne
     # legacy users.access_overrides (JSON) est copiée vers user_access_overrides
     # puis conservée en fallback ; sera droppée dans une migration ultérieure.
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=185 LIMIT 1").fetchone():
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=186 LIMIT 1").fetchone():
         conn.execute(
             "CREATE TABLE IF NOT EXISTS role_access_defaults ("
             "role TEXT NOT NULL, app_id TEXT NOT NULL, "
@@ -6827,7 +6840,7 @@ Ressources :
                 )
 
         conn.commit()
-        _record_schema_migration(conn, 185, "access_control_tables_and_seed")
+        _record_schema_migration(conn, 186, "access_control_tables_and_seed")
 
 
 def create_default_admin():

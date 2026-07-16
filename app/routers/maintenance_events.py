@@ -165,7 +165,7 @@ def _load_event_full(conn, event_id: int) -> Optional[dict]:
     ops = conn.execute(
         """SELECT o.id, o.code, o.statut, o.duree_reelle_min, o.pieces_changees,
                   o.observations, o.photos_json, o.done_at, o.done_by,
-                  o.updated_by, o.updated_at, o.machines_csv,
+                  o.updated_by, o.updated_at, o.machines_csv, o.consignes,
                   c.label     AS code_label,
                   c.categorie AS code_categorie
            FROM maintenance_event_ops o
@@ -264,6 +264,8 @@ class EventUpdateBody(BaseModel):
 class OpAddBody(BaseModel):
     code: str
     machines: Optional[List[str]] = None
+    # v185 : consignes admin optionnelles à la création d'une op
+    consignes: Optional[str] = None
 
 
 class OpUpdateBody(BaseModel):
@@ -273,6 +275,8 @@ class OpUpdateBody(BaseModel):
     observations: Optional[str] = None
     photos_json: Optional[str] = None
     machines: Optional[List[str]] = None
+    # v185 : consignes admin (empty string autorisée pour effacer)
+    consignes: Optional[str] = None
 
 
 class OperatorAddBody(BaseModel):
@@ -564,9 +568,10 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
                 ).fetchone()
             if exists:
                 continue
+            # v185 : consignes si fournies à la création
             conn.execute(
-                "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at) VALUES (?, ?, ?, ?)",
-                (event_id, body.code, single_csv, now),
+                "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, consignes, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (event_id, body.code, single_csv, (body.consignes or None) if body.consignes else None, now),
             )
             inserted += 1
         if inserted == 0:
@@ -598,7 +603,8 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         updates = {}
         machines_touched = False
         for k, v in body.model_dump(exclude_unset=True).items():
-            if v is None: continue
+            # v185 : consignes accepte empty string (pour effacer les consignes)
+            if v is None and k != "consignes": continue
             if k == "statut" and v not in _VALID_STATUTS:
                 raise HTTPException(status_code=400, detail=f"statut invalide: {v}")
             if k == "machines":
@@ -829,6 +835,7 @@ def get_history(
                        e.id             AS event_id,
                        e.machine        AS machine,
                        e.nom            AS event_nom,
+                       o.consignes      AS consignes,
                        o.machines_csv   AS op_machines_csv,
                        o.code           AS code,
                        c.label          AS code_label,
