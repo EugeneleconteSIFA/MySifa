@@ -113,7 +113,7 @@
   let S = {
     // Routing / session
     app: HAS_INITIAL_APP ? INITIAL_APP : 'login',
-    page: 'menu',
+    page: 'production',
     subPage: 'kpis',          // 'kpis' | 'saisies' | 'erreurs'
     user: null,
     sidebarOpen: false,
@@ -7089,7 +7089,6 @@ function renderProdKpis(){
     const items = comptaPlan
       ? (canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : [])
       : [
-          {key: 'menu', label: 'Accueil', icon: 'home'},
           ...(canPlanningNav(S.user) ? [{key: '_planning', label: 'Planning', icon: 'calendar'}] : []),
           {key: 'production', label: 'Production', icon: 'wrench'},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
@@ -7371,7 +7370,7 @@ function renderProdKpis(){
   // Les fonctions sont mises en `window` pour que les étapes 2f+ puissent
   // les compléter / les utiliser. À la fin du refactor (étape 2n), ces
   // exports pourront être retirés si plus nécessaire.
-  // ── Guides in-app MyProd (moteur partagé mysifa_guide_engine.js) ─────
+  // ── Guides in-app MyProd (moteur partagé mysifa_guides.js) ─────
   var PROD_VIEW_GUIDE = {
     menu: 'myprod-overview',
     production: 'myprod-production',
