@@ -681,6 +681,7 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
+<script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
@@ -3114,6 +3115,152 @@ function printConges(){
   window.print();
 }
 
+// ─── Guides in-app Planning RH (moteur partagé mysifa_guides.js) ───
+const PLANNINGRH_GUIDES = {
+  'planningrh-overview': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+      title: 'Planning RH',
+      body: `Planning RH gère <strong>l'affectation du personnel</strong> et les <strong>congés</strong>. Selon votre rôle, vous planifiez l'atelier, suivez les demandes de congés ou consultez les soldes de tous les services.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Affecter le personnel aux postes et machines, semaine par semaine.</li><li>Enregistrer et valider les demandes de congés.</li><li>Suivre les soldes de congés par employé (vue RH).</li><li>Chaque employé consulte sa propre semaine en lecture seule.</li></ul></div></div>`
+    },
+    {
+      title: 'Deux vues : Atelier et RH',
+      body: `En haut, un sélecteur bascule entre <span class="mguide-tag">Atelier</span> (affectation aux postes) et <span class="mguide-tag">RH</span> (congés & soldes, tous services). Chaque vue a ses sous-onglets <span class="mguide-hl">Planning</span> et <span class="mguide-hl">Congés</span>. La vue RH n'apparaît que pour les profils habilités.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="12" width="150" height="30" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+        <rect x="12" y="16" width="71" height="22" rx="6" fill="var(--accent)"/>
+        <text x="47" y="31" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">Atelier</text>
+        <text x="120" y="31" font-size="10" fill="var(--text2)" text-anchor="middle">RH</text>
+        <rect x="8" y="52" width="96" height="24" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
+        <text x="56" y="68" font-size="10" fill="var(--accent)" font-weight="700" text-anchor="middle">Planning</text>
+        <rect x="110" y="52" width="96" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/>
+        <text x="158" y="68" font-size="10" fill="var(--text2)" text-anchor="middle">Congés</text>
+        <rect x="8" y="86" width="324" height="78" rx="9" fill="var(--card)" stroke="var(--border)"/>
+        <text x="20" y="108" font-size="10" fill="var(--muted)">Vue Atelier › onglet Planning :</text>
+        <text x="20" y="126" font-size="11" fill="var(--text)" font-weight="700">la grille d'affectation du personnel</text>
+        <text x="20" y="146" font-size="10" fill="var(--muted)">Vue RH › congés &amp; soldes de tous les services</text>
+      </svg>`
+    },
+    {
+      title: 'Planning atelier — la grille',
+      body: `L'onglet <strong>Planning</strong> affiche une grille <span class="mguide-hl">semaines × postes</span> (Cohésio 1, Cohésio 2, DSI, Repiquage…). On y place les personnes sur les créneaux. Les flèches et le sélecteur <span class="mguide-tag">1 / 2 / 4 sem.</span> changent la période affichée.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="10" width="46" height="18" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="31" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">Poste</text>
+        <text x="80" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S12</text>
+        <text x="140" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S13</text>
+        <text x="200" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S14</text>
+        <text x="262" y="23" font-size="9" fill="var(--muted)" text-anchor="middle">S15</text>
+        <g font-size="9">
+          <rect x="8" y="32" width="46" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="12" y="48" fill="var(--text2)">Cohésio 1</text>
+          <rect x="58" y="32" width="52" height="26" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="84" y="48" fill="var(--accent)" text-anchor="middle" font-weight="700">Dupont</text>
+          <rect x="116" y="32" width="52" height="26" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="142" y="48" fill="var(--accent)" text-anchor="middle" font-weight="700">Dupont</text>
+          <rect x="174" y="32" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+          <rect x="232" y="32" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+          <rect x="8" y="62" width="46" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/><text x="12" y="78" fill="var(--text2)">DSI</text>
+          <rect x="58" y="62" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+          <rect x="116" y="62" width="52" height="26" rx="4" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/><text x="142" y="78" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Martin</text>
+          <rect x="174" y="62" width="52" height="26" rx="4" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/><text x="200" y="78" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Martin</text>
+          <rect x="232" y="62" width="52" height="26" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+        </g>
+        <rect x="214" y="100" width="52" height="20" rx="6" fill="var(--accent)"/><text x="240" y="114" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">2 sem.</text>
+        <rect x="270" y="100" width="30" height="20" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="285" y="114" font-size="9" fill="var(--text2)" text-anchor="middle">4</text>
+        <text x="12" y="140" font-size="10" fill="var(--muted)">Cliquez une cellule pour affecter une personne à un créneau.</text>
+      </svg>`
+    },
+    {
+      title: 'Congés — demandes et validation',
+      body: `L'onglet <strong>Congés</strong> liste les demandes par année : dates, note, <span class="mguide-hl">statut</span>. Les configurateurs valident ou refusent, et chaque congé validé se répercute sur le planning et sur le <strong>solde</strong> de l'employé.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="10" width="324" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="16" y="25" font-size="9" fill="var(--muted)">Employé</text><text x="120" y="25" font-size="9" fill="var(--muted)">Du → Au</text><text x="230" y="25" font-size="9" fill="var(--muted)">Statut</text><text x="290" y="25" font-size="9" fill="var(--muted)">Actions</text>
+        <g font-size="9">
+          <rect x="8" y="36" width="324" height="26" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="52" fill="var(--text)" font-weight="600">Dupont</text><text x="120" y="52" fill="var(--text2)">12/07 → 19/07</text>
+          <rect x="222" y="41" width="54" height="16" rx="8" fill="rgba(52,211,153,.15)"/><text x="249" y="53" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">Validé</text>
+          <rect x="8" y="66" width="324" height="26" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="82" fill="var(--text)" font-weight="600">Martin</text><text x="120" y="82" fill="var(--text2)">05/08 → 09/08</text>
+          <rect x="222" y="71" width="54" height="16" rx="8" fill="rgba(251,191,36,.2)"/><text x="249" y="83" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">En attente</text>
+          <rect x="284" y="70" width="20" height="18" rx="4" fill="var(--accent-bg)"/><text x="294" y="83" fill="var(--accent)" text-anchor="middle" font-weight="700">✓</text>
+          <rect x="308" y="70" width="20" height="18" rx="4" fill="rgba(248,113,113,.15)"/><text x="318" y="83" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="700">×</text>
+        </g>
+        <text x="12" y="118" font-size="10" fill="var(--muted)">Valider une demande met à jour le planning et le solde.</text>
+      </svg>`
+    },
+    {
+      title: 'Vue RH — soldes de congés',
+      body: `La <strong>vue RH</strong> réunit les congés et les <span class="mguide-hl">soldes</span> de <strong>tous les services</strong> pour l'année choisie. Réservée aux profils RH/direction, elle sert de tableau de bord central pour la gestion des congés de l'entreprise.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <text x="8" y="20" font-size="11" fill="var(--text)" font-weight="800">Soldes congés 2026 · Tous les services</text>
+        <rect x="8" y="30" width="324" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="16" y="44" font-size="9" fill="var(--muted)">Employé</text><text x="150" y="44" font-size="9" fill="var(--muted)">Service</text><text x="240" y="44" font-size="9" fill="var(--muted)">Acquis</text><text x="290" y="44" font-size="9" fill="var(--muted)">Restant</text>
+        <g font-size="9">
+          <rect x="8" y="54" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="69" fill="var(--text)" font-weight="600">Dupont</text><text x="150" y="69" fill="var(--text2)">Fabrication</text><text x="252" y="69" fill="var(--text2)" text-anchor="middle">25</text><text x="302" y="69" fill="var(--accent)" text-anchor="middle" font-weight="700">12</text>
+          <rect x="8" y="82" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="97" fill="var(--text)" font-weight="600">Martin</text><text x="150" y="97" fill="var(--text2)">Logistique</text><text x="252" y="97" fill="var(--text2)" text-anchor="middle">25</text><text x="302" y="97" fill="var(--accent)" text-anchor="middle" font-weight="700">18</text>
+          <rect x="8" y="110" width="324" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="16" y="125" fill="var(--text)" font-weight="600">Bernard</text><text x="150" y="125" fill="var(--text2)">Expédition</text><text x="252" y="125" fill="var(--text2)" text-anchor="middle">25</text><text x="302" y="125" fill="var(--accent)" text-anchor="middle" font-weight="700">7</text>
+        </g>
+        <text x="12" y="152" font-size="10" fill="var(--muted)">Un coup d'œil sur les congés de toute l'entreprise.</text>
+      </svg>`
+    }
+  ]},
+  'planningrh-operator': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
+      title: 'Ma semaine',
+      body: `Cette vue vous montre <strong>votre planning</strong> : les postes et créneaux sur lesquels vous êtes affecté. Elle est en <span class="mguide-hl">lecture seule</span> — seules les personnes habilitées modifient l'affectation.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire</div><ul class="mguide-svc-list"><li>Voir votre affectation de la semaine.</li><li>Naviguer d'une semaine à l'autre.</li><li>Vérifier vos créneaux avant de venir.</li></ul></div></div>`
+    },
+    {
+      title: 'Naviguer entre les semaines',
+      body: `Utilisez les flèches <span class="mguide-tag">‹</span> <span class="mguide-tag">›</span> pour passer d'une semaine à l'autre, et <span class="mguide-hl">Aujourd'hui</span> pour revenir à la semaine en cours. Le sélecteur <span class="mguide-tag">1 / 2 sem.</span> élargit l'affichage.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="70" y="16" width="24" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="82" y="33" font-size="13" fill="var(--text2)" text-anchor="middle">‹</text>
+        <rect x="100" y="16" width="90" height="24" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="145" y="32" font-size="10" fill="var(--accent)" text-anchor="middle" font-weight="700">Aujourd'hui</text>
+        <rect x="196" y="16" width="24" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="208" y="33" font-size="13" fill="var(--text2)" text-anchor="middle">›</text>
+        <rect x="234" y="16" width="44" height="24" rx="6" fill="var(--accent)"/><text x="256" y="32" font-size="9" fill="#fff" text-anchor="middle" font-weight="700">1 sem.</text>
+        <rect x="282" y="16" width="30" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="297" y="32" font-size="9" fill="var(--text2)" text-anchor="middle">2</text>
+        <rect x="40" y="56" width="260" height="100" rx="10" fill="var(--card)" stroke="var(--border)"/>
+        <text x="56" y="80" font-size="11" fill="var(--text)" font-weight="800">Semaine 12 · 16 – 22 mars</text>
+        <text x="56" y="108" font-size="10" fill="var(--muted)">Votre affectation s'affiche ici,</text>
+        <text x="56" y="126" font-size="10" fill="var(--muted)">jour par jour.</text>
+      </svg>`
+    },
+    {
+      title: 'Lire votre affectation',
+      body: `Chaque bloc indique le <strong>poste</strong> et le <strong>créneau</strong> où vous êtes attendu (journée ou équipe). Si une case est vide, vous n'êtes pas planifié ce jour-là. En cas d'erreur, signalez-le à votre responsable.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <g font-size="9">
+          <text x="46" y="24" fill="var(--muted)" text-anchor="middle">Lun</text><text x="110" y="24" fill="var(--muted)" text-anchor="middle">Mar</text><text x="174" y="24" fill="var(--muted)" text-anchor="middle">Mer</text><text x="238" y="24" fill="var(--muted)" text-anchor="middle">Jeu</text><text x="300" y="24" fill="var(--muted)" text-anchor="middle">Ven</text>
+        </g>
+        <rect x="16" y="34" width="60" height="70" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/>
+        <text x="46" y="62" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">Cohésio 1</text>
+        <text x="46" y="78" font-size="8" fill="var(--accent)" text-anchor="middle">Matin</text>
+        <rect x="80" y="34" width="60" height="70" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/>
+        <text x="110" y="62" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">Cohésio 1</text>
+        <text x="110" y="78" font-size="8" fill="var(--accent)" text-anchor="middle">Matin</text>
+        <rect x="144" y="34" width="60" height="70" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/>
+        <text x="174" y="72" font-size="8" fill="var(--muted)" text-anchor="middle">—</text>
+        <rect x="208" y="34" width="60" height="70" rx="8" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/>
+        <text x="238" y="62" font-size="9" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="700">DSI</text>
+        <text x="238" y="78" font-size="8" fill="var(--ok,#34d399)" text-anchor="middle">Journée</text>
+        <rect x="272" y="34" width="56" height="70" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/>
+        <text x="300" y="72" font-size="8" fill="var(--muted)" text-anchor="middle">—</text>
+        <text x="16" y="130" font-size="10" fill="var(--muted)">Case vide = non planifié ce jour-là.</text>
+      </svg>`
+    }
+  ]}
+};
+
+function initPlanningRhGuides(){
+  try{
+    if(!window.MySifaGuides) return;
+    MySifaGuides.configure({role:(window.__MYSIFA_ROLE__||'')});
+    MySifaGuides.registerMany(PLANNINGRH_GUIDES);
+    MySifaGuides.boot().then(function(){
+      var isOperator = S.user && !S.isEditor && !S.isReadOnlyAdmin;
+      MySifaGuides.autoOpen(isOperator ? 'planningrh-operator' : 'planningrh-overview');
+    });
+  }catch(e){}
+}
+
 // ── Init ───────────────────────────────────────────────
 (async()=>{
   await loadMe();
@@ -3122,6 +3269,7 @@ function printConges(){
   if(S.view!=='rh'){ await loadMachines(); }
   await loadData();
   if(S.tab==='conges')await loadSoldes();
+  try{ initPlanningRhGuides(); }catch(e){}
 })();
 </script>
 <script src="/static/mysifa_impersonate.js"></script>

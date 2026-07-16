@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "1.11.1"
+APP_VERSION = "2.1.4"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -46,6 +46,10 @@ APP_VERSION = "1.11.1"
 
 # Nom affiché en wordmark, titres, footers.
 APP_NAME = os.getenv("APP_NAME", "MySifa")
+
+# Seuil (ms) au-dela duquel une requete HTTP est loggee comme lente
+# (middleware log_slow_requests dans main.py). 0 = desactive.
+SLOW_REQUEST_MS = int(os.getenv("SLOW_REQUEST_MS", "500"))
 
 # Indice de coupure du wordmark pour l'affichage bicolore. Ex. :
 #   "MySifa" + APP_SPLIT=2 → "My" (couleur principale) + "Sifa" (accent)
@@ -514,6 +518,8 @@ GIPHY_API_KEY = os.getenv("GIPHY_API_KEY", "")
 
 # ─── MyExpé — parsing grilles tarifaires (IA) ───────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
+# ─── MyTradu
 
 # ─── MyTraduction (DeepL) ─────────────────────────────────────────
 # Clé API DeepL — obtenue sur https://www.deepl.com/pro-api
