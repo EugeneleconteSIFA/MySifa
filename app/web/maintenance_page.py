@@ -793,6 +793,8 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 /* ── Modal single-op saisie ─────────────────────────────────────── */
 .op-single-op-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .op-single-op-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px}
+.btn-op-cancel-validation{background:transparent;color:var(--danger);border:1px solid var(--danger);font-weight:600}
+.btn-op-cancel-validation:hover{background:var(--danger);color:#fff}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -6110,10 +6112,11 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
-<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée -->
+<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée
+     (ou modifier / annuler une opération déjà validée) -->
 <div class="op-modal-overlay" id="op-modal-single" onclick="if(event.target===this) opCloseSingleModal()">
   <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px">
-    <div class="op-modal-title">Marquer comme terminée</div>
+    <div class="op-modal-title" id="op-single-title">Marquer comme terminée</div>
     <div class="op-modal-sub" id="op-single-sub">—</div>
     <div class="op-single-op-title" id="op-single-code-line">—</div>
     <div class="op-single-op-name" id="op-single-name">—</div>
@@ -6126,8 +6129,13 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <textarea id="op-single-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
     </div>
     <div class="op-modal-actions">
-      <button type="button" class="btn" onclick="opCloseSingleModal()">Annuler</button>
-      <button type="button" class="btn op-btn-accent" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
+      <button type="button" class="btn btn-op-cancel-validation" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+        Annuler la validation
+      </button>
+      <div style="flex:1"></div>
+      <button type="button" class="btn" onclick="opCloseSingleModal()">Fermer</button>
+      <button type="button" class="btn op-btn-accent" id="op-single-submit" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
     </div>
   </div>
 </div>
@@ -7304,7 +7312,7 @@ function opOpenSingleOpModal(eventId, opId){
   if(!ev){ return; }
   const op = (ev.ops || []).find(o => o.id === opId);
   if(!op){ return; }
-  MAINT_STATE.singleOpTarget = { eventId, opId };
+  MAINT_STATE.singleOpTarget = { eventId, opId, _wasDone: (op.statut === 'termine') };
   const timeLabel = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)
     : 'Sans créneau';
@@ -7312,9 +7320,16 @@ function opOpenSingleOpModal(eventId, opId){
   document.getElementById('op-single-code-line').textContent = 'Code ' + op.code;
   document.getElementById('op-single-name').textContent = op.code_label || '—';
   document.getElementById('op-single-duree').value = op.duree_reelle_min || '';
-  // Fusion pièces + observations si les 2 existaient historiquement.
   const prev = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
   document.getElementById('op-single-comment').value = prev;
+  // Adapte le titre + submit + visibilité du bouton "Annuler la validation" selon statut
+  const isDone = op.statut === 'termine';
+  const titleEl = document.getElementById('op-single-title');
+  const submitEl = document.getElementById('op-single-submit');
+  const cancelValEl = document.getElementById('op-single-cancel-validation');
+  if(titleEl) titleEl.textContent = isDone ? 'Opération terminée' : 'Marquer comme terminée';
+  if(submitEl) submitEl.textContent = isDone ? 'Enregistrer les modifications' : 'Marquer comme terminée';
+  if(cancelValEl) cancelValEl.style.display = isDone ? '' : 'none';
   document.getElementById('op-modal-single').classList.add('active');
 }
 
@@ -7358,6 +7373,37 @@ async function opSubmitSingleOp(){
   if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   opCloseSingleModal();
   // Refresh en tâche de fond (best-effort) — si ça échoue, la vue est à jour.
+  opLoadTasks().catch(() => {});
+  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+}
+
+// ── Annule la saisie d'une op déjà terminée ────────────────────────
+//   Statut termine -> a_faire. Efface done_at/by, durée, commentaires,
+//   pièces changées. La ligne dans l'historique disparaît automatiquement
+//   (get_history filtre sur statut='termine').
+async function opCancelValidation(){
+  const tgt = MAINT_STATE.singleOpTarget;
+  if(!tgt){ opCloseSingleModal(); return; }
+  if(!confirm("Annuler la validation de cette opération ?\n\nLa tâche reviendra dans la liste des tâches à faire et la ligne d'historique correspondante sera effacée. Cette action est définitive.")) return;
+  const r = await fetch('/api/maintenance/events/' + tgt.eventId + '/ops/' + tgt.opId + '/reset', {
+    method:'POST', credentials:'include',
+  });
+  if(!r.ok){
+    const err = await r.json().catch(()=>({}));
+    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
+    else alert('Erreur : ' + (err.detail || r.status));
+    return;
+  }
+  try{
+    const data = await r.json();
+    if(data && data.event){
+      const idx = (MAINT_STATE.tasks || []).findIndex(x => x.id === data.event.id);
+      if(idx >= 0) MAINT_STATE.tasks[idx] = data.event;
+      opRenderTasks();
+    }
+  }catch(e){}
+  if(typeof showToast === 'function') showToast('Validation annulée. Tâche remise à faire.', 'info');
+  opCloseSingleModal();
   opLoadTasks().catch(() => {});
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
