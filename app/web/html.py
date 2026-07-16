@@ -1,3 +1,4 @@
+import functools as _functools
 from config import (
     APP_VERSION,
     APP_META_DESCRIPTION,
@@ -10936,6 +10937,9 @@ _DEFAULT_CONFIG = {
 }
 
 
+# Rendu 100% déterminé par initial_app (le reste = constantes de config lues
+# au boot) : cache pour éviter 84 .replace() sur ~500 Ko à chaque hit.
+@_functools.lru_cache(maxsize=32)
 def render_frontend_html(initial_app: str = "portal") -> str:
     cfg = _MODULE_CONFIG.get(initial_app, _DEFAULT_CONFIG)
     # Bandeau : toujours dans le DOM. Visibilité initiale = IS_STAGING (rouge).

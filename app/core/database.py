@@ -103,6 +103,14 @@ def _register_udfs(conn: sqlite3.Connection) -> None:
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
+    # WAL : les lecteurs ne sont plus bloqués par les écritures (mode persistant,
+    # stocké dans le fichier DB — le PRAGMA à chaque connexion est sans coût).
+    # synchronous=NORMAL : suffisant en WAL (fsync au checkpoint, pas à chaque tx).
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+    except sqlite3.OperationalError:
+        pass  # DB en lecture seule ou FS sans support WAL : on ne bloque pas
     _register_udfs(conn)
     _ensure_schema(conn)
     try:

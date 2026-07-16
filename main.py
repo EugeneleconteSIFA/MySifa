@@ -8,6 +8,7 @@ import re
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -149,6 +150,10 @@ async def no_cache_planning(request: Request, call_next):
             or p.startswith("/api/maintenance/")):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
+    elif p.startswith("/static/"):
+        # Assets statiques : cache navigateur 24h. Les fichiers qui changent
+        # utilisent un querystring de version (?v=N) pour invalider.
+        response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
 
@@ -295,6 +300,11 @@ async def inject_staging_bandeau(request: Request, call_next):
         media_type=response.media_type,
     )
 
+
+# Compression des reponses (>1 Ko). Ajoute en dernier => middleware le plus
+# externe : compresse apres l'injection du bandeau staging (qui lit le HTML
+# en clair). Pages HTML inline 250-780 Ko => ~5-8x plus legeres sur le reseau.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.include_router(auth_router)
 app.include_router(router_imports)
