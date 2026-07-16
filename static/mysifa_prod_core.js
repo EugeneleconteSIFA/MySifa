@@ -6873,7 +6873,7 @@ function renderProdKpis(){
       }catch(e){
         console.warn('[mysifa_prod_core] checkAuth load erreur:', e && e.message);
       }
-      try{ initProdGuides(S.user && S.user.role).then(function(){ try{ MySifaGuides.autoOpen('myprod-overview'); }catch(e){} }); }catch(e){}
+      try{ initProdGuides(S.user && S.user.role).then(function(){ try{ MySifaGuides.autoOpenChain(['myprod-overview','myprod-production']); }catch(e){} }); }catch(e){}
     }else{
       S.user = null;
       S.app = 'login';
@@ -7269,7 +7269,12 @@ function renderProdKpis(){
     }
     const containerKids = [
       topbar,
-      h('h1', null, pageTitle),
+      (function(){
+        var _gk = ({menu:'myprod-overview', production:'myprod-production'})[S.page] || '';
+        var _t = h('h1', null, pageTitle);
+        try{ if(window.MySifaGuides && _gk){ var _b = MySifaGuides.bookBtn(_gk); if(_b){ var _sp = document.createElement('span'); _sp.style.marginLeft='10px'; _sp.innerHTML=_b; _t.appendChild(_sp); } } }catch(e){}
+        return _t;
+      })(),
       h('div', {className: 'subtitle'}, pageSubtitle),
     ];
     // Filtres haut de page pour les sous-onglets Production qui consomment fv.*
@@ -7381,11 +7386,25 @@ function renderProdKpis(){
         icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
         title: 'Bienvenue dans MyProd',
         body: `MyProd centralise le <strong>suivi de production</strong> : ce que les opérateurs saisissent, les matières consommées par dossier et la rentabilité réelle face au devis. Vous arrivez sur la <strong>Production</strong> ; la barre latérale et le logo mènent aux autres espaces.`,
-        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Suivre les KPIs de production et la qualité de saisie.</li><li>Consulter et corriger les saisies opérateur.</li><li>Voir les matières utilisées par dossier (traçabilité).</li><li>Comparer le réel au devis et gérer les fiches + OF.</li></ul></div></div>`
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Corriger et importer des saisies de production.</li><li>Rattacher les ordres de fabrication (OF) aux dossiers.</li><li>Réordonner les dossiers au planning machine.</li></ul></div></div>`
+      },
+      {
+        title: 'Planning de production',
+        body: `Le <strong>Planning machine</strong> ordonne les dossiers par machine et par semaine : ce qui est <span class="mguide-hl">en cours</span>, en attente ou terminé, réordonnable par glisser-déposer. On y accède depuis la tuile <span class="mguide-tag">Planning</span> du menu ou le lien latéral.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+          <text x="8" y="22" font-size="11" fill="var(--text)" font-weight="800">Planning · Cohésio 1</text>
+          <rect x="232" y="8" width="100" height="18" rx="9" fill="var(--accent-bg)"/><text x="282" y="21" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">48h · 6 dossiers</text>
+          <g font-size="8" fill="var(--muted)"><text x="34" y="44">Lun</text><text x="90" y="44">Mar</text><text x="146" y="44">Mer</text><text x="202" y="44">Jeu</text><text x="258" y="44">Ven</text></g>
+          <rect x="14" y="50" width="312" height="108" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+          <g stroke="var(--border)"><line x1="70" y1="50" x2="70" y2="158"/><line x1="126" y1="50" x2="126" y2="158"/><line x1="182" y1="50" x2="182" y2="158"/><line x1="238" y1="50" x2="238" y2="158"/><line x1="294" y1="50" x2="294" y2="158"/></g>
+          <rect x="20" y="60" width="98" height="30" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2"/><text x="69" y="77" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4821</text><text x="69" y="87" font-size="7" fill="#cbd5e1" text-anchor="middle">en cours</text>
+          <rect x="124" y="98" width="150" height="28" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="199" y="116" font-size="9" fill="#e2e8f0" text-anchor="middle" font-weight="700">DOS-4822 · en attente</text>
+          <rect x="46" y="132" width="92" height="20" rx="6" fill="#0f172a" stroke="var(--border)" opacity="0.75"/><text x="92" y="146" font-size="8" fill="#94a3b8" text-anchor="middle">DOS-4790 · terminé</text>
+        </svg>`
       },
       {
         title: 'Production — KPIs, saisies et erreurs',
-        body: `La <strong>Production</strong> est l'écran d'accueil, avec trois sous-onglets : <span class="mguide-tag">KPIs</span> (temps de calage et de production, métrage, vitesse, dossiers, qualité de saisie), <span class="mguide-tag">Saisies</span> (consulter, corriger et importer les saisies opérateur) et <span class="mguide-tag">Erreurs</span> (Sanity Score, incidents et erreurs de saisie). Les filtres en haut ciblent une période, un opérateur ou un dossier.`,
+        body: `La <strong>Production</strong> est l'écran d'accueil, avec trois sous-onglets : <span class="mguide-tag">KPIs</span> (temps de calage et de production, métrage, vitesse, dossiers, qualité de saisie), <span class="mguide-tag">Saisies</span> (corriger et importer les saisies opérateur) et <span class="mguide-tag">Erreurs</span> (Sanity Score, incidents et erreurs de saisie).`,
         illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
           <rect x="8" y="8" width="74" height="22" rx="6" fill="var(--accent)"/><text x="45" y="23" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">KPIs</text>
           <rect x="86" y="8" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="123" y="23" font-size="10" fill="var(--text2)" text-anchor="middle">Saisies</text>
@@ -7416,21 +7435,46 @@ function renderProdKpis(){
       },
       {
         title: 'Rentabilité et Fiches + OF',
-        body: `<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. <strong>Fiches + OF</strong> importe les ordres de fabrication (PDF) et les rattache aux dossiers. Ces deux espaces sont réservés selon votre rôle.`,
+        body: `<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. <strong>Fiches + OF</strong> importe les ordres de fabrication (PDF) et les rattache aux dossiers.`,
         illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><text x="8" y="20" font-size="10" fill="var(--text)" font-weight="800">Rentabilité — DOS-4821</text><text x="18" y="44" font-size="9" fill="var(--muted)">Devis</text><rect x="60" y="34" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="34" width="120" height="14" rx="4" fill="var(--accent)"/><text x="210" y="45" font-size="9" fill="var(--text2)">1 250 €</text><text x="18" y="66" font-size="9" fill="var(--muted)">Réel</text><rect x="60" y="56" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="56" width="134" height="14" rx="4" fill="var(--ok,#34d399)"/><text x="210" y="67" font-size="9" fill="var(--text2)">1 390 €</text><line x1="8" y1="86" x2="332" y2="86" stroke="var(--border)"/><text x="8" y="106" font-size="10" fill="var(--text)" font-weight="800">Fiches + OF</text><rect x="8" y="116" width="150" height="44" rx="8" fill="var(--card)" stroke="var(--border)"/><rect x="18" y="126" width="24" height="30" rx="4" fill="var(--accent-bg)"/><text x="34" y="145" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="800">PDF</text><text x="52" y="136" font-size="9" fill="var(--text)" font-weight="700">OF-2231.pdf</text><text x="52" y="150" font-size="8" fill="var(--muted)">rattaché à DOS-4821</text><rect x="170" y="116" width="162" height="44" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="251" y="142" font-size="9" fill="var(--muted)" text-anchor="middle">Glissez un PDF pour l'importer</text></svg>`
+      }
+    ]},
+
+    'myprod-production': { steps: [
+      {
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
+        title: 'Production',
+        body: `L'onglet <strong>Production</strong> suit la production saisie par les opérateurs, sur trois sous-onglets : <span class="mguide-tag">KPIs</span>, <span class="mguide-tag">Saisies</span>, <span class="mguide-tag">Erreurs</span>. C'est le cœur du suivi quotidien.`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Corriger ou compléter une saisie de production.</li><li>Importer un lot de saisies.</li><li>Filtrer par période, opérateur ou dossier.</li></ul></div></div>`
       },
       {
-        title: 'Planning de production',
-        body: `Le <strong>Planning machine</strong> ordonne les dossiers par machine et par semaine : ce qui est <span class="mguide-hl">en cours</span>, en attente ou terminé, réordonnable par glisser-déposer. On y accède depuis la tuile <span class="mguide-tag">Planning</span> du menu ou le lien latéral.`,
+        title: 'Saisies — corriger et importer',
+        body: `Le sous-onglet <strong>Saisies</strong> liste les saisies opérateur. On y <span class="mguide-hl">corrige</span> une saisie erronée (crayon), on complète une valeur manquante, et on <span class="mguide-hl">importe</span> un lot via CSV. Chaque correction met à jour les KPIs.`,
         illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-          <text x="8" y="22" font-size="11" fill="var(--text)" font-weight="800">Planning · Cohésio 1</text>
-          <rect x="232" y="8" width="100" height="18" rx="9" fill="var(--accent-bg)"/><text x="282" y="21" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">48h · 6 dossiers</text>
-          <g font-size="8" fill="var(--muted)"><text x="34" y="44">Lun</text><text x="90" y="44">Mar</text><text x="146" y="44">Mer</text><text x="202" y="44">Jeu</text><text x="258" y="44">Ven</text></g>
-          <rect x="14" y="50" width="312" height="108" rx="8" fill="var(--bg)" stroke="var(--border)"/>
-          <g stroke="var(--border)"><line x1="70" y1="50" x2="70" y2="158"/><line x1="126" y1="50" x2="126" y2="158"/><line x1="182" y1="50" x2="182" y2="158"/><line x1="238" y1="50" x2="238" y2="158"/><line x1="294" y1="50" x2="294" y2="158"/></g>
-          <rect x="20" y="60" width="98" height="30" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2"/><text x="69" y="77" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4821</text><text x="69" y="87" font-size="7" fill="#cbd5e1" text-anchor="middle">en cours</text>
-          <rect x="124" y="98" width="150" height="28" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="199" y="116" font-size="9" fill="#e2e8f0" text-anchor="middle" font-weight="700">DOS-4822 · en attente</text>
-          <rect x="46" y="132" width="92" height="20" rx="6" fill="#0f172a" stroke="var(--border)" opacity="0.75"/><text x="92" y="146" font-size="8" fill="#94a3b8" text-anchor="middle">DOS-4790 · terminé</text>
+          <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Saisies</text>
+          <rect x="238" y="10" width="94" height="22" rx="7" fill="var(--accent)"/><text x="285" y="25" font-size="8" fill="#fff" text-anchor="middle" font-weight="700">Importer CSV</text>
+          <rect x="14" y="40" width="318" height="20" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="22" y="54" font-size="8" fill="var(--muted)">Date</text><text x="96" y="54" font-size="8" fill="var(--muted)">Opérateur</text><text x="184" y="54" font-size="8" fill="var(--muted)">Dossier</text><text x="262" y="54" font-size="8" fill="var(--muted)">Durée</text>
+          <g font-size="8"><rect x="14" y="64" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="79" fill="var(--text2)">14/07</text><text x="96" y="79" fill="var(--text2)">M. Dupont</text><text x="184" y="79" fill="var(--text2)">DOS-4821</text><text x="262" y="79" fill="var(--text)">2.50 h</text><rect x="304" y="68" width="22" height="16" rx="4" fill="var(--accent-bg)"/><path d="M310 78 l4 -4 2 2 -4 4 -2 0 0 -2z" fill="var(--accent)"/></g>
+          <g font-size="8"><rect x="14" y="92" width="318" height="24" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="22" y="107" fill="var(--text2)">14/07</text><text x="96" y="107" fill="var(--text2)">A. Martin</text><text x="184" y="107" fill="var(--text2)">DOS-4822</text><text x="262" y="107" fill="var(--text)">1.20 h</text><rect x="304" y="96" width="22" height="16" rx="4" fill="var(--accent-bg)"/><path d="M310 106 l4 -4 2 2 -4 4 -2 0 0 -2z" fill="var(--accent)"/></g>
+          <g font-size="8"><rect x="14" y="120" width="318" height="24" rx="5" fill="rgba(248,113,113,.08)" stroke="var(--danger,#f87171)"/><text x="22" y="135" fill="var(--text2)">13/07</text><text x="96" y="135" fill="var(--text2)">M. Dupont</text><text x="184" y="135" fill="var(--text2)">DOS-4790</text><text x="262" y="135" fill="var(--danger,#f87171)" font-weight="700">— à corriger</text></g>
+          <text x="14" y="162" font-size="9" fill="var(--muted)">Cliquez le crayon pour corriger une saisie · Importer CSV pour un lot.</text>
+        </svg>`
+      },
+      {
+        title: 'KPIs et erreurs de saisie',
+        body: `Le sous-onglet <strong>KPIs</strong> agrège temps, métrage, vitesse et <span class="mguide-hl">qualité de saisie</span> (Sanity Score). Le sous-onglet <strong>Erreurs</strong> liste les incidents à corriger. C'est ici que la direction et la fabrication suivent la performance de production.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+          <rect x="8" y="8" width="74" height="22" rx="6" fill="var(--accent)"/><text x="45" y="23" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">KPIs</text>
+          <rect x="86" y="8" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="123" y="23" font-size="10" fill="var(--text2)" text-anchor="middle">Saisies</text>
+          <rect x="164" y="8" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="201" y="23" font-size="10" fill="var(--text2)" text-anchor="middle">Erreurs</text>
+          <rect x="8" y="40" width="102" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="18" y="57" font-size="9" fill="var(--muted)">Dossiers produits</text><text x="18" y="78" font-size="16" fill="var(--accent)" font-weight="800">42</text>
+          <rect x="118" y="40" width="102" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="128" y="57" font-size="9" fill="var(--muted)">Métrage</text><text x="128" y="78" font-size="15" fill="var(--text)" font-weight="800">128 500 m</text>
+          <rect x="228" y="40" width="104" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="238" y="57" font-size="9" fill="var(--muted)">Vitesse</text><text x="238" y="78" font-size="15" fill="var(--text)" font-weight="800">210 m/min</text>
+          <rect x="8" y="94" width="324" height="66" rx="9" fill="var(--bg)" stroke="var(--border)"/>
+          <text x="18" y="112" font-size="9" fill="var(--muted)">Qualité de saisie — Sanity Score</text>
+          <rect x="18" y="120" width="96" height="30" rx="7" fill="rgba(248,113,113,.12)" stroke="var(--danger,#f87171)"/><text x="66" y="132" font-size="8" fill="var(--danger,#f87171)" text-anchor="middle">Critique</text><text x="66" y="146" font-size="13" fill="var(--danger,#f87171)" text-anchor="middle" font-weight="800">1</text>
+          <rect x="122" y="120" width="96" height="30" rx="7" fill="rgba(251,191,36,.14)" stroke="var(--warn,#fbbf24)"/><text x="170" y="132" font-size="8" fill="var(--warn,#fbbf24)" text-anchor="middle">Attention</text><text x="170" y="146" font-size="13" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="800">6</text>
+          <rect x="226" y="120" width="98" height="30" rx="7" fill="rgba(52,211,153,.14)" stroke="var(--ok,#34d399)"/><text x="275" y="132" font-size="8" fill="var(--ok,#34d399)" text-anchor="middle">Normal</text><text x="275" y="146" font-size="13" fill="var(--ok,#34d399)" text-anchor="middle" font-weight="800">318</text>
         </svg>`
       }
     ]}

@@ -5696,8 +5696,8 @@ Ressources :
     # concrète d'une opération de maintenance (contrôle ou intervention) à
     # réaliser sur une machine, à une date donnée, par un opérateur donné.
     # L'admin maintenance (Loïc) crée ces tâches depuis la vue Planning et les
-    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`, si le flag
-    # MAINTENANCE_OPEN_BETA est actif) les voient dans leur vue « Mes tâches »
+    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`) les
+    # voient dans leur vue « Mes tâches »
     # et les complètent en fin de journée (durée réelle, pièces changées,
     # observations, photos, statut final).
     #
@@ -6841,6 +6841,128 @@ Ressources :
 
         conn.commit()
         _record_schema_migration(conn, 186, "access_control_tables_and_seed")
+
+    # Migration 187 - Fondation MyStock <-> /pricing (Coûts matières).
+    #
+    # Contexte : deux tables décrivent aujourd'hui la même chose de deux façons :
+    #   - `mc_material` (module /pricing, alimenté par import Excel)
+    #   - `matieres_premieres` + `mp_valorisation` (MyStock, vérité opérationnelle)
+    # Objectif : faire de MyStock la source unique du prix et des caractéristiques
+    # matière, et transformer /pricing en outil direction (dashboard + édition
+    # inline avec synchronisation bidirectionnelle).
+    #
+    # Cette migration pose UNIQUEMENT la fondation :
+    #   1. Enrichit `matieres_premieres` avec les 8 champs manquants côté pricing
+    #      engine (poids, base tarifaire, rôle produit, container import, taxe,
+    #      flag import) - tous nullable, aucun défaut cassant.
+    #   2. Ajoute `matieres_premieres.mc_material_id` (FK nullable) pour tracer
+    #      l'appairage entre les deux mondes.
+    #   3. Backfille `pricing_role` depuis la catégorie MyStock (frontal ->
+    #      frontal, adhesif -> adhesif, glassine -> glassine, complexe -> autre).
+    #   4. Backfille `mc_material_id` par match nom case-insensitive ou
+    #      appellation_code == reference ; pour chaque match, copie les
+    #      caractéristiques depuis mc_material (weight_per_m2, weight_gsm,
+    #      price_basis, is_imported, container_kg, container_cost_usd,
+    #      tax_incidence) vers matieres_premieres.
+    #
+    # Aucune donnée n'est effacée ni écrasée : les lignes matieres_premieres
+    # sans match restent inchangées, les mc_material continuent d'être lues
+    # par /pricing exactement comme avant. La sync bidirectionnelle et le
+    # remplacement de mc_material par une vue seront des migrations séparées.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=187 LIMIT 1").fetchone():
+        mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        _mp_add = [
+            ("weight_per_m2",       "REAL"),
+            ("weight_gsm",          "INTEGER"),
+            ("price_basis",         "TEXT DEFAULT 'PER_KG'"),
+            ("pricing_role",        "TEXT"),
+            ("container_kg",        "REAL"),
+            ("container_cost_usd",  "REAL"),
+            ("tax_incidence",       "REAL DEFAULT 1.0"),
+            ("is_imported",         "INTEGER DEFAULT 0"),
+            ("mc_material_id",      "INTEGER REFERENCES mc_material(id)"),
+        ]
+        for col, ddl in _mp_add:
+            if col not in mp_cols:
+                conn.execute(f"ALTER TABLE matieres_premieres ADD COLUMN {col} {ddl}")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_mc_material_id "
+            "ON matieres_premieres(mc_material_id)"
+        )
+
+        # Backfill pricing_role depuis la catégorie MyStock (idempotent : ne
+        # touche que les lignes où pricing_role est vide).
+        _role_map = {
+            "frontal":  "frontal",
+            "adhesif":  "adhesif",
+            "silicone": "silicone",
+            "glassine": "glassine",
+            "complexe": "autre",
+        }
+        for cat, role in _role_map.items():
+            conn.execute(
+                "UPDATE matieres_premieres SET pricing_role=? "
+                "WHERE (pricing_role IS NULL OR pricing_role='') "
+                "AND LOWER(TRIM(COALESCE(categorie,'')))=?",
+                (role, cat),
+            )
+
+        # Backfill mc_material_id : match nom, puis appellation_code, puis
+        # copie les caractéristiques pricing depuis mc_material. Uniquement
+        # si la table mc_material existe (v78+).
+        try:
+            has_mc = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mc_material' LIMIT 1"
+            ).fetchone()
+        except Exception:
+            has_mc = None
+        if has_mc:
+            # Passe 1 : appellation_code == reference (le plus fiable).
+            conn.execute(
+                "UPDATE matieres_premieres AS mp "
+                "SET mc_material_id = ("
+                "  SELECT m.id FROM mc_material m "
+                "  WHERE LOWER(TRIM(COALESCE(m.appellation_code,''))) = "
+                "        LOWER(TRIM(COALESCE(mp.reference,''))) "
+                "  AND TRIM(COALESCE(m.appellation_code,'')) != '' "
+                "  LIMIT 1) "
+                "WHERE mp.mc_material_id IS NULL"
+            )
+            # Passe 2 : name == designation (fallback).
+            conn.execute(
+                "UPDATE matieres_premieres AS mp "
+                "SET mc_material_id = ("
+                "  SELECT m.id FROM mc_material m "
+                "  WHERE LOWER(TRIM(COALESCE(m.name,''))) = "
+                "        LOWER(TRIM(COALESCE(mp.designation,''))) "
+                "  LIMIT 1) "
+                "WHERE mp.mc_material_id IS NULL"
+            )
+
+            # Copie des caractéristiques pricing depuis mc_material vers
+            # matieres_premieres pour chaque ligne appairée. On ne remplace
+            # jamais une valeur déjà saisie côté MyStock (COALESCE garde
+            # l'existant).
+            _copy_map = [
+                ("weight_per_m2",      "m.weight_per_m2"),
+                ("weight_gsm",         "m.weight_gsm"),
+                ("price_basis",        "m.price_basis"),
+                ("is_imported",        "m.is_imported"),
+                ("container_kg",       "m.container_kg"),
+                ("container_cost_usd", "m.container_cost_usd"),
+                ("tax_incidence",      "m.tax_incidence"),
+            ]
+            for col, expr in _copy_map:
+                conn.execute(
+                    f"UPDATE matieres_premieres AS mp "
+                    f"SET {col} = COALESCE(mp.{col}, ("
+                    f"  SELECT {expr} FROM mc_material m WHERE m.id = mp.mc_material_id"
+                    f")) "
+                    f"WHERE mp.mc_material_id IS NOT NULL"
+                )
+
+        conn.commit()
+        _record_schema_migration(conn, 187, "mp_pricing_bridge")
 
 
 def create_default_admin():

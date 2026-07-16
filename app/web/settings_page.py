@@ -115,6 +115,22 @@ body.light .acc-matrix .acc-sub-tr td{background:#f8fafc}
 .acc-matrix .acc-sub-label{font-size:11px;color:var(--text2);flex:1;min-width:120px}
 .acc-matrix td.acc-sub-empty{background:transparent}
 .acc-hint{padding:10px 12px;margin:0 0 14px;background:rgba(34,211,238,.08);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;color:var(--text2);font-size:12px;line-height:1.55}
+/* Référentiel rôles (vue transposée : apps en lignes, rôles en colonnes) */
+.acc-matrix-defaults th.acc-app-col{min-width:220px;text-align:left}
+.acc-matrix-defaults th.acc-role-th{min-width:130px;text-align:center;font-size:11px}
+.acc-matrix-defaults th.acc-role-th span{display:inline-block}
+.acc-matrix-defaults td.acc-app-cell{min-width:220px;background:rgba(15,23,42,.15);vertical-align:middle}
+body.light .acc-matrix-defaults td.acc-app-cell{background:#f8fafc}
+.acc-matrix-defaults td.acc-app-cell strong{font-weight:600;color:var(--text)}
+.acc-matrix-defaults td.acc-sub-label-cell{padding-left:24px;font-size:11px;color:var(--text2);background:rgba(15,23,42,.08)}
+body.light .acc-matrix-defaults td.acc-sub-label-cell{background:#fafbfc}
+.acc-matrix-defaults tr.acc-sub-tr td.acc-sub-cell{background:rgba(15,23,42,.08)}
+body.light .acc-matrix-defaults tr.acc-sub-tr td.acc-sub-cell{background:#fafbfc}
+.acc-matrix-defaults .acc-cell{text-align:center;padding:6px 8px}
+.acc-lock{font-size:11px;opacity:.6}
+/* Table wrap horizontal scroll pour les 2 matrices */
+#matrix-table,#role-legend .table-wrap{max-width:100%;overflow-x:auto}
+#matrix-table table.acc-matrix,#role-legend table.acc-matrix{min-width:max-content}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
 input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
 .btn{background:var(--accent);color:var(--accent-fg);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
@@ -2119,6 +2135,16 @@ document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
   b.addEventListener('click', () => setTab(b.dataset.tab));
 });
 
+// Sub-tabs Utilisateurs / Matrice / Référentiel : 3 boutons dans chacun des
+// 3 panels, mapping vers les IDs de panel effectifs (users-list → users, etc.).
+const _SUBTAB_TO_PANEL = { 'users-list': 'users', 'users-matrix': 'matrix', 'users-defaults': 'defaults' };
+document.querySelectorAll('.sub-tab-btn[data-subtab]').forEach(b => {
+  b.addEventListener('click', () => {
+    const target = _SUBTAB_TO_PANEL[b.dataset.subtab];
+    if (target) setTab(target);
+  });
+});
+
 // Onglet initial : lu depuis location.hash (hard refresh, deep-link)
 function _readHashTab(){
   try {
@@ -3163,6 +3189,8 @@ async function loadMatrix() {
   await loadRoleDefaults();
 }
 
+let defaultsExpandedApp = null;
+
 async function loadRoleDefaults() {
   const data = await api('/api/settings/role-defaults');
   if (!data) return;
@@ -3171,23 +3199,58 @@ async function loadRoleDefaults() {
   if (!leg) return;
 
   const appList = data.apps || apps;
-  const appTh = appList.map(a => '<th>' + esc(a.label) + '</th>').join('');
-  const rows = roleDefaultsSnapshot.map(r => {
-    const cells = appList.map(a => {
-      const cur = (r.access[a.id] && r.access[a.id]['_app']) || 'none';
-      if (a.id === 'settings' || r.readonly) {
+  const roles = roleDefaultsSnapshot;
+
+  // Vue transposée : lignes = apps (avec sous-modules dépliables), colonnes = rôles.
+  const rolesTh = roles.map(r => (
+    '<th class="acc-role-th" title="' + esc(r.role) + '"><span>' + esc(r.label) + '</span>' +
+    (r.readonly ? ' <span class="acc-lock" title="Non modifiable">🔒</span>' : '') + '</th>'
+  )).join('');
+  const th = '<th class="acc-app-col">Application</th>' + rolesTh;
+
+  const rowsHtml = appList.map(app => {
+    const openable = app.modules && app.modules.length;
+    const isExpanded = defaultsExpandedApp === app.id;
+    const btn = openable
+      ? '<button type="button" class="acc-expand" data-app="' + esc(app.id) + '" title="Détails par onglet">' + (isExpanded ? '−' : '+') + '</button>'
+      : '';
+    const appCell = '<td class="acc-app-cell"><strong>' + esc(app.label) + '</strong>' + btn + '</td>';
+    const cellsPerRole = roles.map(r => {
+      const cur = (r.access[app.id] && r.access[app.id]['_app']) || 'none';
+      if (app.id === 'settings' || r.readonly) {
         return '<td class="acc-cell readonly"><span class="lvl-badge lvl-' + cur + '">' + esc(LEVEL_TITLE[cur] || cur) + '</span></td>';
       }
-      return '<td class="acc-cell"><select class="rd-lvl" data-role="' + esc(r.role) + '" data-app="' + esc(a.id) + '" data-mod="_app">' + _lvlOpts(cur, false) + '</select></td>';
+      return '<td class="acc-cell"><select class="rd-lvl" data-role="' + esc(r.role) + '" data-app="' + esc(app.id) + '" data-mod="_app">' + _lvlOpts(cur, false) + '</select></td>';
     }).join('');
-    return '<tr><td><strong>' + esc(r.label) + '</strong><code style="font-size:11px;display:block;color:var(--muted)">' + esc(r.role) + '</code></td>' + cells + '</tr>';
+    let out = '<tr class="acc-app-row">' + appCell + cellsPerRole + '</tr>';
+    if (isExpanded && openable) {
+      out += app.modules.map(m => {
+        const subCells = roles.map(r => {
+          const cur = (r.access[app.id] && r.access[app.id][m.id]) || 'none';
+          if (app.id === 'settings' || r.readonly) {
+            return '<td class="acc-cell readonly acc-sub-cell"><span class="lvl-badge lvl-' + cur + '">' + esc(LEVEL_TITLE[cur] || cur) + '</span></td>';
+          }
+          return '<td class="acc-cell acc-sub-cell"><select class="rd-lvl" data-role="' + esc(r.role) + '" data-app="' + esc(app.id) + '" data-mod="' + esc(m.id) + '">' + _lvlOpts(cur, false) + '</select></td>';
+        }).join('');
+        return '<tr class="acc-sub-tr"><td class="acc-app-cell acc-sub-label-cell">↳ ' + esc(m.label) + '</td>' + subCells + '</tr>';
+      }).join('');
+    }
+    return out;
   }).join('');
 
   leg.innerHTML = '<div class="acc-hint">Modifier un défaut ici change tous les utilisateurs du rôle qui n\'ont pas de surcharge personnelle. ' +
-    'Le super admin est intouchable. Pour la granularité par onglet, utilisez le bouton [+] dans la matrice utilisateurs.</div>' +
-    '<table class="acc-matrix"><thead><tr><th>Rôle</th>' + appTh + '</tr></thead><tbody>' + rows + '</tbody></table>';
+    'Le super admin est intouchable. Bouton [+] pour éditer les niveaux onglet par onglet.</div>' +
+    '<div class="table-wrap"><table class="acc-matrix acc-matrix-defaults"><thead><tr>' + th + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+
   leg.querySelectorAll('.rd-lvl').forEach(sel => {
     sel.addEventListener('change', () => setRoleDefault(sel.dataset.role, sel.dataset.app, sel.dataset.mod, sel.value));
+  });
+  leg.querySelectorAll('.acc-expand').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const aid = btn.dataset.app;
+      defaultsExpandedApp = (defaultsExpandedApp === aid) ? null : aid;
+      loadRoleDefaults();
+    });
   });
 }
 

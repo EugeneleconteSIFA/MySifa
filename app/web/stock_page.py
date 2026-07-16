@@ -108,7 +108,7 @@ input,select{font-family:inherit}
   display:flex;flex-direction:column;flex-shrink:0;height:100vh;min-height:100vh;
   position:sticky;top:0;overflow:hidden}
 .sidebar::-webkit-scrollbar{width:0}
-.sidebar-logo{padding:20px 16px 8px;flex-shrink:0;cursor:pointer;border-radius:10px;transition:background .15s}.sidebar-logo:hover{background:var(--accent-bg)}.sidebar-logo:hover .logo-brand{color:var(--accent)}.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
+.sidebar-logo{padding:12px 12px 8px;margin:6px 4px 0;flex-shrink:0;cursor:pointer;border-radius:10px;transition:background .15s}.sidebar-logo:hover{background:var(--accent-bg)}.sidebar-logo:hover .logo-brand{color:var(--accent)}.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
   border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;
@@ -4285,6 +4285,7 @@ function buildSearchBar() {
   camBtn.innerHTML = iconSvg('camera');
 
   row.append(inp, micBtn, camBtn);
+  try{ if(window.MySifaGuides){ var _gk = STOCK_TAB_GUIDE[S.tab]; var _bh = _gk ? MySifaGuides.bookBtn(_gk) : ''; if(_bh){ var _bb=document.createElement('span'); _bb.style.marginLeft='6px'; _bb.style.display='inline-flex'; _bb.style.alignItems='center'; _bb.innerHTML=_bh; row.appendChild(_bb); } } }catch(e){}
   wrap.appendChild(row);
   wrap.appendChild(el('div', { id:'search-results-wrap' }));
   return wrap;
@@ -17327,7 +17328,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
       title: 'Bienvenue dans MyStock',
       body: `MyStock suit vos <strong>stocks</strong> — matières premières et produits — leurs <strong>mouvements</strong> et leurs <strong>emplacements</strong>. La navigation est organisée par sections dans la barre latérale.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Consulter le stock des matières et des produits finis.</li><li>Enregistrer réceptions, sorties et mouvements.</li><li>Faire les inventaires et suivre les écarts.</li><li>Imprimer les étiquettes de traçabilité.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Enregistrer réceptions, sorties et mouvements de stock.</li><li>Faire les inventaires et ajuster les écarts.</li><li>Imprimer les étiquettes de traçabilité.</li></ul></div></div>`
     },
     {
       title: 'La page d\'accueil et les sections',
@@ -17391,7 +17392,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
       title: 'Tableau de bord',
       body: `Le tableau de bord donne la <strong>photo du stock</strong> en un coup d'œil : indicateurs clés, alertes de niveau et accès rapides aux actions courantes.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette page</div><ul class="mguide-svc-list"><li>Repérer les MP à approvisionner et les références à expédier.</li><li>Voir le stock par emplacement.</li><li>Accéder vite aux actions fréquentes.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>À quoi sert cette page</div><ul class="mguide-svc-list"><li>C'est ici que la direction et la logistique repèrent d'un coup d'œil les MP à réapprovisionner, les références à expédier et le stock par emplacement.</li></ul></div></div>`
     },
     {
       title: 'Indicateurs et alertes',
@@ -17426,7 +17427,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
       title: 'Matières premières',
       body: `Cette section gère les <strong>matières premières</strong> : leur stock, leur <strong>réception</strong> à l'entrée et leur <strong>inventaire</strong>. Trois onglets : Matières premières, Réception matière, Inventaire matière.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Consulter le stock matière par catégorie.</li><li>Réceptionner les livraisons fournisseurs.</li><li>Compter et ajuster l'inventaire matière.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Réceptionner les livraisons fournisseurs.</li><li>Enregistrer les entrées et sorties de matière.</li><li>Compter et ajuster l'inventaire matière.</li></ul></div></div>`
     },
     {
       title: 'La fiche matière',
@@ -17468,7 +17469,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
       title: 'Produits',
       body: `Cette section couvre les <strong>produits finis</strong>, les <strong>produits de négoce</strong>, le <strong>référentiel</strong> et l'<strong>inventaire produit</strong>. C'est le stock de sortie, prêt à expédier.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Suivre le stock de produits finis et leurs emplacements.</li><li>Gérer les produits de négoce.</li><li>Tenir le référentiel et faire l'inventaire produit.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Enregistrer les entrées et sorties de produits finis.</li><li>Gérer les produits de négoce.</li><li>Modifier le référentiel et l'unité d'un produit.</li><li>Compter l'inventaire produit.</li></ul></div></div>`
     },
     {
       title: 'Produits finis',
@@ -17516,13 +17517,9 @@ var STOCK_GUIDES = {
   'mystock-controle': { steps: [
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>`,
-      title: 'Contrôle',
-      body: `La section <strong>Contrôle</strong> (réservée à l'encadrement) réunit le <strong>Monitoring</strong> — réconciliation avec l'ERP — et la <strong>Valorisation</strong> du stock en euros. C'est le regard de pilotage sur la fiabilité et la valeur.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Comparer le stock MySifa au stock ERP.</li><li>Repérer les écarts et les références sans correspondance.</li><li>Valoriser le stock par catégorie.</li></ul></div></div>`
-    },
-    {
-      title: 'Monitoring — réconciliation ERP',
-      body: `<span class="mguide-tag">En cours de développement</span> Le <strong>Monitoring</strong> importera un état ERP et le comparera au stock MySifa. Les lignes se classeront par <span class="mguide-hl">statut</span> : concordant, écart, ou <span class="mguide-tag">sans correspondance</span>, pour traiter d'abord les anomalies.`,
+      title: 'Contrôle — Monitoring ERP',
+      body: `<span class="mguide-tag">En cours de développement</span> La section <strong>Contrôle</strong> (encadrement) réconcilie le stock avec l'<strong>ERP</strong> (Monitoring) et le <strong>valorise</strong> en euros. Le Monitoring classera les lignes par statut : concordant, écart, ou <span class="mguide-tag">sans correspondance</span>.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>À quoi sert cette section</div><ul class="mguide-svc-list"><li>C'est ici que la direction et l'administration réconcilient le stock avec l'ERP et le valorisent pour la clôture comptable.</li></ul></div></div>`,
       illu: `<svg viewBox="0 0 340 178" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
         <text x="14" y="22" font-size="12" fill="var(--text)" font-weight="800">Monitoring</text>
         <rect x="230" y="10" width="102" height="20" rx="9" fill="rgba(251,191,36,.15)" stroke="var(--warn,#fbbf24)"/><text x="281" y="24" font-size="8" fill="var(--warn,#fbbf24)" text-anchor="middle" font-weight="700">En développement</text>
@@ -17552,7 +17549,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
       title: 'Outils',
       body: `La section <strong>Outils</strong> regroupe l'<strong>historique des mouvements</strong>, l'impression des <strong>étiquettes de traçabilité</strong> et le <strong>plan d'entrepôt</strong>. De quoi retrouver, tracer et situer le stock.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Retrouver un mouvement dans l'historique.</li><li>Imprimer les étiquettes de traçabilité.</li><li>Situer un emplacement sur le plan d'entrepôt.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette section</div><ul class="mguide-svc-list"><li>Imprimer les étiquettes de traçabilité.</li><li>C'est ici que l'on retrouve l'historique des mouvements et le plan d'entrepôt.</li></ul></div></div>`
     },
     {
       title: 'Historique des mouvements',
@@ -17594,7 +17591,7 @@ var STOCK_GUIDES = {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>`,
       title: 'Production (mode fabrication)',
       body: `Pour les équipes de <strong>fabrication</strong>, MyStock s'ouvre sur une vue dédiée <strong>Production</strong> : les matières à sortir pour les dossiers en cours, en accès simplifié et lecture guidée.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette vue</div><ul class="mguide-svc-list"><li>Voir les matières nécessaires à la production.</li><li>Enregistrer les sorties matière.</li><li>Consulter l'historique et imprimer les étiquettes.</li></ul></div></div>`
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Sur cette vue</div><ul class="mguide-svc-list"><li>Enregistrer les sorties de matière pour un dossier.</li><li>Imprimer les étiquettes de traçabilité.</li></ul></div></div>`
     },
     {
       title: 'Sorties matière',
@@ -17633,7 +17630,7 @@ function initStockGuides(){
     if(!window.MySifaGuides) return;
     MySifaGuides.configure({role:(window.__MYSIFA_ROLE__||'')});
     MySifaGuides.registerMany(STOCK_GUIDES);
-    MySifaGuides.boot().then(function(){ try{ MySifaGuides.autoOpen('mystock-overview'); }catch(e){} });
+    MySifaGuides.boot().then(function(){ try{ var _c=['mystock-overview']; var _t=STOCK_TAB_GUIDE[S.tab]; if(_t && _t!=='mystock-overview') _c.push(_t); MySifaGuides.autoOpenChain(_c); }catch(e){} });
   }catch(e){}
 }
 
