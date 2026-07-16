@@ -2706,14 +2706,33 @@ function openPlanningDetailsModal(events){
       (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
     });
     const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
-    const opsHtml = ops.length
-      ? ops.map(op => {
-          const machChips = (op.machines || []).map(m =>
+    // v2 : regroupe les rows dupliquées (même code sur N machines après split)
+    //      en 1 ligne par code, avec l'union des machines sous forme de chips.
+    const _grouped = new Map();
+    for(const op of ops){
+      const key = op.opTypeId || op._op_id || op.opName || Math.random();
+      if(!_grouped.has(key)){
+        _grouped.set(key, {
+          opName:   op.opName || '—',
+          opNiveau: op.opNiveau || null,
+          opFreq:   op.opFreq || '',
+          machines: [],
+        });
+      }
+      const entry = _grouped.get(key);
+      for(const m of (op.machines || [])){
+        if(!entry.machines.includes(m)) entry.machines.push(m);
+      }
+    }
+    const groupedOps = Array.from(_grouped.values());
+    const opsHtml = groupedOps.length
+      ? groupedOps.map(op => {
+          const machChips = op.machines.map(m =>
             '<span class="plan-det-case-op-mach">' + escHtml(m) + '</span>'
           ).join('');
           return '<div class="plan-det-case-op">' +
             '<span class="plan-det-case-op-bullet"></span>' +
-            '<span class="plan-det-case-op-name">' + escHtml(op.opName || '—') + '</span>' +
+            '<span class="plan-det-case-op-name">' + escHtml(op.opName) + '</span>' +
             (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
             (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
             (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
@@ -2931,8 +2950,17 @@ function _openCaseModalInner(opts){
     }
     const key = o.opTypeId;
     if(!_byCode.has(key)){
+      // v2 : détecte les codes LIB-xxx pour pré-charger la row en mode Libre.
+      //      _originalLibreCode / _originalLibreTitre permettent de savoir si
+      //      le titre a été modifié au submit → PATCH /libres au lieu de POST.
+      const isLibreCode = o.opTypeId && String(o.opTypeId).startsWith('LIB-');
       _byCode.set(key, {
         _op_id: null,  // legacy compat
+        _mode: isLibreCode ? 'libre' : 'catalogue',
+        _libreTitre: isLibreCode ? (o.opName || '') : '',
+        _libreCodeResolved: isLibreCode ? o.opTypeId : null,
+        _originalLibreCode: isLibreCode ? o.opTypeId : null,
+        _originalLibreTitre: isLibreCode ? (o.opName || '') : '',
         opTypeId: o.opTypeId,
         opName:   o.opName   || '',
         opNiveau: o.opNiveau || null,
@@ -3255,11 +3283,30 @@ async function submitCaseModal(e){
       if((op._mode || 'catalogue') !== 'libre') continue;
       const titre = (op._libreTitre || '').trim();
       if(!titre) continue;  // skip vides
-      if(op._libreCodeResolved){
-        // Suggestion catalogue/libre sélectionnée via autocomplete
+      if(op._originalLibreCode){
+        // LIB préexistante (édition d'un créneau) : conserve le code, PATCH le
+        // titre s'il a changé (impact rétroactif sur tous les événements
+        // utilisant ce même code, comportement backend actuel).
+        if(titre !== (op._originalLibreTitre || '')){
+          const rPatch = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(op._originalLibreCode), {
+            method:'PATCH', credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({label: titre}),
+          });
+          if(!rPatch.ok){
+            const err = await rPatch.json().catch(()=>({}));
+            showToast('Renommage libre échoué : ' + (err.detail || rPatch.status), 'danger');
+            return;
+          }
+        }
+        op.opTypeId = op._originalLibreCode;
+        op.opName = titre;
+      } else if(op._libreCodeResolved){
+        // Autocomplete pick : code existant réutilisé, pas besoin de créer
         op.opTypeId = op._libreCodeResolved;
         op.opName = op.opName || titre;
       } else {
+        // Nouvelle libre : POST /codes/libres (dedup exact-match backend)
         const rNew = await fetch('/api/maintenance/codes/libres', {
           method:'POST', credentials:'include',
           headers:{'Content-Type':'application/json'},
