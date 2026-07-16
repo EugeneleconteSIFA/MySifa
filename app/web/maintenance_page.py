@@ -804,6 +804,8 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .case-ops-row-done{background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,transparent 100%);border-left:3px solid var(--success,#34d399);padding:10px 12px;border-radius:8px;margin-bottom:8px}
 .case-ops-row-done .case-ops-row-done-label{display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);flex:1}
 .case-ops-row-done-badge{margin-left:10px;background:rgba(52,211,153,.16);color:var(--success,#34d399);border-radius:5px;padding:2px 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+/* v2 : dropdown machine unique dans le modal case */
+.case-ops-machine-select{min-width:180px;max-width:220px;padding:6px 10px;font-size:13px;font-weight:600}
 body.light .case-ops-row-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,transparent 100%)}
 body.light .case-ops-row-done-badge{background:rgba(5,150,105,.16);color:#059669}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
@@ -2958,6 +2960,14 @@ function toggleCaseOpMachine(idx, machine){
   cur.machines = list;
   renderCaseOpsList();
 }
+// v2 : setter (une seule machine par op après le split 1:1) — remplace le
+// toggle sur les 4 chips par un dropdown unique dans la modal.
+function setCaseOpMachine(idx, machine){
+  if(idx < 0 || idx >= _CASE_OPS.length) return;
+  const cur = _CASE_OPS[idx];
+  cur.machines = machine ? [machine] : [];
+  renderCaseOpsList();
+}
 function removeCaseOp(idx){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
   _CASE_OPS.splice(idx, 1);
@@ -2977,7 +2987,8 @@ function renderCaseOpsList(){
     if(isDone){
       const opName = op.opName || (OPS_TYPES_STATE.list.find(t => t.id === op.opTypeId) || {}).nom || op.opTypeId || '—';
       const nivBadge = op.opNiveau ? ' (N' + op.opNiveau + ')' : '';
-      const chipsDone = (op.machines || []).map(m =>
+      // v2 : n'affiche que la seule machine assignée (1:1 après split).
+      const chipsDone = (op.machines || []).slice(0, 1).map(m =>
         '<span class="case-mach-chip active" style="cursor:default;opacity:.85">' + escHtml(m) + '</span>'
       ).join('');
       return '<div class="case-ops-row case-ops-row-done" data-idx="' + idx + '">' +
@@ -3002,13 +3013,14 @@ function renderCaseOpsList(){
           (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
         '</option>'
       ).join('');
-    const machSet = new Set(Array.isArray(op.machines) ? op.machines : []);
-    const chips = CASE_MACHINES_LIST.map(m => {
-      const active = machSet.has(m);
-      return '<button type="button" class="case-mach-chip' + (active ? ' active' : '') + '" onclick="toggleCaseOpMachine(' + idx + ', \'' + escAttr(m) + '\')" aria-pressed="' + (active ? 'true' : 'false') + '">' +
-        escHtml(m) +
-      '</button>';
-    }).join('');
+    // v2 : après le split 1:1, une op = une machine. Dropdown unique au lieu
+    // des 4 chips (n'affiche pas les machines non concernées).
+    const currentMachine = (Array.isArray(op.machines) && op.machines.length) ? op.machines[0] : '';
+    const machineOptions = '<option value="">Choisir une machine…</option>' +
+      CASE_MACHINES_LIST.map(m =>
+        '<option value="' + escAttr(m) + '"' + (m === currentMachine ? ' selected' : '') + '>' +
+        escHtml(m) + '</option>'
+      ).join('');
     return '<div class="case-ops-row" data-idx="' + idx + '">' +
       '<div class="case-ops-row-top">' +
         '<select class="ops-select" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>' +
@@ -3017,8 +3029,8 @@ function renderCaseOpsList(){
         '</button>' +
       '</div>' +
       '<div class="case-ops-machines">' +
-        '<span class="case-ops-machines-label">Machine(s)</span>' +
-        chips +
+        '<span class="case-ops-machines-label">Machine</span>' +
+        '<select class="ops-select case-ops-machine-select" onchange="setCaseOpMachine(' + idx + ', this.value)">' + machineOptions + '</select>' +
       '</div>' +
     '</div>';
   }).join('');
@@ -3036,6 +3048,8 @@ async function submitCaseModal(e){
   // v2 : on inclut TOUTES les ops (y compris termine) dans wantedOps pour
   //      que _syncEventOpsAndOperators ne les supprime pas — elles doivent
   //      persister à l'identique.
+  // v2 : on inclut TOUTES les ops (y compris termine) dans wantedOps pour
+  //      que _syncEventOpsAndOperators ne les supprime pas.
   const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
     code: o.opTypeId,
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
@@ -3044,8 +3058,22 @@ async function submitCaseModal(e){
   // Chaque op doit être attribuée à au moins une machine.
   const missing = wantedOps.find(o => !o.machines.length);
   if(missing){
-    showToast('Attribuez au moins une machine à chaque opération.', 'danger');
+    const missName = (OPS_TYPES_STATE.list.find(t => t.id === missing.code) || {}).nom || missing.code;
+    showToast('« ' + missName + ' » : sélectionne une machine avant de valider.', 'danger');
     return;
+  }
+  // Détection duplicate (op X + machine Y déjà présente dans le créneau).
+  const seenPairs = new Map();  // key = "code@@machine" → name
+  for(const w of wantedOps){
+    for(const m of w.machines){
+      const k = String(w.code) + '@@' + String(m);
+      if(seenPairs.has(k)){
+        const nm = (OPS_TYPES_STATE.list.find(t => t.id === w.code) || {}).nom || w.code;
+        showToast('« ' + nm + ' » est déjà présente sur ' + m + ' dans ce créneau. Une même opération ne peut être ajoutée qu\'une seule fois par machine.', 'danger');
+        return;
+      }
+      seenPairs.set(k, w.code);
+    }
   }
   const operatorIds = (_CASE_OPERATORS || []).map(o => o.id);
 

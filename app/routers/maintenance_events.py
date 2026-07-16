@@ -457,6 +457,15 @@ def create_event(body: EventCreateBody, request: Request):
         for code, _mcsv in ops_specs:
             if not conn.execute("SELECT 1 FROM maintenance_codes WHERE code=?", (code,)).fetchone():
                 raise HTTPException(status_code=400, detail=f"code inconnu: {code}")
+        # Auto-assign : si admin crée un créneau planifié sans assigner
+        # d'opérateurs, on assigne par défaut tous les users role=fabrication
+        # actifs. Sinon un créneau vide d'opérateurs est inutile.
+        # (Le mode opérateur assigne toujours self ou la liste passée.)
+        if maint_role == "admin" and src == "planifie" and not operator_ids:
+            operator_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM users WHERE role = ? AND actif = 1",
+                (ROLE_FABRICATION,),
+            ).fetchall()]
         # Vérif opérateurs
         for oid in operator_ids:
             if not conn.execute("SELECT 1 FROM users WHERE id=?", (oid,)).fetchone():
@@ -848,7 +857,6 @@ def get_history(
                        o.code           AS code,
                        c.label          AS code_label,
                        c.categorie      AS categorie,
-                       COALESCE(c.libre, 0) AS code_libre,
                        o.duree_reelle_min AS duree_reelle_min,
                        o.observations   AS commentaire,
                        o.pieces_changees AS pieces_changees,
@@ -884,7 +892,6 @@ def get_history(
         # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
         d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
         d["type"] = d.get("code_label") or d.get("code") or ""
-        d["libre"] = bool(d.pop("code_libre", 0) or 0)
         out.append(d)
     return {"history": out}
 
