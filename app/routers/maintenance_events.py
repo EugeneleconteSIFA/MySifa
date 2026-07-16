@@ -848,6 +848,7 @@ def get_history(
                        o.code           AS code,
                        c.label          AS code_label,
                        c.categorie      AS categorie,
+                       COALESCE(c.libre, 0) AS code_libre,
                        o.duree_reelle_min AS duree_reelle_min,
                        o.observations   AS commentaire,
                        o.pieces_changees AS pieces_changees,
@@ -883,6 +884,7 @@ def get_history(
         # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
         d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
         d["type"] = d.get("code_label") or d.get("code") or ""
+        d["libre"] = bool(d.pop("code_libre", 0) or 0)
         out.append(d)
     return {"history": out}
 
