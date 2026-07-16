@@ -796,11 +796,10 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .btn-op-cancel-validation{background:transparent;color:var(--danger);border:1px solid var(--danger);font-weight:600}
 .btn-op-cancel-validation:hover{background:var(--danger);color:#fff}
 /* Actions Modifier/Supprimer sur cartes op individuelles (interventions non-programmées) */
-.op-op-card-actions{position:absolute;top:8px;right:8px;display:inline-flex;gap:4px;z-index:2}
-.op-op-card-actions button{width:26px;height:26px;padding:0;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
-.op-op-card-actions button:hover{color:var(--text);border-color:var(--accent)}
-.op-op-card-actions button.danger:hover{color:var(--danger);border-color:var(--danger);background:transparent}
-.op-op-card:has(.op-op-card-actions) .op-op-card-head{padding-right:64px}
+.op-op-card-footer-actions{display:flex;justify-content:flex-end;gap:4px;margin-top:2px}
+.op-op-card-mini-btn{width:24px;height:24px;padding:0;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
+.op-op-card-mini-btn:hover{color:var(--text);border-color:var(--accent);background:var(--bg)}
+.op-op-card-mini-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -6164,9 +6163,13 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
         <option value="Repiquage">Repiquage</option>
       </select>
     </div>
-    <div class="op-form-row">
+    <div class="op-form-row" id="op-new-code-row">
       <label for="op-new-code">Code opération *</label>
       <select id="op-new-code"></select>
+    </div>
+    <div class="op-form-row" id="op-new-titre-libre-row" style="display:none">
+      <label for="op-new-titre-libre">Titre de l'intervention *</label>
+      <input type="text" id="op-new-titre-libre" maxlength="200" placeholder="Ex : Remplacement joint pompe hydraulique">
     </div>
     <div class="op-form-row">
       <label for="op-new-duree">Durée réelle (min)</label>
@@ -6516,20 +6519,19 @@ function _renderOpCardIndividual(op, ev){
   const statusLabel = _statutLabel(op.statut);
   // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
   // non_planifie créées par l'user courant (interventions déclarées via
-  // le bouton "Enregistrer une opération" côté opérateur).
+  // "Enregistrer une opération").
   const meId = (S && S.me) ? S.me.id : null;
   const canManage = (ev.source === 'non_planifie') && (meId != null) && (ev.created_by === meId);
   const actionsHtml = canManage ? `
-    <div class="op-op-card-actions">
-      <button type="button" title="Modifier l'intervention" onclick="event.stopPropagation();opOpenEditModal(${ev.id})">
+    <div class="op-op-card-footer-actions">
+      <button type="button" class="op-op-card-mini-btn" title="Modifier l'intervention" onclick="event.stopPropagation();opOpenEditModal(${ev.id})">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
       </button>
-      <button type="button" class="danger" title="Supprimer l'intervention" onclick="event.stopPropagation();opDeleteEvent(${ev.id})">
+      <button type="button" class="op-op-card-mini-btn danger" title="Supprimer l'intervention" onclick="event.stopPropagation();opDeleteEvent(${ev.id})">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
       </button>
     </div>` : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
-    ${actionsHtml}
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
@@ -6538,6 +6540,7 @@ function _renderOpCardIndividual(op, ev){
     <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
       ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
     </button>
+    ${actionsHtml}
   </div>`;
 }
 
@@ -6870,31 +6873,57 @@ async function opOpenEditModal(eventId){
     return;
   }
   // Créneau non_planifie → modal simple (édition d'une saisie rapide).
-  await opFetchCodes();
-  MAINT_STATE.editingEventId = eventId;
-  const sel = document.getElementById('op-new-code');
-  sel.innerHTML = MAINT_STATE.codes.map(c =>
-    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
-  ).join('');
-  // Pré-remplit avec les valeurs actuelles
   const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+  const isLibre = !!(currentOp && currentOp.code && String(currentOp.code).startsWith('LIB-'));
+  MAINT_STATE.editingEventId = eventId;
+  MAINT_STATE.editingIsLibre = isLibre;  // flag lu par opSubmitNew
+
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  const sel = document.getElementById('op-new-code');
+  const titreEl = document.getElementById('op-new-titre-libre');
+
+  if(isLibre){
+    // Mode libre : cache le dropdown code, montre le champ titre texte.
+    if(codeRow) codeRow.style.display = 'none';
+    if(titreRow) titreRow.style.display = '';
+    if(titreEl) titreEl.value = currentOp.code_label || '';
+  } else {
+    // Mode code standard : dropdown code, cache titre.
+    if(codeRow) codeRow.style.display = '';
+    if(titreRow) titreRow.style.display = 'none';
+    await opFetchCodes();
+    sel.innerHTML = MAINT_STATE.codes.map(c =>
+      `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+    ).join('');
+    if(currentOp && currentOp.code) sel.value = currentOp.code;
+  }
+
+  // Pré-remplit date/machine/durée/commentaires (communs)
   const dateEl = document.getElementById('op-new-date');
   if(dateEl) dateEl.value = ev.date_prevue || _fmtDateISO(new Date());
   const machineEl = document.getElementById('op-new-machine');
   if(machineEl && ev.machine) machineEl.value = ev.machine;
-  if(currentOp && currentOp.code) sel.value = currentOp.code;
   const dureeEl = document.getElementById('op-new-duree');
   if(dureeEl) dureeEl.value = (currentOp && currentOp.duree_reelle_min != null) ? currentOp.duree_reelle_min : '';
   const commEl = document.getElementById('op-new-comment');
   if(commEl) commEl.value = (currentOp && currentOp.observations) ? currentOp.observations : '';
-  document.getElementById('op-modal-new-title').textContent = 'Modifier l\'opération';
-  document.getElementById('op-modal-new-sub').textContent = 'Ajuste la date, la machine, le code ou les informations complémentaires.';
+  document.getElementById('op-modal-new-title').textContent = isLibre ? 'Modifier l\'intervention libre' : 'Modifier l\'opération';
+  document.getElementById('op-modal-new-sub').textContent = isLibre
+    ? 'Ajuste le titre, la date, la machine ou les informations complémentaires.'
+    : 'Ajuste la date, la machine, le code ou les informations complémentaires.';
   document.getElementById('op-modal-new-submit').textContent = 'Enregistrer les modifications';
   document.getElementById('op-modal-new').classList.add('active');
 }
 
 function opCloseNewModal(){
   MAINT_STATE.editingEventId = null;
+  MAINT_STATE.editingIsLibre = false;
+  // Reset visibilité par défaut : code visible, titre libre caché
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(codeRow) codeRow.style.display = '';
+  if(titreRow) titreRow.style.display = 'none';
   document.getElementById('op-modal-new').classList.remove('active');
 }
 
@@ -6917,14 +6946,24 @@ async function _patchOpTermine(eventId, opId, dureeMin, comment){
 async function opSubmitNew(){
   const dateVal = document.getElementById('op-new-date').value;
   const machine = document.getElementById('op-new-machine').value;
+  const isLibreEdit = !!MAINT_STATE.editingIsLibre;
+  const titreLibre = (document.getElementById('op-new-titre-libre').value || '').trim();
   const code = document.getElementById('op-new-code').value;
   const dureeStr = document.getElementById('op-new-duree').value;
   const comment = (document.getElementById('op-new-comment').value || '').trim();
   const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
 
-  if(!dateVal || !machine || !code){
-    if(typeof showToast === 'function') showToast('Date, machine et code sont obligatoires.', 'danger');
-    else alert('Date, machine et code sont obligatoires.');
+  // Validation champs obligatoires selon mode
+  if(!dateVal || !machine){
+    if(typeof showToast === 'function') showToast('Date et machine sont obligatoires.', 'danger');
+    return;
+  }
+  if(isLibreEdit && !titreLibre){
+    if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger');
+    return;
+  }
+  if(!isLibreEdit && !code){
+    if(typeof showToast === 'function') showToast('Code opération obligatoire.', 'danger');
     return;
   }
   if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
@@ -6937,8 +6976,23 @@ async function opSubmitNew(){
     // ─── Mode édition
     const ev = (MAINT_STATE.tasks || []).find(x => x.id === editingId);
     if(!ev){ opCloseNewModal(); return; }
+    const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+    const wasTermine = !!(currentOp && currentOp.statut === 'termine');
     try{
-      // PATCH event : machine et/ou date si changées
+      // 1. PATCH /libres/{code} si titre libre change
+      if(isLibreEdit && currentOp && currentOp.code){
+        const currentTitre = (currentOp.code_label || '').trim();
+        if(titreLibre !== currentTitre){
+          const rTitre = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(currentOp.code), {
+            method:'PATCH', credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({label: titreLibre}),
+          });
+          if(!rTitre.ok){ const err = await rTitre.json().catch(()=>({})); throw new Error(err.detail || 'Renommage titre échoué'); }
+        }
+      }
+
+      // 2. PATCH event : machine et/ou date si changées
       const evPatch = {};
       if((ev.machine || '') !== machine) evPatch.machine = machine;
       if((ev.date_prevue || '') !== dateVal) evPatch.date_prevue = dateVal;
@@ -6950,10 +7004,10 @@ async function opSubmitNew(){
         });
         if(!r1.ok){ const err = await r1.json().catch(()=>({})); throw new Error(err.detail || r1.status); }
       }
-      const currentOp = (ev.ops && ev.ops[0]) ? ev.ops[0] : null;
+
+      // 3. Si code standard change (impossible en mode libre), replace op
       let opId = currentOp ? currentOp.id : null;
-      // Si le code change, on remplace l'op (delete + add)
-      if(!currentOp || currentOp.code !== code){
+      if(!isLibreEdit && (!currentOp || currentOp.code !== code)){
         if(opId != null){
           const rDel = await fetch('/api/maintenance/events/' + editingId + '/ops/' + opId, {
             method:'DELETE', credentials:'include',
@@ -6970,13 +7024,30 @@ async function opSubmitNew(){
         const newOp = (dataAdd.event && dataAdd.event.ops || []).find(o => o.code === code);
         opId = newOp ? newOp.id : opId;
       }
-      // PATCH op : force termine + durée + observations
+
+      // 4. PATCH op : durée + observations. Statut SEULEMENT si l'op était déjà termine
+      //    (préserve statut a_faire pour les interventions modifiées avant validation).
       if(opId != null){
-        await _patchOpTermine(editingId, opId, dureeMin, comment);
+        if(wasTermine){
+          await _patchOpTermine(editingId, opId, dureeMin, comment);
+        } else {
+          const patchBody = {};
+          if(dureeMin != null && !Number.isNaN(dureeMin)) patchBody.duree_reelle_min = dureeMin;
+          if(comment) patchBody.observations = comment;
+          if(Object.keys(patchBody).length){
+            const r4 = await fetch('/api/maintenance/events/' + editingId + '/ops/' + opId, {
+              method:'PATCH', credentials:'include',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify(patchBody),
+            });
+            if(!r4.ok){ const err = await r4.json().catch(()=>({})); throw new Error(err.detail || r4.status); }
+          }
+        }
       }
-      if(typeof showToast === 'function') showToast('Opération mise à jour.', 'success');
+      if(typeof showToast === 'function') showToast(isLibreEdit ? 'Intervention libre mise à jour.' : 'Opération mise à jour.', 'success');
       opCloseNewModal();
       await opLoadTasks();
+      if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
     }catch(e){
       if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
       else alert('Erreur : ' + e.message);
