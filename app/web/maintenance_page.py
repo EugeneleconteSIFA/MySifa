@@ -795,8 +795,28 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 /* ── Modal single-op saisie ─────────────────────────────────────── */
 .op-single-op-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .op-single-op-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px}
+/* Legacy compat pour l'ancienne classe (au cas où utilisée ailleurs) */
 .btn-op-cancel-validation{background:transparent;color:var(--danger);border:1px solid var(--danger);font-weight:600}
 .btn-op-cancel-validation:hover{background:var(--danger);color:#fff}
+/* v2 : actions harmonisées du modal single-op (3 boutons alignés, même
+   hauteur, hiérarchie visuelle claire) */
+.op-single-actions{align-items:center;gap:8px}
+.op-single-actions-spacer{flex:1}
+.op-single-actions .btn{min-height:40px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s,color .15s,border-color .15s,filter .15s}
+/* Bouton destructif : outline rouge, discret mais reconnaissable */
+.btn-danger-outline{background:transparent;color:var(--danger);border:1px solid var(--danger)}
+.btn-danger-outline:hover{background:var(--danger);color:#fff}
+/* Bouton ghost : transparent, subtil (secondaire) */
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--bg);color:var(--text);border-color:var(--muted)}
+/* Bouton primaire : filled accent (déjà existant, on force la cohérence) */
+.op-single-actions .btn.op-btn-accent{background:var(--accent);color:var(--accent-fg);border:1px solid var(--accent);font-weight:700}
+.op-single-actions .btn.op-btn-accent:hover{filter:brightness(1.08)}
+@media(max-width:520px){
+  .op-single-actions{flex-wrap:wrap}
+  .op-single-actions-spacer{display:none}
+  .op-single-actions .btn{flex:1;min-width:0}
+}
 /* Actions Modifier/Supprimer sur cartes op individuelles (interventions non-programmées) */
 .op-op-card-footer-actions{display:flex;justify-content:flex-end;gap:4px;margin-top:2px}
 .op-op-card-mini-btn{width:24px;height:24px;padding:0;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
@@ -6237,13 +6257,10 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <label for="op-single-comment">Commentaires</label>
       <textarea id="op-single-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
     </div>
-    <div class="op-modal-actions">
-      <button type="button" class="btn btn-op-cancel-validation" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
-        Annuler la validation
-      </button>
-      <div style="flex:1"></div>
-      <button type="button" class="btn" onclick="opCloseSingleModal()">Fermer</button>
+    <div class="op-modal-actions op-single-actions">
+      <button type="button" class="btn btn-danger-outline" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">Annuler la validation</button>
+      <span class="op-single-actions-spacer"></span>
+      <button type="button" class="btn btn-ghost" onclick="opCloseSingleModal()">Fermer</button>
       <button type="button" class="btn op-btn-accent" id="op-single-submit" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
     </div>
   </div>
