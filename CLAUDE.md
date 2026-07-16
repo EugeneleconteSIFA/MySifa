@@ -350,6 +350,24 @@ Liens de navigation (.nav-btn)
 
 **Ne jamais omettre le `.sidebar-bottom`**. Ne jamais changer l'ordre des éléments du bas. Le bouton logout doit toujours être présent.
 
+**Feedback cliquable sur le logo et tous les éléments interactifs de la
+sidebar.** Le logo de chaque module (ex. `My<span>Qualité</span>`,
+`My<span>Sifa</span>`, `My<span>Prod</span>`...) DOIT être cliquable pour
+revenir au menu général du module — et cette cliquabilité DOIT être
+visible :
+
+- `cursor:pointer` sur le `.logo`
+- Effet `:hover` cohérent avec les `.nav-btn` (fond `var(--accent-bg)`,
+  couleur du texte principal qui bascule sur `var(--accent)`)
+- `title=""` avec un texte explicite (ex. "Menu MyQualité")
+- Handler `onclick="setView(\'menu\')"` ou équivalent
+
+Règle générale : **tout élément cliquable de la sidebar (logo, cards,
+badges, boutons)** doit avoir un état hover visible et un `cursor:pointer`.
+Sans feedback visuel, l'utilisateur n'a aucun moyen de savoir qu'il
+peut cliquer — bug rencontré sur le logo MyQualité (juillet 2026, ajouté
+sans hover initialement).
+
 ### Topbar mobile
 La topbar mobile (`.mobile-topbar`) est toujours présente et contient :
 - Bouton menu hamburger (`.mobile-menu-btn`) → toggle classe `sb-open` sur `body`
