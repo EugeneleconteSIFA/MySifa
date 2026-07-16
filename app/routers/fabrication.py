@@ -2031,7 +2031,7 @@ async def patch_matiere(matiere_id: int, request: Request):
 
 
 @router.delete("/api/fabrication/matieres/{matiere_id}")
-async def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False):
+def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False):
     """Supprime un scan de matière."""
     user = get_current_user(request)
     _check_fab_access(user)
@@ -3775,7 +3775,7 @@ def _mp_has_subsequent(conn, row: dict) -> bool:
 
 
 @router.delete("/api/fabrication/saisie-stock/{kind}/{mvt_id}")
-async def delete_saisie_stock(kind: str, mvt_id: int, request: Request):
+def delete_saisie_stock(kind: str, mvt_id: int, request: Request):
     """Supprime une saisie stock avec reversion du stock."""
     user = get_current_user(request)
     _check_fab_access(user)

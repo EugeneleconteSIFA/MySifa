@@ -2156,7 +2156,7 @@ async def update_entry(machine_id: int, entry_id: int, request: Request):
 
 
 @router.put("/machines/{machine_id}/entries/{entry_id}/destockage")
-async def toggle_destockage(machine_id: int, entry_id: int, request: Request):
+def toggle_destockage(machine_id: int, entry_id: int, request: Request):
     """Bascule le flag destockage (todo ↔ done) d'un dossier."""
     require_admin(request)
     now = datetime.now().isoformat()
@@ -2219,7 +2219,7 @@ def entry_production_stats(machine_id: int, entry_id: int, request: Request):
 
 
 @router.post("/machines/{machine_id}/entries/{entry_id}/reset-saisie")
-async def reset_statut_reel(machine_id: int, entry_id: int, request: Request):
+def reset_statut_reel(machine_id: int, entry_id: int, request: Request):
     """
     Remet statut_reel à reellement_en_attente.
     Réservé aux rôles superadmin et direction.
@@ -3645,7 +3645,7 @@ def _pack_termines_before_anchor(
 
 
 @router.post("/machines/{machine_id}/pack-termines-before-en-cours")
-async def pack_termines_before_en_cours(machine_id: int, request: Request):
+def pack_termines_before_en_cours(machine_id: int, request: Request):
     """Recale les terminés *avant* le dossier en cours pour finir au début du en_cours.
 
     Les terminés restent ensuite figés sauf déplacement manuel.
@@ -3678,7 +3678,7 @@ async def pack_termines_before_en_cours(machine_id: int, request: Request):
 
 
 @router.post("/pack-termines-before-en-cours")
-async def pack_termines_before_en_cours_all(request: Request):
+def pack_termines_before_en_cours_all(request: Request):
     """Recale, sur toutes les machines actives, les terminés avant le en_cours."""
     require_admin(request)
     with get_db() as conn:

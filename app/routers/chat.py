@@ -1795,7 +1795,7 @@ async def vote_poll(poll_id: int, request: Request):
 
 
 @router.post("/polls/{poll_id}/close")
-async def close_poll(poll_id: int, request: Request):
+def close_poll(poll_id: int, request: Request):
     """Clôturer manuellement un sondage. Créateur, direction, superadmin."""
     user = _require(request)
     with get_db() as conn:
@@ -1866,7 +1866,7 @@ def poll_voters(poll_id: int, request: Request):
 
 
 @router.post("/polls/{poll_id}/reopen")
-async def reopen_poll(poll_id: int, request: Request):
+def reopen_poll(poll_id: int, request: Request):
     """Rouvrir un sondage clôturé. Créateur, direction, superadmin.
     Efface closed_at, closed_by ET closes_at (évite re-fermeture immédiate).
     """

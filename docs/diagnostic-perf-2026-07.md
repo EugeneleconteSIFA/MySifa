@@ -6,28 +6,40 @@
 
 ---
 
-## Cause principale identifiée
+## Cause principale identifiée — CORRIGÉE après investigation (16/07 après-midi)
 
-### 193 endpoints `async def` avec SQLite bloquant
+### Version initiale (surestimée)
 
-Les routers déclarent des endpoints `async def` qui appellent `get_db()` / `conn.execute()` de façon synchrone. Uvicorn tourne en process unique : chaque requête DB fige l'event loop entier — toutes les autres requêtes attendent.
+Le comptage initial trouvait 193 endpoints `async def` faisant du SQLite bloquant
+sur l'event loop (uvicorn mono-process : une requête DB fige tout le serveur).
 
-Avec le polling front (5 s sur plusieurs pages, 2,5 s pour le chat) multiplié par le nombre d'utilisateurs connectés, les requêtes s'empilent. La lenteur augmente mécaniquement avec l'usage — cohérent avec le symptôme « de plus en plus lent ».
+### Ce que l'investigation AST a montré
 
-**Répartition des endpoints concernés :**
+- **Tous les endpoints GET — le chemin chaud (polling 5 s, chargements de pages,
+  lectures) — sont déjà en `def` sync** : FastAPI les exécute en threadpool,
+  ils ne bloquent PAS l'event loop. Vérifié : planning (14 GET), fabrication
+  (18), stock (42), chat (11) — zéro GET async.
+- Les endpoints async sont des **écritures** (POST/PATCH/DELETE) dont le seul
+  `await` est `await request.json()`. Leur travail SQLite s'exécute bien en
+  bloquant sur l'event loop, mais une écriture ne dure que quelques ms…
+  **sauf quand elle attendait un verrou DB (jusqu'à 5 s de timeout)** — et en
+  mode journal par défaut (pré-WAL), les verrous d'écriture étaient fréquents.
 
-| Router | Endpoints async bloquants |
-|---|---|
-| `app/routers/stock.py` | 31 |
-| `app/routers/planning.py` | 23 |
-| `app/routers/settings.py` | 21 |
-| `app/routers/ao.py` | 17 |
-| `app/routers/fabrication.py` | 15 |
-| `app/routers/chat.py` | 12 |
-| Autres (compta, of_import, auth, expe_departs…) | 74 |
-| **Total** | **193** |
+### Conclusion révisée
 
-**Correctif :** passer ces endpoints de `async def` à `def` — FastAPI les exécute alors dans un threadpool sans autre changement (la plupart ne contiennent aucun `await`). Quasi mécanique, mais à faire router par router et à valider sur v1.
+Mécanisme réel de la lenteur croissante : **écriture bloquée par un verrou
+SQLite (pas de WAL) → event loop gelé jusqu'à 5 s → toutes les requêtes de tous
+les utilisateurs en attente**. Plus d'utilisateurs = plus d'écritures = plus de
+gels. Le quick win WAL (appliqué) supprime la cause racine ; le blocage résiduel
+par écriture (quelques ms) est acceptable.
+
+**Décision : pas de conversion de masse async → def** (~170 signatures à
+modifier pour un gain marginal et un vrai risque de régression). Seuls les
+8 endpoints convertibles sans changement de comportement ont été passés en
+`def` (16/07) : planning ×4 (toggle_destockage, reset_statut_reel,
+pack_termines_before_en_cours, pack_termines_before_en_cours_all),
+fabrication ×2 (delete_matiere, delete_saisie_stock), chat ×2 (close_poll,
+reopen_poll).
 
 ---
 
@@ -84,9 +96,11 @@ Correctif : middleware posant `Cache-Control: public, max-age=86400` sur `/stati
 
 ## 2. Restructurations
 
-### a. Conversion async → def des 193 endpoints (voir cause principale)
+### a. ~~Conversion async → def des 193 endpoints~~ — abandonnée (voir cause principale corrigée)
 
-Le chantier le plus rentable. Ordre suggéré : stock → planning → settings → fabrication → chat → reste.
+Les GET sont déjà sync ; les écritures async ne bloquent que quelques ms une fois
+le WAL actif. Si une mesure montre un endpoint d'écriture réellement lent,
+le convertir ponctuellement via une dépendance `Depends` pour le body JSON.
 
 ### b. Extraire le CSS/JS inline vers `/static` versionné
 
@@ -130,6 +144,7 @@ systemctl cat mysifa | grep -i exec
 
 ## Ordre d'exécution recommandé
 
-1. **Quick wins a + b + c** (une demi-journée, testables sur v1 immédiatement).
-2. **Conversion async → def**, router par router, validation sur v1 entre chaque lot.
-3. **Extraction des assets inline**, en commençant par MyStock.
+1. **Quick wins a + b + c + d** — FAIT (16/07, poussé sur staging).
+2. **8 conversions async → def sans risque** — FAIT (16/07). Conversion de masse abandonnée.
+3. **Middleware de mesure** (log des requêtes > 500 ms) pour objectiver la suite.
+4. **Extraction des assets inline**, en commençant par MyStock et le portail.
