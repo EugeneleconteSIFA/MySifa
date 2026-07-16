@@ -6,7 +6,6 @@ from config import (
     THEME_COLOR_META,
     ENV_NAME,
     IS_STAGING,
-    MAINTENANCE_OPEN_BETA,
     # Branding paramétrable (défaut SIFA — voir config.py).
     APP_NAME,
     APP_NAME_PREFIX,
@@ -1729,7 +1728,6 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
   <span class="msf-imp-slot" id="msf-impersonate-slot" hidden></span>
 </div>
 <script>window.__MYSIFA_ENV__="__ENV_NAME_VALUE__";</script>
-<script>window.__MAINT_OPEN_BETA__=__MAINT_OPEN_BETA_VALUE__;</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <div id="root"></div>
@@ -10981,7 +10979,6 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__STAGING_INITIAL_HIDDEN__", staging_initial_hidden)
         .replace("__STAGING_INITIAL_MSG__", staging_initial_msg)
         .replace("__ENV_NAME_VALUE__", ENV_NAME)
-        .replace("__MAINT_OPEN_BETA_VALUE__", "true" if MAINTENANCE_OPEN_BETA else "false")
         .replace("__INITIAL_APP_VALUE__", initial_app)
         .replace("__FAV_SFX__", fav_sfx)
         .replace("__FAV_SFX2__", fav_sfx)
