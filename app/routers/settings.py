@@ -27,6 +27,11 @@ from config import (
     ROLES_ADMIN,
     SUPERADMIN_EMAIL,
     default_app_access_for_role,
+    APPS_CATALOG,
+    ACCESS_LEVELS,
+    LEVEL_LABELS,
+    LEVEL_ORDER,
+    is_known_app_module,
 )
 from app.services.audit_service import log_action
 from services.auth_service import get_current_user, require_superadmin, merged_app_access, parse_access_overrides_raw
@@ -76,112 +81,266 @@ def _traca_file_from_url(url: str) -> Optional[Path]:
     return p
 
 
+# ─── Labels rôles (partagés par les endpoints d'accès) ────────────
+
+_ROLE_LABELS = {
+    ROLE_DIRECTION: "Direction",
+    ROLE_ADMINISTRATION: "Administration",
+    ROLE_ADMINISTRATION_VENTES: "Administration des ventes",
+    ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
+    ROLE_FABRICATION: "Fabrication",
+    ROLE_LOGISTIQUE: "Logistique",
+    ROLE_COMPTABILITE: "Comptabilité",
+    ROLE_EXPEDITION: "Expédition",
+    ROLE_COMMERCIAL: "Commercial",
+    ROLE_SUPERADMIN: "Super admin",
+}
+
+
+def _load_all_access(conn):
+    """Charge role_access_defaults + user_access_overrides en 2 requêtes.
+
+    Retourne (role_defaults, user_overrides) où :
+    - role_defaults[role][(app, module)] = level
+    - user_overrides[user_id][(app, module)] = level
+    """
+    role_defaults: dict = {}
+    for r in conn.execute(
+        "SELECT role, app_id, module_id, level FROM role_access_defaults"
+    ).fetchall():
+        role_defaults.setdefault(r["role"], {})[(r["app_id"], r["module_id"])] = r["level"]
+    user_overrides: dict = {}
+    for r in conn.execute(
+        "SELECT user_id, app_id, module_id, level FROM user_access_overrides"
+    ).fetchall():
+        user_overrides.setdefault(r["user_id"], {})[(r["app_id"], r["module_id"])] = r["level"]
+    return role_defaults, user_overrides
+
+
+def _effective_level(role, uid, app_id, module_id, role_defaults, user_overrides):
+    """Résout le niveau effectif — user override → role default → 'none'."""
+    if role == ROLE_SUPERADMIN:
+        return "admin"
+    if app_id == "settings":
+        return "none"
+    ov = user_overrides.get(uid, {})
+    if (app_id, module_id) in ov:
+        return ov[(app_id, module_id)]
+    if module_id != "_app" and (app_id, "_app") in ov:
+        return ov[(app_id, "_app")]
+    d = role_defaults.get(role, {})
+    if (app_id, module_id) in d:
+        return d[(app_id, module_id)]
+    if module_id != "_app" and (app_id, "_app") in d:
+        return d[(app_id, "_app")]
+    return "none"
+
+
 @router.get("/api/settings/access-matrix")
 def access_matrix(request: Request):
+    """Matrice complète pour l'écran /settings → Matrice d'accès.
+
+    Renvoie :
+      - `apps` : catalogue APPS_CATALOG (apps + sous-modules + labels).
+      - `levels` : liste ordonnée des niveaux disponibles.
+      - `level_labels` : libellés lisibles des niveaux.
+      - `roles`, `role_labels` : rôles assignables + libellés.
+      - `users[]` : chaque utilisateur avec { id, email, nom, role, role_label,
+        actif, last_login, access:{app_id:{module_id:level}}, overrides:[{app_id,
+        module_id, level}] }.
+    Le super admin apparaît en lecture seule côté UI.
+    """
     require_superadmin(request)
     from database import get_db
 
-    apps = [
-        {
-            "id": "prod",
-            "label": "MyProd",
-            "hint": "Suivi de production (hors planning autonome)",
-        },
-        {
-            "id": "planning",
-            "label": "Planning machine",
-            "hint": "Planning atelier (même périmètre que MyProd pour les rôles)",
-        },
-        {
-            "id": "planning_rh",
-            "label": "Planning RH",
-            "hint": "Planning personnel (affectation opérateurs)",
-        },
-        {
-            "id": "stock",
-            "label": "MyStock",
-            "hint": "Stocks & emplacements",
-        },
-        {
-            "id": "compta",
-            "label": "MyCompta",
-            "hint": "Interface comptabilité",
-        },
-        {
-            "id": "expe",
-            "label": "MyExpé",
-            "hint": "Expédition",
-        },
-        {
-            "id": "pricing",
-            "label": "Pricing",
-            "hint": "Coûts matières et fiches produits (/pricing)",
-        },
-        {
-            "id": "settings",
-            "label": "Paramètres",
-            "hint": "Comptes, rôles & matrice — super admin uniquement",
-        },
-    ]
-
-    role_labels = {
-        ROLE_DIRECTION: "Direction",
-        ROLE_ADMINISTRATION: "Administration",
-        ROLE_ADMINISTRATION_VENTES: "Administration des ventes",
-        ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
-        ROLE_FABRICATION: "Fabrication",
-        ROLE_LOGISTIQUE: "Logistique",
-        ROLE_COMPTABILITE: "Comptabilité",
-        ROLE_EXPEDITION: "Expédition",
-        ROLE_COMMERCIAL: "Commercial",
-        ROLE_SUPERADMIN: "Super admin",
-    }
-
     with get_db() as conn:
-        rows = conn.execute(
-            """SELECT u.id,u.email,u.nom,u.role,u.actif,u.last_login,u.access_overrides
-               FROM users u
-               ORDER BY u.actif DESC, u.role DESC, u.nom ASC"""
+        users = conn.execute(
+            "SELECT id, email, nom, role, actif, last_login FROM users "
+            "ORDER BY actif DESC, role DESC, nom ASC"
         ).fetchall()
+        role_defaults, user_overrides = _load_all_access(conn)
 
-    defaults = []
-    for r in (*ASSIGNABLE_ROLES, ROLE_SUPERADMIN):
-        defaults.append(
-            {
-                "role": r,
-                "label": role_labels.get(r, r),
-                "access": default_app_access_for_role(r),
-            }
-        )
-
-    matrix = []
-    for row in rows:
-        d = dict(row)
+    users_out = []
+    for u in users:
+        d = dict(u)
         role = d["role"]
-        om = d.get("access_overrides")
-        matrix.append(
-            {
-                "id": d["id"],
-                "email": d["email"],
-                "nom": d["nom"],
-                "role": role,
-                "role_label": role_labels.get(role, role),
-                "actif": d["actif"],
-                "last_login": d.get("last_login"),
-                "access_default": default_app_access_for_role(role),
-                "access_overrides": parse_access_overrides_raw(om),
-                "access": merged_app_access(role, om),
-            }
-        )
+        acc = {}
+        for app in APPS_CATALOG:
+            aid = app["id"]
+            acc[aid] = {"_app": _effective_level(role, d["id"], aid, "_app", role_defaults, user_overrides)}
+            for m in app.get("modules", []):
+                acc[aid][m["id"]] = _effective_level(role, d["id"], aid, m["id"], role_defaults, user_overrides)
+        d["access"] = acc
+        d["overrides"] = [
+            {"app_id": a, "module_id": mid, "level": lvl}
+            for (a, mid), lvl in sorted(user_overrides.get(d["id"], {}).items())
+        ]
+        d["role_label"] = _ROLE_LABELS.get(role, role)
+        users_out.append(d)
 
     return {
-        "apps": apps,
-        "assignable_roles": sorted(ASSIGNABLE_ROLES | {ROLE_SUPERADMIN}),
-        "role_labels": role_labels,
+        "apps": APPS_CATALOG,
+        "levels": list(ACCESS_LEVELS),
+        "level_labels": LEVEL_LABELS,
+        "roles": sorted(ASSIGNABLE_ROLES | {ROLE_SUPERADMIN}),
+        "role_labels": _ROLE_LABELS,
         "superadmin_email": SUPERADMIN_EMAIL,
-        "matrix": matrix,
-        "role_defaults": defaults,
+        "users": users_out,
     }
+
+
+class SetAccessBody(BaseModel):
+    app_id: str
+    module_id: str = "_app"
+    level: Optional[str] = None  # None ou "" → suppression de la surcharge
+
+
+@router.put("/api/settings/access-matrix/user/{user_id}")
+def set_user_access(user_id: int, body: SetAccessBody, request: Request):
+    """Écrit / supprime une surcharge d'accès pour un utilisateur.
+
+    `level=None` (ou vide) supprime la ligne — l'utilisateur retombe sur le
+    défaut de son rôle. Refuse d'éditer le rôle super admin (intouchable) et
+    l'app `settings` (super admin uniquement, non surchargeable).
+    """
+    admin_user = require_superadmin(request)
+    if body.app_id == "settings":
+        raise HTTPException(status_code=400, detail="Paramètres non surchargeable (super admin uniquement).")
+    if not is_known_app_module(body.app_id, body.module_id):
+        raise HTTPException(status_code=400, detail=f"App/module inconnu : {body.app_id}/{body.module_id}")
+    lvl = (body.level or "").strip().lower()
+    if lvl and lvl not in ACCESS_LEVELS:
+        raise HTTPException(status_code=400, detail=f"Niveau invalide : {body.level}")
+
+    from database import get_db
+    with get_db() as conn:
+        u = conn.execute("SELECT id, role, nom, email FROM users WHERE id=?", (user_id,)).fetchone()
+        if not u:
+            raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+        if u["role"] == ROLE_SUPERADMIN:
+            raise HTTPException(status_code=400, detail="Le super admin a tous les accès (non modifiable).")
+        # Avant / après pour audit
+        prev = conn.execute(
+            "SELECT level FROM user_access_overrides WHERE user_id=? AND app_id=? AND module_id=?",
+            (user_id, body.app_id, body.module_id),
+        ).fetchone()
+        prev_level = prev["level"] if prev else None
+        if not lvl:
+            conn.execute(
+                "DELETE FROM user_access_overrides WHERE user_id=? AND app_id=? AND module_id=?",
+                (user_id, body.app_id, body.module_id),
+            )
+        else:
+            now = datetime.now().isoformat()
+            conn.execute(
+                "INSERT INTO user_access_overrides (user_id, app_id, module_id, level, updated_at, updated_by) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id, app_id, module_id) DO UPDATE SET "
+                "level=excluded.level, updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+                (user_id, body.app_id, body.module_id, lvl, now, admin_user.get("email", "")),
+            )
+        conn.commit()
+
+    log_action(
+        request,
+        module="settings",
+        action="UPDATE",
+        objet=f"access:user:{u['email']}",
+        detail=f"{body.app_id}/{body.module_id}: {prev_level or 'default'} → {lvl or 'default'}",
+    )
+    return {"ok": True, "app_id": body.app_id, "module_id": body.module_id, "level": lvl or None}
+
+
+@router.get("/api/settings/role-defaults")
+def role_defaults_endpoint(request: Request):
+    """Référentiel rôles éditable — écran /settings → Référentiel rôles."""
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        role_defaults, _ = _load_all_access(conn)
+
+    out = []
+    for role in sorted(ASSIGNABLE_ROLES | {ROLE_SUPERADMIN}):
+        acc = {}
+        for app in APPS_CATALOG:
+            aid = app["id"]
+            per_app = {"_app": _effective_level(role, 0, aid, "_app", role_defaults, {})}
+            for m in app.get("modules", []):
+                per_app[m["id"]] = _effective_level(role, 0, aid, m["id"], role_defaults, {})
+            acc[aid] = per_app
+        out.append({
+            "role": role,
+            "label": _ROLE_LABELS.get(role, role),
+            "readonly": role == ROLE_SUPERADMIN,
+            "access": acc,
+            # Ce qui est explicitement défini en base (le reste hérite)
+            "explicit": [
+                {"app_id": a, "module_id": mid, "level": lvl}
+                for (a, mid), lvl in sorted(role_defaults.get(role, {}).items())
+            ],
+        })
+
+    return {
+        "apps": APPS_CATALOG,
+        "levels": list(ACCESS_LEVELS),
+        "level_labels": LEVEL_LABELS,
+        "roles": out,
+    }
+
+
+class SetRoleDefaultBody(BaseModel):
+    app_id: str
+    module_id: str = "_app"
+    level: Optional[str] = None  # None → suppression (hérite du niveau parent)
+
+
+@router.put("/api/settings/role-defaults/{role}")
+def set_role_default(role: str, body: SetRoleDefaultBody, request: Request):
+    """Édite le référentiel rôle. Refuse le super admin (intouchable) et l'app settings."""
+    admin_user = require_superadmin(request)
+    if role == ROLE_SUPERADMIN:
+        raise HTTPException(status_code=400, detail="Le super admin a tous les accès (non modifiable).")
+    if role not in ASSIGNABLE_ROLES:
+        raise HTTPException(status_code=400, detail=f"Rôle inconnu : {role}")
+    if body.app_id == "settings":
+        raise HTTPException(status_code=400, detail="Paramètres non modifiable (super admin uniquement).")
+    if not is_known_app_module(body.app_id, body.module_id):
+        raise HTTPException(status_code=400, detail=f"App/module inconnu : {body.app_id}/{body.module_id}")
+    lvl = (body.level or "").strip().lower()
+    if lvl and lvl not in ACCESS_LEVELS:
+        raise HTTPException(status_code=400, detail=f"Niveau invalide : {body.level}")
+
+    from database import get_db
+    with get_db() as conn:
+        prev = conn.execute(
+            "SELECT level FROM role_access_defaults WHERE role=? AND app_id=? AND module_id=?",
+            (role, body.app_id, body.module_id),
+        ).fetchone()
+        prev_level = prev["level"] if prev else None
+        if not lvl:
+            conn.execute(
+                "DELETE FROM role_access_defaults WHERE role=? AND app_id=? AND module_id=?",
+                (role, body.app_id, body.module_id),
+            )
+        else:
+            now = datetime.now().isoformat()
+            conn.execute(
+                "INSERT INTO role_access_defaults (role, app_id, module_id, level, updated_at, updated_by) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(role, app_id, module_id) DO UPDATE SET "
+                "level=excluded.level, updated_at=excluded.updated_at, updated_by=excluded.updated_by",
+                (role, body.app_id, body.module_id, lvl, now, admin_user.get("email", "")),
+            )
+        conn.commit()
+
+    log_action(
+        request,
+        module="settings",
+        action="UPDATE",
+        objet=f"role_default:{role}",
+        detail=f"{body.app_id}/{body.module_id}: {prev_level or 'inherit'} → {lvl or 'inherit'}",
+    )
+    return {"ok": True, "role": role, "app_id": body.app_id, "module_id": body.module_id, "level": lvl or None}
 
 
 @router.get("/api/settings/audit")

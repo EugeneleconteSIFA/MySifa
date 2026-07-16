@@ -15,6 +15,7 @@
   var role = "";
   var loaded = false;
   var st = { key:null, idx:0, bitmap:0, startMs:0, lastStepMs:0 };
+  var currentKey = null;
 
   function gfetch(path, opts){ opts = opts || {}; opts.credentials = "include"; return fetch(path, opts); }
   function jbody(o){ return { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(o) }; }
@@ -58,6 +59,7 @@
   }
 
   function autoOpen(key){
+    if(registry[key]){ currentKey = key; updateHelpBtn(); }
     if(role !== "superadmin") return;
     if(!loaded) return;
     if(!registry[key]) return;
@@ -213,6 +215,7 @@
 
   var MGUIDE_CSS = ""
 + ".mguide-ov{position:fixed;inset:0;background:rgba(0,0,0,.68);z-index:20000;display:flex;align-items:center;justify-content:center;padding:16px;animation:mguideOvIn .2s ease-out}"
++ "@media(min-width:900px){.mguide-ov{left:220px;padding-left:24px}}"
 + "@keyframes mguideOvIn{from{opacity:0}to{opacity:1}}"
 + ".mguide{background:var(--card);border:1px solid var(--border);border-radius:20px;width:100%;max-width:820px;position:relative;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);animation:mguideIn .28s cubic-bezier(.34,1.56,.64,1)}"
 + "@keyframes mguideIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}"
@@ -253,8 +256,9 @@
 + ".mguide-nav-btn{padding:8px 16px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;font-size:12px;cursor:pointer;transition:all .15s;font-family:inherit}"
 + ".mguide-nav-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}"
 + ".mguide-nav-btn:disabled{opacity:.4;cursor:not-allowed}"
-+ ".mguide-nav-btn.primary{background:var(--accent);color:var(--btn-fg,#04222b);border-color:var(--accent)}"
-+ ".mguide-nav-btn.primary:hover{filter:brightness(1.08);transform:translateY(-1px)}"
++ ".mguide-nav-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.3)}"
++ ".mguide-nav-btn.primary:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px);color:#fff}"
++ ".mguide-nav-btn.primary:disabled{color:#fff;opacity:.55;text-shadow:none}"
 + ".mguide-ack-row{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:0 24px 16px;background:var(--bg)}"
 + ".mguide-ack-btn{width:100%;max-width:400px;padding:12px 18px;border-radius:10px;border:1.5px solid var(--ok,#34d399);background:var(--ok,#34d399);color:var(--btn-fg,#04222b);font-weight:800;font-size:13px;cursor:pointer;transition:all .18s;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:8px}"
 + ".mguide-ack-btn:hover:not(:disabled){filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 6px 16px rgba(52,211,153,.28)}"
@@ -268,7 +272,29 @@
 + ".mguide-toast.show{opacity:1;transform:translate(-50%,0)}"
 + ".mguide-toast.success{border-left-color:var(--ok,#34d399)}"
 + ".mguide-toast.danger{border-left-color:var(--danger,#f87171)}"
-+ "@media(max-width:640px){.mguide-step{padding:24px 20px 18px}.mguide-illu{height:220px}.mguide-tit{font-size:20px}.mguide-body{font-size:14px}}";
++ ".mguide-help-fab{position:fixed;bottom:82px;right:18px;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.3);z-index:19990;transition:transform .15s,filter .15s}"
++ ".mguide-help-fab:hover{filter:brightness(1.08);transform:translateY(-2px)}"
++ ".mguide-help-fab svg{width:22px;height:22px}"
++ "@media(max-width:640px){.mguide-step{padding:24px 20px 18px}.mguide-illu{height:220px}.mguide-tit{font-size:20px}.mguide-body{font-size:14px}.mguide-help-fab{bottom:74px;right:14px;width:40px;height:40px}}";
+
+  function updateHelpBtn(){
+    var show = (role === "superadmin" && currentKey && registry[currentKey]);
+    var b = document.getElementById("mguide-help-fab");
+    if(!show){ if(b) b.style.display = "none"; return; }
+    injectCSS();
+    if(!b){
+      b = document.createElement("button");
+      b.id = "mguide-help-fab";
+      b.className = "mguide-help-fab";
+      b.type = "button";
+      b.title = "Ouvrir le guide de cette page";
+      b.setAttribute("aria-label", "Guide de la page");
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>';
+      document.body.appendChild(b);
+    }
+    b.onclick = function(){ if(currentKey) open(currentKey); };
+    b.style.display = "flex";
+  }
 
   window.MySifaGuides = {
     configure: configure, register: register, registerMany: registerMany,

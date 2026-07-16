@@ -4972,103 +4972,67 @@ const PLANNING_GUIDES = {
     {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><rect x="7" y="13" width="4" height="5" rx="1" fill="currentColor" stroke="none"/></svg>`,
       title: 'Planning machine',
-      body: `Le planning organise les <strong>dossiers de production par machine</strong> sur un axe de temps. Chaque machine a son propre planning ; les dossiers s'y enchaînent dans l'ordre où ils seront produits.`,
-      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Basculer d'une machine à l'autre et changer d'horizon (semaine, 2 ou 4 semaines).</li><li>Suivre l'état de chaque dossier : en attente, en cours, terminé.</li><li>Réordonner les dossiers par glisser-déposer.</li><li>Ajuster les horaires d'un jour et repérer les jours non travaillés.</li></ul></div></div>`
+      body: `Le planning organise les <strong>dossiers de production par machine</strong> sur un axe de temps. Chaque machine a sa propre timeline ; les dossiers s'y enchaînent dans l'ordre où ils seront produits.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Choisir une machine et un horizon (semaine, 2 ou 4 semaines).</li><li>Lire l'enchaînement des dossiers sur la timeline.</li><li>Réordonner les dossiers par glisser-déposer.</li><li>Ajuster les horaires d'un jour et gérer les jours off.</li></ul></div></div>`
     },
     {
       title: 'Choisir la machine et l\'horizon',
-      body: `En haut, sélectionnez la <span class="mguide-hl">machine</span>, puis l'horizon d'affichage : <span class="mguide-tag">Semaine</span> <span class="mguide-tag">2 semaines</span> <span class="mguide-tag">4 semaines</span>. La vue courante est mémorisée d'une visite à l'autre.`,
+      body: `La <span class="mguide-hl">machine</span> se choisit dans le menu latéral (Cohésio 1, Cohésio 2, DSI, Repiquage). En haut de la timeline, l'<span class="mguide-hl">horizon</span> : <span class="mguide-tag">Semaine</span> <span class="mguide-tag">2 semaines</span> <span class="mguide-tag">4 semaines</span>, et les flèches naviguent de période en période.`,
       illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="8" y="10" width="74" height="22" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
-        <text x="45" y="25" font-size="10" fill="var(--accent)" font-weight="700" text-anchor="middle">Cohésio 1</text>
-        <rect x="88" y="10" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
-        <text x="125" y="25" font-size="10" fill="var(--text2)" text-anchor="middle">Cohésio 2</text>
-        <rect x="168" y="10" width="44" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
-        <text x="190" y="25" font-size="10" fill="var(--text2)" text-anchor="middle">DSI</text>
-        <rect x="234" y="10" width="52" height="22" rx="6" fill="var(--accent)"/>
-        <text x="260" y="25" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">Semaine</text>
-        <rect x="290" y="10" width="20" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
-        <text x="300" y="25" font-size="9" fill="var(--text2)" text-anchor="middle">2s</text>
-        <rect x="314" y="10" width="18" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
-        <text x="323" y="25" font-size="9" fill="var(--text2)" text-anchor="middle">4s</text>
-        <g>
-          <rect x="8" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-          <rect x="72" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-          <rect x="136" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-          <rect x="200" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-          <rect x="264" y="46" width="68" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-          <text x="38" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Lun</text>
-          <text x="102" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Mar</text>
-          <text x="166" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Mer</text>
-          <text x="230" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Jeu</text>
-          <text x="298" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Ven</text>
-          <rect x="14" y="70" width="48" height="26" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/>
-          <rect x="78" y="70" width="48" height="40" rx="5" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/>
-          <rect x="142" y="70" width="48" height="30" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-          <rect x="206" y="70" width="48" height="34" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-        </g>
+        <rect x="8" y="10" width="88" height="152" rx="8" fill="var(--card)" stroke="var(--border)"/>
+        <text x="18" y="27" font-size="8" fill="var(--muted)">MACHINE</text>
+        <rect x="14" y="32" width="76" height="22" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="22" y="47" font-size="9" fill="var(--accent)" font-weight="700">Cohésio 1</text>
+        <rect x="14" y="58" width="76" height="22" rx="6" fill="transparent" stroke="var(--border)"/><text x="22" y="73" font-size="9" fill="var(--text2)">Cohésio 2</text>
+        <rect x="14" y="84" width="76" height="22" rx="6" fill="transparent" stroke="var(--border)"/><text x="22" y="99" font-size="9" fill="var(--text2)">DSI</text>
+        <rect x="14" y="110" width="76" height="22" rx="6" fill="transparent" stroke="var(--border)"/><text x="22" y="125" font-size="9" fill="var(--text2)">Repiquage</text>
+        <text x="108" y="26" font-size="8" fill="var(--muted)">HORIZON</text>
+        <rect x="108" y="32" width="62" height="24" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="139" y="48" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">Semaine</text>
+        <rect x="170" y="32" width="76" height="24" fill="var(--card)" stroke="var(--border)"/><text x="208" y="48" font-size="9" fill="var(--text2)" text-anchor="middle">2 semaines</text>
+        <rect x="246" y="32" width="76" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="284" y="48" font-size="9" fill="var(--text2)" text-anchor="middle">4 semaines</text>
+        <rect x="108" y="66" width="26" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="121" y="83" font-size="12" fill="var(--text2)" text-anchor="middle">&#9664;</text>
+        <rect x="136" y="66" width="132" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="202" y="82" font-size="9" fill="var(--text)" text-anchor="middle" font-weight="700">Semaine 12 · 2026</text>
+        <rect x="270" y="66" width="26" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="283" y="83" font-size="12" fill="var(--text2)" text-anchor="middle">&#9654;</text>
+        <text x="108" y="112" font-size="9" fill="var(--muted)">La machine et l'horizon sont mémorisés</text>
+        <text x="108" y="126" font-size="9" fill="var(--muted)">d'une visite à l'autre.</text>
       </svg>`
     },
     {
       title: 'Lire un dossier dans la timeline',
-      body: `Chaque bloc est un <strong>dossier</strong> positionné sur les jours travaillés. Sa couleur donne l'état d'un coup d'œil : <span class="mguide-tag">En attente</span> <span class="mguide-tag">En cours</span> <span class="mguide-tag">Terminé</span>. La hauteur reflète la durée estimée.`,
+      body: `Chaque <strong>barre</strong> est un dossier, posée sur les jours travaillés ; sa largeur reflète la durée. Le badge <span class="mguide-tag">Xh · N dossiers</span> résume la charge. Le dossier <span class="mguide-hl">en cours</span> est mis en avant.`,
       illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="8" y="8" width="150" height="156" rx="8" fill="var(--card)" stroke="var(--border)"/>
-        <rect x="18" y="20" width="130" height="30" rx="6" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/>
-        <text x="26" y="33" font-size="9" fill="var(--text)" font-weight="700">DOS-4821 · Client A</text>
-        <text x="26" y="45" font-size="8" fill="var(--ok,#34d399)" font-weight="700">En cours</text>
-        <rect x="18" y="56" width="130" height="28" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
-        <text x="26" y="68" font-size="9" fill="var(--text)" font-weight="700">DOS-4822 · Client B</text>
-        <text x="26" y="79" font-size="8" fill="var(--accent)" font-weight="700">En attente</text>
-        <rect x="18" y="90" width="130" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-        <text x="26" y="102" font-size="9" fill="var(--text2)" font-weight="700">DOS-4790 · Client C</text>
-        <text x="26" y="112" font-size="8" fill="var(--muted)" font-weight="700">Terminé</text>
-        <g>
-          <rect x="178" y="30" width="14" height="14" rx="3" fill="rgba(52,211,153,.2)" stroke="var(--ok,#34d399)"/>
-          <text x="200" y="41" font-size="10" fill="var(--text2)">En cours de production</text>
-          <rect x="178" y="56" width="14" height="14" rx="3" fill="var(--accent-bg)" stroke="var(--accent)"/>
-          <text x="200" y="67" font-size="10" fill="var(--text2)">En attente</text>
-          <rect x="178" y="82" width="14" height="14" rx="3" fill="var(--bg)" stroke="var(--border)"/>
-          <text x="200" y="93" font-size="10" fill="var(--text2)">Terminé</text>
-        </g>
+        <rect x="232" y="8" width="100" height="18" rx="9" fill="var(--accent-bg)"/><text x="282" y="21" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">48h · 6 dossiers</text>
+        <g font-size="8" fill="var(--muted)"><text x="34" y="40">Lun</text><text x="90" y="40">Mar</text><text x="146" y="40">Mer</text><text x="202" y="40">Jeu</text><text x="258" y="40">Ven</text></g>
+        <rect x="14" y="46" width="312" height="112" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+        <g stroke="var(--border)"><line x1="70" y1="46" x2="70" y2="158"/><line x1="126" y1="46" x2="126" y2="158"/><line x1="182" y1="46" x2="182" y2="158"/><line x1="238" y1="46" x2="238" y2="158"/><line x1="294" y1="46" x2="294" y2="158"/></g>
+        <rect x="20" y="56" width="98" height="32" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2"/><text x="69" y="73" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4821 · Client A</text><text x="69" y="84" font-size="7" fill="#cbd5e1" text-anchor="middle">en cours</text>
+        <rect x="124" y="96" width="150" height="30" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="199" y="115" font-size="9" fill="#e2e8f0" text-anchor="middle" font-weight="700">DOS-4822 · Client B</text>
+        <rect x="46" y="132" width="92" height="20" rx="6" fill="#0f172a" stroke="var(--border)" opacity="0.75"/><text x="92" y="146" font-size="8" fill="#94a3b8" text-anchor="middle">DOS-4790 · terminé</text>
       </svg>`
     },
     {
       title: 'Réordonner par glisser-déposer',
-      body: `Attrapez un dossier et <span class="mguide-hl">glissez-le</span> pour changer son ordre de passage. Le planning se recalcule automatiquement autour du dossier <strong>en cours</strong>, qui reste le point de repère.`,
+      body: `Attrapez une barre et <span class="mguide-hl">glissez-la</span> pour changer l'ordre de passage ; une poignée <span class="mguide-tag">&#8660;</span> à droite permet d'ajuster la durée. Le planning se recale automatiquement autour du dossier en cours.`,
       illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="70" y="14" width="150" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-        <text x="80" y="31" font-size="9" fill="var(--text2)" font-weight="700">DOS-4790</text>
-        <rect x="70" y="70" width="150" height="30" rx="6" fill="var(--accent-bg)" stroke="var(--accent)" stroke-dasharray="4 3"/>
-        <text x="80" y="88" font-size="9" fill="var(--accent)" font-weight="700">DOS-4822 (déplacé)</text>
-        <rect x="70" y="118" width="150" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
-        <text x="80" y="135" font-size="9" fill="var(--text2)" font-weight="700">DOS-4830</text>
-        <path d="M245 40 L245 96" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" marker-end="url(#ar)"/>
-        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--accent)"/></marker></defs>
-        <circle cx="245" cy="40" r="4" fill="var(--accent)"/>
-        <text x="255" y="72" font-size="9" fill="var(--muted)">glisser</text>
+        <rect x="14" y="28" width="312" height="116" rx="8" fill="var(--bg)" stroke="var(--border)"/>
+        <g stroke="var(--border)"><line x1="92" y1="28" x2="92" y2="144"/><line x1="170" y1="28" x2="170" y2="144"/><line x1="248" y1="28" x2="248" y2="144"/></g>
+        <rect x="24" y="42" width="86" height="28" rx="6" fill="#1e293b" stroke="var(--border)"/><text x="67" y="60" font-size="9" fill="#e2e8f0" text-anchor="middle">DOS-4790</text>
+        <rect x="150" y="88" width="120" height="32" rx="6" fill="#334155" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 3"/><text x="205" y="107" font-size="9" fill="#ffffff" text-anchor="middle" font-weight="700">DOS-4822</text>
+        <circle cx="264" cy="104" r="8" fill="var(--accent)"/><text x="264" y="108" font-size="10" fill="#ffffff" text-anchor="middle" font-weight="800">&#8660;</text>
+        <path d="M120 96 L148 100" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" marker-end="url(#pdr)"/>
+        <defs><marker id="pdr" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--accent)"/></marker></defs>
+        <text x="18" y="162" font-size="10" fill="var(--muted)">Glissez pour réordonner · poignée droite pour la durée.</text>
       </svg>`
     },
     {
       title: 'Horaires, jours off et recherche',
-      body: `Cliquez sur un jour pour ajuster ses <strong>horaires</strong> ponctuellement ; les <strong>jours non travaillés</strong> (week-ends, fermetures) sont exclus du calcul. La <span class="mguide-hl">recherche</span> retrouve un dossier, même sur une autre machine.`,
+      body: `L'icône <span class="mguide-tag">&#9881;</span> de chaque semaine règle les <strong>horaires</strong> et les <strong>jours off</strong> (exclus du calcul). La <span class="mguide-hl">recherche timeline</span> retrouve un dossier par client, OF ou référence produit.`,
       illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
-        <rect x="8" y="10" width="220" height="24" rx="7" fill="var(--bg)" stroke="var(--border)"/>
-        <circle cx="24" cy="22" r="6" fill="none" stroke="var(--muted)" stroke-width="1.6"/>
-        <path d="M28 26 L33 31" stroke="var(--muted)" stroke-width="1.6" stroke-linecap="round"/>
-        <text x="40" y="26" font-size="10" fill="var(--muted)">Rechercher (client, dossier, réf…)</text>
-        <rect x="8" y="46" width="100" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-        <text x="58" y="62" font-size="9" fill="var(--text2)" text-anchor="middle" font-weight="700">Vendredi</text>
-        <rect x="18" y="72" width="80" height="22" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/>
-        <text x="58" y="86" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">06:00 – 14:00</text>
-        <text x="58" y="108" font-size="8" fill="var(--muted)" text-anchor="middle">horaire du jour</text>
-        <rect x="118" y="46" width="100" height="118" rx="7" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/>
-        <text x="168" y="62" font-size="9" fill="var(--muted)" text-anchor="middle" font-weight="700">Samedi</text>
-        <text x="168" y="108" font-size="9" fill="var(--muted)" text-anchor="middle">Jour non travaillé</text>
-        <rect x="228" y="46" width="104" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
-        <text x="280" y="62" font-size="9" fill="var(--text2)" text-anchor="middle" font-weight="700">Lundi</text>
-        <rect x="238" y="72" width="84" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/>
-        <text x="280" y="86" font-size="9" fill="var(--text2)" text-anchor="middle">06:00 – 14:00</text>
+        <rect x="14" y="10" width="190" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/><text x="24" y="25" font-size="9" fill="var(--text)" font-weight="700">Semaine 12 · 16–22 mars</text>
+        <rect x="210" y="10" width="26" height="22" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="223" y="26" font-size="12" fill="var(--accent)" text-anchor="middle">&#9881;</text>
+        <rect x="14" y="42" width="72" height="66" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="50" y="58" font-size="8" fill="var(--muted)" text-anchor="middle" font-weight="700">Vendredi</text><rect x="22" y="66" width="56" height="20" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="50" y="80" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="700">06:00–14:00</text>
+        <rect x="94" y="42" width="72" height="66" rx="7" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="130" y="58" font-size="8" fill="var(--muted)" text-anchor="middle" font-weight="700">Samedi</text><text x="130" y="82" font-size="8" fill="var(--muted)" text-anchor="middle">Jour off</text>
+        <rect x="174" y="42" width="152" height="66" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="184" y="58" font-size="8" fill="var(--muted)">Réglages horaires par défaut</text><rect x="184" y="66" width="132" height="16" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="184" y="86" width="90" height="16" rx="4" fill="var(--bg)" stroke="var(--border)"/>
+        <rect x="14" y="120" width="312" height="26" rx="7" fill="var(--bg)" stroke="var(--border)"/><circle cx="30" cy="133" r="6" fill="none" stroke="var(--muted)" stroke-width="1.6"/><path d="M34 137 L39 142" stroke="var(--muted)" stroke-width="1.6" stroke-linecap="round"/><text x="46" y="137" font-size="9" fill="var(--muted)">Rechercher dans la timeline (client, OF, réf produit…)</text>
       </svg>`
     }
   ]}
