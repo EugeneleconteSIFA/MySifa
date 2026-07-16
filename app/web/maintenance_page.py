@@ -801,6 +801,12 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 /* v2 : actions harmonisées du modal single-op (3 boutons alignés, même
    hauteur, hiérarchie visuelle claire) */
 .op-single-actions{align-items:center;gap:8px}
+/* v2 : croix de fermeture en haut à droite du modal single-op */
+.op-modal-close{position:absolute;top:14px;right:14px;width:32px;height:32px;padding:0;border:none;border-radius:8px;background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.op-modal-close:hover{background:var(--bg);color:var(--text)}
+.op-modal-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* padding supérieur du modal pour éviter que la croix chevauche le titre */
+.op-modal[role="dialog"]{padding-top:24px}
 .op-single-actions-spacer{flex:1}
 .op-single-actions .btn{min-height:40px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap;transition:background .15s,color .15s,border-color .15s,filter .15s}
 /* Bouton destructif : outline rouge, discret mais reconnaissable */
@@ -6244,7 +6250,10 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <!-- Modal single-op : marquer UNE opération d'un créneau comme terminée
      (ou modifier / annuler une opération déjà validée) -->
 <div class="op-modal-overlay" id="op-modal-single" onclick="if(event.target===this) opCloseSingleModal()">
-  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px">
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;position:relative">
+    <button type="button" class="op-modal-close" aria-label="Fermer" onclick="opCloseSingleModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
     <div class="op-modal-title" id="op-single-title">Marquer comme terminée</div>
     <div class="op-modal-sub" id="op-single-sub">—</div>
     <div class="op-single-op-title" id="op-single-code-line">—</div>
@@ -6260,7 +6269,6 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
     <div class="op-modal-actions op-single-actions">
       <button type="button" class="btn btn-danger-outline" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">Annuler la validation</button>
       <span class="op-single-actions-spacer"></span>
-      <button type="button" class="btn btn-ghost" onclick="opCloseSingleModal()">Fermer</button>
       <button type="button" class="btn op-btn-accent" id="op-single-submit" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
     </div>
   </div>
