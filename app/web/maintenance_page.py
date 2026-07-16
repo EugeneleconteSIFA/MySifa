@@ -849,22 +849,38 @@ body.light .op-op-consignes-chip{border-color:rgba(8,145,178,.28)}
 .op-consignes-modal .op-consignes-panel{margin-bottom:0;font-size:14px}
 .col-consignes{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text2)}
 /* v2 : modal détails historique ops */
-.ops-detail-modal .modal-body{padding:18px 22px 22px}
-.ops-detail-header{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)}
-.ops-detail-title-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
-.ops-detail-title{font-size:16px;font-weight:700;color:var(--text)}
-.ops-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px;margin-bottom:16px}
-.ops-detail-cell{display:flex;flex-direction:column;gap:3px}
-.ops-detail-cell-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.ops-detail-cell-value{font-size:13px;color:var(--text)}
-.ops-detail-section{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)}
-.ops-detail-section-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.ops-detail-comment{background:var(--bg);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--text2);line-height:1.5;white-space:pre-wrap}
-.ops-detail-trace-row{display:flex;justify-content:space-between;gap:14px;padding:6px 0;font-size:12px;border-bottom:1px dotted var(--border)}
-.ops-detail-trace-row:last-child{border-bottom:none}
-.ops-detail-trace-label{color:var(--muted);font-weight:600}
-.ops-detail-trace-value{color:var(--text);text-align:right}
-@media(max-width:560px){.ops-detail-grid{grid-template-columns:1fr}}
+.ops-detail-modal .modal-body{padding:20px 22px 22px}
+/* Hero : titre + icône accent */
+.ops-detail-hero{display:flex;align-items:center;gap:14px;padding:14px 16px;margin-bottom:16px;background:linear-gradient(135deg,var(--accent-bg) 0%,transparent 100%);border:1px solid rgba(34,211,238,.22);border-radius:12px}
+.ops-detail-hero-icon{flex-shrink:0;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-fg);border-radius:12px;box-shadow:0 4px 12px rgba(34,211,238,.25)}
+.ops-detail-hero-body{flex:1;min-width:0}
+.ops-detail-hero-chips{margin-top:4px}
+.ops-detail-title{font-size:17px;font-weight:800;color:var(--text);line-height:1.3}
+body.light .ops-detail-hero{border-color:rgba(8,145,178,.22)}
+/* Grille récap avec fond léger */
+.ops-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.ops-detail-cell{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-right:1px solid var(--border)}
+.ops-detail-cell:nth-child(2n){border-right:none}
+.ops-detail-cell:nth-child(-n+2){border-bottom:1px solid var(--border)}
+.ops-detail-cell-label{font-size:10px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.ops-detail-cell-value{font-size:14px;font-weight:600;color:var(--text)}
+/* Blocs colorés distincts pour consignes / commentaires / pièces */
+.ops-detail-block{margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid transparent}
+.ops-detail-block-head{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.ops-detail-block-body{padding:12px 14px;background:var(--card);font-size:13px;line-height:1.55;color:var(--text2);white-space:pre-wrap}
+.ops-detail-block--consignes{border-color:rgba(34,211,238,.35)}
+.ops-detail-block--consignes .ops-detail-block-head{background:rgba(34,211,238,.14);color:var(--accent)}
+.ops-detail-block--comment{border-color:rgba(251,191,36,.35)}
+.ops-detail-block--comment .ops-detail-block-head{background:rgba(251,191,36,.14);color:var(--warn)}
+.ops-detail-block--pieces{border-color:rgba(167,139,250,.35)}
+.ops-detail-block--pieces .ops-detail-block-head{background:rgba(167,139,250,.14);color:#8b5cf6}
+body.light .ops-detail-block--pieces .ops-detail-block-head{color:#7c3aed}
+body.light .ops-detail-block--comment .ops-detail-block-head{color:#b45309}
+@media(max-width:560px){
+  .ops-detail-grid{grid-template-columns:1fr}
+  .ops-detail-cell{border-right:none !important;border-bottom:1px solid var(--border)}
+  .ops-detail-cell:last-child{border-bottom:none}
+}
 /* Modal Modifier créneau : lignes ops déjà effectuées (read-only) */
 .case-ops-row-done{background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,transparent 100%);border-left:3px solid var(--success,#34d399);padding:10px 12px;border-radius:8px;margin-bottom:8px}
 .case-ops-row-done .case-ops-row-done-label{display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);flex:1}
@@ -4118,51 +4134,36 @@ function openOpsHistoryDetail(id){
   const isPlanifie = o._event_source === 'planifie';
   const chipLibre = isLibre ? '<span class="libre-chip">Libre</span>' : '';
 
-  // Consignes
+  // Consignes admin — bloc accent (cyan)
   const consignesBlock = (o.consignes || '').trim()
-    ? '<div class="ops-detail-section">' +
-        '<div class="ops-detail-section-label">Consignes de l\'admin</div>' +
-        '<div class="op-consignes-panel" style="margin-bottom:0">' + escHtml(o.consignes) + '</div>' +
+    ? '<div class="ops-detail-block ops-detail-block--consignes">' +
+        '<div class="ops-detail-block-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>' +
+          '<span>Consignes de l\'admin</span>' +
+        '</div>' +
+        '<div class="ops-detail-block-body">' + escHtml(o.consignes) + '</div>' +
       '</div>'
     : '';
 
-  // Commentaires opérateur
+  // Commentaires opérateur — bloc warn (jaune-orangé)
   const commentBlock = (o.commentaire || '').trim()
-    ? '<div class="ops-detail-section">' +
-        '<div class="ops-detail-section-label">Commentaires de l\'opérateur</div>' +
-        '<div class="ops-detail-comment">' + escHtml(o.commentaire) + '</div>' +
+    ? '<div class="ops-detail-block ops-detail-block--comment">' +
+        '<div class="ops-detail-block-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+          '<span>Commentaires de l\'opérateur</span>' +
+        '</div>' +
+        '<div class="ops-detail-block-body">' + escHtml(o.commentaire) + '</div>' +
       '</div>'
     : '';
 
-  // Pièces changées (legacy, souvent vide)
+  // Pièces changées — bloc violet (legacy)
   const piecesBlock = (o._pieces_changees || '').trim()
-    ? '<div class="ops-detail-section">' +
-        '<div class="ops-detail-section-label">Pièces changées</div>' +
-        '<div class="ops-detail-comment">' + escHtml(o._pieces_changees) + '</div>' +
-      '</div>'
-    : '';
-
-  // Traçabilité
-  const traceRows = [];
-  if(o._done_by_nom || o._done_at){
-    traceRows.push({
-      label: 'Validée par',
-      value: escHtml(o._done_by_nom || 'inconnu') + (o._done_at ? ' <span style="color:var(--muted)">· le ' + escHtml(fmtDate(o._done_at)) + '</span>' : ''),
-    });
-  }
-  if(o._updated_by_nom && o._updated_at && (o._updated_at !== o._done_at || o._updated_by_nom !== o._done_by_nom)){
-    traceRows.push({
-      label: 'Dernière modification',
-      value: escHtml(o._updated_by_nom) + ' <span style="color:var(--muted)">· le ' + escHtml(fmtDate(o._updated_at)) + '</span>',
-    });
-  }
-  // "Créneau créé par" retiré avec le bloc Créneau parent (v2.2.3).
-  const traceBlock = traceRows.length
-    ? '<div class="ops-detail-section">' +
-        '<div class="ops-detail-section-label">Traçabilité</div>' +
-        traceRows.map(r =>
-          '<div class="ops-detail-trace-row"><span class="ops-detail-trace-label">' + r.label + '</span><span class="ops-detail-trace-value">' + r.value + '</span></div>'
-        ).join('') +
+    ? '<div class="ops-detail-block ops-detail-block--pieces">' +
+        '<div class="ops-detail-block-head">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>' +
+          '<span>Pièces changées</span>' +
+        '</div>' +
+        '<div class="ops-detail-block-body">' + escHtml(o._pieces_changees) + '</div>' +
       '</div>'
     : '';
 
@@ -4180,10 +4181,13 @@ function openOpsHistoryDetail(id){
         '</button>' +
       '</div>' +
       '<div class="modal-body">' +
-        '<div class="ops-detail-header">' +
-          '<div class="ops-detail-title-line">' +
+        '<div class="ops-detail-hero">' +
+          '<div class="ops-detail-hero-icon">' +
+            '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>' +
+          '</div>' +
+          '<div class="ops-detail-hero-body">' +
             '<div class="ops-detail-title">' + escHtml(o.type || '—') + '</div>' +
-            chipLibre +
+            (chipLibre ? '<div class="ops-detail-hero-chips">' + chipLibre + '</div>' : '') +
           '</div>' +
         '</div>' +
         '<div class="ops-detail-grid">' +
@@ -4195,7 +4199,6 @@ function openOpsHistoryDetail(id){
         consignesBlock +
         commentBlock +
         piecesBlock +
-        traceBlock +
       '</div>' +
       '<div class="modal-foot">' +
         '<button type="button" class="modal-btn-ghost" onclick="this.closest(\'.op-modal-overlay\').remove()">Fermer</button>' +
