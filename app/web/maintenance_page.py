@@ -225,14 +225,14 @@ body.sb-open .sidebar-overlay{display:block}
 .filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .filter-group{display:flex;flex-direction:column;gap:6px;min-width:0}
 .filter-group label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.filter-input{background:#ffffff;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:#0f172a;font-size:13px;font-family:inherit;outline:none;min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;min-width:168px}
+.filter-input{background:#ffffff;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;color:#0f172a;font-size:13px;font-family:inherit;outline:none;min-height:40px;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;min-width:132px}
 .filter-input::placeholder{color:#64748b}
 .filter-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
-.filters .filter-input[type=date]{min-width:148px;padding:9px 12px;font-size:12px;color:#0f172a}
+.filters .filter-input[type=date]{min-width:128px;padding:9px 10px;font-size:12px;color:#0f172a}
 .filters .filter-input[type=date]::-webkit-calendar-picker-indicator{filter:none;opacity:.6}
 select.filter-input{appearance:none;background-color:#ffffff;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;cursor:pointer;color:#0f172a}
 select.filter-input option{background:#ffffff;color:#0f172a}
-.filters-apply-btn{background:var(--accent);color:var(--accent-fg,var(--bg));border:none;border-radius:10px;padding:10px 22px;font-size:13px;font-weight:700;min-height:40px;cursor:pointer;font-family:inherit;align-self:flex-end;transition:filter .15s,box-shadow .15s,transform .05s}
+.filters-apply-btn{background:var(--accent);color:var(--accent-fg,var(--bg));border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;min-height:40px;cursor:pointer;font-family:inherit;align-self:flex-end;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .filters-apply-btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px var(--accent-bg)}
 .filters-apply-btn:active{transform:translateY(1px)}
 .filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
@@ -661,6 +661,7 @@ body:not(.light) .last-intervention-status.ok{color:#4ade80}
 .ops-table tr:last-child td{border-bottom:none}
 .ops-table tr:hover td{background:var(--bg)}
 .ops-table .col-comment{max-width:340px;white-space:pre-wrap;color:var(--text2);font-size:12.5px;word-break:break-word}
+.ops-table .col-duree{white-space:nowrap;color:var(--text2);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
 .ops-table .col-date{color:var(--muted);font-size:12px;white-space:nowrap}
 .ops-table .col-actions{white-space:nowrap;text-align:right}
 .ops-row-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:.15s;display:inline-flex;align-items:center;margin-left:2px}
@@ -792,8 +793,6 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 /* ── Modal single-op saisie ─────────────────────────────────────── */
 .op-single-op-title{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .op-single-op-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px}
-.btn-op-cancel-validation{background:transparent;color:var(--danger);border:1px solid var(--danger);font-weight:600}
-.btn-op-cancel-validation:hover{background:var(--danger);color:#fff}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -832,6 +831,23 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-right:100px}
 .op-code{display:inline-block;padding:3px 9px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;letter-spacing:.4px;font-family:monospace}
 .op-cat{display:inline-block;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+/* v180 : chip "Libre" pour distinguer les interventions libres dans l'historique */
+.libre-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(96,165,250,.16);color:#3b82f6;margin-left:6px;vertical-align:middle}
+/* v182 Lot 2 : petits boutons inline (renommer + docs) sur les lignes libres de l'historique */
+.libre-inline-btn{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:5px;padding:3px 5px;color:var(--muted);cursor:pointer;transition:background .12s,color .12s,border-color .12s;vertical-align:middle;margin-left:4px}
+.libre-inline-btn:hover{background:var(--bg);color:var(--accent);border-color:var(--border)}
+body[data-maint-role="operator"] .libre-inline-btn{display:none}
+body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
+/* v180 : mini-modal Intervention libre + autocomplete */
+.libre-titre-wrap{position:relative}
+.libre-autocomplete-panel{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;margin-top:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.libre-suggestion{padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);transition:background .1s}
+.libre-suggestion:last-child{border-bottom:none}
+.libre-suggestion:hover{background:var(--bg)}
+.libre-suggestion-label{color:var(--text);font-size:13px;font-weight:500}
+.libre-suggestion-count{color:var(--muted);font-size:11px;white-space:nowrap;margin-left:12px}
+.libre-duree-link{background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:4px 0;text-align:left;font-family:inherit}
+.libre-duree-link:hover{text-decoration:underline}
 .op-cat-controles{background:rgba(52,211,153,.16);color:#10b981}
 .op-cat-interventions,
 .op-cat-entretien{background:rgba(167,139,250,.16);color:#8b5cf6}
@@ -919,6 +935,10 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
     <button type="button" class="nav-btn op-only" onclick="opOpenNewModal()" style="border-top:1px solid var(--border);margin-top:6px;padding-top:14px;color:var(--accent)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Enregistrer une opération
+    </button>
+    <button type="button" class="nav-btn op-only" onclick="libreOpenModal()" style="color:#3b82f6">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Intervention libre
     </button>
     <div class="sidebar-bottom">
       <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'">
@@ -1271,6 +1291,14 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
         <div class="filters-panel">
           <div class="filters">
             <div class="filter-group">
+              <label for="filt-operations-kind">Type de saisie</label>
+              <select id="filt-operations-kind" class="filter-input" onchange="renderOps()">
+                <option value="all">Toutes</option>
+                <option value="codes">Codes catalogue</option>
+                <option value="libres">Interventions libres</option>
+              </select>
+            </div>
+            <div class="filter-group">
               <label for="filt-operations-type">Type d'opération</label>
               <select id="filt-operations-type" class="filter-input">
                 <option value="">Tous les types</option>
@@ -1319,6 +1347,10 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
             <div class="ops-list-title">Historique des opérations</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ops-count">0 opération</div>
+              <button type="button" class="ops-btn-add" onclick="libreOpenModal()" title="Enregistrer une intervention ponctuelle sans creer de code">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Intervention libre
+              </button>
               <button type="button" class="ops-btn-add" onclick="openOpsModal()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Nouvelle saisie
@@ -1333,6 +1365,7 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
                   <th data-sort="machine" onclick="sortOps('machine')">Machine<span class="sort-ico">↕</span></th>
                   <th data-sort="operateur" onclick="sortOps('operateur')">Opérateur<span class="sort-ico">↕</span></th>
                   <th data-sort="type" onclick="sortOps('type')">Type<span class="sort-ico">↕</span></th>
+                  <th data-sort="duree_reelle_min" onclick="sortOps('duree_reelle_min')" style="width:80px">Durée<span class="sort-ico">↕</span></th>
                   <th>Commentaires</th>
                   <th aria-label="Actions"></th>
                 </tr>
@@ -1852,6 +1885,13 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 <script>
 'use strict';
 
+// v179 fix : MAINT_ROLE hoiste tres tot, sinon init() (fin du 1er script)
+// crash sur ReferenceError quand refreshPlanning est appelee via loadPlanning.
+// La const originale plus bas devient une simple reassignation defensive.
+var MAINT_ROLE = (typeof document !== 'undefined' && document.body && document.body.getAttribute)
+  ? (document.body.getAttribute('data-maint-role') || 'admin')
+  : 'admin';
+
 const S = { me: null };
 
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
@@ -2066,8 +2106,14 @@ function _apiEventToClient(ev){
 }
 
 async function refreshPlanning(){
-  // Pré-charge les templates en tâche de fond (pour le badge « depuis modèle »).
-  if(MAINT_ROLE === 'admin' && TEMPLATES_STATE.list === null){
+  // Pre-charge les templates en tache de fond (pour le badge "depuis modele").
+  // v179 fix : TEMPLATES_STATE et loadTemplates sont definis dans un <script>
+  // block ulterieur — ne pas crasher si pas encore disponibles au moment ou
+  // init() appelle loadPlanning() puis refreshPlanning().
+  if(MAINT_ROLE === 'admin'
+     && typeof TEMPLATES_STATE !== 'undefined'
+     && TEMPLATES_STATE && TEMPLATES_STATE.list === null
+     && typeof loadTemplates === 'function'){
     loadTemplates().catch(() => {});
   }
 
@@ -2622,7 +2668,7 @@ function openPlanningDetailsModal(events){
     // Badge template si le créneau vient d'un modèle
     let tmplBadge = '';
     if(ev.template_id){
-      const tmpl = (TEMPLATES_STATE.list || []).find(t => t.id === ev.template_id);
+      const tmpl = (typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE ? (TEMPLATES_STATE.list || []) : []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
       tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
@@ -3159,6 +3205,20 @@ function openOpsModal(editId){
   m.setAttribute('aria-hidden', 'false');
   document.body.style.overflow = 'hidden';
   refreshOpsTypeSelect();
+  // v182 fix : pour un libre, on injecte son titre comme option syntetique
+  // dans le dropdown Type afin que la validation passe. Le titre reste
+  // modifiable directement dans le champ (input text superpose).
+  const typeSel = document.getElementById('ops-type');
+  if(editing && editing._libre && editing.type && typeSel){
+    // Ajoute l'option seulement si pas deja presente
+    if(!Array.from(typeSel.options).some(o => o.value === editing.type)){
+      const opt = document.createElement('option');
+      opt.value = editing.type;
+      opt.textContent = editing.type + ' (Libre)';
+      opt.dataset.libreSynth = '1';
+      typeSel.insertBefore(opt, typeSel.firstChild.nextSibling);
+    }
+  }
   // Titre & label bouton selon le mode (édition vs création)
   const titleEl = document.getElementById('ops-modal-title');
   if(titleEl) titleEl.textContent = editing ? 'Modifier l\'opération' : 'Nouvelle opération';
@@ -3423,6 +3483,7 @@ async function fetchHistoryFromDb(){
       _event_id: h.event_id,
       _op_id: h.op_id,
       _code: h.code,
+      _libre: !!h.libre,   // v180 : flag intervention libre (chip visuel + filtre)
     }));
   }catch(e){ return []; }
 }
@@ -3455,6 +3516,21 @@ function addOperation(e){
       return;
     }
     const original = OPS_STATE.list[idx];
+    // v182 fix : les libres persistent en DB — on fait les PATCH backend
+    // avant l'update local pour que le refresh reflete l'etat serveur.
+    if(original._libre && original._source === 'db' && original._event_id && original._op_id && original._code){
+      _libreEditPersist(original, {machine, titre: type, commentaire, dateSaisie})
+        .then(() => {
+          closeOpsModal();
+          showToast('Intervention libre mise à jour.', 'success');
+          if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+          else if(typeof loadOps === 'function') loadOps();
+        })
+        .catch(err => {
+          showToast('Erreur : ' + (err && err.message ? err.message : 'PATCH échoué'), 'danger');
+        });
+      return;
+    }
     OPS_STATE.list[idx] = Object.assign({}, original, {
       machine, type, commentaire,
       date_saisie: dateSaisie,
@@ -3480,6 +3556,57 @@ function addOperation(e){
   closeOpsModal();
   showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
 }
+// v182 fix : persistance backend pour l'edition complete d'un libre.
+// Enchaîne les PATCH : /libres/{code} (titre) → /events/{event_id} (date+machine)
+// → /events/{event_id}/ops/{op_id} (commentaire).
+async function _libreEditPersist(original, changes){
+  const eventId = original._event_id;
+  const opId = original._op_id;
+  const code = original._code;
+  const jsonHeaders = {'Content-Type':'application/json'};
+  // 1. Rename titre si change
+  const newTitle = (changes.titre || '').trim();
+  if(newTitle && newTitle !== (original.type || '')){
+    const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method:'PATCH', credentials:'include', headers: jsonHeaders,
+      body: JSON.stringify({label: newTitle}),
+    });
+    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage échoué'); }
+  }
+  // 2. PATCH event : date + machine
+  const evPatch = {};
+  const newMachine = (changes.machine || '').trim();
+  if(newMachine && newMachine !== (original.machine || '')) evPatch.machine = newMachine;
+  // date_saisie est ISO datetime, event.date_prevue est YYYY-MM-DD → conversion
+  const newDateIso = changes.dateSaisie;
+  if(newDateIso){
+    try{
+      const d = new Date(newDateIso);
+      if(!isNaN(d.getTime())){
+        const pad = n => (n < 10 ? '0'+n : ''+n);
+        const iso = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+        evPatch.date_prevue = iso;
+      }
+    }catch(e){}
+  }
+  if(Object.keys(evPatch).length){
+    const r2 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), {
+      method:'PATCH', credentials:'include', headers: jsonHeaders,
+      body: JSON.stringify(evPatch),
+    });
+    if(!r2.ok){ const err = await r2.json().catch(()=>({})); throw new Error(err.detail || 'PATCH event échoué'); }
+  }
+  // 3. PATCH op : commentaire (observations)
+  const newComment = (changes.commentaire || '').trim();
+  if(newComment !== (original.commentaire || '')){
+    const r3 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
+      method:'PATCH', credentials:'include', headers: jsonHeaders,
+      body: JSON.stringify({observations: newComment}),
+    });
+    if(!r3.ok){ const err = await r3.json().catch(()=>({})); throw new Error(err.detail || 'PATCH op échoué'); }
+  }
+}
+
 function deleteOp(id){
   if(!confirm('Supprimer cette opération ?')) return;
   OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== id);
@@ -3498,6 +3625,8 @@ function sortOps(field){
 function getOpsFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
   return {
+    // v180 : filtre "kind" : tous / codes / libres (interventions libres)
+    kind:     v('filt-operations-kind') || 'all',
     type:     v('filt-operations-type'),
     operateur:v('filt-operations-operateur'),
     machine:  v('filt-operations-machine'),
@@ -3583,6 +3712,9 @@ function renderOps(){
   }
   // Filter
   let filtered = OPS_STATE.list.filter(o => {
+    // v180 : filtre kind (all / codes / libres)
+    if(f.kind === 'libres' && !o._libre) return false;
+    if(f.kind === 'codes' && o._libre) return false;
     if(f.type && o.type !== f.type) return false;
     if(f.operateur && o.operateur !== f.operateur) return false;
     if(f.machine && o.machine !== f.machine) return false;
@@ -3614,14 +3746,15 @@ function renderOps(){
     const msg = isFiltered
       ? 'Aucune opération ne correspond aux filtres.'
       : 'Aucune opération enregistrée. Cliquez sur « Nouvelle saisie » pour commencer.';
-    tbody.innerHTML = '<tr><td colspan="6" class="ops-empty">' + escHtml(msg) + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
     const rows = filtered.map(o =>
       '<tr>' +
         '<td class="col-date">' + escHtml(fmtDate(o.date_saisie)) + '</td>' +
         '<td>' + escHtml(o.machine) + '</td>' +
         '<td>' + escHtml(o.operateur) + '</td>' +
-        '<td>' + escHtml(o.type) + '</td>' +
+        '<td>' + escHtml(o.type) + (o._libre ? ' <span class="libre-chip">Libre</span>' : '') + '</td>' +
+        '<td class="col-duree">' + (o.duree_reelle_min != null ? escHtml(o.duree_reelle_min + ' min') : '<span style="color:var(--muted)">—</span>') + '</td>' +
         '<td class="col-comment">' + escHtml(o.commentaire || '') + '</td>' +
         '<td class="col-actions">' +
           '<button type="button" class="ops-row-btn edit" onclick="openOpsModal(\'' + escAttr(o.id) + '\')" title="Modifier">' +
@@ -5950,11 +6083,10 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
-<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée
-     (ou modifier / annuler une opération déjà validée) -->
+<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée -->
 <div class="op-modal-overlay" id="op-modal-single" onclick="if(event.target===this) opCloseSingleModal()">
   <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px">
-    <div class="op-modal-title" id="op-single-title">Marquer comme terminée</div>
+    <div class="op-modal-title">Marquer comme terminée</div>
     <div class="op-modal-sub" id="op-single-sub">—</div>
     <div class="op-single-op-title" id="op-single-code-line">—</div>
     <div class="op-single-op-name" id="op-single-name">—</div>
@@ -5967,13 +6099,8 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <textarea id="op-single-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
     </div>
     <div class="op-modal-actions">
-      <button type="button" class="btn btn-op-cancel-validation" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
-        Annuler la validation
-      </button>
-      <div style="flex:1"></div>
-      <button type="button" class="btn" onclick="opCloseSingleModal()">Fermer</button>
-      <button type="button" class="btn op-btn-accent" id="op-single-submit" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
+      <button type="button" class="btn" onclick="opCloseSingleModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
     </div>
   </div>
 </div>
@@ -6015,6 +6142,43 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
   </div>
 </div>
 
+<!-- v180 : Modal Intervention libre (creation rapide sans passer par le catalogue) -->
+<div class="op-modal-overlay" id="libre-modal" onclick="if(event.target===this) libreCloseModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Intervention libre</div>
+    <div class="op-modal-sub">Enregistre une intervention ponctuelle sans creer de code du catalogue.</div>
+    <div class="op-form-row">
+      <label for="libre-date">Date de l'intervention *</label>
+      <input type="date" id="libre-date">
+    </div>
+    <div class="op-form-row">
+      <label for="libre-machine">Machine *</label>
+      <select id="libre-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-form-row libre-titre-wrap">
+      <label for="libre-titre">Titre de l'intervention *</label>
+      <input type="text" id="libre-titre" autocomplete="off" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="libreOnTitreInput()">
+      <div class="libre-autocomplete-panel" id="libre-autocomplete-panel" style="display:none"></div>
+    </div>
+    <div class="op-form-row">
+      <label for="libre-duree">Durée (min)</label>
+      <input type="number" id="libre-duree" min="0" step="1" placeholder="Optionnel — durée de l'intervention en minutes">
+    </div>
+    <div class="op-form-row">
+      <label for="libre-comment">Commentaires</label>
+      <textarea id="libre-comment" rows="3" placeholder="Optionnel — details, pieces changees, remarques..."></textarea>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="libreCloseModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="libreSubmit()">Enregistrer</button>
+    </div>
+  </div>
+</div>
 
 
 <script>
@@ -6023,7 +6187,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
    L'état des tâches côté page est stocké dans MAINT_STATE. */
 'use strict';
 
-const MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+// v179 : MAINT_ROLE deja defini au debut du 1er script (var hoiste).
+// Reassignation defensive au cas ou body.data-maint-role aurait change.
+MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
 const MAINT_STATE = {
   tasks: [],
   codes: [],
@@ -6793,6 +6959,301 @@ async function opSubmitNew(){
   }
 }
 
+// ─── Intervention libre (v180) ────────────────────────────────────
+// Modal minimaliste pour saisir une intervention ponctuelle sans creer
+// de code du catalogue. Autocomplete sur les titres deja utilises pour
+// encourager la reutilisation. Si l'user selectionne une suggestion, on
+// reutilise le code existant ; sinon on cree un nouveau code libre LIB-xxx
+// via POST /api/maintenance/codes/libres.
+let _libreSelectedCode = null;
+let _libreAutocompleteTimer = null;
+
+function libreOpenModal(){
+  _libreSelectedCode = null;
+  const t = document.getElementById('libre-titre');
+  const d = document.getElementById('libre-duree');
+  const c = document.getElementById('libre-comment');
+  const dateEl = document.getElementById('libre-date');
+  if(t) t.value = '';
+  if(d) d.value = '';
+  if(c) c.value = '';
+  // v182 Lot 2 : date pre-remplie a aujourd'hui, modifiable par l'operateur
+  if(dateEl && typeof _fmtDateISO === 'function') dateEl.value = _fmtDateISO(new Date());
+  const panel = document.getElementById('libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  // Pre-remplit machine avec la selection courante si disponible
+  try{
+    const m = (typeof getMaintMachine === 'function') ? getMaintMachine()
+            : (typeof _getSelectedMachine === 'function') ? _getSelectedMachine()
+            : 'Cohésio 1';
+    const sel = document.getElementById('libre-machine');
+    if(sel && m) sel.value = m;
+  }catch(e){}
+  document.getElementById('libre-modal').classList.add('active');
+  setTimeout(() => { const el = document.getElementById('libre-titre'); if(el) el.focus(); }, 100);
+}
+function libreCloseModal(){
+  const m = document.getElementById('libre-modal');
+  if(m) m.classList.remove('active');
+}
+// v182ter : la duree est desormais toujours visible dans la modal.
+// libreShowDuree conservee en no-op pour compat.
+function libreShowDuree(){}
+
+async function libreOnTitreInput(){
+  const t = document.getElementById('libre-titre');
+  const q = (t ? t.value : '').trim();
+  _libreSelectedCode = null; // Reset quand l'user tape
+  clearTimeout(_libreAutocompleteTimer);
+  const panel = document.getElementById('libre-autocomplete-panel');
+  if(q.length < 2){
+    if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+    return;
+  }
+  _libreAutocompleteTimer = setTimeout(async () => {
+    try{
+      const r = await fetch('/api/maintenance/codes/libres/autocomplete?q=' + encodeURIComponent(q) + '&limit=8', {credentials:'include'});
+      if(!r.ok) return;
+      const d = await r.json();
+      const items = d.items || [];
+      if(!panel) return;
+      if(!items.length){ panel.innerHTML = ''; panel.style.display = 'none'; return; }
+      panel.innerHTML = items.map(it =>
+        '<div class="libre-suggestion" data-libre-sug="' + escAttr(it.code) + '|' + escAttr(it.label) + '">' +
+          '<span class="libre-suggestion-label">' + escHtml(it.label) + '</span>' +
+          '<span class="libre-suggestion-count">' + it.usage_count + ' saisie' + (it.usage_count > 1 ? 's' : '') + '</span>' +
+        '</div>'
+      ).join('');
+      panel.style.display = '';
+      panel.querySelectorAll('[data-libre-sug]').forEach(el => {
+        el.addEventListener('click', () => {
+          const parts = (el.getAttribute('data-libre-sug') || '').split('|');
+          if(parts.length >= 2) libreSelectSuggestion(parts[0], parts.slice(1).join('|'));
+        });
+      });
+    }catch(e){}
+  }, 220);
+}
+
+function libreSelectSuggestion(code, label){
+  _libreSelectedCode = code;
+  const t = document.getElementById('libre-titre');
+  if(t) t.value = label;
+  const panel = document.getElementById('libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+}
+
+let _libreSubmitInFlight = false;
+async function libreSubmit(){
+  // v182bis : anti-double-click. Un seul submit a la fois, sinon on cree
+  // des LIB-xxx orphelins a chaque re-click pendant l'attente reseau.
+  if(_libreSubmitInFlight) return;
+  _libreSubmitInFlight = true;
+  const submitBtn = document.querySelector('#libre-modal .op-btn-accent');
+  if(submitBtn){
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.6';
+    submitBtn.style.cursor = 'wait';
+    submitBtn.textContent = 'Enregistrement...';
+  }
+  const _libreReset = () => {
+    _libreSubmitInFlight = false;
+    if(submitBtn){
+      submitBtn.disabled = false;
+      submitBtn.style.opacity = '';
+      submitBtn.style.cursor = '';
+      submitBtn.textContent = 'Enregistrer';
+    }
+  };
+  const titre = (document.getElementById('libre-titre')?.value || '').trim();
+  const machine = document.getElementById('libre-machine')?.value || '';
+  const dateVal = (document.getElementById('libre-date')?.value || '').trim();
+  const dureeStr = document.getElementById('libre-duree')?.value || '';
+  const comment = (document.getElementById('libre-comment')?.value || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  if(!titre || !machine || !dateVal){
+    if(typeof showToast === 'function') showToast('Date, titre et machine sont obligatoires.', 'danger');
+    else alert('Date, titre et machine sont obligatoires.');
+    _libreReset();
+    return;
+  }
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    if(typeof showToast === 'function') showToast('Durée invalide.', 'danger');
+    _libreReset();
+    return;
+  }
+  try{
+    let code = _libreSelectedCode;
+    // Si aucune suggestion selectionnee, cree ou reutilise un code libre
+    // (dedup exact-match cote backend depuis v182bis).
+    if(!code){
+      const rNew = await fetch('/api/maintenance/codes/libres', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({label: titre}),
+      });
+      if(!rNew.ok){ const err = await rNew.json().catch(()=>({})); throw new Error(err.detail || 'Creation code libre echouee'); }
+      const dNew = await rNew.json();
+      code = dNew.code;
+    }
+    // Cree l'event non_planifie + PATCH termine (meme flow que opSubmitNew).
+    // v182 Lot 2 : date_prevue = dateVal saisie par l'operateur (defaut aujourd'hui).
+    const rEv = await fetch('/api/maintenance/events', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        machine, date_prevue: dateVal, source: 'non_planifie',
+        ops: [code], operators: [],
+      }),
+    });
+    if(!rEv.ok){ const err = await rEv.json().catch(()=>({})); throw new Error(err.detail || rEv.status); }
+    const dEv = await rEv.json();
+    const ev = dEv.event;
+    const op = (ev.ops || [])[0];
+    if(!ev || !op) throw new Error('Creneau incomplet retourne par API.');
+    if(typeof _patchOpTermine === 'function'){
+      await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+    }
+    if(typeof showToast === 'function') showToast('Intervention libre enregistree.', 'success');
+    libreCloseModal();
+    // Refresh historique (force bypass cache pour voir la nouvelle entree)
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+    else if(typeof loadOps === 'function') loadOps();
+    // Refresh tasks si operateur
+    if(typeof opLoadTasks === 'function') opLoadTasks().catch(() => {});
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    else alert('Erreur : ' + e.message);
+  }finally{
+    _libreReset();
+  }
+}
+
+// ─── Lot 2c : renommer inline depuis l'historique ────────────────
+async function libreRenameInline(code){
+  const item = OPS_STATE.list.find(o => o._code === code && o._libre);
+  const currentLabel = item ? item.type : '';
+  const newLabel = prompt('Nouveau titre pour cette intervention libre :\nImpact retroactif sur toutes les saisies qui utilisent ce titre.', currentLabel || '');
+  if(newLabel === null) return;
+  const trimmed = (newLabel || '').trim();
+  if(!trimmed){ if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger'); return; }
+  if(trimmed === currentLabel) return;
+  try{
+    const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method:'PATCH', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({label: trimmed}),
+    });
+    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage echoue'); }
+    if(typeof showToast === 'function') showToast('Titre modifie.', 'success');
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+    else if(typeof loadOps === 'function') loadOps();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    else alert('Erreur : ' + e.message);
+  }
+}
+
+// ─── Lot 2d : modal documents attaches a un code ─────────────────
+function libreDocsOpen(code){
+  let overlay = document.getElementById('libre-docs-overlay');
+  if(overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.className = 'op-modal-overlay active';
+  overlay.id = 'libre-docs-overlay';
+  overlay.innerHTML = ''
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:560px">'
+    +   '<div class="op-modal-title">Documents attaches</div>'
+    +   '<div class="op-modal-sub">Code : ' + escHtml(code) + '. Fichiers explicatifs (photos avant/apres, schemas...). 20 Mo max par fichier.</div>'
+    +   '<div id="libre-docs-list" style="display:flex;flex-direction:column;gap:8px;margin:14px 0;max-height:360px;overflow-y:auto">'
+    +     '<p style="color:var(--muted);font-size:12px;text-align:center">Chargement...</p>'
+    +   '</div>'
+    +   '<input type="file" id="libre-docs-file" style="display:none">'
+    +   '<div class="op-modal-actions">'
+    +     '<button type="button" class="btn" onclick="libreDocsClose()">Fermer</button>'
+    +     '<button type="button" class="btn op-btn-accent" id="libre-docs-add-btn">+ Ajouter un fichier</button>'
+    +   '</div>'
+    + '</div>';
+  overlay.addEventListener('click', (e) => { if(e.target === overlay) libreDocsClose(); });
+  document.body.appendChild(overlay);
+  document.getElementById('libre-docs-add-btn').addEventListener('click', () => {
+    document.getElementById('libre-docs-file').click();
+  });
+  document.getElementById('libre-docs-file').addEventListener('change', (e) => libreDocsUpload(code, e.target.files));
+  libreDocsRefresh(code);
+}
+function libreDocsClose(){
+  const el = document.getElementById('libre-docs-overlay');
+  if(el) el.remove();
+}
+async function libreDocsRefresh(code){
+  const list = document.getElementById('libre-docs-list');
+  if(!list) return;
+  try{
+    const r = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {credentials:'include'});
+    if(!r.ok) throw new Error('Erreur ' + r.status);
+    const d = await r.json();
+    const items = Array.isArray(d.items) ? d.items : [];
+    if(!items.length){
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic;text-align:center">Aucun document attache pour l\u2019instant.</p>';
+      return;
+    }
+    list.innerHTML = items.map(doc => {
+      const sz = doc.size_bytes != null ? (Math.round(doc.size_bytes/1024) + ' Ko') : '';
+      const dt = doc.uploaded_at ? escHtml(doc.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        +   '<div style="flex:1;min-width:0">'
+        +     '<div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escHtml(doc.filename) + '</div>'
+        +     '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + sz + (dt ? ' - ' + dt : '') + '</div>'
+        +   '</div>'
+        +   '<a href="/api/maintenance/docs/' + doc.id + '/download" target="_blank" rel="noopener" class="btn btn-sec" style="padding:6px 12px;font-size:12px;text-decoration:none">Ouvrir</a>'
+        +   '<button type="button" class="btn btn-sec" data-libre-doc-del="' + doc.id + '" style="padding:6px 12px;font-size:12px;color:var(--danger)">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    list.querySelectorAll('[data-libre-doc-del]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if(!confirm('Supprimer ce document ?')) return;
+        const id = btn.getAttribute('data-libre-doc-del');
+        try{
+          const r = await fetch('/api/maintenance/docs/' + id, {method:'DELETE', credentials:'include'});
+          if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Suppression echouee'); }
+          if(typeof showToast === 'function') showToast('Document supprime.', 'success');
+          libreDocsRefresh(code);
+        }catch(e){
+          if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+        }
+      });
+    });
+  }catch(e){
+    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
+  }
+}
+async function libreDocsUpload(code, files){
+  if(!files || !files.length) return;
+  const file = files[0];
+  if(file.size > 20 * 1024 * 1024){
+    if(typeof showToast === 'function') showToast('Fichier trop volumineux (max 20 Mo).', 'danger');
+    return;
+  }
+  const btn = document.getElementById('libre-docs-add-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Envoi...'; }
+  try{
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
+      method:'POST', credentials:'include', body: fd,
+    });
+    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Upload echoue'); }
+    if(typeof showToast === 'function') showToast('Document ajoute.', 'success');
+    document.getElementById('libre-docs-file').value = '';
+    libreDocsRefresh(code);
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '+ Ajouter un fichier'; }
+  }
+}
+
 async function opOpenNewTaskModal(){
   // Ouvre le modal admin "planning-case-modal" côté opérateur pour créer
   // une tâche riche (N ops, N machines, N opérateurs, plage horaire).
@@ -6816,7 +7277,7 @@ function opOpenSingleOpModal(eventId, opId){
   if(!ev){ return; }
   const op = (ev.ops || []).find(o => o.id === opId);
   if(!op){ return; }
-  MAINT_STATE.singleOpTarget = { eventId, opId, _wasDone: (op.statut === 'termine') };
+  MAINT_STATE.singleOpTarget = { eventId, opId };
   const timeLabel = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)
     : 'Sans créneau';
@@ -6827,15 +7288,6 @@ function opOpenSingleOpModal(eventId, opId){
   // Fusion pièces + observations si les 2 existaient historiquement.
   const prev = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
   document.getElementById('op-single-comment').value = prev;
-  // Adapte le titre + submit label + visibilité du bouton "Annuler la validation"
-  // selon que l'op est déjà terminée ou non.
-  const isDone = op.statut === 'termine';
-  const titleEl = document.getElementById('op-single-title');
-  const submitEl = document.getElementById('op-single-submit');
-  const cancelValEl = document.getElementById('op-single-cancel-validation');
-  if(titleEl) titleEl.textContent = isDone ? 'Opération terminée' : 'Marquer comme terminée';
-  if(submitEl) submitEl.textContent = isDone ? 'Enregistrer les modifications' : 'Marquer comme terminée';
-  if(cancelValEl) cancelValEl.style.display = isDone ? '' : 'none';
   document.getElementById('op-modal-single').classList.add('active');
 }
 
@@ -6854,9 +7306,6 @@ async function opSubmitSingleOp(){
     return;
   }
   const comment = (document.getElementById('op-single-comment').value || '').trim() || null;
-  // Statut : force termine (même en mode "modifier une op déjà terminée",
-  // on garde son état termine — le seul moyen de la déclasser est
-  // "Annuler la validation").
   const body = { statut: 'termine', duree_reelle_min: dureeMin, observations: comment };
   const r = await fetch('/api/maintenance/events/' + tgt.eventId + '/ops/' + tgt.opId, {
     method:'PATCH', credentials:'include',
@@ -6879,44 +7328,9 @@ async function opSubmitSingleOp(){
       opRenderTasks();
     }
   }catch(e){}
-  if(typeof showToast === 'function'){
-    // Message adapté : "mise à jour" si l'op était déjà terminée, sinon "terminée".
-    const wasDone = tgt._wasDone;
-    showToast(wasDone ? 'Opération mise à jour.' : 'Opération terminée.', 'success');
-  }
+  if(typeof showToast === 'function') showToast('Opération terminée.', 'success');
   opCloseSingleModal();
   // Refresh en tâche de fond (best-effort) — si ça échoue, la vue est à jour.
-  opLoadTasks().catch(() => {});
-  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
-}
-
-// ── Annule la saisie d'une op déjà terminée ────────────────────────
-//   Statut termine -> a_faire. Efface done_at/by, durée, commentaires,
-//   pièces changées. La ligne dans l'historique disparaît automatiquement.
-async function opCancelValidation(){
-  const tgt = MAINT_STATE.singleOpTarget;
-  if(!tgt){ opCloseSingleModal(); return; }
-  if(!confirm("Annuler la validation de cette opération ?\n\nLa tâche reviendra dans la liste des tâches à faire et la ligne d'historique correspondante sera effacée. Cette action est définitive.")) return;
-  const r = await fetch('/api/maintenance/events/' + tgt.eventId + '/ops/' + tgt.opId + '/reset', {
-    method:'POST', credentials:'include',
-  });
-  if(!r.ok){
-    const err = await r.json().catch(()=>({}));
-    if(typeof showToast === 'function') showToast('Erreur : ' + (err.detail || r.status), 'danger');
-    else alert('Erreur : ' + (err.detail || r.status));
-    return;
-  }
-  // Mise à jour in-place depuis la réponse — cohérence même si opLoadTasks échoue.
-  try{
-    const data = await r.json();
-    if(data && data.event){
-      const idx = (MAINT_STATE.tasks || []).findIndex(x => x.id === data.event.id);
-      if(idx >= 0) MAINT_STATE.tasks[idx] = data.event;
-      opRenderTasks();
-    }
-  }catch(e){}
-  if(typeof showToast === 'function') showToast('Validation annulée. Tâche remise à faire.', 'info');
-  opCloseSingleModal();
   opLoadTasks().catch(() => {});
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
