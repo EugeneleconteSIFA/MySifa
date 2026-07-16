@@ -7079,11 +7079,8 @@ function renderProdKpis(){
   }
 
   function renderSidebar(){
-    if(!document.getElementById('myprod-logo-hover-css')){
-      var _ls = document.createElement('style'); _ls.id = 'myprod-logo-hover-css';
-      _ls.textContent = '.sidebar .logo{cursor:pointer;border-radius:10px;padding:4px 6px;margin:-4px -6px 0;transition:background .15s}.sidebar .logo:hover{background:var(--accent-bg)}.sidebar .logo:hover .logo-brand{color:var(--accent)}';
-      document.head.appendChild(_ls);
-    }
+    // Le style du logo (cliquable + hover + espacement 32px) vit dans
+    // mysifa_myprod_shell.css depuis la PR 1 « unifier MyProd ».
     const admin = isAdmin(S.user);
     const comptaPlan = isComptaPlanning(S.user);
     const items = comptaPlan

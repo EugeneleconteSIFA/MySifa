@@ -66,6 +66,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/motion.css">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -94,47 +95,10 @@ body.light{
 }
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.app{display:flex;min-height:100vh}
-.sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto}
-.sidebar::-webkit-scrollbar{width:0}.sidebar{scrollbar-width:none}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
-body.sb-open .sidebar-overlay{display:block}
-/* topbar mobile : mysifa_mobile_topbar.css */
-.logo{padding:0 8px;margin-bottom:32px}
-.logo-brand{font-size:15px;font-weight:800}.logo-brand span{color:var(--accent)}
-.logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
-.nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;width:100%;text-align:left;font-family:inherit;transition:all .15s;margin-bottom:2px}
-.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+/* Sidebar / logo / nav-btn / topbar / responsive : déplacés dans mysifa_myprod_shell.css (PR 1 « unifier MyProd »). */
 .tip-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:8px}
 .tip-col-hdr{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid var(--accent)}
 @media (max-width:540px){.tip-cols{grid-template-columns:1fr}}
-.nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
-.nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
-.nav-btn--mysifa-portal:hover .mysifa-back-preamble{color:var(--text2)}
-.nav-btn--mysifa-portal:hover .mysifa-back-brand{color:var(--text)}
-.nav-btn--mysifa-portal:hover .mysifa-back-accent{color:var(--accent)}
-.mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:0}
-.mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
-.mysifa-back-accent{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-bottom:8px}
-.support-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.support-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.support-ico{display:inline-flex;align-items:center;justify-content:center}
-.user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:12px;width:100%;font-family:inherit;transition:all .15s}
-.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.theme-btn .theme-ico{font-size:14px;line-height:1}
-.theme-btn .theme-label{white-space:nowrap}
-@media (display-mode: standalone), (max-width: 900px){
-  .theme-btn .theme-label{display:none}
-  .theme-btn{justify-content:center}
-}
-.logout-btn{border:none}.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
-.version{font-size:10px;color:var(--muted);font-family:monospace;padding:4px 12px}
-.main{flex:1;padding:28px;overflow-y:auto}
 .planning-container{max-width:1400px;margin:0 auto}
 
 /* Contact support (messagerie interne) */
@@ -1676,7 +1640,7 @@ function planningUserChipHtml(){
 }
 function renderSidebar(){
   if(!ME){
-    return `<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
+    return `<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>
       <div style="padding:10px 12px;color:var(--muted);font-size:12px">Chargement…</div>
       <div class="sidebar-bottom">
         <button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>
@@ -1695,7 +1659,7 @@ function renderSidebar(){
     ]),
   ];
   const isLight=document.body.classList.contains("light");
-  return`<nav class="sidebar"><div class="logo"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
+  return`<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>{
       const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
         ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
