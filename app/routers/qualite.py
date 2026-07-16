@@ -3051,7 +3051,7 @@ def audit_get_matrice(audit_id: int, request: Request):
         if not conn.execute("SELECT 1 FROM audit_dossiers WHERE id=?", (audit_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Audit introuvable")
         four_rows = conn.execute(
-            """SELECT f.id, f.nom, f.licence, f.certificat
+            """SELECT f.id, f.nom, f.licence, f.certificat, f.groupe, f.branche
                FROM audit_fournisseurs af
                JOIN fournisseurs_fsc f ON f.id = af.fournisseur_id
                WHERE af.audit_id=?
@@ -3071,20 +3071,52 @@ def audit_get_matrice(audit_id: int, request: Request):
         # Charger tous les liens certif × fiche pour les fournisseurs concernés
         cert_link_stats = {}   # {(four_id, fiche_id): {"valide":n,"expire_bientot":n,"expire":n,"sans_date":n}}
         cert_examples = {}     # {(four_id, fiche_id): [cert_id,...]}
+        # Mapping groupe -> [fournisseurs_ids de four_rows appartenant a ce groupe]
+        groupe_of_four = {r["id"]: (r["groupe"] or "").strip() for r in four_rows}
+        fours_by_groupe = {}
+        for fid, g in groupe_of_four.items():
+            if g:
+                fours_by_groupe.setdefault(g.lower(), []).append(fid)
+
+        def _add_cert_link(fid, fiche_id, cert_id, date_exp, seen_ids):
+            if cert_id in seen_ids.get((fid, fiche_id), set()):
+                return  # anti-doublon
+            key = (fid, fiche_id)
+            st = _compute_cert_status(date_exp)
+            d = cert_link_stats.setdefault(key, {"valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
+            d[st] = d.get(st, 0) + 1
+            cert_examples.setdefault(key, []).append(cert_id)
+            seen_ids.setdefault(key, set()).add(cert_id)
+
+        seen_by_key = {}  # {(fid, fiche_id): set(cert_id)} pour dedup groupe/direct
         if four_ids and fiche_ids:
-            q = f"""
+            # Query 1 : certs directs (attaches directement au fournisseur, sans groupe_ref)
+            q_direct = f"""
                 SELECT c.id AS cert_id, c.fournisseur_id, c.date_expiration, l.fiche_id
                 FROM qualite_fournisseur_certificats c
                 JOIN qualite_fournisseur_certificat_fiches l ON l.certificat_id = c.id
                 WHERE c.fournisseur_id IN ({','.join(['?']*len(four_ids))})
                   AND l.fiche_id IN ({','.join(['?']*len(fiche_ids))})
+                  AND (c.groupe_ref IS NULL OR TRIM(c.groupe_ref) = '')
             """
-            for r in conn.execute(q, four_ids + fiche_ids).fetchall():
-                key = (r["fournisseur_id"], r["fiche_id"])
-                s = _compute_cert_status(r["date_expiration"])
-                d = cert_link_stats.setdefault(key, {"valide": 0, "expire_bientot": 0, "expire": 0, "sans_date": 0})
-                d[s] = d.get(s, 0) + 1
-                cert_examples.setdefault(key, []).append(r["cert_id"])
+            for r in conn.execute(q_direct, four_ids + fiche_ids).fetchall():
+                _add_cert_link(r["fournisseur_id"], r["fiche_id"], r["cert_id"], r["date_expiration"], seen_by_key)
+
+            # Query 2 : certs niveau groupe → s'appliquent a TOUTES les branches du groupe presentes dans l'audit
+            if fours_by_groupe:
+                groupes_lower = list(fours_by_groupe.keys())
+                q_groupe = f"""
+                    SELECT c.id AS cert_id, c.groupe_ref, c.date_expiration, l.fiche_id
+                    FROM qualite_fournisseur_certificats c
+                    JOIN qualite_fournisseur_certificat_fiches l ON l.certificat_id = c.id
+                    WHERE c.groupe_ref IS NOT NULL AND TRIM(c.groupe_ref) <> ''
+                      AND LOWER(TRIM(c.groupe_ref)) IN ({','.join(['?']*len(groupes_lower))})
+                      AND l.fiche_id IN ({','.join(['?']*len(fiche_ids))})
+                """
+                for r in conn.execute(q_groupe, groupes_lower + fiche_ids).fetchall():
+                    gref_low = (r["groupe_ref"] or "").strip().lower()
+                    for fid in fours_by_groupe.get(gref_low, []):
+                        _add_cert_link(fid, r["fiche_id"], r["cert_id"], r["date_expiration"], seen_by_key)
         # Charger les overrides manuels
         over_rows = conn.execute(
             "SELECT * FROM audit_matrice_overrides WHERE audit_id=?",
