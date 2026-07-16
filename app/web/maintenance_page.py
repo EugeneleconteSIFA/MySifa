@@ -376,7 +376,13 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
 /* Modale Créneau : section liste d'opérations */
 .case-modal-card{max-width:640px;width:92vw;max-height:92vh;display:flex;flex-direction:column}
+/* Le <form> est intercalé entre .modal-card et .modal-body → doit propager
+   le flex column pour que .modal-body puisse scroll et .modal-foot rester
+   collé en bas. Sans ça, le contenu déborde et les boutons Enregistrer/Annuler
+   sortent de l'écran (bug observé v2.1.5). */
+.case-modal-card > form{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .case-modal-card .modal-body{overflow-y:auto;flex:1;min-height:0}
+.case-modal-card .modal-foot{flex-shrink:0}
 .case-ops-list{max-height:none}
 .case-ops-section{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}
 .case-ops-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
