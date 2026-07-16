@@ -656,6 +656,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
+<script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>
 <script>
 // Handler d'erreurs installé *avant* le script principal (capte aussi les erreurs de parsing).
@@ -5001,6 +5002,123 @@ async function submitDefaults(){
   await load();
 }
 
+// ─── Guide in-app Planning machine (moteur partagé mysifa_guides.js) ───
+const PLANNING_GUIDES = {
+  'planning-overview': { steps: [
+    {
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><rect x="7" y="13" width="4" height="5" rx="1" fill="currentColor" stroke="none"/></svg>`,
+      title: 'Planning machine',
+      body: `Le planning organise les <strong>dossiers de production par machine</strong> sur un axe de temps. Chaque machine a son propre planning ; les dossiers s'y enchaînent dans l'ordre où ils seront produits.`,
+      extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Basculer d'une machine à l'autre et changer d'horizon (semaine, 2 ou 4 semaines).</li><li>Suivre l'état de chaque dossier : en attente, en cours, terminé.</li><li>Réordonner les dossiers par glisser-déposer.</li><li>Ajuster les horaires d'un jour et repérer les jours non travaillés.</li></ul></div></div>`
+    },
+    {
+      title: 'Choisir la machine et l\'horizon',
+      body: `En haut, sélectionnez la <span class="mguide-hl">machine</span>, puis l'horizon d'affichage : <span class="mguide-tag">Semaine</span> <span class="mguide-tag">2 semaines</span> <span class="mguide-tag">4 semaines</span>. La vue courante est mémorisée d'une visite à l'autre.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="10" width="74" height="22" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
+        <text x="45" y="25" font-size="10" fill="var(--accent)" font-weight="700" text-anchor="middle">Cohésio 1</text>
+        <rect x="88" y="10" width="74" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
+        <text x="125" y="25" font-size="10" fill="var(--text2)" text-anchor="middle">Cohésio 2</text>
+        <rect x="168" y="10" width="44" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
+        <text x="190" y="25" font-size="10" fill="var(--text2)" text-anchor="middle">DSI</text>
+        <rect x="234" y="10" width="52" height="22" rx="6" fill="var(--accent)"/>
+        <text x="260" y="25" font-size="10" fill="#fff" font-weight="700" text-anchor="middle">Semaine</text>
+        <rect x="290" y="10" width="20" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
+        <text x="300" y="25" font-size="9" fill="var(--text2)" text-anchor="middle">2s</text>
+        <rect x="314" y="10" width="18" height="22" rx="6" fill="var(--card)" stroke="var(--border)"/>
+        <text x="323" y="25" font-size="9" fill="var(--text2)" text-anchor="middle">4s</text>
+        <g>
+          <rect x="8" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+          <rect x="72" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+          <rect x="136" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+          <rect x="200" y="46" width="60" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+          <rect x="264" y="46" width="68" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+          <text x="38" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Lun</text>
+          <text x="102" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Mar</text>
+          <text x="166" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Mer</text>
+          <text x="230" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Jeu</text>
+          <text x="298" y="60" font-size="9" fill="var(--muted)" text-anchor="middle">Ven</text>
+          <rect x="14" y="70" width="48" height="26" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/>
+          <rect x="78" y="70" width="48" height="40" rx="5" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/>
+          <rect x="142" y="70" width="48" height="30" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+          <rect x="206" y="70" width="48" height="34" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+        </g>
+      </svg>`
+    },
+    {
+      title: 'Lire un dossier dans la timeline',
+      body: `Chaque bloc est un <strong>dossier</strong> positionné sur les jours travaillés. Sa couleur donne l'état d'un coup d'œil : <span class="mguide-tag">En attente</span> <span class="mguide-tag">En cours</span> <span class="mguide-tag">Terminé</span>. La hauteur reflète la durée estimée.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="8" width="150" height="156" rx="8" fill="var(--card)" stroke="var(--border)"/>
+        <rect x="18" y="20" width="130" height="30" rx="6" fill="rgba(52,211,153,.15)" stroke="var(--ok,#34d399)"/>
+        <text x="26" y="33" font-size="9" fill="var(--text)" font-weight="700">DOS-4821 · Client A</text>
+        <text x="26" y="45" font-size="8" fill="var(--ok,#34d399)" font-weight="700">En cours</text>
+        <rect x="18" y="56" width="130" height="28" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/>
+        <text x="26" y="68" font-size="9" fill="var(--text)" font-weight="700">DOS-4822 · Client B</text>
+        <text x="26" y="79" font-size="8" fill="var(--accent)" font-weight="700">En attente</text>
+        <rect x="18" y="90" width="130" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="26" y="102" font-size="9" fill="var(--text2)" font-weight="700">DOS-4790 · Client C</text>
+        <text x="26" y="112" font-size="8" fill="var(--muted)" font-weight="700">Terminé</text>
+        <g>
+          <rect x="178" y="30" width="14" height="14" rx="3" fill="rgba(52,211,153,.2)" stroke="var(--ok,#34d399)"/>
+          <text x="200" y="41" font-size="10" fill="var(--text2)">En cours de production</text>
+          <rect x="178" y="56" width="14" height="14" rx="3" fill="var(--accent-bg)" stroke="var(--accent)"/>
+          <text x="200" y="67" font-size="10" fill="var(--text2)">En attente</text>
+          <rect x="178" y="82" width="14" height="14" rx="3" fill="var(--bg)" stroke="var(--border)"/>
+          <text x="200" y="93" font-size="10" fill="var(--text2)">Terminé</text>
+        </g>
+      </svg>`
+    },
+    {
+      title: 'Réordonner par glisser-déposer',
+      body: `Attrapez un dossier et <span class="mguide-hl">glissez-le</span> pour changer son ordre de passage. Le planning se recalcule automatiquement autour du dossier <strong>en cours</strong>, qui reste le point de repère.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="70" y="14" width="150" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="80" y="31" font-size="9" fill="var(--text2)" font-weight="700">DOS-4790</text>
+        <rect x="70" y="70" width="150" height="30" rx="6" fill="var(--accent-bg)" stroke="var(--accent)" stroke-dasharray="4 3"/>
+        <text x="80" y="88" font-size="9" fill="var(--accent)" font-weight="700">DOS-4822 (déplacé)</text>
+        <rect x="70" y="118" width="150" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="80" y="135" font-size="9" fill="var(--text2)" font-weight="700">DOS-4830</text>
+        <path d="M245 40 L245 96" stroke="var(--accent)" stroke-width="2" fill="none" stroke-linecap="round" marker-end="url(#ar)"/>
+        <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--accent)"/></marker></defs>
+        <circle cx="245" cy="40" r="4" fill="var(--accent)"/>
+        <text x="255" y="72" font-size="9" fill="var(--muted)">glisser</text>
+      </svg>`
+    },
+    {
+      title: 'Horaires, jours off et recherche',
+      body: `Cliquez sur un jour pour ajuster ses <strong>horaires</strong> ponctuellement ; les <strong>jours non travaillés</strong> (week-ends, fermetures) sont exclus du calcul. La <span class="mguide-hl">recherche</span> retrouve un dossier, même sur une autre machine.`,
+      illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+        <rect x="8" y="10" width="220" height="24" rx="7" fill="var(--bg)" stroke="var(--border)"/>
+        <circle cx="24" cy="22" r="6" fill="none" stroke="var(--muted)" stroke-width="1.6"/>
+        <path d="M28 26 L33 31" stroke="var(--muted)" stroke-width="1.6" stroke-linecap="round"/>
+        <text x="40" y="26" font-size="10" fill="var(--muted)">Rechercher (client, dossier, réf…)</text>
+        <rect x="8" y="46" width="100" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+        <text x="58" y="62" font-size="9" fill="var(--text2)" text-anchor="middle" font-weight="700">Vendredi</text>
+        <rect x="18" y="72" width="80" height="22" rx="5" fill="var(--accent-bg)" stroke="var(--accent)"/>
+        <text x="58" y="86" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">06:00 – 14:00</text>
+        <text x="58" y="108" font-size="8" fill="var(--muted)" text-anchor="middle">horaire du jour</text>
+        <rect x="118" y="46" width="100" height="118" rx="7" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/>
+        <text x="168" y="62" font-size="9" fill="var(--muted)" text-anchor="middle" font-weight="700">Samedi</text>
+        <text x="168" y="108" font-size="9" fill="var(--muted)" text-anchor="middle">Jour non travaillé</text>
+        <rect x="228" y="46" width="104" height="118" rx="7" fill="var(--card)" stroke="var(--border)"/>
+        <text x="280" y="62" font-size="9" fill="var(--text2)" text-anchor="middle" font-weight="700">Lundi</text>
+        <rect x="238" y="72" width="84" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/>
+        <text x="280" y="86" font-size="9" fill="var(--text2)" text-anchor="middle">06:00 – 14:00</text>
+      </svg>`
+    }
+  ]}
+};
+
+function initPlanningGuides(){
+  try{
+    if(!window.MySifaGuides) return;
+    MySifaGuides.configure({role:(window.__MYSIFA_ROLE__||"")});
+    MySifaGuides.registerMany(PLANNING_GUIDES);
+    MySifaGuides.boot().then(function(){ MySifaGuides.autoOpen('planning-overview'); });
+  }catch(e){}
+}
+
 async function boot(){
   document.body.classList.add("has-topbar");
   try{ render(); }catch(e){}
@@ -5067,6 +5185,7 @@ async function boot(){
   }catch(e){}
   // Vérifier les annonces de mise à jour après le chargement initial
   checkUpdates();
+  try{ initPlanningGuides(); }catch(e){}
   // Actualise le dossier actif + allonge le slot en_cours toutes les 30 s
   setInterval(async()=>{
     if(!MID) return;

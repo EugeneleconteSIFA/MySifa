@@ -1788,7 +1788,7 @@ async function retenirReponse(reponseId,demandeId){
           S.expeDepartHighlightId=null;
           render();
         }
-      },6000);
+      },1300);
     }
   }catch(e){
     showToast(e.message||'Erreur','danger');
@@ -2888,7 +2888,7 @@ EXPE_MAIN_CSS = r"""
 .expe-pal-eur-badge--retournee{background:rgba(52,211,153,.18);color:var(--success,#34d399)}
 .expe-pal-eur-badge--perdue{background:rgba(248,113,113,.18);color:var(--danger)}
 /* Badge — départ créé depuis un devis retenu (traçabilité) */
-.expe-badge-devis{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);vertical-align:middle;cursor:pointer;transition:background .15s,transform .1s;font-family:inherit}.expe-badge-devis:hover{background:color-mix(in srgb,var(--accent) 30%,transparent)}.expe-badge-devis:active{transform:scale(.96)}@keyframes expeDepartFlash{0%{background:color-mix(in srgb,var(--accent) 45%,transparent);box-shadow:inset 0 0 0 2px var(--accent)}40%{background:color-mix(in srgb,var(--accent) 25%,transparent);box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent)}100%{background:transparent;box-shadow:none}}.expe-depart-hl td{animation:expeDepartFlash 5.5s ease-out both}
+.expe-badge-devis{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);vertical-align:middle;cursor:pointer;transition:background .15s,transform .1s;font-family:inherit}.expe-badge-devis:hover{background:color-mix(in srgb,var(--accent) 30%,transparent)}.expe-badge-devis:active{transform:scale(.96)}@keyframes expeDepartFlash{0%{background:color-mix(in srgb,var(--accent) 55%,transparent);box-shadow:inset 0 0 0 2px var(--accent)}60%{background:color-mix(in srgb,var(--accent) 20%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 40%,transparent)}100%{background:transparent;box-shadow:none}}.expe-depart-hl td{animation:expeDepartFlash 1.1s ease-out both}
 .expe-badge-devis-wrap{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .expe-pal-eur-acts-cell{white-space:nowrap;text-align:right}
 .expe-pal-eur-acts{display:inline-flex;gap:4px;justify-content:flex-end}
