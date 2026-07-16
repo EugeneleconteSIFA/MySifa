@@ -16,6 +16,8 @@
   var loaded = false;
   var st = { key:null, idx:0, bitmap:0, startMs:0, lastStepMs:0 };
   var currentKey = null;
+  var chain = null;
+  var chainIdx = 0;
 
   function gfetch(path, opts){ opts = opts || {}; opts.credentials = "include"; return fetch(path, opts); }
   function jbody(o){ return { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(o) }; }
@@ -69,6 +71,25 @@
     setTimeout(function(){ open(key, {autoOpened:true}); }, 400);
   }
 
+  function _chainStep(){
+    if(!chain) return;
+    while(chainIdx < chain.length){
+      var k = chain[chainIdx];
+      if(role === "superadmin" && loaded && registry[k] && !ackedKeys.has(k) && !openedThisSession.has(k)){
+        openedThisSession.add(k);
+        (function(kk){ setTimeout(function(){ open(kk, {autoOpened:true}); }, 300); })(k);
+        return;
+      }
+      chainIdx++;
+    }
+  }
+  function autoOpenChain(keys){
+    keys = (keys||[]).filter(function(k){ return registry[k]; });
+    chain = keys; chainIdx = 0;
+    if(keys.length){ currentKey = keys[keys.length-1]; }
+    _chainStep();
+  }
+
   function mountEl(){
     var m = document.getElementById("mysifa-guide-root");
     if(!m){ m = document.createElement("div"); m.id = "mysifa-guide-root"; document.body.appendChild(m); }
@@ -81,6 +102,7 @@
     var m = document.getElementById("mysifa-guide-root");
     if(m) m.innerHTML = "";
     document.removeEventListener("keydown", onKey);
+    if(chain && chainIdx < chain.length && chain[chainIdx] === key){ chainIdx++; setTimeout(_chainStep, 350); }
   }
 
   function open(key, opts){
@@ -275,30 +297,24 @@
 + ".mguide-help-fab{position:fixed;bottom:82px;right:18px;width:44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;border:none;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.3);z-index:19990;transition:transform .15s,filter .15s}"
 + ".mguide-help-fab:hover{filter:brightness(1.08);transform:translateY(-2px)}"
 + ".mguide-help-fab svg{width:22px;height:22px}"
++ ".mguide-help-inline{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;background:var(--accent-bg);color:var(--accent);border:1px solid transparent;cursor:pointer;transition:all .18s;padding:0;vertical-align:middle}"
++ ".mguide-help-inline:hover{background:var(--accent);color:#fff;transform:translateY(-1px)}"
++ ".mguide-help-inline svg{width:16px;height:16px}"
 + "@media(max-width:640px){.mguide-step{padding:24px 20px 18px}.mguide-illu{height:220px}.mguide-tit{font-size:20px}.mguide-body{font-size:14px}.mguide-help-fab{bottom:74px;right:14px;width:40px;height:40px}}";
 
   function updateHelpBtn(){
-    var show = (role === "superadmin" && currentKey && registry[currentKey]);
     var b = document.getElementById("mguide-help-fab");
-    if(!show){ if(b) b.style.display = "none"; return; }
-    injectCSS();
-    if(!b){
-      b = document.createElement("button");
-      b.id = "mguide-help-fab";
-      b.className = "mguide-help-fab";
-      b.type = "button";
-      b.title = "Ouvrir le guide de cette page";
-      b.setAttribute("aria-label", "Guide de la page");
-      b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>';
-      document.body.appendChild(b);
-    }
-    b.onclick = function(){ if(currentKey) open(currentKey); };
-    b.style.display = "flex";
+    if(b) b.style.display = "none";
+  }
+  function bookBtn(key){
+    if(role !== "superadmin") return "";
+    if(!registry[key]) return "";
+    return '<button type="button" class="mguide-help-inline" title="Guide de la page" aria-label="Guide de la page" onclick="MySifaGuides.open(\''+key+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></button>';
   }
 
   window.MySifaGuides = {
     configure: configure, register: register, registerMany: registerMany,
-    boot: boot, open: open, autoOpen: autoOpen, isAcked: isAcked,
+    boot: boot, open: open, autoOpen: autoOpen, autoOpenChain: autoOpenChain, bookBtn: bookBtn, isAcked: isAcked,
     _nav: nav, _close: closeGuide, _ack: ack, _idx: function(){ return st.idx; }
   };
 })();
