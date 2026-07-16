@@ -4021,18 +4021,20 @@ function addOperation(e){
       return;
     }
     const original = OPS_STATE.list[idx];
-    // v182 fix : les libres persistent en DB — on fait les PATCH backend
-    // avant l'update local pour que le refresh reflete l'etat serveur.
-    if(original._libre && original._source === 'db' && original._event_id && original._op_id && original._code){
-      _libreEditPersist(original, {machine, titre: type, commentaire, dateSaisie})
+    // v2.2.6 : toute row d'origine DB (libre OU catalogue) est persistée en
+    // DB via _dbEditPersist. Avant : seuls les libres l'étaient, les catalogue
+    // updataient uniquement localStorage (donc disparaissaient au refresh).
+    if(original._source === 'db' && original._event_id && original._op_id && original._code){
+      _dbEditPersist(original, {machine, titre: type, commentaire, dateSaisie})
         .then(() => {
           closeOpsModal();
-          showToast('Intervention libre mise à jour.', 'success');
+          showToast(original._libre ? 'Intervention libre mise à jour.' : 'Opération mise à jour.', 'success');
           if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
           else if(typeof loadOps === 'function') loadOps();
         })
         .catch(err => {
-          showToast('Erreur : ' + (err && err.message ? err.message : 'PATCH échoué'), 'danger');
+          const msg = (err && err.message) ? err.message : 'PATCH échoué';
+          showToast('Erreur : ' + msg, 'danger');
         });
       return;
     }
@@ -4061,31 +4063,50 @@ function addOperation(e){
   closeOpsModal();
   showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
 }
-// v182 fix : persistance backend pour l'edition complete d'un libre.
-// Enchaîne les PATCH : /libres/{code} (titre) → /events/{event_id} (date+machine)
-// → /events/{event_id}/ops/{op_id} (commentaire).
-async function _libreEditPersist(original, changes){
+// v182 fix + v2.2.6 : persistance backend pour toute édition depuis l'historique
+// (libre ET catalogue). Enchaîne :
+//   1. PATCH /libres/{code} (titre) — uniquement pour les libres, skip si standard
+//   2. PATCH /events/{event_id} (date + machine)
+//   3. PATCH /events/{event_id}/ops/{op_id} (commentaire + done_at)
+async function _dbEditPersist(original, changes){
   const eventId = original._event_id;
   const opId = original._op_id;
   const code = original._code;
+  const isLibre = !!original._libre;
   const jsonHeaders = {'Content-Type':'application/json'};
-  // 1. Rename titre si change — MAIS on skip si le nouveau titre correspond
-  // a un code standard du catalogue (l'user a clique par megarde une option
-  // standard dans le dropdown Type). Ce cas est un no-op pour proteger
-  // l'integrite du titre libre.
+
+  const _throwFromResp = async (r, defaultMsg) => {
+    // v2.2.6 : messages plus clairs selon le status
+    if(r.status === 502 || r.status === 503){
+      throw new Error('Serveur temporairement indisponible (' + r.status + '), réessaye dans un instant.');
+    }
+    let err = {};
+    try{ err = await r.json(); }catch(e){}
+    throw new Error(err.detail || (defaultMsg + ' (HTTP ' + r.status + ')'));
+  };
+
+  // 1. Rename titre si libre + change effectif — skip si le nouveau titre
+  // correspond à un code standard du catalogue.
   const newTitle = (changes.titre || '').trim();
-  const isStandardCode = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
-    ? OPS_TYPES_STATE.list.some(t => (t.nom || '') === newTitle)
-    : false;
-  if(newTitle && newTitle !== (original.type || '') && !isStandardCode){
-    const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
-      method:'PATCH', credentials:'include', headers: jsonHeaders,
-      body: JSON.stringify({label: newTitle}),
-    });
-    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage échoué'); }
-  }else if(isStandardCode && newTitle !== (original.type || '')){
-    // Toast avertissement (non-bloquant)
-    if(typeof showToast === 'function') showToast('Le titre libre a ete conserve (le type choisi correspondait a un code standard). Utilise Parametres > Interventions libres pour renommer.', 'warn');
+  if(isLibre){
+    const isStandardCode = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+      ? OPS_TYPES_STATE.list.some(t => (t.nom || '') === newTitle)
+      : false;
+    if(newTitle && newTitle !== (original.type || '') && !isStandardCode){
+      const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+        method:'PATCH', credentials:'include', headers: jsonHeaders,
+        body: JSON.stringify({label: newTitle}),
+      });
+      if(!r.ok) await _throwFromResp(r, 'Renommage échoué');
+    }else if(isStandardCode && newTitle !== (original.type || '')){
+      if(typeof showToast === 'function') showToast('Le titre libre a été conservé (le type choisi correspondait à un code standard). Utilise Paramètres → Interventions libres pour renommer.', 'warn');
+    }
+  }
+  // Pour les catalogue standard : le "type" (code_label) n'est pas modifiable
+  // depuis l'historique (il vient de maintenance_codes). Si l'admin l'a changé
+  // dans le dropdown, on ignore le changement de type et on avertit.
+  else if(newTitle && newTitle !== (original.type || '')){
+    if(typeof showToast === 'function') showToast('Le type des opérations catalogue n\'est pas modifiable depuis l\'historique (change le code de l\'op via le créneau parent).', 'warn');
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -4108,7 +4129,7 @@ async function _libreEditPersist(original, changes){
       method:'PATCH', credentials:'include', headers: jsonHeaders,
       body: JSON.stringify(evPatch),
     });
-    if(!r2.ok){ const err = await r2.json().catch(()=>({})); throw new Error(err.detail || 'PATCH event échoué'); }
+    if(!r2.ok) await _throwFromResp(r2, 'PATCH event échoué');
   }
   // 3. PATCH op : commentaire (observations) + done_at (v2.2.5).
   //    Fix : la date_saisie affichée dans l'historique = done_at || date_prevue.
@@ -4143,9 +4164,11 @@ async function _libreEditPersist(original, changes){
       method:'PATCH', credentials:'include', headers: jsonHeaders,
       body: JSON.stringify(opPatch),
     });
-    if(!r3.ok){ const err = await r3.json().catch(()=>({})); throw new Error(err.detail || 'PATCH op échoué'); }
+    if(!r3.ok) await _throwFromResp(r3, 'PATCH op échoué');
   }
 }
+// Alias pour compat éventuelle avec anciens callers
+const _libreEditPersist = _dbEditPersist;
 
 // v2 : modal read-only "Détails de l'opération" (double-clic sur ligne historique)
 function openOpsHistoryDetail(id){
