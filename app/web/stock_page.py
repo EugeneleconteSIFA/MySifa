@@ -8,11 +8,22 @@ Fixes:
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from config import APP_ORG_NAME
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
 router = APIRouter()
+
+
+def _js_escape(s: str) -> str:
+    """Escape pour usage dans une string JS single-quotée."""
+    return (
+        s.replace("\\", "\\\\")
+         .replace("'", "\\'")
+         .replace("\n", "\\n")
+         .replace("\r", "")
+    )
 
 
 @router.get("/stock", response_class=HTMLResponse)
@@ -30,9 +41,11 @@ def stock_page(request: Request):
             pass  # autorisé → accès limité au traça dans le JS
         else:
             return access_denied_response("MyStock")
+    # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
+    html = STOCK_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
     # Important: prevent iOS/PWA from serving stale HTML/JS.
     return HTMLResponse(
-        content=STOCK_HTML,
+        content=html,
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",
