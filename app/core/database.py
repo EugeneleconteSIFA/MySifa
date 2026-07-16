@@ -6665,6 +6665,53 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 180, "fournisseurs_groupe_branche")
 
+    # Migration 181 — Guides in-app : suivi lecture des tutos MyQualite (et
+    # autres modules a venir). Table de progression par (utilisateur, guide).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=181 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS user_guide_progress (
+            user_id INTEGER NOT NULL,
+            guide_key TEXT NOT NULL,
+            total_steps INTEGER NOT NULL DEFAULT 0,
+            steps_seen_bitmap INTEGER NOT NULL DEFAULT 0,
+            total_time_ms INTEGER NOT NULL DEFAULT 0,
+            open_count INTEGER NOT NULL DEFAULT 0,
+            opened_at TEXT,
+            completed_at TEXT,
+            acknowledged_at TEXT,
+            reset_at TEXT,
+            reset_by INTEGER,
+            PRIMARY KEY (user_id, guide_key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reset_by) REFERENCES users(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ugp_user ON user_guide_progress(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ugp_guide ON user_guide_progress(guide_key)")
+        conn.commit()
+        _record_schema_migration(conn, 181, "user_guide_progress")
+    # Migration 182 — Codes maintenance : interventions libres (one-shot).
+    # Ajoute deux colonnes sur maintenance_codes :
+    # - libre INTEGER DEFAULT 0 : flag qui distingue les codes libres des
+    #   codes du catalogue standard. Un code libre est cree a la volee par
+    #   l'operateur pour une intervention ponctuelle (remplacement joint,
+    #   changement de reglage, etc.) sans passer par Parametres > Maintenance.
+    #   Il est exclu du catalogue principal, de la vue Maintenance et du
+    #   selecteur de la modale de saisie standard. Il n'apparait que dans
+    #   l'historique (avec un chip visuel distinct) et dans l'onglet dedie
+    #   des parametres.
+    # - usage_count INTEGER DEFAULT 0 : nombre de saisies rattachees au code.
+    #   Sert a trier l'autocomplete par pertinence et a bloquer la suppression
+    #   d'un code libre encore utilise. Incremente cote router au marquage
+    #   "termine" d'une op.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=182 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "libre" not in cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN libre INTEGER NOT NULL DEFAULT 0")
+        if "usage_count" not in cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_codes_libre ON maintenance_codes(libre)")
+        conn.commit()
+        _record_schema_migration(conn, 182, "maintenance_codes_libre_and_usage_count")
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

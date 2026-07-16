@@ -601,7 +601,7 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT event_id, statut, done_at FROM maintenance_event_ops WHERE id=?",
+            "SELECT event_id, statut, done_at, code FROM maintenance_event_ops WHERE id=?",
             (op_id,),
         ).fetchone()
         if not row or row["event_id"] != event_id:
@@ -630,13 +630,27 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         updates["updated_by"] = user["id"]
         updates["updated_at"] = now
         # Pose done_at + done_by au moment où l'op passe à termine.
+        # v180 : incremente usage_count sur le code au premier passage a termine.
+        first_termine = False
         if updates.get("statut") == "termine" and not row["done_at"]:
             updates["done_at"] = now
             updates["done_by"] = user["id"]
+            first_termine = True
 
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_event_ops SET {set_clause} WHERE id=?",
                      list(updates.values()) + [op_id])
+        # v180 : incremente usage_count sur le code (defensif : colonne peut ne
+        # pas exister sur DB pas encore migree).
+        if first_termine and row["code"]:
+            try:
+                conn.execute(
+                    "UPDATE maintenance_codes SET usage_count = COALESCE(usage_count, 0) + 1 "
+                    "WHERE code = ?",
+                    (row["code"],),
+                )
+            except Exception:
+                pass
         if machines_touched:
             _recompute_event_machine(conn, event_id)
         conn.commit()
@@ -805,6 +819,7 @@ def get_history(
                        o.code           AS code,
                        c.label          AS code_label,
                        c.categorie      AS categorie,
+                       COALESCE(c.libre, 0) AS code_libre,
                        o.duree_reelle_min AS duree_reelle_min,
                        o.observations   AS commentaire,
                        o.pieces_changees AS pieces_changees,
@@ -840,6 +855,7 @@ def get_history(
         # Opérateur : done_by en priorité (qui a marqué termine), fallback creator.
         d["operateur"] = d.get("done_by_nom") or d.get("created_by_nom") or ""
         d["type"] = d.get("code_label") or d.get("code") or ""
+        d["libre"] = bool(d.pop("code_libre", 0) or 0)
         out.append(d)
     return {"history": out}
 

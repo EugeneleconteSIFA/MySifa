@@ -904,6 +904,12 @@ let S = {
   machine: null,     // machine liée
   machines: [],      // liste machines (pour sélecteur admin)
   adminMachineId: null,  // machine sélectionnée par l'admin (override)
+  // Machine du jour via Planning RH (v1.11.0)
+  machinesDuJour: [],       // [{machine_id, machine_nom, machine_code, creneau}]
+  machineIdCourant: null,   // machine suggérée par le serveur pour le créneau courant
+  creneauCourant: '',       // 'matin' | 'apres_midi' | 'nuit'
+  fallbackActif: true,      // true = utilisateur non planifié RH, fallback users.machine_id
+  wantedMachineId: null,    // machine choisie manuellement via le switcher (persistée localStorage/jour)
   operateur: '',
   lastSaisie: null,
 
@@ -1324,9 +1330,42 @@ async function apiFetch(path, opts={}){
   return r.json();
 }
 
+/* ── Machine du jour (Planning RH, v1.11.0) ─────────────────── */
+function _fabDailyMachineKey(){
+  const t = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return 'myprod_machine_'+t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate());
+}
+function _fabReadWantedMachineId(){
+  try{
+    const v = localStorage.getItem(_fabDailyMachineKey());
+    return v ? (parseInt(v,10) || null) : null;
+  }catch(e){ return null; }
+}
+function _fabWriteWantedMachineId(id){
+  try{
+    const currentKey = _fabDailyMachineKey();
+    const toDelete = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf('myprod_machine_')===0 && k!==currentKey) toDelete.push(k);
+    }
+    toDelete.forEach(k=>localStorage.removeItem(k));
+    if(id) localStorage.setItem(currentKey, String(id));
+    else localStorage.removeItem(currentKey);
+  }catch(e){}
+}
+
+if(S.wantedMachineId === null){
+  S.wantedMachineId = _fabReadWantedMachineId();
+}
+
 async function loadSession(opts){
   let url = '/api/fabrication/session';
-  if(S.adminMachineId) url += '?machine_id='+S.adminMachineId;
+  const qs = [];
+  if(S.adminMachineId) qs.push('machine_id='+S.adminMachineId);
+  else if(S.wantedMachineId) qs.push('machine_id='+S.wantedMachineId);
+  if(qs.length) url += '?'+qs.join('&');
   const d = await apiFetch(url).catch(e=>{
     if(!opts?.silent) showToast('Erreur session: '+e.message,'danger');
     return null;
@@ -1343,7 +1382,18 @@ async function loadSession(opts){
     lastSaisie: d.last_saisie||null,
     operateur: d.operateur||'',
     machine: d.machine||null,
+    machinesDuJour: Array.isArray(d.machines_du_jour)?d.machines_du_jour:[],
+    machineIdCourant: d.machine_id_courant||null,
+    creneauCourant: d.creneau_courant||'',
+    fallbackActif: !!d.fallback_actif,
   };
+  if(S.wantedMachineId && Array.isArray(d.machines_du_jour) && d.machines_du_jour.length){
+    const stillValid = d.machines_du_jour.some(m=>m.machine_id===S.wantedMachineId);
+    if(!stillValid){
+      S.wantedMachineId = null;
+      _fabWriteWantedMachineId(null);
+    }
+  }
   if(opts?.noRender){
     Object.assign(S, patch);
     _loadRepiquageDossiersIfNeeded();
@@ -1444,8 +1494,10 @@ async function triggerOp(opCode, opLabel, extra={}){
     if(S.machine) body.machine = S.machine.nom;
     if(S.dossier) body.client = S.dossier.client||'';
     if(S.dossier) body.designation = S.dossier.description||'';
-    // Admin sans machine liée : passer le machine_id sélectionné
+    // Machine sélectionnée : admin (query param) ou opérateur qui a switché via
+    // le picker du jour (validé backend contre les machines RH planifiées).
     if(S.adminMachineId) body.machine_id = S.adminMachineId;
+    else if(S.wantedMachineId) body.machine_id = S.wantedMachineId;
 
     const d = await apiFetch('/api/fabrication/saisie',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -1491,6 +1543,44 @@ async function saveComment(){
 function showToast(msg, type='success'){
   set({toast:msg, toastType:type});
   setTimeout(()=>set({toast:null}),3200);
+}
+
+/* ── Machine switcher (multi-machines RH) ─────────────────────── */
+const _CRENEAU_LABELS = {matin:'matin', apres_midi:'aprem', nuit:'nuit', journee:'journée'};
+function renderMachineSwitcher(){
+  const list = Array.isArray(S.machinesDuJour) ? S.machinesDuJour : [];
+  if(list.length < 2) return null;
+  const currentId = (S.machine && S.machine.id) || S.machineIdCourant || (list[0] && list[0].machine_id);
+  return h('div',{className:'fab-machine-switcher',
+      style:{padding:'6px 10px 8px',borderTop:'1px solid var(--border)',marginTop:'4px'}},
+    h('div',{style:{fontSize:'9px',color:'var(--muted)',textTransform:'uppercase',
+        letterSpacing:'.5px',marginBottom:'4px',fontWeight:'700'}},
+      'Machine du jour · '+list.length
+    ),
+    h('select',{
+      value: String(currentId||''),
+      title: 'Changer de machine pour la journée',
+      style:{width:'100%',padding:'6px 8px',fontSize:'12px',fontWeight:'600',
+             background:'var(--bg)',color:'var(--text)',border:'1px solid var(--border)',
+             borderRadius:'6px',cursor:'pointer',fontFamily:'inherit'},
+      onChange: async (e)=>{
+        const newId = parseInt(e.target.value,10) || null;
+        if(!newId || newId===currentId) return;
+        S.wantedMachineId = newId;
+        _fabWriteWantedMachineId(newId);
+        await loadSession({silent:false});
+        const nom = (S.machine && S.machine.nom) || '—';
+        showToast('Machine active : '+nom);
+      },
+    },
+      ...list.map(m=>{
+        const cLabel = _CRENEAU_LABELS[m.creneau]||m.creneau||'';
+        return h('option',{value:String(m.machine_id)},
+          (m.machine_nom||'?')+(cLabel?' — '+cLabel:'')
+        );
+      })
+    )
+  );
 }
 
 /* ── Sidebar ─────────────────────────────────────────────────── */
@@ -1576,6 +1666,7 @@ function renderSidebar(){
       ),
       h('div',{className:'fab-sidebar-list'}, listContent),
       h('div',{className:'fab-sidebar-bottom'},
+        renderMachineSwitcher(),
         (window.MySifaUserChip
           ? MySifaUserChip.element(
               Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),
@@ -1666,6 +1757,7 @@ function renderSidebar(){
     ),
     h('div',{className:'fab-sidebar-list'},...groups),
     h('div',{className:'fab-sidebar-bottom'},
+      renderMachineSwitcher(),
       (window.MySifaUserChip
         ? MySifaUserChip.element(
             Object.assign({}, S.user||{}, { nom:userName, ucSubtext:machineName }),
