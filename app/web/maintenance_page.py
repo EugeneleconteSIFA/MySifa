@@ -1459,12 +1459,9 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
             <div class="page-subtitle" id="op-tasks-count">—</div>
           </div>
           <div class="op-actions">
-            <button type="button" class="btn op-btn-accent" onclick="opOpenNewTaskModal()">
-              <span class="btn-ico">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              </span>
-              Nouvelle tâche
-            </button>
+            <!-- v2 : bouton "Nouvelle tâche" retiré. La création de tâches se
+                 fait via "Enregistrer une opération" ou "Intervention libre"
+                 dans la sidebar. Les créneaux planifiés sont gérés par l'admin. -->
           </div>
         </div>
         <div class="op-tabs" role="tablist">
@@ -6928,23 +6925,13 @@ async function opOpenEditModal(eventId){
     else alert('Vous ne pouvez modifier que vos propres interventions.');
     return;
   }
-  // Créneau planifie (créé via "Nouvelle tâche") → ouvre le modal admin riche.
-  // On synchronise PLANNING_STATE d'abord (openCaseModal y cherche l'event
-  // au format client via _apiEventToClient) et on passe explicitement les
-  // ops existantes pour qu'elles apparaissent dans le picker.
+  // v2 : l'opérateur ne peut plus gérer les créneaux planifie (feature
+  // "Nouvelle tâche" retirée). Les vieux planifie opérateurs ont été
+  // nettoyés par la migration 184. Si un tel event apparaît encore
+  // (edge case), on bloque avec un message clair.
   if(ev.source === 'planifie'){
-    try{ await refreshPlanning(); }catch(e){}
-    const planEv = (typeof PLANNING_STATE !== 'undefined' && PLANNING_STATE && Array.isArray(PLANNING_STATE.list))
-      ? PLANNING_STATE.list.find(e => String(e.id) === String(ev.id))
-      : null;
-    await openCaseModal({
-      editId: ev.id,
-      iso: ev.date_prevue,
-      start: (planEv && planEv.start) || ev.heure_debut || '',
-      end:   (planEv && planEv.end)   || ev.heure_fin   || '',
-      operations: (planEv && planEv.operations) || [],
-      defaultHour: 8,
-    });
+    if(typeof showToast === 'function') showToast('Les créneaux planifiés sont gérés par l\'administrateur.', 'danger');
+    else alert('Les créneaux planifiés sont gérés par l\'administrateur.');
     return;
   }
   // Créneau non_planifie → modal simple (édition d'une saisie rapide).
@@ -7457,18 +7444,13 @@ async function libreDocsUpload(code, files){
 }
 
 async function opOpenNewTaskModal(){
-  // Ouvre le modal admin "planning-case-modal" côté opérateur pour créer
-  // une tâche riche (N ops, N machines, N opérateurs, plage horaire).
-  // Le backend forcera l'inclusion de self dans les opérateurs (garde-fou).
-  const today = _fmtDateISO(new Date());
-  const now = new Date();
-  const defaultHour = Math.max(6, Math.min(18, now.getHours()));
-  // Pré-remplit self dans _CASE_OPERATORS pour cohérence UX (le backend le
-  // rajoutera de toute façon, mais c'est plus clair côté formulaire).
-  if(S && S.me){
-    _CASE_OPERATORS = [{ id: S.me.id, nom: S.me.name || S.me.nom || 'Moi' }];
+  // v2 : fonctionnalité "Nouvelle tâche" retirée côté opérateur. La création
+  // de tâches passe par "Enregistrer une opération" ou "Intervention libre".
+  // Fonction gardée en no-op au cas où un onclick=... la référence encore.
+  console.warn('[opOpenNewTaskModal] Fonctionnalité retirée. Utilise Enregistrer une opération ou Intervention libre.');
+  if(typeof showToast === 'function'){
+    showToast('La création de tâches se fait via "Enregistrer une opération" ou "Intervention libre".', 'info');
   }
-  await openCaseModal({ iso: today, defaultHour });
 }
 
 // ── Modal single-op : marquer UNE op d'un créneau comme terminée ─────

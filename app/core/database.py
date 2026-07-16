@@ -6725,6 +6725,19 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 183, "expe_departs_source_devis_link")
 
+    # Migration 184 — MyMaintenance : nettoyage one-shot des créneaux planifie
+    # créés historiquement par des opérateurs via l'ancien flow "Nouvelle tâche"
+    # (feature retirée). Désormais seul l'admin peut créer des créneaux planifie.
+    # CASCADE via FK : supprime aussi les ops rattachées et les operators.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=184 LIMIT 1").fetchone():
+        conn.execute(
+            """DELETE FROM maintenance_events
+               WHERE source = 'planifie'
+               AND created_by IN (SELECT id FROM users WHERE role = 'fabrication')"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 184, "cleanup_operator_planifie_creneaux")
+
 
 def create_default_admin():
     import bcrypt
