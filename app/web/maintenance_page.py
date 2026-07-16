@@ -800,6 +800,12 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-mini-btn{width:24px;height:24px;padding:0;border-radius:6px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s,background .15s}
 .op-op-card-mini-btn:hover{color:var(--text);border-color:var(--accent);background:var(--bg)}
 .op-op-card-mini-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+/* Modal Modifier créneau : lignes ops déjà effectuées (read-only) */
+.case-ops-row-done{background:linear-gradient(90deg,rgba(52,211,153,.06) 0%,transparent 100%);border-left:3px solid var(--success,#34d399);padding:10px 12px;border-radius:8px;margin-bottom:8px}
+.case-ops-row-done .case-ops-row-done-label{display:flex;align-items:center;font-size:13px;font-weight:600;color:var(--text2);flex:1}
+.case-ops-row-done-badge{margin-left:10px;background:rgba(52,211,153,.16);color:var(--success,#34d399);border-radius:5px;padding:2px 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+body.light .case-ops-row-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,transparent 100%)}
+body.light .case-ops-row-done-badge{background:rgba(5,150,105,.16);color:#059669}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -2864,6 +2870,8 @@ function _openCaseModalInner(opts){
     opNiveau: o.opNiveau || null,
     opFreq:   o.opFreq   || '',
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
+    // v2 : propage le statut pour l'affichage read-only des ops termine
+    _statut: o.statut || o._statut || 'a_faire',
   }));
   const m = document.getElementById('planning-case-modal');
   if(!m) return;
@@ -2963,6 +2971,30 @@ function renderCaseOpsList(){
     return;
   }
   list.innerHTML = _CASE_OPS.map((op, idx) => {
+    const isDone = op._statut === 'termine';
+    // Ops termine : ligne read-only avec badge "Effectué". Le picker devient
+    // un libellé statique, les chips machines sont figées, le bouton delete disparaît.
+    if(isDone){
+      const opName = op.opName || (OPS_TYPES_STATE.list.find(t => t.id === op.opTypeId) || {}).nom || op.opTypeId || '—';
+      const nivBadge = op.opNiveau ? ' (N' + op.opNiveau + ')' : '';
+      const chipsDone = (op.machines || []).map(m =>
+        '<span class="case-mach-chip active" style="cursor:default;opacity:.85">' + escHtml(m) + '</span>'
+      ).join('');
+      return '<div class="case-ops-row case-ops-row-done" data-idx="' + idx + '">' +
+        '<div class="case-ops-row-top">' +
+          '<div class="case-ops-row-done-label">' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;color:var(--success,#34d399)"><polyline points="20 6 9 17 4 12"/></svg>' +
+            escHtml(opName) + nivBadge +
+            '<span class="case-ops-row-done-badge">Effectué</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="case-ops-machines">' +
+          '<span class="case-ops-machines-label">Machine(s)</span>' +
+          chipsDone +
+        '</div>' +
+      '</div>';
+    }
+    // Ops non-termine : ligne éditable normale.
     const options = '<option value="">Sélectionner une opération…</option>' +
       OPS_TYPES_STATE.list.map(t =>
         '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
@@ -3001,6 +3033,9 @@ async function submitCaseModal(e){
   const sm = _hmToMins(start), em = _hmToMins(end);
   if(sm == null || em == null){ showToast('Format heure invalide (HH:MM).', 'danger'); return; }
   if(em <= sm){ showToast('L\'heure de fin doit être après l\'heure de début.', 'danger'); return; }
+  // v2 : on inclut TOUTES les ops (y compris termine) dans wantedOps pour
+  //      que _syncEventOpsAndOperators ne les supprime pas — elles doivent
+  //      persister à l'identique.
   const wantedOps = _CASE_OPS.filter(o => o.opTypeId).map(o => ({
     code: o.opTypeId,
     machines: Array.isArray(o.machines) ? o.machines.slice() : [],
@@ -6866,10 +6901,22 @@ async function opOpenEditModal(eventId){
     return;
   }
   // Créneau planifie (créé via "Nouvelle tâche") → ouvre le modal admin riche.
-  // On synchronise PLANNING_STATE d'abord (openCaseModal y cherche l'event).
+  // On synchronise PLANNING_STATE d'abord (openCaseModal y cherche l'event
+  // au format client via _apiEventToClient) et on passe explicitement les
+  // ops existantes pour qu'elles apparaissent dans le picker.
   if(ev.source === 'planifie'){
     try{ await refreshPlanning(); }catch(e){}
-    await openCaseModal({ editId: ev.id, iso: ev.date_prevue, defaultHour: 8 });
+    const planEv = (typeof PLANNING_STATE !== 'undefined' && PLANNING_STATE && Array.isArray(PLANNING_STATE.list))
+      ? PLANNING_STATE.list.find(e => String(e.id) === String(ev.id))
+      : null;
+    await openCaseModal({
+      editId: ev.id,
+      iso: ev.date_prevue,
+      start: (planEv && planEv.start) || ev.heure_debut || '',
+      end:   (planEv && planEv.end)   || ev.heure_fin   || '',
+      operations: (planEv && planEv.operations) || [],
+      defaultHour: 8,
+    });
     return;
   }
   // Créneau non_planifie → modal simple (édition d'une saisie rapide).
