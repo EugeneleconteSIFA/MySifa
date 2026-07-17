@@ -7060,6 +7060,19 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 189, "remove_auto_control_alerts_system")
 
+    # Migration 190 — Retire le concept de périodicité (v2.2.17).
+    # Tous les codes maintenance sont désormais considérés comme périodiques
+    # côté modèle métier. La colonne `periodique` reste en DB pour compat
+    # (aucun DROP COLUMN, réversible), mais elle est forcée à 1 partout et
+    # cachée de l'UI (formulaire + tableau).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=190 LIMIT 1").fetchone():
+        conn.execute(
+            "UPDATE maintenance_codes SET periodique=1, updated_at=? WHERE periodique=0",
+            (datetime.now().isoformat(),)
+        )
+        conn.commit()
+        _record_schema_migration(conn, 190, "force_all_maintenance_codes_periodic")
+
 
 def create_default_admin():
     import bcrypt

@@ -1477,14 +1477,10 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <option value="2">N2</option>
               <option value="3">N3</option>
             </select>
-            <select id="maint-categorie" onchange="_maintTogglePeriodiqueUI()">
+            <select id="maint-categorie">
               <option value="controles">Contrôles</option>
               <option value="entretien">Nettoyage</option>
               <option value="remplacements">Interventions</option>
-            </select>
-            <select id="maint-periodique" onchange="_maintTogglePeriodiqueUI()">
-              <option value="oui">Périodique : OUI</option>
-              <option value="non">Périodique : NON</option>
             </select>
             <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
             <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
@@ -1512,7 +1508,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
         <div class="op-toolbar">
-          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie, périodique…)" oninput="renderMaintList()">
+          <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie…)" oninput="renderMaintList()">
         </div>
         <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
@@ -4849,7 +4845,7 @@ function renderMaintList() {
         String(o.label || '').toLowerCase().includes(q) ||
         ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
         _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
-        ('periodique ' + periodLbl).includes(q) ||
+        // v2.2.17 — periodique retiré du filtre
         String(o.intervalle || '').toLowerCase().includes(q) ||
         String(o.metrage_ref || '').toLowerCase().includes(q);
     });
@@ -4882,47 +4878,21 @@ function renderMaintList() {
   let body = '';
   ['controles', 'entretien', 'remplacements'].forEach(cat => {
     if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="10">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
     byCat[cat].forEach(o => {
       const c = esc(String(o.code));
       const niv = parseInt(o.niveau, 10) || 1;
       const catCls = cat;
-      const periodOn = !!o.periodique;
-      const periodCls = periodOn ? 'op-req yes' : 'op-req no';
-      const periodLbl = periodOn ? 'OUI' : 'NON';
-      const intervalleDisplay = periodOn
-        ? (o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
-        : '<span style="color:var(--muted)">—</span>';
-      // Réf. métrage : pertinente pour toute opération périodique
-      const metrageDisplay = periodOn
-        ? (o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>')
-        : '<span style="color:var(--muted)">—</span>';
-      // Dernière intervention : uniquement pour les contrôles non périodiques,
-      // alimentée par le last_ack_at de l'alerte auto-liée.
-      let lastInterventionDisplay;
-      if (cat === 'controles' && !periodOn) {
-        const ack = _lastAckByCode[String(o.code)];
-        if (ack) {
-          lastInterventionDisplay = esc(_fmtAlertDate(ack));
-        } else {
-          const linked = (Array.isArray(_alertsData) ? _alertsData.find(x => x.linked_maint_code === String(o.code)) : null);
-          const notConfigured = !linked || !_alertIsConfigured(linked);
-          lastInterventionDisplay = notConfigured
-            ? '<span style="color:var(--warn);font-style:italic" title="L\'alerte associée n\'est pas encore configurée">À configurer</span>'
-            : '<span style="color:var(--muted);font-style:italic">Jamais</span>';
-        }
-      } else {
-        lastInterventionDisplay = '<span style="color:var(--muted)">—</span>';
-      }
+      // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
+      const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
+      const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
       body += '<tr>'
         + '<td class="op-code-cell">' + c + '</td>'
         + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
         + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
         + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
-        + '<td><span class="' + periodCls + '">' + periodLbl + '</span></td>'
         + '<td>' + intervalleDisplay + '</td>'
         + '<td>' + metrageDisplay + '</td>'
-        + '<td>' + lastInterventionDisplay + '</td>'
         + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
         +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
         +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
@@ -4934,7 +4904,7 @@ function renderMaintList() {
     });
   });
   el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Périodique</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Dernière intervention</th><th>Documents</th><th>Actions</th>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
   el.querySelectorAll('[data-maint-edit]').forEach(btn => {
     btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
@@ -5044,7 +5014,7 @@ function openMaintForm(code) {
   if (!wrap) return;
   wrap.classList.remove('hidden');
   const catSel = document.getElementById('maint-categorie');
-  const perSel = document.getElementById('maint-periodique');
+  // v2.2.17 — perSel retiré (périodicité cachée).
   const intInp = document.getElementById('maint-intervalle');
   const mInp   = document.getElementById('maint-metrage-ref');
   if (code) {
@@ -5064,7 +5034,6 @@ function openMaintForm(code) {
       else c = 'controles';
       catSel.value = c;
     }
-    if (perSel) perSel.value = o.periodique ? 'oui' : 'non';
     if (intInp) intInp.value = o.intervalle || '';
     if (mInp)   mInp.value   = o.metrage_ref || '';
   } else {
@@ -5074,11 +5043,9 @@ function openMaintForm(code) {
     document.getElementById('maint-label').value = '';
     document.getElementById('maint-niveau').value = '1';
     if (catSel) catSel.value = 'controles';
-    if (perSel) perSel.value = 'oui';
     if (intInp) intInp.value = '';
     if (mInp)   mInp.value   = '';
   }
-  _maintTogglePeriodiqueUI();
   // Section Documents : visible dans les 2 modes.
   // En creation : la liste est masquee (aucun doc encore), l'upload est
   // possible des que le code est saisi. En edition : la liste est chargee
@@ -5159,10 +5126,10 @@ async function _maintTriggerDocPicker() {
     const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
       ? rawCat
       : (rawCat === 'interventions' ? 'entretien' : 'controles');
-    const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
-    const periodique = (rawPer === 'oui');
-    const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
-    const metrage_ref = periodique ? (document.getElementById('maint-metrage-ref')?.value || '').trim() : '';
+    // v2.2.17 — periodique forcé à true (concept retiré côté UI).
+    const periodique = true;
+    const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
+    const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
     const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
     try {
       await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
@@ -5237,7 +5204,7 @@ function _maintResetDocPicker() {
 //     remplir l'intervalle de temps et/ou la référence métrage).
 //   - Périodique = NON : les deux champs sont vidés et grisés.
 function _maintTogglePeriodiqueUI(){
-  const perSel = document.getElementById('maint-periodique');
+  // v2.2.17 — perSel retiré (périodicité cachée).
   const intInp = document.getElementById('maint-intervalle');
   const mInp   = document.getElementById('maint-metrage-ref');
   if (!perSel || !intInp || !mInp) return;
@@ -5268,10 +5235,10 @@ async function saveMaintForm() {
   const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
     ? rawCat
     : (rawCat === 'interventions' ? 'entretien' : 'controles');
-  const rawPer = (document.getElementById('maint-periodique')?.value || '').trim();
-  const periodique = (rawPer === 'oui');
-  const intervalle  = periodique ? (document.getElementById('maint-intervalle')?.value  || '').trim() : '';
-  const metrage_ref = periodique ? (document.getElementById('maint-metrage-ref')?.value || '').trim() : '';
+  // v2.2.17 — periodique forcé à true (concept retiré côté UI).
+  const periodique = true;
+  const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
+  const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
