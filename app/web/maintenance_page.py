@@ -4330,11 +4330,46 @@ function openOpsHistoryDetail(id){
   document.body.appendChild(overlay);
 }
 
-function deleteOp(id){
-  if(!confirm('Supprimer cette opération ?')) return;
+async function deleteOp(id){
+  const item = (OPS_STATE.list || []).find(o => o.id === id);
+  if(!item){ if(typeof showToast === 'function') showToast('Ligne introuvable.', 'danger'); return; }
+  if(!confirm('Supprimer cette opération ? Cette action est définitive.')) return;
+
+  // v2.2.10 : suppression persistée en DB (avant : localStorage-only → l'op
+  // réapparaissait au prochain rebuild du cache depuis la DB).
+  if(item._source === 'db' && item._event_id && item._op_id){
+    try{
+      // Non_planifie = 1 op = 1 event → DELETE l'event entier (CASCADE nettoie l'op).
+      // Planifie = créneau partagé → DELETE juste cette op (les autres restent).
+      const url = (item._event_source === 'non_planifie')
+        ? '/api/maintenance/events/' + encodeURIComponent(item._event_id)
+        : '/api/maintenance/events/' + encodeURIComponent(item._event_id) + '/ops/' + encodeURIComponent(item._op_id);
+      const r = await fetch(url, { method:'DELETE', credentials:'include' });
+      if(!r.ok){
+        if(r.status === 502 || r.status === 503){
+          if(typeof showToast === 'function') showToast('Serveur temporairement indisponible, réessaye dans un instant.', 'danger');
+          return;
+        }
+        const err = await r.json().catch(()=>({}));
+        if(typeof showToast === 'function') showToast('Erreur suppression : ' + (err.detail || r.status), 'danger');
+        return;
+      }
+      // Purge du cache DB local pour éviter le rebuild fantôme
+      if(Array.isArray(_OPS_HISTORY_DB_CACHE)){
+        _OPS_HISTORY_DB_CACHE = _OPS_HISTORY_DB_CACHE.filter(x => x.id !== id);
+      }
+    }catch(e){
+      if(typeof showToast === 'function') showToast('Erreur réseau : ' + (e.message || e), 'danger');
+      return;
+    }
+  }
+
+  // Retire aussi de la liste affichée (immediate visual feedback)
   OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== id);
-  saveOps();
   renderOps();
+  if(typeof showToast === 'function') showToast('Opération supprimée.', 'success');
+  // Refresh backend en arrière-plan pour recharger l'état canonique
+  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
 function sortOps(field){
   if(OPS_STATE.sortBy === field){
