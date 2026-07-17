@@ -225,7 +225,38 @@
   function set(u){
     Object.assign(S, u);
     render();
+    if(u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
+
+  var _PROD_SUB_TABS=['kpis','saisies','erreurs','rapport'];
+  var _OF_SUB_TABS=['of','fiche','pending','sansof'];
+  function _readProdHash(){
+    try{var h=(location.hash||'').replace(/^#/,'').trim();
+      if(!h)return null;
+      var r={};
+      if(_PROD_SUB_TABS.indexOf(h)!==-1)r.subPage=h;
+      else if(_OF_SUB_TABS.indexOf(h)!==-1)r.ofSubTab=h;
+      return (r.subPage||r.ofSubTab)?r:null;
+    }catch(e){return null;}
+  }
+  function _syncProdHash(){
+    try{
+      var h='';
+      if(S.page==='production'&&S.subPage&&S.subPage!=='kpis')h=S.subPage;
+      else if(S.page==='of'&&S.ofSubTab&&S.ofSubTab!=='of')h=S.ofSubTab;
+      var target=h?'#'+h:'';
+      if(target){try{history.replaceState(null,'',target);}catch(e){}}
+      else{try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}}
+    }catch(e){}
+  }
+  window.addEventListener('hashchange',function(){
+    try{var hv=_readProdHash();
+      if(hv){
+        if(hv.subPage&&S.page==='production'){S.subPage=hv.subPage;render();}
+        if(hv.ofSubTab&&S.page==='of'){S.ofSubTab=hv.ofSubTab;render();}
+      }
+    }catch(e){}
+  });
   function toast(m, t = 'success'){
     set({toast: {message: m, type: t}});
     setTimeout(() => set({toast: null}), 3500);
@@ -5865,6 +5896,7 @@ function renderProdPage(){
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
         S.subPage=t.key;
+        _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
@@ -6840,6 +6872,7 @@ function renderProdKpis(){
         const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
+      try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
       // Charger les données initiales pour la sous-page courante (étape 2g).
       try{ startAlertsBadgePolling(); }catch(e){}
       try{

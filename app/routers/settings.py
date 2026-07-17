@@ -553,13 +553,33 @@ def get_fsc_registre(
 def list_fournisseurs(request: Request):
     require_superadmin(request)
     from database import get_db
+    import json
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, licence, certificat, has_fsc, traca_photo_url,
-                      traca_explication, traca_exemple_code, groupe, branche
-               FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
+            """SELECT ff.id, ff.nom, ff.licence, ff.certificat, ff.has_fsc,
+                      ff.traca_photo_url, ff.traca_explication, ff.traca_exemple_code,
+                      ff.groupe, ff.branche,
+                      ff.adresse, ff.code_postal, ff.ville, ff.pays,
+                      ff.langue_default, ff.tags, ff.notes, ff.actif, ff.updated_at,
+                      (SELECT COUNT(*) FROM fournisseur_contacts fc
+                       WHERE fc.fournisseur_id = ff.id AND fc.actif=1) AS nb_contacts
+               FROM fournisseurs_fsc ff
+               ORDER BY ff.nom COLLATE NOCASE ASC"""
         ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        raw_tags = d.get("tags")
+        if raw_tags:
+            try:
+                parsed = json.loads(raw_tags)
+                d["tags"] = parsed if isinstance(parsed, list) else []
+            except (json.JSONDecodeError, TypeError):
+                d["tags"] = []
+        else:
+            d["tags"] = []
+        out.append(d)
+    return out
 
 
 @router.get("/api/fournisseurs/groupes")
@@ -577,10 +597,37 @@ def list_fournisseurs_groupes(request: Request):
     return [{"groupe": r["groupe"], "n": r["n"]} for r in rows]
 
 
+def _parse_fournisseur_tags(raw):
+    """Parse tags depuis body : accepte list JSON ou string séparée par virgules."""
+    import json as _json
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(t).strip() for t in raw if str(t).strip()]
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return []
+        try:
+            parsed = _json.loads(s)
+            if isinstance(parsed, list):
+                return [str(t).strip() for t in parsed if str(t).strip()]
+        except (_json.JSONDecodeError, ValueError):
+            pass
+        return [t.strip() for t in s.split(",") if t.strip()]
+    return []
+
+
+def _normalize_langue_fournisseur(raw):
+    v = (str(raw or "fr")).strip().lower()
+    return v if v in ("fr", "en") else "fr"
+
+
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
     user = require_superadmin(request)
     from database import get_db
+    import json
     body = await request.json()
     nom = (body.get("nom") or "").strip()
     licence = (body.get("licence") or "").strip() or None
@@ -591,20 +638,39 @@ async def create_fournisseur(request: Request):
         certificat = None
     groupe = (body.get("groupe") or "").strip() or None
     branche = (body.get("branche") or "").strip() or None
+    adresse = (body.get("adresse") or "").strip() or None
+    code_postal = (body.get("code_postal") or "").strip() or None
+    ville = (body.get("ville") or "").strip() or None
+    pays = (body.get("pays") or "FR").strip() or "FR"
+    langue_default = _normalize_langue_fournisseur(body.get("langue_default"))
+    tags_list = _parse_fournisseur_tags(body.get("tags"))
+    tags_json = json.dumps(tags_list, ensure_ascii=False) if tags_list else None
+    notes = (body.get("notes") or "").strip() or None
+    actif = 1 if bool(body.get("actif", True)) else 0
     if not nom:
         raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
+    now = datetime.now().isoformat()
     with get_db() as conn:
         try:
             cur = conn.execute(
-                "INSERT INTO fournisseurs_fsc (nom, licence, certificat, has_fsc, groupe, branche) VALUES (?,?,?,?,?,?)",
-                (nom, licence, certificat, has_fsc, groupe, branche),
+                """INSERT INTO fournisseurs_fsc
+                   (nom, licence, certificat, has_fsc, groupe, branche,
+                    adresse, code_postal, ville, pays, langue_default, tags,
+                    notes, actif, updated_at)
+                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)""",
+                (nom, licence, certificat, has_fsc, groupe, branche,
+                 adresse, code_postal, ville, pays, langue_default, tags_json,
+                 notes, actif, now),
             )
             conn.commit()
             log_action(
                 user=user,
                 action="CREATE",
                 module="settings",
-                objet=f"Fournisseur FSC {nom}",
+                objet=f"Fournisseur {nom}",
+                detail={"has_fsc": bool(has_fsc), "langue_default": langue_default,
+                        "tags": tags_list, "ville": ville, "pays": pays,
+                        "actif": bool(actif)},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True, "id": cur.lastrowid}
@@ -616,20 +682,28 @@ async def create_fournisseur(request: Request):
 async def update_fournisseur(fournisseur_id: int, request: Request):
     user = require_superadmin(request)
     from database import get_db
+    import json
     body = await request.json()
     with get_db() as conn:
         ex = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
-        nom = (body.get("nom") or ex["nom"]).strip()
-        licence = body.get("licence") if "licence" in body else ex["licence"]
-        certificat = body.get("certificat") if "certificat" in body else ex["certificat"]
+        ex_cols = ex.keys()
+
+        def _pick(field, default=None):
+            if field in body:
+                return body.get(field)
+            return ex[field] if field in ex_cols else default
+
+        nom = (body.get("nom") or ex["nom"] or "").strip()
+        licence = _pick("licence")
+        certificat = _pick("certificat")
         if isinstance(licence, str): licence = licence.strip() or None
         if isinstance(certificat, str): certificat = certificat.strip() or None
         if not nom:
             raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
         try:
-            has_fsc_prev = 1 if (ex["has_fsc"] if "has_fsc" in ex.keys() else 1) else 0
+            has_fsc_prev = 1 if (ex["has_fsc"] if "has_fsc" in ex_cols else 1) else 0
         except Exception:
             has_fsc_prev = 1
         has_fsc = 1 if bool(body.get("has_fsc", has_fsc_prev)) else 0
@@ -638,23 +712,72 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             certificat = None
         traca_explication = (body.get("traca_explication") or "").strip() or None
         traca_exemple_code = (body.get("traca_exemple_code") or "").strip() or None
-        groupe = body.get("groupe") if "groupe" in body else (ex["groupe"] if "groupe" in ex.keys() else None)
-        branche = body.get("branche") if "branche" in body else (ex["branche"] if "branche" in ex.keys() else None)
+        groupe = _pick("groupe")
+        branche = _pick("branche")
         if isinstance(groupe, str): groupe = groupe.strip() or None
         if isinstance(branche, str): branche = branche.strip() or None
+
+        adresse = _pick("adresse")
+        if isinstance(adresse, str): adresse = adresse.strip() or None
+        code_postal = _pick("code_postal")
+        if isinstance(code_postal, str): code_postal = code_postal.strip() or None
+        ville = _pick("ville")
+        if isinstance(ville, str): ville = ville.strip() or None
+        pays = _pick("pays", "FR")
+        if isinstance(pays, str): pays = pays.strip() or "FR"
+        if "langue_default" in body:
+            langue_default = _normalize_langue_fournisseur(body.get("langue_default"))
+        else:
+            langue_default = (ex["langue_default"] if "langue_default" in ex_cols else "fr") or "fr"
+        if "tags" in body:
+            tags_list = _parse_fournisseur_tags(body.get("tags"))
+            tags_json = json.dumps(tags_list, ensure_ascii=False) if tags_list else None
+        else:
+            tags_json = ex["tags"] if "tags" in ex_cols else None
+            try:
+                tags_list = json.loads(tags_json) if tags_json else []
+            except (json.JSONDecodeError, TypeError):
+                tags_list = []
+        notes = _pick("notes")
+        if isinstance(notes, str): notes = notes.strip() or None
+        actif_prev = int(ex["actif"] if "actif" in ex_cols and ex["actif"] is not None else 1)
+        actif = 1 if bool(body.get("actif", actif_prev)) else 0
+
+        now = datetime.now().isoformat()
+
+        changed = {}
+        _pairs = [
+            ("nom", ex["nom"], nom),
+            ("has_fsc", has_fsc_prev, has_fsc),
+            ("langue_default", (ex["langue_default"] if "langue_default" in ex_cols else None), langue_default),
+            ("ville", (ex["ville"] if "ville" in ex_cols else None), ville),
+            ("actif", actif_prev, actif),
+        ]
+        for name, before, after in _pairs:
+            if before != after:
+                changed[name] = {"before": before, "after": after}
+
         try:
             conn.execute(
-                """UPDATE fournisseurs_fsc SET nom=?, licence=?, certificat=?, has_fsc=?,
-                       traca_explication=?, traca_exemple_code=?, groupe=?, branche=?
+                """UPDATE fournisseurs_fsc SET
+                       nom=?, licence=?, certificat=?, has_fsc=?,
+                       traca_explication=?, traca_exemple_code=?, groupe=?, branche=?,
+                       adresse=?, code_postal=?, ville=?, pays=?,
+                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?
                    WHERE id=?""",
-                (nom, licence, certificat, has_fsc, traca_explication, traca_exemple_code, groupe, branche, fournisseur_id),
+                (nom, licence, certificat, has_fsc,
+                 traca_explication, traca_exemple_code, groupe, branche,
+                 adresse, code_postal, ville, pays,
+                 langue_default, tags_json, notes, actif, now,
+                 fournisseur_id),
             )
             conn.commit()
             log_action(
                 user=user,
                 action="UPDATE",
                 module="settings",
-                objet=f"Fournisseur FSC {nom}",
+                objet=f"Fournisseur {nom}",
+                detail={"changed": changed, "tags": tags_list},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True}
@@ -803,15 +926,331 @@ def fournisseur_receptions(fournisseur_id: int, request: Request):
             (four["nom"],),
         ).fetchall()
     result = []
-    for d in rows:
+    for row in rows:
+        d = dict(row)
         raw = d.pop("codes", None)
-        d = dict(d)
         d["items"] = raw.split("||") if raw else []
         result.append(d)
     return {"fournisseur": four["nom"], "receptions": result}
 
 
-# ─── Annonces de mise à jour ──────────────────────────────────────────────────
+# ─── Fournisseurs : actif toggle + export CSV ─────────────────────
+
+@router.patch("/api/fournisseurs/{fournisseur_id}/actif")
+async def toggle_fournisseur_actif(fournisseur_id: int, request: Request):
+    """Bascule / force le flag actif d'un fournisseur (soft archive)."""
+    user = require_superadmin(request)
+    from database import get_db
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom, actif FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        cur_actif = int(ex["actif"] if ex["actif"] is not None else 1)
+        if "actif" in body:
+            new_actif = 1 if bool(body.get("actif")) else 0
+        else:
+            new_actif = 0 if cur_actif else 1
+        if new_actif == cur_actif:
+            return {"success": True, "actif": bool(new_actif), "unchanged": True}
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET actif=?, updated_at=? WHERE id=?",
+            (new_actif, datetime.now().isoformat(), fournisseur_id),
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="settings",
+        objet=f"Fournisseur {ex['nom']}",
+        detail={"changed": {"actif": {"before": bool(cur_actif), "after": bool(new_actif)}}},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "actif": bool(new_actif)}
+
+
+@router.get("/api/fournisseurs/export.csv")
+def export_fournisseurs_csv(request: Request):
+    """Export CSV de la liste fournisseurs (colonnes principales + tags)."""
+    from fastapi.responses import Response
+    import csv, io, json as _json
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT ff.id, ff.nom, ff.groupe, ff.branche, ff.has_fsc, ff.licence, ff.certificat,
+                      ff.adresse, ff.code_postal, ff.ville, ff.pays,
+                      ff.langue_default, ff.tags, ff.actif, ff.notes,
+                      (SELECT COUNT(*) FROM fournisseur_contacts fc
+                       WHERE fc.fournisseur_id=ff.id AND fc.actif=1) AS nb_contacts
+               FROM fournisseurs_fsc ff
+               ORDER BY ff.nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    w.writerow(["id", "nom", "groupe", "branche", "fsc", "licence", "certificat",
+                "adresse", "code_postal", "ville", "pays",
+                "langue", "tags", "actif", "notes", "nb_contacts"])
+    for r in rows:
+        tags_raw = r["tags"] or ""
+        try:
+            tags_parsed = _json.loads(tags_raw) if tags_raw else []
+            tags_str = ", ".join(str(t) for t in tags_parsed) if isinstance(tags_parsed, list) else ""
+        except (_json.JSONDecodeError, TypeError):
+            tags_str = ""
+        w.writerow([
+            r["id"], r["nom"] or "", r["groupe"] or "", r["branche"] or "",
+            "oui" if r["has_fsc"] else "non",
+            r["licence"] or "", r["certificat"] or "",
+            r["adresse"] or "", r["code_postal"] or "", r["ville"] or "", r["pays"] or "",
+            (r["langue_default"] or "fr").upper(),
+            tags_str, "oui" if (r["actif"] is None or r["actif"]) else "non",
+            (r["notes"] or "").replace("\n", " "), r["nb_contacts"],
+        ])
+    log_action(
+        user=require_superadmin(request),
+        action="SEARCH",
+        module="settings",
+        objet=f"Export CSV fournisseurs ({len(rows)} lignes)",
+        ip=request.client.host if request.client else None,
+    )
+    return Response(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="fournisseurs.csv"'},
+    )
+
+
+# ─── Fournisseur_contacts : CRUD contacts ──────────────────────────
+
+def _row_contact_dict(row):
+    import json as _json
+    d = dict(row)
+    for k in ("emails", "tels"):
+        raw = d.get(k)
+        if raw:
+            try:
+                parsed = _json.loads(raw)
+                d[k] = parsed if isinstance(parsed, list) else []
+            except (_json.JSONDecodeError, TypeError):
+                d[k] = []
+        else:
+            d[k] = []
+    d["is_principal"] = bool(d.get("is_principal"))
+    d["actif"] = bool(d.get("actif")) if d.get("actif") is not None else True
+    return d
+
+
+def _parse_contact_list_field(raw):
+    """Emails ou tels : accepte list JSON ou string séparée par virgules/points-virgules."""
+    import json as _json
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(v).strip() for v in raw if str(v).strip()]
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return []
+        try:
+            parsed = _json.loads(s)
+            if isinstance(parsed, list):
+                return [str(v).strip() for v in parsed if str(v).strip()]
+        except (_json.JSONDecodeError, ValueError):
+            pass
+        parts = [p.strip() for p in s.replace(";", ",").split(",")]
+        return [p for p in parts if p]
+    return []
+
+
+def _unset_other_principal(conn, fournisseur_id: int, keep_contact_id: Optional[int]):
+    """Assure qu'au plus un contact est is_principal=1 par fournisseur."""
+    if keep_contact_id is None:
+        conn.execute(
+            "UPDATE fournisseur_contacts SET is_principal=0 WHERE fournisseur_id=?",
+            (fournisseur_id,),
+        )
+    else:
+        conn.execute(
+            "UPDATE fournisseur_contacts SET is_principal=0 "
+            "WHERE fournisseur_id=? AND id<>?",
+            (fournisseur_id, keep_contact_id),
+        )
+
+
+@router.get("/api/fournisseurs/{fournisseur_id}/contacts")
+def list_fournisseur_contacts(fournisseur_id: int, request: Request):
+    require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        rows = conn.execute(
+            """SELECT * FROM fournisseur_contacts
+               WHERE fournisseur_id=?
+               ORDER BY is_principal DESC, actif DESC, nom COLLATE NOCASE ASC""",
+            (fournisseur_id,),
+        ).fetchall()
+    return [_row_contact_dict(r) for r in rows]
+
+
+@router.post("/api/fournisseurs/{fournisseur_id}/contacts")
+async def create_fournisseur_contact(fournisseur_id: int, request: Request):
+    user = require_superadmin(request)
+    from database import get_db
+    import json
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du contact requis")
+    fonction = (body.get("fonction") or "").strip() or None
+    emails_list = _parse_contact_list_field(body.get("emails"))
+    tels_list = _parse_contact_list_field(body.get("tels"))
+    emails_json = json.dumps(emails_list, ensure_ascii=False) if emails_list else None
+    tels_json = json.dumps(tels_list, ensure_ascii=False) if tels_list else None
+    langue = _normalize_langue_fournisseur(body.get("langue"))
+    is_principal = 1 if bool(body.get("is_principal")) else 0
+    actif = 1 if bool(body.get("actif", True)) else 0
+    notes = (body.get("notes") or "").strip() or None
+    now = datetime.now().isoformat()
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        cur = conn.execute(
+            """INSERT INTO fournisseur_contacts
+               (fournisseur_id, nom, fonction, emails, tels, langue,
+                is_principal, actif, notes, created_at, updated_at)
+               VALUES (?,?,?,?,?,?, ?,?,?,?,?)""",
+            (fournisseur_id, nom, fonction, emails_json, tels_json, langue,
+             is_principal, actif, notes, now, now),
+        )
+        new_id = cur.lastrowid
+        if is_principal:
+            _unset_other_principal(conn, fournisseur_id, new_id)
+        conn.commit()
+        row = conn.execute("SELECT * FROM fournisseur_contacts WHERE id=?", (new_id,)).fetchone()
+    log_action(
+        user=user,
+        action="CREATE",
+        module="settings",
+        objet=f"Contact fournisseur {ex['nom']} · {nom}",
+        detail={"emails": emails_list, "tels": tels_list, "langue": langue,
+                "is_principal": bool(is_principal)},
+        ip=request.client.host if request.client else None,
+    )
+    return _row_contact_dict(row)
+
+
+@router.put("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
+async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
+    user = require_superadmin(request)
+    from database import get_db
+    import json
+    body = await request.json()
+    with get_db() as conn:
+        ex_four = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex_four:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        ex = conn.execute(
+            "SELECT * FROM fournisseur_contacts WHERE id=? AND fournisseur_id=?",
+            (contact_id, fournisseur_id),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Contact non trouvé")
+
+        nom = (body.get("nom") or ex["nom"] or "").strip()
+        if not nom:
+            raise HTTPException(status_code=400, detail="Nom du contact requis")
+        fonction = body.get("fonction") if "fonction" in body else ex["fonction"]
+        if isinstance(fonction, str): fonction = fonction.strip() or None
+
+        if "emails" in body:
+            emails_list = _parse_contact_list_field(body.get("emails"))
+            emails_json = json.dumps(emails_list, ensure_ascii=False) if emails_list else None
+        else:
+            emails_json = ex["emails"]
+            try:
+                emails_list = json.loads(emails_json) if emails_json else []
+            except (json.JSONDecodeError, TypeError):
+                emails_list = []
+
+        if "tels" in body:
+            tels_list = _parse_contact_list_field(body.get("tels"))
+            tels_json = json.dumps(tels_list, ensure_ascii=False) if tels_list else None
+        else:
+            tels_json = ex["tels"]
+            try:
+                tels_list = json.loads(tels_json) if tels_json else []
+            except (json.JSONDecodeError, TypeError):
+                tels_list = []
+
+        if "langue" in body:
+            langue = _normalize_langue_fournisseur(body.get("langue"))
+        else:
+            langue = ex["langue"] or "fr"
+        is_principal_prev = int(ex["is_principal"] or 0)
+        is_principal = 1 if bool(body.get("is_principal", is_principal_prev)) else 0
+        actif_prev = int(ex["actif"] if ex["actif"] is not None else 1)
+        actif = 1 if bool(body.get("actif", actif_prev)) else 0
+        notes = body.get("notes") if "notes" in body else ex["notes"]
+        if isinstance(notes, str): notes = notes.strip() or None
+        now = datetime.now().isoformat()
+
+        conn.execute(
+            """UPDATE fournisseur_contacts SET
+                   nom=?, fonction=?, emails=?, tels=?, langue=?,
+                   is_principal=?, actif=?, notes=?, updated_at=?
+               WHERE id=? AND fournisseur_id=?""",
+            (nom, fonction, emails_json, tels_json, langue,
+             is_principal, actif, notes, now,
+             contact_id, fournisseur_id),
+        )
+        if is_principal and not is_principal_prev:
+            _unset_other_principal(conn, fournisseur_id, contact_id)
+        conn.commit()
+        row = conn.execute("SELECT * FROM fournisseur_contacts WHERE id=?", (contact_id,)).fetchone()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="settings",
+        objet=f"Contact fournisseur {ex_four['nom']} · {nom}",
+        detail={"emails": emails_list, "tels": tels_list, "langue": langue,
+                "is_principal": bool(is_principal), "actif": bool(actif)},
+        ip=request.client.host if request.client else None,
+    )
+    return _row_contact_dict(row)
+
+
+@router.delete("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
+def delete_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
+    user = require_superadmin(request)
+    from database import get_db
+    with get_db() as conn:
+        ex_four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
+        if not ex_four:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        ex = conn.execute(
+            "SELECT nom FROM fournisseur_contacts WHERE id=? AND fournisseur_id=?",
+            (contact_id, fournisseur_id),
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Contact non trouvé")
+        conn.execute("DELETE FROM fournisseur_contacts WHERE id=? AND fournisseur_id=?",
+                     (contact_id, fournisseur_id))
+        conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="settings",
+        objet=f"Contact fournisseur {ex_four['nom']} · {ex['nom']}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
+
+
+# ─── Annonces de mise à jour ──────────────────────────────
 
 @router.get("/api/updates/pending")
 def pending_updates(request: Request, scope: str = None):
@@ -1687,11 +2126,11 @@ def _normalize_maint_payload(body: dict) -> dict:
         categorie = "controles"
     if categorie in ("interventions", "suivi"):
         categorie = "entretien"
-    periodique = 1 if body.get("periodique") else 0
-    # Intervalle de temps : texte libre, ignore si non periodique
+    # v2.2.17 — Le concept de "périodique" a été retiré côté UI. Tous les
+    # codes sont considérés comme périodiques (periodique=1 forcé), quelle
+    # que soit la valeur envoyée par le client (compat legacy).
+    periodique = 1
     intervalle = (body.get("intervalle") or "").strip()
-    if not periodique:
-        intervalle = ""
     if len(intervalle) > 80:
         intervalle = intervalle[:80]
     # Référence métrage : texte libre (ex. "5000 m"), surtout utile pour la
@@ -2758,10 +3197,13 @@ import json as _json_alerts
 
 
 def _require_alerts_admin(request: Request) -> dict:
-    """Super administrateur uniquement pour les alertes maintenance."""
+    """v2.2.18 — Élargi aux rôles direction et administration pour permettre
+    la gestion des alertes maintenance depuis MyMaintenance (l'admin métier
+    n'a pas accès à /settings mais peut gérer les alertes depuis sa vue).
+    """
     user = get_current_user(request)
-    if user.get("role") != ROLE_SUPERADMIN:
-        raise HTTPException(status_code=403, detail="Réservé au super administrateur.")
+    if user.get("role") not in (ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION):
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs maintenance.")
     return user
 
 
@@ -2991,9 +3433,12 @@ def maintenance_alert_settings_get(request: Request):
     _require_alerts_admin(request)
     from database import get_db
     with get_db() as conn:
+        # v2.2.23 : ajoute min_gap_minutes au SELECT (bug historique : la valeur
+        # était toujours renvoyée à 5 car la colonne n'était pas sélectionnée).
         r = conn.execute(
             "SELECT placement, size, block_production, stack_mode, "
-            "updated_at, updated_by FROM maintenance_alert_settings WHERE id=1"
+            "min_gap_minutes, updated_at, updated_by "
+            "FROM maintenance_alert_settings WHERE id=1"
         ).fetchone()
     if not r:
         return {

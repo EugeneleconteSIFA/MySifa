@@ -1836,6 +1836,7 @@ function handleOpTrigger(code, label, cat){
 /* ── Main table ──────────────────────────────────────────────── */
 /* ── Tab navigation ──────────────────────────────────────────── */
 async function switchFabTab(tab){
+  try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}
   if(tab!=='traca' && S.tracaScanning) tracaStopCamera();
   set({fabTab:tab});
   if(tab==='traca'){
@@ -1852,6 +1853,13 @@ async function switchFabTab(tab){
   }
 }
 
+var FAB_VALID_TABS=['saisie','print','traca','of','stats'];
+function _readFabTab(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(FAB_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  return 'saisie';
+}
+window.addEventListener('hashchange',function(){try{var t=_readFabTab();if(t!==S.fabTab)set({fabTab:t});}catch(e){}});
 async function loadDossierStats(){
   const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
   if(!ref){
@@ -6352,6 +6360,7 @@ async function init(){
 
   // Load session
   await loadSession();
+  var _initFabTab=_readFabTab(); if(_initFabTab!=='saisie') set({fabTab:_initFabTab});
   // Vue admin (lecture) : charger la liste globale du jour si sélectionnée
   if(isAdm && S.saisieViewMode==='admin'){
     await loadAdminSaisiesJour();
