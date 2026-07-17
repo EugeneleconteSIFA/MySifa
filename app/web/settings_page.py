@@ -8322,9 +8322,12 @@ function _renderBridgeMcList(items) {
 }
 
 async function openBridgeSuggestModal(mp) {
-  const root = document.getElementById('modal-root') || document.body;
-  root.innerHTML = '';
+  // Fix : on crée un overlay dédié ajouté au body, jamais on ne fait
+  // root.innerHTML = '' sur document.body (qui viderait toute la page /settings).
+  const existing = document.getElementById('bridge-modal-overlay');
+  if (existing) existing.remove();
   const modal = document.createElement('div');
+  modal.id = 'bridge-modal-overlay';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px';
   modal.innerHTML =
     '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:640px;width:100%;max-height:80vh;overflow:hidden;display:flex;flex-direction:column">' +
@@ -8339,9 +8342,11 @@ async function openBridgeSuggestModal(mp) {
         '<button type="button" class="btn btn-sec" id="bridge-sugg-close">Annuler</button>' +
       '</div>' +
     '</div>';
-  root.appendChild(modal);
-  modal.querySelector('#bridge-sugg-close').addEventListener('click', () => { root.innerHTML = ''; });
-  modal.addEventListener('click', (e) => { if (e.target === modal) root.innerHTML = ''; });
+  document.body.appendChild(modal);
+
+  const close = () => { try { modal.remove(); } catch(e) {} };
+  modal.querySelector('#bridge-sugg-close').addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
 
   let sugg = [];
   try {
@@ -8371,12 +8376,11 @@ async function openBridgeSuggestModal(mp) {
       '<button type="button" class="btn" data-mc-id="' + s.id + '">Appairer</button>';
     item.querySelector('button').addEventListener('click', async () => {
       await linkBridge(mp.id, s.id);
-      root.innerHTML = '';
+      close();
     });
     body.appendChild(item);
   });
 }
-
 async function linkBridge(mp_id, mc_id) {
   try {
     const r = await fetch('/api/pricing/bridge/link', {

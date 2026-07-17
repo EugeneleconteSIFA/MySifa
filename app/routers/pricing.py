@@ -298,6 +298,19 @@ def pricing_dashboard(request: Request):
                 cost = _build_product_cost(conn, row, extra, settings)
             except HTTPException:
                 continue
+            except PricingError:
+                # Matière inactive / introuvable : on ignore ce produit du dashboard
+                # plutôt que faire crasher toute la page.
+                continue
+            except Exception as _dash_exc:
+                # Filet ultime : données incohérentes (sync mp<->mc défectueuse etc.)
+                # ne doivent pas casser le dashboard direction.
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "pricing_dashboard : produit id=%s ignoré (%s: %s)",
+                    row["id"], type(_dash_exc).__name__, _dash_exc,
+                )
+                continue
             sell_sum += cost.sell_price_eur_m2
             sell_n += 1
             ranked.append(

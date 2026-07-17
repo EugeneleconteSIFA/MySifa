@@ -3892,7 +3892,10 @@ const _OPS_HISTORY_TTL_MS = 15000;  // Recharge la DB toutes les 15s max
 let _OPS_HISTORY_FETCHING = false;
 
 function _rebuildOpsStateFromCaches(){
-  // Merge stable : items DB (source de vérité) + localStorage legacy, dédup.
+  // v2.2.8 : DB = seule source de vérité. Le merge localStorage est désactivé
+  //   car les items pré-DB apparaissaient comme des saisies fantômes qui ne
+  //   survivaient jamais au resync. La localStorage est purgée silencieusement
+  //   à la première reconstruction pour laisser le navigateur propre.
   const seen = new Set();
   const key = it => (it.machine || '') + '|' + (it.type || '') + '|' + (it.date_saisie || '');
   const merged = [];
@@ -3902,17 +3905,19 @@ function _rebuildOpsStateFromCaches(){
     seen.add(k);
     merged.push(it);
   }
-  let local = [];
-  try{
-    const raw = localStorage.getItem(OPS_STORAGE_KEY);
-    local = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(local)) local = [];
-  }catch(e){ local = []; }
-  for(const it of local){
-    const k = key(it);
-    if(seen.has(k)) continue;
-    seen.add(k);
-    merged.push(it);
+  // Purge one-shot du localStorage legacy (une seule fois par session)
+  if(!window._opsLegacyPurged){
+    try{
+      const raw = localStorage.getItem(OPS_STORAGE_KEY);
+      if(raw){
+        const arr = JSON.parse(raw);
+        if(Array.isArray(arr) && arr.length){
+          localStorage.removeItem(OPS_STORAGE_KEY);
+          console.info('[MyMaintenance v2.2.8] localStorage legacy purgé (' + arr.length + ' items) — la DB est désormais la seule source de vérité.');
+        }
+      }
+    }catch(e){}
+    window._opsLegacyPurged = true;
   }
   OPS_STATE.list = merged;
 }
@@ -3993,7 +3998,8 @@ async function fetchHistoryFromDb(){
   }catch(e){ return []; }
 }
 function saveOps(){
-  try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
+  // v2.2.8 : no-op. La DB est la seule source, plus de miroir localStorage.
+  //   Fonction gardée en no-op pour ne pas casser d'appels legacy.
 }
 function addOperation(e){
   e.preventDefault();
@@ -4324,11 +4330,46 @@ function openOpsHistoryDetail(id){
   document.body.appendChild(overlay);
 }
 
-function deleteOp(id){
-  if(!confirm('Supprimer cette opération ?')) return;
+async function deleteOp(id){
+  const item = (OPS_STATE.list || []).find(o => o.id === id);
+  if(!item){ if(typeof showToast === 'function') showToast('Ligne introuvable.', 'danger'); return; }
+  if(!confirm('Supprimer cette opération ? Cette action est définitive.')) return;
+
+  // v2.2.10 : suppression persistée en DB (avant : localStorage-only → l'op
+  // réapparaissait au prochain rebuild du cache depuis la DB).
+  if(item._source === 'db' && item._event_id && item._op_id){
+    try{
+      // Non_planifie = 1 op = 1 event → DELETE l'event entier (CASCADE nettoie l'op).
+      // Planifie = créneau partagé → DELETE juste cette op (les autres restent).
+      const url = (item._event_source === 'non_planifie')
+        ? '/api/maintenance/events/' + encodeURIComponent(item._event_id)
+        : '/api/maintenance/events/' + encodeURIComponent(item._event_id) + '/ops/' + encodeURIComponent(item._op_id);
+      const r = await fetch(url, { method:'DELETE', credentials:'include' });
+      if(!r.ok){
+        if(r.status === 502 || r.status === 503){
+          if(typeof showToast === 'function') showToast('Serveur temporairement indisponible, réessaye dans un instant.', 'danger');
+          return;
+        }
+        const err = await r.json().catch(()=>({}));
+        if(typeof showToast === 'function') showToast('Erreur suppression : ' + (err.detail || r.status), 'danger');
+        return;
+      }
+      // Purge du cache DB local pour éviter le rebuild fantôme
+      if(Array.isArray(_OPS_HISTORY_DB_CACHE)){
+        _OPS_HISTORY_DB_CACHE = _OPS_HISTORY_DB_CACHE.filter(x => x.id !== id);
+      }
+    }catch(e){
+      if(typeof showToast === 'function') showToast('Erreur réseau : ' + (e.message || e), 'danger');
+      return;
+    }
+  }
+
+  // Retire aussi de la liste affichée (immediate visual feedback)
   OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== id);
-  saveOps();
   renderOps();
+  if(typeof showToast === 'function') showToast('Opération supprimée.', 'success');
+  // Refresh backend en arrière-plan pour recharger l'état canonique
+  if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
 }
 function sortOps(field){
   if(OPS_STATE.sortBy === field){
@@ -7757,10 +7798,13 @@ function opCloseNewModal(){
 }
 
 // Helper : PATCH le statut/durée/commentaires d'une op pour la marquer Terminée.
-async function _patchOpTermine(eventId, opId, dureeMin, comment){
+async function _patchOpTermine(eventId, opId, dureeMin, comment, doneAtIso){
+  // v2.2.9 : doneAtIso optionnel — permet à l'admin de définir la date/heure
+  //   exacte de saisie au moment de la création. Sinon backend pose now.
   const body = { statut: 'termine' };
   if(dureeMin != null && !Number.isNaN(dureeMin)) body.duree_reelle_min = dureeMin;
   if(comment) body.observations = comment;
+  if(doneAtIso) body.done_at = doneAtIso;
   const r = await fetch('/api/maintenance/events/' + eventId + '/ops/' + opId, {
     method:'PATCH', credentials:'include',
     headers:{'Content-Type':'application/json'},
@@ -7770,6 +7814,26 @@ async function _patchOpTermine(eventId, opId, dureeMin, comment){
     const err = await r.json().catch(()=>({}));
     throw new Error(err.detail || r.status);
   }
+}
+
+// v2.2.9 : helper pour convertir une valeur date (YYYY-MM-DD) ou datetime en
+// ISO Paris local YYYY-MM-DDTHH:MM:SS. Si seul une date est fournie (pas
+// d'heure), on prend l'heure/minute/seconde actuelles pour tracer précisément.
+function _toDoneAtIso(dateStr){
+  if(!dateStr) return null;
+  try{
+    const pad = n => n < 10 ? '0' + n : '' + n;
+    // Cas 1 : YYYY-MM-DD → complète avec heure actuelle
+    if(/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){
+      const now = new Date();
+      return dateStr + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+    }
+    // Cas 2 : ISO datetime → convertit en local Paris
+    const d = new Date(dateStr);
+    if(isNaN(d.getTime())) return null;
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }catch(e){ return null; }
 }
 
 async function opSubmitNew(){
@@ -7864,7 +7928,8 @@ async function opSubmitNew(){
       //    (préserve statut a_faire pour les interventions modifiées avant validation).
       if(opId != null){
         if(wasTermine){
-          await _patchOpTermine(editingId, opId, dureeMin, comment);
+          // v2.2.9 : passe date_val comme done_at pour respect de la date saisie
+          await _patchOpTermine(editingId, opId, dureeMin, comment, _toDoneAtIso(dateVal));
         } else {
           const patchBody = {};
           if(dureeMin != null && !Number.isNaN(dureeMin)) patchBody.duree_reelle_min = dureeMin;
@@ -7928,8 +7993,8 @@ async function opSubmitNew(){
     const ev = data.event;
     const op = (ev.ops || [])[0];
     if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-    // 3. PATCH op → statut termine + durée + observations
-    await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+    // 3. PATCH op → statut termine + durée + observations + done_at (v2.2.9)
+    await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
     if(typeof showToast === 'function') showToast(isCreationInhabituelle ? 'Intervention libre enregistrée.' : 'Opération enregistrée.', 'success');
     opCloseNewModal();
     await opLoadTasks();
@@ -8093,7 +8158,8 @@ async function libreSubmit(){
     const op = (ev.ops || [])[0];
     if(!ev || !op) throw new Error('Creneau incomplet retourne par API.');
     if(typeof _patchOpTermine === 'function'){
-      await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+      // v2.2.9 : passe la date saisie par l'admin pour override du done_at
+      await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
     }
     if(typeof showToast === 'function') showToast('Intervention libre enregistree.', 'success');
     libreCloseModal();

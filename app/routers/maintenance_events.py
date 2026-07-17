@@ -531,7 +531,13 @@ def delete_event(event_id: int, request: Request):
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
-        # CASCADE supprime ops et rattachements
+        # v2.2.11 : cleanup manuel — get_db() n'active pas PRAGMA foreign_keys,
+        # donc le CASCADE des FK est INACTIF. Sans ces DELETE explicites, les
+        # rows dans maintenance_event_ops et maintenance_event_operators
+        # restent orphelines dans la DB (invisibles dans l'UI via JOIN mais
+        # présentes physiquement).
+        conn.execute("DELETE FROM maintenance_event_ops WHERE event_id=?", (event_id,))
+        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM maintenance_events WHERE id=?", (event_id,))
         conn.commit()
     return {"deleted": event_id}
@@ -625,8 +631,12 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         updates["updated_by"] = user["id"]
         updates["updated_at"] = now
         # Pose done_at + done_by au moment où l'op passe à termine.
+        # v2.2.9 : si le client a fourni un done_at explicite (admin qui saisit
+        # rétroactivement une op faite plus tôt), on le respecte au lieu de
+        # l'écraser avec now. done_by reste toujours l'user qui valide.
         if updates.get("statut") == "termine" and not row["done_at"]:
-            updates["done_at"] = now
+            if "done_at" not in updates:
+                updates["done_at"] = now
             updates["done_by"] = user["id"]
 
         set_clause = ", ".join(f"{k}=?" for k in updates)
