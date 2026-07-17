@@ -6986,57 +6986,69 @@ Ressources :
         _record_schema_migration(conn, 188, "cleanup_orphan_maintenance_event_ops")
 
     # Migration 189 — Retire le système d'alertes automatiques liées aux
-    # contrôles non périodiques (v2.2.15). Le concept de "contrôle non
-    # périodique" disparaît du modèle. La seule alerte utile en pratique
-    # ("Qualité produits finis") devient une alerte classique manuelle qui
-    # conserve toutes ses acks historiques.
+    # contrôles non périodiques (v2.2.15 + fix v2.2.16). L'alerte utile
+    # ("Inspection des produits finis", historiquement liée au code '01')
+    # devient une alerte classique manuelle qui conserve toutes ses acks.
     #
     # Actions (idempotentes via garde schema_migrations 189) :
-    #   a. Rename + détache l'alerte "Qualité produits finis" (LIKE fuzzy
-    #      pour retrouver l'ancien libellé auto "Contrôle : XX – Qualité
-    #      produits finis"). Reset created_by → 'manual'.
-    #   b. DELETE des autres alertes liées à un code (linked_maint_code
-    #      non NULL). CASCADE FK NON active sur SQLite par défaut → on
-    #      supprime aussi manuellement leurs acks.
-    #   c. Convertit les codes maintenance categorie='controles' et
-    #      periodique=0 en periodique=1 avec intervalle='—' si vide.
+    #   a. Trouve l'alerte cible par linked_maint_code='01' (chemin
+    #      canonique) ou fallback LIKE fuzzy sur le nom. Rename propre
+    #      → "Inspection des produits finis". Détache + rebadge manual.
+    #   b. GARDE-FOU STRICT : ne DELETE les autres alertes auto QUE si
+    #      l'alerte cible a été trouvée et sécurisée. Sinon aucun delete.
+    #      (Évite le bug v2.2.15 où qpf_id=None → id != -1 balayait tout.)
+    #   c. Convertit les codes categorie='controles' et periodique=0 en
+    #      periodique=1 avec intervalle='—' si vide.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=189 LIMIT 1").fetchone():
         _now_189 = datetime.now().isoformat()
-        # a. "Qualité produits finis" : rename + détache
+        # a. Trouve l'alerte cible — chemin canonique via linked_maint_code
         qpf = conn.execute(
-            """SELECT id, nom FROM maintenance_alerts
-               WHERE LOWER(nom) LIKE '%qualit%produits%finis%'
-               ORDER BY id ASC LIMIT 1"""
+            "SELECT id, nom FROM maintenance_alerts "
+            "WHERE linked_maint_code='01' LIMIT 1"
         ).fetchone()
+        # Fallback : LIKE fuzzy sur les libellés plausibles
+        if qpf is None:
+            qpf = conn.execute(
+                """SELECT id, nom FROM maintenance_alerts
+                   WHERE LOWER(nom) LIKE '%inspection%produits%finis%'
+                      OR LOWER(nom) LIKE '%inspection%produits%finaux%'
+                      OR LOWER(nom) LIKE '%qualit%produits%finis%'
+                      OR LOWER(nom) LIKE '%contr%le%produits%finis%'
+                   ORDER BY id ASC LIMIT 1"""
+            ).fetchone()
         qpf_id = qpf["id"] if qpf else None
         if qpf_id is not None:
             conn.execute(
                 """UPDATE maintenance_alerts
-                   SET nom='Qualité produits finis',
+                   SET nom='Inspection des produits finis',
                        linked_maint_code=NULL,
                        created_by='manual',
                        updated_at=?
                    WHERE id=?""",
                 (_now_189, qpf_id)
             )
-        # b. Supprime toutes les autres alertes auto-liées à un code
-        orphan_ids = [r["id"] for r in conn.execute(
-            "SELECT id FROM maintenance_alerts "
-            "WHERE linked_maint_code IS NOT NULL AND id != ?",
-            (qpf_id if qpf_id is not None else -1,)
-        ).fetchall()]
-        if orphan_ids:
-            ph = ",".join(["?"] * len(orphan_ids))
-            # Nettoyage manuel des acks (CASCADE FK inactif sur SQLite)
-            conn.execute(
-                f"DELETE FROM maintenance_alert_acks WHERE alert_id IN ({ph})",
-                orphan_ids,
-            )
-            conn.execute(
-                f"DELETE FROM maintenance_alerts WHERE id IN ({ph})",
-                orphan_ids,
-            )
+        # b. GARDE-FOU STRICT : DELETE des autres alertes auto SEULEMENT
+        # si l'alerte cible a été positivement identifiée et sécurisée.
+        # Sinon on s'abstient (préserve la donnée en cas de renommage
+        # inattendu — l'admin peut nettoyer manuellement plus tard).
+        if qpf_id is not None:
+            orphan_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM maintenance_alerts "
+                "WHERE linked_maint_code IS NOT NULL"
+            ).fetchall()]
+            if orphan_ids:
+                ph = ",".join(["?"] * len(orphan_ids))
+                # CASCADE FK inactif sur SQLite → purge manuelle des acks
+                conn.execute(
+                    f"DELETE FROM maintenance_alert_acks WHERE alert_id IN ({ph})",
+                    orphan_ids,
+                )
+                conn.execute(
+                    f"DELETE FROM maintenance_alerts WHERE id IN ({ph})",
+                    orphan_ids,
+                )
         # c. Convertit les codes non-périodiques en périodiques
+        # (safe : aucune perte de données, juste normalisation du flag)
         conn.execute(
             """UPDATE maintenance_codes
                SET periodique=1,
