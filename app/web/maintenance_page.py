@@ -641,7 +641,8 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .ops-list-head-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ops-list-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
 .ops-list-count{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.ops-table-wrap{overflow-x:auto}
+.ops-table-wrap{overflow:auto;max-height:min(60vh,720px);border-radius:10px;border:1px solid var(--border);position:relative}
+.ops-table-wrap .ops-table thead th{position:sticky;top:0;z-index:5;background:var(--card);box-shadow:inset 0 -1px 0 var(--border)}
 .ops-table{width:100%;border-collapse:collapse;font-size:13px;color:var(--text2)}
 .ops-table th{text-align:left;padding:12px 18px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);background:var(--bg);user-select:none;white-space:nowrap}
 .ops-table th[data-sort],.ops-table th[data-sort-cat],.ops-table th[data-sort-ctrl],.ops-table th[data-sort-ctrl-cat]{cursor:pointer;transition:color .15s}
