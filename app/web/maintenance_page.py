@@ -1026,7 +1026,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .alert-status{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .alert-status.on{color:var(--success)}
 .alert-status.off{color:var(--muted)}
-.alert-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}
+.alert-actions{display:grid;grid-template-columns:110px 92px 92px;gap:6px;align-items:center;flex-shrink:0}
 .alert-actions .btn-sm{width:100%;text-align:center;white-space:nowrap}
 @media(max-width:900px){.alert-actions{grid-template-columns:1fr 1fr 1fr;width:100%}}
 /* Toggle switch */
@@ -1350,7 +1350,10 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
         </div>
         </div><!-- /alerts-panel-embed -->
 
-        <!-- v2.2.18 : bloc Historique reste seul (subview wrapper simplifié) -->
+        <!-- v2.2.23 : séparation visuelle Gestion / Historique -->
+        <div style="margin-top:32px;padding-top:24px;border-top:2px solid var(--border)">
+          <div style="font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">Historique des saisies</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</div>
         <div id="ctrl-subview-historique">
 
         <!-- Filtres Historique des contrôles -->
@@ -1443,6 +1446,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
         </div>
 
         </div><!-- /ctrl-subview-historique -->
+        </div><!-- /section historique séparée v2.2.23 -->
 
         <!-- v2.2.18 : sous-onglet Liste des contrôles supprimé -->
 
@@ -7040,8 +7044,8 @@ function renderAlertsList() {
       +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by_display ? ' · ' + esc(a.created_by_display) : '') + lastAck + '</span>'
       + '</div>'
       + '<div class="alert-actions">'
-      +   '<button type="button" class="btn btn-sec" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
-      +   '<button type="button" class="btn btn-sec" data-alert-edit="' + a.id + '">Modifier</button>'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
+      +   '<button type="button" class="btn-sm btn-ghost" data-alert-edit="' + a.id + '">Modifier</button>'
       +   delBtn
       + '</div>'
       + '</div>';
