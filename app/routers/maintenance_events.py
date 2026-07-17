@@ -625,8 +625,12 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         updates["updated_by"] = user["id"]
         updates["updated_at"] = now
         # Pose done_at + done_by au moment où l'op passe à termine.
+        # v2.2.9 : si le client a fourni un done_at explicite (admin qui saisit
+        # rétroactivement une op faite plus tôt), on le respecte au lieu de
+        # l'écraser avec now. done_by reste toujours l'user qui valide.
         if updates.get("statut") == "termine" and not row["done_at"]:
-            updates["done_at"] = now
+            if "done_at" not in updates:
+                updates["done_at"] = now
             updates["done_by"] = user["id"]
 
         set_clause = ", ".join(f"{k}=?" for k in updates)
