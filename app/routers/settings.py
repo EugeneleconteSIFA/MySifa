@@ -3433,9 +3433,12 @@ def maintenance_alert_settings_get(request: Request):
     _require_alerts_admin(request)
     from database import get_db
     with get_db() as conn:
+        # v2.2.23 : ajoute min_gap_minutes au SELECT (bug historique : la valeur
+        # était toujours renvoyée à 5 car la colonne n'était pas sélectionnée).
         r = conn.execute(
             "SELECT placement, size, block_production, stack_mode, "
-            "updated_at, updated_by FROM maintenance_alert_settings WHERE id=1"
+            "min_gap_minutes, updated_at, updated_by "
+            "FROM maintenance_alert_settings WHERE id=1"
         ).fetchone()
     if not r:
         return {
