@@ -408,6 +408,9 @@ def _compute_dashboard_kpis(conn) -> tuple[list, list]:
             continue
         pct = (new - old["old_price"]) / old["old_price"] * 100.0
         variations_by_cat[old["category_code"]].append(pct)
+        # N'ajoute pas aux movers si variation < 0.01% (bruit de calcul).
+        if abs(pct) < 0.01:
+            continue
         try:
             eff = datetime.strptime(old["effective_date"][:10], "%Y-%m-%d").date()
             days = max(0, (date.today() - eff).days)
@@ -1201,7 +1204,7 @@ def bridge_suggest(request: Request, mp_id: int):
     """
     _require_read(request)
     with get_db() as conn:
-        return {"suggestions": pricing_bridge.suggest_matches(conn, mp_id, limit=8)}
+        return {"suggestions": pricing_bridge.suggest_matches(conn, mp_id, limit=500)}
 
 
 @router.post("/api/pricing/bridge/link")
