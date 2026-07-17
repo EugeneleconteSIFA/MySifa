@@ -5374,7 +5374,7 @@ function renderAlertsList() {
   const box = document.getElementById('alerts-list');
   if (!box) return;
   if (!_alertsData.length) {
-    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte pour l\'instant. Les contrôles non périodiques de l\'onglet Codes apparaîtront ici automatiquement, et tu peux aussi en créer manuellement avec « + Nouvelle alerte ».</div>';
+    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte pour l\'instant. Clique sur « + Nouvelle alerte » pour en créer une.</div>';
     return;
   }
   const q = (document.getElementById('alerts-filter-q')?.value || '').trim().toLowerCase();

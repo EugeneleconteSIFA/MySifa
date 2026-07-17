@@ -2053,42 +2053,19 @@ def _alert_nom_for_code(code: str, label: str) -> str:
 
 
 def _is_non_periodic_control(categorie: str, periodique) -> bool:
-    cat = (categorie or "").strip()
-    per = 1 if periodique else 0
-    return cat == "controles" and per == 0
+    # v2.2.15 — Le concept de "contrôle non périodique" a été retiré. Cette
+    # fonction retourne toujours False pour neutraliser toute logique legacy
+    # qui l'appellerait encore. Migration 189 a converti les codes existants.
+    return False
 
 
 def _sync_alert_for_code(conn, code: str, label: str, categorie: str, periodique, now: str) -> None:
-    """Maintient l'alerte auto-liée à un code en cohérence avec ses propriétés.
-    - Si le code est un contrôle non périodique : l'alerte existe (création ou
-      rename selon le label).
-    - Sinon : l'alerte associée est supprimée (la config du formulaire est
-      perdue — c'est volontaire, le code ne déclenche plus d'alerte opérateur).
+    """v2.2.15 — No-op. Le système d'alertes automatiques liées aux codes de
+    contrôle non périodique a été retiré (migration 189). Fonction gardée
+    pour ne pas casser les callers legacy — les alertes sont désormais 100%
+    manuelles via l'UI Paramètres → Alertes.
     """
-    existing = conn.execute(
-        "SELECT id, nom FROM maintenance_alerts WHERE linked_maint_code=? LIMIT 1",
-        (code,)
-    ).fetchone()
-    if _is_non_periodic_control(categorie, periodique):
-        nom = _alert_nom_for_code(code, label)
-        if existing:
-            if existing["nom"] != nom:
-                conn.execute(
-                    "UPDATE maintenance_alerts SET nom=?, updated_at=? WHERE id=?",
-                    (nom, now, existing["id"]),
-                )
-        else:
-            conn.execute(
-                """INSERT INTO maintenance_alerts
-                   (nom, active, params, created_by, created_at, updated_at, linked_maint_code)
-                   VALUES (?, 0, '{}', ?, ?, ?, ?)""",
-                (nom, "auto:code-sync", now, now, code),
-            )
-    else:
-        if existing:
-            conn.execute(
-                "DELETE FROM maintenance_alerts WHERE id=?", (existing["id"],),
-            )
+    return
 
 
 @router.get("/api/maintenance/codes")
@@ -2206,8 +2183,9 @@ def maintenance_codes_delete(code: str, request: Request):
         if cur.rowcount == 0:
             conn.rollback()
             raise HTTPException(404, f"Code {code} introuvable.")
-        # Suppression en cascade de l'alerte auto-liée (s'il y en a une).
-        conn.execute("DELETE FROM maintenance_alerts WHERE linked_maint_code=?", (code,))
+        # v2.2.15 — Plus de cascade sur les alertes (le système auto a été
+        # retiré). Les alertes classiques (manuelles) ne sont jamais liées
+        # à un code, donc rien à supprimer côté maintenance_alerts.
         conn.commit()
     log_action(user=user, action="DELETE", module="maintenance_codes",
                objet=code, detail="")
