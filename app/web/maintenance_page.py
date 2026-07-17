@@ -1351,10 +1351,10 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
         </div>
         </div><!-- /alerts-panel-embed -->
 
-        <!-- v2.2.23 : séparation visuelle Gestion / Historique -->
-        <div style="margin-top:32px;padding-top:24px;border-top:2px solid var(--border)">
-          <div style="font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px">Historique des saisies</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</div>
+        <!-- v2.2.25 : Historique dans card blanche pour équilibre visuel avec Gestion -->
+        <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">Historique des saisies</div>
+          <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
         <div id="ctrl-subview-historique">
 
         <!-- Filtres Historique des contrôles -->
