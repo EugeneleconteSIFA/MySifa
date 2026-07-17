@@ -1687,11 +1687,11 @@ def _normalize_maint_payload(body: dict) -> dict:
         categorie = "controles"
     if categorie in ("interventions", "suivi"):
         categorie = "entretien"
-    periodique = 1 if body.get("periodique") else 0
-    # Intervalle de temps : texte libre, ignore si non periodique
+    # v2.2.17 — Le concept de "périodique" a été retiré côté UI. Tous les
+    # codes sont considérés comme périodiques (periodique=1 forcé), quelle
+    # que soit la valeur envoyée par le client (compat legacy).
+    periodique = 1
     intervalle = (body.get("intervalle") or "").strip()
-    if not periodique:
-        intervalle = ""
     if len(intervalle) > 80:
         intervalle = intervalle[:80]
     # Référence métrage : texte libre (ex. "5000 m"), surtout utile pour la
