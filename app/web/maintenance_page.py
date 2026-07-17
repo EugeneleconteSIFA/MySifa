@@ -1116,6 +1116,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 /* ═══════════════════════════════════════════════════════════ */
 /* v2.2.21 : styles boutons scopés au panel Alertes (dup Paramètres) */
 /* ═══════════════════════════════════════════════════════════ */
+.alerts-panel-embed .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
 .alerts-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alerts-panel-embed .btn:hover{filter:brightness(1.08)}
 .alerts-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
