@@ -7763,10 +7763,13 @@ function opCloseNewModal(){
 }
 
 // Helper : PATCH le statut/durée/commentaires d'une op pour la marquer Terminée.
-async function _patchOpTermine(eventId, opId, dureeMin, comment){
+async function _patchOpTermine(eventId, opId, dureeMin, comment, doneAtIso){
+  // v2.2.9 : doneAtIso optionnel — permet à l'admin de définir la date/heure
+  //   exacte de saisie au moment de la création. Sinon backend pose now.
   const body = { statut: 'termine' };
   if(dureeMin != null && !Number.isNaN(dureeMin)) body.duree_reelle_min = dureeMin;
   if(comment) body.observations = comment;
+  if(doneAtIso) body.done_at = doneAtIso;
   const r = await fetch('/api/maintenance/events/' + eventId + '/ops/' + opId, {
     method:'PATCH', credentials:'include',
     headers:{'Content-Type':'application/json'},
@@ -7776,6 +7779,26 @@ async function _patchOpTermine(eventId, opId, dureeMin, comment){
     const err = await r.json().catch(()=>({}));
     throw new Error(err.detail || r.status);
   }
+}
+
+// v2.2.9 : helper pour convertir une valeur date (YYYY-MM-DD) ou datetime en
+// ISO Paris local YYYY-MM-DDTHH:MM:SS. Si seul une date est fournie (pas
+// d'heure), on prend l'heure/minute/seconde actuelles pour tracer précisément.
+function _toDoneAtIso(dateStr){
+  if(!dateStr) return null;
+  try{
+    const pad = n => n < 10 ? '0' + n : '' + n;
+    // Cas 1 : YYYY-MM-DD → complète avec heure actuelle
+    if(/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){
+      const now = new Date();
+      return dateStr + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+    }
+    // Cas 2 : ISO datetime → convertit en local Paris
+    const d = new Date(dateStr);
+    if(isNaN(d.getTime())) return null;
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+      'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }catch(e){ return null; }
 }
 
 async function opSubmitNew(){
@@ -7870,7 +7893,8 @@ async function opSubmitNew(){
       //    (préserve statut a_faire pour les interventions modifiées avant validation).
       if(opId != null){
         if(wasTermine){
-          await _patchOpTermine(editingId, opId, dureeMin, comment);
+          // v2.2.9 : passe date_val comme done_at pour respect de la date saisie
+          await _patchOpTermine(editingId, opId, dureeMin, comment, _toDoneAtIso(dateVal));
         } else {
           const patchBody = {};
           if(dureeMin != null && !Number.isNaN(dureeMin)) patchBody.duree_reelle_min = dureeMin;
@@ -7934,8 +7958,8 @@ async function opSubmitNew(){
     const ev = data.event;
     const op = (ev.ops || [])[0];
     if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-    // 3. PATCH op → statut termine + durée + observations
-    await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+    // 3. PATCH op → statut termine + durée + observations + done_at (v2.2.9)
+    await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
     if(typeof showToast === 'function') showToast(isCreationInhabituelle ? 'Intervention libre enregistrée.' : 'Opération enregistrée.', 'success');
     opCloseNewModal();
     await opLoadTasks();
@@ -8099,7 +8123,8 @@ async function libreSubmit(){
     const op = (ev.ops || [])[0];
     if(!ev || !op) throw new Error('Creneau incomplet retourne par API.');
     if(typeof _patchOpTermine === 'function'){
-      await _patchOpTermine(ev.id, op.id, dureeMin, comment);
+      // v2.2.9 : passe la date saisie par l'admin pour override du done_at
+      await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
     }
     if(typeof showToast === 'function') showToast('Intervention libre enregistree.', 'success');
     libreCloseModal();
