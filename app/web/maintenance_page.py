@@ -1649,9 +1649,13 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
             <label class="ops-field-label" for="ops-date">Date d'opération<span class="req">*</span></label>
             <input type="datetime-local" id="ops-date" class="ops-select" required>
           </div>
+          <div class="ops-field">
+            <label class="ops-field-label" for="ops-duree">Durée réelle (min)</label>
+            <input type="number" id="ops-duree" class="ops-input" min="0" step="1" placeholder="Optionnel">
+          </div>
           <div class="ops-field ops-field--full">
             <label class="ops-field-label" for="ops-comment">Commentaires</label>
-            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, durée, pièces remplacées…"></textarea>
+            <textarea id="ops-comment" class="ops-textarea" placeholder="Notes, anomalies, pièces remplacées…"></textarea>
           </div>
         </div>
       </div>
@@ -3726,17 +3730,20 @@ function openOpsModal(editId){
                    + 'T' + pad(sourceDate.getHours()) + ':' + pad(sourceDate.getMinutes());
     }
   }
-  // Pré-remplit machine / type / commentaire en mode édition
+  // Pré-remplit machine / type / durée / commentaire en mode édition
   const machineEl = document.getElementById('ops-machine');
   const typeEl = document.getElementById('ops-type');
+  const dureeEl = document.getElementById('ops-duree');
   const commentEl = document.getElementById('ops-comment');
   if(editing){
     if(machineEl) machineEl.value = editing.machine || '';
     if(typeEl) typeEl.value = editing.type || '';
+    if(dureeEl) dureeEl.value = (editing.duree_reelle_min != null && editing.duree_reelle_min !== '') ? editing.duree_reelle_min : '';
     if(commentEl) commentEl.value = editing.commentaire || '';
   } else {
     if(machineEl) machineEl.value = '';
     if(typeEl) typeEl.value = '';
+    if(dureeEl) dureeEl.value = '';
     if(commentEl) commentEl.value = '';
   }
   setTimeout(() => { const f = document.getElementById('ops-machine'); if(f) f.focus(); }, 50);
@@ -4003,6 +4010,13 @@ function addOperation(e){
   const machine = (document.getElementById('ops-machine').value || '').trim();
   const type = (document.getElementById('ops-type').value || '').trim();
   const commentaire = (document.getElementById('ops-comment').value || '').trim();
+  // v2.2.14 : durée réelle (optionnelle) — number en minutes
+  const dureeStr = (document.getElementById('ops-duree')?.value || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){
+    showToast('Durée invalide (entier positif attendu).', 'danger');
+    return;
+  }
   const operateur = currentUserName();
   if(!operateur){ showToast('Identité non chargée. Réessayez dans un instant.', 'danger'); return; }
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
@@ -4028,7 +4042,7 @@ function addOperation(e){
     // DB via _dbEditPersist. Avant : seuls les libres l'étaient, les catalogue
     // updataient uniquement localStorage (donc disparaissaient au refresh).
     if(original._source === 'db' && original._event_id && original._op_id && original._code){
-      _dbEditPersist(original, {machine, titre: type, commentaire, dateSaisie})
+      _dbEditPersist(original, {machine, titre: type, commentaire, dateSaisie, dureeMin})
         .then(() => {
           closeOpsModal();
           showToast(original._libre ? 'Intervention libre mise à jour.' : 'Opération mise à jour.', 'success');
@@ -4043,6 +4057,7 @@ function addOperation(e){
     }
     OPS_STATE.list[idx] = Object.assign({}, original, {
       machine, type, commentaire,
+      duree_reelle_min: dureeMin,
       date_saisie: dateSaisie,
       date_modification: new Date().toISOString(),
       modifie_par: operateur,
@@ -4100,6 +4115,7 @@ function addOperation(e){
         const patchBody = { statut: 'termine' };
         if(commentaire) patchBody.observations = commentaire;
         if(doneAtIso) patchBody.done_at = doneAtIso;
+        if(dureeMin != null && !Number.isNaN(dureeMin)) patchBody.duree_reelle_min = dureeMin;
         const rOp = await fetch('/api/maintenance/events/' + ev.id + '/ops/' + op.id, {
           method:'PATCH', credentials:'include',
           headers:{'Content-Type':'application/json'},
@@ -4210,6 +4226,17 @@ async function _dbEditPersist(original, changes){
   const opPatch = {};
   if(newComment !== (original.commentaire || '')){
     opPatch.observations = newComment;
+  }
+  // v2.2.14 : durée réelle — permet à l'admin d'ajuster la durée après coup
+  if(changes.dureeMin !== undefined){
+    const newDuree = changes.dureeMin;
+    const oldDuree = (original.duree_reelle_min != null && original.duree_reelle_min !== '') ? parseInt(original.duree_reelle_min, 10) : null;
+    // Compare en null-safe : null vs '' vs number
+    const changed = (newDuree === null && oldDuree !== null) ||
+                    (newDuree !== null && newDuree !== oldDuree);
+    if(changed){
+      opPatch.duree_reelle_min = newDuree;
+    }
   }
   if(newDateIso){
     // Convertit en ISO Paris (YYYY-MM-DDTHH:MM:SS local) — même format que
@@ -6914,14 +6941,14 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
         <option value="Repiquage">Repiquage</option>
       </select>
     </div>
-    <!-- v2.2.13 : mode admin — multi-machines (checkboxes). Une op créée par machine cochée. -->
+    <!-- v2.2.13 : mode admin — multi-machines (chips style "Nouveau créneau"). Une op créée par chip active. -->
     <div class="op-form-row" id="op-new-machines-multi-row" style="display:none">
-      <label>Machines * <span style="font-weight:400;color:var(--muted);font-size:11px;text-transform:none;letter-spacing:0">(coche une ou plusieurs — une opération sera créée par machine)</span></label>
-      <div id="op-new-machines-checkboxes" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:10px">
-        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="Cohésio 1" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> Cohésio 1</label>
-        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="Cohésio 2" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> Cohésio 2</label>
-        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="DSI" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> DSI</label>
-        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="Repiquage" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> Repiquage</label>
+      <label>Machines * <span style="font-weight:400;color:var(--muted);font-size:11px;text-transform:none;letter-spacing:0">(clique une ou plusieurs — une opération sera créée par machine)</span></label>
+      <div id="op-new-machines-chips" class="case-ops-machines" style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px">
+        <button type="button" class="case-mach-chip" data-mach="Cohésio 1" onclick="adminToggleMachChip(this)" aria-pressed="false">Cohésio 1</button>
+        <button type="button" class="case-mach-chip" data-mach="Cohésio 2" onclick="adminToggleMachChip(this)" aria-pressed="false">Cohésio 2</button>
+        <button type="button" class="case-mach-chip" data-mach="DSI" onclick="adminToggleMachChip(this)" aria-pressed="false">DSI</button>
+        <button type="button" class="case-mach-chip" data-mach="Repiquage" onclick="adminToggleMachChip(this)" aria-pressed="false">Repiquage</button>
       </div>
     </div>
     <div class="op-form-row" id="op-new-code-row">
@@ -7701,14 +7728,23 @@ async function adminOpenRegisterOpModal(){
   const multiRow = document.getElementById('op-new-machines-multi-row');
   if(monoRow) monoRow.style.display = 'none';
   if(multiRow) multiRow.style.display = '';
-  const cbs = document.querySelectorAll('#op-new-machines-checkboxes input[type=checkbox]');
-  cbs.forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('#op-new-machines-chips .case-mach-chip').forEach(ch => {
+    ch.classList.remove('active');
+    ch.setAttribute('aria-pressed', 'false');
+  });
   // Date par défaut = aujourd'hui
   try{
     const dateEl = document.getElementById('op-new-date');
     if(dateEl && !dateEl.value){ dateEl.value = _fmtDateISO(new Date()); }
   }catch(e){}
   document.getElementById('op-modal-new').classList.add('active');
+}
+
+// v2.2.14 : toggle d'une chip machine dans la modal admin.
+function adminToggleMachChip(btn){
+  if(!btn) return;
+  const active = btn.classList.toggle('active');
+  btn.setAttribute('aria-pressed', active ? 'true' : 'false');
 }
 
 // v2 : switch entre modes Catalogue et Inhabituelle dans le modal fusionné.
@@ -7851,8 +7887,10 @@ function opCloseNewModal(){
   const multiRow = document.getElementById('op-new-machines-multi-row');
   if(monoRow) monoRow.style.display = '';
   if(multiRow) multiRow.style.display = 'none';
-  const cbs = document.querySelectorAll('#op-new-machines-checkboxes input[type=checkbox]');
-  cbs.forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('#op-new-machines-chips .case-mach-chip').forEach(ch => {
+    ch.classList.remove('active');
+    ch.setAttribute('aria-pressed', 'false');
+  });
   const panel = document.getElementById('op-new-libre-autocomplete-panel');
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   document.getElementById('op-modal-new').classList.remove('active');
@@ -8074,8 +8112,8 @@ async function opSubmitNew(){
 //   N events (source=non_planifie) marqués termine, un par machine.
 async function adminSubmitRegisterOp(){
   const dateVal = document.getElementById('op-new-date').value;
-  const cbs = document.querySelectorAll('#op-new-machines-checkboxes input[type=checkbox]');
-  const machines = Array.from(cbs).filter(c => c.checked).map(c => c.value);
+  const machines = Array.from(document.querySelectorAll('#op-new-machines-chips .case-mach-chip.active'))
+    .map(ch => ch.getAttribute('data-mach'));
   const titreLibre = (document.getElementById('op-new-titre-libre').value || '').trim();
   const code = document.getElementById('op-new-code').value;
   const dureeStr = document.getElementById('op-new-duree').value;
