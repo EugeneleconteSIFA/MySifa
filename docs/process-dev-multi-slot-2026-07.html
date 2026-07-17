@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MySifa — Process de développement multi-dev</title>
+<style>
+:root{
+  --bg:#ffffff;--card:#f8fafc;--border:#e2e8f0;
+  --text:#0f172a;--text2:#334155;--muted:#64748b;
+  --accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
+  --ok:#059669;--warn:#d97706;--danger:#dc2626;
+  --danger-bg:rgba(220,38,38,0.06);
+  --ok-bg:rgba(5,150,105,0.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;color:var(--text);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{
+  width:210mm;min-height:297mm;margin:0 auto;padding:12mm 11mm;
+  background:var(--bg);display:flex;flex-direction:column;gap:6mm;
+}
+@page{size:A4 portrait;margin:0}
+@media print{html,body{background:var(--bg)}.page{margin:0}}
+
+/* ---------- HEADER ---------- */
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:1px solid var(--border);padding-bottom:4mm}
+.hdr h1{font-size:19px;font-weight:700;letter-spacing:-.2px}
+.hdr h1 span{color:var(--accent)}
+.hdr .meta{font-size:10px;color:var(--muted);text-align:right;line-height:1.5}
+.hdr .meta strong{color:var(--text2);font-weight:600}
+
+/* ---------- 2 COLUMNS ---------- */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
+.col{border:1px solid var(--border);border-radius:8px;padding:5mm;display:flex;flex-direction:column;gap:3mm;position:relative}
+.col.now{background:linear-gradient(180deg,var(--danger-bg) 0%,transparent 40%)}
+.col.next{background:linear-gradient(180deg,var(--ok-bg) 0%,transparent 40%)}
+.col-hdr{display:flex;align-items:center;gap:6px}
+.tag{font-size:9px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;padding:2px 8px;border-radius:4px}
+.tag.now{background:var(--danger);color:#ffffff}
+.tag.next{background:var(--ok);color:#ffffff}
+.col h2{font-size:13px;font-weight:600;color:var(--text)}
+
+/* ---------- FLOW DIAGRAM ---------- */
+.flow{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4mm 3mm;font-size:9.5px}
+.flow svg{width:100%;height:auto;display:block}
+
+/* ---------- BULLETS ---------- */
+.bullets{font-size:10px;color:var(--text2);line-height:1.55;padding-left:14px}
+.bullets li{margin-bottom:2mm}
+.bullets li strong{color:var(--text);font-weight:600}
+.bullets li .kw{color:var(--accent);font-family:'SF Mono',Consolas,monospace;font-size:9.5px}
+
+/* ---------- PAIN POINT ---------- */
+.pain{background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.30);border-radius:6px;padding:3mm 4mm;font-size:10px;color:var(--text2);line-height:1.5}
+.pain strong{color:var(--danger)}
+.gain{background:rgba(5,150,105,0.08);border:1px solid rgba(5,150,105,0.30);border-radius:6px;padding:3mm 4mm;font-size:10px;color:var(--text2);line-height:1.5}
+.gain strong{color:var(--ok)}
+
+/* ---------- TABLE ---------- */
+.tbl-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.tbl-hdr{background:var(--card);padding:3mm 4mm;font-size:11px;font-weight:600;letter-spacing:.3px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.tbl-hdr .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:9.5px}
+th,td{padding:2.2mm 4mm;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:rgba(15,23,42,0.03);color:var(--muted);font-weight:600;text-transform:uppercase;font-size:8.5px;letter-spacing:.5px}
+tr:last-child td{border-bottom:none}
+td.item{color:var(--text);font-weight:600}
+td.a{color:var(--muted)}
+td.b{color:var(--text2)}
+td .kw{color:var(--accent);font-family:'SF Mono',Consolas,monospace;font-size:9px}
+
+/* ---------- IMPL STEPS ---------- */
+.impl{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4mm 5mm}
+.impl h3{font-size:11px;font-weight:600;color:var(--text);margin-bottom:2.5mm;display:flex;align-items:center;gap:6px}
+.impl h3 .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm;font-size:9.5px}
+.step{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3mm}
+.step-n{color:var(--accent);font-weight:700;font-size:11px;margin-bottom:1.5mm}
+.step-t{color:var(--text);font-weight:600;font-size:10px;margin-bottom:1.5mm}
+.step-d{color:var(--muted);line-height:1.5}
+
+/* ---------- FOOTER ---------- */
+.ftr{margin-top:auto;padding-top:3mm;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:9px;color:var(--muted)}
+.ftr strong{color:var(--text2)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div>
+      <h1>Process de développement <span>multi-dev</span> — proposition</h1>
+      <div style="font-size:10px;color:var(--muted);margin-top:2mm">Isolation par slot pour que la panne d'un dev ne bloque plus les autres.</div>
+    </div>
+    <div class="meta">
+      <strong>MySifa</strong> · 16 juillet 2026<br>
+      Auteur : Eugène + Claude<br>
+      Réf. : CLAUDE.md § « Stratégie v1/v2 »
+    </div>
+  </div>
+
+  <!-- TWO COLUMNS -->
+  <div class="cols">
+
+    <!-- CURRENT -->
+    <div class="col now">
+      <div class="col-hdr">
+        <span class="tag now">Aujourd'hui</span>
+        <h2>Un seul env de test partagé</h2>
+      </div>
+
+      <div class="flow">
+        <svg viewBox="0 0 340 165" xmlns="http://www.w3.org/2000/svg">
+          <!-- devs -->
+          <g font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#334155">
+            <rect x="6" y="10" width="72" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="42" y="24" text-anchor="middle" fill="#0f172a">Dev A</text>
+            <text x="42" y="45" text-anchor="middle" font-size="7.5" fill="#64748b">feature/xxx</text>
+
+            <rect x="6" y="60" width="72" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="42" y="74" text-anchor="middle" fill="#0f172a">Dev B</text>
+            <text x="42" y="95" text-anchor="middle" font-size="7.5" fill="#64748b">feature/yyy</text>
+
+            <rect x="6" y="110" width="72" height="22" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="42" y="124" text-anchor="middle" fill="#0f172a">Dev C</text>
+            <text x="42" y="145" text-anchor="middle" font-size="7.5" fill="#64748b">feature/zzz</text>
+          </g>
+
+          <!-- arrows to staging -->
+          <g stroke="#0891b2" stroke-width="1.2" fill="none" opacity=".7">
+            <path d="M78 21 L128 75" marker-end="url(#a1)"/>
+            <path d="M78 71 L128 79" marker-end="url(#a1)"/>
+            <path d="M78 121 L128 87" marker-end="url(#a1)"/>
+          </g>
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#0891b2"/>
+            </marker>
+            <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#dc2626"/>
+            </marker>
+          </defs>
+
+          <!-- staging branch -->
+          <rect x="128" y="65" width="72" height="30" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+          <text x="164" y="79" text-anchor="middle" font-size="9" fill="#0f172a" font-family="Segoe UI, system-ui">staging</text>
+          <text x="164" y="89" text-anchor="middle" font-size="7" fill="#64748b" font-family="Segoe UI, system-ui">(branche unique)</text>
+
+          <!-- arrow staging → v1 -->
+          <path d="M200 80 L230 80" stroke="#dc2626" stroke-width="1.4" fill="none" marker-end="url(#a2)"/>
+          <text x="215" y="72" text-anchor="middle" font-size="7" fill="#dc2626" font-family="Segoe UI, system-ui">cron 1min</text>
+
+          <!-- v1 SHARED -->
+          <rect x="230" y="55" width="60" height="50" rx="4" fill="#dc2626" opacity=".15" stroke="#dc2626" stroke-width="1.4"/>
+          <text x="260" y="75" text-anchor="middle" font-size="11" font-weight="700" fill="#dc2626" font-family="Segoe UI, system-ui">v1</text>
+          <text x="260" y="88" text-anchor="middle" font-size="7.5" fill="#334155" font-family="Segoe UI, system-ui">v1.mysifa.com</text>
+          <text x="260" y="98" text-anchor="middle" font-size="7" fill="#64748b" font-family="Segoe UI, system-ui">partagé · port 8002</text>
+
+          <!-- bomb -->
+          <text x="260" y="43" text-anchor="middle" font-size="14" fill="#dc2626">⚠</text>
+          <text x="260" y="122" text-anchor="middle" font-size="7" fill="#dc2626" font-family="Segoe UI, system-ui">502 = tout le monde bloqué</text>
+
+          <!-- v2 prod -->
+          <rect x="300" y="55" width="34" height="50" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+          <text x="317" y="77" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a" font-family="Segoe UI, system-ui">v2</text>
+          <text x="317" y="90" text-anchor="middle" font-size="6.5" fill="#64748b" font-family="Segoe UI, system-ui">prod</text>
+          <path d="M290 80 L300 80" stroke="#94a3b8" stroke-width="1" fill="none" stroke-dasharray="2,2"/>
+          <text x="295" y="115" text-anchor="middle" font-size="6" fill="#64748b" font-family="Segoe UI, system-ui">bouton</text>
+          <text x="295" y="122" text-anchor="middle" font-size="6" fill="#64748b" font-family="Segoe UI, system-ui">Promouvoir</text>
+        </svg>
+      </div>
+
+      <ul class="bullets">
+        <li>Toutes les branches feature convergent vers <span class="kw">staging</span> — c'est ce qui alimente v1.</li>
+        <li>Cron VPS <span class="kw">/etc/cron.d/mysifa-v1-pull</span> pull chaque minute, restart <span class="kw">mysifa-v1</span>.</li>
+        <li>DB isolée v1 (<span class="kw">production-v1.db</span>), resync nightly depuis prod à 02:00 UTC.</li>
+      </ul>
+
+      <div class="pain">
+        <strong>Point de douleur —</strong> si un dev merge un truc qui pète v1 (502, migration cassée, import fail), <strong>tous les autres devs sont bloqués</strong> pour tester leur feature, et la promotion vers prod est gelée jusqu'à ce que le fautif corrige.
+      </div>
+    </div>
+
+    <!-- FUTURE -->
+    <div class="col next">
+      <div class="col-hdr">
+        <span class="tag next">Demain</span>
+        <h2>Un slot dev par personne + v1 d'intégration</h2>
+      </div>
+
+      <div class="flow">
+        <svg viewBox="0 0 340 165" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="b1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#0891b2"/>
+            </marker>
+            <marker id="b2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" fill="#059669"/>
+            </marker>
+          </defs>
+
+          <g font-family="Segoe UI, system-ui, sans-serif" font-size="9" fill="#334155">
+            <!-- Dev A → v-alpha -->
+            <rect x="4" y="6" width="52" height="20" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="30" y="19" text-anchor="middle" fill="#0f172a" font-size="8.5">Dev A</text>
+            <path d="M56 16 L94 16" stroke="#0891b2" stroke-width="1.2" fill="none" marker-end="url(#b1)"/>
+            <rect x="94" y="6" width="70" height="20" rx="4" fill="#0891b2" opacity=".15" stroke="#0891b2"/>
+            <text x="129" y="19" text-anchor="middle" fill="#0891b2" font-size="9" font-weight="700">v-alpha</text>
+            <text x="170" y="19" font-size="7" fill="#64748b">alpha.mysifa.com</text>
+
+            <!-- Dev B → v-beta -->
+            <rect x="4" y="34" width="52" height="20" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="30" y="47" text-anchor="middle" fill="#0f172a" font-size="8.5">Dev B</text>
+            <path d="M56 44 L94 44" stroke="#0891b2" stroke-width="1.2" fill="none" marker-end="url(#b1)"/>
+            <rect x="94" y="34" width="70" height="20" rx="4" fill="#0891b2" opacity=".15" stroke="#0891b2"/>
+            <text x="129" y="47" text-anchor="middle" fill="#0891b2" font-size="9" font-weight="700">v-beta</text>
+            <text x="170" y="47" font-size="7" fill="#64748b">beta.mysifa.com</text>
+
+            <!-- Dev C → v-omega -->
+            <rect x="4" y="62" width="52" height="20" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+            <text x="30" y="75" text-anchor="middle" fill="#0f172a" font-size="8.5">Dev C</text>
+            <path d="M56 72 L94 72" stroke="#0891b2" stroke-width="1.2" fill="none" marker-end="url(#b1)"/>
+            <rect x="94" y="62" width="70" height="20" rx="4" fill="#0891b2" opacity=".15" stroke="#0891b2"/>
+            <text x="129" y="75" text-anchor="middle" fill="#0891b2" font-size="9" font-weight="700">v-omega</text>
+            <text x="170" y="75" font-size="7" fill="#64748b">omega.mysifa.com</text>
+          </g>
+
+          <!-- push labels -->
+          <text x="75" y="12" font-size="6.5" fill="#0891b2" font-family="Segoe UI, system-ui">push</text>
+
+          <!-- convergence arrows toward staging -->
+          <g stroke="#94a3b8" stroke-width="0.9" fill="none" stroke-dasharray="2,2" opacity=".7">
+            <path d="M164 16 Q220 30 232 105"/>
+            <path d="M164 44 Q210 60 232 105"/>
+            <path d="M164 72 Q200 85 232 105"/>
+          </g>
+          <text x="215" y="98" font-size="6" fill="#64748b" font-family="Segoe UI, system-ui">merge quand stable</text>
+
+          <!-- staging → v1 → v2 row -->
+          <rect x="4" y="105" width="60" height="26" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+          <text x="34" y="120" text-anchor="middle" font-size="9" fill="#0f172a" font-family="Segoe UI, system-ui">staging</text>
+          <text x="34" y="128" text-anchor="middle" font-size="6.5" fill="#64748b" font-family="Segoe UI, system-ui">branche</text>
+
+          <path d="M64 118 L94 118" stroke="#059669" stroke-width="1.4" fill="none" marker-end="url(#b2)"/>
+          <text x="79" y="112" text-anchor="middle" font-size="6" fill="#059669" font-family="Segoe UI, system-ui">cron 1min</text>
+
+          <rect x="94" y="105" width="60" height="26" rx="4" fill="#059669" opacity=".15" stroke="#059669"/>
+          <text x="124" y="120" text-anchor="middle" font-size="10" font-weight="700" fill="#059669" font-family="Segoe UI, system-ui">v1</text>
+          <text x="124" y="128" text-anchor="middle" font-size="6.5" fill="#334155" font-family="Segoe UI, system-ui">intégration</text>
+
+          <path d="M154 118 L184 118" stroke="#94a3b8" stroke-width="1" fill="none" stroke-dasharray="2,2"/>
+          <text x="169" y="112" text-anchor="middle" font-size="6" fill="#64748b" font-family="Segoe UI, system-ui">bouton</text>
+
+          <rect x="184" y="105" width="60" height="26" rx="4" fill="#ffffff" stroke="#e2e8f0"/>
+          <text x="214" y="120" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a" font-family="Segoe UI, system-ui">v2</text>
+          <text x="214" y="128" text-anchor="middle" font-size="6.5" fill="#64748b" font-family="Segoe UI, system-ui">prod · inchangé</text>
+
+          <!-- shield -->
+          <text x="290" y="45" text-anchor="middle" font-size="18" fill="#059669">✓</text>
+          <text x="290" y="60" text-anchor="middle" font-size="7" fill="#059669" font-family="Segoe UI, system-ui">isolation</text>
+          <text x="290" y="70" text-anchor="middle" font-size="7" fill="#059669" font-family="Segoe UI, system-ui">par slot</text>
+
+          <text x="290" y="115" text-anchor="middle" font-size="6.5" fill="#64748b" font-family="Segoe UI, system-ui">v-alpha KO</text>
+          <text x="290" y="123" text-anchor="middle" font-size="6.5" fill="#64748b" font-family="Segoe UI, system-ui">→ Dev B/C OK</text>
+          <text x="290" y="131" text-anchor="middle" font-size="6.5" fill="#64748b" font-family="Segoe UI, system-ui">→ v1/v2 OK</text>
+        </svg>
+      </div>
+
+      <ul class="bullets">
+        <li><strong>3 slots fixes</strong> (alpha/beta/omega) préprovisionnés, attribués à un dev par un fichier <span class="kw">/etc/mysifa/dev-slots.conf</span>.</li>
+        <li>Chaque slot <strong>track une branche dédiée</strong> (<span class="kw">dev-alpha</span>, <span class="kw">dev-beta</span>, <span class="kw">dev-omega</span>). Push force autorisé — c'est jetable.</li>
+        <li>Chaque slot a <strong>sa DB</strong> (<span class="kw">production-alpha.db</span>…), resync nightly depuis prod comme v1 déjà.</li>
+        <li><strong>v1 devient l'env d'intégration</strong> — le dev n'y pousse que quand sa feature est propre sur son slot.</li>
+      </ul>
+
+      <div class="gain">
+        <strong>Bénéfice —</strong> une erreur 502 sur v-alpha ne touche que Dev A. v-beta, v-omega, v1 et la prod continuent de tourner. La promotion prod ne dépend plus de qui a cassé quoi côté sandbox.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- COMPARISON TABLE -->
+  <div class="tbl-wrap">
+    <div class="tbl-hdr"><span class="dot"></span> Ce qui change concrètement sur le VPS</div>
+    <table>
+      <thead>
+        <tr><th style="width:24%">Élément</th><th style="width:32%">Aujourd'hui</th><th style="width:44%">Cible</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="item">Services systemd</td><td class="a"><span class="kw">mysifa</span>, <span class="kw">mysifa-v1</span></td><td class="b">+ <span class="kw">mysifa-alpha</span>, <span class="kw">mysifa-beta</span>, <span class="kw">mysifa-omega</span></td></tr>
+        <tr><td class="item">Ports</td><td class="a">8000 (prod), 8002 (v1)</td><td class="b">+ 8010 (α), 8011 (β), 8012 (ω)</td></tr>
+        <tr><td class="item">Sous-domaines</td><td class="a"><span class="kw">www.</span>, <span class="kw">v1.</span></td><td class="b">+ <span class="kw">alpha.</span>, <span class="kw">beta.</span>, <span class="kw">omega.</span></td></tr>
+        <tr><td class="item">Répertoires code</td><td class="a"><span class="kw">/home/sifa/production-saas{,-v1}</span></td><td class="b">+ <span class="kw">production-saas-{alpha,beta,omega}</span></td></tr>
+        <tr><td class="item">Bases de données</td><td class="a"><span class="kw">production.db</span>, <span class="kw">production-v1.db</span></td><td class="b">+ <span class="kw">production-{alpha,beta,omega}.db</span></td></tr>
+        <tr><td class="item">Trigger de deploy</td><td class="a">1 cron : pull <span class="kw">staging</span> → v1</td><td class="b">+ 3 crons : pull <span class="kw">dev-{α,β,ω}</span> → slot correspondant</td></tr>
+        <tr><td class="item">Resync DB nightly</td><td class="a">v1 uniquement (02:00 UTC)</td><td class="b">v1 + 3 slots (02:00–02:20 UTC, échelonné)</td></tr>
+        <tr><td class="item">Workflow dev</td><td class="a"><span class="kw">git push</span> feature → merge <span class="kw">staging</span></td><td class="b"><span class="kw">git push origin feat:dev-α</span> (test perso), puis merge <span class="kw">staging</span> quand OK</td></tr>
+        <tr><td class="item">Isolation panne dev</td><td class="a">Aucune (v1 partagé)</td><td class="b">Par slot — un 502 ne touche que le dev concerné</td></tr>
+        <tr><td class="item">Promotion prod</td><td class="a">Bouton <span class="kw">v1 → v2</span> dans <span class="kw">/settings</span></td><td class="b">Inchangé (bouton depuis v1)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- IMPL STEPS -->
+  <div class="impl">
+    <h3><span class="dot"></span> Mise en place — 4 étapes, ~1 journée VPS</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">01</div>
+        <div class="step-t">Provisionner 3 slots</div>
+        <div class="step-d">Clone du repo × 3, <span class="kw">.env</span> par slot (ENV_NAME, DB_PATH, PORT), 3 services systemd + 3 vhosts nginx.</div>
+      </div>
+      <div class="step">
+        <div class="step-n">02</div>
+        <div class="step-t">Branches tracking</div>
+        <div class="step-d">Créer <span class="kw">dev-alpha</span>, <span class="kw">dev-beta</span>, <span class="kw">dev-omega</span> depuis <span class="kw">staging</span>. Push force autorisé (branches jetables, non protégées).</div>
+      </div>
+      <div class="step">
+        <div class="step-n">03</div>
+        <div class="step-t">Cron pull + resync</div>
+        <div class="step-d">Copier <span class="kw">mysifa-v1-pull.sh</span> et <span class="kw">mysifa-v1-resync-db.sh</span> en trois variantes, une par slot, échelonnées.</div>
+      </div>
+      <div class="step">
+        <div class="step-n">04</div>
+        <div class="step-t">Bandeau + attribution</div>
+        <div class="step-d">Étendre le bandeau <span class="kw">html.py</span> (dev-alpha jaune, etc.), <span class="kw">/etc/mysifa/dev-slots.conf</span> pour mapper slot → email dev.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="ftr">
+    <div><strong>Points ouverts —</strong> nommage des vhosts (<span style="font-family:Consolas,monospace">alpha.mysifa.com</span> vs <span style="font-family:Consolas,monospace">alpha.dev.mysifa.com</span>) · SSL wildcard vs certif par sous-domaine · reset button "remettre mon slot sur staging" dans /settings.</div>
+    <div style="margin-left:6mm;white-space:nowrap"><strong>MySifa v0.X</strong> · A4</div>
+  </div>
+
+</div>
+</body>
+</html>

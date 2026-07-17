@@ -3,7 +3,10 @@ Route : /maintenance
 
 Contrôle d'accès multi-rôle :
 - Admin (accès complet) : superadmin, direction, administration.
-- Opérateur (vue « Mes tâches ») : rôle fabrication.
+- Opérateur (vue « Mes tâches ») : rôle fabrication, uniquement quand le flag
+  global MAINTENANCE_OPEN_BETA est activé dans .env. Sert à ouvrir
+  progressivement le module aux opérateurs sur v1 (staging) avant la promotion
+  en prod, sans exposer l'interface encore incomplète à toute l'usine.
 Le rôle effectif (admin / operator) est injecté dans le tag racine via
 l'attribut data-maint-role, ce qui permet au CSS et au JS de la page de
 basculer l'affichage entre les vues admin et opérateur sans deux templates
@@ -20,31 +23,32 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
-    ROLE_ADMINISTRATION_VENTES,
-    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
+    MAINTENANCE_OPEN_BETA,
 )
 
-_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION, ROLE_ADMINISTRATION_VENTES, ROLE_ADMINISTRATION_TECHNIQUE}
+_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
 
 
 def _get_maintenance_role(user: dict) -> Optional[str]:
     """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
 
     - 'admin'    : superadmin, direction, administration.
-    - 'operator' : fabrication.
+    - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
     - None       : pas d'accès (déclencher access_denied_response).
 
     Utilise `effective_role()` pour respecter l'impersonation : un superadmin
     qui simule un rôle `fabrication` doit voir la vue opérateur, pas celle
-    d'admin.
+    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée —
+    elle court-circuitait l'impersonation en renvoyant 'admin' même quand
+    le rôle simulé était différent.
     """
     if not user:
         return None
     role = effective_role(user)
     if role in _MAINTENANCE_ADMIN_ROLES:
         return "admin"
-    if role == ROLE_FABRICATION:
+    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
         return "operator"
     return None
 
@@ -4017,18 +4021,20 @@ function addOperation(e){
       return;
     }
     const original = OPS_STATE.list[idx];
-    // v182 fix : les libres persistent en DB — on fait les PATCH backend
-    // avant l'update local pour que le refresh reflete l'etat serveur.
-    if(original._libre && original._source === 'db' && original._event_id && original._op_id && original._code){
-      _libreEditPersist(original, {machine, titre: type, commentaire, dateSaisie})
+    // v2.2.6 : toute row d'origine DB (libre OU catalogue) est persistée en
+    // DB via _dbEditPersist. Avant : seuls les libres l'étaient, les catalogue
+    // updataient uniquement localStorage (donc disparaissaient au refresh).
+    if(original._source === 'db' && original._event_id && original._op_id && original._code){
+      _dbEditPersist(original, {machine, titre: type, commentaire, dateSaisie})
         .then(() => {
           closeOpsModal();
-          showToast('Intervention libre mise à jour.', 'success');
+          showToast(original._libre ? 'Intervention libre mise à jour.' : 'Opération mise à jour.', 'success');
           if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
           else if(typeof loadOps === 'function') loadOps();
         })
         .catch(err => {
-          showToast('Erreur : ' + (err && err.message ? err.message : 'PATCH échoué'), 'danger');
+          const msg = (err && err.message) ? err.message : 'PATCH échoué';
+          showToast('Erreur : ' + msg, 'danger');
         });
       return;
     }
@@ -4039,49 +4045,136 @@ function addOperation(e){
       modifie_par: operateur,
     });
   } else {
-    OPS_STATE.list.push({
-      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-      machine, operateur, type, commentaire,
-      date_saisie: dateSaisie
-    });
+    // v2.2.7 : CREATE persistée en DB (avant : localStorage-only → saisies
+    //   perdues au resync nightly, ne remontent pas entre navigateurs).
+    //   Le catalog dropdown utilise le LABEL comme value → lookup du code
+    //   via OPS_TYPES_STATE. Puis POST /events + PATCH termine (même flow
+    //   que libreSubmit).
+    const opTypeEntry = (OPS_TYPES_STATE.list || []).find(t => t.nom === type);
+    if(!opTypeEntry){
+      showToast("Type d'opération introuvable dans le catalogue : " + type, 'danger');
+      return;
+    }
+    const code = opTypeEntry.id;
+    // Conversion date_saisie (ISO datetime) → date_prevue (YYYY-MM-DD)
+    //   et done_at (ISO Paris local YYYY-MM-DDTHH:MM:SS).
+    let datePrevue, doneAtIso;
+    try{
+      const d = new Date(dateSaisie);
+      const pad = n => n < 10 ? '0' + n : '' + n;
+      datePrevue = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+      doneAtIso = datePrevue + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }catch(e){
+      datePrevue = _fmtDateISO(new Date());
+    }
+    (async () => {
+      try{
+        // 1. POST /events → crée un event non_planifie avec 1 op statut=a_faire
+        const rEv = await fetch('/api/maintenance/events', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            machine,
+            date_prevue: datePrevue,
+            source: 'non_planifie',
+            ops: [code],
+            operators: [],
+          }),
+        });
+        if(!rEv.ok){
+          const err = await rEv.json().catch(()=>({}));
+          if(rEv.status === 502 || rEv.status === 503){
+            throw new Error('Serveur temporairement indisponible, réessaye dans un instant.');
+          }
+          throw new Error(err.detail || 'Création event échouée (HTTP ' + rEv.status + ')');
+        }
+        const data = await rEv.json();
+        const ev = data.event;
+        const op = (ev.ops || [])[0];
+        if(!ev || !op) throw new Error('Créneau incomplet retourné par l\'API');
+        // 2. PATCH op → statut termine + observations + done_at (l'admin
+        //    choisit la date/heure exacte de saisie).
+        const patchBody = { statut: 'termine' };
+        if(commentaire) patchBody.observations = commentaire;
+        if(doneAtIso) patchBody.done_at = doneAtIso;
+        const rOp = await fetch('/api/maintenance/events/' + ev.id + '/ops/' + op.id, {
+          method:'PATCH', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(patchBody),
+        });
+        if(!rOp.ok){
+          const err = await rOp.json().catch(()=>({}));
+          throw new Error(err.detail || 'PATCH termine échoué (HTTP ' + rOp.status + ')');
+        }
+        showToast('Opération enregistrée en base.', 'success');
+        closeOpsModal();
+        // Aligne les sélecteurs machine pour cohérence
+        try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
+        try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
+        // Refresh depuis backend (bypass cache)
+        if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+        else if(typeof loadOps === 'function') loadOps();
+        if(typeof renderOpsTypes === 'function') renderOpsTypes();
+        if(typeof renderMaintCards === 'function') renderMaintCards();
+      }catch(e){
+        showToast('Erreur : ' + e.message, 'danger');
+      }
+    })();
+    return;
   }
   saveOps();
   renderOps();
-  // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
-  // pour que la "Dernière intervention" reflète immédiatement la modification.
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
-  // Aligne aussi la vue Maintenance (cartes) sur la machine de la saisie.
   try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderOpsTypes === 'function') renderOpsTypes();
   if(typeof renderMaintCards === 'function') renderMaintCards();
   closeOpsModal();
-  showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
+  showToast('Opération mise à jour.', 'info');
 }
-// v182 fix : persistance backend pour l'edition complete d'un libre.
-// Enchaîne les PATCH : /libres/{code} (titre) → /events/{event_id} (date+machine)
-// → /events/{event_id}/ops/{op_id} (commentaire).
-async function _libreEditPersist(original, changes){
+// v182 fix + v2.2.6 : persistance backend pour toute édition depuis l'historique
+// (libre ET catalogue). Enchaîne :
+//   1. PATCH /libres/{code} (titre) — uniquement pour les libres, skip si standard
+//   2. PATCH /events/{event_id} (date + machine)
+//   3. PATCH /events/{event_id}/ops/{op_id} (commentaire + done_at)
+async function _dbEditPersist(original, changes){
   const eventId = original._event_id;
   const opId = original._op_id;
   const code = original._code;
+  const isLibre = !!original._libre;
   const jsonHeaders = {'Content-Type':'application/json'};
-  // 1. Rename titre si change — MAIS on skip si le nouveau titre correspond
-  // a un code standard du catalogue (l'user a clique par megarde une option
-  // standard dans le dropdown Type). Ce cas est un no-op pour proteger
-  // l'integrite du titre libre.
+
+  const _throwFromResp = async (r, defaultMsg) => {
+    // v2.2.6 : messages plus clairs selon le status
+    if(r.status === 502 || r.status === 503){
+      throw new Error('Serveur temporairement indisponible (' + r.status + '), réessaye dans un instant.');
+    }
+    let err = {};
+    try{ err = await r.json(); }catch(e){}
+    throw new Error(err.detail || (defaultMsg + ' (HTTP ' + r.status + ')'));
+  };
+
+  // 1. Rename titre si libre + change effectif — skip si le nouveau titre
+  // correspond à un code standard du catalogue.
   const newTitle = (changes.titre || '').trim();
-  const isStandardCode = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
-    ? OPS_TYPES_STATE.list.some(t => (t.nom || '') === newTitle)
-    : false;
-  if(newTitle && newTitle !== (original.type || '') && !isStandardCode){
-    const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
-      method:'PATCH', credentials:'include', headers: jsonHeaders,
-      body: JSON.stringify({label: newTitle}),
-    });
-    if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || 'Renommage échoué'); }
-  }else if(isStandardCode && newTitle !== (original.type || '')){
-    // Toast avertissement (non-bloquant)
-    if(typeof showToast === 'function') showToast('Le titre libre a ete conserve (le type choisi correspondait a un code standard). Utilise Parametres > Interventions libres pour renommer.', 'warn');
+  if(isLibre){
+    const isStandardCode = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+      ? OPS_TYPES_STATE.list.some(t => (t.nom || '') === newTitle)
+      : false;
+    if(newTitle && newTitle !== (original.type || '') && !isStandardCode){
+      const r = await fetch('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+        method:'PATCH', credentials:'include', headers: jsonHeaders,
+        body: JSON.stringify({label: newTitle}),
+      });
+      if(!r.ok) await _throwFromResp(r, 'Renommage échoué');
+    }else if(isStandardCode && newTitle !== (original.type || '')){
+      if(typeof showToast === 'function') showToast('Le titre libre a été conservé (le type choisi correspondait à un code standard). Utilise Paramètres → Interventions libres pour renommer.', 'warn');
+    }
+  }
+  // Pour les catalogue standard : le "type" (code_label) n'est pas modifiable
+  // depuis l'historique (il vient de maintenance_codes). Si l'admin l'a changé
+  // dans le dropdown, on ignore le changement de type et on avertit.
+  else if(newTitle && newTitle !== (original.type || '')){
+    if(typeof showToast === 'function') showToast('Le type des opérations catalogue n\'est pas modifiable depuis l\'historique (change le code de l\'op via le créneau parent).', 'warn');
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -4104,18 +4197,46 @@ async function _libreEditPersist(original, changes){
       method:'PATCH', credentials:'include', headers: jsonHeaders,
       body: JSON.stringify(evPatch),
     });
-    if(!r2.ok){ const err = await r2.json().catch(()=>({})); throw new Error(err.detail || 'PATCH event échoué'); }
+    if(!r2.ok) await _throwFromResp(r2, 'PATCH event échoué');
   }
-  // 3. PATCH op : commentaire (observations)
+  // 3. PATCH op : commentaire (observations) + done_at (v2.2.5).
+  //    Fix : la date_saisie affichée dans l'historique = done_at || date_prevue.
+  //    Comme les libres sont marqués termine à la création, done_at est set →
+  //    modifier seulement date_prevue est invisible. On PATCH aussi done_at.
   const newComment = (changes.commentaire || '').trim();
+  const opPatch = {};
   if(newComment !== (original.commentaire || '')){
+    opPatch.observations = newComment;
+  }
+  if(newDateIso){
+    // Convertit en ISO Paris (YYYY-MM-DDTHH:MM:SS local) — même format que
+    // _now_paris_iso() côté backend.
+    try{
+      const d = new Date(newDateIso);
+      if(!isNaN(d.getTime())){
+        const pad = n => (n < 10 ? '0' + n : '' + n);
+        const doneAtLocal = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) +
+          'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+        // Compare avec done_at déjà en DB : la trace originale reflète la
+        // date_saisie affichée (done_at || date_prevue). On skip le PATCH si
+        // pas de changement effectif.
+        const originalDoneAt = (original._done_at || original.date_saisie || '').slice(0, 19);
+        if(doneAtLocal !== originalDoneAt){
+          opPatch.done_at = doneAtLocal;
+        }
+      }
+    }catch(e){}
+  }
+  if(Object.keys(opPatch).length){
     const r3 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,
-      body: JSON.stringify({observations: newComment}),
+      body: JSON.stringify(opPatch),
     });
-    if(!r3.ok){ const err = await r3.json().catch(()=>({})); throw new Error(err.detail || 'PATCH op échoué'); }
+    if(!r3.ok) await _throwFromResp(r3, 'PATCH op échoué');
   }
 }
+// Alias pour compat éventuelle avec anciens callers
+const _libreEditPersist = _dbEditPersist;
 
 // v2 : modal read-only "Détails de l'opération" (double-clic sur ligne historique)
 function openOpsHistoryDetail(id){
