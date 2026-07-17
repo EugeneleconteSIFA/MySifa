@@ -517,6 +517,9 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
   .four-head{flex-direction:column;align-items:stretch}
 }
 
+.btn-danger-solid{background:var(--danger);color:#fff;border:1px solid var(--danger);cursor:pointer}
+.btn-danger-solid:hover{filter:brightness(1.08)}
+.btn-danger-solid:disabled{opacity:.6;cursor:wait}
 </style>
 </head>
 <body>
@@ -539,7 +542,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         Opérations
       </button>
       <button type="button" class="nav-btn" data-tab="maintenance">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
       </button>
       <button type="button" class="nav-btn" data-tab="machines">
@@ -1460,8 +1463,6 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
           <h2 style="margin:0">Codes maintenance</h2>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <span id="db-sync-status" style="font-size:11px;color:var(--muted)"></span>
-            <button type="button" class="btn btn-sec" onclick="syncDbV1()" id="db-sync-btn" title="Recopie la base de production (v2) vers v1. Écrase la DB de v1.">Synchroniser DB v2 → v1</button>
             <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
           </div>
         </div>
@@ -1743,6 +1744,35 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       <div class="card" id="pr-output-card" style="display:none">
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sortie du script</div>
         <pre id="pr-output" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;line-height:1.5;color:var(--text2);font-family:'SFMono-Regular',Menlo,monospace;max-height:420px;overflow:auto;margin:0;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+
+      <!-- v2 : bloc Synchroniser DB v2 → v1 (déplacé depuis Maintenance) -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <div style="font-size:17px;font-weight:700;color:var(--text)">Synchroniser DB v2 → v1</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">Aligner la base de staging sur la production pour repartir d'un état réel.</div>
+          </div>
+          <span id="db-sync-status" style="font-size:11px;color:var(--muted)"></span>
+        </div>
+
+        <!-- Bandeau warn : cas d'usage + risque -->
+        <div style="background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.40);border-left:4px solid var(--warn);border-radius:10px;padding:12px 16px;margin-bottom:16px;color:var(--text);font-size:13px;line-height:1.55">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-weight:800;color:var(--warn);text-transform:uppercase;letter-spacing:.4px;font-size:11px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Attention — action irréversible</span>
+          </div>
+          <div>
+            Cette action écrase intégralement la DB v1 avec la copie live de v2. Utilisée pour aligner l'environnement de test sur la production réelle. Toutes les données de test créées sur v1 depuis la dernière resync (auto la nuit) seront irréversiblement perdues.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" id="db-sync-btn" class="btn btn-danger-solid" onclick="syncDbV1()" style="font-size:14px;padding:11px 22px;font-weight:700;background:var(--danger);color:#fff;border:1px solid var(--danger)">
+            Synchroniser DB v2 → v1
+          </button>
+          <span style="font-size:12px;color:var(--muted)">Un backup pré-resync est conservé automatiquement · v1 redémarrera dans ~15s après le lancement</span>
+        </div>
       </div>
     </section>
 
@@ -7978,7 +8008,7 @@ async function syncDbV1() {
   const btn = document.getElementById('db-sync-btn');
   const status = document.getElementById('db-sync-status');
   if (!btn) return;
-  if (!confirm('Synchroniser la base de données v2 vers v1 ?\n\nLa base de v1 sera ECRASEE par une copie live de la prod (v2).\nUn backup pre-resync est conserve automatiquement.\nv1 sera redemarre.')) return;
+  if (!confirm('⚠ Synchroniser DB v2 → v1 ?\n\nCette action écrase intégralement la DB v1 par la copie live de v2.\nToutes les données créées sur v1 depuis la dernière resync seront perdues.\n\nUn backup pré-resync est conservé automatiquement.\nv1 redémarrera dans ~15s.\n\nContinuer ?')) return;
   const original = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Synchronisation…';
