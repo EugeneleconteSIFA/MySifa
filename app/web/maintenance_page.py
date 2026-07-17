@@ -3892,7 +3892,10 @@ const _OPS_HISTORY_TTL_MS = 15000;  // Recharge la DB toutes les 15s max
 let _OPS_HISTORY_FETCHING = false;
 
 function _rebuildOpsStateFromCaches(){
-  // Merge stable : items DB (source de vérité) + localStorage legacy, dédup.
+  // v2.2.8 : DB = seule source de vérité. Le merge localStorage est désactivé
+  //   car les items pré-DB apparaissaient comme des saisies fantômes qui ne
+  //   survivaient jamais au resync. La localStorage est purgée silencieusement
+  //   à la première reconstruction pour laisser le navigateur propre.
   const seen = new Set();
   const key = it => (it.machine || '') + '|' + (it.type || '') + '|' + (it.date_saisie || '');
   const merged = [];
@@ -3902,17 +3905,19 @@ function _rebuildOpsStateFromCaches(){
     seen.add(k);
     merged.push(it);
   }
-  let local = [];
-  try{
-    const raw = localStorage.getItem(OPS_STORAGE_KEY);
-    local = raw ? JSON.parse(raw) : [];
-    if(!Array.isArray(local)) local = [];
-  }catch(e){ local = []; }
-  for(const it of local){
-    const k = key(it);
-    if(seen.has(k)) continue;
-    seen.add(k);
-    merged.push(it);
+  // Purge one-shot du localStorage legacy (une seule fois par session)
+  if(!window._opsLegacyPurged){
+    try{
+      const raw = localStorage.getItem(OPS_STORAGE_KEY);
+      if(raw){
+        const arr = JSON.parse(raw);
+        if(Array.isArray(arr) && arr.length){
+          localStorage.removeItem(OPS_STORAGE_KEY);
+          console.info('[MyMaintenance v2.2.8] localStorage legacy purgé (' + arr.length + ' items) — la DB est désormais la seule source de vérité.');
+        }
+      }
+    }catch(e){}
+    window._opsLegacyPurged = true;
   }
   OPS_STATE.list = merged;
 }
@@ -3993,7 +3998,8 @@ async function fetchHistoryFromDb(){
   }catch(e){ return []; }
 }
 function saveOps(){
-  try{ localStorage.setItem(OPS_STORAGE_KEY, JSON.stringify(OPS_STATE.list)); }catch(e){}
+  // v2.2.8 : no-op. La DB est la seule source, plus de miroir localStorage.
+  //   Fonction gardée en no-op pour ne pas casser d'appels legacy.
 }
 function addOperation(e){
   e.preventDefault();
