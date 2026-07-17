@@ -1030,8 +1030,8 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
       Planning
     </button>
     <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      Contrôles
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Alertes
     </button>
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
@@ -1209,25 +1209,29 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
       <div class="view adm-only" id="view-controles" style="display:none">
         <div class="page-header">
           <div>
-            <div class="page-title">Contrôles</div>
-            <div class="page-subtitle">Saisie et suivi des contrôles de maintenance</div>
+            <div class="page-title">Alertes</div>
+            <div class="page-subtitle">Gestion des alertes maintenance et historique des saisies</div>
           </div>
         </div>
 
-        <!-- Sous-onglets style MyProd : Historique / Liste -->
-        <div class="ops-subtabs" role="tablist">
-          <button type="button" class="ops-subtab active" data-ctrl-subtab="historique" onclick="setCtrlSubtab('historique')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-            Historique des contrôles
-          </button>
-          <button type="button" class="ops-subtab" data-ctrl-subtab="liste" onclick="setCtrlSubtab('liste')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            Liste des contrôles
-          </button>
+        <!-- v2.2.18 : subtabs retirés (Liste des contrôles supprimé). L'onglet Historique reste seul et sans en-tête. -->
+
+        <!-- Placeholder panel Alertes (sera peuplé complètement en v2.2.19) -->
+        <div class="alerts-panel-placeholder" style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <div style="font-size:15px;font-weight:700;color:var(--text)">Alertes maintenance</div>
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:rgba(251,191,36,.18);color:var(--warn);text-transform:uppercase;letter-spacing:.5px">à venir</span>
+          </div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.55">
+            Le panel de gestion complet des alertes (création, modification, activation, suppression, test) sera disponible ici dans la prochaine version.
+            En attendant, demande au super administrateur de créer ou modifier une alerte via <strong>Paramètres → Maintenance → Alertes</strong>.
+            L'historique des saisies opérateur reste consultable ci-dessous.
+          </div>
         </div>
 
-        <!-- Sous-onglet : Historique -->
-        <div class="ctrl-subview" id="ctrl-subview-historique">
+        <!-- v2.2.18 : bloc Historique reste seul (subview wrapper simplifié) -->
+        <div id="ctrl-subview-historique">
 
         <!-- Filtres Historique des contrôles -->
         <div class="filters-panel">
@@ -1291,7 +1295,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
         <!-- Historique des contrôles -->
         <div class="ops-list">
           <div class="ops-list-head">
-            <div class="ops-list-title">Historique des contrôles</div>
+            <div class="ops-list-title">Historique des alertes</div>
             <div class="ops-list-head-right">
               <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
                 <span class="ctrl-extra-toggle-label">Colonnes produit</span>
@@ -1320,58 +1324,8 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 
         </div><!-- /ctrl-subview-historique -->
 
-        <!-- Sous-onglet : Liste -->
-        <div class="ctrl-subview" id="ctrl-subview-liste" style="display:none">
+        <!-- v2.2.18 : sous-onglet Liste des contrôles supprimé -->
 
-        <!-- Bandeau d'information : table en lecture seule -->
-        <div class="ops-readonly-notice">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          <div>
-            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
-            Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres → Maintenance</strong>.
-          </div>
-        </div>
-
-        <!-- Liste de contrôles (catalogue) -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste de contrôles</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count" id="ctrl-cat-count">0 contrôle</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ctrl-cat-machine" onchange="setCtrlCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
-            </div>
-          </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-ctrl-cat="nom" onclick="sortCtrlTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-ctrl-cat="derniere_intervention" onclick="sortCtrlTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th>Documents</th>
-                  <th>Détail</th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody id="ctrl-cat-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        </div><!-- /ctrl-subview-liste -->
       </div>
 
       <!-- View : Opérations de maintenance -->
@@ -6078,7 +6032,7 @@ function refreshCtrlFiltersOptions(){
     // Base : labels du catalogue de codes (même sans saisie encore)
     CTRL_TYPES_STATE.list.forEach(t => { if(t.nom) setTypes.add(t.nom); });
     // Ajoute : chaque entrée (manuelle ou ack) via son nom d'affichage canonique
-    CTRL_STATE.list.forEach(c => { const n = _displayType(c); if(n) setTypes.add(n); });
+    // v2.2.18 : CTRL_STATE.list dropped — types alimentés par acks + known_alerts uniquement
     (CTRL_STATE.acks || []).forEach(a => { const n = _displayType(a); if(n) setTypes.add(n); });
     // Ajoute : les alertes autonomes (sans linked_maint_code) même sans ack.
     // Les alertes auto-générées à partir d'un code maintenance (préfixe
@@ -6096,7 +6050,7 @@ function refreshCtrlFiltersOptions(){
   }
   if(opeSel){
     const cur = opeSel.value;
-    const opes = Array.from(new Set(CTRL_STATE.list.map(c => c.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
+    const opes = Array.from(new Set((CTRL_STATE.acks || []).map(c => c.operateur).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'fr'));
     opeSel.innerHTML = '<option value="">Tous les opérateurs</option>' +
       opes.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
     if(cur && opes.includes(cur)) opeSel.value = cur;
@@ -6394,7 +6348,8 @@ function renderCtrl(){
   // Filter
   // Sync les filtres par point avec le type sélectionné
   renderPointFilters();
-  const merged = CTRL_STATE.list.concat(CTRL_STATE.acks || []);
+  // v2.2.18 : legacy CTRL_STATE.list dropped — historique = acks DB uniquement
+  const merged = (CTRL_STATE.acks || []).slice();
   let filtered = merged.filter(c => {
     if(f.type && _displayType(c) !== f.type) return false;
     if(f.operateur && c.operateur !== f.operateur) return false;
