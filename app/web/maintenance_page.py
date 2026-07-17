@@ -1026,7 +1026,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .alert-status{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .alert-status.on{color:var(--success)}
 .alert-status.off{color:var(--muted)}
-.alert-actions{display:grid;grid-template-columns:110px 92px 92px;gap:6px;align-items:center;flex-shrink:0}
+.alert-actions{display:flex;gap:8px;align-items:center;flex-shrink:0;flex-wrap:wrap}
 .alert-actions .btn-sm{width:100%;text-align:center;white-space:nowrap}
 @media(max-width:900px){.alert-actions{grid-template-columns:1fr 1fr 1fr;width:100%}}
 /* Toggle switch */
@@ -1333,6 +1333,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
         <!-- v2.2.18 : subtabs retirés (Liste des contrôles supprimé). L'onglet Historique reste seul et sans en-tête. -->
 
         <!-- v2.2.19 : panel Alertes maintenance (dup depuis settings_page) -->
+        <div class="alerts-panel-embed">
         <div id="maint-subtab-alertes" class="maint-subtab">
           <div class="card">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
@@ -1347,6 +1348,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
             <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
+        </div><!-- /alerts-panel-embed -->
 
         <!-- v2.2.18 : bloc Historique reste seul (subview wrapper simplifié) -->
         <div id="ctrl-subview-historique">
@@ -7038,8 +7040,8 @@ function renderAlertsList() {
       +   '<span class="alert-meta">Créée le ' + esc(created) + (a.created_by_display ? ' · ' + esc(a.created_by_display) : '') + lastAck + '</span>'
       + '</div>'
       + '<div class="alert-actions">'
-      +   '<button type="button" class="btn-sm btn-ghost" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
-      +   '<button type="button" class="btn-sm btn-ghost" data-alert-edit="' + a.id + '">Modifier</button>'
+      +   '<button type="button" class="btn btn-sec" data-alert-preview="' + a.id + '" title="Ouvre l\'alerte sur ton écran avec les vrais champs interactifs. Aucune donnée n\'est enregistrée.">Tester sur moi</button>'
+      +   '<button type="button" class="btn btn-sec" data-alert-edit="' + a.id + '">Modifier</button>'
       +   delBtn
       + '</div>'
       + '</div>';
