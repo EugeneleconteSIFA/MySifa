@@ -1204,7 +1204,7 @@ def bridge_suggest(request: Request, mp_id: int):
     """
     _require_read(request)
     with get_db() as conn:
-        return {"suggestions": pricing_bridge.suggest_matches(conn, mp_id, limit=8)}
+        return {"suggestions": pricing_bridge.suggest_matches(conn, mp_id, limit=500)}
 
 
 @router.post("/api/pricing/bridge/link")
