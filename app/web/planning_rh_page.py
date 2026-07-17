@@ -2677,10 +2677,18 @@ function toast(msg,type='success'){
 }
 
 // ── Actions ────────────────────────────────────────────
-function setTab(t){
+var PRH_VALID_TABS=['planning','conges'];
+function _readPrhTab(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(PRH_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  return 'planning';
+}
+function setTab(t, opts){
+  var silent=!!(opts&&opts.silent);
   // La vue RH ne propose que l'onglet Congés — bloquer la bascule vers Planning
   if(S.view==='rh' && t==='planning') t='conges';
   S.tab=t;
+  if(!silent){try{var target='#'+t;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
   closeSidebar();
   if(t==='conges'&&!S.soldes.length)loadSoldes();
   render();
@@ -3212,12 +3220,14 @@ function initPlanningRhGuides(){
 (async()=>{
   await loadMe();
   if(S.view==='rh'){ S.tab='conges'; }
+  var _initPrhTab=_readPrhTab(); if(_initPrhTab!=='planning'){S.tab=_initPrhTab;}
   if(S.isEditor || S.isReadOnlyAdmin)S.viewRange=2; else S.viewRange=1;
   if(S.view!=='rh'){ await loadMachines(); }
   await loadData();
   if(S.tab==='conges')await loadSoldes();
   try{ initPlanningRhGuides(); }catch(e){}
 })();
+window.addEventListener('hashchange',function(){try{setTab(_readPrhTab(),{silent:true});}catch(e){}});
 </script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>

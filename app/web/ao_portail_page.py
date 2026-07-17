@@ -435,7 +435,14 @@ function updateBanner() {{
   document.getElementById("banner-meta").innerHTML = meta;
 }}
 
-function setTab(tab) {{
+var AOP_VALID_TABS=['offre','messages','documents'];
+function _readAopTab(){{
+  try{{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(AOP_VALID_TABS.indexOf(h)!==-1)return h;}}catch(e){{}}
+  return 'offre';
+}}
+function setTab(tab, opts) {{
+  var silent=!!(opts&&opts.silent);
   S.tab = tab;
   document.querySelectorAll(".tab").forEach(b => {{
     b.classList.toggle("active", b.dataset.tab === tab);
@@ -450,6 +457,7 @@ function setTab(tab) {{
     stopMsgPolling();
   }}
   render();
+  if(!silent){{try{{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}}catch(e){{}}}}
 }}
 
 function startMsgPolling() {{
@@ -771,7 +779,8 @@ document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 initTheme();
 S.lang = readLang();
 applyI18n();
-init();
+init().then(function(){{try{{var _ht=_readAopTab();if(_ht!=='offre')setTab(_ht,{{silent:true}});}}catch(e){{}}}});
+window.addEventListener('hashchange',function(){{try{{setTab(_readAopTab(),{{silent:true}});}}catch(e){{}}}});
 </script>
 </body>
 </html>"""

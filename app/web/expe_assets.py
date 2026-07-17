@@ -2933,6 +2933,23 @@ EXPE_MAIN_CSS = r"""
 """
 
 EXPE_MAIN_JS = r"""
+var EXPE_VALID_TABS=['suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','prospects'];
+var _expeHashRestored=false;
+function _readExpeHash(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(EXPE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  return null;
+}
+function _syncExpeHash(){
+  try{var t=S&&S.expeTab;
+    if(t&&EXPE_VALID_TABS.indexOf(t)!==-1){
+      var target='#'+t;if(location.hash!==target)history.replaceState(null,'',target);
+    }}catch(e){}
+}
+window.addEventListener('hashchange',function(){
+  try{var h=_readExpeHash();
+    if(h&&S&&h!==S.expeTab){S.expeTab=h;if(typeof renderExpe==='function')renderExpe();}}catch(e){}
+});
 // ── MyExpé ────────────────────────────────────────────────────────
 const EXPE_CONTACTS_KEY='mysifa_transport_contacts';
 const EXPE_DEFAULT_CONTACTS={
@@ -4324,6 +4341,7 @@ function renderExpeSuiviDepartsWithSubtabs(){
 }
 
 function renderExpe(){
+  if(!_expeHashRestored){_expeHashRestored=true;var _ht=_readExpeHash();if(_ht){S.expeTab=_ht;}}
   const isLight=document.body.classList.contains('light');
   if(S.expeTab==='historique_departs'){
     S.expeTab='suivi_departs';
@@ -4331,6 +4349,7 @@ function renderExpe(){
   }
   if(S.expeTab==='dashboard')S.expeTab='suivi_departs';
   const tab=S.expeTab||'suivi_departs';
+  _syncExpeHash();
   const sub=S.expeDepartSubTab||'jour';
   const loadKey=tab==='suivi_departs'?tab+'_'+sub:tab;
   if(loadKey!==_expeLastRenderedInnerTab){

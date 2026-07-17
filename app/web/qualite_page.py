@@ -883,8 +883,16 @@ function renderMenuQualite(){
 }
 
 // ── Vue Liste ──────────────────────────────────────────────────────
-function setView(v){
+var QUALITE_PERSIST_VIEWS=['menu','list','audits-list','ressources-list','ref-list'];
+function _readQualiteView(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(QUALITE_PERSIST_VIEWS.indexOf(h)!==-1)return h;}catch(e){}
+  return null;
+}
+function setView(v, opts){
+  var silent=!!(opts&&opts.silent);
   S.view=v;
+  if(!silent&&QUALITE_PERSIST_VIEWS.indexOf(v)!==-1){try{var target='#'+v;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
   document.querySelectorAll('.sidebar .nav-btn').forEach(b=>b.classList.remove('active'));
   if(v==='menu'){
     document.getElementById('mobile-sub').textContent='MyQualité';
@@ -2636,6 +2644,8 @@ async function init(){
   if(S._qguideAckedKeys && !S._qguideAckedKeys.has('qualite-overview')){
     setTimeout(() => openGuide('qualite-overview', {autoOpened: true}), 600);
   }
+  var _hashView=_readQualiteView();
+  if(_hashView){setView(_hashView,{silent:true});}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -5935,6 +5945,7 @@ async function saveMatriceCell(fourId, ficheId){
 }
 
 
+window.addEventListener('hashchange',function(){try{var hv=_readQualiteView();if(hv)setView(hv,{silent:true});}catch(e){}});
 init();
 </script>
 <script src="/static/mysifa_impersonate.js"></script>
