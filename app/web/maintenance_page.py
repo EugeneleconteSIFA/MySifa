@@ -1112,6 +1112,20 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 /* ── Sidebar : scroll vertical propre + affordance visuelle ──────── */
 .sidebar{scrollbar-width:thin;scrollbar-color:transparent transparent}
 
+
+/* ═══════════════════════════════════════════════════════════ */
+/* v2.2.21 : styles boutons scopés au panel Alertes (dup Paramètres) */
+/* ═══════════════════════════════════════════════════════════ */
+.alerts-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.alerts-panel-embed .btn:hover{filter:brightness(1.08)}
+.alerts-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
+.alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+body.light .alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
+.alerts-panel-embed .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
+.alerts-panel-embed .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,filter .15s}
+.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
+body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
+.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
 </style>
 </head>
 <body data-maint-role="__MAINT_ROLE__">
@@ -1325,14 +1339,11 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
               <h2 style="margin:0">Alertes maintenance</h2>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
-                <button type="button" class="btn btn-danger" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
+                <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
                 <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
               </div>
             </div>
             <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, rappels…). Chaque alerte est créée manuellement depuis « + Nouvelle alerte » puis paramétrée (déclencheur, cible, formulaire de validation).</p>
-            <div class="op-toolbar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-              <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
-            </div>
             <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
