@@ -6985,6 +6985,81 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 188, "cleanup_orphan_maintenance_event_ops")
 
+    # Migration 189 — Retire le système d'alertes automatiques liées aux
+    # contrôles non périodiques (v2.2.15 + fix v2.2.16). L'alerte utile
+    # ("Inspection des produits finis", historiquement liée au code '01')
+    # devient une alerte classique manuelle qui conserve toutes ses acks.
+    #
+    # Actions (idempotentes via garde schema_migrations 189) :
+    #   a. Trouve l'alerte cible par linked_maint_code='01' (chemin
+    #      canonique) ou fallback LIKE fuzzy sur le nom. Rename propre
+    #      → "Inspection des produits finis". Détache + rebadge manual.
+    #   b. GARDE-FOU STRICT : ne DELETE les autres alertes auto QUE si
+    #      l'alerte cible a été trouvée et sécurisée. Sinon aucun delete.
+    #      (Évite le bug v2.2.15 où qpf_id=None → id != -1 balayait tout.)
+    #   c. Convertit les codes categorie='controles' et periodique=0 en
+    #      periodique=1 avec intervalle='—' si vide.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=189 LIMIT 1").fetchone():
+        _now_189 = datetime.now().isoformat()
+        # a. Trouve l'alerte cible — chemin canonique via linked_maint_code
+        qpf = conn.execute(
+            "SELECT id, nom FROM maintenance_alerts "
+            "WHERE linked_maint_code='01' LIMIT 1"
+        ).fetchone()
+        # Fallback : LIKE fuzzy sur les libellés plausibles
+        if qpf is None:
+            qpf = conn.execute(
+                """SELECT id, nom FROM maintenance_alerts
+                   WHERE LOWER(nom) LIKE '%inspection%produits%finis%'
+                      OR LOWER(nom) LIKE '%inspection%produits%finaux%'
+                      OR LOWER(nom) LIKE '%qualit%produits%finis%'
+                      OR LOWER(nom) LIKE '%contr%le%produits%finis%'
+                   ORDER BY id ASC LIMIT 1"""
+            ).fetchone()
+        qpf_id = qpf["id"] if qpf else None
+        if qpf_id is not None:
+            conn.execute(
+                """UPDATE maintenance_alerts
+                   SET nom='Inspection des produits finis',
+                       linked_maint_code=NULL,
+                       created_by='manual',
+                       updated_at=?
+                   WHERE id=?""",
+                (_now_189, qpf_id)
+            )
+        # b. GARDE-FOU STRICT : DELETE des autres alertes auto SEULEMENT
+        # si l'alerte cible a été positivement identifiée et sécurisée.
+        # Sinon on s'abstient (préserve la donnée en cas de renommage
+        # inattendu — l'admin peut nettoyer manuellement plus tard).
+        if qpf_id is not None:
+            orphan_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM maintenance_alerts "
+                "WHERE linked_maint_code IS NOT NULL"
+            ).fetchall()]
+            if orphan_ids:
+                ph = ",".join(["?"] * len(orphan_ids))
+                # CASCADE FK inactif sur SQLite → purge manuelle des acks
+                conn.execute(
+                    f"DELETE FROM maintenance_alert_acks WHERE alert_id IN ({ph})",
+                    orphan_ids,
+                )
+                conn.execute(
+                    f"DELETE FROM maintenance_alerts WHERE id IN ({ph})",
+                    orphan_ids,
+                )
+        # c. Convertit les codes non-périodiques en périodiques
+        # (safe : aucune perte de données, juste normalisation du flag)
+        conn.execute(
+            """UPDATE maintenance_codes
+               SET periodique=1,
+                   intervalle=COALESCE(NULLIF(TRIM(intervalle),''), '—'),
+                   updated_at=?
+               WHERE categorie='controles' AND periodique=0""",
+            (_now_189,)
+        )
+        conn.commit()
+        _record_schema_migration(conn, 189, "remove_auto_control_alerts_system")
+
 
 def create_default_admin():
     import bcrypt

@@ -1527,14 +1527,9 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
             </div>
           </div>
-          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, etc.). Les alertes <span style="color:var(--accent);font-weight:600">Auto</span> sont créées et synchronisées depuis l'onglet Codes (un contrôle non périodique = une alerte). Les alertes manuelles couvrent les rappels et contrôles événementiels.</p>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, rappels…). Chaque alerte est créée manuellement depuis « + Nouvelle alerte » puis paramétrée (déclencheur, cible, formulaire de validation).</p>
           <div class="op-toolbar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-            <div style="display:flex;gap:4px">
-              <button type="button" class="btn-sm btn-ghost alerts-filter-btn active" data-alerts-filter="all">Toutes</button>
-              <button type="button" class="btn-sm btn-ghost alerts-filter-btn" data-alerts-filter="auto">Auto</button>
-              <button type="button" class="btn-sm btn-ghost alerts-filter-btn" data-alerts-filter="manual">Manuelles</button>
-            </div>
-            <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer (nom, code source…)" oninput="renderAlertsList()">
+            <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
           </div>
           <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
@@ -5374,16 +5369,14 @@ function renderAlertsList() {
   const box = document.getElementById('alerts-list');
   if (!box) return;
   if (!_alertsData.length) {
-    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte pour l\'instant. Les contrôles non périodiques de l\'onglet Codes apparaîtront ici automatiquement, et tu peux aussi en créer manuellement avec « + Nouvelle alerte ».</div>';
+    box.innerHTML = '<div class="alert-preview-empty">Aucune alerte pour l\'instant. Clique sur « + Nouvelle alerte » pour en créer une.</div>';
     return;
   }
   const q = (document.getElementById('alerts-filter-q')?.value || '').trim().toLowerCase();
   const filtered = _alertsData.filter(a => {
-    const isAuto = !!a.linked_maint_code;
-    if (_alertsFilterKind === 'auto' && !isAuto) return false;
-    if (_alertsFilterKind === 'manual' && isAuto) return false;
+    // v2.2.16 — Filtre Auto/Manuelles retiré. Seul le search reste actif.
     if (q) {
-      const hay = (a.nom + ' ' + (a.linked_maint_code || '')).toLowerCase();
+      const hay = (a.nom || '').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -5398,9 +5391,8 @@ function renderAlertsList() {
     let cls = a.active ? 'is-active' : 'is-inactive';
     if (!configured) cls += ' is-todo';
     const created = _fmtAlertDate(a.created_at);
-    const autoBadge = isAuto
-      ? '<span class="alert-badge auto" title="Alerte auto-générée depuis le code ' + esc(a.linked_maint_code) + '">Auto · ' + esc(a.linked_maint_code) + '</span>'
-      : '';
+    // v2.2.16 — Badge Auto retiré (système d'alertes auto supprimé).
+    const autoBadge = '';
     const todoBadge = (!configured)
       ? '<span class="alert-badge todo" title="Cette alerte n\'a pas encore été configurée — cliquez sur Modifier pour renseigner ses paramètres.">À configurer</span>'
       : '';
