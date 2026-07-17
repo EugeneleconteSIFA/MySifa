@@ -4045,23 +4045,91 @@ function addOperation(e){
       modifie_par: operateur,
     });
   } else {
-    OPS_STATE.list.push({
-      id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8),
-      machine, operateur, type, commentaire,
-      date_saisie: dateSaisie
-    });
+    // v2.2.7 : CREATE persistée en DB (avant : localStorage-only → saisies
+    //   perdues au resync nightly, ne remontent pas entre navigateurs).
+    //   Le catalog dropdown utilise le LABEL comme value → lookup du code
+    //   via OPS_TYPES_STATE. Puis POST /events + PATCH termine (même flow
+    //   que libreSubmit).
+    const opTypeEntry = (OPS_TYPES_STATE.list || []).find(t => t.nom === type);
+    if(!opTypeEntry){
+      showToast("Type d'opération introuvable dans le catalogue : " + type, 'danger');
+      return;
+    }
+    const code = opTypeEntry.id;
+    // Conversion date_saisie (ISO datetime) → date_prevue (YYYY-MM-DD)
+    //   et done_at (ISO Paris local YYYY-MM-DDTHH:MM:SS).
+    let datePrevue, doneAtIso;
+    try{
+      const d = new Date(dateSaisie);
+      const pad = n => n < 10 ? '0' + n : '' + n;
+      datePrevue = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+      doneAtIso = datePrevue + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }catch(e){
+      datePrevue = _fmtDateISO(new Date());
+    }
+    (async () => {
+      try{
+        // 1. POST /events → crée un event non_planifie avec 1 op statut=a_faire
+        const rEv = await fetch('/api/maintenance/events', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            machine,
+            date_prevue: datePrevue,
+            source: 'non_planifie',
+            ops: [code],
+            operators: [],
+          }),
+        });
+        if(!rEv.ok){
+          const err = await rEv.json().catch(()=>({}));
+          if(rEv.status === 502 || rEv.status === 503){
+            throw new Error('Serveur temporairement indisponible, réessaye dans un instant.');
+          }
+          throw new Error(err.detail || 'Création event échouée (HTTP ' + rEv.status + ')');
+        }
+        const data = await rEv.json();
+        const ev = data.event;
+        const op = (ev.ops || [])[0];
+        if(!ev || !op) throw new Error('Créneau incomplet retourné par l\'API');
+        // 2. PATCH op → statut termine + observations + done_at (l'admin
+        //    choisit la date/heure exacte de saisie).
+        const patchBody = { statut: 'termine' };
+        if(commentaire) patchBody.observations = commentaire;
+        if(doneAtIso) patchBody.done_at = doneAtIso;
+        const rOp = await fetch('/api/maintenance/events/' + ev.id + '/ops/' + op.id, {
+          method:'PATCH', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(patchBody),
+        });
+        if(!rOp.ok){
+          const err = await rOp.json().catch(()=>({}));
+          throw new Error(err.detail || 'PATCH termine échoué (HTTP ' + rOp.status + ')');
+        }
+        showToast('Opération enregistrée en base.', 'success');
+        closeOpsModal();
+        // Aligne les sélecteurs machine pour cohérence
+        try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
+        try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
+        // Refresh depuis backend (bypass cache)
+        if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+        else if(typeof loadOps === 'function') loadOps();
+        if(typeof renderOpsTypes === 'function') renderOpsTypes();
+        if(typeof renderMaintCards === 'function') renderMaintCards();
+      }catch(e){
+        showToast('Erreur : ' + e.message, 'danger');
+      }
+    })();
+    return;
   }
   saveOps();
   renderOps();
-  // Aligne le sélecteur du catalogue sur la machine de la saisie et re-render
-  // pour que la "Dernière intervention" reflète immédiatement la modification.
   try{ localStorage.setItem(OPS_CAT_MACHINE_KEY, machine); }catch(e){}
-  // Aligne aussi la vue Maintenance (cartes) sur la machine de la saisie.
   try{ localStorage.setItem(MAINT_MACHINE_KEY, machine); }catch(e){}
   if(typeof renderOpsTypes === 'function') renderOpsTypes();
   if(typeof renderMaintCards === 'function') renderMaintCards();
   closeOpsModal();
-  showToast(isEdit ? 'Opération mise à jour.' : 'Opération enregistrée.', 'info');
+  showToast('Opération mise à jour.', 'info');
 }
 // v182 fix + v2.2.6 : persistance backend pour toute édition depuis l'historique
 // (libre ET catalogue). Enchaîne :
