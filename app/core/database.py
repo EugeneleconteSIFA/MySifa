@@ -6964,6 +6964,27 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 187, "mp_pricing_bridge")
 
+    # Migration 188 — MyMaintenance : purge one-shot des ops et operators
+    # orphelins. Bug historique : le PRAGMA foreign_keys n'est pas activé sur
+    # get_db(), donc les DELETE sur maintenance_events ne CASCADE pas → chaque
+    # suppression de créneau laissait des rows dans maintenance_event_ops et
+    # maintenance_event_operators avec un event_id pointant vers un event qui
+    # n'existe plus. Rows invisibles dans l'UI (les JOIN les excluent) mais
+    # présentes physiquement en DB.
+    # Le fix v2.2.11 ajoute des DELETE explicites dans delete_event pour ne
+    # plus créer de nouveaux orphelins. Cette migration nettoie le passif.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=188 LIMIT 1").fetchone():
+        conn.execute(
+            """DELETE FROM maintenance_event_ops
+               WHERE event_id NOT IN (SELECT id FROM maintenance_events)"""
+        )
+        conn.execute(
+            """DELETE FROM maintenance_event_operators
+               WHERE event_id NOT IN (SELECT id FROM maintenance_events)"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 188, "cleanup_orphan_maintenance_event_ops")
+
 
 def create_default_admin():
     import bcrypt

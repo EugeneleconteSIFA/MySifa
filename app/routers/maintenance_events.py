@@ -531,7 +531,13 @@ def delete_event(event_id: int, request: Request):
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
-        # CASCADE supprime ops et rattachements
+        # v2.2.11 : cleanup manuel — get_db() n'active pas PRAGMA foreign_keys,
+        # donc le CASCADE des FK est INACTIF. Sans ces DELETE explicites, les
+        # rows dans maintenance_event_ops et maintenance_event_operators
+        # restent orphelines dans la DB (invisibles dans l'UI via JOIN mais
+        # présentes physiquement).
+        conn.execute("DELETE FROM maintenance_event_ops WHERE event_id=?", (event_id,))
+        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM maintenance_events WHERE id=?", (event_id,))
         conn.commit()
     return {"deleted": event_id}
