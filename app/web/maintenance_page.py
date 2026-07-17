@@ -1319,38 +1319,21 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
         <!-- v2.2.18 : subtabs retirés (Liste des contrôles supprimé). L'onglet Historique reste seul et sans en-tête. -->
 
         <!-- v2.2.19 : panel Alertes maintenance (dup depuis settings_page) -->
-        <div class="alerts-panel-embed" style="margin-bottom:16px">
-      <div id="maint-subtab-alertes" class="maint-subtab">
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-            <h2 style="margin:0">Alertes maintenance</h2>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
-              <button type="button" class="btn btn-danger" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
-              <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
+        <div id="maint-subtab-alertes" class="maint-subtab">
+          <div class="card">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+              <h2 style="margin:0">Alertes maintenance</h2>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
+                <button type="button" class="btn btn-danger" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
+                <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
+              </div>
             </div>
-          </div>
-          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, rappels…). Chaque alerte est créée manuellement depuis « + Nouvelle alerte » puis paramétrée (déclencheur, cible, formulaire de validation).</p>
-          <div class="op-toolbar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-            <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
-          </div>
-          <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
-        </div>
-      </div>
-      <!-- v182 Lot 2 : Sous-onglet Interventions libres -->
-      <div id="maint-subtab-libres" class="maint-subtab" style="display:none">
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-            <h2 style="margin:0">Interventions libres</h2>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn btn-sec" id="libres-merge-btn" disabled onclick="libresMergeSelected()" title="Fusionne les 2 titres selectionnes en un seul (les saisies passees sont reaffectees).">Fusionner sélection</button>
-              <span id="libres-selection-count" style="font-size:11px;color:var(--muted)"></span>
+            <p class="sub" style="margin-top:-4px;margin-bottom:14px">Messages et formulaires affichés aux opérateurs lors de tâches de maintenance (contrôles qualité, vérifications, rappels…). Chaque alerte est créée manuellement depuis « + Nouvelle alerte » puis paramétrée (déclencheur, cible, formulaire de validation).</p>
+            <div class="op-toolbar" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+              <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
             </div>
-        </div>
-          <div style="font-size:13px;color:var(--text2);line-height:1.55">
-            Le panel de gestion complet des alertes (création, modification, activation, suppression, test) sera disponible ici dans la prochaine version.
-            En attendant, demande au super administrateur de créer ou modifier une alerte via <strong>Paramètres → Maintenance → Alertes</strong>.
-            L'historique des saisies opérateur reste consultable ci-dessous.
+            <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
 
@@ -6946,9 +6929,7 @@ async function loadMe(){
 
 // ═══════════════════════════════════════════════════════════════════
 // v2.2.19 : Panel Alertes maintenance — duplication de settings_page.py
-// Adapters pour matcher les conventions maintenance_page (escHtml, showToast).
-// Ces adapters sont scopés à ce bloc via un IIFE au-dessus, mais on garde
-// tout à plat pour minimiser le diff avec l'original.
+// Adapters : esc/toast/api pour matcher les conventions maintenance_page
 // ═══════════════════════════════════════════════════════════════════
 if (typeof esc !== 'function') { window.esc = function(s){ return escHtml(s); }; }
 if (typeof toast !== 'function') { window.toast = function(msg, err){ if(typeof showToast==='function') showToast(msg, err?'danger':'info'); else console.log(msg); }; }
