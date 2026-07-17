@@ -1458,13 +1458,10 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
             <div class="ops-list-title">Historique des opérations</div>
             <div class="ops-list-head-right">
               <div class="ops-list-count" id="ops-count">0 opération</div>
-              <button type="button" class="ops-btn-add" onclick="libreOpenModal()" title="Enregistrer une intervention ponctuelle sans creer de code">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                Intervention libre
-              </button>
-              <button type="button" class="ops-btn-add" onclick="openOpsModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Nouvelle saisie
+              <!-- v2.2.13 : bouton unifié "Enregistrer une opération" (fusion Intervention libre + Nouvelle saisie) -->
+              <button type="button" class="ops-btn-add" onclick="adminOpenRegisterOpModal()" title="Enregistrer une opération de maintenance déjà effectuée">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                Enregistrer une opération
               </button>
             </div>
           </div>
@@ -6908,7 +6905,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
       <label for="op-new-date">Date de l'intervention *</label>
       <input type="date" id="op-new-date">
     </div>
-    <div class="op-form-row">
+    <div class="op-form-row" id="op-new-machine-mono-row">
       <label for="op-new-machine">Machine *</label>
       <select id="op-new-machine">
         <option value="Cohésio 1">Cohésio 1</option>
@@ -6916,6 +6913,16 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
         <option value="DSI">DSI</option>
         <option value="Repiquage">Repiquage</option>
       </select>
+    </div>
+    <!-- v2.2.13 : mode admin — multi-machines (checkboxes). Une op créée par machine cochée. -->
+    <div class="op-form-row" id="op-new-machines-multi-row" style="display:none">
+      <label>Machines * <span style="font-weight:400;color:var(--muted);font-size:11px;text-transform:none;letter-spacing:0">(coche une ou plusieurs — une opération sera créée par machine)</span></label>
+      <div id="op-new-machines-checkboxes" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:10px">
+        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="Cohésio 1" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> Cohésio 1</label>
+        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="Cohésio 2" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> Cohésio 2</label>
+        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="DSI" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> DSI</label>
+        <label class="op-mach-chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);font-weight:500"><input type="checkbox" value="Repiquage" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)"> Repiquage</label>
+      </div>
     </div>
     <div class="op-form-row" id="op-new-code-row">
       <label for="op-new-code">Code opération *</label>
@@ -6996,6 +7003,7 @@ const MAINT_STATE = {
   codes: [],
   operators: [],
   saisieTaskId: null,
+  newModalAdminMode: false,  // v2.2.13 : true si modal ouverte via adminOpenRegisterOpModal
 };
 
 function _fmtDateISO(d){
@@ -7658,6 +7666,51 @@ async function opOpenNewModal(){
   document.getElementById('op-modal-new').classList.add('active');
 }
 
+// v2.2.13 : entrée admin — ouvre la MÊME modal fusionnée que l'opérateur, avec :
+//   - Machine multi-choix (checkboxes) au lieu du select mono
+//   - Date d'intervention modifiable (déjà présente)
+//   - Durée manuelle (déjà présente)
+//   - Onglets Catalogue / Inhabituelle (déjà présents)
+//   Une op créée par machine cochée. Opérateur = admin connecté (côté backend).
+async function adminOpenRegisterOpModal(){
+  await opFetchCodes();
+  MAINT_STATE.editingEventId = null;
+  MAINT_STATE.editingIsLibre = false;
+  MAINT_STATE.newModalMode = 'catalogue';
+  MAINT_STATE.newLibreSelectedCode = null;
+  MAINT_STATE.newModalAdminMode = true;
+  const sel = document.getElementById('op-new-code');
+  sel.innerHTML = MAINT_STATE.codes.map(c =>
+    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+  ).join('');
+  document.getElementById('op-modal-new-title').textContent = 'Enregistrer une opération';
+  document.getElementById('op-modal-new-sub').textContent = 'Choisis une opération dans le catalogue ou décris une intervention inhabituelle. Coche une ou plusieurs machines — une opération sera créée pour chaque machine.';
+  document.getElementById('op-modal-new-submit').textContent = 'Enregistrer';
+  _opResetModalFields();
+  // Reset visibilité par mode Catalogue
+  const codeRow = document.getElementById('op-new-code-row');
+  const titreRow = document.getElementById('op-new-titre-libre-row');
+  if(codeRow) codeRow.style.display = '';
+  if(titreRow) titreRow.style.display = 'none';
+  const titreEl = document.getElementById('op-new-titre-libre');
+  if(titreEl) titreEl.value = '';
+  const panel = document.getElementById('op-new-libre-autocomplete-panel');
+  if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
+  // Bascule mono → multi-machines
+  const monoRow = document.getElementById('op-new-machine-mono-row');
+  const multiRow = document.getElementById('op-new-machines-multi-row');
+  if(monoRow) monoRow.style.display = 'none';
+  if(multiRow) multiRow.style.display = '';
+  const cbs = document.querySelectorAll('#op-new-machines-checkboxes input[type=checkbox]');
+  cbs.forEach(cb => { cb.checked = false; });
+  // Date par défaut = aujourd'hui
+  try{
+    const dateEl = document.getElementById('op-new-date');
+    if(dateEl && !dateEl.value){ dateEl.value = _fmtDateISO(new Date()); }
+  }catch(e){}
+  document.getElementById('op-modal-new').classList.add('active');
+}
+
 // v2 : switch entre modes Catalogue et Inhabituelle dans le modal fusionné.
 function opSwitchMode(mode){
   MAINT_STATE.newModalMode = mode;
@@ -7787,11 +7840,19 @@ function opCloseNewModal(){
   MAINT_STATE.editingIsLibre = false;
   MAINT_STATE.newModalMode = 'catalogue';
   MAINT_STATE.newLibreSelectedCode = null;
+  MAINT_STATE.newModalAdminMode = false;  // v2.2.13
   // Reset visibilité par défaut : code visible, titre libre caché
   const codeRow = document.getElementById('op-new-code-row');
   const titreRow = document.getElementById('op-new-titre-libre-row');
   if(codeRow) codeRow.style.display = '';
   if(titreRow) titreRow.style.display = 'none';
+  // v2.2.13 : reset multi-machines
+  const monoRow = document.getElementById('op-new-machine-mono-row');
+  const multiRow = document.getElementById('op-new-machines-multi-row');
+  if(monoRow) monoRow.style.display = '';
+  if(multiRow) multiRow.style.display = 'none';
+  const cbs = document.querySelectorAll('#op-new-machines-checkboxes input[type=checkbox]');
+  cbs.forEach(cb => { cb.checked = false; });
   const panel = document.getElementById('op-new-libre-autocomplete-panel');
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   document.getElementById('op-modal-new').classList.remove('active');
@@ -7837,6 +7898,10 @@ function _toDoneAtIso(dateStr){
 }
 
 async function opSubmitNew(){
+  // v2.2.13 : si admin mode, on route vers le flow multi-machines
+  if(MAINT_STATE.newModalAdminMode && !MAINT_STATE.editingEventId){
+    return adminSubmitRegisterOp();
+  }
   const dateVal = document.getElementById('op-new-date').value;
   const machine = document.getElementById('op-new-machine').value;
   const isLibreEdit = !!MAINT_STATE.editingIsLibre;
@@ -7999,6 +8064,73 @@ async function opSubmitNew(){
     opCloseNewModal();
     await opLoadTasks();
     if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    else alert('Erreur : ' + e.message);
+  }
+}
+
+// v2.2.13 : soumet la modal admin — boucle sur les machines cochées et crée
+//   N events (source=non_planifie) marqués termine, un par machine.
+async function adminSubmitRegisterOp(){
+  const dateVal = document.getElementById('op-new-date').value;
+  const cbs = document.querySelectorAll('#op-new-machines-checkboxes input[type=checkbox]');
+  const machines = Array.from(cbs).filter(c => c.checked).map(c => c.value);
+  const titreLibre = (document.getElementById('op-new-titre-libre').value || '').trim();
+  const code = document.getElementById('op-new-code').value;
+  const dureeStr = document.getElementById('op-new-duree').value;
+  const comment = (document.getElementById('op-new-comment').value || '').trim();
+  const dureeMin = dureeStr === '' ? null : parseInt(dureeStr, 10);
+  const isCreationInhabituelle = (MAINT_STATE.newModalMode === 'inhabituelle');
+
+  // Validation
+  if(!dateVal){ if(typeof showToast === 'function') showToast('Date obligatoire.', 'danger'); return; }
+  if(machines.length === 0){ if(typeof showToast === 'function') showToast('Sélectionne au moins une machine.', 'danger'); return; }
+  if(isCreationInhabituelle && !titreLibre){ if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger'); return; }
+  if(!isCreationInhabituelle && !code){ if(typeof showToast === 'function') showToast('Code opération obligatoire.', 'danger'); return; }
+  if(dureeStr !== '' && (Number.isNaN(dureeMin) || dureeMin < 0)){ if(typeof showToast === 'function') showToast('Durée invalide.', 'danger'); return; }
+
+  try{
+    // 1. Résout le code final (une seule fois — réutilisé pour toutes les machines).
+    let codeFinal = code;
+    if(isCreationInhabituelle){
+      if(MAINT_STATE.newLibreSelectedCode){
+        codeFinal = MAINT_STATE.newLibreSelectedCode;
+      } else {
+        const rNew = await fetch('/api/maintenance/codes/libres', {
+          method:'POST', credentials:'include',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({label: titreLibre}),
+        });
+        if(!rNew.ok){ const err = await rNew.json().catch(()=>({})); throw new Error(err.detail || 'Création code libre échouée'); }
+        const dNew = await rNew.json();
+        codeFinal = dNew.code;
+      }
+    }
+    // 2. Boucle machines : POST /events + PATCH termine pour chacune
+    let created = 0;
+    for(const machine of machines){
+      const body = { machine, date_prevue: dateVal, source: 'non_planifie', ops: [codeFinal], operators: [] };
+      const r = await fetch('/api/maintenance/events', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      });
+      if(!r.ok){ const err = await r.json().catch(()=>({})); throw new Error(err.detail || r.status); }
+      const data = await r.json();
+      const ev = data.event;
+      const op = (ev.ops || [])[0];
+      if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
+      await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      created += 1;
+    }
+    const msg = created > 1
+      ? `${created} opérations enregistrées (${machines.join(', ')}).`
+      : (isCreationInhabituelle ? 'Intervention libre enregistrée.' : 'Opération enregistrée.');
+    if(typeof showToast === 'function') showToast(msg, 'success');
+    opCloseNewModal();
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+    if(typeof renderOps === 'function') renderOps();
   }catch(e){
     if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
     else alert('Erreur : ' + e.message);
