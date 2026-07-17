@@ -3197,10 +3197,13 @@ import json as _json_alerts
 
 
 def _require_alerts_admin(request: Request) -> dict:
-    """Super administrateur uniquement pour les alertes maintenance."""
+    """v2.2.18 — Élargi aux rôles direction et administration pour permettre
+    la gestion des alertes maintenance depuis MyMaintenance (l'admin métier
+    n'a pas accès à /settings mais peut gérer les alertes depuis sa vue).
+    """
     user = get_current_user(request)
-    if user.get("role") != ROLE_SUPERADMIN:
-        raise HTTPException(status_code=403, detail="Réservé au super administrateur.")
+    if user.get("role") not in (ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION):
+        raise HTTPException(status_code=403, detail="Réservé aux administrateurs maintenance.")
     return user
 
 
