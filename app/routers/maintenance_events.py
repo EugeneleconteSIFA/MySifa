@@ -462,15 +462,14 @@ def create_event(body: EventCreateBody, request: Request):
         for code, _mcsv in ops_specs:
             if not conn.execute("SELECT 1 FROM maintenance_codes WHERE code=?", (code,)).fetchone():
                 raise HTTPException(status_code=400, detail=f"code inconnu: {code}")
-        # Auto-assign : si admin crée un créneau planifié sans assigner
-        # d'opérateurs, on assigne par défaut tous les users role=fabrication
-        # actifs. Sinon un créneau vide d'opérateurs est inutile.
-        # (Le mode opérateur assigne toujours self ou la liste passée.)
+        # v2.2.49 : opérateurs obligatoires pour un créneau planifié admin.
+        # L'ancienne logique d'auto-assign 'tous fabrication' est retirée
+        # (un créneau doit expliciter qui doit intervenir).
         if maint_role == "admin" and src == "planifie" and not operator_ids:
-            operator_ids = [r["id"] for r in conn.execute(
-                "SELECT id FROM users WHERE role = ? AND actif = 1",
-                (ROLE_FABRICATION,),
-            ).fetchall()]
+            raise HTTPException(
+                status_code=400,
+                detail="Sélectionne au moins un opérateur pour ce créneau."
+            )
         # Vérif opérateurs
         for oid in operator_ids:
             if not conn.execute("SELECT 1 FROM users WHERE id=?", (oid,)).fetchone():

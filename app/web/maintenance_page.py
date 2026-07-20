@@ -1523,7 +1523,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div id="plan-subview-historique" style="display:none">
           <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
             <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
-            <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l\'avancement, réutilise les tâches en modèle.</p>
+            <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l'avancement, réutilise les tâches en modèle.</p>
             <div id="plan-hist-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
@@ -3920,6 +3920,11 @@ async function submitCaseModal(e){
       if(syncError) throw syncError;
       showToast('Créneau mis à jour.', 'info');
     } else {
+      // v2.2.49 : bloque côté client si aucun opérateur (double-guard avec backend)
+      if(!operatorIds || !operatorIds.length){
+        showToast('Sélectionne au moins un opérateur pour ce créneau.', 'danger');
+        return;
+      }
       const rNew = await fetch('/api/maintenance/events', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
@@ -7351,8 +7356,10 @@ async function loadPlanningHistorique(){
     if(!r.ok){ listEl.innerHTML = '<p style="color:var(--danger)">Erreur de chargement.</p>'; return; }
     const data = await r.json();
     const todayIso = _fmtDateISO(today);
+    // v2.2.49 : inclut aujourd'hui (<=) — un créneau créé et validé le jour même
+    // doit apparaître dans l'historique tout de suite.
     const events = (data.events || []).filter(ev =>
-      ev.source === 'planifie' && ev.date_prevue && ev.date_prevue < todayIso
+      ev.source === 'planifie' && ev.date_prevue && ev.date_prevue <= todayIso
     );
     events.sort((a,b) => (b.date_prevue || '').localeCompare(a.date_prevue || ''));
     renderPlanningHistorique(events);
