@@ -7128,6 +7128,17 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 193, "ao_fournisseurs_fks")
 
+    # v194 -- ao_demandes : cloture + fournisseur retenu
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=194 LIMIT 1").fetchone():
+        aod_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+        if "fournisseur_retenu_id" not in aod_cols:
+            conn.execute("ALTER TABLE ao_demandes ADD COLUMN fournisseur_retenu_id INTEGER")
+        if "date_cloture" not in aod_cols:
+            conn.execute("ALTER TABLE ao_demandes ADD COLUMN date_cloture TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_demandes_retenu ON ao_demandes(fournisseur_retenu_id)")
+        conn.commit()
+        _record_schema_migration(conn, 194, "ao_demandes_cloture_retention")
+
 
 def create_default_admin():
     import bcrypt

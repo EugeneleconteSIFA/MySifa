@@ -737,6 +737,43 @@ def email_expe_devis_confirmation(
     return subject, body
 
 
+
+def email_offre_retenue(ao: dict, fourni: dict, message_perso: str | None = None) -> tuple[str, str]:
+    """Email envoye au fournisseur retenu apres cloture de l'AO."""
+    langue = (fourni.get("langue") or "fr").lower()
+    ref = ao.get("reference") or ""
+    titre = ao.get("titre") or "Appel d\'offres"
+    nom_fournisseur = fourni.get("nom_fournisseur") or ""
+
+    if langue == "en":
+        subject = f"Your quote has been selected — {ref}"
+        greeting = f"Dear {nom_fournisseur},"
+        body_html = (
+            f"<p>{greeting}</p>"
+            f"<p>We are pleased to inform you that your quote for the RFQ <strong>{ref}</strong> ({titre}) has been selected.</p>"
+            + (f"<p>{message_perso}</p>" if message_perso else "")
+            + "<p>Our team will contact you shortly to finalize the order.</p>"
+            + "<p>Best regards,</p>"
+        )
+    else:
+        subject = f"Votre offre a ete retenue — {ref}"
+        greeting = f"Bonjour {nom_fournisseur},"
+        body_html = (
+            f"<p>{greeting}</p>"
+            f"<p>Nous avons le plaisir de vous informer que votre offre pour l\'appel d\'offres <strong>{ref}</strong> ({titre}) a ete retenue.</p>"
+            + (f"<p>{message_perso}</p>" if message_perso else "")
+            + "<p>Notre equipe reviendra vers vous rapidement pour finaliser la commande.</p>"
+            + "<p>Cordialement,</p>"
+        )
+
+    body = email_mysifa_layout(
+        title_html=subject,
+        content_html=body_html,
+        footer_contact=True,
+    )
+    return subject, body
+
+
 def send_email(
     to: str | list[str],
     subject: str,
