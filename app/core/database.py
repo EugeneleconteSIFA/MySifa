@@ -7073,6 +7073,24 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 190, "force_all_maintenance_codes_periodic")
 
+    # Migration 191 — Backfill usage_count des codes libres (v2.2.37).
+    # Le compteur `usage_count` sur maintenance_codes (libre=1) n'est
+    # historiquement peuplé que par la fonction merge. Depuis v2.2.37 il est
+    # aussi incrémenté à chaque INSERT d'op avec un code LIB-*, mais les
+    # données antérieures ont un compteur à 0. Cette migration re-calcule
+    # usage_count à partir du vrai nombre d'ops enregistrées.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=191 LIMIT 1").fetchone():
+        conn.execute(
+            """UPDATE maintenance_codes
+               SET usage_count = COALESCE((
+                     SELECT COUNT(*) FROM maintenance_event_ops
+                     WHERE maintenance_event_ops.code = maintenance_codes.code
+                   ), 0)
+               WHERE libre = 1"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 191, "backfill_libres_usage_count")
+
 
 def create_default_admin():
     import bcrypt
