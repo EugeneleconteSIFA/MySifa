@@ -1339,7 +1339,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
         <div id="maint-subtab-alertes" class="maint-subtab">
           <div class="card">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-              <h2 style="margin:0">Alertes maintenance</h2>
+              <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des alertes</h2>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
                 <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
@@ -1354,7 +1354,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
 
         <!-- v2.2.25 : Historique dans card blanche pour équilibre visuel avec Gestion -->
         <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
-          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">Historique des saisies</div>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
           <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
         <div id="ctrl-subview-historique">
 
@@ -1363,7 +1363,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
           <div class="filters">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="filter-input" onchange="resetPointFilters(); renderCtrl()">
+              <select id="filt-controles-type" class="filter-input" onchange="ctrlResetPage(); resetPointFilters(); renderCtrl()">
                 <option value="">Tous les types</option>
               </select>
             </div>
@@ -1385,7 +1385,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
             </div>
             <div class="filter-group">
               <label for="filt-controles-conformite">Conformité</label>
-              <select id="filt-controles-conformite" class="filter-input" onchange="renderCtrl()">
+              <select id="filt-controles-conformite" class="filter-input" onchange="ctrlResetPage(); renderCtrl()">
                 <option value="">Toutes les réponses</option>
                 <option value="nc">Non-conformes uniquement</option>
                 <option value="ok">Conformes uniquement</option>
@@ -1399,7 +1399,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
               <label for="filt-controles-date-to">Au</label>
               <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
             </div>
-            <button type="button" class="filters-apply-btn" onclick="renderCtrl()">Filtrer</button>
+            <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
             <span class="filters-date-presets-label">Période :</span>
@@ -5962,7 +5962,14 @@ function renderOpsTypes(){
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
 const CTRL_EXTRA_KEY = 'mysifa_ctrl_show_extra_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {} };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {}, page: 0, pageSize: 50 };
+// v2.2.27 : navigation pagination
+function ctrlPageGo(delta){
+  CTRL_STATE.page = (CTRL_STATE.page || 0) + delta;
+  if(CTRL_STATE.page < 0) CTRL_STATE.page = 0;
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
+function ctrlResetPage(){ CTRL_STATE.page = 0; }
 
 // Toggle "Colonnes produit" : par defaut off, persistance localStorage.
 function getShowExtraCols(){
@@ -6553,6 +6560,15 @@ function renderCtrl(){
 
   const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
+  // v2.2.27 : pagination 50/page (pattern MyProd)
+  const _totalFiltered = filtered.length;
+  const _pageSize = CTRL_STATE.pageSize || 50;
+  const _maxPage = Math.max(0, Math.ceil(_totalFiltered / _pageSize) - 1);
+  if(CTRL_STATE.page > _maxPage) CTRL_STATE.page = _maxPage;
+  if(CTRL_STATE.page < 0) CTRL_STATE.page = 0;
+  const _pageStart = CTRL_STATE.page * _pageSize;
+  const _pageEnd = Math.min(_pageStart + _pageSize, _totalFiltered);
+  const _pagedRows = filtered.slice(_pageStart, _pageEnd);
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
@@ -6560,7 +6576,7 @@ function renderCtrl(){
       : 'Aucun contrôle enregistré pour cette période.';
     tbody.innerHTML = '<tr><td colspan="' + totalCols + '" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = filtered.map(c => {
+    const rows = _pagedRows.map(c => {
       let cells = '';
       cells += '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>';
       cells += '<td>' + escHtml(c.machine) + '</td>';
@@ -6630,13 +6646,22 @@ function renderCtrl(){
     tbody.innerHTML = rows.join('');
   }
   if(count){
-    const n = CTRL_STATE.list.length + (CTRL_STATE.acks || []).length;
-    const visible = filtered.length;
-    if(visible !== n){
-      count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
-    } else {
-      count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
-    }
+    // v2.2.27 : compteur + pager (‹ X-Y/N ›)
+    const n = (CTRL_STATE.acks || []).length;
+    const visible = _totalFiltered;
+    const from = visible === 0 ? 0 : _pageStart + 1;
+    const to = _pageEnd;
+    const label = visible !== n
+      ? (from + '-' + to + ' / ' + visible + ' filtrés (' + n + ' total)')
+      : (from + '-' + to + ' / ' + n + ' contrôle' + (n > 1 ? 's' : ''));
+    const prevD = CTRL_STATE.page <= 0;
+    const nextD = CTRL_STATE.page >= _maxPage;
+    const btnStyle = 'border:1px solid var(--border);background:var(--card);color:var(--text2);padding:3px 9px;border-radius:6px;font-size:13px;line-height:1;font-family:inherit;transition:border-color .12s,color .12s';
+    count.innerHTML = '<div style="display:inline-flex;align-items:center;gap:8px">' +
+      '<button type="button" ' + (prevD ? 'disabled' : '') + ' onclick="ctrlPageGo(-1)" title="Page précédente" style="' + btnStyle + ';cursor:' + (prevD ? 'not-allowed' : 'pointer') + (prevD ? ';opacity:.35' : '') + '">‹</button>' +
+      '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600">' + escHtml(label) + '</span>' +
+      '<button type="button" ' + (nextD ? 'disabled' : '') + ' onclick="ctrlPageGo(1)" title="Page suivante" style="' + btnStyle + ';cursor:' + (nextD ? 'not-allowed' : 'pointer') + (nextD ? ';opacity:.35' : '') + '">›</button>' +
+      '</div>';
   }
 }
 
