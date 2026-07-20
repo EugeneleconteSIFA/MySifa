@@ -11141,8 +11141,12 @@ function openMaintForm(code) {
       if (docsList) docsList.style.display = 'none';
     }
   }
-  // v2.2.32 : scroll tout en haut de la page pour voir titre + subtabs + formulaire
-  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) { window.scrollTo(0, 0); }
+  // v2.2.33 : le body a overflow:hidden, le vrai scroll est sur .main
+  try {
+    const scroller = document.querySelector('.main') || document.scrollingElement || document.documentElement;
+    if (scroller.scrollTo) scroller.scrollTo({ top: 0, behavior: 'smooth' });
+    else scroller.scrollTop = 0;
+  } catch(e) { try { document.querySelector('.main').scrollTop = 0; } catch(e2) {} }
   codeInp.focus();
 }
 
