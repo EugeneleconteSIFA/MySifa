@@ -10506,6 +10506,10 @@ window.opSetPlanTab = opSetPlanTabWithCal;
 // v2.2.28 : Panel Codes maintenance — duplication de settings_page.py
 // Réutilise les adapters esc/toast/api de v2.2.19 (déjà en place).
 // ═══════════════════════════════════════════════════════════════════
+// v2.2.29 fix : déclarations globales oubliées (lignes 4587-4588 de settings_page.py)
+let _maintItems = [];
+let _maintEditCode = null;
+
 async function loadMaintCodes() {
   try {
     const r = await api('/api/maintenance/codes');
