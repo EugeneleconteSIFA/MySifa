@@ -1406,8 +1406,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
       Opérations de maintenance
     </button>
-    <!-- v2.2.43 : "Mes tâches" aussi disponible pour l'admin (certains admins font la maintenance) -->
-    <button type="button" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')">
+    <!-- v2.2.45 : "Mes tâches" admin est réservée à Manuel Lesaffre. Cachée par défaut,
+         révélée en JS après loadMe() si S.me.nom contient "lesaffre" (case-insensitive). -->
+    <button type="button" id="nav-mes-taches-admin" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')" style="display:none">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Mes tâches
     </button>
@@ -7224,6 +7225,14 @@ async function loadMe(){
       const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
       chip.innerHTML='<div class="uc-name">'+escHtml(S.me.nom||'')+'</div><div class="uc-role">'+escHtml(roles[S.me.role]||S.me.role||'')+'</div>';
     }
+    // v2.2.45 : révèle la nav-btn "Mes tâches" (côté admin) uniquement pour Manuel Lesaffre
+    try {
+      const nomLower = String((S.me && S.me.nom) || '').toLowerCase();
+      if (nomLower.includes('lesaffre')) {
+        const btn = document.getElementById('nav-mes-taches-admin');
+        if (btn) btn.style.display = '';
+      }
+    } catch(e) {}
   }catch(e){}
 }
 
