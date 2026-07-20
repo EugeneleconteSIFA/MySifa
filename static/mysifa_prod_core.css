@@ -920,3 +920,22 @@ body.light .contact-modal-overlay{background:rgba(15,23,42,.42)}
 .contact-modal input,.contact-modal select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
 .contact-modal input:focus,.contact-modal select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 body.light .contact-modal input:focus,body.light .contact-modal select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+
+/* ── v1.7 — Colonne "Actions" des tableaux OF & Fiches ─────────────
+   Le CSS global `td { max-width:200px; overflow:hidden }` (l. 592) clippe
+   la barre d'icones actions quand elle contient 4-5 boutons (Modifier,
+   Apercu, Imprimer, Telecharger, Supprimer). Cette classe releve le
+   cap et desactive l'overflow pour cette colonne uniquement. th associe
+   fixe une min-width pour reserver la place. */
+.table-std th.th-actions{
+  min-width:180px;
+  width:180px;
+}
+.table-std td.td-actions{
+  max-width:none;
+  overflow:visible;
+  white-space:nowrap;
+}
+.table-std td.td-actions > div{
+  justify-content:flex-start;
+}

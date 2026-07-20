@@ -1663,7 +1663,8 @@ function renderOfTab(){
       h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
       h('td',null,escHtml(dateCrea)),
       h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
-      h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+      // v1.7 — className 'td-actions' pour override du clip global (cf. CSS)
+      h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
@@ -1693,7 +1694,7 @@ function renderOfTab(){
           ),
           h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),
           h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Date création'),
-          h('th',null,'Statut'),h('th',null,'Actions')
+          h('th',null,'Statut'),h('th',{className:'th-actions'},'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))
       )
@@ -1802,7 +1803,8 @@ function renderFichesTab(){
       h('td',null,escHtml(row.machine||'—')),
       h('td',null,row.nb_couleurs!=null?escHtml(String(row.nb_couleurs)):'—'),
       h('td',null,escHtml(row.source||'—')),
-      h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+      // v1.7 — className 'td-actions' pour override du clip global (cf. CSS)
+      h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
@@ -1832,7 +1834,7 @@ function renderFichesTab(){
           ),
           h('th',null,'Référence'),h('th',null,'Format'),h('th',null,'Laize eti.'),
           h('th',null,'Support'),h('th',null,'Machine'),h('th',null,'Nb coul.'),
-          h('th',null,'Source'),h('th',null,'Actions')
+          h('th',null,'Source'),h('th',{className:'th-actions'},'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))
       )
