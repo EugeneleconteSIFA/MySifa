@@ -841,6 +841,10 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-perso-section-head strong{font-size:13px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--text2)}
 .op-perso-section-head .op-perso-section-count{background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
 .op-perso-section-head .op-perso-section-hint{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-weight:500;text-transform:none;letter-spacing:0}
+/* v2.2.63 : badge machine dans les cards d'ops perso */
+.op-op-card-machine{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 10px;background:var(--accent-bg);color:var(--accent);border-radius:5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;align-self:flex-start;max-width:100%}
+.op-op-card-machine .op-op-card-machine-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.op-op-card-machine .op-op-card-machine-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 /* ── Carte d'op individuelle ────────────────────────────────────── */
 .op-op-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,transform .15s;position:relative}
 .op-op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
@@ -9292,7 +9296,9 @@ function _bucketsForMachine(events, machine, showTermine){
 }
 
 // Rendu d'une carte d'op individuelle (utilisé dans les créneaux ET dans le bloc non-programmées).
-function _renderOpCardIndividual(op, ev){
+function _renderOpCardIndividual(op, ev, opts){
+  opts = opts || {};
+  const showMachine = !!opts.showMachine;
   const isDone = op.statut === 'termine';
   const statusLabel = _statutLabel(op.statut);
   // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
@@ -9318,12 +9324,17 @@ function _renderOpCardIndividual(op, ev){
          <span>Consignes de l'admin</span>
        </button>`
     : '';
+  const machinesList = showMachine ? _opMachines(op, ev) : [];
+  const machineChip = (showMachine && machinesList.length)
+    ? `<div class="op-op-card-machine"><span class="op-op-card-machine-dot"></span><span class="op-op-card-machine-lbl">${machinesList.map(m => escHtml(m)).join(' · ')}</span></div>`
+    : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
     </div>
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
+    ${machineChip}
     ${consignesChip}
     <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
       ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
@@ -9594,7 +9605,7 @@ function _renderPersoSection(evs, showTermine){
     if(da !== db) return db.localeCompare(da);
     return (b.ev.id || 0) - (a.ev.id || 0);
   });
-  const cards = items.map(({op, ev}) => _renderOpCardIndividual(op, ev)).join('');
+  const cards = items.map(({op, ev}) => _renderOpCardIndividual(op, ev, {showMachine:true})).join('');
   return `<section class="op-perso-section">
     <div class="op-perso-section-head">
       <strong>Opérations personnelles</strong>
