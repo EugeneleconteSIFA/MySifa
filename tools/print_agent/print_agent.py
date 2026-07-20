@@ -3,11 +3,20 @@
 MySifa — agent d'impression local
 
 Petit démon Python autonome à faire tourner sur un Raspberry Pi ou un PC de
-l'usine, sur le même réseau que les imprimantes. Il poll le VPS MySifa toutes
-les N secondes, récupère les jobs pending, les envoie en TCP:9100 sur les
-imprimantes cibles, puis ack.
+l'usine. Il poll le VPS MySifa toutes les N secondes, récupère les jobs pending,
+les envoie à leur imprimante cible, puis ack.
 
-Zéro dépendance externe (stdlib uniquement). Compatible Python 3.9+.
+Deux backends d'envoi selon le `type_connexion` de l'imprimante côté MySifa :
+
+  - tcp_ip        → socket TCP:9100 (stdlib pure). Marche pour toute imprimante
+                    Zebra/Brother/TSC/… branchée directement au LAN.
+
+  - windows_local → API Windows (win32print) pour cibler une queue installée
+                    sur ce PC hôte. Marche pour USB, LPT et toute imprimante
+                    déjà déclarée dans "Périphériques et imprimantes". Nécessite
+                    `pip install pywin32` sur le PC hôte.
+
+Compatible Python 3.7+ (via `from __future__ import annotations`).
 
 Configuration : agent_config.yaml dans le même dossier que ce script.
 Format minimal :
@@ -19,7 +28,8 @@ Format minimal :
     printer_timeout: 8              # secondes de timeout socket vers l'imprimante
     log_level: INFO
 
-Déploiement systemd : voir mysifa-print-agent.service dans ce dossier.
+Déploiement Linux (systemd) : voir mysifa-print-agent.service dans ce dossier.
+Déploiement Windows (NSSM)  : voir install_agent_windows.ps1 dans ce dossier.
 """
 
 from __future__ import annotations
@@ -33,6 +43,15 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+# ─── Backend Windows local (queue via win32print) ────────────────────
+# Import optionnel : l'agent fonctionne sans si aucun `windows_local` n'est
+# rattaché. On log l'absence à l'usage seulement (pas au démarrage).
+try:
+    import win32print  # type: ignore
+    _HAS_WIN32PRINT = True
+except Exception:
+    _HAS_WIN32PRINT = False
 
 
 DEFAULT_CONFIG = {
@@ -98,14 +117,46 @@ def http_request(url: str, method: str, token: str, payload: dict | None = None,
         raise RuntimeError(f"Réseau : {e.reason}")
 
 
-def send_to_printer(ip: str, port: int, payload: bytes, timeout: int = 8) -> None:
+def send_to_printer_tcp(ip: str, port: int, payload: bytes, timeout: int = 8) -> None:
     """Envoie les octets directement à l'imprimante en TCP:9100 (protocole
-    raw / RAW / Line Printer Daemon standard des Zebra, Brother, TSC, etc.)."""
+    raw standard des Zebra, Brother, TSC, etc.)."""
     with socket.create_connection((ip, port), timeout=timeout) as sock:
         sock.settimeout(timeout)
         # Utile pour les paquets < MTU : force l'envoi immédiat
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.sendall(payload)
+
+
+def send_to_printer_windows(queue_name: str, payload: bytes, doc_name: str = "MySifa print job") -> None:
+    """Envoie les octets à une queue Windows en mode RAW (le driver ne réinterprète
+    pas). Marche pour USB, LPT et réseau tant qu'une queue Windows existe.
+
+    Nécessite `pywin32` — installé sur les PC hôtes via install_agent_windows.ps1.
+    """
+    if not _HAS_WIN32PRINT:
+        raise RuntimeError(
+            "pywin32 non installé sur cet agent — impossible d'atteindre les imprimantes "
+            "Windows locales. Installe-le avec : pip install pywin32"
+        )
+    hprinter = win32print.OpenPrinter(queue_name)
+    try:
+        # Format ("nom_doc", None, "RAW") = octets bruts, le driver Windows
+        # ne rerend pas. C'est exactement ce qu'on veut pour du ZPL/EPL/ESC-POS.
+        job_id = win32print.StartDocPrinter(hprinter, 1, (doc_name, None, "RAW"))
+        try:
+            win32print.StartPagePrinter(hprinter)
+            win32print.WritePrinter(hprinter, payload)
+            win32print.EndPagePrinter(hprinter)
+        finally:
+            win32print.EndDocPrinter(hprinter)
+    finally:
+        win32print.ClosePrinter(hprinter)
+
+
+# Backward-compat : garde l'ancienne signature pour éviter de casser
+# des appels externes qui pourraient exister.
+def send_to_printer(ip: str, port: int, payload: bytes, timeout: int = 8) -> None:
+    send_to_printer_tcp(ip, port, payload, timeout)
 
 
 def process_jobs(cfg: dict) -> int:
@@ -125,10 +176,21 @@ def process_jobs(cfg: dict) -> int:
         except Exception as e:
             _ack(cfg, jid, ok=False, erreur=f"Payload b64 invalide : {e}")
             continue
+        # v1.6 — route selon type_connexion. Défaut 'tcp_ip' pour rétrocompat
+        # avec des serveurs pré-v189 qui ne renvoient pas encore ce champ.
+        tc = imp.get("type_connexion", "tcp_ip") if isinstance(imp, dict) else "tcp_ip"
         try:
-            send_to_printer(imp["ip"], int(imp["port"]), payload, timeout=cfg["printer_timeout"])
-            _ack(cfg, jid, ok=True)
-            logging.info("Job %s → %s (%s:%s) : OK", jid, imp["nom"], imp["ip"], imp["port"])
+            if tc == "windows_local":
+                queue = imp.get("nom_queue_windows")
+                if not queue:
+                    raise RuntimeError("Imprimante configurée en windows_local mais nom_queue_windows vide côté serveur.")
+                send_to_printer_windows(queue, payload, doc_name=f"MySifa job {jid}")
+                _ack(cfg, jid, ok=True)
+                logging.info("Job %s → %s (win:%s) : OK", jid, imp["nom"], queue)
+            else:
+                send_to_printer_tcp(imp["ip"], int(imp["port"]), payload, timeout=cfg["printer_timeout"])
+                _ack(cfg, jid, ok=True)
+                logging.info("Job %s → %s (%s:%s) : OK", jid, imp["nom"], imp["ip"], imp["port"])
             processed += 1
         except Exception as e:
             msg = f"{type(e).__name__}: {e}"
@@ -156,7 +218,11 @@ def heartbeat(cfg: dict) -> None:
 
 
 def main_loop(cfg: dict) -> None:
-    logging.info("MySifa print-agent démarré — server=%s poll=%ss", cfg["server_url"], cfg["poll_interval"])
+    logging.info(
+        "MySifa print-agent v1.6 démarré — server=%s poll=%ss, backend Windows=%s",
+        cfg["server_url"], cfg["poll_interval"],
+        "OK" if _HAS_WIN32PRINT else "absent (pip install pywin32 pour les imprimantes USB/LPT)",
+    )
     heartbeat(cfg)
     last_hb = time.monotonic()
     while True:
