@@ -1927,8 +1927,19 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 
       <!-- Modal template -->
       <div id="pr-tpl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prCloseTplModal()">
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(820px,95vw);max-height:90vh;overflow:auto">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(1200px,97vw);max-height:92vh;overflow:auto">
           <h2 id="pr-tpl-modal-title" style="margin:0 0 18px;font-size:17px">Éditer le template</h2>
+
+          <!-- Galerie de modèles de départ (visible uniquement à la création) -->
+          <div id="pr-tpl-gallery-row" style="margin-bottom:14px;display:none">
+            <label class="pr-lbl">Partir d'un modèle prédéfini</label>
+            <select id="pr-tpl-gallery" class="pr-inp" onchange="prLoadFromGallery()" style="width:100%">
+              <option value="">— Vide (je pars de zéro) —</option>
+            </select>
+            <div id="pr-tpl-gallery-desc" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+          </div>
+
+          <!-- Ligne du haut : nom + usage -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div>
               <label class="pr-lbl">Nom</label>
@@ -1939,17 +1950,56 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <select id="pr-tpl-usage" class="pr-inp"></select>
             </div>
           </div>
+
           <div style="margin-bottom:6px">
-            <label class="pr-lbl">Placeholders disponibles</label>
+            <label class="pr-lbl">Placeholders disponibles (clique pour insérer)</label>
             <div id="pr-tpl-placeholders" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px"></div>
           </div>
-          <div style="margin-bottom:12px">
-            <label class="pr-lbl">Contenu (ZPL / EPL / ESC-POS avec placeholders)</label>
-            <textarea id="pr-tpl-contenu" class="pr-inp" spellcheck="false" style="min-height:280px;font-family:'SFMono-Regular',Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre;resize:vertical"></textarea>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">
-              Utilise <code>{{champ}}</code>, <code>{{barcode:champ,CODE128,140}}</code>, <code>{{qrcode:champ}}</code>, <code>{{now:%d/%m/%Y}}</code>.
+
+          <!-- Corps : éditeur à gauche, aperçu à droite -->
+          <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-bottom:12px">
+
+            <!-- Éditeur ZPL -->
+            <div>
+              <label class="pr-lbl">Contenu (ZPL / EPL / ESC-POS)</label>
+              <textarea id="pr-tpl-contenu" class="pr-inp" spellcheck="false" style="min-height:420px;font-family:'SFMono-Regular',Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre;resize:vertical;width:100%"></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">
+                Placeholders : <code>{{champ}}</code>, <code>{{barcode:champ,CODE128,140}}</code>, <code>{{qrcode:champ}}</code>, <code>{{now:%d/%m/%Y}}</code>.
+              </div>
+            </div>
+
+            <!-- Aperçu WYSIWYG -->
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label class="pr-lbl" style="margin:0">Aperçu (rendu réel via labelary.com)</label>
+                <button type="button" class="btn btn-ghost" onclick="prTplRefreshPreview()" style="padding:4px 10px;font-size:11px">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:-1px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  Actualiser
+                </button>
+              </div>
+              <!-- Dimensions pour l'aperçu (ajustables) -->
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;font-size:11px;color:var(--muted)">
+                <span>Format :</span>
+                <input type="number" id="pr-tpl-prev-w" value="102" min="20" max="300" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:11px"> ×
+                <input type="number" id="pr-tpl-prev-h" value="152" min="20" max="300" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:11px"> mm
+                @
+                <select id="pr-tpl-prev-dpi" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:11px">
+                  <option value="203">203 dpi</option>
+                  <option value="300">300 dpi</option>
+                  <option value="600">600 dpi</option>
+                </select>
+              </div>
+              <div id="pr-tpl-preview-box" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;min-height:420px;display:flex;align-items:center;justify-content:center;overflow:auto">
+                <div id="pr-tpl-preview-placeholder" style="color:var(--muted);font-size:12px;text-align:center;padding:20px">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4;margin-bottom:8px"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
+                  <div>Clique sur <strong>Actualiser</strong> pour voir<br>l'aperçu de ton template.</div>
+                </div>
+                <img id="pr-tpl-preview-img" style="display:none;max-width:100%;max-height:100%" alt="Aperçu">
+              </div>
+              <div id="pr-tpl-preview-err" style="font-size:11px;color:var(--danger);margin-top:4px"></div>
             </div>
           </div>
+
           <div style="display:flex;gap:8px;justify-content:space-between;margin-top:18px">
             <button id="pr-tpl-del" class="btn btn-ghost" style="color:var(--danger);display:none" onclick="prDeleteTemplate()">Supprimer</button>
             <div style="display:flex;gap:8px;margin-left:auto">
@@ -8808,7 +8858,7 @@ function prRenderTemplates() {
   }).join('');
 }
 
-function prNewTemplate(imprimanteId) {
+async function prNewTemplate(imprimanteId) {
   PR.editingTpl = { imprimanteId };
   document.getElementById('pr-tpl-modal-title').textContent = 'Nouveau template';
   document.getElementById('pr-tpl-nom').value = '';
@@ -8816,9 +8866,15 @@ function prNewTemplate(imprimanteId) {
   const usel = document.getElementById('pr-tpl-usage');
   usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
   usel.value = PR.usages[0] ? PR.usages[0].key : '';
+  usel.disabled = false;
   prRenderPlaceholders(usel.value);
   usel.onchange = () => prRenderPlaceholders(usel.value);
   document.getElementById('pr-tpl-del').style.display = 'none';
+  // Charge la galerie de modeles predefinis
+  document.getElementById('pr-tpl-gallery-row').style.display = '';
+  await prLoadGallery();
+  // Reset preview
+  prTplClearPreview();
   document.getElementById('pr-tpl-modal').style.display = 'flex';
 }
 
@@ -8832,10 +8888,22 @@ function prEditTemplate(id) {
   const usel = document.getElementById('pr-tpl-usage');
   usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
   usel.value = t.usage_key;
-  usel.disabled = true; // usage fixe une fois créé, sinon création d'un nouveau
+  usel.disabled = true; // usage fixe une fois créé
   prRenderPlaceholders(usel.value);
   document.getElementById('pr-tpl-del').style.display = '';
+  // Cache la galerie en edition (on ne change pas de modele quand on edite un existant)
+  document.getElementById('pr-tpl-gallery-row').style.display = 'none';
+  // Prefill des dimensions apercu depuis l'imprimante liee si dispo
+  const imp = PR.imprimantes.find(x => x.id === t.imprimante_id);
+  if (imp) {
+    document.getElementById('pr-tpl-prev-w').value = imp.largeur_mm || 102;
+    document.getElementById('pr-tpl-prev-h').value = imp.hauteur_mm || 152;
+    document.getElementById('pr-tpl-prev-dpi').value = imp.dpi || 203;
+  }
+  // Reset preview et auto-charge
+  prTplClearPreview();
   document.getElementById('pr-tpl-modal').style.display = 'flex';
+  setTimeout(() => prTplRefreshPreview(), 200);
 }
 
 function prRenderPlaceholders(usageKey) {
@@ -8902,6 +8970,107 @@ async function prDeleteTemplate() {
     await initPrintersPanel();
   } catch (e) {
     prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+// âââ Galerie de templates prÃ©dÃ©finis (nouveau template) ââââ
+let PR_TPL_GALLERY = [];
+
+async function prLoadGallery() {
+  const sel = document.getElementById('pr-tpl-gallery');
+  const desc = document.getElementById('pr-tpl-gallery-desc');
+  if (!sel) return;
+  try {
+    const r = await prFetch('/api/print/templates/defaults');
+    PR_TPL_GALLERY = r.templates || [];
+    const opts = ['<option value="">â Vide (je pars de zÃ©ro) â</option>'];
+    PR_TPL_GALLERY.forEach(t => {
+      opts.push(`<option value="${_escH(t.key)}">${_escH(t.nom)} (${t.largeur_mm}Ã${t.hauteur_mm}mm)</option>`);
+    });
+    sel.innerHTML = opts.join('');
+    sel.value = '';
+    if (desc) desc.textContent = 'Choisis un modÃ¨le pour prÃ©remplir le contenu ci-dessous. Tu peux ensuite l\'adapter Ã  ton usage.';
+  } catch (e) {
+    sel.innerHTML = '<option value="">â Vide â</option>';
+    if (desc) desc.textContent = 'Impossible de charger les modÃ¨les prÃ©dÃ©finis.';
+  }
+}
+
+async function prLoadFromGallery() {
+  const sel = document.getElementById('pr-tpl-gallery');
+  const desc = document.getElementById('pr-tpl-gallery-desc');
+  const key = sel.value;
+  if (!key) {
+    if (desc) desc.textContent = 'Choisis un modÃ¨le pour prÃ©remplir le contenu ci-dessous.';
+    return;
+  }
+  try {
+    const t = await prFetch('/api/print/templates/defaults/' + encodeURIComponent(key));
+    if (!document.getElementById('pr-tpl-nom').value.trim()) {
+      document.getElementById('pr-tpl-nom').value = t.nom;
+    }
+    document.getElementById('pr-tpl-contenu').value = t.contenu;
+    const usel = document.getElementById('pr-tpl-usage');
+    if (t.usage_key) usel.value = t.usage_key;
+    document.getElementById('pr-tpl-prev-w').value = t.largeur_mm || 102;
+    document.getElementById('pr-tpl-prev-h').value = t.hauteur_mm || 152;
+    if (desc) desc.textContent = t.description || '';
+    prRenderPlaceholders(usel.value);
+    setTimeout(() => prTplRefreshPreview(), 100);
+  } catch (e) {
+    prToast('Erreur chargement modÃ¨le : ' + e.message, 'danger');
+  }
+}
+
+// âââ AperÃ§u WYSIWYG du template (via labelary) ââââ
+function prTplClearPreview() {
+  const img = document.getElementById('pr-tpl-preview-img');
+  const ph = document.getElementById('pr-tpl-preview-placeholder');
+  const err = document.getElementById('pr-tpl-preview-err');
+  if (img) { img.style.display = 'none'; img.src = ''; }
+  if (ph) ph.style.display = '';
+  if (err) err.textContent = '';
+}
+
+async function prTplRefreshPreview() {
+  const contenu = document.getElementById('pr-tpl-contenu').value;
+  const largeur_mm = parseInt(document.getElementById('pr-tpl-prev-w').value, 10) || 102;
+  const hauteur_mm = parseInt(document.getElementById('pr-tpl-prev-h').value, 10) || 152;
+  const dpi = parseInt(document.getElementById('pr-tpl-prev-dpi').value, 10) || 203;
+  const img = document.getElementById('pr-tpl-preview-img');
+  const ph = document.getElementById('pr-tpl-preview-placeholder');
+  const err = document.getElementById('pr-tpl-preview-err');
+  if (!contenu.trim()) {
+    err.textContent = 'Le contenu est vide.';
+    return;
+  }
+  err.textContent = 'GÃ©nÃ©ration de l\'aperÃ§uâ¦';
+  err.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/print/preview', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contenu, langage: 'zpl', largeur_mm, hauteur_mm, dpi }),
+    });
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); if (j.detail) msg = j.detail; } catch(e){}
+      throw new Error(msg);
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    if (img) {
+      img.onload = () => { URL.revokeObjectURL(url); };
+      img.src = url;
+      img.style.display = '';
+    }
+    if (ph) ph.style.display = 'none';
+    err.textContent = `AperÃ§u ${largeur_mm}Ã${hauteur_mm}mm @ ${dpi}dpi (rendu labelary.com)`;
+    err.style.color = 'var(--muted)';
+  } catch (e) {
+    err.textContent = 'Erreur aperÃ§u : ' + e.message;
+    err.style.color = 'var(--danger)';
   }
 }
 
