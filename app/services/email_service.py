@@ -4,15 +4,19 @@ Contrat: `send_email()` retourne True/False et **ne lève jamais**.
 """
 from __future__ import annotations
 
+import base64
 import logging
+import mimetypes
 import smtplib
 import ssl
 import time
 import json
 import urllib.parse
 import urllib.request
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email import encoders
 
 import html as html_module
 
@@ -151,16 +155,22 @@ def _rfq_email_body_block(
     lang: str,
     portail_lien: str,
 ) -> str:
-    from app.services.expe_email_i18n import expe_rfq_email_strings, expe_type_envoi_label
+    from app.services.expe_email_i18n import (
+        expe_rfq_email_strings,
+        expe_type_envoi_label,
+        expe_type_palette_label,
+    )
 
     cp = (demande.get("code_postal_destination") or "—").strip()
     poids = demande.get("poids_total_kg")
     nb_pal = demande.get("nb_palette")
     type_raw = (demande.get("type_envoi") or "messagerie").strip()
+    type_palette_raw = (demande.get("type_palette") or "").strip()
     contraintes = (demande.get("contraintes") or "").strip()
     user_nom = user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
     s = expe_rfq_email_strings(lang, cp=cp, user_nom=user_nom)
     type_envoi = expe_type_envoi_label(type_raw, lang)
+    type_palette_label = expe_type_palette_label(type_palette_raw, lang)
 
     detail_rows: list[tuple[str, str]] = [
         (s["type_label"], f"<span style=\"color:#0891b2\">{_esc(type_envoi)}</span>"),
@@ -169,6 +179,8 @@ def _rfq_email_body_block(
         detail_rows.append((s["weight_label"], f"{_esc(poids)} kg"))
     if nb_pal is not None and str(nb_pal).strip() != "":
         detail_rows.append((s["pallets_label"], _esc(nb_pal)))
+    if type_palette_label:
+        detail_rows.append((s["pallet_type_label"], _esc(type_palette_label)))
     if contraintes:
         detail_rows.append((s["constraints_label"], _esc(contraintes)))
 
@@ -652,15 +664,21 @@ def email_expe_devis_confirmation(
     reponse: dict,
     depart: dict,
     user: dict,
+    retention_comment: str | None = None,
+    retention_file_name: str | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — confirmation transporteur : sa proposition de
     devis a été retenue, voici le récap de la mission. Envoyé au transporteur
     après clic sur « Retenir » côté MyExpé.
     """
+    from app.services.expe_email_i18n import expe_type_palette_label
+
     cp = (demande.get("code_postal_destination") or "—").strip()
     ref_dem = (demande.get("reference") or "").strip()
     client = (demande.get("client") or depart.get("client") or "").strip()
     type_envoi = (demande.get("type_envoi") or "").strip()
+    type_palette_raw = (demande.get("type_palette") or "").strip()
+    type_palette_label = expe_type_palette_label(type_palette_raw, "fr")
     poids = demande.get("poids_total_kg")
     nb_pal = demande.get("nb_palette")
     contraintes = (demande.get("contraintes") or "").strip()
@@ -669,6 +687,8 @@ def email_expe_devis_confirmation(
     prix = reponse.get("prix")
     delai = reponse.get("delai_jours")
     commentaire = (reponse.get("commentaire") or "").strip()
+    retention_msg = (retention_comment or "").strip()
+    retention_file = (retention_file_name or "").strip()
     user_nom = (
         user.get("nom") or user.get("email") or user.get("identifiant") or "SIFA"
     )
@@ -687,6 +707,8 @@ def email_expe_devis_confirmation(
         detail_rows.append(("Poids total", f"{_esc(poids)} kg"))
     if nb_pal not in (None, ""):
         detail_rows.append(("Nombre de palettes", _esc(nb_pal)))
+    if type_palette_label:
+        detail_rows.append(("Type de palette", _esc(type_palette_label)))
     if prix not in (None, ""):
         try:
             prix_s = f"{float(prix):.2f} €"
@@ -706,6 +728,23 @@ def email_expe_devis_confirmation(
 
     detail_table = _email_detail_table(detail_rows)
 
+    retention_block = ""
+    if retention_msg:
+        retention_block += (
+            "<div style=\"background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.28);"
+            "border-radius:10px;padding:14px 16px;margin:0 0 18px\">"
+            "<div style=\"font-size:11px;color:#0891b2;text-transform:uppercase;"
+            "letter-spacing:.5px;font-weight:800;margin-bottom:6px\">Message SIFA</div>"
+            f"<div style=\"font-size:14px;color:#0f172a;line-height:1.6;white-space:pre-wrap\">"
+            f"{_esc(retention_msg)}</div></div>"
+        )
+    if retention_file:
+        retention_block += (
+            "<p style=\"margin:0 0 18px;font-size:13px;color:#475569\">"
+            "Un fichier est joint à ce courriel : "
+            f"<strong style=\"color:#0f172a\">{_esc(retention_file)}</strong>.</p>"
+        )
+
     inner = f"""
     <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">
       Bonjour {_esc(nom_trp)},
@@ -716,6 +755,7 @@ def email_expe_devis_confirmation(
       Merci de bien vouloir organiser l'enlèvement selon les modalités indiquées et
       de nous confirmer la prise en charge par retour de mail.
     </p>
+    {retention_block}
     {detail_table}
     <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
       Cordialement,<br>
@@ -774,16 +814,34 @@ def email_offre_retenue(ao: dict, fourni: dict, message_perso: str | None = None
     return subject, body
 
 
+class _SendPreflightError(Exception):
+    """Sentinelle interne : erreur *avant* toute tentative reelle d'envoi.
+    Signale a l'orchestrateur qu'il est sur qu'aucun message n'est parti
+    et qu'il peut donc essayer le provider suivant sans risque de doublon.
+    """
+
+
 def send_email(
     to: str | list[str],
     subject: str,
     html_body: str,
     reply_to: str | None = None,
     cc: str | list[str] | None = None,
+    attachments: list[dict] | None = None,
 ) -> bool:
     """
-    Envoie un email HTML via SMTP (STARTTLS) + fallback Microsoft Graph (si configuré).
-    Retourne True si OK, False sinon — ne lève jamais d'exception.
+    Envoie un email HTML via Microsoft Graph (prod SIFA) ou SMTP.
+    Retourne True si OK, False sinon — ne leve jamais d'exception.
+
+    Les provides sont essayes dans l'ordre `SUPPORT_EMAIL_PROVIDER` puis l'autre.
+    IMPORTANT : le fallback automatique entre les deux providers a ete restreint
+    pour ne pas envoyer le meme email deux fois. Si un provider est configure
+    et que l'appel reseau part reellement (i.e. autre chose qu'une erreur de
+    config avant emission), on ne bascule PAS sur l'autre provider — le message
+    pourrait avoir ete accepte cote serveur pendant qu'on lisait une reponse
+    incomplete, et un fallback deposerait une seconde copie chez le destinataire.
+
+    `attachments` : liste de {filename, content(bytes), mime?} — inline uniquement.
     """
     recipients = [to] if isinstance(to, str) else [str(x) for x in to]
     recipients = [r.strip() for r in recipients if r and str(r).strip()]
@@ -795,6 +853,23 @@ def send_email(
     if cc:
         cc_list = [cc] if isinstance(cc, str) else [str(x) for x in cc]
         cc_list = [c.strip() for c in cc_list if c and str(c).strip()]
+
+    atts: list[dict] = []
+    for a in attachments or []:
+        try:
+            name = str(a.get("filename") or "fichier").strip() or "fichier"
+            content = a.get("content")
+            if content is None:
+                continue
+            if not isinstance(content, (bytes, bytearray)):
+                logger.warning("send_email: pj '%s' ignoree (content non bytes)", name)
+                continue
+            mime = (a.get("mime") or "").strip()
+            if not mime:
+                mime = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            atts.append({"filename": name, "content": bytes(content), "mime": mime})
+        except Exception:
+            continue
 
     def _can_smtp() -> bool:
         return bool(SMTP_HOST)
@@ -833,7 +908,15 @@ def send_email(
         return str(tok)
 
     def _send_graph() -> None:
-        token = _graph_get_token()
+        # Token fetch : si ca echoue on est sur qu'aucun message n'a ete envoye
+        # → l'appelant peut relever une SendPreflightError qui autorise le
+        # fallback SMTP. Une fois le POST sendMail lance, toute erreur est
+        # traitee comme "peut-etre parti" et interdit le fallback.
+        try:
+            token = _graph_get_token()
+        except Exception as e:
+            raise _SendPreflightError(str(e)) from e
+
         url = f"https://graph.microsoft.com/v1.0/users/{urllib.parse.quote(MS_SENDER_UPN)}/sendMail"
         payload: dict = {
             "message": {
@@ -849,17 +932,48 @@ def send_email(
             ]
         if reply_to:
             payload["message"]["replyTo"] = [{"emailAddress": {"address": reply_to}}]
+        if atts:
+            payload["message"]["attachments"] = [
+                {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    "name": a["filename"],
+                    "contentType": a["mime"],
+                    "contentBytes": base64.b64encode(a["content"]).decode("ascii"),
+                }
+                for a in atts
+            ]
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Authorization", f"Bearer {token}")
         req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             if getattr(r, "status", 202) not in (200, 201, 202):
-                raise RuntimeError("Graph sendMail refusé")
+                raise RuntimeError("Graph sendMail refuse")
 
     def _send_smtp() -> None:
-        msg = MIMEMultipart("alternative")
+        # Root multipart mixed pour supporter attachments + alternative HTML.
+        if atts:
+            root = MIMEMultipart("mixed")
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(html_body, "html", "utf-8"))
+            root.attach(alt)
+            for a in atts:
+                maintype, _, subtype = a["mime"].partition("/")
+                part = MIMEBase(maintype or "application", subtype or "octet-stream")
+                part.set_payload(a["content"])
+                encoders.encode_base64(part)
+                part.add_header(
+                    "Content-Disposition",
+                    "attachment",
+                    filename=a["filename"],
+                )
+                root.attach(part)
+            msg = root
+        else:
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+
         from_header = (
             f"{SMTP_FROM_NAME} <{SMTP_FROM}>"
             if SMTP_FROM_NAME
@@ -873,46 +987,64 @@ def send_email(
         if cc_list:
             msg["Cc"] = ", ".join(cc_list)
 
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
         context = ssl.create_default_context()
         all_rcpt = list(recipients) + list(cc_list)
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
-            smtp.ehlo()
-            smtp.starttls(context=context)
-            smtp.ehlo()
-            if SMTP_USER and SMTP_PASS:
-                smtp.login(SMTP_USER, SMTP_PASS)
-            smtp.sendmail(SMTP_FROM, all_rcpt, msg.as_string())
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
+                smtp.ehlo()
+                smtp.starttls(context=context)
+                smtp.ehlo()
+                if SMTP_USER and SMTP_PASS:
+                    smtp.login(SMTP_USER, SMTP_PASS)
+                # A partir de sendmail() on est en "peut-etre parti" — toute
+                # erreur remontee ne doit plus declencher de fallback.
+                smtp.sendmail(SMTP_FROM, all_rcpt, msg.as_string())
+        except smtplib.SMTPConnectError as e:
+            # Impossible de se connecter → on sait qu'aucun mail n'est parti,
+            # on autorise le fallback via la sentinelle _SendPreflightError.
+            raise _SendPreflightError(str(e)) from e
 
     try:
         provider = (SUPPORT_EMAIL_PROVIDER or "").strip().lower()
-        # Si provider est forcé, on l'essaie en premier, sinon on privilégie Graph si dispo (prod).
+        # Si provider est force, on l'essaie en premier, sinon on privilegie Graph si dispo (prod).
         if provider in {"smtp", "graph"}:
             order = [provider, "graph" if provider == "smtp" else "smtp"]
         else:
             order = ["graph", "smtp"]
 
         last_err: Exception | None = None
-        for p in order:
+        for idx, p in enumerate(order):
             try:
                 if p == "graph":
                     if not _can_graph():
-                        raise RuntimeError("Graph non configuré (MS_* manquants)")
+                        # Non configure → on peut essayer l'autre provider sans risque.
+                        raise _SendPreflightError("Graph non configure (MS_* manquants)")
                     _send_graph()
                 else:
                     if not _can_smtp():
-                        raise RuntimeError("SMTP non configuré (SMTP_HOST manquant)")
+                        raise _SendPreflightError("SMTP non configure (SMTP_HOST manquant)")
                     _send_smtp()
                 last_err = None
                 break
-            except Exception as e:
+            except _SendPreflightError as e:
+                # Erreur avant emission reelle : on peut passer au provider suivant.
                 last_err = e
                 continue
+            except Exception as e:
+                # Erreur pendant/apres emission : le message a peut-etre ete
+                # accepte cote serveur. Ne pas tenter le second provider pour
+                # eviter le doublon chez le destinataire — on remonte l'echec.
+                logger.warning(
+                    "send_email: %s a leve apres tentative d'envoi (%s) — pas de fallback pour eviter le doublon",
+                    p,
+                    e,
+                )
+                last_err = e
+                break
 
         if last_err is not None:
             raise last_err
         return True
     except Exception as exc:
-        logger.error("Échec envoi email: %s", exc, exc_info=True)
+        logger.error("Echec envoi email: %s", exc, exc_info=True)
         return False

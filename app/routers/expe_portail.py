@@ -252,6 +252,7 @@ def portail_expe_data(request: Request, token: str):
               d.poids_total_kg,
               d.nb_palette,
               d.type_envoi,
+              d.type_palette,
               d.contraintes,
               d.statut AS demande_statut,
               r.id AS reponse_id,

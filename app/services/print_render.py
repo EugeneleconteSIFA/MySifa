@@ -163,24 +163,143 @@ DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 ^PW812
 ^LL1218
 ^LH0,0
-^FO40,40^GB732,1138,4^FS
-^FO60,70^A0N,40,40^FDIDENTIFICATION BOBINE^FS
-^FO60,120^GB692,3,3^FS
-^FO60,150^A0N,55,55^FD{{fsc_banner}}^FS
-^FO60,240^A0N,26,26^FDReference produit^FS
-^FO60,280^A0N,45,45^FD{{ref_produit}}^FS
-^FO60,360^A0N,26,26^FDFournisseur^FS
-^FO60,400^A0N,42,42^FD{{fournisseur}}^FS
-^FO60,480^A0N,26,26^FDStatut FSC^FS
-^FO60,520^A0N,40,40^FD{{fsc_label}}^FS
-^FO60,600^A0N,26,26^FDN de lot^FS
-^FO60,640^A0N,40,40^FD{{lot_numero}}^FS
-^FO60,730^A0N,26,26^FDCode-barres bobine^FS
-^FO60,770^BY3^BCN,140,Y,N,N^FD{{code_barre}}^FS
-^FO60,970^A0N,22,22^FDReception le {{date_reception}} par {{operateur_nom}}^FS
-^FO60,1010^A0N,22,22^FDSIFA^FS
+^FO30,30^A0N,55,55^FDSIFA^FS
+^FO30,95^A0N,22,22^FDIdentification bobine^FS
+^FO490,30^GB292,85,85^FS
+^FO510,52^A0N,42,42^FR^FD{{fsc_banner}}^FS
+^FO30,150^GB752,3,3^FS
+^FO30,185^A0N,22,22^FDREFERENCE PRODUIT^FS
+^FO30,220^A0N,50,50^FD{{ref_produit}}^FS
+^FO30,305^A0N,22,22^FDFOURNISSEUR^FS
+^FO30,340^A0N,40,40^FD{{fournisseur}}^FS
+^FO30,415^GB752,2,2^FS
+^FO30,445^A0N,22,22^FDNUMERO DE LOT^FS
+^FO30,483^A0N,70,70^FD{{lot_numero}}^FS
+^FO30,595^GB752,2,2^FS
+^FO30,615^A0N,20,20^FDCode-barres bobine^FS
+^FO30,650^BY4,3,140^BCN,140,Y,N,N^FD{{code_barre}}^FS
+^FO30,850^BQN,2,7^FDLA,{{lot_numero}}^FS
+^FO270,860^A0N,20,20^FDReception :^FS
+^FO270,890^A0N,28,28^FD{{date_reception}}^FS
+^FO270,940^A0N,20,20^FDOperateur :^FS
+^FO270,970^A0N,28,28^FD{{operateur_nom}}^FS
+^FO30,1155^GB752,1,1^FS
+^FO30,1165^A0N,18,18^FDSIFA Loos - Certifie FSC C012345^FS
 ^XZ
 """
+
+
+# Templates prédéfinis complémentaires (galerie de départ pour l'admin).
+# Format : liste de dicts {key, nom, description, langage, contenu}.
+DEFAULT_TEMPLATE_GALLERY = [
+    {
+        "key": "bobine_full",
+        "nom": "Étiquette bobine — complète (FSC + code-barres + QR)",
+        "description": "Format A6 (102×152mm). Header SIFA, badge FSC inversé, référence produit gros, fournisseur, lot très visible, code-barres CODE128, QR code + traçabilité.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 102,
+        "hauteur_mm": 152,
+        "contenu": DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL,
+    },
+    {
+        "key": "bobine_compact",
+        "nom": "Étiquette bobine — compacte (petit format 57×32mm)",
+        "description": "Format ticket (57×32mm). Juste l'essentiel : lot + code-barres + FSC.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 57,
+        "hauteur_mm": 32,
+        "contenu": """^XA
+^CI28
+^PW456
+^LL256
+^LH0,0
+^FO10,10^A0N,22,22^FD{{fsc_banner}}^FS
+^FO10,40^A0N,26,26^FD{{lot_numero}}^FS
+^FO10,80^BY2,3,80^BCN,80,N,N,N^FD{{lot_numero}}^FS
+^FO10,180^A0N,16,16^FD{{ref_produit}}^FS
+^FO10,205^A0N,14,14^FD{{fournisseur}} - {{date_reception}}^FS
+^XZ
+""",
+    },
+    {
+        "key": "emplacement_stock",
+        "nom": "Étiquette emplacement stock (grand)",
+        "description": "Format A5 (102×74mm). Code emplacement en très gros + code-barres pour scan mobile.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 102,
+        "hauteur_mm": 74,
+        "contenu": """^XA
+^CI28
+^PW812
+^LL592
+^LH0,0
+^FO30,30^A0N,26,26^FDEMPLACEMENT^FS
+^FO30,70^A0N,130,130^FD{{ref_produit}}^FS
+^FO30,240^BY5,3,180^BCN,180,Y,N,N^FD{{ref_produit}}^FS
+^FO30,530^A0N,20,20^FDSIFA - Loos^FS
+^XZ
+""",
+    },
+    {
+        "key": "colis_expedition",
+        "nom": "Étiquette colis expédition (100×150mm)",
+        "description": "Format standard colis. Client, adresse, numéro de commande, code-barres tracking.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 100,
+        "hauteur_mm": 150,
+        "contenu": """^XA
+^CI28
+^PW800
+^LL1200
+^LH0,0
+^FO30,30^A0N,32,32^FDEXPEDITION^FS
+^FO30,80^GB740,3,3^FS
+^FO30,110^A0N,22,22^FDDestinataire :^FS
+^FO30,150^A0N,42,42^FD{{fournisseur}}^FS
+^FO30,220^A0N,26,26^FD{{ref_produit}}^FS
+^FO30,290^GB740,2,2^FS
+^FO30,320^A0N,22,22^FDNumero de commande :^FS
+^FO30,360^A0N,55,55^FD{{lot_numero}}^FS
+^FO30,470^BY4,3,150^BCN,150,Y,N,N^FD{{code_barre}}^FS
+^FO30,700^BQN,2,8^FDLA,{{code_barre}}^FS
+^FO320,720^A0N,22,22^FDExpedie le :^FS
+^FO320,750^A0N,32,32^FD{{date_reception}}^FS
+^FO320,810^A0N,22,22^FDPar :^FS
+^FO320,840^A0N,28,28^FD{{operateur_nom}}^FS
+^FO30,1150^A0N,18,18^FDSIFA Loos - Support: contact@sifa.pro^FS
+^XZ
+""",
+    },
+]
+
+
+def list_default_templates() -> list[dict]:
+    """Renvoie la galerie de templates prédéfinis pour l'UI (sans le contenu ZPL
+    complet dans la liste, juste key + nom + description + dimensions)."""
+    return [
+        {
+            "key": t["key"],
+            "nom": t["nom"],
+            "description": t["description"],
+            "langage": t["langage"],
+            "usage_key": t["usage_key"],
+            "largeur_mm": t["largeur_mm"],
+            "hauteur_mm": t["hauteur_mm"],
+        }
+        for t in DEFAULT_TEMPLATE_GALLERY
+    ]
+
+
+def get_default_template(key: str) -> dict | None:
+    """Renvoie le template prédéfini complet (avec contenu) par sa clé."""
+    for t in DEFAULT_TEMPLATE_GALLERY:
+        if t["key"] == key:
+            return t
+    return None
 
 
 def default_templates_seed() -> list[dict]:
@@ -191,7 +310,7 @@ def default_templates_seed() -> list[dict]:
     return [
         {
             "usage_key": "reception_matiere",
-            "nom": "Étiquette réception matière",
+            "nom": "Étiquette réception matière (complète)",
             "contenu": DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL,
         },
     ]

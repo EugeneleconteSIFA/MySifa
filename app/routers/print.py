@@ -46,7 +46,12 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
+from pathlib import Path
+import urllib.error
+import urllib.request
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
@@ -55,6 +60,8 @@ from app.services.print_render import (
     LANGAGES,
     USAGES,
     default_templates_seed,
+    get_default_template,
+    list_default_templates,
     render_template,
     usage_label,
 )
@@ -595,6 +602,114 @@ def emit_label(payload: LabelRequest, request: Request):
 
 class TestPrintPayload(BaseModel):
     imprimante_id: int
+
+
+# ─── Aperçu WYSIWYG d'un template ZPL via labelary.com ────────────────
+
+def _labelary_render_zpl(zpl: str, dpi: int, width_mm: int, height_mm: int) -> bytes:
+    """Rend un template ZPL en PNG via l'API publique labelary.com.
+    Renvoie le PNG en bytes. Leve HTTPException si erreur reseau ou API.
+    """
+    dpmm = max(6, min(24, round(dpi / 25.4)))  # 8dpmm = 203dpi, 12 = 300dpi, 24 = 600dpi
+    # Labelary attend width/height en INCHES avec 1 decimale max
+    width_in = round(max(0.5, width_mm / 25.4), 1)
+    height_in = round(max(0.5, height_mm / 25.4), 1)
+    url = f"http://api.labelary.com/v1/printers/{dpmm}dpmm/labels/{width_in}x{height_in}/0/"
+    req = urllib.request.Request(
+        url,
+        data=zpl.encode("utf-8"),
+        headers={"Accept": "image/png", "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            pass
+        raise HTTPException(status_code=502, detail=f"Labelary HTTP {e.code} : {detail or e.reason}")
+    except urllib.error.URLError as e:
+        raise HTTPException(status_code=502, detail=f"Labelary reseau : {e.reason}")
+
+
+class PreviewPayload(BaseModel):
+    contenu: str = Field(min_length=1)
+    langage: str = "zpl"
+    largeur_mm: int = 102
+    hauteur_mm: int = 152
+    dpi: int = 203
+
+
+@router.post("/preview")
+def preview_template(payload: PreviewPayload, request: Request):
+    """Rend un template en PNG (via labelary) pour aperçu dans l'UI editeur.
+    Utilise des donnees mock pour les placeholders (lot demo, fournisseur demo, etc.).
+    """
+    require_superadmin(request)
+    if payload.langage != "zpl":
+        raise HTTPException(status_code=400, detail="Apercu supporte uniquement le ZPL pour l'instant.")
+    # Donnees mock pour resoudre les placeholders
+    mock = {
+        "lot_numero": "LOT-2026-07-DEMO-42",
+        "fournisseur": "Papeterie Exemple SA",
+        "fsc_label": "FSC C012345",
+        "fsc_banner": "FSC",
+        "ref_produit": "PAPIER-KRAFT-80G",
+        "code_barre": "MYSIFA-2026-07-DEMO",
+        "operateur_nom": "Eugene L.",
+        "date_reception": "20/07/2026",
+    }
+    try:
+        rendered_bytes = render_template(payload.contenu, mock, payload.langage)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Erreur rendu template : {e}")
+    rendered_str = rendered_bytes.decode("utf-8", errors="replace")
+    png = _labelary_render_zpl(
+        rendered_str,
+        int(payload.dpi or 203),
+        int(payload.largeur_mm or 102),
+        int(payload.hauteur_mm or 152),
+    )
+    return Response(content=png, media_type="image/png")
+
+
+@router.get("/templates/defaults")
+def list_default_templates_gallery(request: Request):
+    """Galerie de templates predefinis (bobine, colis, emplacement, etc.)
+    utilisee dans le modal 'Nouveau template' pour demarrer depuis un modele."""
+    require_superadmin(request)
+    return {"templates": list_default_templates()}
+
+
+@router.get("/templates/defaults/{key}")
+def get_default_template_content(key: str, request: Request):
+    """Renvoie le contenu complet (avec ZPL) d'un template predefini."""
+    require_superadmin(request)
+    t = get_default_template(key)
+    if not t:
+        raise HTTPException(status_code=404, detail="Template predefini introuvable.")
+    return t
+
+
+@router.get("/installer/windows")
+def download_windows_installer(request: Request):
+    """Sert le script PowerShell d'install de l'agent MySifa pour PC Windows hote.
+    Utilise par le wizard 'Comment connecter mon imprimante' cote UI.
+    """
+    require_superadmin(request)
+    # Le fichier vit dans le repo à tools/print_agent/install_agent_windows.ps1
+    # Chemin resolu depuis app/routers/print.py : ../../../tools/print_agent/...
+    ps1_path = Path(__file__).resolve().parent.parent.parent / "tools" / "print_agent" / "install_agent_windows.ps1"
+    if not ps1_path.is_file():
+        raise HTTPException(status_code=404, detail="Installeur introuvable sur le serveur.")
+    return FileResponse(
+        path=str(ps1_path),
+        media_type="text/plain",
+        filename="install_agent_windows.ps1",
+    )
 
 
 @router.post("/test")

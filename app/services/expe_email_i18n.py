@@ -13,10 +13,34 @@ _EXPE_TYPE_EN = {
     "affretement": "Full truckload",
 }
 
+# Type de palette utilise cote devis transporteur (facultatif). Les valeurs
+# techniques restent stables ; les libelles sont traduits pour affichage.
+_EXPE_PALETTE_FR = {
+    "europe": "Palette Europe (EUR/EPAL)",
+    "perdue": "Palette perdue",
+    "autre": "Autre palette",
+    "vrac": "Sans palette (vrac)",
+}
+_EXPE_PALETTE_EN = {
+    "europe": "Euro pallet (EUR/EPAL)",
+    "perdue": "One-way pallet",
+    "autre": "Other pallet",
+    "vrac": "No pallet (bulk)",
+}
+
 
 def expe_type_envoi_label(type_raw: str, lang: str) -> str:
     raw = (type_raw or "messagerie").strip()
     labels = _EXPE_TYPE_EN if lang == "en" else _EXPE_TYPE_FR
+    return labels.get(raw, raw)
+
+
+def expe_type_palette_label(type_raw: str, lang: str) -> str:
+    """Libelle du type de palette pour l'email (renvoie chaine vide si non defini)."""
+    raw = (type_raw or "").strip().lower()
+    if not raw:
+        return ""
+    labels = _EXPE_PALETTE_EN if lang == "en" else _EXPE_PALETTE_FR
     return labels.get(raw, raw)
 
 
@@ -33,6 +57,7 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
             "type_label": "Shipment type",
             "weight_label": "Total weight",
             "pallets_label": "Pallets",
+            "pallet_type_label": "Pallet type",
             "constraints_label": "Constraints",
             "cta": "Reply on the portal",
             "ask": (
@@ -57,6 +82,7 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
         "type_label": "Type d'envoi",
         "weight_label": "Poids total",
         "pallets_label": "Palettes",
+        "pallet_type_label": "Type de palette",
         "constraints_label": "Contraintes",
         "cta": "Répondre sur le portail",
         "ask": (

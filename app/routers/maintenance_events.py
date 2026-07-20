@@ -30,6 +30,8 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
     MAINTENANCE_OPEN_BETA,
 )
@@ -40,7 +42,8 @@ router = APIRouter(tags=["maintenance-events"])
 
 # ─── Constantes / helpers ─────────────────────────────────────────
 
-_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
+_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION,
+                ROLE_ADMINISTRATION_VENTES, ROLE_ADMINISTRATION_TECHNIQUE}
 _PARIS = ZoneInfo("Europe/Paris")
 
 _VALID_STATUTS = {"a_faire", "en_cours", "termine", "reporte"}
@@ -307,14 +310,16 @@ class OperatorAddBody(BaseModel):
 
 @router.get("/api/maintenance/operators")
 def list_operators(request: Request):
-    """Liste des utilisateurs assignables (rôle fabrication + actifs).
-    Ouvert à admin et opérateur (l'opérateur peut désormais créer des tâches
-    riches "à la admin" — cf. bouton Nouvelle tâche v163+)."""
+    """Liste des utilisateurs assignables : opérateurs fabrication + Manuel Lesaffre.
+    v2.2.45 : ciblé sur Manuel Lesaffre uniquement (au lieu de tous les admins)
+    puisqu'il est le seul admin à réaliser aussi la maintenance."""
     _require_access(request)
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, nom, email, identifiant "
-            "FROM users WHERE role = ? AND actif = 1 "
+            "FROM users "
+            "WHERE (role = ? OR LOWER(COALESCE(nom, '')) LIKE '%lesaffre%') "
+            "  AND actif = 1 "
             "ORDER BY nom",
             (ROLE_FABRICATION,),
         ).fetchall()

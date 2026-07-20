@@ -23,11 +23,21 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
     MAINTENANCE_OPEN_BETA,
 )
 
-_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
+# v2.2.46 : inclut les 2 sous-rôles administration modernes (ventes/technique)
+# qui manquaient et provoquaient un "Accès refusé" pour ces admins.
+_MAINTENANCE_ADMIN_ROLES = {
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
+}
 
 
 def _get_maintenance_role(user: dict) -> Optional[str]:
@@ -720,12 +730,15 @@ body.light .toast.info{background:#fff;color:var(--text)}
    La page rend la même structure DOM pour tous ; le body porte
    data-maint-role="admin" ou "operator" et les règles ci-dessous
    masquent ce qui n'est pas pertinent pour le rôle courant. */
-body[data-maint-role="admin"] .op-only{display:none !important}
+body[data-maint-role="admin"] .op-only:not(#view-op-tasks):not(#view-op-planning){display:none !important}
 body[data-maint-role="operator"] .adm-only{display:none !important}
 /* Bascule du contenu principal : admin voit .content, opérateur voit
    .op-main. Deux conteneurs distincts pour éviter toute interaction
    parasite entre les vues admin et les vues opérateur. */
-body[data-maint-role="admin"] .op-main{display:none !important}
+body[data-maint-role="admin"] .op-main{display:none}
+body[data-maint-role="admin"].admin-op-active .op-main{display:flex}
+body[data-maint-role="admin"].admin-op-active .view.adm-only{display:none !important}
+body[data-maint-role="admin"].admin-op-active .content{display:none}
 body[data-maint-role="operator"] .content{display:none !important}
 
 /* Conteneur opérateur : padding + colonne, prend toute la hauteur restante. */
@@ -1402,6 +1415,12 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
       Opérations de maintenance
+    </button>
+    <!-- v2.2.45 : "Mes tâches" admin est réservée à Manuel Lesaffre. Cachée par défaut,
+         révélée en JS après loadMe() si S.me.nom contient "lesaffre" (case-insensitive). -->
+    <button type="button" id="nav-mes-taches-admin" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')" style="display:none">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Mes tâches
     </button>
     <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -2406,6 +2425,10 @@ function setCtrlSubtab(name){
 
 function switchView(name){
   if(!VIEW_META[name]) return;
+  // v2.2.43 : quand admin bascule sur une vue op (op-tasks / op-planning),
+  // afficher .op-main + masquer les vues admin via body.admin-op-active.
+  const isOpView = (name === 'op-tasks' || name === 'op-planning');
+  document.body.classList.toggle('admin-op-active', isOpView);
   // Vues admin (.view) : bascule via inline display comme historiquement.
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   const admTarget = document.getElementById('view-' + name);
@@ -7212,6 +7235,14 @@ async function loadMe(){
       const roles={direction:'Direction',administration:'Administration',superadmin:'Super admin',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial'};
       chip.innerHTML='<div class="uc-name">'+escHtml(S.me.nom||'')+'</div><div class="uc-role">'+escHtml(roles[S.me.role]||S.me.role||'')+'</div>';
     }
+    // v2.2.45 : révèle la nav-btn "Mes tâches" (côté admin) uniquement pour Manuel Lesaffre
+    try {
+      const nomLower = String((S.me && S.me.nom) || '').toLowerCase();
+      if (nomLower.includes('lesaffre')) {
+        const btn = document.getElementById('nav-mes-taches-admin');
+        if (btn) btn.style.display = '';
+      }
+    } catch(e) {}
   }catch(e){}
 }
 
@@ -8608,7 +8639,10 @@ async function admFetchOperators(){
 /* ── Vue Mes tâches ──────────────────────────────────────────────── */
 
 async function opLoadTasks(){
-  if(MAINT_ROLE !== 'operator') return;
+  // v2.2.47 : autorise opérateur ET admin naviguant sur Mes tâches
+  // (body.admin-op-active), sinon ne fetch pas inutilement.
+  const isAdminOnOpView = (MAINT_ROLE !== 'operator' && document.body.classList.contains('admin-op-active'));
+  if(MAINT_ROLE !== 'operator' && !isAdminOnOpView) return;
   const today = new Date();
   const in60 = new Date(); in60.setDate(today.getDate() + 60);
   const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
@@ -8645,6 +8679,51 @@ async function opLoadTasks(){
   }
   opRenderTasks();
 }
+
+// v2.2.47 : auto-refresh silencieux des tâches (poll 20s).
+// Utile quand plusieurs opérateurs travaillent sur le même créneau : chacun
+// voit l'avancement de l'autre en temps réel sans avoir à changer de section.
+// Pause si tab en background ou modal ouvert (évite steal focus + fetch inutile).
+let _opAutoRefreshInterval = null;
+const _OP_AUTO_REFRESH_MS = 20000;
+function _opShouldAutoRefresh(){
+  // Actif seulement si l'onglet est visible
+  if(document.visibilityState !== 'visible') return false;
+  // Actif seulement si l'user est sur la vue Mes tâches (op-tasks)
+  const onOpTasks = MAINT_ROLE === 'operator' ||
+    (document.body.classList.contains('admin-op-active') &&
+     document.getElementById('view-op-tasks') &&
+     document.getElementById('view-op-tasks').classList.contains('active'));
+  if(!onOpTasks) return false;
+  // Pause si un modal opérateur est ouvert (single-op, saisie, new, etc.)
+  const anyOpen = document.querySelector('.op-modal-overlay.active');
+  if(anyOpen) return false;
+  return true;
+}
+function _opAutoRefreshTick(){
+  if(!_opShouldAutoRefresh()) return;
+  try{
+    // Silent : pas de spinner, pas de toast. En cas d'erreur, opLoadTasks
+    // logue en console mais ne wipe pas la vue.
+    if(typeof opLoadTasks === 'function') opLoadTasks();
+  }catch(e){ console.warn('[opAutoRefresh]', e); }
+}
+function opAutoRefreshStart(){
+  if(_opAutoRefreshInterval) return;
+  _opAutoRefreshInterval = setInterval(_opAutoRefreshTick, _OP_AUTO_REFRESH_MS);
+}
+function opAutoRefreshStop(){
+  if(_opAutoRefreshInterval){
+    clearInterval(_opAutoRefreshInterval);
+    _opAutoRefreshInterval = null;
+  }
+}
+// Refresh immédiat quand l'user revient sur l'onglet (visibilitychange).
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') _opAutoRefreshTick();
+});
+// Démarre le polling au chargement.
+opAutoRefreshStart();
 
 function _countRemainingOps(ev){
   return (ev.ops || []).filter(o => o.statut !== 'termine').length;
