@@ -41,6 +41,8 @@ align-items:center}
 .pf-client-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pf-client-display{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pf-client-display.is-empty{font-weight:400}
+.pf-client-row{grid-column:span 2}
+@media(max-width:960px){.pf-client-row{grid-column:span 1}}
 .pf-pick-list{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
 .pf-pick-item{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
 .pf-pick-item:last-child{border-bottom:none}
@@ -75,7 +77,7 @@ function defaultProduitFiche() {
     etiquette: { laize: '', longueur: '', rayon: '', perforation: '' },
     echenillage: { droite: '', gauche: '', avance: '' },
     matiere: { frontal_id: '', adhesif_id: '', grammage_adhesif: '', glassine_id: '', couleur_glassine: '' },
-    bobines: { diametre_mandrin: '', enroulement: 'interieur', diametre_bobine: '', nb_etiquettes: '' },
+    bobines: { diametre_mandrin: '', enroulement: 'exterieur', diametre_bobine: '', nb_etiquettes: '' },
     impressions_detail: {
       aplat: false, aplat_pourcent: '', recto: 0, verso: 0,
       recto_details: [], verso_details: []
@@ -196,7 +198,7 @@ function renderProduitForm() {
       '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
-    pfRow('Client', clientPicker, 'pf-inline-wide')+
+    pfRow('Client', clientPicker, 'pf-inline-wide pf-client-row')+
     '</div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
