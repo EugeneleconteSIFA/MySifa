@@ -9118,7 +9118,6 @@ function _countRemainingOps(ev){
 // groupe "Sans machine". Une op multi-machines apparaît dans chaque groupe.
 function _groupOpsByMachine(ev){
   const groups = new Map();
-  const order = [];
   const ops = (ev && ev.ops) ? ev.ops : [];
   for(const o of ops){
     let machines = Array.isArray(o.machines) ? o.machines.slice() : [];
@@ -9126,11 +9125,22 @@ function _groupOpsByMachine(ev){
       machines = ev.machine ? [ev.machine] : ['Sans machine'];
     }
     for(const m of machines){
-      if(!groups.has(m)){ groups.set(m, []); order.push(m); }
+      if(!groups.has(m)) groups.set(m, []);
       groups.get(m).push(o);
     }
   }
-  return order.map(m => ({ machine: m, ops: groups.get(m) }));
+  // v2.2.64 : ordre canonique stable — _MACHINE_ORDER d'abord, puis alphabétique
+  // pour les machines hors liste. Évite l'ordre non déterministe issu de la
+  // première occurrence dans ev.ops.
+  const canon = (typeof _MACHINE_ORDER !== 'undefined') ? _MACHINE_ORDER : [];
+  const rank = new Map(canon.map((m, i) => [m, i]));
+  const sortedMachines = [...groups.keys()].sort((a, b) => {
+    const ra = rank.has(a) ? rank.get(a) : Infinity;
+    const rb = rank.has(b) ? rank.get(b) : Infinity;
+    if(ra !== rb) return ra - rb;
+    return String(a).localeCompare(String(b), 'fr', {sensitivity:'base'});
+  });
+  return sortedMachines.map(m => ({ machine: m, ops: groups.get(m) }));
 }
 
 function _renderOpCard(ev, opts){
