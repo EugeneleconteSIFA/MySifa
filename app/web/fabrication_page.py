@@ -11,6 +11,9 @@ from config import APP_ORG_NAME
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
+# v1.7 — modal partage pour impression de PDF (OF, fiches techniques) vers
+# une imprimante bureautique via l'agent local. Cf. app/web/print_modal.py.
+from app.web.print_modal import PRINT_MODAL_CSS, PRINT_MODAL_JS
 
 router = APIRouter()
 
@@ -2233,6 +2236,18 @@ function renderOfPanel(){
       }, svgIcon('edit',14)),
     ];
     if(row.pdf_filename){
+      // v1.7 — bouton imprimer (avant le telecharger PDF) : ouvre le popup
+      // de choix imprimante + params, puis POST /api/print/pdf.
+      actBtns.push(h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Imprimer',
+        onClick:()=>openPrintModal({
+          entityType:'of',
+          entityId:row.id,
+          title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
+          subtitle:(row.reference?('Ref '+row.reference+' — '):'') + (row.machine||''),
+        }),
+      }, svgIcon('printer',14)));
       actBtns.push(h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
         title:'Télécharger PDF',
@@ -2395,6 +2410,14 @@ function renderFichesPanel(){
   const rows=(S.fiches||[]).map(row=>{
     const acts=[
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')},svgIcon('file',14)),
+      // v1.7 — bouton imprimer : ouvre le popup de choix imprimante + params,
+      // puis POST /api/print/pdf avec entity_type='fiche'.
+      h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Imprimer',onClick:()=>openPrintModal({
+        entityType:'fiche',
+        entityId:row.id,
+        title:'Imprimer fiche '+(row.reference||('#'+row.id)),
+        subtitle:[row.format,row.machine].filter(Boolean).join(' — '),
+      })},svgIcon('printer',14)),
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Modifier',onClick:()=>openFicheEditModal(row)},svgIcon('edit',14)),
     ];
     if(S.user&&S.user.role==='superadmin'){
@@ -6413,3 +6436,17 @@ init();
 </html>"""
 
 FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+
+# v1.7 — Injection du modal partage d'impression PDF (CSS + JS) juste avant la
+# fin du </head> et de </script>. On evite les placeholders et on injecte
+# directement pour rester compatible avec toute modif ulterieure du template.
+FABRICATION_HTML = FABRICATION_HTML.replace(
+    "</style>",
+    PRINT_MODAL_CSS + "\n</style>",
+    1,  # premiere occurrence seulement (le </style> principal du <head>)
+)
+FABRICATION_HTML = FABRICATION_HTML.replace(
+    "init();\n</script>",
+    PRINT_MODAL_JS + "\ninit();\n</script>",
+    1,
+)
