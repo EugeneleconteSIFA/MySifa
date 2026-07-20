@@ -334,8 +334,13 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* v2.2.53 : min-width:0 + overflow:hidden empêche les chips d'étirer la colonne */
 .cal-wv-day-col{min-width:0}
 /* Bandeau non-planifié repliable en haut de chaque jour (Week/Day view) */
-.cal-wv-nonpl-strip{position:sticky;top:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;min-width:0;overflow:hidden}
+.cal-wv-nonpl-strip{background:var(--card);display:flex;flex-direction:column;gap:0;max-width:100%;min-width:0;overflow:hidden}
 .cal-wv-nonpl-strip:empty{display:none}
+.cal-wv-nonpl-band{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;min-width:1268px;background:var(--card);border-bottom:1px solid var(--border)}
+.cal-wv-nonpl-band-time{background:transparent}
+.cal-wv-nonpl-band-cell{border-left:1px solid var(--border);min-width:0;overflow:hidden;min-height:0}
+.cal-wv-nonpl-band:not(:has(.cal-wv-nonpl-strip)){display:none}
+.cal-week-view.cal-wv-mode-day .cal-wv-nonpl-band{grid-template-columns:90px 1fr;min-width:0}
 .cal-wv-nonpl-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;background:rgba(148,163,184,.05);transition:background .12s}
 .cal-wv-nonpl-header:hover{background:rgba(148,163,184,.12);color:var(--text2)}
 .cal-wv-nonpl-header-lbl{display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1592,6 +1597,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
             <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
             <div class="cal-wv-header" id="cal-wv-header"></div>
+            <div class="cal-wv-nonpl-band" id="cal-wv-nonpl-band"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
 
@@ -2910,9 +2916,22 @@ function renderCalWeek(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.52 : ajoute le bandeau non-planifié en haut du jour (mode compact)
-    _renderNonPlanifStrip(iso, col, 'week');
   });
+  // v2.2.57 : construit la bande de non-planifiés séparée (au-dessus du body) pour préserver l'alignement des heures
+  const _npBand = document.getElementById('cal-wv-nonpl-band');
+  if(_npBand){
+    let _bandHtml = '<div class="cal-wv-nonpl-band-time"></div>';
+    for(let i=0;i<7;i++){
+      const _d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+i);
+      const _iso = _calIsoYMD(_d);
+      _bandHtml += '<div class="cal-wv-nonpl-band-cell" data-date="' + _iso + '"></div>';
+    }
+    _npBand.innerHTML = _bandHtml;
+    _npBand.querySelectorAll('.cal-wv-nonpl-band-cell').forEach(cell => {
+      const iso2 = cell.getAttribute('data-date');
+      _renderNonPlanifStrip(iso2, cell, 'week');
+    });
+  }
 }
 function renderCalDay(){
   const d = CAL_STATE.dayDate || new Date();
@@ -2961,9 +2980,14 @@ function renderCalDay(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.54 : bandeau enrichi et déplié en vue Jour
-    _renderNonPlanifStrip(cIso, col, 'day');
   });
+  // v2.2.57 : strip Jour déplacé dans la bande dédiée au-dessus du body
+  const _npBandDay = document.getElementById('cal-wv-nonpl-band');
+  if(_npBandDay){
+    _npBandDay.innerHTML = '<div class="cal-wv-nonpl-band-time"></div><div class="cal-wv-nonpl-band-cell" data-date="' + iso + '"></div>';
+    const _bandCellDay = _npBandDay.querySelector('.cal-wv-nonpl-band-cell');
+    if(_bandCellDay) _renderNonPlanifStrip(iso, _bandCellDay, 'day');
+  }
 }
 
 // v2.2.54 : bandeau non-planifié — mode 'week' (compact, replié) ou 'day' (large, déplié)
