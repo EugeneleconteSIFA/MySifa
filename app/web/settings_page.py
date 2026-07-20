@@ -1777,63 +1777,20 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         </div>
       </div>
 
-      <!-- Aide : comment ajouter une imprimante -->
-      <details style="margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px" open>
-        <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text);list-style:none;display:flex;align-items:center;gap:8px">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          Comment ajouter une imprimante ?
-          <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:500">Clique pour plier / déplier</span>
-        </summary>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
-
-          <!-- Colonne Réseau -->
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              <span style="font-size:13px;font-weight:700;color:var(--text)">Imprimante réseau (TCP/IP)</span>
-            </div>
-            <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:8px">
-              L'imprimante est branchée en Ethernet ou Wifi sur le LAN usine et possède sa <strong>propre adresse IP</strong>. Cas typique des Zebra ZT/S4M avec option réseau.
-            </div>
-            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Prérequis</div>
-            <ul style="font-size:12px;color:var(--text2);margin:0;padding-left:18px;line-height:1.6">
-              <li>Un <strong>agent MySifa</strong> qui tourne sur un PC ou Raspberry Pi du LAN</li>
-              <li>L'IP + port 9100 accessibles depuis cet agent</li>
-              <li>Le langage supporté par l'imprimante (ZPL, EPL, ESC/POS)</li>
-            </ul>
-            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
-              → Nouvelle imprimante → cocher <strong>Réseau (TCP/IP)</strong> → saisir IP + port
-            </div>
-          </div>
-
-          <!-- Colonne Locale -->
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              <span style="font-size:13px;font-weight:700;color:var(--text)">Imprimante locale (USB / LPT)</span>
-            </div>
-            <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:8px">
-              L'imprimante est <strong>physiquement branchée</strong> à un PC via USB ou port parallèle (LPT). Elle n'a pas d'IP. Windows la gère via son driver installé.
-            </div>
-            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Prérequis</div>
-            <ul style="font-size:12px;color:var(--text2);margin:0;padding-left:18px;line-height:1.6">
-              <li>Un <strong>agent MySifa installé sur CE PC hôte</strong> (script <code style="font-size:11px;background:var(--bg-code, rgba(0,0,0,.05));padding:1px 4px;border-radius:3px">install_agent_windows.ps1</code>)</li>
-              <li>Le <strong>driver Windows</strong> de l'imprimante déjà installé (visible dans "Périphériques et imprimantes")</li>
-              <li>Le <strong>nom exact de la queue Windows</strong> (avec majuscules, espaces, accents)</li>
-            </ul>
-            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
-              → Nouvelle imprimante → cocher <strong>Locale</strong> → saisir le nom de la queue Windows
-            </div>
-          </div>
+      <!-- Bandeau : lien vers le wizard "Comment connecter mon imprimante" -->
+      <div style="margin-bottom:16px;background:linear-gradient(135deg, rgba(240,165,0,0.08), rgba(45,111,187,0.05));border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="width:40px;height:40px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
         </div>
-
-        <div style="margin-top:12px;padding:10px 12px;background:rgba(240, 165, 0, 0.08);border-left:3px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.5">
-          <strong style="color:var(--text)">Workflow complet</strong> :
-          <span style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:1px 7px;border-radius:10px;font-size:11px;margin:0 2px">1</span> Onglet <strong>Agents locaux</strong> → <em>Nouvel agent</em> → copier le token affiché (n'apparaît qu'une fois) &nbsp;·&nbsp;
-          <span style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:1px 7px;border-radius:10px;font-size:11px;margin:0 2px">2</span> Sur le PC hôte, lancer <code style="font-size:11px;background:var(--bg-code, rgba(0,0,0,.05));padding:1px 4px;border-radius:3px">install_agent_windows.ps1 -Token "..."</code> en admin &nbsp;·&nbsp;
-          <span style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:1px 7px;border-radius:10px;font-size:11px;margin:0 2px">3</span> Revenir ici sur <strong>Imprimantes</strong> → <em>Nouvelle imprimante</em> → choisir le type et rattacher à l'agent qu'on vient de créer
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Première fois ? On t'accompagne pas à pas.</div>
+          <div style="font-size:12px;color:var(--muted)">Assistant guidé pour connecter une imprimante réseau ou locale (USB / LPT) — 3 étapes, prise en main de A à Z.</div>
         </div>
-      </details>
+        <button class="btn btn-accent" onclick="prWizardStart()" style="padding:10px 18px;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:-2px"><polyline points="9 18 15 12 9 6"/></svg>
+          Comment connecter mon imprimante à MySifa
+        </button>
+      </div>
 
       <!-- Sous-onglets Imprimantes / Templates / Agents -->
       <div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border)">
@@ -2002,6 +1959,254 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════════
+           WIZARD : Comment connecter mon imprimante à MySifa
+           4 étapes : Type → Agent (+ installer si Locale) → Imprimante → Test
+           ═══════════════════════════════════════════════════════════════════════ -->
+      <div id="pr-wiz-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:950;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prWizClose()">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0;width:min(760px,95vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
+
+          <!-- Header du wizard -->
+          <div style="padding:20px 24px 12px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--text)">Connecter une imprimante à MySifa</h2>
+              <button onclick="prWizClose()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0;line-height:1">×</button>
+            </div>
+            <!-- Barre de progression étapes -->
+            <div id="pr-wiz-progress" style="display:flex;gap:6px;margin-top:14px">
+              <div class="pr-wiz-dot" data-s="1" style="flex:1;height:4px;background:var(--accent);border-radius:2px;transition:all .2s"></div>
+              <div class="pr-wiz-dot" data-s="2" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
+              <div class="pr-wiz-dot" data-s="3" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
+              <div class="pr-wiz-dot" data-s="4" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
+            </div>
+            <div id="pr-wiz-step-label" style="font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Étape 1 / 4 · Type d'imprimante</div>
+          </div>
+
+          <!-- Corps du wizard : 4 étapes, une seule visible à la fois -->
+          <div id="pr-wiz-body" style="padding:20px 24px;overflow-y:auto;flex:1">
+
+            <!-- ─── ÉTAPE 1 : Type d'imprimante ─── -->
+            <div class="pr-wiz-page" data-step="1">
+              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Comment est branchée ton imprimante ?</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choisis le cas qui correspond à ta situation.</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button type="button" class="pr-wiz-typebtn" onclick="prWizSelectType('tcp_ip')" style="text-align:left;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;font-family:inherit">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                    <div style="width:36px;height:36px;background:rgba(45,111,187,0.12);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--warn)">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text)">Réseau (IP)</div>
+                  </div>
+                  <div style="font-size:12px;color:var(--text2);line-height:1.5">Mon imprimante a sa propre adresse IP sur le LAN de l'usine (câble Ethernet ou Wifi).</div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:8px"><em>Ex : Zebra ZT230 avec option réseau</em></div>
+                </button>
+                <button type="button" class="pr-wiz-typebtn" onclick="prWizSelectType('windows_local')" style="text-align:left;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;font-family:inherit">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                    <div style="width:36px;height:36px;background:rgba(240,165,0,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--accent)">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    </div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text)">Locale (USB / LPT)</div>
+                  </div>
+                  <div style="font-size:12px;color:var(--text2);line-height:1.5">Mon imprimante est branchée physiquement sur un PC de l'usine, via USB ou port parallèle (LPT).</div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:8px"><em>Ex : imprimante USB, matricielle en LPT</em></div>
+                </button>
+              </div>
+            </div>
+
+            <!-- ─── ÉTAPE 2 : Agent MySifa ─── -->
+            <div class="pr-wiz-page" data-step="2" style="display:none">
+              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px" id="pr-wiz-agent-title">Un agent MySifa doit être en place</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="pr-wiz-agent-intro">L'agent est un petit programme qui fait le pont entre MySifa et l'imprimante. Il tourne en arrière-plan.</div>
+
+              <!-- Choix : agent existant ou nouveau -->
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <label style="display:flex;gap:8px;align-items:center;cursor:pointer">
+                    <input type="radio" name="pr-wiz-agent-choice" value="existing" id="pr-wiz-agent-existing" onchange="prWizToggleAgentMode()">
+                    <div style="flex:1">
+                      <div style="font-size:13px;font-weight:600;color:var(--text)">Utiliser un agent existant</div>
+                      <div style="font-size:11px;color:var(--muted)">Si tu as déjà installé un agent avant.</div>
+                    </div>
+                  </label>
+                  <div id="pr-wiz-agent-existing-row" style="display:none;padding-left:26px">
+                    <select id="pr-wiz-agent-select" class="pr-inp" style="width:100%"><option value="">— Sélectionner —</option></select>
+                  </div>
+
+                  <label style="display:flex;gap:8px;align-items:center;cursor:pointer;padding-top:8px;border-top:1px solid var(--border)">
+                    <input type="radio" name="pr-wiz-agent-choice" value="new" id="pr-wiz-agent-new" checked onchange="prWizToggleAgentMode()">
+                    <div style="flex:1">
+                      <div style="font-size:13px;font-weight:600;color:var(--text)">Créer un nouvel agent</div>
+                      <div style="font-size:11px;color:var(--muted)">Recommandé si c'est ta première fois ou si tu ajoutes un nouveau PC hôte.</div>
+                    </div>
+                  </label>
+                  <div id="pr-wiz-agent-new-row" style="padding-left:26px">
+                    <div style="display:flex;gap:8px;align-items:center">
+                      <input type="text" id="pr-wiz-agent-name" class="pr-inp" placeholder="Ex : PC-Reception, Pi-Atelier..." style="flex:1">
+                      <button type="button" class="btn btn-accent" onclick="prWizCreateAgent()" style="padding:8px 14px;font-size:12px;white-space:nowrap">Créer l'agent</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bloc affiché après création : token + installer (surtout pour Locale) -->
+              <div id="pr-wiz-agent-created" style="display:none;margin-top:12px">
+                <div style="background:rgba(5,150,105,0.08);border-left:3px solid var(--success);border-radius:6px;padding:10px 12px;margin-bottom:12px">
+                  <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:4px">✓ Agent créé</div>
+                  <div style="font-size:11px;color:var(--text2)">Le token ci-dessous ne sera plus lisible après avoir fermé cet assistant. Copie-le maintenant.</div>
+                </div>
+
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Token de l'agent</div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <input type="text" id="pr-wiz-token-display" readonly style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:12px">
+                    <button type="button" class="btn btn-ghost" onclick="prWizCopyToken()" style="padding:8px 12px;font-size:12px">📋 Copier</button>
+                  </div>
+                </div>
+
+                <!-- Instructions install (visibles pour Locale, cachées pour Réseau si agent existant utilisé) -->
+                <div id="pr-wiz-install-block">
+                  <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">Installer l'agent sur le PC hôte</div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">1</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Télécharge l'installeur :
+                        <div style="margin-top:6px">
+                          <a href="/api/print/installer/windows" download="install_agent_windows.ps1" class="btn btn-accent" style="padding:6px 12px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            install_agent_windows.ps1
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct sur ce PC).
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">3</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Sur le PC hôte, ouvre <strong>PowerShell en tant qu'Administrateur</strong> (Menu Démarrer → tape "powershell" → clic droit → Exécuter en admin), puis colle cette commande :
+                        <div style="display:flex;gap:6px;align-items:flex-start;margin-top:6px">
+                          <textarea id="pr-wiz-install-cmd" readonly style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:11px;resize:vertical;min-height:60px;line-height:1.4"></textarea>
+                          <button type="button" class="btn btn-ghost" onclick="prWizCopyInstallCmd()" style="padding:8px 12px;font-size:12px;white-space:nowrap">📋 Copier</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">4</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Attends la fin du script (~3-5 min : Python + pywin32 + NSSM + service Windows). Le message final doit indiquer <code style="background:var(--bg);border:1px solid var(--border);padding:1px 5px;border-radius:3px;font-family:monospace">SERVICE_RUNNING</code>.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ─── ÉTAPE 3 : Créer l'imprimante ─── -->
+            <div class="pr-wiz-page" data-step="3" style="display:none">
+              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Créer l'imprimante dans MySifa</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Renseigne les infos de ton imprimante. L'agent que tu as sélectionné à l'étape précédente est rattaché automatiquement.</div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div style="grid-column:span 2">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom de l'imprimante *</label>
+                  <input type="text" id="pr-wiz-imp-nom" class="pr-inp" placeholder="Ex : Zebra Réception matière" style="width:100%">
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Poste / atelier</label>
+                  <input type="text" id="pr-wiz-imp-poste" class="pr-inp" placeholder="Ex : Réception" style="width:100%">
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Langage *</label>
+                  <select id="pr-wiz-imp-langage" class="pr-inp" style="width:100%">
+                    <option value="zpl">ZPL — Zebra</option>
+                    <option value="epl">EPL — vieilles Zebra</option>
+                    <option value="escpos">ESC/POS — Brother, tickets</option>
+                  </select>
+                </div>
+
+                <!-- Champs Réseau (IP + port) -->
+                <div id="pr-wiz-imp-ip-row">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Adresse IP *</label>
+                  <input type="text" id="pr-wiz-imp-ip" class="pr-inp" placeholder="192.168.1.42" style="width:100%">
+                </div>
+                <div id="pr-wiz-imp-port-row">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Port</label>
+                  <input type="number" id="pr-wiz-imp-port" class="pr-inp" value="9100" style="width:100%">
+                </div>
+
+                <!-- Champ Locale (nom queue Windows) -->
+                <div id="pr-wiz-imp-queue-row" style="display:none;grid-column:span 2">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom exact de la queue Windows *</label>
+                  <input type="text" id="pr-wiz-imp-queue" class="pr-inp" placeholder="Ex : Zebra QL-800 ou ZDesigner GK420t" style="width:100%">
+                  <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4">
+                    <strong>Astuce</strong> : sur le PC hôte, ouvre <em>Panneau de configuration → Périphériques et imprimantes</em>. Le nom affiché sous l'icône de l'imprimante = le nom exact à coller ici (avec majuscules, espaces, accents).
+                  </div>
+                </div>
+
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">DPI</label>
+                  <select id="pr-wiz-imp-dpi" class="pr-inp" style="width:100%">
+                    <option value="203">203 dpi (standard)</option>
+                    <option value="300">300 dpi</option>
+                    <option value="600">600 dpi</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Largeur × Hauteur (mm)</label>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <input type="number" id="pr-wiz-imp-largeur" class="pr-inp" value="102" style="width:100%">
+                    <span style="color:var(--muted)">×</span>
+                    <input type="number" id="pr-wiz-imp-hauteur" class="pr-inp" value="152" style="width:100%">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ─── ÉTAPE 4 : Test d'impression ─── -->
+            <div class="pr-wiz-page" data-step="4" style="display:none">
+              <div style="text-align:center;padding:16px 0">
+                <div style="width:60px;height:60px;background:rgba(5,150,105,0.15);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--success)">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">Imprimante configurée !</div>
+                <div style="font-size:13px;color:var(--text2);margin-bottom:20px">
+                  L'imprimante <strong id="pr-wiz-created-name">—</strong> a été ajoutée à MySifa.
+                </div>
+                <button type="button" class="btn btn-accent" onclick="prWizTestPrint()" style="padding:12px 24px;font-size:13px;font-weight:700">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  Lancer un test d'impression
+                </button>
+                <div id="pr-wiz-test-result" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Footer navigation -->
+          <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <button type="button" id="pr-wiz-back-btn" onclick="prWizBack()" class="btn btn-ghost" style="padding:9px 18px;font-size:13px;visibility:hidden">← Retour</button>
+            <div style="flex:1"></div>
+            <button type="button" id="pr-wiz-next-btn" onclick="prWizNext()" class="btn btn-accent" style="padding:9px 18px;font-size:13px">Continuer →</button>
+          </div>
+        </div>
+      </div>
+
     </section>
 
     <section id="panel-formations" class="hidden">
@@ -8286,6 +8491,271 @@ async function prTestPrint(imprimanteId) {
     prToast(r.message || 'Test envoyé.', 'success');
   } catch (e) {
     prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WIZARD "Comment connecter mon imprimante à MySifa"
+// 4 étapes : Type → Agent (+ install si Locale) → Imprimante → Test
+// ═══════════════════════════════════════════════════════════════════════
+
+const PR_WIZ = {
+  step: 1,
+  type: null,           // 'tcp_ip' | 'windows_local'
+  agentId: null,        // id de l'agent sélectionné ou créé
+  agentToken: null,     // token en clair (récupéré à la création)
+  agentName: null,      // nom de l'agent pour affichage
+  imprimanteId: null,   // id de l'imprimante créée à l'étape 3
+  imprimanteName: null,
+};
+
+function prWizardStart() {
+  // Réinitialise l'état
+  PR_WIZ.step = 1;
+  PR_WIZ.type = null;
+  PR_WIZ.agentId = null;
+  PR_WIZ.agentToken = null;
+  PR_WIZ.agentName = null;
+  PR_WIZ.imprimanteId = null;
+  PR_WIZ.imprimanteName = null;
+  // Reset UI
+  document.querySelectorAll('.pr-wiz-typebtn').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.background = 'var(--bg)';
+  });
+  document.getElementById('pr-wiz-agent-created').style.display = 'none';
+  document.getElementById('pr-wiz-agent-name').value = '';
+  document.getElementById('pr-wiz-token-display').value = '';
+  document.getElementById('pr-wiz-install-cmd').value = '';
+  document.getElementById('pr-wiz-imp-nom').value = '';
+  document.getElementById('pr-wiz-imp-poste').value = '';
+  document.getElementById('pr-wiz-imp-ip').value = '';
+  document.getElementById('pr-wiz-imp-port').value = '9100';
+  document.getElementById('pr-wiz-imp-queue').value = '';
+  document.getElementById('pr-wiz-test-result').innerHTML = '';
+  // Recharge la liste des agents pour le dropdown (au cas où)
+  prWizPopulateAgents();
+  // Affiche l'étape 1
+  prWizGotoStep(1);
+  document.getElementById('pr-wiz-modal').style.display = 'flex';
+}
+
+function prWizClose() {
+  document.getElementById('pr-wiz-modal').style.display = 'none';
+  // Si une imprimante a été créée, rafraîchit la liste principale
+  if (PR_WIZ.imprimanteId) {
+    initPrintersPanel();
+  }
+}
+
+function prWizGotoStep(n) {
+  PR_WIZ.step = n;
+  // Cache toutes les pages, affiche celle demandée
+  document.querySelectorAll('.pr-wiz-page').forEach(p => {
+    p.style.display = (parseInt(p.dataset.step, 10) === n) ? '' : 'none';
+  });
+  // Progress bar
+  document.querySelectorAll('.pr-wiz-dot').forEach(d => {
+    const s = parseInt(d.dataset.s, 10);
+    d.style.background = (s <= n) ? 'var(--accent)' : 'var(--border)';
+  });
+  // Label
+  const labels = {
+    1: 'Étape 1 / 4 · Type d\'imprimante',
+    2: 'Étape 2 / 4 · Agent MySifa',
+    3: 'Étape 3 / 4 · Créer l\'imprimante',
+    4: 'Étape 4 / 4 · Test',
+  };
+  document.getElementById('pr-wiz-step-label').textContent = labels[n];
+  // Nav buttons
+  document.getElementById('pr-wiz-back-btn').style.visibility = (n === 1 || n === 4) ? 'hidden' : 'visible';
+  const nextBtn = document.getElementById('pr-wiz-next-btn');
+  if (n === 1) {
+    nextBtn.textContent = 'Continuer →';
+    nextBtn.style.display = PR_WIZ.type ? '' : 'none';
+  } else if (n === 2) {
+    nextBtn.textContent = 'Continuer →';
+    nextBtn.style.display = PR_WIZ.agentId ? '' : 'none';
+  } else if (n === 3) {
+    nextBtn.textContent = 'Créer l\'imprimante';
+    nextBtn.style.display = '';
+    nextBtn.onclick = prWizCreateImprimante;
+  } else if (n === 4) {
+    nextBtn.textContent = 'Terminer';
+    nextBtn.style.display = '';
+    nextBtn.onclick = prWizClose;
+  }
+  if (n !== 3 && n !== 4) nextBtn.onclick = prWizNext;
+}
+
+function prWizNext() {
+  if (PR_WIZ.step === 1) {
+    if (!PR_WIZ.type) { prToast('Choisis un type d\'imprimante.', 'danger'); return; }
+    // Adapte les textes de l'étape 2 selon le type
+    if (PR_WIZ.type === 'windows_local') {
+      document.getElementById('pr-wiz-agent-title').textContent = 'Installer l\'agent MySifa sur le PC hôte';
+      document.getElementById('pr-wiz-agent-intro').textContent = 'Comme ton imprimante est branchée sur un PC (USB / LPT), l\'agent MySifa doit tourner SUR CE PC. Il communiquera avec l\'imprimante via le driver Windows installé.';
+    } else {
+      document.getElementById('pr-wiz-agent-title').textContent = 'Choisir ou installer un agent MySifa';
+      document.getElementById('pr-wiz-agent-intro').textContent = 'L\'agent est un petit programme qui poll MySifa depuis un PC/Raspberry Pi du LAN, et envoie les jobs à ton imprimante réseau. Un seul agent suffit pour plusieurs imprimantes.';
+    }
+    prWizGotoStep(2);
+  } else if (PR_WIZ.step === 2) {
+    if (!PR_WIZ.agentId) { prToast('Sélectionne ou crée un agent.', 'danger'); return; }
+    // Adapte le formulaire imprimante selon le type
+    const isWin = (PR_WIZ.type === 'windows_local');
+    document.getElementById('pr-wiz-imp-ip-row').style.display = isWin ? 'none' : '';
+    document.getElementById('pr-wiz-imp-port-row').style.display = isWin ? 'none' : '';
+    document.getElementById('pr-wiz-imp-queue-row').style.display = isWin ? '' : 'none';
+    prWizGotoStep(3);
+  }
+}
+
+function prWizBack() {
+  if (PR_WIZ.step > 1) prWizGotoStep(PR_WIZ.step - 1);
+}
+
+function prWizSelectType(type) {
+  PR_WIZ.type = type;
+  // Style visuel : highlight le bouton sélectionné
+  document.querySelectorAll('.pr-wiz-typebtn').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.background = 'var(--bg)';
+  });
+  const btn = document.querySelector(`.pr-wiz-typebtn[onclick*="${type}"]`);
+  if (btn) {
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.background = 'var(--accent-bg)';
+  }
+  document.getElementById('pr-wiz-next-btn').style.display = '';
+}
+
+function prWizPopulateAgents() {
+  const sel = document.getElementById('pr-wiz-agent-select');
+  if (!sel) return;
+  const opts = ['<option value="">— Sélectionner —</option>'];
+  (PR.agents || []).forEach(a => {
+    opts.push(`<option value="${a.id}">${_escH(a.nom)}</option>`);
+  });
+  sel.innerHTML = opts.join('');
+  sel.onchange = () => {
+    const v = parseInt(sel.value, 10);
+    if (v) {
+      PR_WIZ.agentId = v;
+      const ag = PR.agents.find(a => a.id === v);
+      PR_WIZ.agentName = ag ? ag.nom : null;
+      PR_WIZ.agentToken = null; // pas de token pour un agent existant
+      document.getElementById('pr-wiz-agent-created').style.display = 'none';
+      document.getElementById('pr-wiz-next-btn').style.display = '';
+    } else {
+      PR_WIZ.agentId = null;
+      document.getElementById('pr-wiz-next-btn').style.display = 'none';
+    }
+  };
+}
+
+function prWizToggleAgentMode() {
+  const existing = document.getElementById('pr-wiz-agent-existing').checked;
+  document.getElementById('pr-wiz-agent-existing-row').style.display = existing ? '' : 'none';
+  document.getElementById('pr-wiz-agent-new-row').style.display = existing ? 'none' : '';
+  // Reset agentId quand on change de mode
+  PR_WIZ.agentId = null;
+  PR_WIZ.agentToken = null;
+  document.getElementById('pr-wiz-agent-created').style.display = 'none';
+  document.getElementById('pr-wiz-next-btn').style.display = 'none';
+}
+
+async function prWizCreateAgent() {
+  const nom = document.getElementById('pr-wiz-agent-name').value.trim();
+  if (!nom) { prToast('Nom de l\'agent requis.', 'danger'); return; }
+  try {
+    const r = await prFetch('/api/print/agents', {
+      method: 'POST', body: JSON.stringify({ nom }),
+    });
+    PR_WIZ.agentId = r.id;
+    PR_WIZ.agentToken = r.token;
+    PR_WIZ.agentName = nom;
+    // Affiche le bloc token + installer
+    document.getElementById('pr-wiz-token-display').value = r.token;
+    // Génère la commande d'install pré-remplie avec le token
+    const cmd = `powershell -ExecutionPolicy Bypass -File .\\install_agent_windows.ps1 -Token "${r.token}"`;
+    document.getElementById('pr-wiz-install-cmd').value = cmd;
+    document.getElementById('pr-wiz-agent-created').style.display = '';
+    // Cache le bloc install si c'est TCP/IP (l'agent tourne peut-être ailleurs, on ne force pas)
+    document.getElementById('pr-wiz-install-block').style.display = '';
+    // Active le bouton Continuer
+    document.getElementById('pr-wiz-next-btn').style.display = '';
+    // Rafraîchit la liste principale des agents (pour que l'onglet Agents locaux le voie)
+    await initPrintersPanel();
+    // Re-populate le dropdown
+    prWizPopulateAgents();
+    prToast('Agent créé. Token affiché ci-dessous.', 'success');
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+function prWizCopyToken() {
+  const el = document.getElementById('pr-wiz-token-display');
+  el.select();
+  try { document.execCommand('copy'); prToast('Token copié.', 'success'); }
+  catch (e) { prToast('Copie manuelle nécessaire.', 'danger'); }
+}
+
+function prWizCopyInstallCmd() {
+  const el = document.getElementById('pr-wiz-install-cmd');
+  el.select();
+  try { document.execCommand('copy'); prToast('Commande copiée.', 'success'); }
+  catch (e) { prToast('Copie manuelle nécessaire.', 'danger'); }
+}
+
+async function prWizCreateImprimante() {
+  const isWin = (PR_WIZ.type === 'windows_local');
+  const body = {
+    nom: document.getElementById('pr-wiz-imp-nom').value.trim(),
+    poste: document.getElementById('pr-wiz-imp-poste').value.trim() || null,
+    agent_id: PR_WIZ.agentId,
+    type_connexion: PR_WIZ.type,
+    ip_locale: isWin ? null : document.getElementById('pr-wiz-imp-ip').value.trim(),
+    port: isWin ? null : (parseInt(document.getElementById('pr-wiz-imp-port').value, 10) || 9100),
+    nom_queue_windows: isWin ? document.getElementById('pr-wiz-imp-queue').value.trim() : null,
+    langage: document.getElementById('pr-wiz-imp-langage').value,
+    dpi: parseInt(document.getElementById('pr-wiz-imp-dpi').value, 10) || 203,
+    largeur_mm: parseInt(document.getElementById('pr-wiz-imp-largeur').value, 10) || 102,
+    hauteur_mm: parseInt(document.getElementById('pr-wiz-imp-hauteur').value, 10) || 152,
+  };
+  if (!body.nom) { prToast('Nom de l\'imprimante requis.', 'danger'); return; }
+  if (!isWin && !body.ip_locale) { prToast('Adresse IP requise.', 'danger'); return; }
+  if (isWin && !body.nom_queue_windows) { prToast('Nom de la queue Windows requis.', 'danger'); return; }
+  try {
+    const r = await prFetch('/api/print/imprimantes', {
+      method: 'POST', body: JSON.stringify(body),
+    });
+    PR_WIZ.imprimanteId = r.id;
+    PR_WIZ.imprimanteName = body.nom;
+    document.getElementById('pr-wiz-created-name').textContent = body.nom;
+    prWizGotoStep(4);
+    // Rafraîchit la liste principale
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prWizTestPrint() {
+  if (!PR_WIZ.imprimanteId) return;
+  const resultEl = document.getElementById('pr-wiz-test-result');
+  resultEl.textContent = 'Envoi du test…';
+  resultEl.style.color = 'var(--muted)';
+  try {
+    const r = await prFetch('/api/print/test', {
+      method: 'POST', body: JSON.stringify({ imprimante_id: PR_WIZ.imprimanteId }),
+    });
+    resultEl.innerHTML = '✓ ' + (r.message || 'Test envoyé.') + ' — regarde l\'imprimante physique.';
+    resultEl.style.color = 'var(--success)';
+  } catch (e) {
+    resultEl.innerHTML = '⚠ Erreur : ' + e.message + '. Vérifie que l\'agent tourne bien.';
+    resultEl.style.color = 'var(--danger)';
   }
 }
 
