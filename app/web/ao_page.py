@@ -1560,9 +1560,12 @@ async function openCreateAoWizard() {
   function renderStep1() {
     const info = state.info;
     const clientBtn = info.client_id
-      ? '<div style="display:flex;align-items:center;gap:8px"><strong>' + escHtml(info.client_label || '') + '</strong>' +
-        '<button type="button" class="btn btn-ghost btn-sm" id="w-client-clear">×</button></div>'
-      : '<button type="button" class="btn btn-ghost btn-sm" id="w-client-pick">Selectionner un client</button>';
+      ? '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px"><strong>' + escHtml(info.client_label || '') + '</strong>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="w-client-clear" style="padding:2px 8px">×</button></div>'
+      : '<div style="position:relative">' +
+        '<input type="text" id="w-client-search" placeholder="Tape un nom de client (min 2 lettres)..." autocomplete="off" style="width:100%">' +
+        '<div id="w-client-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:200px;overflow:auto;z-index:20"></div>' +
+        '</div>';
     return '<div class="field"><label>Titre de l\'appel d\'offre *</label>' +
       '<input id="w-titre" value="' + escAttr(info.titre) + '" placeholder="Ex: RFQ etiquettes lot 12345"></div>' +
       '<div class="field"><label>Client (optionnel)</label>' + clientBtn + '</div>' +
@@ -1718,16 +1721,52 @@ async function openCreateAoWizard() {
       '</div></div>';
     box.innerHTML = content;
 
-    // Step 1 client picker
+    // Step 1 client picker inline autocomplete
     if (state.step === 1) {
-      const pick = document.getElementById('w-client-pick');
-      if (pick) pick.onclick = () => {
-        openModalPickClient((cli) => {
-          state.info.client_id = cli.id;
-          state.info.client_label = cli.nom || cli.raison_sociale || ('Client #' + cli.id);
-          setTimeout(render, 50);
+      const searchInp = document.getElementById('w-client-search');
+      const resultsDiv = document.getElementById('w-client-results');
+      let searchTimer = null;
+      if (searchInp && resultsDiv) {
+        searchInp.addEventListener('input', () => {
+          const q = searchInp.value.trim();
+          clearTimeout(searchTimer);
+          if (q.length < 2) {
+            resultsDiv.style.display = 'none';
+            return;
+          }
+          searchTimer = setTimeout(async () => {
+            try {
+              const rows = await api('/api/ao/picker/clients?search=' + encodeURIComponent(q) + '&limit=20');
+              if (!rows || !rows.length) {
+                resultsDiv.innerHTML = '<div style="padding:8px 10px;color:var(--muted);font-size:12px">Aucun client trouve.</div>';
+                resultsDiv.style.display = 'block';
+                return;
+              }
+              resultsDiv.innerHTML = rows.map(c => {
+                const label = c.raison_sociale || c.nom || ('Client #' + c.id);
+                const meta = [c.code, c.ville, c.pays].filter(Boolean).join(' · ');
+                return '<div class="w-client-row" data-cid="' + c.id + '" data-clabel="' + escAttr(label) + '" style="padding:8px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)">' +
+                  '<strong>' + escHtml(label) + '</strong>' +
+                  (meta ? '<div style="color:var(--muted);font-size:10px">' + escHtml(meta) + '</div>' : '') +
+                  '</div>';
+              }).join('');
+              resultsDiv.style.display = 'block';
+              resultsDiv.querySelectorAll('.w-client-row').forEach(row => {
+                row.onclick = () => {
+                  state.info.client_id = parseInt(row.dataset.cid, 10);
+                  state.info.client_label = row.dataset.clabel;
+                  render();
+                };
+                row.onmouseenter = () => { row.style.background = 'var(--accent-bg, rgba(34,211,238,.08))'; };
+                row.onmouseleave = () => { row.style.background = ''; };
+              });
+            } catch (e) {
+              resultsDiv.innerHTML = '<div style="padding:8px 10px;color:var(--danger);font-size:12px">Erreur: ' + escHtml(e.message || String(e)) + '</div>';
+              resultsDiv.style.display = 'block';
+            }
+          }, 220);
         });
-      };
+      }
       const clr = document.getElementById('w-client-clear');
       if (clr) clr.onclick = () => { state.info.client_id = null; state.info.client_label = ''; render(); };
     }
