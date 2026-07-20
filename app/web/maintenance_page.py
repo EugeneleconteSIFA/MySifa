@@ -331,14 +331,23 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
 .cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
 .cal-wv-day-col.today{background:var(--accent-bg)}
-/* v2.2.52 : bandeau non-planifié en haut de chaque jour (Week/Day view) */
-.cal-wv-nonpl-strip{position:sticky;top:0;z-index:3;padding:6px 4px;background:linear-gradient(180deg,var(--card) 0%,var(--card) 70%,transparent 100%);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:3px;max-height:auto}
+/* v2.2.53 : min-width:0 + overflow:hidden empêche les chips d'étirer la colonne */
+.cal-wv-day-col{min-width:0}
+/* Bandeau non-planifié repliable en haut de chaque jour (Week/Day view) */
+.cal-wv-nonpl-strip{position:sticky;top:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;overflow:hidden}
 .cal-wv-nonpl-strip:empty{display:none}
-.cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:background .15s,color .15s}
+.cal-wv-nonpl-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;background:rgba(148,163,184,.05);transition:background .12s}
+.cal-wv-nonpl-header:hover{background:rgba(148,163,184,.12);color:var(--text2)}
+.cal-wv-nonpl-header-lbl{display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-wv-nonpl-header-chev{transition:transform .18s}
+.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-header-chev{transform:rotate(90deg)}
+.cal-wv-nonpl-list{display:none;flex-direction:column;gap:3px;padding:4px 4px 6px;max-height:200px;overflow-y:auto}
+.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-list{display:flex}
+.cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;box-sizing:border-box;transition:background .15s,color .15s}
 .cal-wv-nonpl-chip:hover{background:rgba(148,163,184,.28);color:var(--text)}
 .cal-wv-nonpl-chip[data-statut="termine"]{background:rgba(52,211,153,.15);color:var(--ok,#059669);border-left-color:var(--ok,#34d399)}
 .cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
-.cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
+.cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle;flex-shrink:0}
 .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-icon{background:var(--ok,#34d399)}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
@@ -2942,15 +2951,36 @@ function renderCalDay(){
   });
 }
 
-// v2.2.52 : rend le bandeau non-planifié en haut d'un jour (Week/Day view)
+// v2.2.53 : bandeau non-planifié repliable (compact par défaut, expand au clic)
 function _renderNonPlanifStrip(iso, col){
   if(!col) return;
   const events = (PLANNING_STATE.list || []).filter(ev =>
     ev.date === iso && ev.source === 'non_planifie'
   );
   if(!events.length) return;
+  // Compte total d'ops non-planifiées ce jour
+  let opsCount = 0;
+  events.forEach(ev => { opsCount += (ev.operations || []).length; });
+  if(!opsCount) return;
   const strip = document.createElement('div');
   strip.className = 'cal-wv-nonpl-strip';
+  // Header cliquable (repliable)
+  const header = document.createElement('div');
+  header.className = 'cal-wv-nonpl-header';
+  header.title = 'Cliquer pour ' + (opsCount > 1 ? 'déplier' : 'voir') + ' les ops non planifiées de ce jour';
+  header.innerHTML =
+    '<span class="cal-wv-nonpl-header-lbl">' +
+      '<svg class="cal-wv-nonpl-header-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+      '<span>' + opsCount + ' non planifiée' + (opsCount > 1 ? 's' : '') + '</span>' +
+    '</span>';
+  header.addEventListener('click', e => {
+    e.stopPropagation();
+    strip.classList.toggle('is-open');
+  });
+  strip.appendChild(header);
+  // Liste des chips (cachée par défaut)
+  const list = document.createElement('div');
+  list.className = 'cal-wv-nonpl-list';
   events.forEach(ev => {
     (ev.operations || []).forEach(op => {
       const chip = document.createElement('div');
@@ -2964,9 +2994,10 @@ function _renderNonPlanifStrip(iso, col){
         e.stopPropagation();
         openPlanningDetailsModal([ev]);
       });
-      strip.appendChild(chip);
+      list.appendChild(chip);
     });
   });
+  strip.appendChild(list);
   col.insertBefore(strip, col.firstChild);
 }
 
