@@ -46,7 +46,10 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
@@ -595,6 +598,24 @@ def emit_label(payload: LabelRequest, request: Request):
 
 class TestPrintPayload(BaseModel):
     imprimante_id: int
+
+
+@router.get("/installer/windows")
+def download_windows_installer(request: Request):
+    """Sert le script PowerShell d'install de l'agent MySifa pour PC Windows hote.
+    Utilise par le wizard 'Comment connecter mon imprimante' cote UI.
+    """
+    require_superadmin(request)
+    # Le fichier vit dans le repo à tools/print_agent/install_agent_windows.ps1
+    # Chemin resolu depuis app/routers/print.py : ../../../tools/print_agent/...
+    ps1_path = Path(__file__).resolve().parent.parent.parent / "tools" / "print_agent" / "install_agent_windows.ps1"
+    if not ps1_path.is_file():
+        raise HTTPException(status_code=404, detail="Installeur introuvable sur le serveur.")
+    return FileResponse(
+        path=str(ps1_path),
+        media_type="text/plain",
+        filename="install_agent_windows.ps1",
+    )
 
 
 @router.post("/test")
