@@ -349,6 +349,18 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
 .cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle;flex-shrink:0}
 .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-icon{background:var(--ok,#34d399)}
+/* v2.2.54 : variante Day view — bandeau plus visible, déplié par défaut */
+.cal-wv-nonpl-strip.mode-day{border:1px solid var(--accent);border-radius:8px;margin:8px 8px 12px;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header{background:var(--accent);color:var(--accent-fg,#fff);padding:8px 12px;font-size:12px;font-weight:800;letter-spacing:.5px;border-radius:7px 7px 0 0}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header:hover{filter:brightness(1.08);color:var(--accent-fg,#fff)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header-chev{stroke-width:3.4}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-list{padding:8px 10px;max-height:none;gap:6px}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;white-space:normal;line-height:1.4}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-main{flex:1;min-width:0;font-weight:700;color:var(--text)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;font-weight:500}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
@@ -2818,12 +2830,15 @@ function renderCalMonth(){
 function onCalMonthCellClick(e){
   // Si le clic vient d'une chip-événement, son propre handler gère
   if(e.target.closest('.cal-day-event')) return;
-  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
-  if(MAINT_ROLE === 'operator') return;
   const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
   const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
   if(!iso) return;
-  openCaseModal({ iso: iso, defaultHour: 8 });
+  // v2.2.54 : bascule sur la vue Jour du jour cliqué (au lieu d'ouvrir la création)
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m){
+    CAL_STATE.dayDate = new Date(parseInt(m[1],10), parseInt(m[2],10) - 1, parseInt(m[3],10));
+    if(typeof setCalView === 'function') setCalView('day');
+  }
 }
 function onCalMonthEventClick(e, id){
   if(e && e.stopPropagation) e.stopPropagation();
@@ -2895,8 +2910,8 @@ function renderCalWeek(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.52 : ajoute le bandeau non-planifié en haut du jour
-    _renderNonPlanifStrip(iso, col);
+    // v2.2.52 : ajoute le bandeau non-planifié en haut du jour (mode compact)
+    _renderNonPlanifStrip(iso, col, 'week');
   });
 }
 function renderCalDay(){
@@ -2946,41 +2961,47 @@ function renderCalDay(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.52 : ajoute le bandeau non-planifié en haut du jour
-    _renderNonPlanifStrip(cIso, col);
+    // v2.2.54 : bandeau enrichi et déplié en vue Jour
+    _renderNonPlanifStrip(cIso, col, 'day');
   });
 }
 
-// v2.2.53 : bandeau non-planifié repliable (compact par défaut, expand au clic)
-function _renderNonPlanifStrip(iso, col){
+// v2.2.54 : bandeau non-planifié — mode 'week' (compact, replié) ou 'day' (large, déplié)
+function _renderNonPlanifStrip(iso, col, mode){
   if(!col) return;
   const events = (PLANNING_STATE.list || []).filter(ev =>
     ev.date === iso && ev.source === 'non_planifie'
   );
   if(!events.length) return;
-  // Compte total d'ops non-planifiées ce jour
   let opsCount = 0;
   events.forEach(ev => { opsCount += (ev.operations || []).length; });
   if(!opsCount) return;
+  const isDay = (mode === 'day');
   const strip = document.createElement('div');
-  strip.className = 'cal-wv-nonpl-strip';
-  // Header cliquable (repliable)
+  strip.className = 'cal-wv-nonpl-strip' + (isDay ? ' mode-day is-open' : '');
+  // Header
   const header = document.createElement('div');
   header.className = 'cal-wv-nonpl-header';
-  header.title = 'Cliquer pour ' + (opsCount > 1 ? 'déplier' : 'voir') + ' les ops non planifiées de ce jour';
+  header.title = 'Cliquer pour ' + (opsCount > 1 ? 'déplier/replier' : 'voir') + ' les ops non planifiées de ce jour';
   header.innerHTML =
     '<span class="cal-wv-nonpl-header-lbl">' +
-      '<svg class="cal-wv-nonpl-header-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
-      '<span>' + opsCount + ' non planifiée' + (opsCount > 1 ? 's' : '') + '</span>' +
+      '<svg class="cal-wv-nonpl-header-chev" width="' + (isDay ? 11 : 9) + '" height="' + (isDay ? 11 : 9) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+      '<span>' + opsCount + ' opération' + (opsCount > 1 ? 's' : '') + ' non planifiée' + (opsCount > 1 ? 's' : '') + '</span>' +
     '</span>';
   header.addEventListener('click', e => {
     e.stopPropagation();
     strip.classList.toggle('is-open');
   });
   strip.appendChild(header);
-  // Liste des chips (cachée par défaut)
+  // Liste
   const list = document.createElement('div');
   list.className = 'cal-wv-nonpl-list';
+  // helper heure done_at
+  const _fmtHM = (iso2) => {
+    if(!iso2) return '';
+    const m = String(iso2).match(/T(\d{2}):(\d{2})/);
+    return m ? (m[1] + ':' + m[2]) : '';
+  };
   events.forEach(ev => {
     (ev.operations || []).forEach(op => {
       const chip = document.createElement('div');
@@ -2988,8 +3009,24 @@ function _renderNonPlanifStrip(iso, col){
       chip.setAttribute('data-statut', op.statut || 'a_faire');
       chip.setAttribute('data-event-id', ev.id);
       const machine = (op.machines && op.machines[0]) || ev.machine || '';
+      const timeStr = (op.statut === 'termine') ? _fmtHM(op.done_at) : '';
       chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') + '\n(Non planifiée · cliquer pour voir le détail)';
-      chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') + (machine ? ' · ' + escHtml(machine) : '');
+      if(isDay){
+        // Rendu enrichi mode Day
+        const statusIcon = (op.statut === 'termine')
+          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+          : '';
+        chip.innerHTML =
+          '<span class="cal-wv-nonpl-chip-status">' + statusIcon + '</span>' +
+          '<div class="cal-wv-nonpl-chip-main">' +
+            escHtml(op.opName || '—') +
+            (machine ? '<div class="cal-wv-nonpl-chip-sub">' + escHtml(machine) + '</div>' : '') +
+          '</div>' +
+          (timeStr ? '<span class="cal-wv-nonpl-chip-time">' + escHtml(timeStr) + '</span>' : '');
+      } else {
+        // Rendu compact mode Week
+        chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') + (machine ? ' · ' + escHtml(machine) : '');
+      }
       chip.addEventListener('click', e => {
         e.stopPropagation();
         openPlanningDetailsModal([ev]);
