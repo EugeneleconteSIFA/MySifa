@@ -143,7 +143,17 @@ def list_ao(request: Request):
         rows = conn.execute(
             """SELECT d.id, d.reference, d.titre, d.statut, d.date_creation, d.date_limite,
                       (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id) AS nb_fournisseurs,
-                      (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id AND f.statut = 'repondu') AS nb_reponses
+                      (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id AND f.statut = 'repondu') AS nb_reponses,
+                      (SELECT GROUP_CONCAT(DISTINCT l.ref_produit)
+                         FROM ao_lignes l
+                         WHERE l.ao_id = d.id
+                           AND l.ref_produit IS NOT NULL AND l.ref_produit != '') AS refs_produits,
+                      (SELECT GROUP_CONCAT(DISTINCT COALESCE(cg.raison_sociale, lc.nom))
+                         FROM ao_lignes l
+                         JOIN ao_produits p ON p.ref = l.ref_produit
+                         LEFT JOIN clients            cg ON cg.id = p.client_id
+                         LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+                         WHERE l.ao_id = d.id) AS clients
                FROM ao_demandes d
                ORDER BY d.date_creation DESC"""
         ).fetchall()

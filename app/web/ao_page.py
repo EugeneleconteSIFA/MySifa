@@ -476,6 +476,16 @@ function formatProduitConditionnement(p) {
   return parts.join(' · ');
 }
 
+function matiereNameById(cat, id) {
+  if (!id) return '<span style="color:var(--muted)">\u2014</span>';
+  const list = (S.matieres && S.matieres[cat]) || [];
+  const m = list.find(x => String(x.id) === String(id));
+  if (!m) return '#' + id;
+  const ref = m.reference || '';
+  const des = m.designation || '';
+  return escHtml(ref + (des ? (ref ? ' \u2014 ' : '') + des : ''));
+}
+
 function renderProduitsRows() {
   const ae = document.activeElement;
   const focusId = ae?.id;
@@ -492,8 +502,15 @@ function renderProduitsRows() {
   } else {
     let rows = '';
     list.forEach(p => {
+      const mat = (p.fiche && p.fiche.matiere) || {};
+      const clientTxt = p.client_nom ? escHtml(p.client_nom) : '<span style="color:var(--muted)">\u2014</span>';
+      const frontalTxt = matiereNameById('frontal', mat.frontal_id);
+      const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id);
       rows += '<tr>'+
         '<td class="prod-ref-cell">'+escHtml(p.ref)+'</td>'+
+        '<td>'+clientTxt+'</td>'+
+        '<td>'+frontalTxt+'</td>'+
+        '<td>'+adhesifTxt+'</td>'+
         '<td class="prod-info-cell">'+formatProduitImpressions(p)+'</td>'+
         '<td class="prod-info-cell">'+formatProduitConditionnement(p)+'</td>'+
         '<td class="prod-actions-cell">'+
@@ -505,6 +522,9 @@ function renderProduitsRows() {
     el.innerHTML = '<table class="data-table prod-list-table">'+
       '<thead><tr>'+
       '<th>Référence</th>'+
+      '<th>Client</th>'+
+      '<th>Frontal</th>'+
+      '<th>Adhésif</th>'+
       '<th>Impressions</th>'+
       '<th>Conditionnement bobine</th>'+
       '<th></th>'+
@@ -1340,19 +1360,27 @@ function renderList() {
   list.forEach(a => {
     const ref = escAttr(a.reference||'');
     const titre = escAttr(a.titre||'');
+    const cliTxt = a.clients ? escHtml(a.clients) : '<span style="color:var(--muted)">—</span>';
+    const refsTxt = a.refs_produits ? escHtml(a.refs_produits) : '<span style="color:var(--muted)">—</span>';
     const actions =
       '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
       '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
       '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
-    rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td><td>'+escHtml(a.titre)+'</td><td>'+statutBadge(a.statut)+'</td>'+
-      '<td>'+escHtml(a.date_limite||'—')+'</td><td>'+escHtml(a.nb_fournisseurs)+'</td><td>'+escHtml(a.nb_reponses)+'</td>'+
+    rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td>'+
+      '<td>'+escHtml(a.titre)+'</td>'+
+      '<td>'+cliTxt+'</td>'+
+      '<td>'+refsTxt+'</td>'+
+      '<td>'+statutBadge(a.statut)+'</td>'+
+      '<td>'+escHtml(a.date_limite||'—')+'</td>'+
+      '<td>'+escHtml(a.nb_fournisseurs)+'</td>'+
+      '<td>'+escHtml(a.nb_reponses)+'</td>'+
       '<td class="ao-actions-cell">'+actions+'</td></tr>';
   });
   return '<div class="page-hdr"><h1>Appels d\'offre</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offre</button></div>'+
     '<div class="filter-tabs">'+
     ['tous','brouillon','envoyee','cloturee'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':'Clôturée')+'</button>').join('')+
     '</div>'+
-    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
+    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Références produits</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
     '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
 }
 
