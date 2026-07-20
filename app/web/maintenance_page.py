@@ -23,11 +23,21 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
     MAINTENANCE_OPEN_BETA,
 )
 
-_MAINTENANCE_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
+# v2.2.46 : inclut les 2 sous-rôles administration modernes (ventes/technique)
+# qui manquaient et provoquaient un "Accès refusé" pour ces admins.
+_MAINTENANCE_ADMIN_ROLES = {
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
+}
 
 
 def _get_maintenance_role(user: dict) -> Optional[str]:

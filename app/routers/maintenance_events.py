@@ -30,6 +30,8 @@ from config import (
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
     ROLE_ADMINISTRATION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
     MAINTENANCE_OPEN_BETA,
 )
@@ -40,7 +42,8 @@ router = APIRouter(tags=["maintenance-events"])
 
 # ─── Constantes / helpers ─────────────────────────────────────────
 
-_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION}
+_ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION,
+                ROLE_ADMINISTRATION_VENTES, ROLE_ADMINISTRATION_TECHNIQUE}
 _PARIS = ZoneInfo("Europe/Paris")
 
 _VALID_STATUTS = {"a_faire", "en_cours", "termine", "reporte"}
