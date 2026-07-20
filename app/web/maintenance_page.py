@@ -1354,6 +1354,28 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .maint-codes-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 .maint-codes-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
 .maint-codes-panel-embed .hidden{display:none}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* v2.2.38 : CSS unscoped pour modal Documents (append au body) */
+/* ═══════════════════════════════════════════════════════════ */
+.alert-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.alert-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.alert-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.alert-modal-head h3{margin:0;font-size:15px;color:var(--text);font-weight:700}
+.alert-modal-body{padding:18px 20px}
+.alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
+.alert-modal-overlay .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.alert-modal-overlay .btn:hover{filter:brightness(1.08)}
+.alert-modal-overlay .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
+.alert-modal-overlay .btn-sec:hover{border-color:rgba(34,211,238,.45);color:var(--accent)}
+.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s}
+.alert-modal-overlay .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+.alert-modal-overlay a.btn-sm{text-decoration:none}
+.alert-modal-overlay .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg,#fff);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
+.alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
+.alert-modal-overlay .maint-doc-add-btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
 </style>
 </head>
 <body data-maint-role="__MAINT_ROLE__">
