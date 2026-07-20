@@ -535,10 +535,10 @@ function renderOffre() {{
         '<td><select class="inp-devise" data-lid="' + ln.id + '"' + dis + ">" +
           devSel("EUR", dev) + devSel("USD", dev) +
         "</select></td>" +
-        '<td><select class="inp-unite" data-lid="' + ln.id + '"' + dis + ">" +
-          uniteSel("mille", t("unitMille"), unite) +
-          uniteSel("bobine", t("unitBobine"), unite) +
-        "</select></td>" +
+        '<td><div class="unite-radios">' +
+          '<label><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="mille"' + (unite === "mille" ? " checked" : "") + dis + "> " + escHtml(t("unitMille")) + "</label>" +
+          '<label style="margin-left:10px"><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="bobine"' + (unite === "bobine" ? " checked" : "") + dis + "> " + escHtml(t("unitBobine")) + "</label>" +
+        "</div></td>" +
         '<td><input type="number" step="1" min="0" class="inp-delai" data-lid="' + ln.id + '" value="' + escHtml(delaiVal) + '"' + dis + "></td>" +
         '<td><input type="text" class="inp-com" data-lid="' + ln.id + '" value="' + escAttr(r.commentaire || "") + '"' + dis + "></td>" +
         "</tr>";
@@ -568,7 +568,7 @@ async function submitOffre() {{
     const delaiEl = document.querySelector('.inp-delai[data-lid="' + lid + '"]');
     const comEl = document.querySelector('.inp-com[data-lid="' + lid + '"]');
     const devEl = document.querySelector('.inp-devise[data-lid="' + lid + '"]');
-    const uniteEl = document.querySelector('.inp-unite[data-lid="' + lid + '"]');
+    const uniteEl = document.querySelector('.inp-unite[data-lid="' + lid + '"]:checked') || document.querySelector('.inp-unite[data-lid="' + lid + '"]');
     if (quotation != null && !isNaN(quotation)) hasQuotation = true;
     let delai = null;
     if (delaiEl && delaiEl.value.trim() !== "") {{

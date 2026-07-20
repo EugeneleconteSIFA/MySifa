@@ -1420,7 +1420,7 @@ function renderFournisseurs() {
 
 // ── Phase 3 : nouveau modal picker fournisseurs + Modifier ──
 async function openAddFournisseurModalV2() {
-  const m = document.getElementById('modal-root');
+  const m = document.getElementById('mroot');
   if (!m) return;
   m.innerHTML = '';
   const ov = document.createElement('div'); ov.className = 'modal-overlay';
@@ -1557,7 +1557,7 @@ async function openAddFournisseurModalV2() {
 async function openEditFournisseurAoModal(fourniId) {
   const f = (S.detail && S.detail.fournisseurs || []).find(x => x.id === fourniId);
   if (!f) return;
-  const m = document.getElementById('modal-root'); if (!m) return;
+  const m = document.getElementById('mroot'); if (!m) return;
   m.innerHTML = '';
   const ov = document.createElement('div'); ov.className = 'modal-overlay';
   const box = document.createElement('div'); box.className = 'modal';
