@@ -5066,6 +5066,8 @@ function openMaintForm(code) {
       if (docsList) docsList.style.display = 'none';
     }
   }
+  // v2.2.31 : scroll fluide vers le formulaire pour éviter au user de scroller à la main
+  try { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
   codeInp.focus();
 }
 
