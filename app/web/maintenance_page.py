@@ -10816,10 +10816,10 @@ function renderLibresList() {
     const usageChip = usage > 0
       ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
       : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
-    const canDelete = (usage === 0);
-    const delBtn = canDelete
-      ? '<button type="button" class="btn-sm btn-ghost danger" data-libre-del="' + codeEsc + '">Archiver</button>'
-      : '<button type="button" class="btn-sm btn-ghost" disabled title="Fusionne avec un autre titre pour supprimer" style="opacity:.4;cursor:not-allowed">Archiver</button>';
+    // v2.2.41 : bouton Archiver retiré — un libre est créé au moment de sa 1ère
+    // utilisation, donc usage_count >= 1 dès la naissance, le bouton était mort.
+    // Nettoyage désormais uniquement via Fusion.
+    const delBtn = '';
     return '<tr>' +
       '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
       '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
