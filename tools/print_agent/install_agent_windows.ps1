@@ -97,16 +97,33 @@ if (-not (Test-Path (Join-Path $InstallDir "logs"))) {
   New-Item -ItemType Directory -Path (Join-Path $InstallDir "logs") | Out-Null
 }
 
-# print_agent.py — copié depuis le même dossier que ce script
+# print_agent.py — copie depuis local OU download depuis MySifa (auto)
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $srcAgent = Join-Path $scriptDir "print_agent.py"
-if (-not (Test-Path $srcAgent)) {
-  Write-Host "[ERREUR] print_agent.py introuvable à côté de ce script ($srcAgent)." -ForegroundColor Red
-  Write-Host "         Copie print_agent.py dans le même dossier que install_agent_windows.ps1 et relance." -ForegroundColor Red
-  exit 1
+$targetAgent = Join-Path $InstallDir "print_agent.py"
+if (Test-Path $srcAgent) {
+  Copy-Item $srcAgent $targetAgent -Force
+  Write-Host "  print_agent.py copie depuis le dossier local." -ForegroundColor Green
+} else {
+  # Pas dans le dossier local -> telecharge depuis MySifa (endpoint auth via X-Agent-Token)
+  Write-Host "  print_agent.py absent en local, telechargement depuis $ServerUrl ..."
+  $url = "$ServerUrl/api/print/agent-script"
+  $wc = New-Object System.Net.WebClient
+  $wc.Headers.Add("X-Agent-Token", $Token)
+  $wc.Headers.Add("User-Agent", "MySifa-Installer/1.0")
+  try {
+    $wc.DownloadFile($url, $targetAgent)
+    Write-Host "  print_agent.py telecharge depuis MySifa." -ForegroundColor Green
+  } catch {
+    Write-Host "[ERREUR] Impossible de telecharger print_agent.py depuis $url" -ForegroundColor Red
+    Write-Host "         Detail : $_" -ForegroundColor Red
+    Write-Host "         Verifie que le token est valide et que $ServerUrl est joignable." -ForegroundColor Red
+    Write-Host "         Alternative : copie print_agent.py a cote de install_agent_windows.ps1 et relance." -ForegroundColor Yellow
+    exit 1
+  } finally {
+    $wc.Dispose()
+  }
 }
-Copy-Item $srcAgent (Join-Path $InstallDir "print_agent.py") -Force
-Write-Host "  print_agent.py copié."
 
 # agent_config.yaml — généré à partir du token en argument
 $configPath = Join-Path $InstallDir "agent_config.yaml"

@@ -300,6 +300,17 @@ def create_imprimante(payload: ImprimanteBase, request: Request):
     tc = (payload.type_connexion or "tcp_ip").strip()
     if tc not in TYPES_CONNEXION:
         raise HTTPException(status_code=400, detail=f"Type de connexion invalide (attendu: {TYPES_CONNEXION}).")
+    # v1.7 — une imprimante de langage="pdf" DOIT etre en windows_local
+    # (SumatraPDF ne sait envoyer qu'a une queue Windows locale). Cette
+    # contrainte evite de creer une config incoherente qui echouerait
+    # silencieusement cote agent.
+    if payload.langage == "pdf" and tc != "windows_local":
+        raise HTTPException(
+            status_code=400,
+            detail=("Une imprimante PDF (bureautique) doit etre en 'windows_local' "
+                    "avec un nom de queue Windows. SumatraPDF, utilise cote agent, "
+                    "ne peut envoyer qu'a une queue Windows locale."),
+        )
     # Normalise selon type_connexion : champs non utilises = valeurs vides
     # plutot que NULL pour rester compatible avec la contrainte NOT NULL heritee.
     if tc == "tcp_ip":
@@ -600,6 +611,200 @@ def emit_label(payload: LabelRequest, request: Request):
     return {"ok": True, "job_ids": job_ids, "imprimante": imp["nom"], "copies": copies}
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# ENDPOINT USER — Impression PDF bureautique (OF, fiches techniques) (v1.7)
+# ═══════════════════════════════════════════════════════════════════════
+#
+# Pipeline :
+#   Front (MyProd Fiches/OF) → POST /api/print/pdf {entity_type, entity_id,
+#     imprimante_id, copies, duplex, format, bin, color}
+#   → resolve imprimante (id explicite ou defaut utilisateur)
+#   → fetch le PDF selon entity_type :
+#        - "of"    : lit `of_imports.pdf_filename`, charge le fichier disque
+#        - "fiche" : appelle generate_fiche_pdf(row_dict) a la volee
+#   → stocke le PDF en BLOB dans print_jobs.payload avec payload_langage="pdf"
+#   → serialise les params impression (copies, duplex, ...) dans data_json
+#   → agent local (Windows) recupere le job, decode le PDF, invoque SumatraPDF
+#     avec les params extraits de data_json.
+
+_PDF_DUPLEX_VALUES = ("simplex", "long-edge", "short-edge")
+_PDF_COLOR_VALUES = ("color", "monochrome")
+_PDF_FORMAT_VALUES = ("A4", "A5", "A3", "Letter", "Legal")
+
+
+class PdfPrintRequest(BaseModel):
+    entity_type: str = Field(..., description="'of' ou 'fiche'")
+    entity_id: int
+    imprimante_id: Optional[int] = None
+    copies: int = 1
+    # Options impression bureautique (interpretees par l'agent via SumatraPDF)
+    duplex: str = "simplex"                # simplex | long-edge | short-edge
+    format: str = "A4"                     # A4 | A5 | A3 | Letter | Legal
+    bin: Optional[str] = None              # nom du bac (ex: "Tray1"); None = defaut driver
+    color: str = "color"                   # color | monochrome
+
+
+def _fetch_pdf_bytes(entity_type: str, entity_id: int) -> tuple[bytes, str]:
+    """Retourne (pdf_bytes, filename_suggere) pour l'entite demandee.
+
+    - 'of'    : lit le PDF importe depuis of_imports.pdf_filename (sur disque).
+    - 'fiche' : appelle app.services.fiche_pdf.generate_fiche_pdf() a la volee.
+
+    Leve HTTPException si l'entite est introuvable ou le PDF absent.
+    """
+    et = (entity_type or "").strip().lower()
+    if et not in ("of", "fiche"):
+        raise HTTPException(status_code=400, detail="entity_type invalide (attendu: 'of' ou 'fiche').")
+
+    with get_db() as conn:
+        if et == "of":
+            row = conn.execute(
+                "SELECT id, of_numero, pdf_filename FROM of_imports WHERE id=? LIMIT 1",
+                (entity_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="OF introuvable.")
+            pdf_filename = row["pdf_filename"]
+            if not pdf_filename:
+                raise HTTPException(status_code=409, detail="Cet OF n'a pas de PDF associe.")
+            # OF_UPLOAD_DIR est defini dans of_import.py — on le reimporte pour rester DRY.
+            try:
+                from app.routers.of_import import OF_UPLOAD_DIR  # type: ignore
+            except Exception:
+                # Fallback : reconstitue le chemin depuis data/uploads/of/
+                from pathlib import Path as _P
+                OF_UPLOAD_DIR = str(_P(__file__).resolve().parent.parent.parent / "data" / "uploads" / "of")
+            import os as _os
+            path = _os.path.join(OF_UPLOAD_DIR, pdf_filename)
+            if not _os.path.isfile(path):
+                raise HTTPException(status_code=404, detail=f"PDF introuvable sur le serveur : {pdf_filename}")
+            with open(path, "rb") as f:
+                return f.read(), pdf_filename
+        # et == "fiche"
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE id=? LIMIT 1",
+            (entity_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Fiche technique introuvable.")
+        try:
+            from app.services.fiche_pdf import generate_fiche_pdf
+            pdf_bytes = generate_fiche_pdf(dict(row))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur generation PDF fiche : {e}")
+        ref = row["reference"] if "reference" in row.keys() else f"fiche-{entity_id}"
+        return pdf_bytes, f"fiche_{ref}.pdf"
+
+
+@router.post("/pdf")
+def emit_pdf_print(payload: PdfPrintRequest, request: Request):
+    """Emet un job d'impression PDF (bureautique) vers une imprimante rattachee
+    a un agent local Windows equipe de SumatraPDF.
+
+    - Resolution imprimante :
+        1. `imprimante_id` explicite
+        2. sinon defaut utilisateur pour l'usage_key deduit de entity_type
+           ('of_document' pour 'of', 'fiche_technique' pour 'fiche')
+        3. sinon erreur 409 → le client doit demander a l'utilisateur de choisir
+    - L'imprimante DOIT etre de langage 'pdf' (sinon 409).
+    - Le PDF est stocke tel quel en BLOB. Les params sont dans data_json,
+      l'agent les lit et les passe a SumatraPDF.
+    """
+    user = get_current_user(request)
+    email = user.get("email")
+    copies = max(1, min(999, int(payload.copies or 1)))
+
+    # Validation options
+    duplex = (payload.duplex or "simplex").strip().lower()
+    if duplex not in _PDF_DUPLEX_VALUES:
+        raise HTTPException(status_code=400, detail=f"duplex invalide (attendu: {_PDF_DUPLEX_VALUES}).")
+    color = (payload.color or "color").strip().lower()
+    if color not in _PDF_COLOR_VALUES:
+        raise HTTPException(status_code=400, detail=f"color invalide (attendu: {_PDF_COLOR_VALUES}).")
+    fmt = (payload.format or "A4").strip()
+    if fmt not in _PDF_FORMAT_VALUES:
+        raise HTTPException(status_code=400, detail=f"format invalide (attendu: {_PDF_FORMAT_VALUES}).")
+
+    # Deduit l'usage_key depuis entity_type (pour resolution du defaut utilisateur)
+    et = (payload.entity_type or "").strip().lower()
+    if et == "of":
+        usage_key = "of_document"
+    elif et == "fiche":
+        usage_key = "fiche_technique"
+    else:
+        raise HTTPException(status_code=400, detail="entity_type invalide (attendu: 'of' ou 'fiche').")
+
+    # Recupere le PDF (leve HTTPException si probleme)
+    pdf_bytes, filename = _fetch_pdf_bytes(et, payload.entity_id)
+
+    with get_db() as conn:
+        # Resolution imprimante
+        imp_id = payload.imprimante_id
+        if not imp_id:
+            row = conn.execute(
+                "SELECT imprimante_id FROM user_printer_defaults WHERE user_email=? AND usage_key=?",
+                (email, usage_key),
+            ).fetchone()
+            if row:
+                imp_id = row["imprimante_id"]
+        if not imp_id:
+            raise HTTPException(
+                status_code=409,
+                detail=("Aucune imprimante configuree pour cet usage. "
+                        "Choisis une imprimante dans le popup, ou fixe un defaut dans ton profil."),
+            )
+        imp = conn.execute(
+            "SELECT id,nom,agent_id,langage,actif FROM imprimantes WHERE id=?",
+            (imp_id,),
+        ).fetchone()
+        if not imp:
+            raise HTTPException(status_code=404, detail="Imprimante introuvable.")
+        if not imp["actif"]:
+            raise HTTPException(status_code=409, detail="Imprimante desactivee.")
+        if imp["langage"] != "pdf":
+            raise HTTPException(
+                status_code=409,
+                detail=(f"L'imprimante « {imp['nom']} » n'est pas configuree pour le PDF "
+                        f"(langage={imp['langage']}). Choisis une imprimante bureautique "
+                        f"(langage=pdf) pour imprimer un document."),
+            )
+
+        # Prepare data_json pour l'agent (options SumatraPDF)
+        import json as _json
+        print_options = {
+            "copies": copies,          # SumatraPDF gere les copies via `-print-settings copies=N`
+            "duplex": duplex,          # simplex | long-edge | short-edge
+            "format": fmt,             # A4 | A5 | A3 | Letter | Legal
+            "bin": payload.bin,        # None ou nom du bac
+            "color": color,            # color | monochrome
+            "filename": filename,      # nom suggere pour le fichier temp cote agent
+        }
+        data_json = _json.dumps(print_options, ensure_ascii=False)
+
+        # Un seul job (pas N jobs comme pour les etiquettes) — les copies sont
+        # gerees par SumatraPDF via -print-settings copies=N. Simplifie le suivi
+        # et evite d'ouvrir/fermer SumatraPDF N fois.
+        now = _now()
+        cur = conn.execute(
+            "INSERT INTO print_jobs (imprimante_id,agent_id,usage_key,template_id,payload,"
+            "payload_langage,status,created_at,created_by,data_json) "
+            "VALUES (?,?,?,?,?,?,'pending',?,?,?)",
+            (imp_id, imp["agent_id"], usage_key, None, pdf_bytes,
+             "pdf", now, email, data_json),
+        )
+        job_id = cur.lastrowid
+        conn.commit()
+
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "imprimante": imp["nom"],
+        "copies": copies,
+        "filename": filename,
+        "size_bytes": len(pdf_bytes),
+    }
+
+
 class TestPrintPayload(BaseModel):
     imprimante_id: int
 
@@ -813,6 +1018,7 @@ def agent_get_jobs(request: Request, limit: int = 20):
         # agent (ou celles dont agent_id est NULL — pas encore rattachées).
         rows = conn.execute(
             "SELECT pj.id,pj.imprimante_id,pj.payload,pj.payload_langage,pj.tentatives,"
+            "pj.data_json,"  # v1.7 — options impression PDF (copies/duplex/format/bin/color)
             "i.nom AS imp_nom,i.type_connexion,i.ip_locale,i.port,i.nom_queue_windows "
             "FROM print_jobs pj JOIN imprimantes i ON i.id=pj.imprimante_id "
             "WHERE pj.status='pending' AND (i.agent_id=? OR i.agent_id IS NULL) "
@@ -846,6 +1052,19 @@ def agent_get_jobs(request: Request, limit: int = 20):
             except (IndexError, KeyError):
                 info["nom_queue_windows"] = None
         return info
+    # v1.7 — parse data_json cote serveur (evite a l'agent de gerer un decode
+    # JSON eventuellement bugue). Pour les jobs pre-v1.7 (langage zpl/epl/escpos)
+    # data_json contient juste les data metier du template — inutile pour l'agent.
+    # Pour les jobs PDF, il contient {copies, duplex, format, bin, color, filename}.
+    import json as _json
+    def _parse_options(raw):
+        if not raw:
+            return {}
+        try:
+            v = _json.loads(raw)
+            return v if isinstance(v, dict) else {}
+        except Exception:
+            return {}
     return {
         "jobs": [
             {
@@ -854,6 +1073,9 @@ def agent_get_jobs(request: Request, limit: int = 20):
                 "langage": r["payload_langage"],
                 "payload_b64": base64.b64encode(bytes(r["payload"])).decode("ascii"),
                 "tentatives": r["tentatives"] + 1,
+                # v1.7 — expose les options d'impression a l'agent (utile pour PDF/SumatraPDF).
+                # Vide {} pour les jobs pre-v1.7 ou pour les etiquettes qui n'ont pas d'options.
+                "options": _parse_options(r["data_json"]) if r["payload_langage"] == "pdf" else {},
             }
             for r in rows
         ]
