@@ -5066,8 +5066,8 @@ function openMaintForm(code) {
       if (docsList) docsList.style.display = 'none';
     }
   }
-  // v2.2.31 : scroll fluide vers le formulaire pour éviter au user de scroller à la main
-  try { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
+  // v2.2.32 : scroll tout en haut de la page pour voir titre + subtabs + formulaire
+  try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) { window.scrollTo(0, 0); }
   codeInp.focus();
 }
 
