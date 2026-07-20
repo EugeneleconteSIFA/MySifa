@@ -1506,7 +1506,9 @@ async function openCreateAoWizard() {
   if (!m) return;
   m.innerHTML = '';
   const ov = document.createElement('div'); ov.className = 'modal-overlay';
-  const box = document.createElement('div'); box.className = 'modal modal-wide';
+  const box = document.createElement('div'); box.className = 'modal modal-wide wizard-ao';
+  box.style.maxWidth = '760px';
+  box.style.width = '92vw';
 
   const state = {
     step: 1,
@@ -1545,16 +1547,24 @@ async function openCreateAoWizard() {
 
   function renderStepIndicator() {
     const steps = ['Infos AO', 'Produits', 'Fournisseurs'];
-    return '<div style="display:flex;gap:4px;margin-bottom:16px">' +
-      steps.map((label, i) => {
-        const n = i + 1;
-        const isActive = state.step === n;
-        const isDone = state.step > n;
-        const bg = isActive ? 'var(--accent)' : (isDone ? 'rgba(52,211,153,.2)' : 'var(--bg)');
-        const fg = isActive ? '#fff' : (isDone ? 'var(--ok)' : 'var(--text2)');
-        return '<div style="flex:1;padding:8px 10px;border-radius:8px;background:' + bg + ';color:' + fg + ';font-size:12px;font-weight:600;text-align:center;border:1px solid var(--border)">' +
-          n + '. ' + label + '</div>';
-      }).join('') + '</div>';
+    // Style breadcrumb avec fleches (chevron) — pas de bordures type boutons
+    let html = '<div style="display:flex;align-items:center;margin-bottom:20px;font-size:14px;user-select:none">';
+    steps.forEach((label, i) => {
+      const n = i + 1;
+      const isActive = state.step === n;
+      const isDone = state.step > n;
+      const color = isActive ? 'var(--accent)' : (isDone ? 'var(--ok)' : 'var(--muted)');
+      const weight = isActive ? '700' : (isDone ? '600' : '500');
+      const badge = isDone
+        ? '<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--ok);color:#fff;font-size:11px;margin-right:8px">✓</span>'
+        : '<span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:' + (isActive ? 'var(--accent)' : 'transparent') + ';color:' + (isActive ? '#fff' : color) + ';border:' + (isActive ? 'none' : '1.5px solid ' + color) + ';font-size:11px;font-weight:700;margin-right:8px">' + n + '</span>';
+      html += '<span style="display:inline-flex;align-items:center;color:' + color + ';font-weight:' + weight + '">' + badge + label + '</span>';
+      if (i < steps.length - 1) {
+        html += '<span style="margin:0 12px;color:var(--muted);font-size:16px">›</span>';
+      }
+    });
+    html += '</div>';
+    return html;
   }
 
   function renderStep1() {
@@ -1705,7 +1715,23 @@ async function openCreateAoWizard() {
   }
 
   function render() {
-    let content = '<h3>Nouvel appel d\'offre</h3>' + renderStepIndicator();
+    // Style scope au wizard : inputs et polices plus grandes
+    let content = '<style>' +
+      '.wizard-ao h3{font-size:18px;margin-bottom:6px}' +
+      '.wizard-ao .field label{font-size:13px;color:var(--text);font-weight:600;margin-bottom:4px;display:block}' +
+      '.wizard-ao .field input,.wizard-ao .field select,.wizard-ao .field textarea{width:100%;padding:9px 12px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;box-sizing:border-box}' +
+      '.wizard-ao .field textarea{min-height:64px;resize:vertical}' +
+      '.wizard-ao .field{margin-bottom:12px}' +
+      '.wizard-ao .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
+      '.wizard-ao table input,.wizard-ao table select{padding:6px 8px;font-size:13px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;box-sizing:border-box;width:100%}' +
+      '.wizard-ao table th{padding:8px 6px !important;font-size:11px;text-transform:uppercase;letter-spacing:.5px}' +
+      '.wizard-ao table td{padding:4px 6px !important;vertical-align:middle}' +
+      '.wizard-ao .w-l-del{color:var(--danger)}' +
+      '.wizard-ao p{font-size:13px;line-height:1.5}' +
+      '.wizard-ao label{font-size:13px}' +
+      '.wizard-ao .modal-actions button{padding:10px 16px;font-size:14px}' +
+      '</style>' +
+      '<h3>Nouvel appel d\'offre</h3>' + renderStepIndicator();
     if (state.step === 1) content += renderStep1();
     else if (state.step === 2) content += renderStep2();
     else if (state.step === 3) content += renderStep3();
