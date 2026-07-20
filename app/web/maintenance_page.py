@@ -3095,8 +3095,11 @@ function _makeEventBlock(item){
   const ev = item.ev;
   const startMin = item.s, endMin = item.e;
   if(startMin == null || endMin == null || endMin <= startMin) return null;
-  const top = ((startMin - CAL_HOUR_START*60) / 60) * CAL_HOUR_PX;
-  const height = Math.max(22, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  // v2.2.55 : la vue Jour a des rows plus hautes (72px vs 62px pour la semaine).
+  // Sync avec le CSS pour éviter le décalage vertical cumulatif.
+  const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+  const top = ((startMin - CAL_HOUR_START*60) / 60) * px;
+  const height = Math.max(22, ((endMin - startMin) / 60) * px - 2);
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
