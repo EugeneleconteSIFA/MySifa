@@ -1772,10 +1772,68 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         <div>
           <div style="font-size:17px;font-weight:700;color:var(--text)">Imprimantes</div>
           <div style="font-size:12px;color:var(--muted);margin-top:4px">
-            Configure les imprimantes réseau de l'usine et les agents locaux qui font le pont avec MySifa.
+            Configure les imprimantes réseau et locales (USB/LPT) de l'usine, et les agents qui font le pont avec MySifa.
           </div>
         </div>
       </div>
+
+      <!-- Aide : comment ajouter une imprimante -->
+      <details style="margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px" open>
+        <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text);list-style:none;display:flex;align-items:center;gap:8px">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          Comment ajouter une imprimante ?
+          <span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:500">Clique pour plier / déplier</span>
+        </summary>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px">
+
+          <!-- Colonne Réseau -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <span style="font-size:13px;font-weight:700;color:var(--text)">Imprimante réseau (TCP/IP)</span>
+            </div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:8px">
+              L'imprimante est branchée en Ethernet ou Wifi sur le LAN usine et possède sa <strong>propre adresse IP</strong>. Cas typique des Zebra ZT/S4M avec option réseau.
+            </div>
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Prérequis</div>
+            <ul style="font-size:12px;color:var(--text2);margin:0;padding-left:18px;line-height:1.6">
+              <li>Un <strong>agent MySifa</strong> qui tourne sur un PC ou Raspberry Pi du LAN</li>
+              <li>L'IP + port 9100 accessibles depuis cet agent</li>
+              <li>Le langage supporté par l'imprimante (ZPL, EPL, ESC/POS)</li>
+            </ul>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+              → Nouvelle imprimante → cocher <strong>Réseau (TCP/IP)</strong> → saisir IP + port
+            </div>
+          </div>
+
+          <!-- Colonne Locale -->
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent);flex-shrink:0"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <span style="font-size:13px;font-weight:700;color:var(--text)">Imprimante locale (USB / LPT)</span>
+            </div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:8px">
+              L'imprimante est <strong>physiquement branchée</strong> à un PC via USB ou port parallèle (LPT). Elle n'a pas d'IP. Windows la gère via son driver installé.
+            </div>
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Prérequis</div>
+            <ul style="font-size:12px;color:var(--text2);margin:0;padding-left:18px;line-height:1.6">
+              <li>Un <strong>agent MySifa installé sur CE PC hôte</strong> (script <code style="font-size:11px;background:var(--bg-code, rgba(0,0,0,.05));padding:1px 4px;border-radius:3px">install_agent_windows.ps1</code>)</li>
+              <li>Le <strong>driver Windows</strong> de l'imprimante déjà installé (visible dans "Périphériques et imprimantes")</li>
+              <li>Le <strong>nom exact de la queue Windows</strong> (avec majuscules, espaces, accents)</li>
+            </ul>
+            <div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+              → Nouvelle imprimante → cocher <strong>Locale</strong> → saisir le nom de la queue Windows
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;padding:10px 12px;background:rgba(240, 165, 0, 0.08);border-left:3px solid var(--accent);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.5">
+          <strong style="color:var(--text)">Workflow complet</strong> :
+          <span style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:1px 7px;border-radius:10px;font-size:11px;margin:0 2px">1</span> Onglet <strong>Agents locaux</strong> → <em>Nouvel agent</em> → copier le token affiché (n'apparaît qu'une fois) &nbsp;·&nbsp;
+          <span style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:1px 7px;border-radius:10px;font-size:11px;margin:0 2px">2</span> Sur le PC hôte, lancer <code style="font-size:11px;background:var(--bg-code, rgba(0,0,0,.05));padding:1px 4px;border-radius:3px">install_agent_windows.ps1 -Token "..."</code> en admin &nbsp;·&nbsp;
+          <span style="display:inline-block;background:var(--accent);color:#fff;font-weight:700;padding:1px 7px;border-radius:10px;font-size:11px;margin:0 2px">3</span> Revenir ici sur <strong>Imprimantes</strong> → <em>Nouvelle imprimante</em> → choisir le type et rattacher à l'agent qu'on vient de créer
+        </div>
+      </details>
 
       <!-- Sous-onglets Imprimantes / Templates / Agents -->
       <div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border)">
