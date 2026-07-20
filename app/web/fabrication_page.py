@@ -469,6 +469,35 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
 .fab-tab-btn svg{opacity:.65}
 .fab-tab-btn.active svg{opacity:1}
+
+/* ── Tabs plus visibles pour opérateurs ─────────────────────── */
+.fab-footer-tabs-row{
+  display:flex;align-items:center;justify-content:center;width:100%;
+  margin-bottom:2px;
+}
+.fab-tab-nav--prominent{
+  border-width:1.5px;border-radius:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,.10);
+}
+.fab-tab-nav--prominent .fab-tab-btn{
+  width:auto;min-width:82px;padding:9px 14px 7px;
+  font-size:11px;letter-spacing:.6px;
+  color:var(--text2);
+}
+.fab-tab-nav--prominent .fab-tab-btn svg{
+  width:18px;height:18px;opacity:.85;margin-bottom:2px;
+}
+.fab-tab-nav--prominent .fab-tab-btn.active{
+  color:var(--accent);background:var(--accent-bg);
+  box-shadow:inset 0 -2px 0 var(--accent);
+}
+.fab-tab-nav--prominent .fab-tab-btn.active svg{opacity:1}
+
+/* ── Centrage sections footer ──────────────────────────────── */
+.fab-footer{align-items:center}
+.fab-footer-info{justify-content:center}
+.fab-footer-actions{align-items:center;justify-content:center;gap:6px}
+.fab-footer-tools{align-items:stretch;justify-content:center}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
 .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -3358,35 +3387,77 @@ function renderTracaPanel(){
   );
 }
 
+function _renderStockQuickAccess(){
+  // Boutons d'accès rapide aux vues MyStock, ouverts dans un
+  // nouvel onglet pour ne pas casser la session de saisie en cours.
+  // La sidebar de gauche reste toujours cliquable côté /fabrication
+  // (on peut à tout moment saisir une opération).
+  const links = [
+    {tab:'production',    icon:'cpu',     label:'Production'},
+    {tab:'matieres',      icon:'layers',  label:'Matières premières'},
+    {tab:'reception',     icon:'inbox',   label:'Réception matière'},
+    {tab:'traca',         icon:'printer', label:'Étiquettes traça'},
+    {tab:'plan-entrepot', icon:'map-pin', label:'Plan entrepôt'},
+    {tab:'historique',    icon:'clock',   label:'Historique'},
+  ];
+  const buttons = links.map(l => {
+    const btn = h('button',{
+      className:'fab-btn fab-btn-ghost fab-btn-sm',
+      style:{minWidth:'120px',justifyContent:'center'},
+      title:'Ouvrir '+l.label+' dans MyStock',
+      onClick:()=>{
+        try{ window.open('/stock?tab='+encodeURIComponent(l.tab),'_blank','noopener'); }
+        catch(e){ window.location.href='/stock?tab='+encodeURIComponent(l.tab); }
+      }
+    }, svgIcon(l.icon,14),' '+l.label);
+    return btn;
+  });
+  return h('div',{
+    style:{
+      display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',
+      padding:'14px 20px 4px',borderBottom:'1px solid var(--border)',
+      background:'var(--bg)'
+    }
+  },
+    h('div',{style:{width:'100%',textAlign:'center',fontSize:'11px',
+      textTransform:'uppercase',letterSpacing:'.5px',color:'var(--muted)',
+      fontWeight:'700',marginBottom:'4px'}},
+      'Accès rapide MyStock'),
+    ...buttons
+  );
+}
+
 function renderStatsPanel(){
   const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'-';
   const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
   if(!ref){
     return h('div',{className:'fab-main'},
       h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
+        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier'),
         h('span',{className:'fab-main-sub'},machineName)
       ),
       h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},
         'Aucun dossier actif. Demarrez un dossier (op 01) pour voir ses stats.'
-      )
+      ),
+      _renderStockQuickAccess()
     );
   }
   const st = S.dossierStats;
   if(S.dossierStatsLoading || !st){
     return h('div',{className:'fab-main'},
       h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
+        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier'),
         h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
         h('span',{className:'fab-main-sub'},machineName)
       ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...')
+      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...'),
+      _renderStockQuickAccess()
     );
   }
   if(st._err){
     return h('div',{className:'fab-main'},
       h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier')
+        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier')
       ),
       h('div',{style:{padding:'24px',color:'var(--danger)'}}, st._err)
     );
@@ -3429,10 +3500,11 @@ function renderStatsPanel(){
 
   return h('div',{className:'fab-main', style:{overflow:'auto'}},
     h('div',{className:'fab-main-head'},
-      h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
+      h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier'),
       h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
       h('span',{className:'fab-main-sub'},machineName)
     ),
+    _renderStockQuickAccess(),
     h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}},
       // Resume en tetes de cartes
       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}},
@@ -3789,32 +3861,55 @@ async function openTracabiliteModal(noDossier){
   }
 }
 
+/* ── Tabs footer : définitions + filtrage rôle ─────────────── */
+function _fabTabDefs(){
+  // Tab 'stats' est renommé "Stock" (icône package) pour donner
+  // accès aux vues MyStock depuis la fabrication.
+  return [
+    {key:'saisie', icon:'edit',    label:'Saisie'},
+    {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
+    {key:'traca',  icon:'scan',    label:'Traça'},
+    {key:'stats',  icon:'package', label:'Stock'},
+    {key:'of',     icon:'file',    label:'Fiches + OF', ofOnly:true},
+  ];
+}
+function _isFabricationOperator(){
+  const r = S.user && S.user.role;
+  // Un pur opérateur fabrication OU un admin qui a explicitement
+  // basculé en vue opérateur : on masque Imprimer et Fiches+OF.
+  return r === 'fabrication' || S.saisieViewMode === 'operator';
+}
+function _visibleFabTabs(){
+  const opView = _isFabricationOperator();
+  return _fabTabDefs().filter(t => {
+    if(t.adminOnly && opView) return false;
+    if(t.ofOnly && (!canAccessOfTab() || opView)) return false;
+    return true;
+  });
+}
+function _renderFabTabNav(extraClass){
+  const tabs = _visibleFabTabs().map(t =>
+    h('button',{
+      className:'fab-tab-btn'+(S.fabTab===t.key?' active':''),
+      title:t.label,
+      onClick:()=>{ void switchFabTab(t.key); }
+    }, svgIcon(t.icon,16), t.label)
+  );
+  return h('div',{className:'fab-tab-nav'+(extraClass?' '+extraClass:'')}, ...tabs);
+}
+
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
   // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
   const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
   if(isAdminView){
-    const adminTabBtns = [
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
-        svgIcon('edit',16),'Saisie'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
-        svgIcon('printer',16),'Imprimer'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-        svgIcon('scan',16),'Traça'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
-        svgIcon('bar-chart-2',16),'Stats'),
-    ];
-    if(canAccessOfTab()){
-      adminTabBtns.push(
-        h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-          svgIcon('file',16),'Fiches + OF')
-      );
-    }
+    const adminTabNav = _renderFabTabNav();
+    adminTabNav.style.marginLeft = 'auto';
     return h('div',{className:'fab-footer fab-footer--admin'},
       h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase',flexShrink:0}},
         'Vue admin — lecture seule'),
-      h('div',{className:'fab-tab-nav',style:{marginLeft:'auto'}}, ...adminTabBtns)
+      adminTabNav
     );
   }
 
@@ -3993,24 +4088,10 @@ function renderFooter(){
     )
   );
 
-  // Tab nav (always visible at bottom of footer)
-  const tabBtns = [
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
-      svgIcon('edit',16),'Saisie'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
-      svgIcon('printer',16),'Imprimer'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-      svgIcon('scan',16),'Traça'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
-      svgIcon('bar-chart-2',16),'Stats'),
-  ];
-  if(canAccessOfTab()){
-    tabBtns.push(
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-        svgIcon('file',16),'Fiches + OF')
-    );
-  }
-  const tabNav = h('div',{className:'fab-tab-nav'}, ...tabBtns);
+  // Tab nav : maintenant positionné ENTRE les infos dossier et
+  // le bouton "Fin de production" (dans centerSection, en tête).
+  // Rendu identique quel que soit l'onglet actif -> footer unifié.
+  const tabNav = _renderFabTabNav('fab-tab-nav--prominent');
 
   const isOperatorView = S.saisieViewMode === 'operator';
 
@@ -4025,43 +4106,20 @@ function renderFooter(){
   }, svgIcon(isLight?'sun':'moon',14),
     h('span',{className:'fab-theme-label'}, isLight?'Clair':'Sombre'));
 
-  const tabNavWrap = h('div',{className:'fab-footer-row2'}, tabNav, themeBtn);
-
-  // When on non-saisie tabs, show a minimal status line instead of full footer
-  if(S.fabTab!=='saisie'){
-    const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
-    const dossierLabel = S.dossier ? fabDossierRefLabel(S.dossier) : 'Aucun dossier';
-    const fscFooterBtn = S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
-      ? h('button',{
-          className:'fab-btn fab-btn-ghost',
-          style:{fontSize:'10px',padding:'2px 8px'},
-          onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
-        },'FSC')
-      : null;
-    const footerCls = 'fab-footer fab-footer-operator fab-footer--alt';
-    return h('div',{className:footerCls,style:{gridTemplateColumns:'1fr'}},
-      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',
-        fontSize:'10px',color:'var(--muted)',padding:'2px 0',flexWrap:'wrap'}},
-        h('span',null, svgIcon('tool',11),' '+machineName),
-        h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',null,dossierLabel),
-        h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 6px'}}, etatLabel(S.etat)),
-        fscFooterBtn,
-        themeBtn
-      ),
-      h('div',{className:'fab-footer-row2',style:{justifyContent:'center'}}, tabNav)
-    );
-  }
+  // centerSection : la nav des onglets est empilée AU-DESSUS des
+  // action buttons ("Fin de production", etc.), bien centrée et
+  // agrandie pour être immédiatement visible.
+  const actionsSection = h('div',{className:'fab-footer-actions'},
+    machineSelectorRow,
+    h('div',{className:'fab-footer-tabs-row'}, tabNav),
+    h('div',{className:'fab-footer-btns'},...btns),
+    h('div',{className:'fab-footer-row2'}, themeBtn)
+  );
 
   const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '');
   return h('div',{className:footerCls},
     infoSection,
-    h('div',{className:'fab-footer-actions'},
-      machineSelectorRow,
-      h('div',{className:'fab-footer-btns'},...btns),
-      tabNavWrap
-    ),
+    actionsSection,
     toolsSection
   );
 }
