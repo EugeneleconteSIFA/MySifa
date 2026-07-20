@@ -1102,6 +1102,9 @@ def get_my_maintenance(
                WHERE eo.operator_id = ?
                  AND e.date_prevue >= ?
                  AND e.date_prevue <= ?
+                 AND COALESCE(e.source, 'planifie') != 'non_planifie'
+                 AND e.heure_debut IS NOT NULL AND e.heure_debut != ''
+                 AND e.heure_fin IS NOT NULL AND e.heure_fin != ''
                ORDER BY e.date_prevue ASC, e.heure_debut ASC, e.id ASC""",
             (user["id"], lundi_from.isoformat(), dim_to.isoformat()),
         ).fetchall()
