@@ -1793,6 +1793,16 @@ body.light .recep-print-title{color:#059669}
 .recep-print-field input{background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
 .recep-print-field input:focus{border-color:var(--accent)}
 .recep-print-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+
+/* ── Mode embed (iframe depuis /fabrication) ───────────────── */
+body.stock-embed .sidebar,
+body.stock-embed .sidebar-overlay,
+body.stock-embed .mobile-topbar,
+body.stock-embed .contact-modal-overlay .contact-close ~ .version { display:none !important }
+body.stock-embed .app-layout { grid-template-columns: 1fr !important; }
+body.stock-embed .main-area { width:100% !important; }
+body.stock-embed { background: var(--bg, transparent) !important; }
+
 </style>
 </head>
 <body>
@@ -1823,6 +1833,7 @@ let S = {
   stockReadOnly: false,
   tracaOnly: false,
   fabStockMode: false,  // fabrication : accès limité aux sections Matières premières + Outils
+  embedMode: false,     // affiché en iframe depuis /fabrication : masque sidebar + topbar
   sidebarOpen: false,
   searchQuery: '',
   searchResults: null,
@@ -17128,7 +17139,7 @@ function render() {
     el('div', { cls:'scroll-area', id:'scroll-area' })
   );
 
-  layout.append(sidebar, main);
+  if (S.embedMode) { layout.append(main); } else { layout.append(sidebar, main); }
   root.appendChild(layout);
 
   document.title = STOCK_TAB_DOC_TITLES[S.tab] || 'MyStock — MySifa';
@@ -17653,6 +17664,10 @@ async function init() {
   S.tracaOnly = false;
   // Fabrication : accès limité aux sections Matières premières + Outils, lecture seule
   S.fabStockMode = (user.role === 'fabrication');
+  // Mode embed : /stock est chargé dans une iframe depuis /fabrication
+  try { S.embedMode = (new URLSearchParams(window.location.search).get('embed') === '1'); }
+  catch(e){ S.embedMode = false; }
+  if (S.embedMode) { document.body.classList.add('stock-embed'); }
   // Charger les fournisseurs FSC
   await loadFournisseursFSC();
   // Charger le référentiel des laizes (utilisé dans modal matière + valorisation)

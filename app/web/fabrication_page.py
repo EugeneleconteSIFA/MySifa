@@ -493,6 +493,32 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 }
 .fab-tab-nav--prominent .fab-tab-btn.active svg{opacity:1}
 
+/* ── Panneau Stock intégré (iframe MyStock) ────────────────── */
+.fab-stock-main{
+  display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;
+}
+.fab-stock-subnav{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 12px;border-bottom:1px solid var(--border);
+  background:var(--card);flex-shrink:0;flex-wrap:wrap;
+}
+.fab-stock-subtab{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 14px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text2);cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;
+  letter-spacing:.3px;transition:all .15s;
+}
+.fab-stock-subtab:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.fab-stock-subtab.active{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.fab-stock-subtab.active:hover{filter:brightness(1.05)}
+.fab-stock-subtab svg{opacity:.9}
+.fab-stock-iframe{
+  flex:1;min-height:0;width:100%;border:none;
+  background:var(--bg);display:block;
+}
+
+
 /* ── Centrage sections footer ──────────────────────────────── */
 .fab-footer{align-items:center}
 .fab-footer-info{justify-content:center}
@@ -979,7 +1005,8 @@ let S = {
   searchQuery: '',
 
   // Footer tabs
-  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'of'
+  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'stats' (Stock) | 'of'
+  stockSubTab: 'production', // sous-onglet actif dans le panneau Stock (iframe /stock)
 
   // Import OF PDF
   ofImports: [],
@@ -3387,194 +3414,49 @@ function renderTracaPanel(){
   );
 }
 
-function _renderStockQuickAccess(){
-  // Boutons d'accès rapide aux vues MyStock, ouverts dans un
-  // nouvel onglet pour ne pas casser la session de saisie en cours.
-  // La sidebar de gauche reste toujours cliquable côté /fabrication
-  // (on peut à tout moment saisir une opération).
-  const links = [
-    {tab:'production',    icon:'cpu',     label:'Production'},
-    {tab:'matieres',      icon:'layers',  label:'Matières premières'},
-    {tab:'reception',     icon:'inbox',   label:'Réception matière'},
-    {tab:'traca',         icon:'printer', label:'Étiquettes traça'},
-    {tab:'plan-entrepot', icon:'map-pin', label:'Plan entrepôt'},
-    {tab:'historique',    icon:'clock',   label:'Historique'},
+function _renderStockSubNav(){
+  const tabs = [
+    {key:'production',    icon:'box',     label:'Production'},
+    {key:'matieres',      icon:'grid',    label:'Matières'},
+    {key:'traca',         icon:'printer', label:'Étiquettes'},
+    {key:'historique',    icon:'clock',   label:'Historique'},
   ];
-  const buttons = links.map(l => {
-    const btn = h('button',{
-      className:'fab-btn fab-btn-ghost fab-btn-sm',
-      style:{minWidth:'120px',justifyContent:'center'},
-      title:'Ouvrir '+l.label+' dans MyStock',
-      onClick:()=>{
-        try{ window.open('/stock?tab='+encodeURIComponent(l.tab),'_blank','noopener'); }
-        catch(e){ window.location.href='/stock?tab='+encodeURIComponent(l.tab); }
+  const active = S.stockSubTab || 'production';
+  const btns = tabs.map(t => {
+    const btn = h('button', {
+      className: 'fab-stock-subtab' + (active === t.key ? ' active' : ''),
+      title: t.label,
+      onClick: () => {
+        set({ stockSubTab: t.key });
+        // recharger l'iframe avec le nouveau tab
+        const ifr = document.getElementById('fab-stock-iframe');
+        if (ifr) ifr.src = '/stock?tab=' + encodeURIComponent(t.key) + '&embed=1&_t=' + Date.now();
       }
-    }, svgIcon(l.icon,14),' '+l.label);
+    }, svgIcon(t.icon, 14), ' ' + t.label);
     return btn;
   });
-  return h('div',{
-    style:{
-      display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',
-      padding:'14px 20px 4px',borderBottom:'1px solid var(--border)',
-      background:'var(--bg)'
-    }
-  },
-    h('div',{style:{width:'100%',textAlign:'center',fontSize:'11px',
-      textTransform:'uppercase',letterSpacing:'.5px',color:'var(--muted)',
-      fontWeight:'700',marginBottom:'4px'}},
-      'Accès rapide MyStock'),
-    ...buttons
-  );
+  return h('div', {className: 'fab-stock-subnav'}, ...btns);
+}
+
+function _renderStockIframe(){
+  const sub = S.stockSubTab || 'production';
+  return h('iframe', {
+    id: 'fab-stock-iframe',
+    src: '/stock?tab=' + encodeURIComponent(sub) + '&embed=1',
+    className: 'fab-stock-iframe',
+    // largeur/hauteur pilotées par CSS (.fab-stock-iframe)
+    // credentials sont hérités (même origine)
+  });
 }
 
 function renderStatsPanel(){
-  const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'-';
-  const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
-  if(!ref){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier'),
-        h('span',{className:'fab-main-sub'},machineName)
-      ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},
-        'Aucun dossier actif. Demarrez un dossier (op 01) pour voir ses stats.'
-      ),
-      _renderStockQuickAccess()
-    );
-  }
-  const st = S.dossierStats;
-  if(S.dossierStatsLoading || !st){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier'),
-        h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
-        h('span',{className:'fab-main-sub'},machineName)
-      ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...'),
-      _renderStockQuickAccess()
-    );
-  }
-  if(st._err){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier')
-      ),
-      h('div',{style:{padding:'24px',color:'var(--danger)'}}, st._err)
-    );
-  }
-
-  // Section Produits finis (Z1)
-  const pfRows = (st.pf_totaux || []).map(r => {
-    const dt = r.created_at ? new Date(r.created_at) : null;
-    const dateStr = dt && !isNaN(dt)
-      ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
-      : '-';
-    return h('tr',null,
-      h('td',null, r.produit_reference || '-'),
-      h('td',{style:{color:'var(--text2)'}}, r.produit_designation || ''),
-      h('td',{style:{textAlign:'right',fontWeight:'700'}},
-        Number(r.quantite).toLocaleString('fr-FR') + ' ' + (r.produit_unite || '')),
-      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, dateStr),
-      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, r.created_by_name || '-'),
-    );
-  });
-  const pfTotalQte = (st.pf_totaux || []).reduce((s, r) => s + Number(r.quantite || 0), 0);
-
-  // Section Palettes
-  const palRows = (st.palettes || []).map(p => h('div',{
-    style:{display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',
-           background:'var(--bg)',borderRadius:'8px',marginBottom:'6px',
-           border:'1px solid var(--border)'}
-  },
-    h('div',{style:{flex:'1'}},
-      h('div',{style:{fontWeight:'600',fontSize:'13px',color:'var(--text)'}},
-        (p.palette_reference || '-') + (p.is_europe ? ' · EUROPE' : ' · perdue')),
-      h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, p.palette_designation || '')
-    ),
-    h('div',{style:{fontSize:'20px',fontWeight:'800',color:'var(--accent)'}},
-      String(p.nombre_total) + ' pal.')
-  ));
-
-  // Section MP scannees
-  const mpCount = (st.mp_scannees || []).length;
-
-  return h('div',{className:'fab-main', style:{overflow:'auto'}},
-    h('div',{className:'fab-main-head'},
-      h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock — dossier'),
-      h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
-      h('span',{className:'fab-main-sub'},machineName)
-    ),
-    _renderStockQuickAccess(),
-    h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}},
-      // Resume en tetes de cartes
-      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}},
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Entrees Z1'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
-            String(st.nb_z1_entrees || 0)),
-          h('div',{style:{fontSize:'11px',color:'var(--text2)',marginTop:'2px'}},
-            Number(pfTotalQte).toLocaleString('fr-FR') + ' unites')
-        ),
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Palettes'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
-            String(st.nb_palettes_total || 0))
-        ),
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'MP scannees'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}}, String(mpCount))
-        )
-      ),
-
-      // Section PF Z1
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('package',14),' Produits finis en Z1'),
-        pfRows.length
-          ? h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
-              h('thead',null, h('tr',null,
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Reference'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Designation'),
-                h('th',{style:{textAlign:'right',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Quantite'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Date'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Operateur'),
-              )),
-              h('tbody',null, ...pfRows.map(r => {
-                // patch les styles des cellules
-                r.querySelectorAll && r.querySelectorAll('td').forEach(td => { td.style.padding = '8px'; td.style.borderBottom = '1px solid var(--border)'; });
-                return r;
-              }))
-            )
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune entree Z1 pour ce dossier.')
-      ),
-
-      // Section Palettes
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('layers',14),' Palettes utilisees'),
-        palRows.length
-          ? h('div',null, ...palRows)
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune palette enregistree pour ce dossier.')
-      ),
-
-      // Section MP scannees (renvoi vers Traca pour le detail)
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('scan',14),' Matieres premieres scannees'),
-        mpCount > 0
-          ? h('div',null,
-              h('div',{style:{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}},
-                String(mpCount) + ' bobine' + (mpCount > 1 ? 's' : '') + ' scannee' + (mpCount > 1 ? 's' : '') + ' liee' + (mpCount > 1 ? 's' : '') + ' a ce dossier.'),
-              h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',
-                onClick: () => { void switchFabTab('traca'); }},
-                svgIcon('arrow-right',12),' Voir le detail dans Traca')
-            )
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune matiere scannee pour ce dossier.')
-      )
-    )
+  // Vue Stock intégrée : iframe embarquant /stock?tab=<sub>&embed=1
+  // → 100 % des éléments visuels et techniques de MyStock, sans sa
+  //   sidebar ni son topbar (masqués par le CSS .stock-embed).
+  // La sidebar de gauche de /fabrication reste cliquable en permanence.
+  return h('div', {className:'fab-main fab-stock-main'},
+    _renderStockSubNav(),
+    _renderStockIframe()
   );
 }
 
@@ -3869,7 +3751,7 @@ function _fabTabDefs(){
     {key:'saisie', icon:'edit',    label:'Saisie'},
     {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
     {key:'traca',  icon:'scan',    label:'Traça'},
-    {key:'stats',  icon:'package', label:'Stock'},
+    {key:'stats',  icon:'box',     label:'Stock'},
     {key:'of',     icon:'file',    label:'Fiches + OF', ofOnly:true},
   ];
 }
@@ -4111,8 +3993,8 @@ function renderFooter(){
   // agrandie pour être immédiatement visible.
   const actionsSection = h('div',{className:'fab-footer-actions'},
     machineSelectorRow,
-    h('div',{className:'fab-footer-tabs-row'}, tabNav),
     h('div',{className:'fab-footer-btns'},...btns),
+    h('div',{className:'fab-footer-tabs-row'}, tabNav),
     h('div',{className:'fab-footer-row2'}, themeBtn)
   );
 
