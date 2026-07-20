@@ -491,6 +491,80 @@ async def picker_create_fournisseur(request: Request):
     return _row_dict(row)
 
 
+
+
+@router.get("/picker/fournisseurs-with-contacts")
+def picker_fournisseurs_with_contacts(request: Request, search: str = ""):
+    """Fournisseurs actifs + leurs contacts, pour le modal AO."""
+    _require_ao(request)
+    import json as _json
+    with get_db() as conn:
+        four_cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        actif_clause = "AND (actif IS NULL OR actif=1)" if "actif" in four_cols else ""
+        select_extras = ""
+        for extra in ("ville", "langue_default", "tags"):
+            if extra in four_cols:
+                select_extras += f", {extra}"
+        if search:
+            like = f"%{search.strip()}%"
+            search_cols = ["nom"]
+            if "ville" in four_cols: search_cols.append("ville")
+            if "tags" in four_cols: search_cols.append("tags")
+            where = " OR ".join(f"{c} LIKE ?" for c in search_cols)
+            frows = conn.execute(
+                f"SELECT id, nom, licence, has_fsc{select_extras} FROM fournisseurs_fsc "
+                f"WHERE ({where}) {actif_clause} ORDER BY nom COLLATE NOCASE",
+                tuple([like] * len(search_cols)),
+            ).fetchall()
+        else:
+            frows = conn.execute(
+                f"SELECT id, nom, licence, has_fsc{select_extras} FROM fournisseurs_fsc "
+                f"WHERE 1=1 {actif_clause} ORDER BY nom COLLATE NOCASE"
+            ).fetchall()
+
+        has_contacts_table = bool(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fournisseur_contacts'"
+        ).fetchone())
+        contacts_by_four = {}
+        if has_contacts_table:
+            crows = conn.execute(
+                """SELECT id, fournisseur_id, nom, fonction, emails, tels, langue, is_principal
+                   FROM fournisseur_contacts WHERE actif=1
+                   ORDER BY is_principal DESC, nom COLLATE NOCASE"""
+            ).fetchall()
+            for c in crows:
+                d = dict(c)
+                for k in ("emails", "tels"):
+                    raw = d.get(k)
+                    if raw:
+                        try:
+                            parsed = _json.loads(raw)
+                            d[k] = parsed if isinstance(parsed, list) else []
+                        except (_json.JSONDecodeError, TypeError):
+                            d[k] = []
+                    else:
+                        d[k] = []
+                d["is_principal"] = bool(d.get("is_principal"))
+                contacts_by_four.setdefault(d["fournisseur_id"], []).append(d)
+
+    out = []
+    for f in frows:
+        fd = dict(f)
+        raw = fd.get("tags")
+        if raw:
+            try:
+                fd["tags"] = _json.loads(raw) if isinstance(raw, str) else []
+                if not isinstance(fd["tags"], list):
+                    fd["tags"] = []
+            except (_json.JSONDecodeError, TypeError):
+                fd["tags"] = []
+        else:
+            fd["tags"] = []
+        fd["contacts"] = contacts_by_four.get(fd["id"], [])
+        out.append(fd)
+    return out
+
+
 # ─── Matières premières (lecture pour fiches produit) ─────────────
 
 _MP_AO_CATEGORIES = frozenset({
@@ -1280,16 +1354,35 @@ async def add_fournisseur(request: Request, ao_id: int):
     if not nom or not email:
         raise HTTPException(status_code=400, detail="Nom et email du fournisseur obligatoires.")
     langue = _normalize_langue(body.get("langue"))
-
+    fournisseur_id = body.get("fournisseur_id")
+    contact_id = body.get("fournisseur_contact_id")
+    try:
+        fournisseur_id = int(fournisseur_id) if fournisseur_id is not None else None
+    except (TypeError, ValueError):
+        fournisseur_id = None
+    try:
+        contact_id = int(contact_id) if contact_id is not None else None
+    except (TypeError, ValueError):
+        contact_id = None
     token = str(uuid.uuid4())
     with get_db() as conn:
         _get_ao_or_404(conn, ao_id)
-        cur = conn.execute(
-            """INSERT INTO ao_fournisseurs
-               (ao_id, nom_fournisseur, email_contact, token, statut, langue)
-               VALUES (?,?,?,?,'invite',?)""",
-            (ao_id, nom, email, token, langue),
-        )
+        af_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "fournisseur_id" in af_cols and "fournisseur_contact_id" in af_cols:
+            cur = conn.execute(
+                """INSERT INTO ao_fournisseurs
+                   (ao_id, nom_fournisseur, email_contact, token, statut, langue,
+                    fournisseur_id, fournisseur_contact_id)
+                   VALUES (?,?,?,?,'invite',?,?,?)""",
+                (ao_id, nom, email, token, langue, fournisseur_id, contact_id),
+            )
+        else:
+            cur = conn.execute(
+                """INSERT INTO ao_fournisseurs
+                   (ao_id, nom_fournisseur, email_contact, token, statut, langue)
+                   VALUES (?,?,?,?,'invite',?)""",
+                (ao_id, nom, email, token, langue),
+            )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM ao_fournisseurs WHERE id=?", (cur.lastrowid,)
@@ -1313,6 +1406,35 @@ def delete_fournisseur(request: Request, ao_id: int, fourni_id: int):
         )
         conn.commit()
     return {"ok": True}
+
+
+
+
+@router.put("/{ao_id}/fournisseurs/{fourni_id}")
+async def update_fournisseur_ao(request: Request, ao_id: int, fourni_id: int):
+    """Override local (nom, email, langue) d'un fournisseur invite — ne touche pas Parametres."""
+    _require_ao(request)
+    body = await request.json()
+    with get_db() as conn:
+        fourni = _get_fourni_in_ao(conn, ao_id, fourni_id)
+        if fourni.get("statut") == "repondu":
+            raise HTTPException(status_code=400, detail="Modification impossible — le fournisseur a deja repondu.")
+        nom = (body.get("nom_fournisseur") or fourni["nom_fournisseur"] or "").strip()
+        email = (body.get("email_contact") or fourni["email_contact"] or "").strip().lower()
+        if not nom or not email:
+            raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
+        if "langue" in body:
+            langue = _normalize_langue(body.get("langue"))
+        else:
+            langue = fourni.get("langue") or "fr"
+        conn.execute(
+            """UPDATE ao_fournisseurs SET nom_fournisseur=?, email_contact=?, langue=?
+               WHERE id=? AND ao_id=?""",
+            (nom, email, langue, fourni_id, ao_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_fournisseurs WHERE id=?", (fourni_id,)).fetchone()
+    return _row_dict(row)
 
 
 # ─── Envoi ───────────────────────────────────────────────────────

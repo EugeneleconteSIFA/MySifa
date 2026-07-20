@@ -7073,6 +7073,61 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 190, "force_all_maintenance_codes_periodic")
 
+    # v191 -- Enrichissement fournisseurs_fsc : contacts, adresse, langue, tags
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=191 LIMIT 1").fetchone():
+        ff_cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        _ff_add = [
+            ("adresse",         "TEXT"),
+            ("code_postal",     "TEXT"),
+            ("ville",           "TEXT"),
+            ("pays",            "TEXT DEFAULT 'FR'"),
+            ("langue_default",  "TEXT DEFAULT 'fr'"),
+            ("tags",            "TEXT"),
+            ("notes",           "TEXT"),
+            ("actif",           "INTEGER NOT NULL DEFAULT 1"),
+            ("updated_at",      "TEXT"),
+        ]
+        for col, ddl in _ff_add:
+            if col not in ff_cols:
+                conn.execute(f"ALTER TABLE fournisseurs_fsc ADD COLUMN {col} {ddl}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseurs_fsc_actif ON fournisseurs_fsc(actif)")
+        conn.commit()
+        _record_schema_migration(conn, 191, "fournisseurs_fsc_contacts_infos")
+
+    # v192 -- Table fournisseur_contacts (N contacts par fournisseur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=192 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS fournisseur_contacts (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            fournisseur_id  INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+            nom             TEXT NOT NULL,
+            fonction        TEXT,
+            emails          TEXT,
+            tels            TEXT,
+            langue          TEXT DEFAULT 'fr',
+            is_principal    INTEGER NOT NULL DEFAULT 0,
+            actif           INTEGER NOT NULL DEFAULT 1,
+            notes           TEXT,
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseur_contacts_fournisseur ON fournisseur_contacts(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseur_contacts_principal ON fournisseur_contacts(fournisseur_id, is_principal)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseur_contacts_actif ON fournisseur_contacts(actif)")
+        conn.commit()
+        _record_schema_migration(conn, 192, "fournisseur_contacts")
+
+    # v193 -- ao_fournisseurs : FKs optionnels vers fournisseurs_fsc + fournisseur_contacts
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=193 LIMIT 1").fetchone():
+        af_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "fournisseur_id" not in af_cols:
+            conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN fournisseur_id INTEGER")
+        if "fournisseur_contact_id" not in af_cols:
+            conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN fournisseur_contact_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_fournisseurs_fournisseur ON ao_fournisseurs(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_fournisseurs_contact ON ao_fournisseurs(fournisseur_contact_id)")
+        conn.commit()
+        _record_schema_migration(conn, 193, "ao_fournisseurs_fks")
+
 
 def create_default_admin():
     import bcrypt
