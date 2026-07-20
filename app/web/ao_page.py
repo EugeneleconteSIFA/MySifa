@@ -1450,9 +1450,10 @@ function renderFournisseurs() {
 
 
 
-// ── Phase 3 : nouveau modal picker fournisseurs + Modifier ──
 
 
+
+// ── Cloture AO avec picker fournisseur retenu ──
 async function openCloturerAoModal() {
   const ao = S.ao;
   const d = S.detail;
@@ -1499,6 +1500,433 @@ async function openCloturerAoModal() {
   };
 }
 
+// ── Wizard creation AO en 3 etapes ──
+async function openCreateAoWizard() {
+  const m = document.getElementById('mroot');
+  if (!m) return;
+  m.innerHTML = '';
+  const ov = document.createElement('div'); ov.className = 'modal-overlay';
+  const box = document.createElement('div'); box.className = 'modal modal-wide';
+
+  const state = {
+    step: 1,
+    info: {
+      titre: '',
+      description: '',
+      date_limite: '',
+      responsable_email: (S.user && S.user.email) || '',
+      client_id: null,
+      client_label: '',
+    },
+    lignes: [{ ref_produit: '', designation: '', quantite: '', unite: 'etiquettes', notes: '' }],
+    // fournisseurs: liste d'objets ajoutes {nom_fournisseur, email_contact, langue, fournisseur_id?, fournisseur_contact_id?}
+    fournisseurs: [],
+    availableFournisseurs: [],
+    availableProduits: S.produits || [],
+    selectedContactKeys: new Set(),
+    manualFourni: { nom: '', email: '', langue: 'fr' },
+    _autoP: false,
+  };
+
+  // Charge fournisseurs+contacts et produits en parallele
+  try {
+    const [fours] = await Promise.all([
+      api('/api/ao/picker/fournisseurs-with-contacts'),
+    ]);
+    state.availableFournisseurs = fours || [];
+  } catch (e) {
+    showToast('Erreur chargement donnees: ' + (e.message || e), 'danger');
+  }
+
+  // Auto-preselect contacts principaux
+  state.availableFournisseurs.forEach(f => (f.contacts || []).forEach(c => {
+    if (c.is_principal) state.selectedContactKeys.add(f.id + ':' + c.id);
+  }));
+
+  function renderStepIndicator() {
+    const steps = ['Infos AO', 'Produits', 'Fournisseurs'];
+    return '<div style="display:flex;gap:4px;margin-bottom:16px">' +
+      steps.map((label, i) => {
+        const n = i + 1;
+        const isActive = state.step === n;
+        const isDone = state.step > n;
+        const bg = isActive ? 'var(--accent)' : (isDone ? 'rgba(52,211,153,.2)' : 'var(--bg)');
+        const fg = isActive ? '#fff' : (isDone ? 'var(--ok)' : 'var(--text2)');
+        return '<div style="flex:1;padding:8px 10px;border-radius:8px;background:' + bg + ';color:' + fg + ';font-size:12px;font-weight:600;text-align:center;border:1px solid var(--border)">' +
+          n + '. ' + label + '</div>';
+      }).join('') + '</div>';
+  }
+
+  function renderStep1() {
+    const info = state.info;
+    const clientBtn = info.client_id
+      ? '<div style="display:flex;align-items:center;gap:8px"><strong>' + escHtml(info.client_label || '') + '</strong>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="w-client-clear">×</button></div>'
+      : '<button type="button" class="btn btn-ghost btn-sm" id="w-client-pick">Selectionner un client</button>';
+    return '<div class="field"><label>Titre de l\'appel d\'offre *</label>' +
+      '<input id="w-titre" value="' + escAttr(info.titre) + '" placeholder="Ex: RFQ etiquettes lot 12345"></div>' +
+      '<div class="field"><label>Client (optionnel)</label>' + clientBtn + '</div>' +
+      '<div class="field"><label>Description</label>' +
+      '<textarea id="w-desc" rows="3" placeholder="Contexte, contraintes...">' + escHtml(info.description) + '</textarea></div>' +
+      '<div class="form-row">' +
+      '<div class="field"><label>Date limite</label>' +
+      '<input type="date" id="w-limite" value="' + escAttr(info.date_limite) + '"></div>' +
+      '<div class="field"><label>Email responsable *</label>' +
+      '<input type="email" id="w-email" value="' + escAttr(info.responsable_email) + '"></div>' +
+      '</div>';
+  }
+
+  function renderStep2() {
+    const prodOpts = '<option value="">— saisie manuelle —</option>' +
+      (state.availableProduits || []).map(p =>
+        '<option value="' + p.id + '">' + escHtml(p.ref) + ' — ' + escHtml(p.designation) + '</option>'
+      ).join('');
+    let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Ajoute une ou plusieurs lignes produits. Le champ <strong>Ref produit</strong> et la <strong>quantite</strong> sont obligatoires.</p>' +
+      '<div style="overflow-x:auto"><table style="width:100%;font-size:12px">' +
+      '<thead><tr>' +
+      '<th style="text-align:left;padding:4px;color:var(--muted)">Catalogue</th>' +
+      '<th style="text-align:left;padding:4px;color:var(--muted)">Ref *</th>' +
+      '<th style="text-align:left;padding:4px;color:var(--muted)">Designation</th>' +
+      '<th style="text-align:left;padding:4px;color:var(--muted)">Qte *</th>' +
+      '<th style="text-align:left;padding:4px;color:var(--muted)">Notes</th>' +
+      '<th></th></tr></thead><tbody>';
+    state.lignes.forEach((ln, i) => {
+      html += '<tr class="w-ligne-row" data-idx="' + i + '">' +
+        '<td style="padding:2px"><select class="w-l-pick" style="width:100%;font-size:11px">' + prodOpts + '</select></td>' +
+        '<td style="padding:2px"><input class="w-l-ref" value="' + escAttr(ln.ref_produit) + '" style="width:100%;font-size:11px"></td>' +
+        '<td style="padding:2px"><input class="w-l-des" value="' + escAttr(ln.designation) + '" style="width:100%;font-size:11px"></td>' +
+        '<td style="padding:2px"><input class="w-l-qte" type="number" step="1" min="0" value="' + escAttr(ln.quantite) + '" style="width:80px;font-size:11px"></td>' +
+        '<td style="padding:2px"><input class="w-l-notes" value="' + escAttr(ln.notes || '') + '" style="width:100%;font-size:11px"></td>' +
+        '<td style="padding:2px"><button type="button" class="btn btn-ghost btn-sm w-l-del" style="font-size:11px;padding:2px 8px" title="Supprimer">×</button></td>' +
+        '</tr>';
+    });
+    html += '</tbody></table></div>' +
+      '<button type="button" class="btn btn-ghost btn-sm" id="w-l-add" style="margin-top:8px">+ Ajouter une ligne</button>';
+    return html;
+  }
+
+  function renderStep3() {
+    const fours = state.availableFournisseurs;
+    const nManualAdded = state.fournisseurs.filter(f => !f.fournisseur_id).length;
+    let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Selectionne au moins un contact fournisseur.</p>' +
+      '<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px">';
+    if (!fours.length) {
+      html += '<div style="padding:20px;color:var(--muted);text-align:center">Aucun fournisseur enregistre en base. Utilise la saisie manuelle ci-dessous.</div>';
+    } else {
+      fours.forEach(f => {
+        const contacts = f.contacts || [];
+        html += '<div style="padding:6px 8px;border-bottom:1px solid var(--border)">' +
+          '<div style="font-weight:600;font-size:12px">' + escHtml(f.nom) +
+          (f.ville ? ' <span style="font-size:10px;color:var(--muted)">' + escHtml(f.ville) + '</span>' : '') +
+          '</div>';
+        if (!contacts.length) {
+          html += '<div style="font-size:11px;color:var(--muted);margin:2px 0">Aucun contact enregistre.</div>';
+        } else {
+          contacts.forEach(c => {
+            const key = f.id + ':' + c.id;
+            const emails = (c.emails || []).join(', ');
+            const principal = c.is_principal ? ' <span style="font-size:10px;color:var(--accent)">★</span>' : '';
+            html += '<label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;cursor:pointer">' +
+              '<input type="checkbox" class="w-fc" data-key="' + escAttr(key) + '"' + (state.selectedContactKeys.has(key) ? ' checked' : '') + '>' +
+              '<span><strong>' + escHtml(c.nom || '—') + '</strong>' + principal +
+              (emails ? ' <span style="color:var(--muted)">· ' + escHtml(emails) + '</span>' : '') + '</span></label>';
+          });
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+    html += '<div style="margin-top:12px;padding:10px;border:1px dashed var(--border);border-radius:8px">' +
+      '<div style="font-size:12px;font-weight:600;margin-bottom:8px">Ou ajouter un contact manuel</div>' +
+      '<div class="form-row">' +
+      '<div class="field"><label style="font-size:11px">Nom / societe</label><input class="w-mf-nom" value="' + escAttr(state.manualFourni.nom) + '" placeholder="Nom fournisseur"></div>' +
+      '<div class="field"><label style="font-size:11px">Email</label><input type="email" class="w-mf-email" value="' + escAttr(state.manualFourni.email) + '"></div>' +
+      '</div>' +
+      '<div class="form-row" style="align-items:end">' +
+      '<div class="field"><label style="font-size:11px">Langue</label>' +
+      '<select class="w-mf-langue"><option value="fr"' + (state.manualFourni.langue === 'fr' ? ' selected' : '') + '>FR</option>' +
+      '<option value="en"' + (state.manualFourni.langue === 'en' ? ' selected' : '') + '>EN</option></select></div>' +
+      '<div class="field"><button type="button" class="btn btn-ghost btn-sm" id="w-mf-add">+ Ajouter ce contact</button></div>' +
+      '</div>';
+    if (nManualAdded > 0) {
+      html += '<ul style="font-size:11px;color:var(--muted);margin:8px 0 0;padding-left:18px">' +
+        state.fournisseurs.filter(f => !f.fournisseur_id).map(f =>
+          '<li>' + escHtml(f.nom_fournisseur) + ' — ' + escHtml(f.email_contact) + '</li>'
+        ).join('') + '</ul>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function commitStep1FromDOM() {
+    state.info.titre = (document.getElementById('w-titre')?.value || '').trim();
+    state.info.description = (document.getElementById('w-desc')?.value || '').trim();
+    state.info.date_limite = document.getElementById('w-limite')?.value || '';
+    state.info.responsable_email = (document.getElementById('w-email')?.value || '').trim();
+  }
+  function commitStep2FromDOM() {
+    const rows = box.querySelectorAll('.w-ligne-row');
+    state.lignes = [];
+    rows.forEach(row => {
+      state.lignes.push({
+        ref_produit: (row.querySelector('.w-l-ref')?.value || '').trim(),
+        designation: (row.querySelector('.w-l-des')?.value || '').trim(),
+        quantite: (row.querySelector('.w-l-qte')?.value || '').trim(),
+        unite: 'etiquettes',
+        notes: (row.querySelector('.w-l-notes')?.value || '').trim(),
+      });
+    });
+  }
+  function commitStep3ManualFromDOM() {
+    const nom = (box.querySelector('.w-mf-nom')?.value || '').trim();
+    const email = (box.querySelector('.w-mf-email')?.value || '').trim();
+    const langue = box.querySelector('.w-mf-langue')?.value || 'fr';
+    state.manualFourni = { nom, email, langue };
+  }
+
+  function validateStep(n) {
+    if (n === 1) {
+      if (!state.info.titre) return 'Titre obligatoire.';
+      if (!state.info.responsable_email) return 'Email responsable obligatoire.';
+    }
+    if (n === 2) {
+      const valid = state.lignes.filter(l => l.ref_produit && l.quantite);
+      if (!valid.length) return 'Ajoute au moins une ligne avec ref produit et quantite.';
+    }
+    if (n === 3) {
+      if (!state.selectedContactKeys.size && !state.fournisseurs.length) {
+        return 'Selectionne au moins un contact fournisseur ou ajoute-en un manuellement.';
+      }
+    }
+    return null;
+  }
+
+  function render() {
+    let content = '<h3>Nouvel appel d\'offre</h3>' + renderStepIndicator();
+    if (state.step === 1) content += renderStep1();
+    else if (state.step === 2) content += renderStep2();
+    else if (state.step === 3) content += renderStep3();
+    const isLast = state.step === 3;
+    content += '<div class="modal-actions" style="margin-top:16px;justify-content:space-between">' +
+      '<div>' +
+      (state.step > 1 ? '<button type="button" class="btn btn-ghost" id="w-prev">← Precedent</button>' : '') +
+      '</div><div style="display:flex;gap:6px">' +
+      '<button type="button" class="btn btn-ghost" id="w-cancel">Annuler</button>' +
+      (isLast
+        ? '<button type="button" class="btn btn-accent" id="w-submit">Creer l\'AO</button>'
+        : '<button type="button" class="btn btn-accent" id="w-next">Suivant →</button>') +
+      '</div></div>';
+    box.innerHTML = content;
+
+    // Step 1 client picker
+    if (state.step === 1) {
+      const pick = document.getElementById('w-client-pick');
+      if (pick) pick.onclick = () => {
+        openModalPickClient((cli) => {
+          state.info.client_id = cli.id;
+          state.info.client_label = cli.nom || cli.raison_sociale || ('Client #' + cli.id);
+          setTimeout(render, 50);
+        });
+      };
+      const clr = document.getElementById('w-client-clear');
+      if (clr) clr.onclick = () => { state.info.client_id = null; state.info.client_label = ''; render(); };
+    }
+
+    // Step 2 : add / delete row + prefill from catalogue
+    if (state.step === 2) {
+      document.getElementById('w-l-add').onclick = () => {
+        commitStep2FromDOM();
+        state.lignes.push({ ref_produit: '', designation: '', quantite: '', unite: 'etiquettes', notes: '' });
+        render();
+      };
+      box.querySelectorAll('.w-l-del').forEach((btn, idx) => {
+        btn.onclick = () => {
+          commitStep2FromDOM();
+          state.lignes.splice(idx, 1);
+          if (!state.lignes.length) state.lignes.push({ ref_produit: '', designation: '', quantite: '', unite: 'etiquettes', notes: '' });
+          render();
+        };
+      });
+      box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
+        sel.onchange = () => {
+          const pid = sel.value;
+          if (!pid) return;
+          const p = (state.availableProduits || []).find(x => String(x.id) === String(pid));
+          if (!p) return;
+          const row = box.querySelectorAll('.w-ligne-row')[idx];
+          row.querySelector('.w-l-ref').value = p.ref || '';
+          row.querySelector('.w-l-des').value = p.designation || '';
+          if (!row.querySelector('.w-l-qte').value) row.querySelector('.w-l-qte').value = '';
+        };
+      });
+    }
+
+    // Step 3 : contact checkboxes + manual add
+    if (state.step === 3) {
+      box.querySelectorAll('.w-fc').forEach(cb => {
+        cb.onchange = () => {
+          const k = cb.dataset.key;
+          if (cb.checked) state.selectedContactKeys.add(k);
+          else state.selectedContactKeys.delete(k);
+        };
+      });
+      document.getElementById('w-mf-add').onclick = () => {
+        commitStep3ManualFromDOM();
+        const mf = state.manualFourni;
+        if (!mf.nom || !mf.email) { showToast('Nom et email obligatoires.', 'danger'); return; }
+        state.fournisseurs.push({
+          nom_fournisseur: mf.nom, email_contact: mf.email, langue: mf.langue,
+        });
+        state.manualFourni = { nom: '', email: '', langue: 'fr' };
+        render();
+      };
+    }
+
+    // Nav
+    document.getElementById('w-cancel').onclick = closeModal;
+    if (state.step > 1) {
+      document.getElementById('w-prev').onclick = () => {
+        if (state.step === 1) commitStep1FromDOM();
+        if (state.step === 2) commitStep2FromDOM();
+        if (state.step === 3) commitStep3ManualFromDOM();
+        state.step -= 1;
+        render();
+      };
+    }
+    const nextBtn = document.getElementById('w-next');
+    if (nextBtn) {
+      nextBtn.onclick = () => {
+        if (state.step === 1) commitStep1FromDOM();
+        if (state.step === 2) commitStep2FromDOM();
+        if (state.step === 3) commitStep3ManualFromDOM();
+        const err = validateStep(state.step);
+        if (err) { showToast(err, 'danger'); return; }
+        state.step += 1;
+        render();
+      };
+    }
+    const submitBtn = document.getElementById('w-submit');
+    if (submitBtn) {
+      submitBtn.onclick = async () => {
+        commitStep3ManualFromDOM();
+        // Recheck all steps
+        for (let s = 1; s <= 3; s++) {
+          const err = validateStep(s);
+          if (err) { showToast('Etape ' + s + ' : ' + err, 'danger'); state.step = s; render(); return; }
+        }
+        submitBtn.disabled = true;
+        try {
+          // 1. Create AO
+          const aoBody = {
+            titre: state.info.titre,
+            description: state.info.description || null,
+            date_limite: state.info.date_limite || null,
+            responsable_email: state.info.responsable_email,
+            client_id: state.info.client_id || null,
+          };
+          const ao = await api('/api/ao', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(aoBody)});
+          // 2. Add lignes
+          for (const ln of state.lignes.filter(l => l.ref_produit && l.quantite)) {
+            await api('/api/ao/' + ao.id + '/lignes', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                ref_produit: ln.ref_produit, designation: ln.designation || ln.ref_produit,
+                quantite: parseFloat(ln.quantite), unite: ln.unite || 'etiquettes', notes: ln.notes || null,
+              })
+            });
+          }
+          // 3. Add fournisseurs from selected contacts
+          for (const key of state.selectedContactKeys) {
+            const [fId, cId] = key.split(':').map(Number);
+            const f = state.availableFournisseurs.find(x => x.id === fId); if (!f) continue;
+            const c = (f.contacts || []).find(x => x.id === cId); if (!c) continue;
+            const email = (c.emails && c.emails[0]) || ''; if (!email) continue;
+            await api('/api/ao/' + ao.id + '/fournisseurs', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                nom_fournisseur: f.nom + ' — ' + (c.nom || ''), email_contact: email,
+                langue: c.langue || f.langue_default || 'fr',
+                fournisseur_id: fId, fournisseur_contact_id: cId,
+              })
+            });
+          }
+          // 4. Add manual fournisseurs
+          for (const mf of state.fournisseurs) {
+            await api('/api/ao/' + ao.id + '/fournisseurs', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({
+                nom_fournisseur: mf.nom_fournisseur, email_contact: mf.email_contact, langue: mf.langue,
+              })
+            });
+          }
+          closeModal();
+          showToast('AO cree — ' + ao.reference, 'success');
+          await openDetail(ao.id);
+        } catch (e) {
+          submitBtn.disabled = false;
+          showToast(e.message || 'Erreur creation AO', 'danger');
+        }
+      };
+    }
+  }
+
+  ov.appendChild(box); m.appendChild(ov);
+  render();
+}
+
+
+// ── Phase 3 v2 : modal picker fournisseurs (avec quick-add contact) ──
+async function _reloadFournisseursCache(state) {
+  try {
+    state.fournisseurs = await api('/api/ao/picker/fournisseurs-with-contacts');
+  } catch (e) {
+    state.fournisseurs = [];
+    showToast('Erreur chargement fournisseurs: ' + (e.message || e), 'danger');
+  }
+}
+
+async function _quickAddContact(fournisseurId, box, onDone) {
+  // Mini modal inline pour ajouter un contact rapidement
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:absolute;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:10;border-radius:12px';
+  wrap.innerHTML = '<div style="background:var(--card);padding:16px;border-radius:10px;border:1px solid var(--border);min-width:320px;max-width:400px">' +
+    '<h4 style="margin:0 0 12px;font-size:14px">Ajouter un contact rapide</h4>' +
+    '<div class="field"><label>Nom du contact</label><input id="qac-nom" placeholder="Prenom Nom" style="width:100%"></div>' +
+    '<div class="field"><label>Email</label><input type="email" id="qac-email" placeholder="contact@..." style="width:100%"></div>' +
+    '<div class="field"><label>Langue</label>' +
+    '<select id="qac-langue"><option value="fr">Francais</option><option value="en">English</option></select></div>' +
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:10px;cursor:pointer">' +
+    '<input type="checkbox" id="qac-principal" checked> Contact principal</label>' +
+    '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+    '<button class="btn btn-ghost btn-sm" id="qac-cancel">Annuler</button>' +
+    '<button class="btn btn-accent btn-sm" id="qac-ok">Creer</button>' +
+    '</div></div>';
+  box.style.position = 'relative';
+  box.appendChild(wrap);
+  const cleanup = () => wrap.remove();
+  wrap.querySelector('#qac-cancel').onclick = cleanup;
+  wrap.querySelector('#qac-ok').onclick = async () => {
+    const nom = wrap.querySelector('#qac-nom').value.trim();
+    const email = wrap.querySelector('#qac-email').value.trim();
+    if (!nom || !email) { showToast('Nom et email obligatoires.', 'danger'); return; }
+    const payload = {
+      nom,
+      emails: [email],
+      langue: wrap.querySelector('#qac-langue').value,
+      is_principal: wrap.querySelector('#qac-principal').checked,
+    };
+    try {
+      await api('/api/fournisseurs/' + fournisseurId + '/contacts', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      showToast('Contact ajoute.', 'success');
+      cleanup();
+      if (onDone) await onDone();
+    } catch (e) { showToast(e.message || 'Erreur', 'danger'); }
+  };
+  wrap.querySelector('#qac-nom').focus();
+}
 
 async function openAddFournisseurModalV2() {
   const m = document.getElementById('mroot');
@@ -1506,42 +1934,48 @@ async function openAddFournisseurModalV2() {
   m.innerHTML = '';
   const ov = document.createElement('div'); ov.className = 'modal-overlay';
   const box = document.createElement('div'); box.className = 'modal modal-wide';
-  let fournisseurs = [];
-  try {
-    fournisseurs = await api('/api/ao/picker/fournisseurs-with-contacts');
-  } catch (e) {
-    showToast('Erreur chargement fournisseurs: ' + (e.message || e), 'danger');
-    return;
-  }
-  const state = { search: '', selectedContacts: new Set(), manualTab: false, _autoP: false };
+
+  const state = {
+    search: '',
+    selectedContacts: new Set(),
+    manualTab: false,
+    _autoP: false,
+    fournisseurs: [],
+    expandedFour: new Set(),
+  };
+
+  await _reloadFournisseursCache(state);
+
   function render() {
     if (!state._autoP && !state.selectedContacts.size) {
       state._autoP = true;
-      fournisseurs.forEach(f => (f.contacts || []).forEach(c => {
+      state.fournisseurs.forEach(f => (f.contacts || []).forEach(c => {
         if (c.is_principal) state.selectedContacts.add(f.id + ':' + c.id);
       }));
     }
     const filtered = state.search
-      ? fournisseurs.filter(f => {
+      ? state.fournisseurs.filter(f => {
           const q = state.search.toLowerCase();
           return (f.nom || '').toLowerCase().includes(q)
             || (f.ville || '').toLowerCase().includes(q)
             || (f.contacts || []).some(c => (c.nom || '').toLowerCase().includes(q));
         })
-      : fournisseurs;
+      : state.fournisseurs;
+
     let html = '<h3>Ajouter un fournisseur</h3>' +
       '<div style="display:flex;gap:6px;margin-bottom:12px">' +
       '<button type="button" class="btn ' + (state.manualTab ? 'btn-ghost' : 'btn-accent') + ' btn-sm" id="tab-base">Depuis la base</button>' +
       '<button type="button" class="btn ' + (state.manualTab ? 'btn-accent' : 'btn-ghost') + ' btn-sm" id="tab-manual">Saisie manuelle</button>' +
       '</div>';
+
     if (state.manualTab) {
-      html += '<div class="field"><label>Nom fournisseur / société</label><input id="m-nom-manual"></div>' +
+      html += '<div class="field"><label>Nom fournisseur / societe</label><input id="m-nom-manual"></div>' +
         '<div class="field"><label>Email</label><input type="email" id="m-mail-manual"></div>' +
         '<div class="field"><label>Langue AO</label>' +
-        '<select id="m-langue-manual"><option value="fr">Français</option><option value="en">English</option></select></div>';
+        '<select id="m-langue-manual"><option value="fr">Francais</option><option value="en">English</option></select></div>';
     } else {
       html += '<div class="field"><input id="m-search" placeholder="Rechercher fournisseur, ville, contact..." value="' + escAttr(state.search) + '" autocomplete="off"></div>' +
-        '<div style="max-height:380px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px" id="m-list">';
+        '<div style="max-height:400px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px" id="m-list">';
       if (!filtered.length) {
         html += '<div style="padding:20px;color:var(--muted);text-align:center">Aucun fournisseur.</div>';
       } else {
@@ -1549,10 +1983,13 @@ async function openAddFournisseurModalV2() {
           const contacts = f.contacts || [];
           const fscBadge = f.has_fsc ? '<span style="font-size:10px;background:rgba(52,211,153,.15);color:var(--ok);padding:1px 6px;border-radius:6px;margin-left:6px">FSC</span>' : '';
           const villeBadge = f.ville ? '<span style="font-size:10px;color:var(--muted);margin-left:8px">' + escHtml(f.ville) + '</span>' : '';
-          html += '<div style="padding:8px 10px;border-bottom:1px solid var(--border)">' +
-            '<div style="font-weight:600">' + escHtml(f.nom) + fscBadge + villeBadge + '</div>';
+          html += '<div class="four-row" style="padding:8px 10px;border-bottom:1px solid var(--border)">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<div style="font-weight:600">' + escHtml(f.nom) + fscBadge + villeBadge + '</div>' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-quickadd="' + f.id + '" style="font-size:11px;padding:2px 8px" title="Ajouter un contact rapidement">+ Contact</button>' +
+            '</div>';
           if (!contacts.length) {
-            html += '<div style="font-size:11px;color:var(--muted);margin:4px 0 2px">Aucun contact enregistré — ajoute-en via Paramètres > Fournisseurs.</div>';
+            html += '<div style="font-size:11px;color:var(--muted);margin:4px 0 2px">Aucun contact enregistre — clique + Contact pour en ajouter.</div>';
           } else {
             contacts.forEach(c => {
               const key = f.id + ':' + c.id;
@@ -1569,13 +2006,18 @@ async function openAddFournisseurModalV2() {
         });
       }
       html += '</div>';
+      html += '<p style="font-size:11px;color:var(--muted);margin-top:8px">Astuce : cliquer <strong>+ Contact</strong> sur un fournisseur pour lui ajouter un contact sans passer par Parametres.</p>';
     }
+
     html += '<div class="modal-actions" style="margin-top:14px">' +
       '<button class="btn btn-ghost" id="m-cancel">Annuler</button>' +
       '<button class="btn btn-accent" id="m-ok">Ajouter</button></div>';
+
     box.innerHTML = html;
+
     document.getElementById('tab-base').onclick = () => { state.manualTab = false; render(); };
     document.getElementById('tab-manual').onclick = () => { state.manualTab = true; render(); };
+
     if (!state.manualTab) {
       const s = document.getElementById('m-search');
       if (s) s.addEventListener('input', () => { state.search = s.value; render(); });
@@ -1586,7 +2028,17 @@ async function openAddFournisseurModalV2() {
           else state.selectedContacts.delete(k);
         };
       });
+      box.querySelectorAll('[data-quickadd]').forEach(btn => {
+        btn.onclick = () => {
+          const fid = parseInt(btn.dataset.quickadd, 10);
+          _quickAddContact(fid, box, async () => {
+            await _reloadFournisseursCache(state);
+            render();
+          });
+        };
+      });
     }
+
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
       if (state.manualTab) {
@@ -1601,14 +2053,14 @@ async function openAddFournisseurModalV2() {
           });
           closeModal();
           await loadDetail(S.ao.id);
-          showToast('Fournisseur ajouté', 'success');
+          showToast('Fournisseur ajoute', 'success');
         } catch (e) { showToast(e.message || 'Erreur', 'danger'); }
       } else {
-        if (!state.selectedContacts.size) { showToast('Sélectionne au moins un contact.', 'danger'); return; }
+        if (!state.selectedContacts.size) { showToast('Selectionne au moins un contact.', 'danger'); return; }
         let ok = 0, ko = 0;
         for (const key of state.selectedContacts) {
           const [fId, cId] = key.split(':').map(Number);
-          const f = fournisseurs.find(x => x.id === fId); if (!f) continue;
+          const f = state.fournisseurs.find(x => x.id === fId); if (!f) continue;
           const c = (f.contacts || []).find(x => x.id === cId); if (!c) continue;
           const email = (c.emails && c.emails[0]) || '';
           if (!email) { ko++; continue; }
@@ -1627,7 +2079,7 @@ async function openAddFournisseurModalV2() {
         }
         closeModal();
         await loadDetail(S.ao.id);
-        showToast(ok + ' ajouté(s)' + (ko ? ', ' + ko + ' en échec' : ''), ok ? 'success' : 'danger');
+        showToast(ok + ' ajoute(s)' + (ko ? ', ' + ko + ' en echec' : ''), ok ? 'success' : 'danger');
       }
     };
   }
@@ -1794,7 +2246,7 @@ function renderDocuments() {
 }
 
 function bindListEvents() {
-  document.getElementById('btn-new-ao')?.addEventListener('click', openModalCreate);
+  document.getElementById('btn-new-ao')?.addEventListener('click', openCreateAoWizard);
   document.querySelectorAll('.filter-tab').forEach(b => b.addEventListener('click', () => { S.filtre = b.dataset.f; render(); }));
   document.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(parseInt(b.dataset.id,10))));
   document.querySelectorAll('.btn-del-ao').forEach(b => b.addEventListener('click', (e) => {
