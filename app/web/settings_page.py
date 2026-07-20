@@ -5066,12 +5066,16 @@ function openMaintForm(code) {
       if (docsList) docsList.style.display = 'none';
     }
   }
-  // v2.2.33 : le body a overflow:hidden, le vrai scroll est sur .main
+  // v2.2.34 : le scroller varie selon la page (window en Paramètres, .main en MyMaintenance).
+  // On tente les 2 : celui qui n'est pas le vrai scroller no-op silencieusement.
   try {
-    const scroller = document.querySelector('.main') || document.scrollingElement || document.documentElement;
-    if (scroller.scrollTo) scroller.scrollTo({ top: 0, behavior: 'smooth' });
-    else scroller.scrollTop = 0;
-  } catch(e) { try { document.querySelector('.main').scrollTop = 0; } catch(e2) {} }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const m = document.querySelector('.main');
+    if (m) { if (m.scrollTo) m.scrollTo({ top: 0, behavior: 'smooth' }); else m.scrollTop = 0; }
+  } catch(e) {
+    try { window.scrollTo(0, 0); } catch(e2) {}
+    try { document.querySelector('.main').scrollTop = 0; } catch(e3) {}
+  }
   codeInp.focus();
 }
 
