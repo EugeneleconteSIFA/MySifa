@@ -7073,16 +7073,15 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 190, "force_all_maintenance_codes_periodic")
 
-    # Migration 194 — Backfill usage_count des codes libres (v2.2.37 fix).
-    # NOTE : renumérotée de 191 → 194 en v2.2.39 pour éviter le conflit avec
-    # les migrations 191/192/193 (fournisseurs_fsc_contacts_infos, etc.) qui
-    # ont été mergées sur staging entre-temps.
+    # Migration 195 — Backfill usage_count des codes libres (v2.2.37 fix).
+    # NOTE : renumérotée 191 → 194 → 195 (v2.2.40) car staging accumule des
+    # migrations en parallèle (fournisseurs_fsc_contacts_infos, ao_demandes...).
     # Le compteur `usage_count` sur maintenance_codes (libre=1) n'est
     # historiquement peuplé que par la fonction merge. Depuis v2.2.37 il est
     # aussi incrémenté à chaque INSERT d'op avec un code LIB-*, mais les
     # données antérieures ont un compteur à 0. Cette migration re-calcule
     # usage_count à partir du vrai nombre d'ops enregistrées.
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=194 LIMIT 1").fetchone():
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
         conn.execute(
             """UPDATE maintenance_codes
                SET usage_count = COALESCE((
@@ -7092,7 +7091,7 @@ Ressources :
                WHERE libre = 1"""
         )
         conn.commit()
-        _record_schema_migration(conn, 194, "backfill_libres_usage_count")
+        _record_schema_migration(conn, 195, "backfill_libres_usage_count")
 
 
 def create_default_admin():
