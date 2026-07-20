@@ -37,8 +37,11 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import socket
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -127,6 +130,152 @@ def send_to_printer_tcp(ip: str, port: int, payload: bytes, timeout: int = 8) ->
         sock.sendall(payload)
 
 
+# ─── Backend PDF via SumatraPDF (v1.7) ──────────────────────────────
+# SumatraPDF est un lecteur PDF portable qui expose une CLI silencieuse
+# pour imprimer un PDF vers une queue Windows avec options (copies, duplex,
+# bac, N&B, format papier). C'est le pont naturel entre le monde MySifa
+# (payload PDF stocke cote VPS) et une imprimante bureautique branchee sur
+# le PC hote de l'agent.
+#
+# Priorite de recherche de SumatraPDF.exe :
+#   1. Variable d'env MYSIFA_SUMATRA_PATH
+#   2. Dossier de l'agent (install portable) — sous-dossier `sumatra/`
+#   3. C:\Program Files\SumatraPDF\SumatraPDF.exe
+#   4. C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe
+#   5. PATH systeme (via shutil.which)
+
+_SUMATRA_CACHED: str | None = None
+
+
+def _find_sumatra() -> str:
+    """Localise SumatraPDF.exe sur ce PC. Cache le resultat.
+    Leve RuntimeError si introuvable (avec message d'aide install)."""
+    global _SUMATRA_CACHED
+    if _SUMATRA_CACHED:
+        return _SUMATRA_CACHED
+    candidates = []
+    env = os.environ.get("MYSIFA_SUMATRA_PATH", "").strip()
+    if env:
+        candidates.append(env)
+    here = Path(__file__).resolve().parent
+    candidates.append(str(here / "sumatra" / "SumatraPDF.exe"))
+    candidates.append(str(here / "SumatraPDF.exe"))
+    candidates.append(r"C:\Program Files\SumatraPDF\SumatraPDF.exe")
+    candidates.append(r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe")
+    for c in candidates:
+        try:
+            if c and Path(c).is_file():
+                _SUMATRA_CACHED = c
+                return c
+        except Exception:
+            continue
+    # Dernier recours : shutil.which
+    try:
+        import shutil
+        w = shutil.which("SumatraPDF") or shutil.which("SumatraPDF.exe")
+        if w:
+            _SUMATRA_CACHED = w
+            return w
+    except Exception:
+        pass
+    raise RuntimeError(
+        "SumatraPDF.exe introuvable. Installe-le via install_agent_windows.ps1 "
+        "(mode -InstallSumatra), ou pose SumatraPDF.exe dans le dossier de l'agent, "
+        "ou definis MYSIFA_SUMATRA_PATH=<chemin>."
+    )
+
+
+def _sumatra_print_settings(options: dict) -> str:
+    """Convertit les options MySifa en chaine `-print-settings` SumatraPDF.
+
+    Options attendues (dict) :
+      - copies    : int (defaut 1)
+      - duplex    : "simplex" | "long-edge" | "short-edge"
+      - format    : "A4" | "A5" | "A3" | "Letter" | "Legal"
+      - bin       : nom du bac (str) ou None
+      - color     : "color" | "monochrome"
+
+    Doc SumatraPDF : https://www.sumatrapdfreader.org/docs/Command-line-arguments
+    Format des settings : "copies=N,paper=A4,bin=name,duplexlong,color"
+    """
+    parts: list[str] = []
+    copies = int(options.get("copies") or 1)
+    if copies > 1:
+        parts.append(f"copies={copies}")
+    fmt = str(options.get("format") or "A4").strip()
+    if fmt:
+        # SumatraPDF utilise "A4", "letter", "legal", "A3", "A5" (insensible a la casse)
+        parts.append(f"paper={fmt}")
+    duplex = str(options.get("duplex") or "simplex").strip().lower()
+    if duplex == "long-edge":
+        parts.append("duplexlong")
+    elif duplex == "short-edge":
+        parts.append("duplexshort")
+    # simplex = default, rien a ajouter
+    color = str(options.get("color") or "color").strip().lower()
+    if color == "monochrome":
+        parts.append("monochrome")
+    # color = default, rien a ajouter
+    bin_name = options.get("bin")
+    if bin_name:
+        parts.append(f"bin={bin_name}")
+    return ",".join(parts)
+
+
+def send_pdf_to_printer_windows(queue_name: str, pdf_bytes: bytes, options: dict,
+                                doc_name: str = "MySifa PDF") -> None:
+    """Imprime un PDF sur une queue Windows via SumatraPDF (silencieux, sans UI).
+
+    Ecrit le PDF dans un fichier temporaire (SumatraPDF veut un chemin fichier,
+    pas stdin), invoque SumatraPDF avec les params, attend la fin, supprime le
+    fichier temp. Timeout raisonnable (60s) pour ne pas bloquer l'agent si
+    l'imprimante est HS.
+    """
+    sumatra = _find_sumatra()
+    # SumatraPDF veut un nom de fichier avec extension .pdf pour bien detecter
+    suggested = str(options.get("filename") or f"{doc_name}.pdf")
+    if not suggested.lower().endswith(".pdf"):
+        suggested += ".pdf"
+    # Nettoie le nom (evite caracteres bizarres qui feraient echouer SumatraPDF)
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in suggested)[:80]
+    if not safe_name.lower().endswith(".pdf"):
+        safe_name += ".pdf"
+    tmp_dir = tempfile.mkdtemp(prefix="mysifa_pdf_")
+    tmp_pdf = os.path.join(tmp_dir, safe_name)
+    try:
+        with open(tmp_pdf, "wb") as f:
+            f.write(pdf_bytes)
+        settings = _sumatra_print_settings(options or {})
+        cmd = [sumatra, "-print-to", queue_name]
+        if settings:
+            cmd += ["-print-settings", settings]
+        cmd += ["-silent", "-exit-when-done", tmp_pdf]
+        logging.info("SumatraPDF cmd: %s", " ".join(f'"{a}"' if " " in a else a for a in cmd))
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or "").strip()[:300]
+            raise RuntimeError(
+                f"SumatraPDF a retourne code={proc.returncode}. Sortie : {err or '(vide)'}"
+            )
+    finally:
+        # Best-effort cleanup — si SumatraPDF a encore un handle sur le fichier
+        # (rare avec -exit-when-done), on ignore l'echec ; le dossier temp sera
+        # nettoye par le prochain redemarrage Windows.
+        try:
+            os.remove(tmp_pdf)
+        except Exception:
+            pass
+        try:
+            os.rmdir(tmp_dir)
+        except Exception:
+            pass
+
+
 def send_to_printer_windows(queue_name: str, payload: bytes, doc_name: str = "MySifa print job") -> None:
     """Envoie les octets à une queue Windows en mode RAW (le driver ne réinterprète
     pas). Marche pour USB, LPT et réseau tant qu'une queue Windows existe.
@@ -179,8 +328,30 @@ def process_jobs(cfg: dict) -> int:
         # v1.6 — route selon type_connexion. Défaut 'tcp_ip' pour rétrocompat
         # avec des serveurs pré-v189 qui ne renvoient pas encore ce champ.
         tc = imp.get("type_connexion", "tcp_ip") if isinstance(imp, dict) else "tcp_ip"
+        # v1.7 — langage du payload (zpl/epl/escpos vs pdf). Les jobs PDF
+        # empruntent un backend distinct (SumatraPDF) car un PDF envoye en
+        # RAW a une imprimante bureautique ne s'imprime pas — il faut un
+        # rendeur intermediaire.
+        langage = job.get("langage") or "zpl"
+        options = job.get("options") or {}
         try:
-            if tc == "windows_local":
+            if langage == "pdf":
+                # PDF : uniquement supporte via queue Windows + SumatraPDF.
+                # (Le backend valide deja que langage=pdf ⇒ type_connexion=windows_local,
+                # donc si on tombe sur autre chose ici, c'est une config obsolete.)
+                if tc != "windows_local":
+                    raise RuntimeError(
+                        f"Job PDF sur imprimante non-windows_local (tc={tc}) — "
+                        f"reconfigure l'imprimante en Windows local avec un nom de queue."
+                    )
+                queue = imp.get("nom_queue_windows")
+                if not queue:
+                    raise RuntimeError("Imprimante PDF sans nom_queue_windows cote serveur.")
+                send_pdf_to_printer_windows(queue, payload, options, doc_name=f"MySifa job {jid}")
+                _ack(cfg, jid, ok=True)
+                logging.info("Job %s [PDF] → %s (win:%s, opts=%s) : OK",
+                             jid, imp["nom"], queue, options)
+            elif tc == "windows_local":
                 queue = imp.get("nom_queue_windows")
                 if not queue:
                     raise RuntimeError("Imprimante configurée en windows_local mais nom_queue_windows vide côté serveur.")
@@ -218,10 +389,18 @@ def heartbeat(cfg: dict) -> None:
 
 
 def main_loop(cfg: dict) -> None:
+    # v1.7 — verifie la dispo de SumatraPDF pour indiquer si les jobs PDF
+    # (OF, fiches techniques) pourront etre traites sur cet agent.
+    try:
+        sumatra_path = _find_sumatra()
+        sumatra_status = f"OK ({sumatra_path})"
+    except Exception:
+        sumatra_status = "absent (jobs PDF echoueront — voir install_agent_windows.ps1 -InstallSumatra)"
     logging.info(
-        "MySifa print-agent v1.6 démarré — server=%s poll=%ss, backend Windows=%s",
+        "MySifa print-agent v1.7 démarré — server=%s poll=%ss, backend Windows=%s, SumatraPDF=%s",
         cfg["server_url"], cfg["poll_interval"],
         "OK" if _HAS_WIN32PRINT else "absent (pip install pywin32 pour les imprimantes USB/LPT)",
+        sumatra_status,
     )
     heartbeat(cfg)
     last_hb = time.monotonic()

@@ -26,7 +26,12 @@ from datetime import datetime
 from typing import Any
 
 
-LANGAGES = ("zpl", "epl", "escpos")
+# v1.7 — ajout de "pdf" pour l'impression de documents bureautiques (OF, fiches
+# techniques) vers des imprimantes A4/A3 laser/jet. Le langage "pdf" est un
+# passthrough : les bytes du PDF sont stockes tels quels dans print_jobs.payload
+# et transmis a l'agent, qui les envoie a SumatraPDF pour impression sur la
+# queue Windows cible (avec params copies/duplex/format/bac/N&B via data_json).
+LANGAGES = ("zpl", "epl", "escpos", "pdf")
 
 # Placeholder simple : {{ clef }} ou {{ clef.sous_clef }} (support dot notation)
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}")
@@ -118,6 +123,16 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
     """
     if langage not in LANGAGES:
         raise ValueError(f"Langage inconnu : {langage!r}. Attendu : {LANGAGES}")
+    # v1.7 — le langage "pdf" ne rend pas de template : les bytes du PDF sont
+    # fournis directement par l'endpoint POST /api/print/pdf. render_template
+    # n'est jamais appele pour un job PDF (l'endpoint stocke directement le
+    # blob dans print_jobs.payload). Si on arrive ici avec langage=pdf, c'est
+    # que quelqu'un a mal cable l'appel — on remonte une erreur explicite.
+    if langage == "pdf":
+        raise ValueError(
+            "Le langage 'pdf' ne s'utilise pas via render_template. "
+            "Utilise l'endpoint POST /api/print/pdf pour soumettre un job PDF."
+        )
     if template is None:
         template = ""
     if data is None:
@@ -332,8 +347,24 @@ USAGES = [
             "{{qrcode:lot_numero}}", "{{now:%d/%m/%Y}}",
         ],
     },
-    # À venir : etiquette_of (MyProd), etiquette_colis (MyExpé),
-    # etiquette_emplacement (MyStock), etc.
+    # v1.7 — usages "PDF passthrough" pour MyProd. Aucun template n'est
+    # applique : c'est le PDF genere/importe qui sert de payload direct
+    # (endpoint POST /api/print/pdf). Ces usages doivent etre associes a
+    # une imprimante de langage="pdf" (imprimante bureautique via
+    # SumatraPDF sur agent Windows).
+    {
+        "key": "of_document",
+        "label": "Ordre de fabrication (PDF)",
+        "module": "prod",
+        "placeholders": [],
+    },
+    {
+        "key": "fiche_technique",
+        "label": "Fiche technique (PDF)",
+        "module": "prod",
+        "placeholders": [],
+    },
+    # À venir : etiquette_colis (MyExpé), etiquette_emplacement (MyStock), etc.
 ]
 
 
