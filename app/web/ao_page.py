@@ -767,10 +767,22 @@ function openModalConfirmDelete(id, ref, statut) {
   S.modalData = {id, ref, statut};
   renderModal();
 }
-function openModalDuplicate(id, ref, titre) {
+async function openModalDuplicate(id, ref, titre) {
   S.modal = 'duplicate-ao';
-  S.modalData = {id, ref, titre, with_fournisseurs: true, with_pieces_jointes: false};
+  S.modalData = {id, ref, titre, with_fournisseurs: true, with_pieces_jointes: false, fournisseurs: [], _loading: true};
   renderModal();
+  try {
+    const det = await api('/api/ao/' + id);
+    S.modalData.fournisseurs = (det && det.fournisseurs) || [];
+    // Par defaut : tous coches
+    S.modalData.selectedFourniIds = new Set(S.modalData.fournisseurs.map(f => f.id));
+    S.modalData._loading = false;
+    renderModal();
+  } catch (e) {
+    S.modalData._loading = false;
+    S.modalData.fournisseurs = [];
+    renderModal();
+  }
 }
 function openModalPickClient(onPick) {
   S.modal = 'pick-client';
@@ -1107,24 +1119,43 @@ function renderModal() {
   } else if (S.modal === 'duplicate-ao') {
     const md = S.modalData;
     const defaultTitre = (md.titre || '') + ' (copie)';
+    const fournis = md.fournisseurs || [];
+    const selected = md.selectedFourniIds || new Set();
+    let fourniSection = '';
+    if (md._loading) {
+      fourniSection = '<p class="sub" style="color:var(--muted);font-size:12px">Chargement des fournisseurs…</p>';
+    } else if (fournis.length === 0) {
+      fourniSection = '<p class="sub" style="color:var(--muted);font-size:12px">Aucun fournisseur invite sur l\'AO source.</p>';
+    } else {
+      fourniSection = '<label style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:6px;display:block">Fournisseurs a recopier</label>' +
+        '<div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:14px">' +
+        fournis.map(f => 
+          '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:12px">' +
+          '<input type="checkbox" class="m-dup-fid" value="' + f.id + '"' + (selected.has(f.id) ? ' checked' : '') + '>' +
+          escHtml(f.nom_fournisseur) + ' <span style="color:var(--muted)">· ' + escHtml(f.email_contact || '') + '</span>' +
+          '</label>'
+        ).join('') +
+        '</div>';
+    }
     box.innerHTML = '<h3>Dupliquer l\'appel d\'offre</h3>'+
       '<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px">Source : <strong style="color:var(--text2)">'+escHtml(md.ref)+'</strong></p>'+
       '<div class="field"><label>Titre du nouvel appel d\'offre</label>'+
       '<input id="m-dup-titre" value="'+escAttr(defaultTitre)+'"></div>'+
-      '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">'+
-      '<input type="checkbox" id="m-dup-f" checked> Recopier les fournisseurs invités</label>'+
+      fourniSection +
       '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px">'+
       '<input type="checkbox" id="m-dup-pj"> Recopier les documents joints</label>'+
-      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera créé en <strong style="color:var(--text2)">brouillon</strong>. Les réponses fournisseurs ne sont jamais recopiées.</p>'+
+      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera cree en <strong style="color:var(--text2)">brouillon</strong>. Les reponses fournisseurs ne sont jamais recopiees.</p>'+
       '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-accent" type="button" id="m-ok">Dupliquer et ouvrir</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
       const titre = document.getElementById('m-dup-titre').value.trim();
       if (!titre) { showToast('Titre obligatoire.', 'danger'); return; }
+      const selected_ids = Array.from(document.querySelectorAll('.m-dup-fid:checked')).map(cb => parseInt(cb.value, 10));
       const body = {
         titre,
-        with_fournisseurs: document.getElementById('m-dup-f').checked,
+        with_fournisseurs: selected_ids.length > 0,
+        fournisseur_ids: fournis.length ? selected_ids : null,
         with_pieces_jointes: document.getElementById('m-dup-pj').checked,
       };
       try {
@@ -1348,7 +1379,8 @@ function renderDetailHeader() {
   const st = ao.statut;
   const lignes = (d.lignes||[]).length;
   const fournis = (d.fournisseurs||[]).length;
-  let actions = '<button class="btn btn-ghost" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>';
+  let actions = '<button class="btn btn-ghost" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
+    ' <a class="btn btn-ghost" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
   if (st === 'brouillon') {
     const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
     actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
@@ -1419,6 +1451,55 @@ function renderFournisseurs() {
 
 
 // ── Phase 3 : nouveau modal picker fournisseurs + Modifier ──
+
+
+async function openCloturerAoModal() {
+  const ao = S.ao;
+  const d = S.detail;
+  const fournis = (d && d.fournisseurs) || [];
+  const rep = fournis.filter(f => f.statut === 'repondu');
+  const m = document.getElementById('mroot');
+  if (!m) return;
+  m.innerHTML = '';
+  const ov = document.createElement('div'); ov.className = 'modal-overlay';
+  const box = document.createElement('div'); box.className = 'modal';
+  const hasReponses = rep.length > 0;
+  let html = '<h3>Cloturer l\'appel d\'offre</h3>' +
+    '<p style="font-size:12px;color:var(--muted);margin-bottom:14px">Cloture le AO et notifie optionnellement le fournisseur retenu par email.</p>';
+  if (hasReponses) {
+    html += '<div class="field"><label>Fournisseur retenu (optionnel)</label>' +
+      '<select id="m-retenu"><option value="">— Aucun (juste cloturer) —</option>';
+    rep.forEach(f => {
+      html += '<option value="' + f.id + '">' + escHtml(f.nom_fournisseur) + ' &lt;' + escHtml(f.email_contact) + '&gt;</option>';
+    });
+    html += '</select></div>' +
+      '<div class="field"><label>Message personnalise (optionnel)</label>' +
+      '<textarea id="m-msg" rows="3" placeholder="Ajoute un message qui sera insere dans l\'email au fournisseur retenu."></textarea></div>';
+  } else {
+    html += '<p class="sub" style="color:var(--muted)">Aucun fournisseur n\'a repondu pour l\'instant — la cloture ne notifiera personne.</p>';
+  }
+  html += '<div class="modal-actions">' +
+    '<button class="btn btn-ghost" id="m-cancel">Annuler</button>' +
+    '<button class="btn btn-accent" id="m-ok">Cloturer</button></div>';
+  box.innerHTML = html;
+  ov.appendChild(box); m.appendChild(ov);
+  document.getElementById('m-cancel').onclick = closeModal;
+  document.getElementById('m-ok').onclick = async () => {
+    const retenu = hasReponses ? (document.getElementById('m-retenu').value || null) : null;
+    const msg = hasReponses ? (document.getElementById('m-msg').value.trim() || null) : null;
+    try {
+      await api('/api/ao/' + ao.id + '/cloturer', {
+        method: 'PATCH', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({fournisseur_retenu_id: retenu ? parseInt(retenu, 10) : null, message_perso: msg})
+      });
+      closeModal();
+      showToast('AO cloture' + (retenu ? ' — email envoye au fournisseur retenu' : '') + '.', 'success');
+      await loadDetail(ao.id); render();
+    } catch (e) { showToast(e.message || 'Erreur', 'danger'); }
+  };
+}
+
+
 async function openAddFournisseurModalV2() {
   const m = document.getElementById('mroot');
   if (!m) return;
@@ -1743,14 +1824,7 @@ function bindDetailEvents() {
     const n = (S.detail.fournisseurs||[]).length;
     openModalConfirmEnvoi(n);
   });
-  document.getElementById('btn-cloturer')?.addEventListener('click', async () => {
-    if (!confirm('Clôturer cet appel d\'offre ?')) return;
-    try {
-      await api('/api/ao/'+S.ao.id+'/cloturer', {method:'PATCH'});
-      showToast('Appel d\'offre clôturé.', 'success');
-      await loadDetail(S.ao.id); render();
-    } catch(e) { showToast(e.message, 'danger'); }
-  });
+  document.getElementById('btn-cloturer')?.addEventListener('click', openCloturerAoModal);
   document.getElementById('btn-add-ligne')?.addEventListener('click', () => openModalLigne(null));
   document.querySelectorAll('.btn-edit-ligne').forEach(b => {
     b.addEventListener('click', () => {
