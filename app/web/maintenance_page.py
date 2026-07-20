@@ -1848,6 +1848,15 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie…)" oninput="renderMaintList()">
           </div>
           <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div><!-- /maint-view-recurrentes -->
+          <!-- Vue Inhabituelles (libres) — v2.2.35 -->
+          <div id="maint-view-inhabituelles" style="display:none">
+            <p class="sub" style="margin-top:-4px;margin-bottom:14px">Titres saisis ponctuellement par les opérateurs, hors catalogue. Coche 2 lignes pour les fusionner ; renomme depuis la ligne pour uniformiser la terminologie ; archive uniquement les titres sans saisie associée.</p>
+            <div class="op-toolbar">
+              <input type="search" id="libres-filter" class="op-filter" placeholder="Filtrer (titre, code…)" oninput="renderLibresList()">
+            </div>
+            <div id="libres-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div>
         </div>
         </div>
         </div><!-- /maint-codes-panel-embed -->
