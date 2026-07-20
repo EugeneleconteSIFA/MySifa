@@ -1,0 +1,656 @@
+﻿diff --git a/app/web/fabrication_page.py b/app/web/fabrication_page.py
+index 82e98c9..8415403 100644
+--- a/app/web/fabrication_page.py
++++ b/app/web/fabrication_page.py
+@@ -11,6 +11,9 @@ from config import APP_ORG_NAME
+ from app.services.auth_service import get_current_user, is_fabrication, is_admin
+ from app.web.access_denied import access_denied_response
+ from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
++# v1.7 ÔÇö modal partage pour impression de PDF (OF, fiches techniques) vers
++# une imprimante bureautique via l'agent local. Cf. app/web/print_modal.py.
++from app.web.print_modal import PRINT_MODAL_CSS, PRINT_MODAL_JS
+ 
+ router = APIRouter()
+ 
+@@ -466,6 +469,35 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
+ .fab-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
+ .fab-tab-btn svg{opacity:.65}
+ .fab-tab-btn.active svg{opacity:1}
++
++/* ÔöÇÔöÇ Tabs plus visibles pour op├®rateurs ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
++.fab-footer-tabs-row{
++  display:flex;align-items:center;justify-content:center;width:100%;
++  margin-bottom:2px;
++}
++.fab-tab-nav--prominent{
++  border-width:1.5px;border-radius:12px;
++  box-shadow:0 2px 6px rgba(0,0,0,.10);
++}
++.fab-tab-nav--prominent .fab-tab-btn{
++  width:auto;min-width:82px;padding:9px 14px 7px;
++  font-size:11px;letter-spacing:.6px;
++  color:var(--text2);
++}
++.fab-tab-nav--prominent .fab-tab-btn svg{
++  width:18px;height:18px;opacity:.85;margin-bottom:2px;
++}
++.fab-tab-nav--prominent .fab-tab-btn.active{
++  color:var(--accent);background:var(--accent-bg);
++  box-shadow:inset 0 -2px 0 var(--accent);
++}
++.fab-tab-nav--prominent .fab-tab-btn.active svg{opacity:1}
++
++/* ÔöÇÔöÇ Centrage sections footer ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
++.fab-footer{align-items:center}
++.fab-footer-info{justify-content:center}
++.fab-footer-actions{align-items:center;justify-content:center;gap:6px}
++.fab-footer-tools{align-items:stretch;justify-content:center}
+ /* ÔöÇÔöÇ Onglet OF (import PDF) ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+ .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+ .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+@@ -1836,6 +1868,7 @@ function handleOpTrigger(code, label, cat){
+ /* ÔöÇÔöÇ Main table ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+ /* ÔöÇÔöÇ Tab navigation ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+ async function switchFabTab(tab){
++  try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}
+   if(tab!=='traca' && S.tracaScanning) tracaStopCamera();
+   set({fabTab:tab});
+   if(tab==='traca'){
+@@ -1852,6 +1885,13 @@ async function switchFabTab(tab){
+   }
+ }
+ 
++var FAB_VALID_TABS=['saisie','print','traca','of','stats'];
++function _readFabTab(){
++  try{var h=(location.hash||'').replace(/^#/,'').trim();
++    if(FAB_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
++  return 'saisie';
++}
++window.addEventListener('hashchange',function(){try{var t=_readFabTab();if(t!==S.fabTab)set({fabTab:t});}catch(e){}});
+ async function loadDossierStats(){
+   const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
+   if(!ref){
+@@ -2225,6 +2265,18 @@ function renderOfPanel(){
+       }, svgIcon('edit',14)),
+     ];
+     if(row.pdf_filename){
++      // v1.7 ÔÇö bouton imprimer (avant le telecharger PDF) : ouvre le popup
++      // de choix imprimante + params, puis POST /api/print/pdf.
++      actBtns.push(h('button',{
++        className:'fab-btn fab-btn-ghost fab-btn-sm',
++        title:'Imprimer',
++        onClick:()=>openPrintModal({
++          entityType:'of',
++          entityId:row.id,
++          title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
++          subtitle:(row.reference?('Ref '+row.reference+' ÔÇö '):'') + (row.machine||''),
++        }),
++      }, svgIcon('printer',14)));
+       actBtns.push(h('button',{
+         className:'fab-btn fab-btn-ghost fab-btn-sm',
+         title:'T├®l├®charger PDF',
+@@ -2387,6 +2439,14 @@ function renderFichesPanel(){
+   const rows=(S.fiches||[]).map(row=>{
+     const acts=[
+       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Pr├®visualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')},svgIcon('file',14)),
++      // v1.7 ÔÇö bouton imprimer : ouvre le popup de choix imprimante + params,
++      // puis POST /api/print/pdf avec entity_type='fiche'.
++      h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Imprimer',onClick:()=>openPrintModal({
++        entityType:'fiche',
++        entityId:row.id,
++        title:'Imprimer fiche '+(row.reference||('#'+row.id)),
++        subtitle:[row.format,row.machine].filter(Boolean).join(' ÔÇö '),
++      })},svgIcon('printer',14)),
+       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Modifier',onClick:()=>openFicheEditModal(row)},svgIcon('edit',14)),
+     ];
+     if(S.user&&S.user.role==='superadmin'){
+@@ -3327,35 +3387,77 @@ function renderTracaPanel(){
+   );
+ }
+ 
++function _renderStockQuickAccess(){
++  // Boutons d'acc├¿s rapide aux vues MyStock, ouverts dans un
++  // nouvel onglet pour ne pas casser la session de saisie en cours.
++  // La sidebar de gauche reste toujours cliquable c├┤t├® /fabrication
++  // (on peut ├á tout moment saisir une op├®ration).
++  const links = [
++    {tab:'production',    icon:'cpu',     label:'Production'},
++    {tab:'matieres',      icon:'layers',  label:'Mati├¿res premi├¿res'},
++    {tab:'reception',     icon:'inbox',   label:'R├®ception mati├¿re'},
++    {tab:'traca',         icon:'printer', label:'├ëtiquettes tra├ºa'},
++    {tab:'plan-entrepot', icon:'map-pin', label:'Plan entrep├┤t'},
++    {tab:'historique',    icon:'clock',   label:'Historique'},
++  ];
++  const buttons = links.map(l => {
++    const btn = h('button',{
++      className:'fab-btn fab-btn-ghost fab-btn-sm',
++      style:{minWidth:'120px',justifyContent:'center'},
++      title:'Ouvrir '+l.label+' dans MyStock',
++      onClick:()=>{
++        try{ window.open('/stock?tab='+encodeURIComponent(l.tab),'_blank','noopener'); }
++        catch(e){ window.location.href='/stock?tab='+encodeURIComponent(l.tab); }
++      }
++    }, svgIcon(l.icon,14),' '+l.label);
++    return btn;
++  });
++  return h('div',{
++    style:{
++      display:'flex',flexWrap:'wrap',gap:'8px',justifyContent:'center',
++      padding:'14px 20px 4px',borderBottom:'1px solid var(--border)',
++      background:'var(--bg)'
++    }
++  },
++    h('div',{style:{width:'100%',textAlign:'center',fontSize:'11px',
++      textTransform:'uppercase',letterSpacing:'.5px',color:'var(--muted)',
++      fontWeight:'700',marginBottom:'4px'}},
++      'Acc├¿s rapide MyStock'),
++    ...buttons
++  );
++}
++
+ function renderStatsPanel(){
+   const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'-';
+   const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
+   if(!ref){
+     return h('div',{className:'fab-main'},
+       h('div',{className:'fab-main-head'},
+-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
++        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock ÔÇö dossier'),
+         h('span',{className:'fab-main-sub'},machineName)
+       ),
+       h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},
+         'Aucun dossier actif. Demarrez un dossier (op 01) pour voir ses stats.'
+-      )
++      ),
++      _renderStockQuickAccess()
+     );
+   }
+   const st = S.dossierStats;
+   if(S.dossierStatsLoading || !st){
+     return h('div',{className:'fab-main'},
+       h('div',{className:'fab-main-head'},
+-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
++        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock ÔÇö dossier'),
+         h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
+         h('span',{className:'fab-main-sub'},machineName)
+       ),
+-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...')
++      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...'),
++      _renderStockQuickAccess()
+     );
+   }
+   if(st._err){
+     return h('div',{className:'fab-main'},
+       h('div',{className:'fab-main-head'},
+-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier')
++        h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock ÔÇö dossier')
+       ),
+       h('div',{style:{padding:'24px',color:'var(--danger)'}}, st._err)
+     );
+@@ -3398,10 +3500,11 @@ function renderStatsPanel(){
+ 
+   return h('div',{className:'fab-main', style:{overflow:'auto'}},
+     h('div',{className:'fab-main-head'},
+-      h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
++      h('span',{className:'fab-main-title'}, svgIcon('package',16),' Stock ÔÇö dossier'),
+       h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
+       h('span',{className:'fab-main-sub'},machineName)
+     ),
++    _renderStockQuickAccess(),
+     h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}},
+       // Resume en tetes de cartes
+       h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}},
+@@ -3758,32 +3861,55 @@ async function openTracabiliteModal(noDossier){
+   }
+ }
+ 
++/* ÔöÇÔöÇ Tabs footer : d├®finitions + filtrage r├┤le ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
++function _fabTabDefs(){
++  // Tab 'stats' est renomm├® "Stock" (ic├┤ne package) pour donner
++  // acc├¿s aux vues MyStock depuis la fabrication.
++  return [
++    {key:'saisie', icon:'edit',    label:'Saisie'},
++    {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
++    {key:'traca',  icon:'scan',    label:'Tra├ºa'},
++    {key:'stats',  icon:'package', label:'Stock'},
++    {key:'of',     icon:'file',    label:'Fiches + OF', ofOnly:true},
++  ];
++}
++function _isFabricationOperator(){
++  const r = S.user && S.user.role;
++  // Un pur op├®rateur fabrication OU un admin qui a explicitement
++  // bascul├® en vue op├®rateur : on masque Imprimer et Fiches+OF.
++  return r === 'fabrication' || S.saisieViewMode === 'operator';
++}
++function _visibleFabTabs(){
++  const opView = _isFabricationOperator();
++  return _fabTabDefs().filter(t => {
++    if(t.adminOnly && opView) return false;
++    if(t.ofOnly && (!canAccessOfTab() || opView)) return false;
++    return true;
++  });
++}
++function _renderFabTabNav(extraClass){
++  const tabs = _visibleFabTabs().map(t =>
++    h('button',{
++      className:'fab-tab-btn'+(S.fabTab===t.key?' active':''),
++      title:t.label,
++      onClick:()=>{ void switchFabTab(t.key); }
++    }, svgIcon(t.icon,16), t.label)
++  );
++  return h('div',{className:'fab-tab-nav'+(extraClass?' '+extraClass:'')}, ...tabs);
++}
++
+ /* ÔöÇÔöÇ Footer ÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇÔöÇ */
+ function renderFooter(){
+   // Vue admin : lecture seule ÔåÆ ne pas afficher le footer d'actions (├®vite toute confusion).
+   const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
+   const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
+   if(isAdminView){
+-    const adminTabBtns = [
+-      h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
+-        svgIcon('edit',16),'Saisie'),
+-      h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
+-        svgIcon('printer',16),'Imprimer'),
+-      h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
+-        svgIcon('scan',16),'Tra├ºa'),
+-      h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
+-        svgIcon('bar-chart-2',16),'Stats'),
+-    ];
+-    if(canAccessOfTab()){
+-      adminTabBtns.push(
+-        h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
+-          svgIcon('file',16),'Fiches + OF')
+-      );
+-    }
++    const adminTabNav = _renderFabTabNav();
++    adminTabNav.style.marginLeft = 'auto';
+     return h('div',{className:'fab-footer fab-footer--admin'},
+       h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase',flexShrink:0}},
+         'Vue admin ÔÇö lecture seule'),
+-      h('div',{className:'fab-tab-nav',style:{marginLeft:'auto'}}, ...adminTabBtns)
++      adminTabNav
+     );
+   }
+ 
+@@ -3962,24 +4088,10 @@ function renderFooter(){
+     )
+   );
+ 
+-  // Tab nav (always visible at bottom of footer)
+-  const tabBtns = [
+-    h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
+-      svgIcon('edit',16),'Saisie'),
+-    h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
+-      svgIcon('printer',16),'Imprimer'),
+-    h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
+-      svgIcon('scan',16),'Tra├ºa'),
+-    h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
+-      svgIcon('bar-chart-2',16),'Stats'),
+-  ];
+-  if(canAccessOfTab()){
+-    tabBtns.push(
+-      h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
+-        svgIcon('file',16),'Fiches + OF')
+-    );
+-  }
+-  const tabNav = h('div',{className:'fab-tab-nav'}, ...tabBtns);
++  // Tab nav : maintenant positionn├® ENTRE les infos dossier et
++  // le bouton "Fin de production" (dans centerSection, en t├¬te).
++  // Rendu identique quel que soit l'onglet actif -> footer unifi├®.
++  const tabNav = _renderFabTabNav('fab-tab-nav--prominent');
+ 
+   const isOperatorView = S.saisieViewMode === 'operator';
+ 
+@@ -3994,43 +4106,20 @@ function renderFooter(){
+   }, svgIcon(isLight?'sun':'moon',14),
+     h('span',{className:'fab-theme-label'}, isLight?'Clair':'Sombre'));
+ 
+-  const tabNavWrap = h('div',{className:'fab-footer-row2'}, tabNav, themeBtn);
+-
+-  // When on non-saisie tabs, show a minimal status line instead of full footer
+-  if(S.fabTab!=='saisie'){
+-    const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'ÔÇö';
+-    const dossierLabel = S.dossier ? fabDossierRefLabel(S.dossier) : 'Aucun dossier';
+-    const fscFooterBtn = S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
+-      ? h('button',{
+-          className:'fab-btn fab-btn-ghost',
+-          style:{fontSize:'10px',padding:'2px 8px'},
+-          onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
+-        },'FSC')
+-      : null;
+-    const footerCls = 'fab-footer fab-footer-operator fab-footer--alt';
+-    return h('div',{className:footerCls,style:{gridTemplateColumns:'1fr'}},
+-      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',
+-        fontSize:'10px',color:'var(--muted)',padding:'2px 0',flexWrap:'wrap'}},
+-        h('span',null, svgIcon('tool',11),' '+machineName),
+-        h('span',{style:{color:'var(--border)'}},'/'),
+-        h('span',null,dossierLabel),
+-        h('span',{style:{color:'var(--border)'}},'/'),
+-        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 6px'}}, etatLabel(S.etat)),
+-        fscFooterBtn,
+-        themeBtn
+-      ),
+-      h('div',{className:'fab-footer-row2',style:{justifyContent:'center'}}, tabNav)
+-    );
+-  }
++  // centerSection : la nav des onglets est empil├®e AU-DESSUS des
++  // action buttons ("Fin de production", etc.), bien centr├®e et
++  // agrandie pour ├¬tre imm├®diatement visible.
++  const actionsSection = h('div',{className:'fab-footer-actions'},
++    machineSelectorRow,
++    h('div',{className:'fab-footer-tabs-row'}, tabNav),
++    h('div',{className:'fab-footer-btns'},...btns),
++    h('div',{className:'fab-footer-row2'}, themeBtn)
++  );
+ 
+   const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '');
+   return h('div',{className:footerCls},
+     infoSection,
+-    h('div',{className:'fab-footer-actions'},
+-      machineSelectorRow,
+-      h('div',{className:'fab-footer-btns'},...btns),
+-      tabNavWrap
+-    ),
++    actionsSection,
+     toolsSection
+   );
+ }
+@@ -6352,6 +6441,7 @@ async function init(){
+ 
+   // Load session
+   await loadSession();
++  var _initFabTab=_readFabTab(); if(_initFabTab!=='saisie') set({fabTab:_initFabTab});
+   // Vue admin (lecture) : charger la liste globale du jour si s├®lectionn├®e
+   if(isAdm && S.saisieViewMode==='admin'){
+     await loadAdminSaisiesJour();
+@@ -6404,3 +6494,17 @@ init();
+ </html>"""
+ 
+ FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
++
++# v1.7 ÔÇö Injection du modal partage d'impression PDF (CSS + JS) juste avant la
++# fin du </head> et de </script>. On evite les placeholders et on injecte
++# directement pour rester compatible avec toute modif ulterieure du template.
++FABRICATION_HTML = FABRICATION_HTML.replace(
++    "</style>",
++    PRINT_MODAL_CSS + "\n</style>",
++    1,  # premiere occurrence seulement (le </style> principal du <head>)
++)
++FABRICATION_HTML = FABRICATION_HTML.replace(
++    "init();\n</script>",
++    PRINT_MODAL_JS + "\ninit();\n</script>",
++    1,
++)
+diff --git a/app/web/settings_page.py b/app/web/settings_page.py
+index 8e27952..3e39314 100644
+--- a/app/web/settings_page.py
++++ b/app/web/settings_page.py
+@@ -1926,6 +1926,267 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
+           </div>
+         </div>
+       </div>
++<<<<<<< Updated upstream
++=======
++
++      <!-- ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ
++           WIZARD : Comment connecter mon imprimante ├á MySifa
++           4 ├®tapes : Type ÔåÆ Agent (+ installer si Locale) ÔåÆ Imprimante ÔåÆ Test
++           ÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉ -->
++      <div id="pr-wiz-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:950;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prWizClose()">
++        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0;width:min(760px,95vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
++
++          <!-- Header du wizard -->
++          <div style="padding:20px 24px 12px;border-bottom:1px solid var(--border)">
++            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
++              <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--text)">Connecter une imprimante ├á MySifa</h2>
++              <button onclick="prWizClose()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0;line-height:1">├ù</button>
++            </div>
++            <!-- Barre de progression ├®tapes -->
++            <div id="pr-wiz-progress" style="display:flex;gap:6px;margin-top:14px">
++              <div class="pr-wiz-dot" data-s="1" style="flex:1;height:4px;background:var(--accent);border-radius:2px;transition:all .2s"></div>
++              <div class="pr-wiz-dot" data-s="2" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
++              <div class="pr-wiz-dot" data-s="3" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
++              <div class="pr-wiz-dot" data-s="4" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
++            </div>
++            <div id="pr-wiz-step-label" style="font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:700">├ëtape 1 / 4 ┬À Type d'imprimante</div>
++          </div>
++
++          <!-- Corps du wizard : 4 ├®tapes, une seule visible ├á la fois -->
++          <div id="pr-wiz-body" style="padding:20px 24px;overflow-y:auto;flex:1">
++
++            <!-- ÔöÇÔöÇÔöÇ ├ëTAPE 1 : Type d'imprimante ÔöÇÔöÇÔöÇ -->
++            <div class="pr-wiz-page" data-step="1">
++              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Comment est branch├®e ton imprimante ?</div>
++              <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choisis le cas qui correspond ├á ta situation.</div>
++              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
++                <button type="button" class="pr-wiz-typebtn" onclick="prWizSelectType('tcp_ip')" style="text-align:left;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;font-family:inherit">
++                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
++                    <div style="width:36px;height:36px;background:rgba(45,111,187,0.12);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--warn)">
++                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
++                    </div>
++                    <div style="font-size:14px;font-weight:700;color:var(--text)">R├®seau (IP)</div>
++                  </div>
++                  <div style="font-size:12px;color:var(--text2);line-height:1.5">Mon imprimante a sa propre adresse IP sur le LAN de l'usine (c├óble Ethernet ou Wifi).</div>
++                  <div style="font-size:11px;color:var(--muted);margin-top:8px"><em>Ex : Zebra ZT230 avec option r├®seau</em></div>
++                </button>
++                <button type="button" class="pr-wiz-typebtn" onclick="prWizSelectType('windows_local')" style="text-align:left;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;font-family:inherit">
++                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
++                    <div style="width:36px;height:36px;background:rgba(240,165,0,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--accent)">
++                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
++                    </div>
++                    <div style="font-size:14px;font-weight:700;color:var(--text)">Locale (USB / LPT)</div>
++                  </div>
++                  <div style="font-size:12px;color:var(--text2);line-height:1.5">Mon imprimante est branch├®e physiquement sur un PC de l'usine, via USB ou port parall├¿le (LPT).</div>
++                  <div style="font-size:11px;color:var(--muted);margin-top:8px"><em>Ex : imprimante USB, matricielle en LPT</em></div>
++                </button>
++              </div>
++            </div>
++
++            <!-- ÔöÇÔöÇÔöÇ ├ëTAPE 2 : Agent MySifa ÔöÇÔöÇÔöÇ -->
++            <div class="pr-wiz-page" data-step="2" style="display:none">
++              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px" id="pr-wiz-agent-title">Un agent MySifa doit ├¬tre en place</div>
++              <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="pr-wiz-agent-intro">L'agent est un petit programme qui fait le pont entre MySifa et l'imprimante. Il tourne en arri├¿re-plan.</div>
++
++              <!-- Choix : agent existant ou nouveau (layout table pour ├®viter les collisions CSS input radio) -->
++              <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
++
++                <!-- Option 1 : Agent existant -->
++                <div style="display:flex;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="document.getElementById('pr-wiz-agent-existing').click()">
++                  <input type="radio" name="pr-wiz-agent-choice" value="existing" id="pr-wiz-agent-existing" onchange="prWizToggleAgentMode()" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;accent-color:var(--accent)">
++                  <div style="flex:1;min-width:0">
++                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Utiliser un agent existant</div>
++                    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Si tu as d├®j├á install├® un agent MySifa sur un PC ou Pi accessible.</div>
++                    <div id="pr-wiz-agent-existing-row" style="display:none">
++                      <select id="pr-wiz-agent-select" class="pr-inp" style="width:100%;max-width:400px" onclick="event.stopPropagation()"><option value="">ÔÇö S├®lectionner un agent ÔÇö</option></select>
++                    </div>
++                  </div>
++                </div>
++
++                <!-- Option 2 : Nouvel agent -->
++                <div style="display:flex;align-items:flex-start;gap:12px;padding-top:12px;cursor:pointer" onclick="document.getElementById('pr-wiz-agent-new').click()">
++                  <input type="radio" name="pr-wiz-agent-choice" value="new" id="pr-wiz-agent-new" checked onchange="prWizToggleAgentMode()" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;accent-color:var(--accent)">
++                  <div style="flex:1;min-width:0">
++                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Cr├®er un nouvel agent</div>
++                    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Recommand├® si c'est ta premi├¿re fois ou si tu ajoutes un nouveau PC h├┤te.</div>
++                    <div id="pr-wiz-agent-new-row" onclick="event.stopPropagation()">
++                      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
++                        <input type="text" id="pr-wiz-agent-name" class="pr-inp" placeholder="Ex : PC-Reception, PC-Quai-Expedition..." style="flex:1;min-width:200px">
++                        <button type="button" class="btn btn-accent" onclick="prWizCreateAgent()" style="padding:8px 14px;font-size:12px;white-space:nowrap">Cr├®er l'agent</button>
++                      </div>
++                    </div>
++                  </div>
++                </div>
++              </div>
++
++              <!-- Bloc affich├® apr├¿s cr├®ation : token + installer (surtout pour Locale) -->
++              <div id="pr-wiz-agent-created" style="display:none;margin-top:12px">
++                <div style="background:rgba(5,150,105,0.08);border-left:3px solid var(--success);border-radius:6px;padding:10px 12px;margin-bottom:12px">
++                  <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:4px">Ô£ô Agent cr├®├®</div>
++                  <div style="font-size:11px;color:var(--text2)">Le token ci-dessous ne sera plus lisible apr├¿s avoir ferm├® cet assistant. Copie-le maintenant.</div>
++                </div>
++
++                <div style="margin-bottom:12px">
++                  <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Token de l'agent</div>
++                  <div style="display:flex;gap:6px;align-items:center">
++                    <input type="text" id="pr-wiz-token-display" readonly style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:12px">
++                    <button type="button" class="btn btn-ghost" onclick="prWizCopyToken()" style="padding:8px 12px;font-size:12px">­ƒôï Copier</button>
++                  </div>
++                </div>
++
++                <!-- Instructions install (visibles pour Locale, cach├®es pour R├®seau si agent existant utilis├®) -->
++                <div id="pr-wiz-install-block">
++                  <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">Installer l'agent sur le PC h├┤te</div>
++
++                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
++                    <div style="display:flex;gap:10px;align-items:flex-start">
++                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">1</div>
++                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
++                        T├®l├®charge l'installeur :
++                        <div style="margin-top:6px">
++                          <a href="/api/print/installer/windows" download="install_agent_windows.ps1" class="btn btn-accent" style="padding:6px 12px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
++                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
++                            install_agent_windows.ps1
++                          </a>
++                        </div>
++                      </div>
++                    </div>
++                  </div>
++
++                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
++                    <div style="display:flex;gap:10px;align-items:flex-start">
++                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
++                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
++                        Copie le fichier sur le <strong>PC h├┤te de l'imprimante</strong> (cl├® USB, partage r├®seau, ou t├®l├®chargement direct sur ce PC).
++                      </div>
++                    </div>
++                  </div>
++
++                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
++                    <div style="display:flex;gap:10px;align-items:flex-start">
++                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">3</div>
++                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
++                        Sur le PC h├┤te, ouvre <strong>PowerShell en tant qu'Administrateur</strong> (Menu D├®marrer ÔåÆ tape "powershell" ÔåÆ clic droit ÔåÆ Ex├®cuter en admin), puis colle cette commande :
++                        <div style="display:flex;gap:6px;align-items:flex-start;margin-top:6px">
++                          <textarea id="pr-wiz-install-cmd" readonly style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:11px;resize:vertical;min-height:60px;line-height:1.4"></textarea>
++                          <button type="button" class="btn btn-ghost" onclick="prWizCopyInstallCmd()" style="padding:8px 12px;font-size:12px;white-space:nowrap">­ƒôï Copier</button>
++                        </div>
++                      </div>
++                    </div>
++                  </div>
++
++                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
++                    <div style="display:flex;gap:10px;align-items:flex-start">
++                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">4</div>
++                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
++                        Attends la fin du script (~3-5 min : Python + pywin32 + NSSM + service Windows). Le message final doit indiquer <code style="background:var(--bg);border:1px solid var(--border);padding:1px 5px;border-radius:3px;font-family:monospace">SERVICE_RUNNING</code>.
++                      </div>
++                    </div>
++                  </div>
++                </div>
++              </div>
++            </div>
++
++            <!-- ÔöÇÔöÇÔöÇ ├ëTAPE 3 : Cr├®er l'imprimante ÔöÇÔöÇÔöÇ -->
++            <div class="pr-wiz-page" data-step="3" style="display:none">
++              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Cr├®er l'imprimante dans MySifa</div>
++              <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Renseigne les infos de ton imprimante. L'agent que tu as s├®lectionn├® ├á l'├®tape pr├®c├®dente est rattach├® automatiquement.</div>
++
++              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
++                <div style="grid-column:span 2">
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom de l'imprimante *</label>
++                  <input type="text" id="pr-wiz-imp-nom" class="pr-inp" placeholder="Ex : Zebra R├®ception mati├¿re" style="width:100%">
++                </div>
++                <div>
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Poste / atelier</label>
++                  <input type="text" id="pr-wiz-imp-poste" class="pr-inp" placeholder="Ex : R├®ception" style="width:100%">
++                </div>
++                <div>
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Langage *</label>
++                  <select id="pr-wiz-imp-langage" class="pr-inp" style="width:100%">
++                    <option value="zpl">ZPL ÔÇö Zebra</option>
++                    <option value="epl">EPL ÔÇö vieilles Zebra</option>
++                    <option value="escpos">ESC/POS ÔÇö Brother, tickets</option>
++                  </select>
++                </div>
++
++                <!-- Champs R├®seau (IP + port) -->
++                <div id="pr-wiz-imp-ip-row">
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Adresse IP *</label>
++                  <input type="text" id="pr-wiz-imp-ip" class="pr-inp" placeholder="192.168.1.42" style="width:100%">
++                </div>
++                <div id="pr-wiz-imp-port-row">
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Port</label>
++                  <input type="number" id="pr-wiz-imp-port" class="pr-inp" value="9100" style="width:100%">
++                </div>
++
++                <!-- Champ Locale (nom queue Windows) -->
++                <div id="pr-wiz-imp-queue-row" style="display:none;grid-column:span 2">
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom exact de la queue Windows *</label>
++                  <input type="text" id="pr-wiz-imp-queue" class="pr-inp" placeholder="Ex : Zebra Z4M (300 dpi)" style="width:100%">
++                  <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.6;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
++                    <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:14px">Comment r├®cup├®rer le nom exact ?</div>
++                    <div style="margin-bottom:10px">
++                      Sur le PC h├┤te, ouvre <strong>l'invite de commande</strong> (Menu D├®marrer ÔåÆ tape <code style="background:var(--card);border:1px solid var(--border);padding:1px 6px;border-radius:3px;font-family:monospace;font-size:12px">cmd</code>) et lance :
++                    </div>
++                    <div style="display:flex;align-items:center;justify-content:center;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:10px">
++                      <code style="font-family:monospace;font-size:14px;color:var(--text);font-weight:600">wmic printer get name</code>
++                    </div>
++                    <div>
++                      Copie-colle le nom retourn├® (attention aux <strong>espaces</strong>, <strong>majuscules</strong> et <strong>parenth├¿ses</strong>).
++                    </div>
++                  </div>
++                </div>
++
++                <div>
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">DPI</label>
++                  <select id="pr-wiz-imp-dpi" class="pr-inp" style="width:100%">
++                    <option value="203">203 dpi (standard)</option>
++                    <option value="300">300 dpi</option>
++                    <option value="600">600 dpi</option>
++                  </select>
++                </div>
++                <div>
++                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Largeur ├ù Hauteur (mm)</label>
++                  <div style="display:flex;gap:6px;align-items:center">
++                    <input type="number" id="pr-wiz-imp-largeur" class="pr-inp" value="102" style="width:100%">
++                    <span style="color:var(--muted)">├ù</span>
++                    <input type="number" id="pr-wiz-imp-hauteur" class="pr-inp" value="152" style="width:100%">
++                  </div>
++                </div>
++              </div>
++            </div>
++
++            <!-- ÔöÇÔöÇÔöÇ ├ëTAPE 4 : Test d'impression ÔöÇÔöÇÔöÇ -->
++            <div class="pr-wiz-page" data-step="4" style="display:none">
++              <div style="text-align:center;padding:16px 0">
++                <div style="width:60px;height:60px;background:rgba(5,150,105,0.15);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--success)">
++                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
++                </div>
++                <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">Imprimante configur├®e !</div>
++                <div style="font-size:13px;color:var(--text2);margin-bottom:20px">
++                  L'imprimante <strong id="pr-wiz-created-name">ÔÇö</strong> a ├®t├® ajout├®e ├á MySifa.
++                </div>
++                <button type="button" class="btn btn-accent" onclick="prWizTestPrint()" style="padding:12px 24px;font-size:13px;font-weight:700">
++                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
++                  Lancer un test d'impression
++                </button>
++                <div id="pr-wiz-test-result" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
++              </div>
++            </div>
++
++          </div>
++
++          <!-- Footer navigation -->
++          <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">
++            <button type="button" id="pr-wiz-back-btn" onclick="prWizBack()" class="btn btn-ghost" style="padding:9px 18px;font-size:13px;visibility:hidden">ÔåÉ Retour</button>
++            <div style="flex:1"></div>
++            <button type="button" id="pr-wiz-next-btn" onclick="prWizNext()" class="btn btn-accent" style="padding:9px 18px;font-size:13px">Continuer ÔåÆ</button>
++          </div>
++        </div>
++      </div>
++
++>>>>>>> Stashed changes
+     </section>
+ 
+     <section id="panel-formations" class="hidden">
