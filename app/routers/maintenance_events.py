@@ -90,6 +90,22 @@ def _now_paris_iso() -> str:
     return datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _bump_libre_usage(conn, code: str) -> None:
+    """v2.2.37 : incrémente maintenance_codes.usage_count si le code est un libre (LIB-*).
+    Safe : ignore silencieusement les codes standards et les erreurs.
+    """
+    if not code or not code.startswith("LIB-"):
+        return
+    try:
+        conn.execute(
+            "UPDATE maintenance_codes SET usage_count = COALESCE(usage_count, 0) + 1 "
+            "WHERE code = ? AND libre = 1",
+            (code,),
+        )
+    except Exception:
+        pass
+
+
 def _get_maintenance_role(user: dict) -> Optional[str]:
     if not user:
         return None
@@ -479,6 +495,7 @@ def create_event(body: EventCreateBody, request: Request):
                            VALUES (?, ?, ?, ?)""",
                         (event_id, code, single_csv, now),
                     )
+                    _bump_libre_usage(conn, code)  # v2.2.37
                 except Exception as e:
                     # UNIQUE(event_id, code, machines_csv) : doublon silencieux (rare, mais safe).
                     pass
@@ -583,6 +600,7 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
                 "INSERT INTO maintenance_event_ops (event_id, code, machines_csv, consignes, updated_at) VALUES (?, ?, ?, ?, ?)",
                 (event_id, body.code, single_csv, (body.consignes or None) if body.consignes else None, now),
             )
+            _bump_libre_usage(conn, body.code)  # v2.2.37
             inserted += 1
         if inserted == 0:
             raise HTTPException(status_code=400, detail="Op déjà présente sur toutes les machines demandées")
@@ -959,6 +977,7 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
                    VALUES (?, ?, ?, ?)""",
                 (eid, op["code"], op.get("machines_csv"), now),
             )
+            _bump_libre_usage(conn, op["code"])  # v2.2.37
         _recompute_event_machine(conn, eid)
     return len(events)
 

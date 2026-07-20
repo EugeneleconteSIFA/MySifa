@@ -491,6 +491,80 @@ async def picker_create_fournisseur(request: Request):
     return _row_dict(row)
 
 
+
+
+@router.get("/picker/fournisseurs-with-contacts")
+def picker_fournisseurs_with_contacts(request: Request, search: str = ""):
+    """Fournisseurs actifs + leurs contacts, pour le modal AO."""
+    _require_ao(request)
+    import json as _json
+    with get_db() as conn:
+        four_cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        actif_clause = "AND (actif IS NULL OR actif=1)" if "actif" in four_cols else ""
+        select_extras = ""
+        for extra in ("ville", "langue_default", "tags"):
+            if extra in four_cols:
+                select_extras += f", {extra}"
+        if search:
+            like = f"%{search.strip()}%"
+            search_cols = ["nom"]
+            if "ville" in four_cols: search_cols.append("ville")
+            if "tags" in four_cols: search_cols.append("tags")
+            where = " OR ".join(f"{c} LIKE ?" for c in search_cols)
+            frows = conn.execute(
+                f"SELECT id, nom, licence, has_fsc{select_extras} FROM fournisseurs_fsc "
+                f"WHERE ({where}) {actif_clause} ORDER BY nom COLLATE NOCASE",
+                tuple([like] * len(search_cols)),
+            ).fetchall()
+        else:
+            frows = conn.execute(
+                f"SELECT id, nom, licence, has_fsc{select_extras} FROM fournisseurs_fsc "
+                f"WHERE 1=1 {actif_clause} ORDER BY nom COLLATE NOCASE"
+            ).fetchall()
+
+        has_contacts_table = bool(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fournisseur_contacts'"
+        ).fetchone())
+        contacts_by_four = {}
+        if has_contacts_table:
+            crows = conn.execute(
+                """SELECT id, fournisseur_id, nom, fonction, emails, tels, langue, is_principal
+                   FROM fournisseur_contacts WHERE actif=1
+                   ORDER BY is_principal DESC, nom COLLATE NOCASE"""
+            ).fetchall()
+            for c in crows:
+                d = dict(c)
+                for k in ("emails", "tels"):
+                    raw = d.get(k)
+                    if raw:
+                        try:
+                            parsed = _json.loads(raw)
+                            d[k] = parsed if isinstance(parsed, list) else []
+                        except (_json.JSONDecodeError, TypeError):
+                            d[k] = []
+                    else:
+                        d[k] = []
+                d["is_principal"] = bool(d.get("is_principal"))
+                contacts_by_four.setdefault(d["fournisseur_id"], []).append(d)
+
+    out = []
+    for f in frows:
+        fd = dict(f)
+        raw = fd.get("tags")
+        if raw:
+            try:
+                fd["tags"] = _json.loads(raw) if isinstance(raw, str) else []
+                if not isinstance(fd["tags"], list):
+                    fd["tags"] = []
+            except (_json.JSONDecodeError, TypeError):
+                fd["tags"] = []
+        else:
+            fd["tags"] = []
+        fd["contacts"] = contacts_by_four.get(fd["id"], [])
+        out.append(fd)
+    return out
+
+
 # ─── Matières premières (lecture pour fiches produit) ─────────────
 
 _MP_AO_CATEGORIES = frozenset({
@@ -963,21 +1037,66 @@ async def update_ao(request: Request, ao_id: int):
 
 
 @router.patch("/{ao_id}/cloturer")
-def cloturer_ao(request: Request, ao_id: int):
+async def cloturer_ao(request: Request, ao_id: int):
+    """Cloture l'AO et notifie optionnellement le fournisseur retenu.
+
+    Body JSON optionnel :
+      - fournisseur_retenu_id (int) : id du fournisseur invite retenu
+      - message_perso (str) : message personnalise ajoute a l'email au retenu
+    """
     _require_ao(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    fournisseur_retenu_id = body.get("fournisseur_retenu_id")
+    if fournisseur_retenu_id is not None:
+        try:
+            fournisseur_retenu_id = int(fournisseur_retenu_id)
+        except (TypeError, ValueError):
+            fournisseur_retenu_id = None
+    message_perso = (body.get("message_perso") or "").strip() or None
+    now = _now_paris_iso()
+
     with get_db() as conn:
         ao = _get_ao_or_404(conn, ao_id)
         if ao.get("statut") != "envoyee":
             raise HTTPException(
                 status_code=400,
-                detail="Clôture impossible — l'appel d'offre doit être au statut « envoyée ».",
+                detail="Cloture impossible : l'appel d'offre doit etre au statut envoyee.",
             )
-        conn.execute(
-            "UPDATE ao_demandes SET statut='cloturee' WHERE id=?",
-            (ao_id,),
-        )
+        fourni_retenu = None
+        if fournisseur_retenu_id:
+            fourni_retenu = conn.execute(
+                "SELECT * FROM ao_fournisseurs WHERE id=? AND ao_id=?",
+                (fournisseur_retenu_id, ao_id),
+            ).fetchone()
+            if not fourni_retenu:
+                raise HTTPException(status_code=400, detail="Fournisseur retenu invalide.")
+
+        aod_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+        if "fournisseur_retenu_id" in aod_cols and "date_cloture" in aod_cols:
+            conn.execute(
+                "UPDATE ao_demandes SET statut='cloturee', fournisseur_retenu_id=?, date_cloture=? WHERE id=?",
+                (fournisseur_retenu_id, now, ao_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE ao_demandes SET statut='cloturee' WHERE id=?",
+                (ao_id,),
+            )
         conn.commit()
         updated = _get_ao_or_404(conn, ao_id)
+
+    if fourni_retenu:
+        try:
+            subject, html_body = email_offre_retenue(
+                dict(updated), dict(fourni_retenu), message_perso=message_perso
+            )
+            send_email(fourni_retenu["email_contact"], subject, html_body)
+        except Exception as e:
+            logger.warning("Envoi email offre retenue echoue pour AO %s: %s", ao_id, e)
+
     return updated
 
 
@@ -1043,6 +1162,174 @@ def delete_ao(request: Request, ao_id: int):
     return {"ok": True}
 
 
+
+
+@router.get("/{ao_id}/export.pdf")
+def export_ao_pdf(request: Request, ao_id: int):
+    """Genere un PDF recapitulant l'AO : infos, lignes, fournisseurs invites + reponses."""
+    from fastapi.responses import Response
+    _require_ao(request)
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        lignes = [dict(r) for r in conn.execute(
+            "SELECT * FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
+            (ao_id,),
+        ).fetchall()]
+        fournis = [dict(r) for r in conn.execute(
+            "SELECT * FROM ao_fournisseurs WHERE ao_id=? ORDER BY nom_fournisseur COLLATE NOCASE",
+            (ao_id,),
+        ).fetchall()]
+        # Reponses regroupees par fournisseur
+        rep_rows = conn.execute(
+            """SELECT r.ao_fournisseur_id, r.ligne_id, r.quotation, r.devise,
+                      r.unite_quotation, r.delai_jours, r.commentaire
+               FROM ao_reponses r
+               JOIN ao_fournisseurs f ON f.id = r.ao_fournisseur_id
+               WHERE f.ao_id=?""",
+            (ao_id,),
+        ).fetchall()
+        reponses_by_fourni: dict[int, dict[int, dict]] = {}
+        for r in rep_rows:
+            reponses_by_fourni.setdefault(r["ao_fournisseur_id"], {})[r["ligne_id"]] = dict(r)
+
+    # Genere le PDF avec reportlab (deja dans les deps)
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    except ImportError:
+        raise HTTPException(status_code=500, detail="reportlab non disponible sur le serveur.")
+
+    from io import BytesIO
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    styles = getSampleStyleSheet()
+    h1 = styles["Heading1"]
+    h2 = styles["Heading2"]
+    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, leading=10)
+    normal = styles["Normal"]
+
+    story = []
+    story.append(Paragraph(f"Appel d'offres — {ao.get('reference') or ''}", h1))
+    story.append(Paragraph(ao.get("titre") or "", h2))
+    story.append(Spacer(1, 0.3*cm))
+
+    info_data = [
+        ["Reference", ao.get("reference") or "—"],
+        ["Statut", (ao.get("statut") or "").capitalize()],
+        ["Date creation", (ao.get("date_creation") or "")[:10]],
+        ["Date limite", ao.get("date_limite") or "—"],
+        ["Responsable", ao.get("responsable_email") or "—"],
+    ]
+    info_tbl = Table(info_data, colWidths=[4*cm, 12*cm])
+    info_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTSIZE", (0,0), (-1,-1), 9),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ]))
+    story.append(info_tbl)
+    story.append(Spacer(1, 0.4*cm))
+
+    if ao.get("description"):
+        story.append(Paragraph("<b>Description</b>", normal))
+        story.append(Paragraph(str(ao.get("description")), small))
+        story.append(Spacer(1, 0.3*cm))
+
+    # Lignes produits
+    story.append(Paragraph("<b>Lignes produits</b>", h2))
+    if lignes:
+        lignes_data = [["Ref produit", "Designation", "Quantite", "Unite", "Notes"]]
+        for ln in lignes:
+            lignes_data.append([
+                ln.get("ref_produit") or "",
+                (ln.get("designation") or "")[:60],
+                str(ln.get("quantite") or ""),
+                ln.get("unite") or "",
+                (ln.get("notes") or "")[:40],
+            ])
+        tbl = Table(lignes_data, colWidths=[3*cm, 6*cm, 2*cm, 2*cm, 4*cm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef2f7")),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ]))
+        story.append(tbl)
+    else:
+        story.append(Paragraph("<i>Aucune ligne produit.</i>", small))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Fournisseurs invites + reponses
+    story.append(Paragraph("<b>Fournisseurs invites</b>", h2))
+    if fournis:
+        four_data = [["Nom", "Email", "Statut", "Envoi", "Reponse"]]
+        for f in fournis:
+            four_data.append([
+                (f.get("nom_fournisseur") or "")[:30],
+                (f.get("email_contact") or "")[:35],
+                (f.get("statut") or ""),
+                (f.get("date_envoi") or "")[:10],
+                (f.get("date_reponse") or "")[:10],
+            ])
+        tbl = Table(four_data, colWidths=[4*cm, 6*cm, 2.5*cm, 2*cm, 2.5*cm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef2f7")),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 0.5*cm))
+
+        # Reponses detaillees par fournisseur
+        for f in fournis:
+            reps = reponses_by_fourni.get(f["id"])
+            if not reps:
+                continue
+            story.append(PageBreak())
+            story.append(Paragraph(f"Reponse — {f.get('nom_fournisseur') or ''}", h2))
+            rep_data = [["Ref produit", "Prix", "Devise", "Unite", "Delai (j)", "Commentaire"]]
+            for ln in lignes:
+                r = reps.get(ln["id"])
+                if not r:
+                    continue
+                rep_data.append([
+                    ln.get("ref_produit") or "",
+                    (f"{r.get('quotation'):.4f}" if r.get('quotation') is not None else "—"),
+                    r.get("devise") or "EUR",
+                    r.get("unite_quotation") or "mille",
+                    str(r.get("delai_jours") or "—"),
+                    (r.get("commentaire") or "")[:40],
+                ])
+            tbl = Table(rep_data, colWidths=[3*cm, 2.5*cm, 1.5*cm, 2*cm, 2*cm, 6*cm])
+            tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef2f7")),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 8),
+                ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
+            ]))
+            story.append(tbl)
+    else:
+        story.append(Paragraph("<i>Aucun fournisseur invite.</i>", small))
+
+    doc.build(story)
+    pdf_bytes = buf.getvalue()
+    buf.close()
+
+    filename = f"AO_{ao.get('reference') or ao_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/{ao_id}/dupliquer")
 async def dupliquer_ao(request: Request, ao_id: int):
     """Duplique un appel d'offre. Le nouveau AO est en statut 'brouillon'.
@@ -1059,6 +1346,18 @@ async def dupliquer_ao(request: Request, ao_id: int):
         body = {}
     with_fournisseurs = bool(body.get("with_fournisseurs", True))
     with_pieces_jointes = bool(body.get("with_pieces_jointes", False))
+    # fournisseur_ids : liste optionnelle d'IDs a recopier. Si absente,
+    # copie tous les fournisseurs (comportement existant). Si liste vide,
+    # ne copie aucun fournisseur meme si with_fournisseurs=True.
+    fournisseur_ids_raw = body.get("fournisseur_ids")
+    fournisseur_ids: list[int] | None = None
+    if isinstance(fournisseur_ids_raw, list):
+        fournisseur_ids = []
+        for v in fournisseur_ids_raw:
+            try:
+                fournisseur_ids.append(int(v))
+            except (TypeError, ValueError):
+                pass
     titre_override = (body.get("titre") or "").strip() or None
     now = _now_paris_iso()
 
@@ -1105,11 +1404,19 @@ async def dupliquer_ao(request: Request, ao_id: int):
             )
 
         # Copie des fournisseurs (sans dates d'envoi / ouverture / réponse, nouveau token, statut='invite')
-        if with_fournisseurs:
-            src_fournis = conn.execute(
-                "SELECT * FROM ao_fournisseurs WHERE ao_id=?",
-                (ao_id,),
-            ).fetchall()
+        # Si fournisseur_ids est fourni : ne copier que ceux-là. Sinon : tous (si with_fournisseurs).
+        if with_fournisseurs and (fournisseur_ids is None or fournisseur_ids):
+            if fournisseur_ids is not None:
+                qmarks = ",".join("?" * len(fournisseur_ids))
+                src_fournis = conn.execute(
+                    f"SELECT * FROM ao_fournisseurs WHERE ao_id=? AND id IN ({qmarks})",
+                    tuple([ao_id] + fournisseur_ids),
+                ).fetchall()
+            else:
+                src_fournis = conn.execute(
+                    "SELECT * FROM ao_fournisseurs WHERE ao_id=?",
+                    (ao_id,),
+                ).fetchall()
             for f in src_fournis:
                 src_langue = _normalize_langue(f["langue"] if "langue" in f.keys() else "fr")
                 conn.execute(
@@ -1280,16 +1587,35 @@ async def add_fournisseur(request: Request, ao_id: int):
     if not nom or not email:
         raise HTTPException(status_code=400, detail="Nom et email du fournisseur obligatoires.")
     langue = _normalize_langue(body.get("langue"))
-
+    fournisseur_id = body.get("fournisseur_id")
+    contact_id = body.get("fournisseur_contact_id")
+    try:
+        fournisseur_id = int(fournisseur_id) if fournisseur_id is not None else None
+    except (TypeError, ValueError):
+        fournisseur_id = None
+    try:
+        contact_id = int(contact_id) if contact_id is not None else None
+    except (TypeError, ValueError):
+        contact_id = None
     token = str(uuid.uuid4())
     with get_db() as conn:
         _get_ao_or_404(conn, ao_id)
-        cur = conn.execute(
-            """INSERT INTO ao_fournisseurs
-               (ao_id, nom_fournisseur, email_contact, token, statut, langue)
-               VALUES (?,?,?,?,'invite',?)""",
-            (ao_id, nom, email, token, langue),
-        )
+        af_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "fournisseur_id" in af_cols and "fournisseur_contact_id" in af_cols:
+            cur = conn.execute(
+                """INSERT INTO ao_fournisseurs
+                   (ao_id, nom_fournisseur, email_contact, token, statut, langue,
+                    fournisseur_id, fournisseur_contact_id)
+                   VALUES (?,?,?,?,'invite',?,?,?)""",
+                (ao_id, nom, email, token, langue, fournisseur_id, contact_id),
+            )
+        else:
+            cur = conn.execute(
+                """INSERT INTO ao_fournisseurs
+                   (ao_id, nom_fournisseur, email_contact, token, statut, langue)
+                   VALUES (?,?,?,?,'invite',?)""",
+                (ao_id, nom, email, token, langue),
+            )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM ao_fournisseurs WHERE id=?", (cur.lastrowid,)
@@ -1313,6 +1639,35 @@ def delete_fournisseur(request: Request, ao_id: int, fourni_id: int):
         )
         conn.commit()
     return {"ok": True}
+
+
+
+
+@router.put("/{ao_id}/fournisseurs/{fourni_id}")
+async def update_fournisseur_ao(request: Request, ao_id: int, fourni_id: int):
+    """Override local (nom, email, langue) d'un fournisseur invite — ne touche pas Parametres."""
+    _require_ao(request)
+    body = await request.json()
+    with get_db() as conn:
+        fourni = _get_fourni_in_ao(conn, ao_id, fourni_id)
+        if fourni.get("statut") == "repondu":
+            raise HTTPException(status_code=400, detail="Modification impossible — le fournisseur a deja repondu.")
+        nom = (body.get("nom_fournisseur") or fourni["nom_fournisseur"] or "").strip()
+        email = (body.get("email_contact") or fourni["email_contact"] or "").strip().lower()
+        if not nom or not email:
+            raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
+        if "langue" in body:
+            langue = _normalize_langue(body.get("langue"))
+        else:
+            langue = fourni.get("langue") or "fr"
+        conn.execute(
+            """UPDATE ao_fournisseurs SET nom_fournisseur=?, email_contact=?, langue=?
+               WHERE id=? AND ao_id=?""",
+            (nom, email, langue, fourni_id, ao_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_fournisseurs WHERE id=?", (fourni_id,)).fetchone()
+    return _row_dict(row)
 
 
 # ─── Envoi ───────────────────────────────────────────────────────

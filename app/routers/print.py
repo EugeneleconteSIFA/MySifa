@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -65,7 +65,10 @@ router = APIRouter(tags=["print"], prefix="/api/print")
 # ─── Helpers ──────────────────────────────────────────────────────────
 
 def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    # v1.5.1 — timestamp UTC ISO avec Z. Sans TZ, le browser interprete la string
+    # comme "heure locale" et affiche l'agent "Hors ligne (120min)" en ete francais
+    # alors qu'il vient tout juste d'envoyer un heartbeat depuis un VPS en UTC.
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _hash_token(token: str) -> str:

@@ -4700,10 +4700,10 @@ function renderLibresList() {
     const usageChip = usage > 0
       ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
       : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
-    const canDelete = (usage === 0);
-    const delBtn = canDelete
-      ? '<button type="button" class="btn-sm btn-ghost danger" data-libre-del="' + codeEsc + '">Archiver</button>'
-      : '<button type="button" class="btn-sm btn-ghost" disabled title="Fusionne avec un autre titre pour supprimer" style="opacity:.4;cursor:not-allowed">Archiver</button>';
+    // v2.2.41 : bouton Archiver retiré — un libre est créé au moment de sa 1ère
+    // utilisation, donc usage_count >= 1 dès la naissance, le bouton était mort.
+    // Nettoyage désormais uniquement via Fusion.
+    const delBtn = '';
     return '<tr>' +
       '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
       '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
@@ -5065,6 +5065,16 @@ function openMaintForm(code) {
       if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
       if (docsList) docsList.style.display = 'none';
     }
+  }
+  // v2.2.34 : le scroller varie selon la page (window en Paramètres, .main en MyMaintenance).
+  // On tente les 2 : celui qui n'est pas le vrai scroller no-op silencieusement.
+  try {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const m = document.querySelector('.main');
+    if (m) { if (m.scrollTo) m.scrollTo({ top: 0, behavior: 'smooth' }); else m.scrollTop = 0; }
+  } catch(e) {
+    try { window.scrollTo(0, 0); } catch(e2) {}
+    try { document.querySelector('.main').scrollTop = 0; } catch(e3) {}
   }
   codeInp.focus();
 }
@@ -5455,8 +5465,6 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
-  { v: 'machine_change', l: 'Changement de machine' },
-  { v: 'login',          l: 'Connexion de l\'opérateur' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -5605,15 +5613,7 @@ function _renderAlertFormFields(params, opts) {
     +     '<div data-trigger-for="event">'
     +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
     +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '<div id="af-trigger-filter-cond-wrap" style="margin-top:10px;' + ((d.trigger.event === 'dossier_start' || d.trigger.event === 'dossier_end') ? '' : 'display:none;') + '">'
-    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Filtre produit</label>'
-    +         '<select id="af-trigger-filter-cond" class="alert-field-input">'
-    +           '<option value="any"'         + (d.trigger.filter_conditionnement === 'bobine_only' || d.trigger.filter_conditionnement === 'plis_only' ? '' : ' selected') + '>Tous les dossiers</option>'
-    +           '<option value="bobine_only"' + (d.trigger.filter_conditionnement === 'bobine_only' ? ' selected' : '') + '>Bobines uniquement</option>'
-    +           '<option value="plis_only"'   + (d.trigger.filter_conditionnement === 'plis_only'   ? ' selected' : '') + '>Plis uniquement</option>'
-    +         '</select>'
-    +         '<div class="alert-field-help">L\'alerte ne se déclenche que si la fiche technique du produit indique ce conditionnement. Si aucune info n\'est renseignée dans la fiche, l\'alerte reste silencieuse.</div>'
-    +       '</div>'
+    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -5830,14 +5830,8 @@ function _afOnDismissToggle() {
   if (wrap) wrap.style.display = en ? '' : 'none';
 }
 
-// v163+ : n'affiche le filtre « produit » (bobine/plis) que pour les
-// événements dossier_start / dossier_end (les autres événements n'ont pas
-// de dossier associé).
-function _afOnTriggerEventChange() {
-  const ev = document.getElementById('af-trigger-event')?.value || '';
-  const wrap = document.getElementById('af-trigger-filter-cond-wrap');
-  if (wrap) wrap.style.display = (ev === 'dossier_start' || ev === 'dossier_end') ? '' : 'none';
-}
+// v2.2.42 : no-op depuis le retrait du filtre produit.
+function _afOnTriggerEventChange() { /* no-op */ }
 
 function _afRowClick(ev, inputId) {
   // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
@@ -5944,17 +5938,8 @@ function _afReadParams() {
     trig.days = days;
   } else if (t === 'event') {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
-    // Filtre produit (bobine/plis) — uniquement pour événements dossier_*
-    if (trig.event === 'dossier_start' || trig.event === 'dossier_end') {
-      const fc = document.getElementById('af-trigger-filter-cond')?.value || 'any';
-      if (fc === 'bobine_only' || fc === 'plis_only') {
-        trig.filter_conditionnement = fc;
-      } else {
-        delete trig.filter_conditionnement;
-      }
-    } else {
-      delete trig.filter_conditionnement;
-    }
+    // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
+    delete trig.filter_conditionnement;
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;

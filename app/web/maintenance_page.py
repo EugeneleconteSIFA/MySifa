@@ -1128,6 +1128,254 @@ body.light .alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,17
 .alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
 body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
 .alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* v2.2.30 : panel Codes maintenance — CSS scopé (re-extraction propre) */
+/* ═══════════════════════════════════════════════════════════ */
+.maint-codes-panel-embed .sidebar-overlay {display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200}
+.maint-codes-panel-embed h1 {font-size:22px;margin:0 0 6px}
+.maint-codes-panel-embed .sub {color:var(--muted);font-size:13px;margin-bottom:22px}
+.maint-codes-panel-embed .card {background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+.maint-codes-panel-embed .card h2 {font-size:15px;margin:0 0 14px}
+.maint-codes-panel-embed .table-wrap {overflow:auto;border-radius:10px;border:1px solid var(--border)}
+.maint-codes-panel-embed table {width:100%;border-collapse:collapse;font-size:12px}
+.maint-codes-panel-embed th, .maint-codes-panel-embed td {padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+.maint-codes-panel-embed th {background:rgba(15,23,42,.35);font-weight:700;color:var(--muted);position:sticky;top:0}
+body.light .maint-codes-panel-embed th {background:#f1f5f9}
+.maint-codes-panel-embed td.chk {text-align:center}
+.maint-codes-panel-embed .dot {display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.maint-codes-panel-embed .dot.no {background:var(--border)}
+.maint-codes-panel-embed .chk-edit {width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
+.maint-codes-panel-embed .cell-ov {font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.02em;margin-left:6px;text-transform:uppercase}
+.maint-codes-panel-embed .acc-matrix {width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.maint-codes-panel-embed .acc-matrix th {padding:8px 10px}
+.maint-codes-panel-embed .acc-matrix .acc-th-lbl {margin-right:6px}
+.maint-codes-panel-embed .acc-matrix .acc-expand {background:var(--accent-bg);color:var(--accent);border:none;border-radius:6px;width:20px;height:20px;font-weight:700;font-size:14px;cursor:pointer;line-height:1}
+.maint-codes-panel-embed .acc-matrix .acc-expand:hover {filter:brightness(1.15)}
+.maint-codes-panel-embed .acc-matrix td.acc-cell {padding:6px 8px;vertical-align:middle}
+.maint-codes-panel-embed .acc-matrix td.acc-cell.readonly {opacity:.75}
+.maint-codes-panel-embed .acc-matrix .acc-lvl, .maint-codes-panel-embed .acc-matrix .rd-lvl {width:auto;min-width:130px;padding:4px 8px;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px}
+.maint-codes-panel-embed .acc-matrix .acc-lvl.is-ov {border-color:var(--accent);box-shadow:0 0 0 2px rgba(34,211,238,.15)}
+.maint-codes-panel-embed .acc-matrix .lvl-badge {display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);color:var(--text2)}
+.maint-codes-panel-embed .acc-matrix .lvl-badge.lvl-admin {background:rgba(139,92,246,.15);color:#a78bfa;border-color:rgba(139,92,246,.4)}
+.maint-codes-panel-embed .acc-matrix .lvl-badge.lvl-write {background:var(--accent-bg);color:var(--accent);border-color:rgba(34,211,238,.35)}
+.maint-codes-panel-embed .acc-matrix .lvl-badge.lvl-read {background:rgba(34,197,94,.12);color:#4ade80;border-color:rgba(34,197,94,.3)}
+.maint-codes-panel-embed .acc-matrix .lvl-badge.lvl-none {background:transparent;color:var(--muted)}
+.maint-codes-panel-embed .acc-matrix .acc-sub-tr td {background:rgba(15,23,42,.25);border-top:1px dashed var(--border);padding:8px 10px}
+body.light .maint-codes-panel-embed .acc-matrix .acc-sub-tr td {background:#f8fafc}
+.maint-codes-panel-embed .acc-matrix .acc-sub-title {font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.maint-codes-panel-embed .acc-matrix td.acc-sub {padding:6px 10px}
+.maint-codes-panel-embed .acc-matrix .acc-sub-row {display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dotted rgba(148,163,184,.15)}
+.maint-codes-panel-embed .acc-matrix .acc-sub-row:last-child {border-bottom:none}
+.maint-codes-panel-embed .acc-matrix .acc-sub-label {font-size:11px;color:var(--text2);flex:1;min-width:120px}
+.maint-codes-panel-embed .acc-matrix td.acc-sub-empty {background:transparent}
+.maint-codes-panel-embed .acc-hint {padding:10px 12px;margin:0 0 14px;background:rgba(34,211,238,.08);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;color:var(--text2);font-size:12px;line-height:1.55}
+.maint-codes-panel-embed .acc-matrix-defaults th.acc-app-col {min-width:220px;text-align:left}
+.maint-codes-panel-embed .acc-matrix-defaults th.acc-role-th {min-width:130px;text-align:center;font-size:11px}
+.maint-codes-panel-embed .acc-matrix-defaults th.acc-role-th span {display:inline-block}
+.maint-codes-panel-embed .acc-matrix-defaults td.acc-app-cell {min-width:220px;background:rgba(15,23,42,.15);vertical-align:middle}
+body.light .maint-codes-panel-embed .acc-matrix-defaults td.acc-app-cell {background:#f8fafc}
+.maint-codes-panel-embed .acc-matrix-defaults td.acc-app-cell strong {font-weight:600;color:var(--text)}
+.maint-codes-panel-embed .acc-matrix-defaults td.acc-sub-label-cell {padding-left:24px;font-size:11px;color:var(--text2);background:rgba(15,23,42,.08)}
+body.light .maint-codes-panel-embed .acc-matrix-defaults td.acc-sub-label-cell {background:#fafbfc}
+.maint-codes-panel-embed .acc-matrix-defaults tr.acc-sub-tr td.acc-sub-cell {background:rgba(15,23,42,.08)}
+body.light .maint-codes-panel-embed .acc-matrix-defaults tr.acc-sub-tr td.acc-sub-cell {background:#fafbfc}
+.maint-codes-panel-embed .acc-matrix-defaults .acc-cell {text-align:center;padding:6px 8px}
+.maint-codes-panel-embed .acc-lock {font-size:11px;opacity:.6}
+.maint-codes-panel-embed #matrix-table, .maint-codes-panel-embed #role-legend .table-wrap {max-width:100%;overflow-x:auto}
+.maint-codes-panel-embed #matrix-table table.acc-matrix, .maint-codes-panel-embed #role-legend table.acc-matrix {min-width:max-content}
+.maint-codes-panel-embed .form-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
+.maint-codes-panel-embed input, .maint-codes-panel-embed select {width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
+.maint-codes-panel-embed .btn {background:var(--accent);color:var(--accent-fg);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit}
+.maint-codes-panel-embed .btn:hover {filter:brightness(1.06)}
+.maint-codes-panel-embed .btn-danger {background:var(--danger);color:var(--danger-fg)}
+.maint-codes-panel-embed .btn-danger:hover {filter:brightness(1.08)}
+.maint-codes-panel-embed .btn-ok {background:var(--ok);color:#fff}
+.maint-codes-panel-embed .btn-ok:hover {filter:brightness(1.05)}
+.maint-codes-panel-embed .btn-sec {background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
+.maint-codes-panel-embed .btn-sec:hover {box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+body.light .maint-codes-panel-embed .btn-sec:hover {box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
+.maint-codes-panel-embed .row-user {display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.maint-codes-panel-embed .row-user:last-child {border-bottom:none}
+.maint-codes-panel-embed .prof-ring {position:relative;flex-shrink:0;width:34px;height:34px;cursor:default}
+.maint-codes-panel-embed .prof-ring svg {display:block;width:34px;height:34px}
+.maint-codes-panel-embed .prof-ring-track {stroke:var(--border)}
+.maint-codes-panel-embed .prof-ring-bar {stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .25s ease}
+.maint-codes-panel-embed .prof-ring[data-tier="low"] .prof-ring-bar {stroke:var(--danger)}
+.maint-codes-panel-embed .prof-ring[data-tier="mid"] .prof-ring-bar {stroke:var(--warn)}
+.maint-codes-panel-embed .prof-ring[data-tier="high"] .prof-ring-bar {stroke:var(--ok)}
+.maint-codes-panel-embed .prof-ring-label {
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;color:var(--text);letter-spacing:-.02em;
+  opacity:0;transition:opacity .15s;pointer-events:none;
+}
+.maint-codes-panel-embed .prof-ring:hover .prof-ring-label {opacity:1}
+.maint-codes-panel-embed .op-toolbar {display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.maint-codes-panel-embed .op-filter {flex:1;min-width:200px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.maint-codes-panel-embed .op-filter:focus {border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .maint-codes-panel-embed .op-filter:focus {box-shadow:0 0 0 3px rgba(8,145,178,.1)}
+.maint-codes-panel-embed .maint-doc-add-btn {display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
+.maint-codes-panel-embed .maint-doc-add-btn:hover {filter:brightness(1.06)}
+.maint-codes-panel-embed .maint-doc-add-btn:active {transform:translateY(1px)}
+.maint-codes-panel-embed .maint-doc-add-btn:disabled {opacity:.55;cursor:not-allowed;filter:none}
+.maint-codes-panel-embed .maint-doc-row {display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.maint-codes-panel-embed .maint-doc-row-info {flex:1;min-width:0}
+.maint-codes-panel-embed .maint-doc-row-name {font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.maint-codes-panel-embed .maint-doc-row-meta {font-size:10px;color:var(--muted);margin-top:2px;display:block}
+.maint-codes-panel-embed .maint-doc-row-link {padding:4px 10px;font-size:11px;font-weight:600;color:var(--accent);border:1px solid var(--border);border-radius:6px;text-decoration:none;transition:border-color .12s}
+.maint-codes-panel-embed .maint-doc-row-link:hover {border-color:var(--accent)}
+.maint-codes-panel-embed .maint-doc-row-del {padding:4px 8px;font-size:11px;color:var(--danger);border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer;font-family:inherit}
+.maint-codes-panel-embed .maint-doc-row-del:hover {border-color:var(--danger);background:rgba(248,113,113,.08)}
+.maint-codes-panel-embed .op-form-panel {margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+.maint-codes-panel-embed .op-form-panel h3 {margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-codes-panel-embed .op-table-wrap {margin-top:4px}
+.maint-codes-panel-embed .op-table {font-size:12px}
+.maint-codes-panel-embed .op-table th {font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
+.maint-codes-panel-embed .op-table td {padding:10px 12px;vertical-align:middle}
+.maint-codes-panel-embed .op-table tbody tr:hover td {background:rgba(34,211,238,.04)}
+body.light .maint-codes-panel-embed .op-table tbody tr:hover td {background:rgba(8,145,178,.05)}
+.maint-codes-panel-embed .op-table tr.op-cat-row td {
+  padding:14px 12px 6px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--accent);background:rgba(34,211,238,.06);border-bottom:1px solid var(--border)
+}
+body.light .maint-codes-panel-embed .op-table tr.op-cat-row td {background:rgba(8,145,178,.06)}
+.maint-codes-panel-embed .op-table tr.op-cat-row:first-child td {padding-top:8px}
+.maint-codes-panel-embed .op-code-cell {font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--accent);width:56px}
+.maint-codes-panel-embed .op-lbl-cell {font-weight:600;color:var(--text);max-width:280px;white-space:normal}
+.maint-codes-panel-embed .op-pill {
+  display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px;
+  border:1px solid var(--border);text-transform:uppercase;letter-spacing:.3px;line-height:1.3
+}
+.maint-codes-panel-embed .op-pill.info {color:var(--text2);border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.1)}
+.maint-codes-panel-embed .op-pill.attention {color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.12)}
+.maint-codes-panel-embed .op-pill.critique {color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.12)}
+.maint-codes-panel-embed .op-pill.calage {color:var(--ok);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.1)}
+.maint-codes-panel-embed .op-pill.arret {color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.1)}
+.maint-codes-panel-embed .op-pill.production {color:#60a5fa;border-color:rgba(96,165,250,.4);background:rgba(96,165,250,.1)}
+.maint-codes-panel-embed .op-pill.changement {color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.1)}
+.maint-codes-panel-embed .op-pill.nettoyage {color:#c084fc;border-color:rgba(192,132,252,.4);background:rgba(192,132,252,.1)}
+.maint-codes-panel-embed .op-pill.autre {color:var(--muted);border-color:var(--border);background:rgba(148,163,184,.08)}
+.maint-codes-panel-embed .op-pill.controles {color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
+.maint-codes-panel-embed .op-pill.interventions {color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.maint-codes-panel-embed .op-pill.entretien {color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.maint-codes-panel-embed .op-pill.remplacements {color:#fb923c;border-color:rgba(251,146,60,.4);background:rgba(251,146,60,.12)}
+.maint-codes-panel-embed .op-req {font-size:11px;font-weight:600;color:var(--muted)}
+.maint-codes-panel-embed .fsc-kpi-grid {display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.maint-codes-panel-embed .fsc-kpi-card {background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.maint-codes-panel-embed .fsc-kpi-label {font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.maint-codes-panel-embed .fsc-kpi-val {font-size:28px;font-weight:800;color:var(--text);line-height:1}
+.maint-codes-panel-embed .fsc-kpi-badge {display:inline-block;margin-top:8px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:999px}
+.maint-codes-panel-embed .fsc-kpi-badge.accent {color:var(--accent);background:rgba(34,211,238,.12)}
+.maint-codes-panel-embed .fsc-kpi-badge.ok {color:var(--ok);background:rgba(52,211,153,.12)}
+.maint-codes-panel-embed .fsc-kpi-badge.danger {color:var(--danger);background:rgba(248,113,113,.12)}
+.maint-codes-panel-embed .fsc-kpi-badge.muted {color:var(--muted);background:rgba(148,163,184,.12)}
+.maint-codes-panel-embed .fsc-claim-badge {display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:3px 10px;border-radius:6px;line-height:1.3}
+.maint-codes-panel-embed .fsc-section-title {font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px}
+.maint-codes-panel-embed .fsc-date-inp {background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit}
+.maint-codes-panel-embed .fsc-date-inp:focus {border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.maint-codes-panel-embed .fsc-toolbar {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.maint-codes-panel-embed .fsc-toolbar-dates {display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.maint-codes-panel-embed .fsc-toolbar-dates .fsc-range-sep {color:var(--muted);font-size:12px}
+.maint-codes-panel-embed .fsc-toolbar .btn-sec {font-size:12px;padding:7px 14px}
+.maint-codes-panel-embed tr.fsc-row-alert td {background:rgba(248,113,113,.08)}
+body.light .maint-codes-panel-embed tr.fsc-row-alert td {background:rgba(220,38,38,.06)}
+.maint-codes-panel-embed .op-req.yes {color:var(--ok)}
+.maint-codes-panel-embed .op-req.no {color:var(--muted)}
+.maint-codes-panel-embed .op-table th:last-child, .maint-codes-panel-embed .op-table td:last-child {text-align:right}
+.maint-codes-panel-embed .op-act {display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
+.maint-codes-panel-embed .btn-sm {padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
+.maint-codes-panel-embed .btn-ghost {background:transparent;border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,filter .15s}
+.maint-codes-panel-embed .btn-ghost:hover {border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
+body.light .maint-codes-panel-embed .btn-ghost:hover {box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
+.maint-codes-panel-embed .btn-ghost.danger:hover {border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
+.maint-codes-panel-embed .pill {font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;border:1px solid var(--border);display:inline-flex;align-items:center;gap:6px;line-height:1.4}
+.maint-codes-panel-embed .empl-pill {display:inline-flex;align-items:center;gap:5px;padding:4px 8px 4px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);transition:border-color .15s,background .15s}
+.maint-codes-panel-embed .empl-pill:hover {border-color:var(--accent);background:rgba(34,211,238,.06)}
+body.light .maint-codes-panel-embed .empl-pill:hover {background:rgba(8,145,178,.06)}
+.maint-codes-panel-embed .empl-pill-code {font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.03em}
+.maint-codes-panel-embed .empl-pill-del {display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;padding:0;transition:color .15s,background .15s;flex-shrink:0}
+.maint-codes-panel-embed .empl-pill-del:hover {color:var(--danger);background:rgba(248,113,113,.14)}
+.maint-codes-panel-embed .empl-allee {flex:0 0 auto;width:fit-content;min-width:120px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;overflow:hidden}
+.maint-codes-panel-embed .empl-allee-hd {display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.maint-codes-panel-embed .empl-allee-letter {display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.12);color:var(--accent);font-size:14px;font-weight:800;font-family:ui-monospace,monospace;flex-shrink:0}
+body.light .maint-codes-panel-embed .empl-allee-letter {background:rgba(8,145,178,.12)}
+.maint-codes-panel-embed .empl-allee-label {font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-codes-panel-embed .empl-allee-body {display:flex;flex-direction:column;gap:5px}
+.maint-codes-panel-embed .empl-rangee {display:flex;align-items:flex-start}
+.maint-codes-panel-embed .empl-rangee-pills {display:flex;flex-wrap:nowrap;gap:4px}
+.maint-codes-panel-embed .pill--direction {border-color:rgba(244,114,182,.35);color:#f472b6;background:rgba(244,114,182,.12)}
+.maint-codes-panel-embed .pill--administration {border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.maint-codes-panel-embed .pill--administration_ventes {border-color:rgba(167,139,250,.38);color:#a78bfa;background:rgba(167,139,250,.12)}
+.maint-codes-panel-embed .pill--administration_technique {border-color:rgba(99,102,241,.38);color:#818cf8;background:rgba(99,102,241,.12)}
+.maint-codes-panel-embed .pill--fabrication {border-color:rgba(52,211,153,.35);color:var(--ok);background:rgba(52,211,153,.12)}
+.maint-codes-panel-embed .pill--logistique {border-color:rgba(96,165,250,.35);color:#60a5fa;background:rgba(96,165,250,.12)}
+.maint-codes-panel-embed .pill--comptabilite {border-color:rgba(251,191,36,.38);color:#fbbf24;background:rgba(251,191,36,.12)}
+.maint-codes-panel-embed .pill--expedition {border-color:rgba(249,115,22,.38);color:#fb923c;background:rgba(249,115,22,.12)}
+.maint-codes-panel-embed .pill--commercial {border-color:rgba(202,138,4,.38);color:#eab308;background:rgba(202,138,4,.12)}
+.maint-codes-panel-embed .pill--encadrement_atelier {border-color:rgba(20,184,166,.38);color:#2dd4bf;background:rgba(20,184,166,.12)}
+.maint-codes-panel-embed .pill--superadmin {border-color:rgba(34,211,238,.45);color:var(--accent);background:rgba(34,211,238,.14)}
+.maint-codes-panel-embed .pill--inactive {border-color:rgba(148,163,184,.35);color:var(--muted);background:rgba(148,163,184,.10)}
+.maint-codes-panel-embed .users-head {display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.maint-codes-panel-embed .users-head h2 {margin:0}
+.maint-codes-panel-embed .users-search {display:flex;align-items:center;gap:8px;min-width:min(520px,100%)}
+.maint-codes-panel-embed .users-search input {flex:1;min-width:220px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.maint-codes-panel-embed .users-search input:focus {border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
+body.light .maint-codes-panel-embed .users-search input:focus {box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.maint-codes-panel-embed .users-search .hint {font-size:11px;color:var(--muted);white-space:nowrap}
+.maint-codes-panel-embed .users-search select {min-width:140px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.maint-codes-panel-embed .users-search select:focus {border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.14)}
+body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+.maint-codes-panel-embed .tabs {display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
+.maint-codes-panel-embed .tabs .btn {display:inline-flex;align-items:center;gap:8px;vertical-align:middle}
+.maint-codes-panel-embed .tabs .btn svg {flex-shrink:0}
+.maint-codes-panel-embed .nav-group-label {font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:6px 10px 4px;opacity:.7;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s}
+.maint-codes-panel-embed .nav-group-label:hover {opacity:1;background:rgba(148,163,184,.08)}
+.maint-codes-panel-embed .nav-group-chevron {display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.6}
+.maint-codes-panel-embed .nav-group-label.ngl-collapsed .nav-group-chevron {transform:rotate(-90deg)}
+.maint-codes-panel-embed .nav-subgroup-label {font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);padding:4px 10px 2px 14px;opacity:.55;display:flex;align-items:center;justify-content:space-between;cursor:pointer;border-radius:6px;user-select:none;transition:opacity .15s,background .15s;margin-top:2px}
+.maint-codes-panel-embed .nav-subgroup-label:hover {opacity:.85;background:rgba(148,163,184,.06)}
+.maint-codes-panel-embed .nav-subgroup-chevron {display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55}
+.maint-codes-panel-embed .nav-subgroup-label.nsl-collapsed .nav-subgroup-chevron {transform:rotate(-90deg)}
+.maint-codes-panel-embed .hidden {display:none}
+.maint-codes-panel-embed .legend {display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.maint-codes-panel-embed .legend .item {padding:12px;border:1px solid var(--border);border-radius:10px;font-size:12px}
+.maint-codes-panel-embed .legend .item strong {display:block;margin-bottom:6px;font-size:13px}
+.maint-codes-panel-embed .toast {position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:900}
+.maint-codes-panel-embed .toast.err {border-left:3px solid var(--danger)}
+.maint-codes-panel-embed .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+.maint-codes-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.maint-codes-panel-embed .btn:hover{filter:brightness(1.08)}
+.maint-codes-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
+.maint-codes-panel-embed .btn-sec:hover{border-color:rgba(34,211,238,.45);color:var(--accent)}
+.maint-codes-panel-embed .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s}
+.maint-codes-panel-embed .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.maint-codes-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.maint-codes-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+.maint-codes-panel-embed .hidden{display:none}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* v2.2.38 : CSS unscoped pour modal Documents (append au body) */
+/* ═══════════════════════════════════════════════════════════ */
+.alert-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.alert-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.alert-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.alert-modal-head h3{margin:0;font-size:15px;color:var(--text);font-weight:700}
+.alert-modal-body{padding:18px 20px}
+.alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
+.alert-modal-overlay .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.alert-modal-overlay .btn:hover{filter:brightness(1.08)}
+.alert-modal-overlay .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
+.alert-modal-overlay .btn-sec:hover{border-color:rgba(34,211,238,.45);color:var(--accent)}
+.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s}
+.alert-modal-overlay .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+.alert-modal-overlay a.btn-sm{text-decoration:none}
+.alert-modal-overlay .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg,#fff);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
+.alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
+.alert-modal-overlay .maint-doc-add-btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
 </style>
 </head>
 <body data-maint-role="__MAINT_ROLE__">
@@ -1339,7 +1587,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
         <div id="maint-subtab-alertes" class="maint-subtab">
           <div class="card">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-              <h2 style="margin:0">Alertes maintenance</h2>
+              <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des alertes</h2>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
                 <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
@@ -1354,7 +1602,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
 
         <!-- v2.2.25 : Historique dans card blanche pour équilibre visuel avec Gestion -->
         <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
-          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px">Historique des saisies</div>
+          <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des saisies</h2>
           <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Toutes les validations d'alertes effectuées par les opérateurs (lecture seule).</p>
         <div id="ctrl-subview-historique">
 
@@ -1363,7 +1611,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
           <div class="filters">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="filter-input" onchange="resetPointFilters(); renderCtrl()">
+              <select id="filt-controles-type" class="filter-input" onchange="ctrlResetPage(); resetPointFilters(); renderCtrl()">
                 <option value="">Tous les types</option>
               </select>
             </div>
@@ -1385,7 +1633,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
             </div>
             <div class="filter-group">
               <label for="filt-controles-conformite">Conformité</label>
-              <select id="filt-controles-conformite" class="filter-input" onchange="renderCtrl()">
+              <select id="filt-controles-conformite" class="filter-input" onchange="ctrlResetPage(); renderCtrl()">
                 <option value="">Toutes les réponses</option>
                 <option value="nc">Non-conformes uniquement</option>
                 <option value="ok">Conformes uniquement</option>
@@ -1399,7 +1647,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
               <label for="filt-controles-date-to">Au</label>
               <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
             </div>
-            <button type="button" class="filters-apply-btn" onclick="renderCtrl()">Filtrer</button>
+            <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
             <span class="filters-date-presets-label">Période :</span>
@@ -1471,7 +1719,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
           </button>
           <button type="button" class="ops-subtab" data-ops-subtab="liste" onclick="setOpsSubtab('liste')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            Liste des opérations
+            Gestion des opérations
           </button>
         </div>
 
@@ -1566,59 +1814,82 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
 
         </div><!-- /ops-subview-historique -->
 
-        <!-- Sous-onglet : Liste -->
+        <!-- v2.2.28 : Gestion des opérations (miroir Paramètres → Codes maintenance) -->
         <div class="ops-subview" id="ops-subview-liste" style="display:none">
-
-        <!-- Bandeau d'information : table en lecture seule -->
-        <div class="ops-readonly-notice">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          <div>
-            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
-            Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres → Maintenance</strong>.
-          </div>
-        </div>
-
-        <!-- Liste d'opérations de maintenance (catalogue) -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
+        <div class="maint-codes-panel-embed">
+        <div id="maint-subtab-codes" class="maint-subtab">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des opérations</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn btn-sec" id="libres-merge-btn" disabled onclick="libresMergeSelected()" title="Fusionne les 2 titres sélectionnés en un seul (les saisies passées sont réaffectées)." style="display:none">Fusionner sélection</button>
+              <span id="libres-selection-count" style="font-size:11px;color:var(--muted);display:none"></span>
+              <button type="button" class="btn" id="maint-add-btn" onclick="openMaintForm()">+ Ajouter un code</button>
             </div>
           </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody id="cat-tbody" class="js-cat-tbody"></tbody>
-            </table>
+          <!-- v2.2.36 : tabs Récurrentes / Inhabituelles -->
+          <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:12px">
+            <button type="button" id="maint-tab-recurrentes" onclick="switchMaintView('recurrentes')" style="padding:6px 14px;font-size:12px;background:var(--accent);color:var(--accent-fg,#fff);border:none;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit">Récurrentes</button>
+            <button type="button" id="maint-tab-inhabituelles" onclick="switchMaintView('inhabituelles')" style="padding:6px 14px;font-size:12px;background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit">Inhabituelles</button>
+          </div>
+          <div id="maint-view-recurrentes">
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en trois catégories : Contrôles, Nettoyage et Interventions.</p>
+          <div id="maint-form-wrap" class="hidden op-form-panel">
+            <h3 id="maint-form-title">Nouveau code</h3>
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+              <input type="text" id="maint-code" placeholder="Code (ex. 10)" inputmode="numeric" maxlength="4">
+              <input type="text" id="maint-label" placeholder="Libellé">
+              <select id="maint-niveau">
+                <option value="1">N1</option>
+                <option value="2">N2</option>
+                <option value="3">N3</option>
+              </select>
+              <select id="maint-categorie">
+                <option value="controles">Contrôles</option>
+                <option value="entretien">Nettoyage</option>
+                <option value="remplacements">Interventions</option>
+              </select>
+              <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
+              <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
+              <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
+            </div>
+            <div id="maint-form-docs" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px">
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Documents attaches</div>
+                  <div id="maint-form-docs-hint" style="font-size:11px;color:var(--muted);margin-top:2px">Fichiers explicatifs consultes par les operateurs.</div>
+                </div>
+                <span style="font-size:11px;color:var(--muted);white-space:nowrap">20 Mo max</span>
+              </div>
+              <input type="file" id="maint-form-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" onchange="_maintOnDocFileChange()">
+              <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+                <p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>
+              </div>
+              <button type="button" class="maint-doc-add-btn" id="maint-form-doc-add-btn" onclick="_maintTriggerDocPicker()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Ajouter un fichier</span>
+              </button>
+            </div>
+          </div>
+          <div class="op-toolbar">
+            <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie…)" oninput="renderMaintList()">
+          </div>
+          <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div><!-- /maint-view-recurrentes -->
+          <!-- Vue Inhabituelles (libres) — v2.2.35 -->
+          <div id="maint-view-inhabituelles" style="display:none">
+            <p class="sub" style="margin-top:-4px;margin-bottom:14px">Titres saisis ponctuellement par les opérateurs, hors catalogue. Coche 2 lignes pour les fusionner ; renomme depuis la ligne pour uniformiser la terminologie ; archive uniquement les titres sans saisie associée.</p>
+            <div class="op-toolbar">
+              <input type="search" id="libres-filter" class="op-filter" placeholder="Filtrer (titre, code…)" oninput="renderLibresList()">
+            </div>
+            <div id="libres-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
-
+        </div>
+        </div><!-- /maint-codes-panel-embed -->
         </div><!-- /ops-subview-liste -->
       </div>
     </div>
@@ -2111,6 +2382,10 @@ function setOpsSubtab(name){
   document.querySelectorAll('.ops-subview').forEach(div => { div.style.display = 'none'; });
   const target = document.getElementById('ops-subview-' + name);
   if(target) target.style.display = '';
+  // v2.2.28 : recharge les codes maintenance à l'ouverture de l'onglet Gestion
+  if(name === 'liste' && typeof loadMaintCodes === 'function') loadMaintCodes();
+  // v2.2.36 : force la vue Récurrentes à chaque arrivée sur l'onglet Gestion
+  if(name === 'liste' && typeof switchMaintView === 'function') switchMaintView('recurrentes');
 }
 // Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
 const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
@@ -5962,7 +6237,14 @@ function renderOpsTypes(){
 // =========================================================================
 const CTRL_STORAGE_KEY = 'mysifa_maint_controles_v1';
 const CTRL_EXTRA_KEY = 'mysifa_ctrl_show_extra_v1';
-const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {} };
+const CTRL_STATE = { sortBy: 'date_saisie', sortDir: 'desc', list: [], acks: [], alerts_meta: {}, pointFilters: {}, page: 0, pageSize: 50 };
+// v2.2.27 : navigation pagination
+function ctrlPageGo(delta){
+  CTRL_STATE.page = (CTRL_STATE.page || 0) + delta;
+  if(CTRL_STATE.page < 0) CTRL_STATE.page = 0;
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
+function ctrlResetPage(){ CTRL_STATE.page = 0; }
 
 // Toggle "Colonnes produit" : par defaut off, persistance localStorage.
 function getShowExtraCols(){
@@ -6553,6 +6835,15 @@ function renderCtrl(){
 
   const totalCols = 3 + (singleType ? 0 : 1) + extraCols.length + (showExtra ? 4 : 0) + 2;  // date+machine+operateur (+type?) + extra + (refprod+adhesif+glassine si toggle on) + commentaires + actions
 
+  // v2.2.27 : pagination 50/page (pattern MyProd)
+  const _totalFiltered = filtered.length;
+  const _pageSize = CTRL_STATE.pageSize || 50;
+  const _maxPage = Math.max(0, Math.ceil(_totalFiltered / _pageSize) - 1);
+  if(CTRL_STATE.page > _maxPage) CTRL_STATE.page = _maxPage;
+  if(CTRL_STATE.page < 0) CTRL_STATE.page = 0;
+  const _pageStart = CTRL_STATE.page * _pageSize;
+  const _pageEnd = Math.min(_pageStart + _pageSize, _totalFiltered);
+  const _pagedRows = filtered.slice(_pageStart, _pageEnd);
   if(!filtered.length){
     const isFiltered = f.type || f.operateur || f.machine || f.dateFrom || f.dateTo;
     const msg = isFiltered
@@ -6560,7 +6851,7 @@ function renderCtrl(){
       : 'Aucun contrôle enregistré pour cette période.';
     tbody.innerHTML = '<tr><td colspan="' + totalCols + '" class="ops-empty">' + escHtml(msg) + '</td></tr>';
   } else {
-    const rows = filtered.map(c => {
+    const rows = _pagedRows.map(c => {
       let cells = '';
       cells += '<td class="col-date">' + escHtml(fmtDate(c.date_saisie)) + '</td>';
       cells += '<td>' + escHtml(c.machine) + '</td>';
@@ -6630,13 +6921,22 @@ function renderCtrl(){
     tbody.innerHTML = rows.join('');
   }
   if(count){
-    const n = CTRL_STATE.list.length + (CTRL_STATE.acks || []).length;
-    const visible = filtered.length;
-    if(visible !== n){
-      count.textContent = visible + ' / ' + n + ' contrôle' + (n > 1 ? 's' : '');
-    } else {
-      count.textContent = n + ' contrôle' + (n > 1 ? 's' : '');
-    }
+    // v2.2.27 : compteur + pager (‹ X-Y/N ›)
+    const n = (CTRL_STATE.acks || []).length;
+    const visible = _totalFiltered;
+    const from = visible === 0 ? 0 : _pageStart + 1;
+    const to = _pageEnd;
+    const label = visible !== n
+      ? (from + '-' + to + ' / ' + visible + ' filtrés (' + n + ' total)')
+      : (from + '-' + to + ' / ' + n + ' contrôle' + (n > 1 ? 's' : ''));
+    const prevD = CTRL_STATE.page <= 0;
+    const nextD = CTRL_STATE.page >= _maxPage;
+    const btnStyle = 'border:1px solid var(--border);background:var(--card);color:var(--text2);padding:3px 9px;border-radius:6px;font-size:13px;line-height:1;font-family:inherit;transition:border-color .12s,color .12s';
+    count.innerHTML = '<div style="display:inline-flex;align-items:center;gap:8px">' +
+      '<button type="button" ' + (prevD ? 'disabled' : '') + ' onclick="ctrlPageGo(-1)" title="Page précédente" style="' + btnStyle + ';cursor:' + (prevD ? 'not-allowed' : 'pointer') + (prevD ? ';opacity:.35' : '') + '">‹</button>' +
+      '<span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600">' + escHtml(label) + '</span>' +
+      '<button type="button" ' + (nextD ? 'disabled' : '') + ' onclick="ctrlPageGo(1)" title="Page suivante" style="' + btnStyle + ';cursor:' + (nextD ? 'not-allowed' : 'pointer') + (nextD ? ';opacity:.35' : '') + '">›</button>' +
+      '</div>';
   }
 }
 
@@ -7121,8 +7421,6 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
-  { v: 'machine_change', l: 'Changement de machine' },
-  { v: 'login',          l: 'Connexion de l\'opérateur' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -7271,15 +7569,7 @@ function _renderAlertFormFields(params, opts) {
     +     '<div data-trigger-for="event">'
     +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
     +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '<div id="af-trigger-filter-cond-wrap" style="margin-top:10px;' + ((d.trigger.event === 'dossier_start' || d.trigger.event === 'dossier_end') ? '' : 'display:none;') + '">'
-    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Filtre produit</label>'
-    +         '<select id="af-trigger-filter-cond" class="alert-field-input">'
-    +           '<option value="any"'         + (d.trigger.filter_conditionnement === 'bobine_only' || d.trigger.filter_conditionnement === 'plis_only' ? '' : ' selected') + '>Tous les dossiers</option>'
-    +           '<option value="bobine_only"' + (d.trigger.filter_conditionnement === 'bobine_only' ? ' selected' : '') + '>Bobines uniquement</option>'
-    +           '<option value="plis_only"'   + (d.trigger.filter_conditionnement === 'plis_only'   ? ' selected' : '') + '>Plis uniquement</option>'
-    +         '</select>'
-    +         '<div class="alert-field-help">L\'alerte ne se déclenche que si la fiche technique du produit indique ce conditionnement. Si aucune info n\'est renseignée dans la fiche, l\'alerte reste silencieuse.</div>'
-    +       '</div>'
+    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -7496,14 +7786,8 @@ function _afOnDismissToggle() {
   if (wrap) wrap.style.display = en ? '' : 'none';
 }
 
-// v163+ : n'affiche le filtre « produit » (bobine/plis) que pour les
-// événements dossier_start / dossier_end (les autres événements n'ont pas
-// de dossier associé).
-function _afOnTriggerEventChange() {
-  const ev = document.getElementById('af-trigger-event')?.value || '';
-  const wrap = document.getElementById('af-trigger-filter-cond-wrap');
-  if (wrap) wrap.style.display = (ev === 'dossier_start' || ev === 'dossier_end') ? '' : 'none';
-}
+// v2.2.42 : no-op depuis le retrait du filtre produit.
+function _afOnTriggerEventChange() { /* no-op */ }
 
 function _afRowClick(ev, inputId) {
   // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
@@ -7610,17 +7894,8 @@ function _afReadParams() {
     trig.days = days;
   } else if (t === 'event') {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
-    // Filtre produit (bobine/plis) — uniquement pour événements dossier_*
-    if (trig.event === 'dossier_start' || trig.event === 'dossier_end') {
-      const fc = document.getElementById('af-trigger-filter-cond')?.value || 'any';
-      if (fc === 'bobine_only' || fc === 'plis_only') {
-        trig.filter_conditionnement = fc;
-      } else {
-        delete trig.filter_conditionnement;
-      }
-    } else {
-      delete trig.filter_conditionnement;
-    }
+    // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
+    delete trig.filter_conditionnement;
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
@@ -10393,6 +10668,745 @@ window.opSetPlanTab = opSetPlanTabWithCal;
     refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   }
 })();
+
+// ═══════════════════════════════════════════════════════════════════
+// v2.2.28 : Panel Codes maintenance — duplication de settings_page.py
+// Réutilise les adapters esc/toast/api de v2.2.19 (déjà en place).
+// ═══════════════════════════════════════════════════════════════════
+// v2.2.29 fix : déclarations globales oubliées (lignes 4587-4588 de settings_page.py)
+let _maintItems = [];
+let _maintEditCode = null;
+
+async function loadMaintCodes() {
+  try {
+    const r = await api('/api/maintenance/codes');
+    _maintItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
+    _maintItems = [];
+  }
+  // Migration one-shot : si la liste serveur est vide ET qu'on a des codes en
+  // localStorage (heritage de l'ancienne implementation), on propose l'import.
+  if (_maintItems.length === 0) {
+    try {
+      const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
+      const local = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(local) && local.length > 0) {
+        if (confirm(local.length + ' code(s) maintenance trouve(s) dans le stockage local du navigateur.\n\nLes importer dans la base de donnees ? (recommande, ils seront ensuite disponibles sur tous les navigateurs et synchronises v2 -> v1)')) {
+          try {
+            const res = await api('/api/maintenance/codes/bulk-import', {
+              method: 'POST',
+              body: JSON.stringify({ items: local }),
+            });
+            toast((res?.imported || 0) + ' code(s) importe(s)');
+            try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
+            const r2 = await api('/api/maintenance/codes');
+            _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
+          } catch (e) {
+            toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  renderMaintList();
+}
+// ─── Interventions libres (Lot 2) ────────────────────────────────
+// Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
+let _libresItems = [];
+let _libresSelection = new Set();
+
+async function loadLibres() {
+  const listEl = document.getElementById('libres-list');
+  if (!listEl) return;
+  try {
+    const r = await api('/api/maintenance/codes/libres');
+    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    _libresItems = [];
+  }
+  _libresSelection.clear();
+  _updateLibresSelectionUI();
+  renderLibresList();
+}
+
+function _fmtLibreDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+  } catch (e) { return '—'; }
+}
+
+function _updateLibresSelectionUI() {
+  const btn = document.getElementById('libres-merge-btn');
+  const cnt = document.getElementById('libres-selection-count');
+  const n = _libresSelection.size;
+  if (btn) btn.disabled = (n !== 2);
+  if (cnt) {
+    if (n === 0) cnt.textContent = '';
+    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
+    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
+    else cnt.textContent = n + ' selectionnes (max 2)';
+  }
+}
+
+function libresToggleSelection(code, checked) {
+  if (checked) {
+    _libresSelection.add(code);
+    if (_libresSelection.size > 2) {
+      const arr = Array.from(_libresSelection);
+      _libresSelection = new Set(arr.slice(-2));
+      renderLibresList();
+    }
+  } else {
+    _libresSelection.delete(code);
+  }
+  _updateLibresSelectionUI();
+}
+
+function renderLibresList() {
+  const el = document.getElementById('libres-list');
+  if (!el) return;
+  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
+  let items = _libresItems.slice();
+  if (q) {
+    items = items.filter(o =>
+      String(o.label || '').toLowerCase().includes(q) ||
+      String(o.code || '').toLowerCase().includes(q)
+    );
+  }
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
+      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
+    return;
+  }
+  const rows = items.map(o => {
+    const codeEsc = esc(String(o.code));
+    const labelEsc = esc(String(o.label || ''));
+    const checked = _libresSelection.has(o.code) ? ' checked' : '';
+    const usage = o.usage_count;
+    const usageChip = usage > 0
+      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
+    // v2.2.41 : bouton Archiver retiré — un libre est créé au moment de sa 1ère
+    // utilisation, donc usage_count >= 1 dès la naissance, le bouton était mort.
+    // Nettoyage désormais uniquement via Fusion.
+    const delBtn = '';
+    return '<tr>' +
+      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
+      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
+      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
+      '<td>' + usageChip + '</td>' +
+      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
+        delBtn +
+      '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
+    '<thead><tr>' +
+      '<th></th>' +
+      '<th>Code</th>' +
+      '<th>Titre</th>' +
+      '<th>Usage</th>' +
+      '<th>Derniere utilisation</th>' +
+      '<th>Cree le</th>' +
+      '<th style="text-align:right">Actions</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div>';
+  // Bind event delegation (checkbox + rename + delete)
+  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
+    });
+  });
+  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-rename');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresRename(code, it.label);
+    });
+  });
+  el.querySelectorAll('[data-libre-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-del');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresDelete(code, it.label);
+    });
+  });
+}
+
+async function libresRename(code, currentLabel) {
+  const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
+  if (newLabel === null) return;
+  const trimmed = (newLabel || '').trim();
+  if (!trimmed) { toast('Titre obligatoire', true); return; }
+  if (trimmed === currentLabel) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method: 'PATCH',
+      body: JSON.stringify({ label: trimmed }),
+    });
+    toast('Titre modifie');
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresDelete(code, label) {
+  if (!confirm('Archiver definitivement "' + label + '" (' + code + ') ?\n\nCette action est reversible uniquement via SQL manuel.')) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Titre archive');
+    _libresSelection.delete(code);
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresMergeSelected() {
+  if (_libresSelection.size !== 2) return;
+  const codes = Array.from(_libresSelection);
+  const items = codes.map(c => _libresItems.find(x => x.code === c)).filter(Boolean);
+  if (items.length !== 2) { toast('Selection invalide', true); return; }
+  const opts = items.map((it, i) => (i + 1) + '. ' + it.label + ' (' + it.usage_count + ' saisie' + (it.usage_count > 1 ? 's' : '') + ')').join('\n');
+  const choice = prompt(
+    'Quel titre garder pour la fusion ?\n\n' + opts + '\n\nSaisis 1 ou 2 :',
+    items[0].usage_count >= items[1].usage_count ? '1' : '2'
+  );
+  if (choice === null) return;
+  const idx = parseInt(choice, 10) - 1;
+  if (idx !== 0 && idx !== 1) { toast('Choix invalide (1 ou 2 attendu)', true); return; }
+  const winner = items[idx];
+  const loser = items[1 - idx];
+  if (!confirm(
+    'Fusionner "' + loser.label + '" (' + loser.usage_count + ' saisie' + (loser.usage_count > 1 ? 's' : '') + ') vers "' + winner.label + '" ?\n\n' +
+    'Toutes les saisies passees de "' + loser.label + '" seront desormais attribuees a "' + winner.label + '".\n' +
+    'Le titre "' + loser.label + '" (' + loser.code + ') sera supprime.'
+  )) return;
+  try {
+    await api('/api/maintenance/codes/libres/merge', {
+      method: 'POST',
+      body: JSON.stringify({ winner_code: winner.code, loser_code: loser.code }),
+    });
+    toast('Fusion effectuee');
+    _libresSelection.clear();
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+function _maintCatLabel(cat) {
+  // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
+  // et "remplacements" (UI: Interventions). Labels renommés v179.
+  // 'interventions' et 'suivi' (legacy) sont remappés vers Nettoyage à l'affichage.
+  if (cat === 'remplacements') return 'Interventions';
+  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
+  return 'Contrôles';
+}
+let _lastAckByCode = {};
+function renderMaintList() {
+  const el = document.getElementById('maint-list');
+  if (!el) return;
+  // Reconstruire la map code -> dernière intervention depuis les alertes auto.
+  _lastAckByCode = {};
+  if (Array.isArray(_alertsData)) {
+    _alertsData.forEach(a => {
+      if (a && a.linked_maint_code) {
+        _lastAckByCode[String(a.linked_maint_code)] = a.last_ack_at || '';
+      }
+    });
+  }
+  const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
+  let items = _maintItems.slice();
+  // Normaliser la catégorie sur les anciens enregistrements
+  items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
+  if (q) {
+    items = items.filter(o => {
+      const periodLbl = (o.periodique ? 'oui' : 'non');
+      return String(o.code || '').toLowerCase().includes(q) ||
+        String(o.label || '').toLowerCase().includes(q) ||
+        ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
+        _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
+        // v2.2.17 — periodique retiré du filtre
+        String(o.intervalle || '').toLowerCase().includes(q) ||
+        String(o.metrage_ref || '').toLowerCase().includes(q);
+    });
+  }
+  // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
+  // legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'affichage.
+  const _normCat = (c) => {
+    if (c === 'remplacements') return 'remplacements';
+    if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
+    return 'controles';
+  };
+  const _catOrder = (c) => {
+    const n = _normCat(c);
+    return n === 'controles' ? 0 : (n === 'entretien' ? 1 : 2);
+  };
+  items.sort((a, b) => {
+    const da = _catOrder(a.categorie);
+    const db = _catOrder(b.categorie);
+    if (da !== db) return da - db;
+    const ac = String(a.code || '').padStart(6, '0');
+    const bc = String(b.code || '').padStart(6, '0');
+    return ac.localeCompare(bc, 'fr');
+  });
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
+    return;
+  }
+  const byCat = { controles: [], entretien: [], remplacements: [] };
+  items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
+  let body = '';
+  ['controles', 'entretien', 'remplacements'].forEach(cat => {
+    if (!byCat[cat].length) return;
+    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    byCat[cat].forEach(o => {
+      const c = esc(String(o.code));
+      const niv = parseInt(o.niveau, 10) || 1;
+      const catCls = cat;
+      // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
+      const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
+      const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
+      body += '<tr>'
+        + '<td class="op-code-cell">' + c + '</td>'
+        + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
+        + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
+        + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
+        + '<td>' + intervalleDisplay + '</td>'
+        + '<td>' + metrageDisplay + '</td>'
+        + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
+        +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+        +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
+        + '</button></td>'
+        + '<td><div class="op-act">'
+        + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
+        + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
+        + '</div></td></tr>';
+    });
+  });
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+  el.querySelectorAll('[data-maint-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
+  });
+  el.querySelectorAll('[data-maint-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
+  });
+  el.querySelectorAll('[data-maint-docs]').forEach(btn => {
+    btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
+  });
+}
+
+// ── Documents attaches aux codes maintenance ─────────────────────────────
+async function openMaintDocsModal(code) {
+  const item = _maintItems.find(x => String(x.code) === String(code));
+  const label = item ? item.label : '';
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
+    + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
+    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
+    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
+    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+    +     '<span>Ajouter un fichier</span>'
+    +   '</button>'
+    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const listEl = overlay.querySelector('#maint-docs-list');
+  const renderDocs = (items) => {
+    if (!items.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document pour l\'instant.</p>';
+      return;
+    }
+    listEl.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes / 1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0, 16).replace('T', ' ')) : '';
+      return '<div class="maint-doc-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
+        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
+        +   '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
+        +   '<button type="button" class="btn-sm btn-ghost danger" data-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    listEl.querySelectorAll('[data-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await refresh();
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  };
+  const refresh = async () => {
+    try {
+      const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+      renderDocs(Array.isArray(r.items) ? r.items : []);
+    } catch(e) {
+      listEl.innerHTML = '<p style="color:var(--danger);font-size:12px">' + esc(e.message || 'Erreur') + '</p>';
+    }
+  };
+  await refresh();
+
+  const fileInp = overlay.querySelector('#maint-doc-file');
+  const addBtn = overlay.querySelector('#maint-doc-add-btn');
+  addBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
+    addBtn.disabled = true;
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
+        method: 'POST', credentials: 'same-origin', body: fd
+      });
+      if (!res.ok) {
+        let msg = 'Upload echoue';
+        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+        toast(msg, true); return;
+      }
+      toast('Document ajoute');
+      fileInp.value = '';
+      await refresh();
+      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
+  });
+}
+function openMaintForm(code) {
+  _maintEditCode = code || null;
+  const wrap = document.getElementById('maint-form-wrap');
+  const title = document.getElementById('maint-form-title');
+  const codeInp = document.getElementById('maint-code');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  const catSel = document.getElementById('maint-categorie');
+  // v2.2.17 — perSel retiré (périodicité cachée).
+  const intInp = document.getElementById('maint-intervalle');
+  const mInp   = document.getElementById('maint-metrage-ref');
+  if (code) {
+    const o = _maintItems.find(x => String(x.code) === String(code));
+    if (!o) return;
+    title.textContent = 'Modifier le code ' + code;
+    codeInp.value = o.code;
+    codeInp.disabled = true;
+    document.getElementById('maint-label').value = o.label || '';
+    document.getElementById('maint-niveau').value = String(o.niveau || 1);
+    if (catSel) {
+      // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+      // Codes legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'édition.
+      let c;
+      if (o.categorie === 'remplacements') c = 'remplacements';
+      else if (o.categorie === 'entretien' || o.categorie === 'interventions' || o.categorie === 'suivi') c = 'entretien';
+      else c = 'controles';
+      catSel.value = c;
+    }
+    if (intInp) intInp.value = o.intervalle || '';
+    if (mInp)   mInp.value   = o.metrage_ref || '';
+  } else {
+    title.textContent = 'Nouveau code';
+    codeInp.value = '';
+    codeInp.disabled = false;
+    document.getElementById('maint-label').value = '';
+    document.getElementById('maint-niveau').value = '1';
+    if (catSel) catSel.value = 'controles';
+    if (intInp) intInp.value = '';
+    if (mInp)   mInp.value   = '';
+  }
+  // Section Documents : visible dans les 2 modes.
+  // En creation : la liste est masquee (aucun doc encore), l'upload est
+  // possible des que le code est saisi. En edition : la liste est chargee
+  // et l'upload attache directement au code existant.
+  const docsWrap = document.getElementById('maint-form-docs');
+  const docsList = document.getElementById('maint-form-docs-list');
+  const docsHint = document.getElementById('maint-form-docs-hint');
+  if (docsWrap) {
+    docsWrap.style.display = '';
+    _maintResetDocPicker();
+    _bindMaintFormDocUpload(code);
+    if (code) {
+      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
+      if (docsList) docsList.style.display = '';
+      _renderMaintFormDocs(code);
+    } else {
+      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
+      if (docsList) docsList.style.display = 'none';
+    }
+  }
+  // v2.2.34 : le scroller varie selon la page (window en Paramètres, .main en MyMaintenance).
+  // On tente les 2 : celui qui n'est pas le vrai scroller no-op silencieusement.
+  try {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const m = document.querySelector('.main');
+    if (m) { if (m.scrollTo) m.scrollTo({ top: 0, behavior: 'smooth' }); else m.scrollTop = 0; }
+  } catch(e) {
+    try { window.scrollTo(0, 0); } catch(e2) {}
+    try { document.querySelector('.main').scrollTop = 0; } catch(e3) {}
+  }
+  codeInp.focus();
+}
+
+async function _renderMaintFormDocs(code) {
+  const list = document.getElementById('maint-form-docs-list');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
+  try {
+    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+    const items = Array.isArray(r.items) ? r.items : [];
+    if (!items.length) {
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>';
+      return;
+    }
+    list.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      const meta = [sz, dt, d.uploaded_by ? esc(d.uploaded_by) : ''].filter(Boolean).join(' · ');
+      return '<div class="maint-doc-row">'
+        + '<div class="maint-doc-row-info">'
+        +   '<span class="maint-doc-row-name" title="' + esc(d.filename) + '">' + esc(d.filename) + '</span>'
+        +   '<span class="maint-doc-row-meta">' + meta + '</span>'
+        + '</div>'
+        + '<a class="maint-doc-row-link" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener">Telecharger</a>'
+        + '<button type="button" class="maint-doc-row-del" data-form-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await _renderMaintFormDocs(code);
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
+  }
+}
+
+// Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
+async function _maintTriggerDocPicker() {
+  const codeInp = document.getElementById('maint-code');
+  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
+  if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
+  // En creation : sauvegarde le code en base avant l'upload, pour eviter
+  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
+  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
+  if (!codeExists) {
+    const labelInp = document.getElementById('maint-label');
+    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
+    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
+    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+    const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
+      ? rawCat
+      : (rawCat === 'interventions' ? 'entretien' : 'controles');
+    // v2.2.17 — periodique forcé à true (concept retiré côté UI).
+    const periodique = true;
+    const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
+    const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
+    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
+    try {
+      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Code enregistre - upload en cours');
+      _maintEditCode = codeNow;
+      codeInp.disabled = true;
+      await loadMaintCodes();
+      const listEl = document.getElementById('maint-form-docs-list');
+      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
+    } catch(e) {
+      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
+      return;
+    }
+  }
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.click();
+}
+
+// Compat : appele par openMaintForm, mais l'upload est declenche directement
+// par onchange du <input type=file>. No-op.
+function _bindMaintFormDocUpload(code) { /* upload direct via _maintOnDocFileChange */ }
+
+// Picker onchange -> upload immediat (pas de bouton Envoyer intermediaire).
+async function _maintOnDocFileChange() {
+  const inp = document.getElementById('maint-form-doc-file');
+  const f = inp && inp.files && inp.files[0];
+  if (!f) return;
+  if (f.size > 20 * 1024 * 1024) {
+    toast('Fichier trop volumineux (max 20 Mo)', true);
+    inp.value = '';
+    return;
+  }
+  const codeInp = document.getElementById('maint-code');
+  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
+  if (!codeNow) {
+    toast('Renseigne d\'abord le code', true);
+    inp.value = '';
+    return;
+  }
+  const btn = document.getElementById('maint-form-doc-add-btn');
+  if (btn) btn.disabled = true;
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
+      method: 'POST', credentials: 'same-origin', body: fd
+    });
+    if (!res.ok) {
+      let msg = 'Upload echoue';
+      try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+      toast(msg, true); return;
+    }
+    toast('Document ajoute');
+    inp.value = '';
+    const listEl = document.getElementById('maint-form-docs-list');
+    if (listEl) listEl.style.display = '';
+    await _renderMaintFormDocs(codeNow);
+    if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+  } catch(e) {
+    toast('Erreur reseau', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _maintResetDocPicker() {
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.value = '';
+}
+// Active/désactive Intervalle et Réf. métrage selon Périodique :
+//   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
+//     remplir l'intervalle de temps et/ou la référence métrage).
+//   - Périodique = NON : les deux champs sont vidés et grisés.
+function _maintTogglePeriodiqueUI(){
+  // v2.2.17 — perSel retiré (périodicité cachée).
+  const intInp = document.getElementById('maint-intervalle');
+  const mInp   = document.getElementById('maint-metrage-ref');
+  if (!perSel || !intInp || !mInp) return;
+  perSel.disabled = false;
+  const isPeriodic = (perSel.value === 'oui');
+  intInp.disabled = !isPeriodic;
+  intInp.style.opacity = isPeriodic ? '1' : '0.5';
+  mInp.disabled   = !isPeriodic;
+  mInp.style.opacity = isPeriodic ? '1' : '0.5';
+  mInp.style.display = '';
+  if (!isPeriodic) {
+    intInp.value = '';
+    mInp.value   = '';
+  }
+}
+function closeMaintForm() {
+  _maintEditCode = null;
+  const wrap = document.getElementById('maint-form-wrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+async function saveMaintForm() {
+  const code = (document.getElementById('maint-code').value || '').trim();
+  const label = (document.getElementById('maint-label').value || '').trim();
+  const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+  const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+  // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+  // Legacy 'interventions' est remappée vers 'entretien' pour rester compat.
+  const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
+    ? rawCat
+    : (rawCat === 'interventions' ? 'entretien' : 'controles');
+  // v2.2.17 — periodique forcé à true (concept retiré côté UI).
+  const periodique = true;
+  const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
+  const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
+  if (!code) { toast('Code obligatoire', true); return; }
+  if (!label) { toast('Libellé obligatoire', true); return; }
+  if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  try {
+    if (_maintEditCode) {
+      await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      toast('Code mis à jour');
+    } else {
+      await api('/api/maintenance/codes', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      toast('Code ajouté');
+    }
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur lors de l\'enregistrement', true);
+    return;
+  }
+  closeMaintForm();
+  await loadMaintCodes();
+  // Sync côté Alertes : une création/modif de code peut créer, renommer
+  // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
+  if(typeof loadAlerts === 'function') await loadAlerts();
+}
+async function deleteMaintCode(code) {
+  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  try {
+    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Code supprimé');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
+    return;
+  }
+  await loadMaintCodes();
+  // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
+  // côté backend — on force le rechargement pour que la liste se mette à jour.
+  if(typeof loadAlerts === 'function') await loadAlerts();
+}
+
+
+// v2.2.36 : bascule entre les 2 vues du panel Gestion des opérations
+function switchMaintView(view) {
+  if (view !== 'recurrentes' && view !== 'inhabituelles') view = 'recurrentes';
+  const isRec = (view === 'recurrentes');
+  const vRec = document.getElementById('maint-view-recurrentes');
+  const vInh = document.getElementById('maint-view-inhabituelles');
+  const tRec = document.getElementById('maint-tab-recurrentes');
+  const tInh = document.getElementById('maint-tab-inhabituelles');
+  const btnAdd = document.getElementById('maint-add-btn');
+  const btnMerge = document.getElementById('libres-merge-btn');
+  const spanCount = document.getElementById('libres-selection-count');
+  if (vRec) vRec.style.display = isRec ? '' : 'none';
+  if (vInh) vInh.style.display = isRec ? 'none' : '';
+  const activeStyle = 'padding:6px 14px;font-size:12px;background:var(--accent);color:var(--accent-fg,#fff);border:none;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit';
+  const inactiveStyle = 'padding:6px 14px;font-size:12px;background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit';
+  if (tRec) tRec.setAttribute('style', isRec ? activeStyle : inactiveStyle);
+  if (tInh) tInh.setAttribute('style', isRec ? inactiveStyle : activeStyle);
+  if (btnAdd) btnAdd.style.display = isRec ? 'inline-flex' : 'none';
+  if (btnMerge) btnMerge.style.display = isRec ? 'none' : '';
+  if (spanCount) spanCount.style.display = isRec ? 'none' : '';
+  if (!isRec && typeof loadLibres === 'function') loadLibres();
+}
+
 </script>
 
 </body>

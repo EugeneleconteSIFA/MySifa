@@ -1,6 +1,6 @@
 """
-SIFA — Database & helpers v0.5
-Ajouts : colonnes traçabilité, détection doublons à l'import
+SIFA â€” Database & helpers v0.5
+Ajouts : colonnes traÃ§abilitÃ©, dÃ©tection doublons Ã  l'import
 """
 import sqlite3
 import pandas as pd
@@ -17,7 +17,7 @@ import threading
 from config import DB_PATH, UPLOAD_DIR, ROLE_SUPERADMIN, ROLE_DIRECTION, SUPERADMIN_EMAIL, classify_operation, MIGRATIONS_DISABLED, ENV_NAME
 from app.services.emplacements_plan import reload_emplacements_plan, sync_emplacements_plan_to_db
 
-# Baselinage des migrations SQL déjà regroupées dans _migrate (historique).
+# Baselinage des migrations SQL dÃ©jÃ  regroupÃ©es dans _migrate (historique).
 SCHEMA_MIGRATION_VERSION_BASELINE = 1
 
 
@@ -47,8 +47,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     """Applique les migrations manquantes (idempotent, une fois par process).
 
     Si MIGRATIONS_DISABLED=1 (env staging v1), ne joue AUCUNE migration : la DB
-    est partagée avec la prod v2, qui en a la responsabilité exclusive. Le flag
-    est posé une fois pour toutes pour ne pas re-tenter à chaque requête.
+    est partagÃ©e avec la prod v2, qui en a la responsabilitÃ© exclusive. Le flag
+    est posÃ© une fois pour toutes pour ne pas re-tenter Ã  chaque requÃªte.
     """
     global _schema_migrate_done
     if _schema_migrate_done:
@@ -57,16 +57,16 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         if _schema_migrate_done:
             return
         if MIGRATIONS_DISABLED:
-            print(f"[MySifa] _ensure_schema : migrations DÉSACTIVÉES (ENV_NAME={ENV_NAME}). "
-                  f"La DB n'est PAS modifiée par cette instance.")
+            print(f"[MySifa] _ensure_schema : migrations DÃ‰SACTIVÃ‰ES (ENV_NAME={ENV_NAME}). "
+                  f"La DB n'est PAS modifiÃ©e par cette instance.")
             _schema_migrate_done = True
             return
-        # DB fraîche (client Kernse nouvellement provisionné, MySifa jamais
-        # démarré) : les tables de base n'existent pas encore. _migrate()
+        # DB fraÃ®che (client Kernse nouvellement provisionnÃ©, MySifa jamais
+        # dÃ©marrÃ©) : les tables de base n'existent pas encore. _migrate()
         # tente des ALTER TABLE et crashe. On skip ici et on laisse `init_db()`
-        # créer le schéma de base via son executescript, puis appeler _migrate
-        # lui-même sur une DB peuplée. Le flag _schema_migrate_done reste
-        # à False pour que init_db puisse boucler.
+        # crÃ©er le schÃ©ma de base via son executescript, puis appeler _migrate
+        # lui-mÃªme sur une DB peuplÃ©e. Le flag _schema_migrate_done reste
+        # Ã  False pour que init_db puisse boucler.
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='production_data' LIMIT 1"
         ).fetchone()
@@ -81,10 +81,10 @@ def _register_udfs(conn: sqlite3.Connection) -> None:
     """
     Enregistre les fonctions Python appelables depuis SQL/triggers.
 
-    `norm_ref_produit(s)` extrait la clé produit normalisée "XXX/NNNN" d'une
-    chaîne quelconque ("1013/0068 - COHESIO 1" → "1013/0068"). Utilisée par
+    `norm_ref_produit(s)` extrait la clÃ© produit normalisÃ©e "XXX/NNNN" d'une
+    chaÃ®ne quelconque ("1013/0068 - COHESIO 1" â†’ "1013/0068"). UtilisÃ©e par
     les triggers qui maintiennent `planning_entries.ref_produit_norm` et
-    `fiches_techniques.ref_produit_norm` à jour automatiquement à chaque
+    `fiches_techniques.ref_produit_norm` Ã  jour automatiquement Ã  chaque
     insertion ou modification.
     """
     try:
@@ -92,7 +92,7 @@ def _register_udfs(conn: sqlite3.Connection) -> None:
     except Exception:
         return
     try:
-        # deterministic=True permet à SQLite de l'utiliser dans les index/triggers
+        # deterministic=True permet Ã  SQLite de l'utiliser dans les index/triggers
         conn.create_function("norm_ref_produit", 1, normalize_ref_produit, deterministic=True)
     except TypeError:
         # Python < 3.8 ou SQLite trop ancien : pas de flag deterministic
@@ -103,9 +103,9 @@ def _register_udfs(conn: sqlite3.Connection) -> None:
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=5)
     conn.row_factory = sqlite3.Row
-    # WAL : les lecteurs ne sont plus bloqués par les écritures (mode persistant,
-    # stocké dans le fichier DB — le PRAGMA à chaque connexion est sans coût).
-    # synchronous=NORMAL : suffisant en WAL (fsync au checkpoint, pas à chaque tx).
+    # WAL : les lecteurs ne sont plus bloquÃ©s par les Ã©critures (mode persistant,
+    # stockÃ© dans le fichier DB â€” le PRAGMA Ã  chaque connexion est sans coÃ»t).
+    # synchronous=NORMAL : suffisant en WAL (fsync au checkpoint, pas Ã  chaque tx).
     try:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
@@ -234,10 +234,10 @@ def sync_emplacements_plan_from_csv(csv_path: Optional[Path] = None) -> int:
 
 
 def _migrate_emplacements_plan(conn):
-    """Référentiel plan MyStock — crée la table si besoin, seed depuis CSV uniquement si vide.
+    """RÃ©fÃ©rentiel plan MyStock â€” crÃ©e la table si besoin, seed depuis CSV uniquement si vide.
 
-    Les modifications manuelles (ajout/suppression via l'UI Paramètres) sont préservées
-    au redémarrage. Le bouton 'Recharger depuis CSV' est le seul déclencheur d'un
+    Les modifications manuelles (ajout/suppression via l'UI ParamÃ¨tres) sont prÃ©servÃ©es
+    au redÃ©marrage. Le bouton 'Recharger depuis CSV' est le seul dÃ©clencheur d'un
     rechargement complet intentionnel.
     """
     conn.execute(
@@ -253,7 +253,7 @@ def _migrate_emplacements_plan(conn):
 
 
 def _migrate(conn):
-    """Ajoute colonnes manquantes sur base existante sans tout recréer."""
+    """Ajoute colonnes manquantes sur base existante sans tout recrÃ©er."""
     _ensure_schema_migrations_table(conn)
     existing_pd = {row[1] for row in conn.execute("PRAGMA table_info(production_data)").fetchall()}
     for col, sql in [
@@ -270,8 +270,8 @@ def _migrate(conn):
         if col not in existing_pd:
             conn.execute(sql)
 
-    # Migration : recopie metrage_prevu → metrage_total_debut et metrage_reel → metrage_total_fin
-    # pour les lignes fabrication déjà existantes (exécution idempotente grâce au WHERE IS NULL)
+    # Migration : recopie metrage_prevu â†’ metrage_total_debut et metrage_reel â†’ metrage_total_fin
+    # pour les lignes fabrication dÃ©jÃ  existantes (exÃ©cution idempotente grÃ¢ce au WHERE IS NULL)
     conn.execute("""UPDATE production_data
                     SET metrage_total_debut = metrage_prevu
                     WHERE operation_code = '01'
@@ -283,7 +283,7 @@ def _migrate(conn):
                       AND metrage_reel IS NOT NULL
                       AND metrage_total_fin IS NULL""")
 
-    # Index composites : accélèrent les filtres par opérateur/dossier + date
+    # Index composites : accÃ©lÃ¨rent les filtres par opÃ©rateur/dossier + date
     conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_operateur_date ON production_data(operateur,date_operation)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_dossier_date   ON production_data(no_dossier,date_operation)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_prod_code_date      ON production_data(operation_code,date_operation)")
@@ -302,7 +302,7 @@ def _migrate(conn):
         if col not in existing_users:
             conn.execute(sql)
 
-    # Générer identifiant pour les comptes existants si absent.
+    # GÃ©nÃ©rer identifiant pour les comptes existants si absent.
     def _slug(s: str) -> str:
         s = unicodedata.normalize("NFD", str(s or ""))
         s = "".join(ch for ch in s if unicodedata.category(ch) != "Mn")
@@ -318,7 +318,7 @@ def _migrate(conn):
             return ""
         if len(parts) == 1:
             return parts[0]
-        # "premier mot du champ nom et prenom" → token1.token2
+        # "premier mot du champ nom et prenom" â†’ token1.token2
         return f"{parts[0]}.{parts[1]}"
 
     try:
@@ -349,10 +349,10 @@ def _migrate(conn):
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_identifiant ON users(identifiant) WHERE identifiant IS NOT NULL AND identifiant != ''"
         )
     except Exception:
-        # Ne jamais bloquer le démarrage sur une migration d'identifiants.
+        # Ne jamais bloquer le dÃ©marrage sur une migration d'identifiants.
         pass
 
-    # Tables devis — créées si absentes
+    # Tables devis â€” crÃ©Ã©es si absentes
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ).fetchall()}
@@ -374,7 +374,7 @@ def _migrate(conn):
             FOREIGN KEY (devis_id) REFERENCES devis(id)
         )""")
 
-    # Tables planning — créées si absentes
+    # Tables planning â€” crÃ©Ã©es si absentes
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ).fetchall()}
@@ -392,13 +392,13 @@ def _migrate(conn):
             actif INTEGER DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )""")
-        conn.execute("INSERT OR IGNORE INTO machines (nom, code) VALUES ('Cohésio 1', 'C1')")
+        conn.execute("INSERT OR IGNORE INTO machines (nom, code) VALUES ('CohÃ©sio 1', 'C1')")
 
-    # Machines par défaut (compat planning multi-machines)
+    # Machines par dÃ©faut (compat planning multi-machines)
     # Ne force pas les IDs : s'appuie sur nom/code uniques.
     for nom, code in [
-        ("Cohésio 1", "C1"),
-        ("Cohésio 2", "C2"),
+        ("CohÃ©sio 1", "C1"),
+        ("CohÃ©sio 2", "C2"),
         ("DSI", "DSI"),
         ("Repiquage", "REP"),
     ]:
@@ -438,8 +438,8 @@ def _migrate(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_planning_config_lookup ON planning_config(machine_id, semaine)")
 
     # Migration v1 -> v1.1 (standalone) : planning_entries stocke ref/client/description
-    # Ne pas utiliser `existing_tables` ici : il est figé avant la création éventuelle de
-    # planning_entries ; sinon la table est créée sans colonnes v1.2 et les ALTER ne s’exécutent jamais.
+    # Ne pas utiliser `existing_tables` ici : il est figÃ© avant la crÃ©ation Ã©ventuelle de
+    # planning_entries ; sinon la table est crÃ©Ã©e sans colonnes v1.2 et les ALTER ne sâ€™exÃ©cutent jamais.
     if conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_entries'"
     ).fetchone():
@@ -464,7 +464,7 @@ def _migrate(conn):
                 FOREIGN KEY (machine_id) REFERENCES machines(id)
             )""")
 
-            # Best-effort : récupérer ref/client/description depuis dossiers si possible
+            # Best-effort : rÃ©cupÃ©rer ref/client/description depuis dossiers si possible
             conn.execute("""
                 INSERT INTO planning_entries
                     (id, machine_id, position, reference, client, description, format_l, format_h,
@@ -493,26 +493,26 @@ def _migrate(conn):
             ("planned_start", "ALTER TABLE planning_entries ADD COLUMN planned_start TEXT"),
             ("planned_end", "ALTER TABLE planning_entries ADD COLUMN planned_end TEXT"),
             ("statut_force", "ALTER TABLE planning_entries ADD COLUMN statut_force INTEGER DEFAULT 0"),
-            # Rentabilité v2: groupement split + liaison devis/production
+            # RentabilitÃ© v2: groupement split + liaison devis/production
             ("group_id", "ALTER TABLE planning_entries ADD COLUMN group_id TEXT"),
             ("split_parent_id", "ALTER TABLE planning_entries ADD COLUMN split_parent_id INTEGER"),
-            # Planning v2: flag "à placer au planning" (0=non, 1=oui — zébré dans liste+timeline)
+            # Planning v2: flag "Ã  placer au planning" (0=non, 1=oui â€” zÃ©brÃ© dans liste+timeline)
             ("a_placer", "ALTER TABLE planning_entries ADD COLUMN a_placer INTEGER DEFAULT 0"),
-            # Planning v2: destockage (todo/done — point gris dans le slot timeline)
+            # Planning v2: destockage (todo/done â€” point gris dans le slot timeline)
             ("destockage", "ALTER TABLE planning_entries ADD COLUMN destockage TEXT DEFAULT 'todo'"),
-            # Planning v3: statut réel issu de la saisie fabrication
+            # Planning v3: statut rÃ©el issu de la saisie fabrication
             # reellement_en_attente | reellement_en_saisie | reellement_termine
             ("statut_reel", "ALTER TABLE planning_entries ADD COLUMN statut_reel TEXT DEFAULT 'reellement_en_attente'"),
-            # Fin de créneau figée manuellement (resize timeline) — ne pas recalculer depuis la saisie prod
+            # Fin de crÃ©neau figÃ©e manuellement (resize timeline) â€” ne pas recalculer depuis la saisie prod
             ("planned_end_manual", "ALTER TABLE planning_entries ADD COLUMN planned_end_manual INTEGER DEFAULT 0"),
-            # Traçabilité création/modification
+            # TraÃ§abilitÃ© crÃ©ation/modification
             ("created_by", "ALTER TABLE planning_entries ADD COLUMN created_by TEXT"),
             ("updated_by", "ALTER TABLE planning_entries ADD COLUMN updated_by TEXT"),
         ]:
             if col not in pe_cols:
                 conn.execute(sql)
 
-        # Backfill group_id pour les entrées existantes (valeur stable et unique par ligne)
+        # Backfill group_id pour les entrÃ©es existantes (valeur stable et unique par ligne)
         try:
             conn.execute(
                 "UPDATE planning_entries SET group_id=CAST(id AS TEXT) WHERE group_id IS NULL OR TRIM(group_id)=''"
@@ -520,7 +520,7 @@ def _migrate(conn):
         except Exception:
             pass
 
-        # Backfill statut_reel : les dossiers planning marqués "termine" sont réellement terminés
+        # Backfill statut_reel : les dossiers planning marquÃ©s "termine" sont rÃ©ellement terminÃ©s
         try:
             conn.execute(
                 """UPDATE planning_entries
@@ -531,7 +531,7 @@ def _migrate(conn):
         except Exception:
             pass
 
-    # Tables Rentabilité v2 (liens planning -> devis + no_dossier production)
+    # Tables RentabilitÃ© v2 (liens planning -> devis + no_dossier production)
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ).fetchall()}
@@ -555,7 +555,7 @@ def _migrate(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_rent_links_devis ON rent_links(devis_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_rent_prod_links_entry ON rent_prod_links(planning_entry_id)")
 
-    # Jours fériés / jours off par machine (standalone planning)
+    # Jours fÃ©riÃ©s / jours off par machine (standalone planning)
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ).fetchall()}
@@ -589,8 +589,8 @@ def _migrate(conn):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             machine_id INTEGER NOT NULL,
             date TEXT NOT NULL,              -- YYYY-MM-DD
-            heure_debut REAL NOT NULL,       -- fraction décimale (ex: 5.0 = 5h)
-            heure_fin   REAL NOT NULL,       -- fraction décimale (ex: 13.0 = 13h)
+            heure_debut REAL NOT NULL,       -- fraction dÃ©cimale (ex: 5.0 = 5h)
+            heure_fin   REAL NOT NULL,       -- fraction dÃ©cimale (ex: 13.0 = 13h)
             UNIQUE(machine_id, date),
             FOREIGN KEY (machine_id) REFERENCES machines(id)
         )""")
@@ -623,35 +623,35 @@ def _migrate(conn):
             reference TEXT UNIQUE NOT NULL,
             designation TEXT NOT NULL,
             description TEXT,
-            unite TEXT DEFAULT 'étiquette',
+            unite TEXT DEFAULT 'Ã©tiquette',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )""")
     else:
-        # Migration: anciens libellés vides/génériques → "étiquette"
+        # Migration: anciens libellÃ©s vides/gÃ©nÃ©riques â†’ "Ã©tiquette"
         try:
             conn.execute(
                 """UPDATE produits
-                   SET unite='étiquette'
+                   SET unite='Ã©tiquette'
                    WHERE unite IS NULL
                       OR TRIM(COALESCE(unite,'')) = ''
-                      OR LOWER(TRIM(unite)) IN ('unité','unite','unites','unités','u.','u')"""
+                      OR LOWER(TRIM(unite)) IN ('unitÃ©','unite','unites','unitÃ©s','u.','u')"""
             )
         except Exception:
             pass
 
-    # Migration: unités obsolètes (forfait/mille/mille A4) → "étiquette"
+    # Migration: unitÃ©s obsolÃ¨tes (forfait/mille/mille A4) â†’ "Ã©tiquette"
     try:
         conn.execute(
             """UPDATE produits
-               SET unite='étiquette', updated_at=datetime('now')
+               SET unite='Ã©tiquette', updated_at=datetime('now')
                WHERE LOWER(TRIM(COALESCE(unite,''))) IN ('forfait','mille','mille a4')"""
         )
     except Exception:
         pass
 
-    # Migration: suppression du "s" final pour stocker les unités au singulier
-    # (idempotent : après strip le mot ne se termine plus par "s")
+    # Migration: suppression du "s" final pour stocker les unitÃ©s au singulier
+    # (idempotent : aprÃ¨s strip le mot ne se termine plus par "s")
     try:
         conn.execute(
             """UPDATE produits
@@ -690,7 +690,7 @@ def _migrate(conn):
             FOREIGN KEY (produit_id) REFERENCES produits(id)
         )""")
 
-    # MyStock v2 — lots FIFO + inventaires
+    # MyStock v2 â€” lots FIFO + inventaires
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ).fetchall()}
@@ -733,7 +733,7 @@ def _migrate(conn):
     if "commentaire" not in se_cols:
         conn.execute("ALTER TABLE stock_emplacements ADD COLUMN commentaire TEXT")
 
-    # Traçabilité mouvements MyStock : snapshot du nom (Nom Prénom) de l'auteur
+    # TraÃ§abilitÃ© mouvements MyStock : snapshot du nom (Nom PrÃ©nom) de l'auteur
     try:
         mvt_cols = {row[1] for row in conn.execute("PRAGMA table_info(mouvements_stock)").fetchall()}
         if "created_by_name" not in mvt_cols:
@@ -752,7 +752,7 @@ def _migrate(conn):
     except Exception:
         pass
 
-    # ── Messagerie interne (contact support → super admin) ───────────────
+    # â”€â”€ Messagerie interne (contact support â†’ super admin) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     existing_tables = {row[0] for row in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ).fetchall()}
@@ -819,7 +819,7 @@ def _migrate(conn):
     _migrate_emplacements_plan(conn)
 
     try:
-        conn.execute("UPDATE machines SET nom='Cohésio 1' WHERE nom='Cohésion 1'")
+        conn.execute("UPDATE machines SET nom='CohÃ©sio 1' WHERE nom='CohÃ©sion 1'")
     except sqlite3.Error:
         pass
 
@@ -828,7 +828,7 @@ def _migrate(conn):
     if "dernier_metrage" not in existing_machines:
         conn.execute("ALTER TABLE machines ADD COLUMN dernier_metrage REAL")
 
-    # Tables réception matière (bobines)
+    # Tables rÃ©ception matiÃ¨re (bobines)
     if "stock_receptions" not in existing_tables:
         conn.execute("""CREATE TABLE stock_receptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -848,7 +848,7 @@ def _migrate(conn):
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_recp_items ON stock_reception_items(reception_id)")
 
-    # Traçabilité matières utilisées en fabrication
+    # TraÃ§abilitÃ© matiÃ¨res utilisÃ©es en fabrication
     if "fab_matieres_utilisees" not in existing_tables:
         conn.execute("""CREATE TABLE fab_matieres_utilisees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -880,7 +880,7 @@ def _migrate(conn):
             licence TEXT,
             certificat TEXT
         )""")
-        # Insérer les fournisseurs par défaut
+        # InsÃ©rer les fournisseurs par dÃ©faut
         default_fournisseurs = [
             ('Avery', 'FSC-C004451', 'CU-COC-807907'),
             ('Fedrigoni', 'FSC-C011937', 'FCBA-COC-000059'),
@@ -971,7 +971,7 @@ def _migrate(conn):
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )""")
 
-        # Compte Manuel Lesaffre (configurateur planning RH — rôle direction)
+        # Compte Manuel Lesaffre (configurateur planning RH â€” rÃ´le direction)
         import bcrypt as _bcrypt
         _pwd = _bcrypt.hashpw("Lesaffre2026!".encode(), _bcrypt.gensalt()).decode()
         _now = datetime.now().isoformat()
@@ -984,13 +984,13 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 4, "planning_rh_tables_and_lesaffre")
 
-    # Migration v5 : Désaffecter tout le personnel planning RH (nettoyage avant déploiement)
+    # Migration v5 : DÃ©saffecter tout le personnel planning RH (nettoyage avant dÃ©ploiement)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=5 LIMIT 1").fetchone():
         conn.execute("DELETE FROM rh_planning_postes")
         conn.commit()
         _record_schema_migration(conn, 5, "clear_rh_planning_assignments")
 
-    # Migration v6 : Configurer les overrides d'accès pour les utilisateurs spécifiques
+    # Migration v6 : Configurer les overrides d'accÃ¨s pour les utilisateurs spÃ©cifiques
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=6 LIMIT 1").fetchone():
         # S'assurer que la colonne access_overrides existe
         existing_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
@@ -998,7 +998,7 @@ def _migrate(conn):
             conn.execute("ALTER TABLE users ADD COLUMN access_overrides TEXT")
             conn.commit()
         
-        # Liste des utilisateurs avec leurs overrides d'accès
+        # Liste des utilisateurs avec leurs overrides d'accÃ¨s
         access_overrides_config = [
             {"email": "mlesaffre@sifa.pro", "overrides": {"planning_rh": True}}
         ]
@@ -1023,7 +1023,7 @@ def _migrate(conn):
                 for key, value in config["overrides"].items():
                     overrides[key] = value
                 
-                # Mettre à jour
+                # Mettre Ã  jour
                 conn.execute(
                     "UPDATE users SET access_overrides = ? WHERE id = ?",
                     (json.dumps(overrides), user_id)
@@ -1074,16 +1074,16 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 7, "paie_employes_et_variables")
 
-    # Migration v8 : Tables annonces de mise à jour + acquittements utilisateurs
+    # Migration v8 : Tables annonces de mise Ã  jour + acquittements utilisateurs
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=8 LIMIT 1").fetchone():
         conn.execute("""CREATE TABLE IF NOT EXISTS update_announcements (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             scope       TEXT NOT NULL,        -- 'planning', 'fabrication', 'global'
             titre       TEXT NOT NULL,
-            message     TEXT NOT NULL,        -- HTML autorisé
+            message     TEXT NOT NULL,        -- HTML autorisÃ©
             created_at  TEXT NOT NULL,
-            created_by  TEXT DEFAULT 'système',
-            active      INTEGER DEFAULT 1    -- 0 = archivé (ne plus afficher)
+            created_by  TEXT DEFAULT 'systÃ¨me',
+            active      INTEGER DEFAULT 1    -- 0 = archivÃ© (ne plus afficher)
         )""")
         conn.execute("""CREATE TABLE IF NOT EXISTS update_acknowledgements (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1095,61 +1095,61 @@ def _migrate(conn):
             FOREIGN KEY (announcement_id) REFERENCES update_announcements(id)
         )""")
 
-        # ── Seed : annonces du 30 avril 2026 ─────────────────────────────────
+        # â”€â”€ Seed : annonces du 30 avril 2026 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _planning_msg = (
-            "<p style='margin-bottom:14px'>Plusieurs améliorations ont été déployées ce matin sur le planning.</p>"
+            "<p style='margin-bottom:14px'>Plusieurs amÃ©liorations ont Ã©tÃ© dÃ©ployÃ©es ce matin sur le planning.</p>"
             "<ul style='margin:10px 0;padding-left:20px;line-height:1.9'>"
-            "<li><strong>Lisibilité de la liste</strong> — Les dossiers terminés sont masqués par défaut, à l'exception des deux derniers. Un bouton permet de les afficher en totalité si nécessaire. La position de défilement est conservée après chaque modification ou réordonnancement.</li>"
-            "<li><strong>Timeline</strong> — Les slots <em>En attente</em> sont déplaçables par glisser-déposer directement sur la barre de temps. Survoler un slot et appuyer sur <kbd style='background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:11px'>Entrée</kbd> ouvre sa fiche d'édition.</li>"
-            "<li><strong>Paramètres semaine</strong> — Une icône ⚙ est disponible sur chaque en-tête de semaine pour configurer les jours travaillés et les horaires spécifiques, indépendamment des défauts machine.</li>"
-            "<li><strong>Durée réelle</strong> — À la clôture d'un dossier, sa durée plannée est mise à jour automatiquement d'après les horodatages réels de production. Les durées s'affichent au format <em>5h15</em>.</li>"
-            "<li><strong>Statut saisie</strong> — La liste et la timeline indiquent si un dossier est en cours de saisie ou réellement terminé côté opérateur.</li>"
+            "<li><strong>LisibilitÃ© de la liste</strong> â€” Les dossiers terminÃ©s sont masquÃ©s par dÃ©faut, Ã  l'exception des deux derniers. Un bouton permet de les afficher en totalitÃ© si nÃ©cessaire. La position de dÃ©filement est conservÃ©e aprÃ¨s chaque modification ou rÃ©ordonnancement.</li>"
+            "<li><strong>Timeline</strong> â€” Les slots <em>En attente</em> sont dÃ©plaÃ§ables par glisser-dÃ©poser directement sur la barre de temps. Survoler un slot et appuyer sur <kbd style='background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:11px'>EntrÃ©e</kbd> ouvre sa fiche d'Ã©dition.</li>"
+            "<li><strong>ParamÃ¨tres semaine</strong> â€” Une icÃ´ne âš™ est disponible sur chaque en-tÃªte de semaine pour configurer les jours travaillÃ©s et les horaires spÃ©cifiques, indÃ©pendamment des dÃ©fauts machine.</li>"
+            "<li><strong>DurÃ©e rÃ©elle</strong> â€” Ã€ la clÃ´ture d'un dossier, sa durÃ©e plannÃ©e est mise Ã  jour automatiquement d'aprÃ¨s les horodatages rÃ©els de production. Les durÃ©es s'affichent au format <em>5h15</em>.</li>"
+            "<li><strong>Statut saisie</strong> â€” La liste et la timeline indiquent si un dossier est en cours de saisie ou rÃ©ellement terminÃ© cÃ´tÃ© opÃ©rateur.</li>"
             "</ul>"
         )
         _fabrication_msg = (
-            "<p style='margin-bottom:14px'>Deux changements importants sont en vigueur dès aujourd'hui.</p>"
+            "<p style='margin-bottom:14px'>Deux changements importants sont en vigueur dÃ¨s aujourd'hui.</p>"
             "<ul style='margin:10px 0;padding-left:20px;line-height:1.9'>"
-            "<li><strong>Renommage</strong> — «&nbsp;Début dossier&nbsp;» et «&nbsp;Fin dossier&nbsp;» s'appellent désormais <strong>Début de production</strong> et <strong>Fin de production</strong>.</li>"
-            "<li><strong>Clôture de dossier</strong> — Lors d'une fin de production, il est obligatoire d'indiquer si le dossier est terminé ou s'il reprend. Cette information alimente directement le planning&nbsp;: ne pas la renseigner correctement faussera la visibilité de l'équipe sur les encours.</li>"
-            "<li><strong>Durée plannée mise à jour automatiquement</strong> — À la clôture d'un dossier, la durée dans le planning est recalculée d'après le temps réel de production.</li>"
+            "<li><strong>Renommage</strong> â€” Â«&nbsp;DÃ©but dossier&nbsp;Â» et Â«&nbsp;Fin dossier&nbsp;Â» s'appellent dÃ©sormais <strong>DÃ©but de production</strong> et <strong>Fin de production</strong>.</li>"
+            "<li><strong>ClÃ´ture de dossier</strong> â€” Lors d'une fin de production, il est obligatoire d'indiquer si le dossier est terminÃ© ou s'il reprend. Cette information alimente directement le planning&nbsp;: ne pas la renseigner correctement faussera la visibilitÃ© de l'Ã©quipe sur les encours.</li>"
+            "<li><strong>DurÃ©e plannÃ©e mise Ã  jour automatiquement</strong> â€” Ã€ la clÃ´ture d'un dossier, la durÃ©e dans le planning est recalculÃ©e d'aprÃ¨s le temps rÃ©el de production.</li>"
             "</ul>"
         )
 
         _seed_ts = "2026-04-30T00:00:00"
         conn.execute(
             "INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active) VALUES (?,?,?,?,?,1)",
-            ("planning", "Mise à jour du 30 avril 2026 — Planning de production", _planning_msg, _seed_ts, "système"),
+            ("planning", "Mise Ã  jour du 30 avril 2026 â€” Planning de production", _planning_msg, _seed_ts, "systÃ¨me"),
         )
         conn.execute(
             "INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active) VALUES (?,?,?,?,?,1)",
-            ("fabrication", "Mise à jour du 30 avril 2026 — Saisie de production", _fabrication_msg, _seed_ts, "système"),
+            ("fabrication", "Mise Ã  jour du 30 avril 2026 â€” Saisie de production", _fabrication_msg, _seed_ts, "systÃ¨me"),
         )
 
         conn.commit()
         _record_schema_migration(conn, 8, "update_announcements_tables")
 
-    # Migration v9 : Correctifs planning — statut_reel corrompu + dates erronées
+    # Migration v9 : Correctifs planning â€” statut_reel corrompu + dates erronÃ©es
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=9 LIMIT 1").fetchone():
-        # Bug 1 : SNV 9931304 marqué "en saisie" par erreur opérateur
+        # Bug 1 : SNV 9931304 marquÃ© "en saisie" par erreur opÃ©rateur
         conn.execute(
             """UPDATE planning_entries
                SET statut_reel = 'reellement_en_attente', updated_at = datetime('now')
                WHERE reference = '9931304'
                  AND statut_reel = 'reellement_en_saisie'"""
         )
-        # Bug 2 : Nestlé Marconnelle (Marché 722) — planned_start erroné 30/04 au lieu de 04/05
+        # Bug 2 : NestlÃ© Marconnelle (MarchÃ© 722) â€” planned_start erronÃ© 30/04 au lieu de 04/05
         conn.execute(
             """UPDATE planning_entries
                SET planned_start = '2026-05-04T07:00:00',
                    planned_end   = datetime('2026-05-04T07:00:00', '+' || CAST(duree_heures AS INTEGER) || ' hours'),
                    updated_at    = datetime('now')
-               WHERE reference LIKE '%Marché 722%'
+               WHERE reference LIKE '%MarchÃ© 722%'
                  AND statut = 'en_cours'"""
         )
         conn.commit()
         _record_schema_migration(conn, 9, "fix_corrupted_statut_reel_and_dates")
 
-    # Migration v10 : traçabilité code-barre fournisseur (photo + texte)
+    # Migration v10 : traÃ§abilitÃ© code-barre fournisseur (photo + texte)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=10 LIMIT 1").fetchone():
         fsc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
         if "traca_photo_url" not in fsc_cols:
@@ -1161,7 +1161,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 10, "add_traca_barcode_to_fournisseurs")
 
-    # Migration v11 : MyDevis — paramètres matière & base prix
+    # Migration v11 : MyDevis â€” paramÃ¨tres matiÃ¨re & base prix
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=11 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -1212,18 +1212,18 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 11, "matiere_params_base_config")
 
-    # v12 — jours travaillés par affectation RH (bitmask Lun=bit0…Ven=bit4, Sam=bit5 ; 31=lun–ven, 32=sam)
+    # v12 â€” jours travaillÃ©s par affectation RH (bitmask Lun=bit0â€¦Ven=bit4, Sam=bit5 ; 31=lunâ€“ven, 32=sam)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=12 LIMIT 1").fetchone():
         try:
             conn.execute(
                 "ALTER TABLE rh_planning_postes ADD COLUMN jours INTEGER NOT NULL DEFAULT 31"
             )
         except Exception:
-            pass  # colonne déjà présente
+            pass  # colonne dÃ©jÃ  prÃ©sente
         conn.commit()
         _record_schema_migration(conn, 12, "rh_planning_postes_jours")
 
-    # v13 — MyExpé : suivi des départs (exportations)
+    # v13 â€” MyExpÃ© : suivi des dÃ©parts (exportations)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=13 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -1256,7 +1256,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 13, "expe_departs_suivi")
 
-    # v14 — ordre des tuiles portail (préférence utilisateur)
+    # v14 â€” ordre des tuiles portail (prÃ©fÃ©rence utilisateur)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=14 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "portal_apps_order" not in cols:
@@ -1264,7 +1264,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 14, "users_portal_apps_order")
 
-    # v15 — base matière : supplément Rotoflex par ligne (calcul prix depuis paramètres)
+    # v15 â€” base matiÃ¨re : supplÃ©ment Rotoflex par ligne (calcul prix depuis paramÃ¨tres)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=15 LIMIT 1").fetchone():
         mb_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matiere_base)").fetchall()}
         if "rotoflex_supplement_eur_m2" not in mb_cols:
@@ -1278,10 +1278,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 15, "matiere_base_rotoflex_supplement")
 
-    # v16 — MyDevis : matiere_params.code nullable + base matière groupée par famille
+    # v16 â€” MyDevis : matiere_params.code nullable + base matiÃ¨re groupÃ©e par famille
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=16 LIMIT 1").fetchone():
         try:
-            # Recréer la table sans la contrainte NOT NULL sur code
+            # RecrÃ©er la table sans la contrainte NOT NULL sur code
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS matiere_params_new (
@@ -1317,7 +1317,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 16, "matiere_params_code_nullable_and_matiere_base_groupe")
 
-    # v17 — base matière : liens directs vers matiere_params (IDs composants)
+    # v17 â€” base matiÃ¨re : liens directs vers matiere_params (IDs composants)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=17 LIMIT 1").fetchone():
         try:
             mb_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matiere_base)").fetchall()}
@@ -1349,7 +1349,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 17, "matiere_base_param_ids")
 
-    # v18 — Traça fabrication : liaison scans matières ↔ réceptions (fournisseur + certificat)
+    # v18 â€” TraÃ§a fabrication : liaison scans matiÃ¨res â†” rÃ©ceptions (fournisseur + certificat)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=18 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()}
         if "reception_id" not in cols:
@@ -1363,7 +1363,7 @@ def _migrate(conn):
             conn.execute("ALTER TABLE fab_matieres_utilisees ADD COLUMN certificat_fsc_manual TEXT")
         _record_schema_migration(conn, 18, "fab_traca_link_receptions")
 
-    # v19 — Profil utilisateur : adresse + date de naissance
+    # v19 â€” Profil utilisateur : adresse + date de naissance
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=19 LIMIT 1").fetchone():
         ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "adresse" not in ucols:
@@ -1373,7 +1373,7 @@ def _migrate(conn):
             conn.execute("ALTER TABLE users ADD COLUMN date_naissance TEXT")
         _record_schema_migration(conn, 19, "users_adresse_date_naissance")
 
-    # v20 — Planning : commentaires par jour (timeline)
+    # v20 â€” Planning : commentaires par jour (timeline)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=20 LIMIT 1").fetchone():
         if not conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='planning_day_comments'"
@@ -1392,7 +1392,7 @@ def _migrate(conn):
         )
         _record_schema_migration(conn, 20, "planning_day_comments")
 
-    # v21 — Planning : date de fin manuelle (override saisie production)
+    # v21 â€” Planning : date de fin manuelle (override saisie production)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=21 LIMIT 1").fetchone():
         pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "planned_end_manual" not in pe_cols:
@@ -1401,14 +1401,14 @@ def _migrate(conn):
             )
         _record_schema_migration(conn, 21, "planning_planned_end_manual")
 
-    # v22 — Machines : horaires paire/impaire (JSON) pour la timeline Cohésio 2 et similaires
+    # v22 â€” Machines : horaires paire/impaire (JSON) pour la timeline CohÃ©sio 2 et similaires
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=22 LIMIT 1").fetchone():
         mcols = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
         if "horaires_parity" not in mcols:
             conn.execute("ALTER TABLE machines ADD COLUMN horaires_parity TEXT")
         _record_schema_migration(conn, 22, "machines_horaires_parity")
 
-    # v23 — Référentiel codes opération (ex operations.json)
+    # v23 â€” RÃ©fÃ©rentiel codes opÃ©ration (ex operations.json)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=23 LIMIT 1").fetchone():
         if not conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='operation_codes'"
@@ -1435,34 +1435,34 @@ def _migrate(conn):
             pass
         _record_schema_migration(conn, 23, "operation_codes")
 
-    # v24 — Préférences thème utilisateur (palette, style, mode)
+    # v24 â€” PrÃ©fÃ©rences thÃ¨me utilisateur (palette, style, mode)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=24 LIMIT 1").fetchone():
         ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "theme_prefs" not in ucols:
             conn.execute("ALTER TABLE users ADD COLUMN theme_prefs TEXT")
         _record_schema_migration(conn, 24, "users_theme_prefs")
 
-    # v25 — Planning : exigences de production par dossier
+    # v25 â€” Planning : exigences de production par dossier
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=25 LIMIT 1").fetchone():
         pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "exigences_production" not in pe_cols:
             conn.execute("ALTER TABLE planning_entries ADD COLUMN exigences_production TEXT")
         _record_schema_migration(conn, 25, "planning_exigences_production")
 
-    # v26 — Jours fériés nationaux 2026 (planning + calendrier)
+    # v26 â€” Jours fÃ©riÃ©s nationaux 2026 (planning + calendrier)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=26 LIMIT 1").fetchone():
         feries_2026 = [
             ("2026-01-01", "Jour de l'an"),
-            ("2026-04-06", "Lundi de Pâques"),
-            ("2026-05-01", "Fête du Travail"),
-            ("2026-05-08", "Victoire des Alliés 1945"),
+            ("2026-04-06", "Lundi de PÃ¢ques"),
+            ("2026-05-01", "FÃªte du Travail"),
+            ("2026-05-08", "Victoire des AlliÃ©s 1945"),
             ("2026-05-14", "Jeudi de l'Ascension"),
-            ("2026-05-25", "Lundi de Pentecôte"),
-            ("2026-07-14", "Fête Nationale"),
+            ("2026-05-25", "Lundi de PentecÃ´te"),
+            ("2026-07-14", "FÃªte Nationale"),
             ("2026-08-15", "Assomption"),
             ("2026-11-01", "La Toussaint"),
             ("2026-11-11", "Armistice 1918"),
-            ("2026-12-25", "Noël"),
+            ("2026-12-25", "NoÃ«l"),
         ]
         conn.execute("DELETE FROM planning_holidays")
         machine_ids = [
@@ -1478,7 +1478,7 @@ def _migrate(conn):
                 )
         _record_schema_migration(conn, 26, "feries_nationaux_2026")
 
-    # v27 — Plusieurs affectations RH par personne et par semaine (jours partiels multi-postes)
+    # v27 â€” Plusieurs affectations RH par personne et par semaine (jours partiels multi-postes)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=27 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -1509,7 +1509,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 27, "rh_planning_multi_affectations_semaine")
 
-    # v28 — Événements calendrier personnel (MyCalendrier)
+    # v28 â€” Ã‰vÃ©nements calendrier personnel (MyCalendrier)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=28 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -1531,7 +1531,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 28, "cal_events_perso")
 
-    # v29 — Journal d'audit (actions sensibles)
+    # v29 â€” Journal d'audit (actions sensibles)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=29 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -1555,7 +1555,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 29, "audit_logs")
 
-    # v31 — FSC : flag certification requise sur les dossiers planning
+    # v31 â€” FSC : flag certification requise sur les dossiers planning
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=31 LIMIT 1").fetchone():
         pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "fsc_requis" not in pe_cols:
@@ -1569,7 +1569,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 31, "planning_entries_fsc_requis")
 
-    # v32 — FSC : type de claim sur les réceptions de bobines
+    # v32 â€” FSC : type de claim sur les rÃ©ceptions de bobines
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=32 LIMIT 1").fetchone():
         sr_cols = {r["name"] for r in conn.execute("PRAGMA table_info(stock_receptions)").fetchall()}
         if "fsc_type_claim" not in sr_cols:
@@ -1579,7 +1579,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 32, "stock_receptions_fsc_type_claim")
 
-    # v33 — FSC : champs alerte sur fab_matieres_utilisees
+    # v33 â€” FSC : champs alerte sur fab_matieres_utilisees
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=33 LIMIT 1").fetchone():
         fmu_cols = {
             r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()
@@ -1595,7 +1595,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 33, "fab_matieres_fsc_warning")
 
-    # v34 — Photo de profil utilisateur
+    # v34 â€” Photo de profil utilisateur
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=34 LIMIT 1").fetchone():
         ucols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "avatar_url" not in ucols:
@@ -1603,7 +1603,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 34, "users_avatar_url")
 
-    # v35 — Chat interne (DMs + canaux d'équipe)
+    # v35 â€” Chat interne (DMs + canaux d'Ã©quipe)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=35 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_channels (
@@ -1643,7 +1643,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 35, "chat_channels_messages")
 
-    # v36 — Pièces jointes messagerie
+    # v36 â€” PiÃ¨ces jointes messagerie
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=36 LIMIT 1").fetchone():
         for col, typedef in (
             ("attachment_url", "TEXT"),
@@ -1656,7 +1656,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 36, "chat_messages_attachments")
 
-    # v37 — Réactions emoji sur les messages chat
+    # v37 â€” RÃ©actions emoji sur les messages chat
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=37 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_reactions (
@@ -1675,14 +1675,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 37, "chat_reactions")
 
-    # v38 — Retirer des fériés planning les jours off erronés (18–22 mai 2026) ; calendrier = liste nationale
+    # v38 â€” Retirer des fÃ©riÃ©s planning les jours off erronÃ©s (18â€“22 mai 2026) ; calendrier = liste nationale
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=38 LIMIT 1").fetchone():
         conn.execute(
             "DELETE FROM planning_holidays WHERE date >= '2026-05-18' AND date <= '2026-05-22'"
         )
         _record_schema_migration(conn, 38, "cleanup_feries_planning_mai_2026")
 
-    # v39 — MyExpé : référentiel transporteurs
+    # v39 â€” MyExpÃ© : rÃ©fÃ©rentiel transporteurs
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=39 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -1697,13 +1697,13 @@ def _migrate(conn):
                 zone_france_hors_paris INTEGER DEFAULT 0,
                 zone_affretement INTEGER DEFAULT 0,     -- >6 palettes
                 zone_messagerie INTEGER DEFAULT 0,      -- <6 palettes (ramasse)
-                tarif_filename TEXT,                    -- nom du fichier uploadé
+                tarif_filename TEXT,                    -- nom du fichier uploadÃ©
                 tarif_url TEXT,                         -- chemin relatif de stockage
-                -- Colonnes ajoutées par migrations ultérieures — dupliquées
+                -- Colonnes ajoutÃ©es par migrations ultÃ©rieures â€” dupliquÃ©es
                 -- ici pour que le seed initial (`seed_expe_transporteurs_if_empty`,
-                -- appelé dans la même migration que la CREATE TABLE) fonctionne
-                -- sur une DB fraîche Kernse. Les ALTER TABLE plus loin sont
-                -- devenus des no-op grâce au check `if col not in cols`.
+                -- appelÃ© dans la mÃªme migration que la CREATE TABLE) fonctionne
+                -- sur une DB fraÃ®che Kernse. Les ALTER TABLE plus loin sont
+                -- devenus des no-op grÃ¢ce au check `if col not in cols`.
                 palette_max INTEGER,                    -- v64
                 poids_max_kg REAL,                      -- v64
                 accepte_poids INTEGER DEFAULT 1,        -- v64
@@ -1723,7 +1723,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 39, "expe_transporteurs")
 
-    # v40 — Matières premières : référentiel
+    # v40 â€” MatiÃ¨res premiÃ¨res : rÃ©fÃ©rentiel
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=40 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS matieres_premieres (
@@ -1741,7 +1741,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 40, "matieres_premieres")
 
-    # v41 — Matières premières : stock courant
+    # v41 â€” MatiÃ¨res premiÃ¨res : stock courant
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=41 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mp_stock (
@@ -1755,7 +1755,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 41, "mp_stock")
 
-    # v42 — Matières premières : historique mouvements
+    # v42 â€” MatiÃ¨res premiÃ¨res : historique mouvements
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=42 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS mp_mouvements (
@@ -1777,7 +1777,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 42, "mp_mouvements")
 
-    # v43 — MyCompta : codes de banque (code vendeur Factor → compte CAF)
+    # v43 â€” MyCompta : codes de banque (code vendeur Factor â†’ compte CAF)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=43 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS compta_banques (
@@ -1803,7 +1803,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 43, "compta_banques")
 
-    # v44 — MyExpé : transporteurs historiques (Coupé, Ceva, Coquelle, Dimotrans)
+    # v44 â€” MyExpÃ© : transporteurs historiques (CoupÃ©, Ceva, Coquelle, Dimotrans)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=44 LIMIT 1").fetchone():
         from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 
@@ -1811,7 +1811,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 44, "expe_transporteurs_seed")
 
-    # v45 — MyAO : demandes
+    # v45 â€” MyAO : demandes
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=45 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ao_demandes (
@@ -1829,7 +1829,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 45, "ao_demandes")
 
-    # v46 — MyAO : lignes
+    # v46 â€” MyAO : lignes
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=46 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ao_lignes (
@@ -1838,7 +1838,7 @@ def _migrate(conn):
                 ref_produit TEXT NOT NULL,
                 designation TEXT NOT NULL,
                 quantite    REAL NOT NULL,
-                unite       TEXT DEFAULT 'unité',
+                unite       TEXT DEFAULT 'unitÃ©',
                 notes       TEXT,
                 position    INTEGER DEFAULT 0
             )
@@ -1846,7 +1846,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 46, "ao_lignes")
 
-    # v47 — MyAO : fournisseurs invités
+    # v47 â€” MyAO : fournisseurs invitÃ©s
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=47 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ao_fournisseurs (
@@ -1865,7 +1865,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 47, "ao_fournisseurs")
 
-    # v48 — MyAO : réponses par ligne
+    # v48 â€” MyAO : rÃ©ponses par ligne
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=48 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ao_reponses (
@@ -1881,7 +1881,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 48, "ao_reponses")
 
-    # v49 — MyAO : messages portail
+    # v49 â€” MyAO : messages portail
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=49 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ao_messages (
@@ -1897,7 +1897,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 49, "ao_messages")
 
-    # v50 — MyAO : pièces jointes
+    # v50 â€” MyAO : piÃ¨ces jointes
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=50 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ao_pieces_jointes (
@@ -1964,7 +1964,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 55, "chat_messages_pin")
 
-    # v56 — Import OF PDF (MyProd)
+    # v56 â€” Import OF PDF (MyProd)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=56 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2025,7 +2025,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 56, "of_imports")
 
-    # v57 — Post-its portail (desktop, par utilisateur)
+    # v57 â€” Post-its portail (desktop, par utilisateur)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=57 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2055,49 +2055,49 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 57, "postits")
 
-    # v58 — Annonces de mise à jour messagerie (chat interne)
+    # v58 â€” Annonces de mise Ã  jour messagerie (chat interne)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=58 LIMIT 1").fetchone():
         _msg_chat_annonce = (
             '<div style="font-size:13px;line-height:1.7;color:var(--text2)">'
             '<div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:12px">'
-            'Mise à jour — Messagerie</div>'
+            'Mise Ã  jour â€” Messagerie</div>'
             '<div style="margin-bottom:10px;font-weight:600;color:var(--text);font-size:12px;'
-            'text-transform:uppercase;letter-spacing:.5px">Nouveautés</div>'
+            'text-transform:uppercase;letter-spacing:.5px">NouveautÃ©s</div>'
             '<ul style="margin:0 0 14px 0;padding-left:18px">'
-            '<li style="margin-bottom:5px">Envoi de GIFs — bouton + dans la barre de saisie, puis GIF.</li>'
-            '<li style="margin-bottom:5px">Mentions — taper @ pour taguer un collègue. @tous pour tout le canal.</li>'
-            '<li style="margin-bottom:5px">Notifications navigateur — demande d\'activation au premier usage.</li>'
-            '<li style="margin-bottom:5px">Emoji de canal — les administrateurs peuvent personnaliser l\'icône depuis les réglages du canal.</li>'
-            '<li style="margin-bottom:5px">Réactions emoji sur les messages.</li>'
+            '<li style="margin-bottom:5px">Envoi de GIFs â€” bouton + dans la barre de saisie, puis GIF.</li>'
+            '<li style="margin-bottom:5px">Mentions â€” taper @ pour taguer un collÃ¨gue. @tous pour tout le canal.</li>'
+            '<li style="margin-bottom:5px">Notifications navigateur â€” demande d\'activation au premier usage.</li>'
+            '<li style="margin-bottom:5px">Emoji de canal â€” les administrateurs peuvent personnaliser l\'icÃ´ne depuis les rÃ©glages du canal.</li>'
+            '<li style="margin-bottom:5px">RÃ©actions emoji sur les messages.</li>'
             '<li style="margin-bottom:5px">Modification d\'un message (15 min, texte seul).</li>'
-            '<li style="margin-bottom:5px">Épinglage de messages — bouton dans l\'en-tête du canal.</li>'
+            '<li style="margin-bottom:5px">Ã‰pinglage de messages â€” bouton dans l\'en-tÃªte du canal.</li>'
             '</ul>'
             '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);'
             'font-size:11px;color:var(--muted);line-height:1.6">'
-            'Dans l\'optique d\'améliorer constamment l\'outil, vos retours sont les bienvenus.<br>'
+            'Dans l\'optique d\'amÃ©liorer constamment l\'outil, vos retours sont les bienvenus.<br>'
             'Merci de votre confiance.<br>'
-            '<span style="color:var(--text2);font-weight:600">Eugène</span></div></div>'
+            '<span style="color:var(--text2);font-weight:600">EugÃ¨ne</span></div></div>'
         )
         _seed_ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         exists = conn.execute(
             "SELECT 1 FROM update_announcements WHERE scope=? AND titre=? LIMIT 1",
-            ("messages", "Messagerie — GIFs, mentions et notifications"),
+            ("messages", "Messagerie â€” GIFs, mentions et notifications"),
         ).fetchone()
         if not exists:
             conn.execute(
                 "INSERT INTO update_announcements (scope,titre,message,created_at,created_by,active) VALUES (?,?,?,?,?,1)",
                 (
                     "messages",
-                    "Messagerie — GIFs, mentions et notifications",
+                    "Messagerie â€” GIFs, mentions et notifications",
                     _msg_chat_annonce,
                     _seed_ts,
-                    "système",
+                    "systÃ¨me",
                 ),
             )
         conn.commit()
         _record_schema_migration(conn, 58, "update_announcements_messages_chat")
 
-    # v59 — Post-its visibles sur toutes les pages (option multi-page)
+    # v59 â€” Post-its visibles sur toutes les pages (option multi-page)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=59 LIMIT 1").fetchone():
         conn.execute(
             "ALTER TABLE postits ADD COLUMN multi_page INTEGER NOT NULL DEFAULT 0"
@@ -2105,7 +2105,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 59, "postits_multi_page")
 
-    # v60 — Matières premières : piles (palettes) et palettes (cartons)
+    # v60 â€” MatiÃ¨res premiÃ¨res : piles (palettes) et palettes (cartons)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=60 LIMIT 1").fetchone():
         mp_cols = {
             r["name"]
@@ -2126,7 +2126,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 60, "matieres_premieres_palettes_par_pile")
 
-    # v61 — Post-its réduits en barre en bas de l'écran
+    # v61 â€” Post-its rÃ©duits en barre en bas de l'Ã©cran
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=61 LIMIT 1").fetchone():
         conn.execute(
             "ALTER TABLE postits ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"
@@ -2134,7 +2134,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 61, "postits_hidden")
 
-    # v62 — Post-its : couleur personnalisable (pastille)
+    # v62 â€” Post-its : couleur personnalisable (pastille)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=62 LIMIT 1").fetchone():
         conn.execute("ALTER TABLE postits ADD COLUMN color TEXT")
         conn.execute(
@@ -2146,7 +2146,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 62, "postits_color")
 
-    # v63 — MyExpé : FK transporteur sur départs
+    # v63 â€” MyExpÃ© : FK transporteur sur dÃ©parts
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=63 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
         if "transporteur_id" not in cols:
@@ -2156,7 +2156,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 63, "expe_departs_transporteur_fk")
 
-    # v64 — MyExpé : capacités transporteurs (comparateur)
+    # v64 â€” MyExpÃ© : capacitÃ©s transporteurs (comparateur)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=64 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
         for col, defn in [
@@ -2174,7 +2174,7 @@ def _migrate(conn):
         update_expe_transporteurs_capacites(conn)
         conn.commit()
 
-    # v65 — MyExpé : grilles tarifaires structurées
+    # v65 â€” MyExpÃ© : grilles tarifaires structurÃ©es
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=65 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2216,7 +2216,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 65, "expe_tarifs_schema")
 
-    # v66 — MyExpé : demandes de devis (prospection parallèle)
+    # v66 â€” MyExpÃ© : demandes de devis (prospection parallÃ¨le)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=66 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2254,7 +2254,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 66, "expe_demandes_devis")
 
-    # v67 — MyExpé : transporteurs prospects
+    # v67 â€” MyExpÃ© : transporteurs prospects
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=67 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2277,7 +2277,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 67, "expe_transporteurs_prospects")
 
-    # v68 — MyExpé : délais carte France (base partagée, remplace localStorage)
+    # v68 â€” MyExpÃ© : dÃ©lais carte France (base partagÃ©e, remplace localStorage)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=68 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2320,7 +2320,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 68, "expe_delais")
 
-    # v69 — MyAO : carnet fournisseurs récurrents
+    # v69 â€” MyAO : carnet fournisseurs rÃ©currents
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=69 LIMIT 1").fetchone():
         conn.execute(
             """
@@ -2337,7 +2337,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 69, "ao_carnet_fournisseurs")
 
-    # v70 — MyAO : catalogue produits récurrents
+    # v70 â€” MyAO : catalogue produits rÃ©currents
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=70 LIMIT 1").fetchone():
         conn.execute(
             """
@@ -2345,7 +2345,7 @@ def _migrate(conn):
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 ref         TEXT NOT NULL,
                 designation TEXT NOT NULL,
-                unite       TEXT DEFAULT 'unité',
+                unite       TEXT DEFAULT 'unitÃ©',
                 notes       TEXT,
                 created_at  TEXT NOT NULL
             )
@@ -2354,7 +2354,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 70, "ao_produits")
 
-    # v71 — Liaison OF → planning_entries
+    # v71 â€” Liaison OF â†’ planning_entries
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=71 LIMIT 1").fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "of_import_id" not in pe_cols:
@@ -2364,7 +2364,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 71, "planning_entries_of_import_link")
 
-    # v72 — MyAO : carnet clients récurrents
+    # v72 â€” MyAO : carnet clients rÃ©currents
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=72 LIMIT 1").fetchone():
         conn.execute(
             """
@@ -2381,7 +2381,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 72, "ao_carnet_clients")
 
-    # v73 — MyAO : fiche produit complète (JSON + client)
+    # v73 â€” MyAO : fiche produit complÃ¨te (JSON + client)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=73 LIMIT 1").fetchone():
         ap_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_produits)").fetchall()}
         if "client_id" not in ap_cols:
@@ -2391,7 +2391,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 73, "ao_produits_fiche")
 
-    # v74 — Matières premières : frontal, glassine (+ couleur)
+    # v74 â€” MatiÃ¨res premiÃ¨res : frontal, glassine (+ couleur)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=74 LIMIT 1").fetchone():
         mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
         if "couleur" not in mp_cols:
@@ -2429,7 +2429,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 74, "matieres_premieres_frontal_glassine")
 
-    # v75 — MyAO : carnet fournisseurs — société et adresse
+    # v75 â€” MyAO : carnet fournisseurs â€” sociÃ©tÃ© et adresse
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=75 LIMIT 1").fetchone():
         cf_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_carnet_fournisseurs)").fetchall()}
         if "societe" not in cf_cols:
@@ -2439,7 +2439,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 75, "ao_carnet_fournisseurs_societe_adresse")
 
-    # v77 — MyAO : référence produit unique (insensible à la casse)
+    # v77 â€” MyAO : rÃ©fÃ©rence produit unique (insensible Ã  la casse)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=77 LIMIT 1").fetchone():
         dup = conn.execute(
             """
@@ -2455,7 +2455,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 77, "ao_produits_ref_unique")
 
-    # v76 — MyExpé : type de palette (réf. matières premières MyStock)
+    # v76 â€” MyExpÃ© : type de palette (rÃ©f. matiÃ¨res premiÃ¨res MyStock)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=76 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
         if "type_palette_matiere_id" not in cols:
@@ -2466,7 +2466,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 76, "expe_departs_type_palette")
 
-    # v78 — Calcul coûts matières (remplace Excel / schéma distinct de MyDevis matiere_*)
+    # v78 â€” Calcul coÃ»ts matiÃ¨res (remplace Excel / schÃ©ma distinct de MyDevis matiere_*)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=78 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2572,7 +2572,7 @@ def _migrate(conn):
             "INSERT OR IGNORE INTO mc_material_category (code, label, sort_order) VALUES (?,?,?)",
             [
                 ("FRONTAL", "Frontal", 1),
-                ("ADHESIF", "Adhésif", 2),
+                ("ADHESIF", "AdhÃ©sif", 2),
                 ("SILICONE", "Silicone", 3),
                 ("GLASSINE", "Glassine", 4),
                 ("AUTRE", "Autre", 5),
@@ -2590,7 +2590,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 78, "mc_material_cost_schema")
 
-    # v79 — Coûts matières : source du taux FX sur mc_setting
+    # v79 â€” CoÃ»ts matiÃ¨res : source du taux FX sur mc_setting
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=79 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_setting)").fetchall()}
         if "source" not in cols:
@@ -2598,7 +2598,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 79, "mc_setting_fx_source")
 
-    # v80 — Accès applicatif MyDevis (devis) → pricing
+    # v80 â€” AccÃ¨s applicatif MyDevis (devis) â†’ pricing
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=80 LIMIT 1").fetchone():
         for row in conn.execute(
             "SELECT id, access_overrides, portal_apps_order FROM users"
@@ -2642,7 +2642,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 80, "app_access_devis_to_pricing")
 
-    # v81 — Coûts matières : accès réservé Direction et super admin (retrait Administration)
+    # v81 â€” CoÃ»ts matiÃ¨res : accÃ¨s rÃ©servÃ© Direction et super admin (retrait Administration)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=81 LIMIT 1").fetchone():
         allowed_roles = {ROLE_DIRECTION, ROLE_SUPERADMIN}
         for row in conn.execute("SELECT id, role, access_overrides FROM users").fetchall():
@@ -2672,7 +2672,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 81, "pricing_access_direction_superadmin_only")
 
-    # v82 — MyStock : produits finis (catalogue + mouvements)
+    # v82 â€” MyStock : produits finis (catalogue + mouvements)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=82 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2680,7 +2680,7 @@ def _migrate(conn):
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 reference TEXT NOT NULL UNIQUE,
                 designation TEXT NOT NULL,
-                unite TEXT DEFAULT 'pièces',
+                unite TEXT DEFAULT 'piÃ¨ces',
                 created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
             );
             CREATE TABLE IF NOT EXISTS pf_mouvements (
@@ -2689,7 +2689,7 @@ def _migrate(conn):
                 designation TEXT NOT NULL,
                 type TEXT NOT NULL CHECK(type IN ('entree', 'sortie')),
                 quantite REAL NOT NULL,
-                unite TEXT DEFAULT 'pièces',
+                unite TEXT DEFAULT 'piÃ¨ces',
                 emplacement TEXT NOT NULL,
                 no_of TEXT,
                 commentaire TEXT,
@@ -2704,7 +2704,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 82, "produits_finis_pf_mouvements")
 
-    # v83 — MyAO : quotation, devise, unité et coef sur les réponses fournisseur
+    # v83 â€” MyAO : quotation, devise, unitÃ© et coef sur les rÃ©ponses fournisseur
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=83 LIMIT 1").fetchone():
         ar_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
         if "quotation" not in ar_cols:
@@ -2732,7 +2732,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 83, "ao_reponses_quotation_pricing")
 
-    # v84 — planning_entries : département livraison et prise de RDV
+    # v84 â€” planning_entries : dÃ©partement livraison et prise de RDV
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=84 LIMIT 1").fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "departement_livraison" not in pe_cols:
@@ -2746,7 +2746,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 84, "planning_entries_dept_livraison_prise_rdv")
 
-    # v85 — MyExpé : portail transporteur (réponses en ligne)
+    # v85 â€” MyExpÃ© : portail transporteur (rÃ©ponses en ligne)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=85 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2776,7 +2776,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 85, "expe_portal_transporteurs")
 
-    # v86 — MyStock Monitoring : réconciliation stocks PF ERP vs MySifa
+    # v86 â€” MyStock Monitoring : rÃ©conciliation stocks PF ERP vs MySifa
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=86 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -2819,7 +2819,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 86, "reconciliation_snapshots_pf")
 
-    # v87 — Tableaux de bord : référentiel créé par le superadmin
+    # v87 â€” Tableaux de bord : rÃ©fÃ©rentiel crÃ©Ã© par le superadmin
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=87 LIMIT 1").fetchone():
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS dashboards (
@@ -2838,7 +2838,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 87, "dashboards")
 
-    # v88 — Tableaux de bord : association utilisateur ↔ dashboard
+    # v88 â€” Tableaux de bord : association utilisateur â†” dashboard
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=88 LIMIT 1").fetchone():
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS user_dashboards (
@@ -2856,7 +2856,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 88, "user_dashboards")
 
-    # v89 — Table des clés API (pont Access ↔ MySifa)
+    # v89 â€” Table des clÃ©s API (pont Access â†” MySifa)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=89 LIMIT 1").fetchone():
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS api_keys (
@@ -2877,7 +2877,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 89, "api_keys")
 
-    # v90 — Fiches techniques produits
+    # v90 â€” Fiches techniques produits
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=90 LIMIT 1").fetchone():
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS fiches_techniques (
@@ -2901,7 +2901,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 90, "fiches_techniques")
 
-    # v91 — Humeur utilisateur (indicateur quotidien)
+    # v91 â€” Humeur utilisateur (indicateur quotidien)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=91 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)").fetchall()}
         if "humeur_active" not in cols:
@@ -2913,7 +2913,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 91, "users_humeur")
 
-    # v92 — MyBAT : gestion des Bons À Tirer
+    # v92 â€” MyBAT : gestion des Bons Ã€ Tirer
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=92 LIMIT 1").fetchone():
         conn.execute(
             """
@@ -2938,7 +2938,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 92, "bat_entries")
 
-    # v93 — MyBAT : renommage numero_client→description + ajout delai_client
+    # v93 â€” MyBAT : renommage numero_clientâ†’description + ajout delai_client
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=93 LIMIT 1").fetchone():
         try:
             conn.execute("ALTER TABLE bat_entries RENAME COLUMN numero_client TO description")
@@ -2951,10 +2951,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 93, "bat_entries_v2")
 
-    # v94 — fiches_techniques : colonnes étendues depuis Access
+    # v94 â€” fiches_techniques : colonnes Ã©tendues depuis Access
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=94 LIMIT 1").fetchone():
         cols_to_add = [
-            # Étiquette
+            # Ã‰tiquette
             ("eti_laize",          "REAL"),
             ("eti_longueur",       "REAL"),
             ("eti_rayons",         "REAL"),
@@ -2963,7 +2963,7 @@ def _migrate(conn):
             ("mod_laize",          "REAL"),
             ("mod_longueur",       "REAL"),
             ("mod_nb_front",       "INTEGER"),
-            # Échenillage
+            # Ã‰chenillage
             ("lateral_ext",        "REAL"),
             ("horizontal",         "REAL"),
             ("lateral_int",        "REAL"),
@@ -2990,7 +2990,7 @@ def _migrate(conn):
             ("outil3_nb_dents",    "INTEGER"),
             ("outil3_nb_front",    "INTEGER"),
             ("outil3_nb_avance",   "INTEGER"),
-            # Matière
+            # MatiÃ¨re
             ("support",            "TEXT"),
             ("glassine",           "TEXT"),
             ("laize_optimale",     "REAL"),
@@ -3044,7 +3044,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 94, "fiches_techniques_extended")
 
-    # v95 — MyStock : sessions d'inventaire par emplacement (outil inventaire v2)
+    # v95 â€” MyStock : sessions d'inventaire par emplacement (outil inventaire v2)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=95 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS inventaires_sessions (
@@ -3064,7 +3064,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 95, "inventaires_sessions")
 
-    # v96 — expe_transporteurs : couleur personnalisée
+    # v96 â€” expe_transporteurs : couleur personnalisÃ©e
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=96 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
         if "couleur" not in cols:
@@ -3072,7 +3072,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 96, "expe_transporteurs_couleur")
 
-    # v97 — MyStock : produits de négoce (type sur produits)
+    # v97 â€” MyStock : produits de nÃ©goce (type sur produits)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=97 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(produits)").fetchall()}
         if "type" not in cols:
@@ -3080,7 +3080,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 97, "produits_type_negoce")
 
-    # v98 — Chat : reply, forward, soft-delete visible
+    # v98 â€” Chat : reply, forward, soft-delete visible
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=98 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(chat_messages)").fetchall()}
         if "reply_to_id" not in cols:
@@ -3092,7 +3092,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 98, "chat_messages_reply_forward")
 
-    # v99 — MyExpé : type_colis pour les envois sans palette (ex: vrac / UPS)
+    # v99 â€” MyExpÃ© : type_colis pour les envois sans palette (ex: vrac / UPS)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=99 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
         if "type_colis" not in cols:
@@ -3100,7 +3100,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 99, "expe_departs_type_colis")
 
-    # v100 — Notifications push (Web Push / VAPID)
+    # v100 â€” Notifications push (Web Push / VAPID)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=100 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -3120,11 +3120,11 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 100, "push_subscriptions")
 
-    # v101 — fiches_techniques + planning_entries : clé produit normalisée
-    # Permet la jointure planning_entries.ref_produit ↔ fiches_techniques
-    # sans dépendre du libellé textuel ni de la variante (machine, laize,
-    # conditionnement) saisie après le tiret. Trois dimensions extraites du
-    # libellé historique des fiches : machine, laize_mm, conditionnement_norm.
+    # v101 â€” fiches_techniques + planning_entries : clÃ© produit normalisÃ©e
+    # Permet la jointure planning_entries.ref_produit â†” fiches_techniques
+    # sans dÃ©pendre du libellÃ© textuel ni de la variante (machine, laize,
+    # conditionnement) saisie aprÃ¨s le tiret. Trois dimensions extraites du
+    # libellÃ© historique des fiches : machine, laize_mm, conditionnement_norm.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=101 LIMIT 1").fetchone():
         ft_cols = {r["name"] for r in conn.execute("PRAGMA table_info(fiches_techniques)").fetchall()}
         if "ref_produit_norm" not in ft_cols:
@@ -3133,13 +3133,13 @@ def _migrate(conn):
             conn.execute("ALTER TABLE fiches_techniques ADD COLUMN laize_mm INTEGER")
         if "conditionnement_norm" not in ft_cols:
             conn.execute("ALTER TABLE fiches_techniques ADD COLUMN conditionnement_norm TEXT")
-        # NB: la colonne `machine` existe déjà depuis v94 — on la réutilise.
+        # NB: la colonne `machine` existe dÃ©jÃ  depuis v94 â€” on la rÃ©utilise.
 
         pe_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "ref_produit_norm" not in pe_cols:
             conn.execute("ALTER TABLE planning_entries ADD COLUMN ref_produit_norm TEXT")
 
-        # Backfill via le parser. Sans écraser les valeurs renseignées à la main
+        # Backfill via le parser. Sans Ã©craser les valeurs renseignÃ©es Ã  la main
         # (machine, conditionnement) ; on remplit seulement les cases vides.
         try:
             from app.services.fiche_ref_parser import (
@@ -3197,10 +3197,10 @@ def _migrate(conn):
             "ON planning_entries(ref_produit_norm)"
         )
 
-        # Triggers : maintiennent ref_produit_norm à jour automatiquement
-        # à chaque INSERT/UPDATE, sans devoir patcher tous les endpoints.
-        # S'appuient sur la fonction Python `norm_ref_produit()` enregistrée
-        # à chaque ouverture de connexion (cf. _register_udfs).
+        # Triggers : maintiennent ref_produit_norm Ã  jour automatiquement
+        # Ã  chaque INSERT/UPDATE, sans devoir patcher tous les endpoints.
+        # S'appuient sur la fonction Python `norm_ref_produit()` enregistrÃ©e
+        # Ã  chaque ouverture de connexion (cf. _register_udfs).
         conn.executescript("""
             DROP TRIGGER IF EXISTS trg_pe_ref_produit_norm_ins;
             CREATE TRIGGER trg_pe_ref_produit_norm_ins
@@ -3245,7 +3245,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 101, "fiches_techniques_ref_produit_norm")
 
-    # v102 — MyStock : commentaires par produit dans les sessions d'inventaire
+    # v102 â€” MyStock : commentaires par produit dans les sessions d'inventaire
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=102 LIMIT 1").fetchone():
         existing = {r["name"] for r in conn.execute("PRAGMA table_info(inventaires_sessions)").fetchall()}
         if "commentaires_json" not in existing:
@@ -3256,7 +3256,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 102, "inventaires_sessions_commentaires")
 
-    # v103 — Paramètres : référentiel Clients (ERP)
+    # v103 â€” ParamÃ¨tres : rÃ©fÃ©rentiel Clients (ERP)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=103 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS clients (
@@ -3308,7 +3308,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 103, "clients_referentiel")
 
-    # v104 — MyAO : langue préférée des fournisseurs (FR/EN) pour les invitations
+    # v104 â€” MyAO : langue prÃ©fÃ©rÃ©e des fournisseurs (FR/EN) pour les invitations
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=104 LIMIT 1").fetchone():
         af_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
         if "langue" not in af_cols:
@@ -3325,7 +3325,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 104, "ao_fournisseurs_langue")
 
-    # v105 — MyBAT : table bat_pdfs (multi-PDF par entrée)
+    # v105 â€” MyBAT : table bat_pdfs (multi-PDF par entrÃ©e)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=105 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS bat_pdfs (
@@ -3353,7 +3353,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 105, "bat_pdfs_multi")
 
-    # v106 — Module Qualité : NC (non-conformités), fichiers et messages
+    # v106 â€” Module QualitÃ© : NC (non-conformitÃ©s), fichiers et messages
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=106 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS nc_dossiers (
@@ -3438,7 +3438,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 106, "qualite_non_conformites")
 
-        # v107 — planning_entries : date de livraison imposée (affichage rouge dans la timeline)
+        # v107 â€” planning_entries : date de livraison imposÃ©e (affichage rouge dans la timeline)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=107 LIMIT 1").fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "date_livraison_imposee" not in pe_cols:
@@ -3448,10 +3448,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 107, "planning_entries_date_livraison_imposee")
 
-    # v109 — flag of_link_user_managed sur planning_entries
-    # Évite que get_of_for_planning_entry re-crée automatiquement un lien
+    # v109 â€” flag of_link_user_managed sur planning_entries
+    # Ã‰vite que get_of_for_planning_entry re-crÃ©e automatiquement un lien
     # OF que l'utilisateur vient de retirer manuellement. Le flag est mis
-    # à 1 par les endpoints POST/DELETE sur planning_of_links et
+    # Ã  1 par les endpoints POST/DELETE sur planning_of_links et
     # link-planning-of.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=109 LIMIT 1").fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
@@ -3462,11 +3462,11 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 109, "planning_entries_of_link_user_managed")
 
-    # v108 — multi-OF par planning_entry : table de jonction planning_of_links
-    # Un dossier de production peut être lié à plusieurs OF (lots, plages,
+    # v108 â€” multi-OF par planning_entry : table de jonction planning_of_links
+    # Un dossier de production peut Ãªtre liÃ© Ã  plusieurs OF (lots, plages,
     # reliquats). La colonne planning_entries.of_import_id reste maintenue
-    # par triggers (= premier lien FIFO) pour la rétrocompat du code existant ;
-    # les nouvelles écritures passent par planning_of_links.
+    # par triggers (= premier lien FIFO) pour la rÃ©trocompat du code existant ;
+    # les nouvelles Ã©critures passent par planning_of_links.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=108 LIMIT 1").fetchone():
         conn.executescript(
             """
@@ -3499,10 +3499,10 @@ def _migrate(conn):
             (now_iso,),
         )
 
-        # Triggers de synchronisation : la colonne of_import_id reflète
+        # Triggers de synchronisation : la colonne of_import_id reflÃ¨te
         # automatiquement le premier lien (ordre position ASC, id ASC).
-        # Permet au code legacy (page planning, traceabilité, saisie) de
-        # continuer à lire of_import_id sans rien savoir du multi.
+        # Permet au code legacy (page planning, traceabilitÃ©, saisie) de
+        # continuer Ã  lire of_import_id sans rien savoir du multi.
         conn.executescript(
             """
             DROP TRIGGER IF EXISTS trg_planning_of_links_after_insert;
@@ -3537,11 +3537,11 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 108, "planning_of_links_multi")
 
-    # v110 — flag valide sur planning_entries
-    # Un dossier n'est plus zébré (« à placer / non finalisé ») que lorsqu'il est
-    # à la fois placé (a_placer=0) ET validé (valide=1). Les dossiers déjà placés
-    # avant cette migration sont considérés validés pour ne pas les faire basculer
-    # en zébré rétroactivement ; les dossiers encore « à placer » restent à valider.
+    # v110 â€” flag valide sur planning_entries
+    # Un dossier n'est plus zÃ©brÃ© (Â« Ã  placer / non finalisÃ© Â») que lorsqu'il est
+    # Ã  la fois placÃ© (a_placer=0) ET validÃ© (valide=1). Les dossiers dÃ©jÃ  placÃ©s
+    # avant cette migration sont considÃ©rÃ©s validÃ©s pour ne pas les faire basculer
+    # en zÃ©brÃ© rÃ©troactivement ; les dossiers encore Â« Ã  placer Â» restent Ã  valider.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=110 LIMIT 1").fetchone():
         pe_cols = {row[1] for row in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
         if "valide" not in pe_cols:
@@ -3554,14 +3554,14 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 110, "planning_entries_valide")
 
-    # v111 — MyExpé : lien départ ↔ dossier planning + suivi palettes Europe
-    # - planning_entry_id : trace le dossier de production source quand un départ
-    #   est créé via le picker "Depuis un dossier" dans Ajouter départ.
-    # - palette_europe (0/1) : marque ce départ comme expédition de palettes Europe
-    #   (consignées). Auto à 1 si la réf MyStock palette a is_europe=1.
-    # - palette_europe_statut : 'en_attente' (par défaut), 'retournee' ou 'perdue'.
+    # v111 â€” MyExpÃ© : lien dÃ©part â†” dossier planning + suivi palettes Europe
+    # - planning_entry_id : trace le dossier de production source quand un dÃ©part
+    #   est crÃ©Ã© via le picker "Depuis un dossier" dans Ajouter dÃ©part.
+    # - palette_europe (0/1) : marque ce dÃ©part comme expÃ©dition de palettes Europe
+    #   (consignÃ©es). Auto Ã  1 si la rÃ©f MyStock palette a is_europe=1.
+    # - palette_europe_statut : 'en_attente' (par dÃ©faut), 'retournee' ou 'perdue'.
     # - palette_europe_date_retour : YYYY-MM-DD, optionnelle.
-    # - palette_europe_note : commentaire libre (raison de perte, n° BL retour…).
+    # - palette_europe_note : commentaire libre (raison de perte, nÂ° BL retourâ€¦).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=111 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
         if "planning_entry_id" not in cols:
@@ -3597,15 +3597,15 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 111, "expe_departs_planning_link_palette_europe")
 
-    # v112 — MyStock : flag is_europe sur matières premières catégorie palette
-    # Marque les références palette consignées (Europe) pour détection auto dans MyExpé.
+    # v112 â€” MyStock : flag is_europe sur matiÃ¨res premiÃ¨res catÃ©gorie palette
+    # Marque les rÃ©fÃ©rences palette consignÃ©es (Europe) pour dÃ©tection auto dans MyExpÃ©.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=112 LIMIT 1").fetchone():
         mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
         if "is_europe" not in mp_cols:
             conn.execute(
                 "ALTER TABLE matieres_premieres ADD COLUMN is_europe INTEGER NOT NULL DEFAULT 0"
             )
-        # Détection auto initiale : références dont la désignation ou la réf contient "europe"
+        # DÃ©tection auto initiale : rÃ©fÃ©rences dont la dÃ©signation ou la rÃ©f contient "europe"
         conn.execute(
             """UPDATE matieres_premieres
                SET is_europe = 1
@@ -3621,7 +3621,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 112, "matieres_premieres_is_europe")
 
-    # ── Migration 113 : DSI + Repiquage passent en matin/aprem ──────────
+    # â”€â”€ Migration 113 : DSI + Repiquage passent en matin/aprem â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Les affectations existantes etaient en creneau='journee' ; on les deplace
     # par defaut sur 'matin' (l'utilisateur ajustera vers 'aprem' au cas par cas).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=113 LIMIT 1").fetchone():
@@ -3631,9 +3631,9 @@ def _migrate(conn):
         targets = []
         for r in rows:
             n = (r["nom"] or "").lower().strip()
-            n = (n.replace("é", "e").replace("è", "e").replace("ê", "e")
-                  .replace("à", "a").replace("â", "a")
-                  .replace("î", "i").replace("ô", "o"))
+            n = (n.replace("Ã©", "e").replace("Ã¨", "e").replace("Ãª", "e")
+                  .replace("Ã ", "a").replace("Ã¢", "a")
+                  .replace("Ã®", "i").replace("Ã´", "o"))
             if n == "dsi" or n.startswith("dsi ") or n.endswith(" dsi"):
                 targets.append(r["id"])
             elif "repiquage" in n or n == "rep" or n.startswith("rep "):
@@ -3947,7 +3947,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 119, "mp_laizes_matieres_laizees")
 
-    # v120 — MyExpé : référence "YYYY-N" pour les demandes de devis
+    # v120 â€” MyExpÃ© : rÃ©fÃ©rence "YYYY-N" pour les demandes de devis
     if not conn.execute(
         "SELECT 1 FROM schema_migrations WHERE version=120 LIMIT 1"
     ).fetchone():
@@ -3961,13 +3961,13 @@ def _migrate(conn):
             conn.execute(
                 "ALTER TABLE expe_demandes_devis ADD COLUMN reference TEXT"
             )
-        # Backfill : numéros séquentiels par année (ordre chronologique).
+        # Backfill : numÃ©ros sÃ©quentiels par annÃ©e (ordre chronologique).
         rows = conn.execute(
             "SELECT id, created_at FROM expe_demandes_devis "
             "WHERE reference IS NULL OR reference='' "
             "ORDER BY COALESCE(created_at,''), id"
         ).fetchall()
-        # Compteurs initialisés à partir des références déjà présentes.
+        # Compteurs initialisÃ©s Ã  partir des rÃ©fÃ©rences dÃ©jÃ  prÃ©sentes.
         counters: dict[str, int] = {}
         existing = conn.execute(
             "SELECT reference FROM expe_demandes_devis WHERE reference IS NOT NULL"
@@ -4038,7 +4038,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 121, "pf_valorisation")
 
-    # v122 — Matières premières : catégorie "autre" + sous-section libre
+    # v122 â€” MatiÃ¨res premiÃ¨res : catÃ©gorie "autre" + sous-section libre
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=122 LIMIT 1").fetchone():
         mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
         if "sous_section" not in mp_cols:
@@ -4049,10 +4049,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 122, "matieres_premieres_autre_sous_section")
 
-    # v123 — Matières premières : conditionnement unitaire pour cartons / adhésifs / mandrins
-    # Analogue à metres_lineaires_par_bobine pour les frontaux : permet de saisir le prix
-    # à l'unité d'achat (€/carton, €/tube, €/kg) tout en gardant le stock en palettes.
-    # Valorisation = stock_palettes × unites_par_palette × prix_unitaire.
+    # v123 â€” MatiÃ¨res premiÃ¨res : conditionnement unitaire pour cartons / adhÃ©sifs / mandrins
+    # Analogue Ã  metres_lineaires_par_bobine pour les frontaux : permet de saisir le prix
+    # Ã  l'unitÃ© d'achat (â‚¬/carton, â‚¬/tube, â‚¬/kg) tout en gardant le stock en palettes.
+    # Valorisation = stock_palettes Ã— unites_par_palette Ã— prix_unitaire.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=123 LIMIT 1").fetchone():
         mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
         if "unites_par_palette" not in mp_cols:
@@ -4060,10 +4060,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 123, "matieres_premieres_unites_par_palette")
 
-    # v124 — Valorisation MP : flag « prix saisi numériquement assimilé USD ».
-    # Lorsque prix_en_usd = 1, le prix_unitaire stocké est considéré comme une valeur
-    # exprimée en USD (mais portée par le champ EUR pour compatibilité). Le « prix réel »
-    # affiché côté direction/superadmin = prix_unitaire × taux_eur_usd (paramètre MyCouts).
+    # v124 â€” Valorisation MP : flag Â« prix saisi numÃ©riquement assimilÃ© USD Â».
+    # Lorsque prix_en_usd = 1, le prix_unitaire stockÃ© est considÃ©rÃ© comme une valeur
+    # exprimÃ©e en USD (mais portÃ©e par le champ EUR pour compatibilitÃ©). Le Â« prix rÃ©el Â»
+    # affichÃ© cÃ´tÃ© direction/superadmin = prix_unitaire Ã— taux_eur_usd (paramÃ¨tre MyCouts).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=124 LIMIT 1").fetchone():
         valo_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_valorisation)").fetchall()}
         if "prix_en_usd" not in valo_cols:
@@ -4073,30 +4073,30 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 124, "mp_valorisation_prix_en_usd")
 
-    # v125 — Valorisation MP : flag « taxe d'importation » (multiplicatif avec USD).
+    # v125 â€” Valorisation MP : flag Â« taxe d'importation Â» (multiplicatif avec USD).
     # Lorsque taxe_importation = 1, on applique au prix_unitaire le multiplicateur
-    # (1 + import_tax_pct / 100), où import_tax_pct est le paramètre MyCouts.
-    # Combiné avec prix_en_usd : prix_reel = prix × taux_eur_usd × (1 + taxe%).
+    # (1 + import_tax_pct / 100), oÃ¹ import_tax_pct est le paramÃ¨tre MyCouts.
+    # CombinÃ© avec prix_en_usd : prix_reel = prix Ã— taux_eur_usd Ã— (1 + taxe%).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=125 LIMIT 1").fetchone():
         valo_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_valorisation)").fetchall()}
         if "taxe_importation" not in valo_cols:
             conn.execute(
                 "ALTER TABLE mp_valorisation ADD COLUMN taxe_importation INTEGER NOT NULL DEFAULT 0"
             )
-        # Seed la nouvelle clé mc_setting si la table existe (idempotent).
+        # Seed la nouvelle clÃ© mc_setting si la table existe (idempotent).
         try:
             conn.execute(
                 "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('import_tax_pct', 0)"
             )
         except Exception:
-            pass  # mc_setting peut ne pas exister sur les DB très anciennes
+            pass  # mc_setting peut ne pas exister sur les DB trÃ¨s anciennes
         conn.commit()
         _record_schema_migration(conn, 125, "mp_valorisation_taxe_importation")
 
-    # v126 — Valorisation MP : flag « coût transport » (forfait additif).
+    # v126 â€” Valorisation MP : flag Â« coÃ»t transport Â» (forfait additif).
     # Lorsque cout_transport_inclus = 1, on ajoute le forfait transport_cost_fixed_eur
-    # (paramètre MyCouts) UNE SEULE FOIS à la valorisation de la référence, APRÈS les
-    # multiplicateurs USD et taxe. Forfait peu importe la quantité en stock.
+    # (paramÃ¨tre MyCouts) UNE SEULE FOIS Ã  la valorisation de la rÃ©fÃ©rence, APRÃˆS les
+    # multiplicateurs USD et taxe. Forfait peu importe la quantitÃ© en stock.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=126 LIMIT 1").fetchone():
         valo_cols = {row[1] for row in conn.execute("PRAGMA table_info(mp_valorisation)").fetchall()}
         if "cout_transport_inclus" not in valo_cols:
@@ -4112,7 +4112,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 126, "mp_valorisation_cout_transport")
 
-    # v127 — MyExpé : transporteurs avec portail séparé et emails multiples
+    # v127 â€” MyExpÃ© : transporteurs avec portail sÃ©parÃ© et emails multiples
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=127 LIMIT 1").fetchone():
         import json as _json
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()}
@@ -4120,7 +4120,7 @@ def _migrate(conn):
             conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN contact_portail_url TEXT")
         if "contact_emails" not in cols:
             conn.execute("ALTER TABLE expe_transporteurs ADD COLUMN contact_emails TEXT")
-        # Backfill : contact_email = URL → contact_portail_url ; sinon → contact_emails JSON
+        # Backfill : contact_email = URL â†’ contact_portail_url ; sinon â†’ contact_emails JSON
         rows = conn.execute(
             "SELECT id, contact_email, contact_portail_url, contact_emails FROM expe_transporteurs"
         ).fetchall()
@@ -4139,7 +4139,7 @@ def _migrate(conn):
                 if not has_emails:
                     new_emails = "[]"
             else:
-                # Peut contenir plusieurs adresses séparées par , ou ;
+                # Peut contenir plusieurs adresses sÃ©parÃ©es par , ou ;
                 if not has_emails:
                     parts = []
                     for chunk in old.replace(";", ",").split(","):
@@ -4154,8 +4154,8 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 127, "expe_transporteurs_portail_emails")
 
-    # v128 — Codes maintenance : migration localStorage → table SQLite.
-    # Permet la synchronisation v2 → v1 et l'accès depuis n'importe quel navigateur.
+    # v128 â€” Codes maintenance : migration localStorage â†’ table SQLite.
+    # Permet la synchronisation v2 â†’ v1 et l'accÃ¨s depuis n'importe quel navigateur.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=128 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS maintenance_codes (
@@ -4171,8 +4171,8 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 128, "maintenance_codes_table")
 
-    # v131 — Codes maintenance : référence métrage pour la catégorie "Suivi"
-    # (pièces d'usure). Texte libre comme intervalle (ex. "5000 m", "10 km").
+    # v131 â€” Codes maintenance : rÃ©fÃ©rence mÃ©trage pour la catÃ©gorie "Suivi"
+    # (piÃ¨ces d'usure). Texte libre comme intervalle (ex. "5000 m", "10 km").
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=131 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
         if "metrage_ref" not in cols:
@@ -4180,9 +4180,9 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 131, "maintenance_codes_metrage_ref")
 
-    # v130 — Demandes de devis transporteur : champ client + pièce jointe.
-    # Le client est renseigné par l'utilisateur à la création. La pièce jointe
-    # est un fichier uploadé optionnellement, stocké sous data/uploads/devis/.
+    # v130 â€” Demandes de devis transporteur : champ client + piÃ¨ce jointe.
+    # Le client est renseignÃ© par l'utilisateur Ã  la crÃ©ation. La piÃ¨ce jointe
+    # est un fichier uploadÃ© optionnellement, stockÃ© sous data/uploads/devis/.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=130 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_demandes_devis)").fetchall()}
         if "client" not in cols:
@@ -4194,9 +4194,9 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 130, "expe_demandes_devis_client_piece_jointe")
 
-    # v129 — Codes maintenance : intervalle de temps pour les codes périodiques.
+    # v129 â€” Codes maintenance : intervalle de temps pour les codes pÃ©riodiques.
     # Texte libre (ex. "Quotidien", "Hebdo", "30 jours", "1 mois", "6 mois").
-    # Ignoré côté UI quand periodique=0.
+    # IgnorÃ© cÃ´tÃ© UI quand periodique=0.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=129 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
         if "intervalle" not in cols:
@@ -4205,11 +4205,11 @@ def _migrate(conn):
         _record_schema_migration(conn, 129, "maintenance_codes_intervalle")
 
 
-    # v132 — Alertes de maintenance : règles paramétrables qui déclenchent un
-    # message / formulaire pour les opérateurs sur leur écran. Une alerte stocke
-    # ses paramètres complets (déclencheur, cible, formulaire de validation) en
-    # JSON dans `params`, ce qui évite d'avoir à faire une migration de schéma à
-    # chaque évolution du modèle de règles. `active` est à 0 à la création :
+    # v132 â€” Alertes de maintenance : rÃ¨gles paramÃ©trables qui dÃ©clenchent un
+    # message / formulaire pour les opÃ©rateurs sur leur Ã©cran. Une alerte stocke
+    # ses paramÃ¨tres complets (dÃ©clencheur, cible, formulaire de validation) en
+    # JSON dans `params`, ce qui Ã©vite d'avoir Ã  faire une migration de schÃ©ma Ã 
+    # chaque Ã©volution du modÃ¨le de rÃ¨gles. `active` est Ã  0 Ã  la crÃ©ation :
     # l'admin doit activer explicitement chaque alerte via le toggle.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=132 LIMIT 1").fetchone():
         conn.execute(
@@ -4226,12 +4226,12 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 132, "maintenance_alerts_table")
 
-    # v133 — Alertes liées aux codes maintenance.
-    # Chaque code "contrôle non périodique" doit avoir son alerte automatique.
-    # La date de dernière intervention du contrôle = last_ack_at de l'alerte
-    # (mise à jour quand l'opérateur valide le formulaire).
-    # linked_maint_code est UNIQUE quand non NULL pour éviter d'avoir deux
-    # alertes pour le même code (sécurité contre les désyncs).
+    # v133 â€” Alertes liÃ©es aux codes maintenance.
+    # Chaque code "contrÃ´le non pÃ©riodique" doit avoir son alerte automatique.
+    # La date de derniÃ¨re intervention du contrÃ´le = last_ack_at de l'alerte
+    # (mise Ã  jour quand l'opÃ©rateur valide le formulaire).
+    # linked_maint_code est UNIQUE quand non NULL pour Ã©viter d'avoir deux
+    # alertes pour le mÃªme code (sÃ©curitÃ© contre les dÃ©syncs).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=133 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alerts)").fetchall()}
         if "linked_maint_code" not in cols:
@@ -4242,8 +4242,8 @@ def _migrate(conn):
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_maint_alerts_linked_code "
             "ON maintenance_alerts(linked_maint_code) WHERE linked_maint_code IS NOT NULL"
         )
-        # Backfill : pour chaque contrôle non périodique existant, créer
-        # l'alerte associée si elle n'existe pas déjà.
+        # Backfill : pour chaque contrÃ´le non pÃ©riodique existant, crÃ©er
+        # l'alerte associÃ©e si elle n'existe pas dÃ©jÃ .
         now = datetime.now().isoformat()
         rows = conn.execute(
             "SELECT code, label FROM maintenance_codes "
@@ -4258,7 +4258,7 @@ def _migrate(conn):
             ).fetchone()
             if existing:
                 continue
-            nom = f"Contrôle : {code} – {label}" if label else f"Contrôle : {code}"
+            nom = f"ContrÃ´le : {code} â€“ {label}" if label else f"ContrÃ´le : {code}"
             nom = nom[:120]
             conn.execute(
                 """INSERT INTO maintenance_alerts
@@ -4269,10 +4269,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 133, "maintenance_alerts_link_to_codes")
 
-    # v134 — Réglages globaux des alertes maintenance (singleton row).
-    # Placement, taille et bloque-production s'appliquent à TOUTES les alertes
-    # actives. Stockés à part de chaque alerte pour qu'un changement global
-    # prenne effet immédiatement sans toucher au paramétrage individuel.
+    # v134 â€” RÃ©glages globaux des alertes maintenance (singleton row).
+    # Placement, taille et bloque-production s'appliquent Ã  TOUTES les alertes
+    # actives. StockÃ©s Ã  part de chaque alerte pour qu'un changement global
+    # prenne effet immÃ©diatement sans toucher au paramÃ©trage individuel.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=134 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS maintenance_alert_settings (
@@ -4294,10 +4294,10 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 134, "maintenance_alert_settings_singleton")
 
-    # v135 — Comportement d'empilement des alertes maintenance.
-    # 'stack'    : toutes les alertes actives sont affichées en pile
-    # 'queue'    : une seule à la fois, les autres attendent leur tour
-    # 'replace'  : la dernière alerte remplace celle déjà affichée
+    # v135 â€” Comportement d'empilement des alertes maintenance.
+    # 'stack'    : toutes les alertes actives sont affichÃ©es en pile
+    # 'queue'    : une seule Ã  la fois, les autres attendent leur tour
+    # 'replace'  : la derniÃ¨re alerte remplace celle dÃ©jÃ  affichÃ©e
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=135 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_settings)").fetchall()}
         if "stack_mode" not in cols:
@@ -4311,11 +4311,11 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 135, "maintenance_alert_settings_stack_mode")
 
-    # v136 — Historique des acquittements d'alertes maintenance.
-    # Chaque entrée trace : qui (user_id, nom), quand (ack_at), sur quelle
-    # machine, quel dossier en cours, les réponses cochées/saisies par point
-    # (JSON), et le commentaire libre. Permet l'audit qualité et le calcul
-    # du compteur périodique par machine.
+    # v136 â€” Historique des acquittements d'alertes maintenance.
+    # Chaque entrÃ©e trace : qui (user_id, nom), quand (ack_at), sur quelle
+    # machine, quel dossier en cours, les rÃ©ponses cochÃ©es/saisies par point
+    # (JSON), et le commentaire libre. Permet l'audit qualitÃ© et le calcul
+    # du compteur pÃ©riodique par machine.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=136 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS maintenance_alert_acks (
@@ -4342,11 +4342,11 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 136, "maintenance_alert_acks_table")
 
-    # v137 — Nouveaux défauts des réglages d'alerte (UX) :
+    # v137 â€” Nouveaux dÃ©fauts des rÃ©glages d'alerte (UX) :
     #   placement = top-right, size = medium, block_production = 0, stack_mode = queue
-    # On met à jour le singleton uniquement s'il n'a jamais été personnalisé
+    # On met Ã  jour le singleton uniquement s'il n'a jamais Ã©tÃ© personnalisÃ©
     # par un super admin (updated_by = 'auto:migration'). Les utilisateurs qui
-    # ont déjà configuré leurs propres réglages ne sont pas écrasés.
+    # ont dÃ©jÃ  configurÃ© leurs propres rÃ©glages ne sont pas Ã©crasÃ©s.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=137 LIMIT 1").fetchone():
         conn.execute(
             """UPDATE maintenance_alert_settings
@@ -4357,11 +4357,11 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 137, "maintenance_alert_settings_new_defaults")
 
-    # v138 — Espacement minimum entre alertes affichées à l'opérateur.
-    # min_gap_minutes = délai de silence après chaque acquittement pendant
-    # lequel aucune autre alerte ne peut s'afficher sur cette machine. Évite
-    # que l'opérateur soit inondé quand plusieurs alertes deviennent dues
-    # simultanément (typiquement à la reprise de production).
+    # v138 â€” Espacement minimum entre alertes affichÃ©es Ã  l'opÃ©rateur.
+    # min_gap_minutes = dÃ©lai de silence aprÃ¨s chaque acquittement pendant
+    # lequel aucune autre alerte ne peut s'afficher sur cette machine. Ã‰vite
+    # que l'opÃ©rateur soit inondÃ© quand plusieurs alertes deviennent dues
+    # simultanÃ©ment (typiquement Ã  la reprise de production).
     # On force aussi stack_mode='queue' partout : c'est le seul mode qui a
     # du sens avec la nouvelle logique.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=138 LIMIT 1").fetchone():
@@ -4375,7 +4375,7 @@ def _migrate(conn):
             "UPDATE maintenance_alert_settings SET min_gap_minutes=5 "
             "WHERE id=1 AND (min_gap_minutes IS NULL OR min_gap_minutes < 0)"
         )
-        # Force stack_mode='queue' (seul mode UI désormais)
+        # Force stack_mode='queue' (seul mode UI dÃ©sormais)
         conn.execute(
             "UPDATE maintenance_alert_settings SET stack_mode='queue' WHERE id=1"
         )
@@ -4383,9 +4383,9 @@ def _migrate(conn):
         _record_schema_migration(conn, 138, "maintenance_alert_settings_min_gap")
 
 
-    # v139 — Sondages dans la messagerie interne (chat_polls + options + votes)
-    # Rattachés à un chat_messages (cascade delete). Vote 100% anonyme possible :
-    # user_id/user_nom NULL, dédup via voter_hash = SHA256(poll_id || user_id || secret).
+    # v139 â€” Sondages dans la messagerie interne (chat_polls + options + votes)
+    # RattachÃ©s Ã  un chat_messages (cascade delete). Vote 100% anonyme possible :
+    # user_id/user_nom NULL, dÃ©dup via voter_hash = SHA256(poll_id || user_id || secret).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=139 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_polls (
@@ -4429,12 +4429,12 @@ def _migrate(conn):
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_poll_votes_option ON chat_poll_votes(option_id)"
         )
-        # Unicité vote nominatif (1 vote par option par user)
+        # UnicitÃ© vote nominatif (1 vote par option par user)
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_poll_votes_user "
             "ON chat_poll_votes(poll_id, option_id, user_id) WHERE user_id IS NOT NULL"
         )
-        # Unicité vote anonyme (1 vote par option par voter_hash)
+        # UnicitÃ© vote anonyme (1 vote par option par voter_hash)
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_poll_votes_hash "
             "ON chat_poll_votes(poll_id, option_id, voter_hash) WHERE voter_hash IS NOT NULL"
@@ -4442,8 +4442,8 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 139, "chat_polls")
 
-    # v140 — MyCouts : nouvelles clés mc_setting « charge de production » et
-    # « frais de stockage » (utilisées côté valorisation PF pour calculer
+    # v140 â€” MyCouts : nouvelles clÃ©s mc_setting Â« charge de production Â» et
+    # Â« frais de stockage Â» (utilisÃ©es cÃ´tÃ© valorisation PF pour calculer
     # total_pf_avec_charges = total_pf * (1 + storage/100) / (1 - charge/100)).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=140 LIMIT 1").fetchone():
         try:
@@ -4454,13 +4454,13 @@ def _migrate(conn):
                 "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('storage_fees_pct', 0)"
             )
         except Exception:
-            pass  # mc_setting peut ne pas exister sur les DB très anciennes
+            pass  # mc_setting peut ne pas exister sur les DB trÃ¨s anciennes
         conn.commit()
         _record_schema_migration(conn, 140, "mc_setting_charges_prod_stockage")
 
-    # v141 — MyCouts + Logistique : coût demi-container (EUR) + quantités m² par
-    # container (renseignées via /settings > Logistique > Importations, utilisées
-    # pour afficher "soit X EUR/m²" sous les 2 champs coût container du modal).
+    # v141 â€” MyCouts + Logistique : coÃ»t demi-container (EUR) + quantitÃ©s mÂ² par
+    # container (renseignÃ©es via /settings > Logistique > Importations, utilisÃ©es
+    # pour afficher "soit X EUR/mÂ²" sous les 2 champs coÃ»t container du modal).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=141 LIMIT 1").fetchone():
         try:
             conn.execute(
@@ -4477,7 +4477,7 @@ def _migrate(conn):
         conn.commit()
         _record_schema_migration(conn, 141, "mc_setting_demi_container_qte_m2")
 
-    # v142 — Traçabilité clôture sondages : colonne closed_by (auteur du clic)
+    # v142 â€” TraÃ§abilitÃ© clÃ´ture sondages : colonne closed_by (auteur du clic)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=142 LIMIT 1").fetchone():
         cols = {r[1] for r in conn.execute("PRAGMA table_info(chat_polls)").fetchall()}
         if "closed_by" not in cols:
@@ -4746,7 +4746,7 @@ Ressources :
 2. Identifier les aspects environnementaux significatifs : consommations (elec, eau, gaz), dechets (tonnages par filiere), rejets atmospheriques et aqueux.
 3. Definir un plan de progres annuel avec 3-5 objectifs mesurables (ex : -10 % dechets non tries, -5 % kWh/unite).
 4. Realiser une revue de direction annuelle formalisee (compte-rendu ecrit).
-5. Certifier si demande client recurrente. Cout indicatif PME : 3 a 8 k€ / an (Bureau Veritas, AFNOR, SGS).
+5. Certifier si demande client recurrente. Cout indicatif PME : 3 a 8 kâ‚¬ / an (Bureau Veritas, AFNOR, SGS).
 
 Ressources :
 - Norme officielle : https://www.iso.org/fr/iso-14001-environmental-management.html"""),
@@ -4791,7 +4791,7 @@ Ressources :
 - Recherche certifies : https://fr.fsc.org/fr-fr/annuaire"""),
             ("ademe-acv", "https://bilans-ges.ademe.fr/", """Actions concretes a mettre en place chez SIFA :
 1. Realiser un Bilan Carbone Scope 1 + 2 chaque annee (obligatoire au-dela de 500 salaries, tres recommande en dessous).
-2. Estimer le Scope 3 (achats, transport aval, dechets, deplacements domicile-travail) — souvent 70 % du total pour une PME industrielle.
+2. Estimer le Scope 3 (achats, transport aval, dechets, deplacements domicile-travail) â€” souvent 70 % du total pour une PME industrielle.
 3. Utiliser la Base Empreinte ADEME pour les facteurs d emission fiables et opposables.
 4. Publier un plan de reduction sur 3 a 5 ans avec objectifs chiffres.
 5. Reponse type client : partager le Bilan Carbone consolide et les initiatives de reduction.
@@ -4832,14 +4832,14 @@ Ressources :
 1. Verifier si nos produits sont destines au grand public (BtoC ou passage BtoB2C).
 2. Ajouter le logo Triman + l Info-tri (couleur du bac) sur chaque emballage concerne.
 3. Format : image visible, taille minimum 6 mm de hauteur, texte "Cet emballage se recycle".
-4. Ne pas confondre avec le point vert (obsolete depuis 2017) — ne plus l apposer.
-5. Sanction en cas d absence : jusqu a 15 000 € par produit non conforme.
+4. Ne pas confondre avec le point vert (obsolete depuis 2017) â€” ne plus l apposer.
+5. Sanction en cas d absence : jusqu a 15 000 â‚¬ par produit non conforme.
 
 Ressources :
 - Signaletique officielle : https://www.ecologie.gouv.fr/logo-triman-et-info-tri-signaletique-commune
 - Info-Tri Citeo : https://www.citeo.com/info-tri"""),
             ("csrd", "https://finance.ec.europa.eu/capital-markets-union-and-financial-markets/company-reporting-and-auditing/company-reporting/corporate-sustainability-reporting_en", """Actions concretes a mettre en place chez SIFA :
-1. Verifier l assujettissement : seuils 250 salaries / 50 M€ CA / 25 M€ bilan (2 sur 3). SIFA probablement non assujetti direct.
+1. Verifier l assujettissement : seuils 250 salaries / 50 Mâ‚¬ CA / 25 Mâ‚¬ bilan (2 sur 3). SIFA probablement non assujetti direct.
 2. MAIS nos clients grands comptes assujettis vont demander nos donnees ESG pour leur propre reporting.
 3. Preparer un jeu minimal de datapoints ESRS pertinents : E1 (climat), E5 (economie circulaire), S1 (personnel), G1 (gouvernance).
 4. Anticiper une augmentation forte des demandes clients CSRD des 2025.
@@ -4849,7 +4849,7 @@ Ressources :
 - CSRD officiel UE : https://finance.ec.europa.eu/capital-markets-union-and-financial-markets/company-reporting-and-auditing/company-reporting/corporate-sustainability-reporting_en
 - Guide CSRD PME : https://www.efrag.org/"""),
             ("iso-26000", "https://www.iso.org/fr/iso-26000-social-responsibility.html", """Actions concretes a mettre en place chez SIFA :
-1. Norme d orientation, NON certifiable — pas d audit ni de logo utilisable.
+1. Norme d orientation, NON certifiable â€” pas d audit ni de logo utilisable.
 2. Utile comme cadre pour structurer la demarche RSE globale de SIFA.
 3. 7 questions centrales a couvrir : gouvernance, droits humains, relations et conditions de travail, environnement, loyaute des pratiques, questions relatives aux consommateurs, communautes et developpement local.
 4. Referencer ISO 26000 dans notre code de conduite interne et notre reporting RSE.
@@ -4862,7 +4862,7 @@ Ressources :
 1. Preparer un dossier d evaluation Ecovadis (demandes recurrentes des grands comptes).
 2. 4 piliers evalues : environnement, social et droits humains, ethique, achats responsables.
 3. Objectif realiste PME : atteindre le medaille bronze (25-49) puis argent (50-64) en 2 ans.
-4. Cout indicatif : ~500 a 2 000 € / an selon taille (evaluation annuelle payante par la PME evaluee).
+4. Cout indicatif : ~500 a 2 000 â‚¬ / an selon taille (evaluation annuelle payante par la PME evaluee).
 5. De plus en plus de clients (LVMH, L Oreal, Michelin, etc.) exigent un score Ecovadis minimum comme condition d achat.
 
 Ressources :
@@ -4872,14 +4872,14 @@ Ressources :
 1. Alternative ou complement a Ecovadis, plus orientee audit sur site.
 2. Inscription sur la plateforme Sedex + remplissage du SAQ (Self-Assessment Questionnaire).
 3. Audit SMETA 4-piliers realise par un tiers accredite (Bureau Veritas, Intertek, SGS).
-4. Duree : 1 a 2 jours sur site, cout indicatif : 2 a 5 k€.
+4. Duree : 1 a 2 jours sur site, cout indicatif : 2 a 5 kâ‚¬.
 5. Rapport publie sur la plateforme, accessible aux clients membres qui le demandent.
 
 Ressources :
 - Sedex : https://www.sedex.com/
 - Methodologie SMETA : https://www.sedex.com/our-services/smeta-audit/"""),
             ("sapin-ii", "https://www.agence-francaise-anticorruption.gouv.fr/", """Actions concretes a mettre en place chez SIFA :
-1. Assujettissement direct si > 500 salaries et > 100 M€ CA — SIFA probablement en dessous.
+1. Assujettissement direct si > 500 salaries et > 100 Mâ‚¬ CA â€” SIFA probablement en dessous.
 2. Bonnes pratiques a adopter meme si non assujetti (attendu par les clients) :
 3. Rediger un code de conduite anti-corruption + charte cadeaux et invitations.
 4. Mettre en place un dispositif d alerte interne (canal confidentiel type Whispli ou boite email dediee).
@@ -4897,11 +4897,11 @@ Ressources :
 
 Ressources :
 - DGCCRF Devoir de vigilance : https://www.economie.gouv.fr/dgccrf/devoir-de-vigilance
-- Loi n° 2017-399 : https://www.legifrance.gouv.fr/loda/id/JORFTEXT000034290626/"""),
+- Loi nÂ° 2017-399 : https://www.legifrance.gouv.fr/loda/id/JORFTEXT000034290626/"""),
             ("code-conduite-fournisseur", "https://www.iso.org/fr/standard/63026.html", """Actions concretes a mettre en place chez SIFA :
 1. Rediger un code de conduite fournisseur (2 a 3 pages maximum).
 2. Points essentiels a couvrir : droits humains, travail des enfants, corruption, environnement, sante-securite au travail, respect des lois locales.
-3. Faire signer le code aux fournisseurs strategiques (top 20 en CA) — condition d entree en relation commerciale.
+3. Faire signer le code aux fournisseurs strategiques (top 20 en CA) â€” condition d entree en relation commerciale.
 4. Reviser le code annuellement, maintenir a jour la liste des signataires.
 5. S appuyer sur le referentiel ISO 20400 (achats responsables) pour la structure.
 
@@ -4909,7 +4909,7 @@ Ressources :
 - ISO 20400 (achats responsables) : https://www.iso.org/fr/standard/63026.html
 - Modele code fournisseur : voir templates ObsAR ou Global Compact France"""),
             ("modern-slavery-act", "https://www.legislation.gov.uk/ukpga/2015/30/contents", """Actions concretes a mettre en place chez SIFA :
-1. Loi britannique — concerne SIFA seulement si nous vendons au Royaume-Uni via une entite legale UK ou fournissons un client UK assujetti.
+1. Loi britannique â€” concerne SIFA seulement si nous vendons au Royaume-Uni via une entite legale UK ou fournissons un client UK assujetti.
 2. Sinon, non applicable directement mais une clause anti-esclavage moderne dans le code fournisseur est une bonne pratique.
 3. Certains clients UK (retail, mode, distribution) exigent une declaration meme des fournisseurs non-UK.
 4. Reponse type : declaration ecrite (1 page) confirmant l absence d esclavage moderne dans notre chaine d appro connue.
@@ -4927,17 +4927,17 @@ Ressources :
 - Reglement UE : https://policy.trade.ec.europa.eu/development-and-sustainability/conflict-minerals-regulation_en
 - Template CMRT : https://www.responsiblemineralsinitiative.org/"""),
             ("iso-9001", "https://www.iso.org/fr/iso-9001-quality-management.html", """Actions concretes a mettre en place chez SIFA :
-1. Standard tres largement demande par les clients grands comptes — souvent bloquant pour rentrer en relation.
+1. Standard tres largement demande par les clients grands comptes â€” souvent bloquant pour rentrer en relation.
 2. Systeme de management qualite documente : politique qualite, processus cartographies, procedures ecrites, indicateurs mesurables.
 3. Revue de direction annuelle formalisee, audits internes semestriels, audit externe annuel.
-4. Cout indicatif PME : 3 a 6 k€ / an (Bureau Veritas, AFNOR, SGS, LRQA).
+4. Cout indicatif PME : 3 a 6 kâ‚¬ / an (Bureau Veritas, AFNOR, SGS, LRQA).
 5. ROI evident : reduction des non-conformites, argument commercial fort, souvent en pack integre avec ISO 14001 / ISO 45001.
 
 Ressources :
 - Norme ISO 9001 : https://www.iso.org/fr/iso-9001-quality-management.html"""),
             ("tracabilite-lot", "", """Actions concretes a mettre en place chez SIFA :
-1. Attribuer un N° de lot unique a chaque matiere premiere entree en stock (deja fait via MyStock).
-2. Lier chaque OF a ses lots MP consommes (fait via MyProd — saisie de production).
+1. Attribuer un NÂ° de lot unique a chaque matiere premiere entree en stock (deja fait via MyStock).
+2. Lier chaque OF a ses lots MP consommes (fait via MyProd â€” saisie de production).
 3. Conserver la trace en base pendant minimum 5 ans (10 ans pour l agroalimentaire et le medical).
 4. En cas de rappel client : capacite a retrouver tous les OF impactes en moins d une heure via requete SQL sur mouvements_stock.no_dossier.
 5. Realiser annuellement un exercice de mock-recall pour valider la chaine de tracabilite.
@@ -4947,15 +4947,15 @@ Ressources :
             ("oeko-tex", "https://www.oeko-tex.com/fr/", """Actions concretes a mettre en place chez SIFA :
 1. Concerne uniquement produits textiles, fibres, cuir ou accessoires textiles.
 2. Si applicable : envoi d echantillons a un laboratoire OEKO-TEX (Testex, Hohenstein, Centexbel).
-3. Certification valable 1 an, renouvelable — analyse chimique complete (colorants azoiques, phtalates, metaux lourds, etc.).
-4. Cout indicatif : ~1 a 3 k€ par article certifie.
+3. Certification valable 1 an, renouvelable â€” analyse chimique complete (colorants azoiques, phtalates, metaux lourds, etc.).
+4. Cout indicatif : ~1 a 3 kâ‚¬ par article certifie.
 5. Reponse standard client si non applicable : "SIFA ne fabrique pas de produits textiles, cette certification ne s applique pas a notre offre."
 
 Ressources :
 - Portail OEKO-TEX : https://www.oeko-tex.com/fr/
 - Laboratoires accredites : https://www.oeko-tex.com/fr/institutes"""),
             ("gots", "https://global-standard.org/", """Actions concretes a mettre en place chez SIFA :
-1. Certification textile bio (Global Organic Textile Standard) — pertinent uniquement si nous transformons coton bio, laine bio ou autres fibres bio certifiees.
+1. Certification textile bio (Global Organic Textile Standard) â€” pertinent uniquement si nous transformons coton bio, laine bio ou autres fibres bio certifiees.
 2. Auditeur externe agree GOTS : ECOCERT, IMO-Control, Control Union.
 3. Chaine de controle complete de la matiere premiere au produit fini (traceabilite lot par lot).
 4. Interdit certains procedes chimiques : chlore, formaldehyde, colorants toxiques, OGM.
@@ -4965,10 +4965,10 @@ Ressources :
 - GOTS officiel : https://global-standard.org/"""),
             ("iso-45001", "https://www.iso.org/fr/iso-45001-occupational-health-and-safety.html", """Actions concretes a mettre en place chez SIFA :
 1. Systeme de management sante et securite au travail (norme qui remplace OHSAS 18001 depuis 2018).
-2. Document Unique d Evaluation des Risques (DUER) obligatoire quel que soit l effectif — a mettre a jour annuellement.
+2. Document Unique d Evaluation des Risques (DUER) obligatoire quel que soit l effectif â€” a mettre a jour annuellement.
 3. Analyse systematique des accidents et presqu-accidents (arbre des causes).
 4. Referent securite designe + CSE (Comite Social et Economique) actif.
-5. Certification pertinente si demande client — souvent en pack systeme integre avec ISO 9001 et ISO 14001.
+5. Certification pertinente si demande client â€” souvent en pack systeme integre avec ISO 9001 et ISO 14001.
 
 Ressources :
 - Norme ISO 45001 : https://www.iso.org/fr/iso-45001-occupational-health-and-safety.html
@@ -5083,7 +5083,7 @@ Ressources :
             ]),
             ("pefc", [
                 ("Vos produits sont-ils certifies PEFC ?",
-                 "[A completer selon statut : si applicable, N° certificat PEFC chaine de controle + annee d obtention. Sinon : non applicable a notre activite.]"),
+                 "[A completer selon statut : si applicable, NÂ° certificat PEFC chaine de controle + annee d obtention. Sinon : non applicable a notre activite.]"),
                 ("Pouvez-vous fournir un certificat PEFC par lot ?",
                  "Oui, sur demande nous fournissons la tracabilite PEFC lot par lot avec le certificat CoC correspondant."),
                 ("Utilisez-vous du bois issu de forets certifiees ?",
@@ -5091,7 +5091,7 @@ Ressources :
             ]),
             ("fsc", [
                 ("Vos produits sont-ils certifies FSC ?",
-                 "[A completer selon statut : si applicable, N° certificat FSC chaine de controle + variantes disponibles (100 %, Mix, Recycled).]"),
+                 "[A completer selon statut : si applicable, NÂ° certificat FSC chaine de controle + variantes disponibles (100 %, Mix, Recycled).]"),
                 ("Quelle difference entre FSC 100 %, FSC Mix et FSC Recycled ?",
                  "FSC 100 % : matiere integralement issue de forets certifiees FSC. FSC Mix : melange forets FSC + matiere recyclee + matiere controlee. FSC Recycled : 100 % recycle. La variante est precisee sur chaque commande."),
                 ("Pouvez-vous fournir un certificat FSC par livraison ?",
@@ -5171,7 +5171,7 @@ Ressources :
             ]),
             ("sapin-ii", [
                 ("Etes-vous assujettis a la loi Sapin II ?",
-                 "Non, SIFA n atteint pas les seuils Sapin II (500 salaries + 100 M€ CA). Nous appliquons neanmoins les bonnes pratiques anti-corruption."),
+                 "Non, SIFA n atteint pas les seuils Sapin II (500 salaries + 100 Mâ‚¬ CA). Nous appliquons neanmoins les bonnes pratiques anti-corruption."),
                 ("Avez-vous un code de conduite anti-corruption ?",
                  "Oui, code de conduite anti-corruption + charte cadeaux formalises. Signature par les collaborateurs concernes."),
                 ("Avez-vous un dispositif d alerte interne ?",
@@ -5211,11 +5211,11 @@ Ressources :
             ]),
             ("iso-9001", [
                 ("Etes-vous certifies ISO 9001 ?",
-                 "[A completer selon statut SIFA : oui, certifies par organisme depuis annee, N° certificat. Ou : non certifies mais SMQ equivalent applique.]"),
+                 "[A completer selon statut SIFA : oui, certifies par organisme depuis annee, NÂ° certificat. Ou : non certifies mais SMQ equivalent applique.]"),
                 ("Puis-je consulter votre certificat ?",
                  "Oui, copie du certificat en cours de validite fournie sur simple demande."),
                 ("Quelle est votre date d audit annuel ?",
-                 "Audit externe annuel realise en [mois]. Prochain audit prevu en [date] — dates precises communicables sur demande."),
+                 "Audit externe annuel realise en [mois]. Prochain audit prevu en [date] â€” dates precises communicables sur demande."),
             ]),
             ("tracabilite-lot", [
                 ("Etes-vous capable de tracer un lot fini vers ses matieres premieres ?",
@@ -5359,12 +5359,12 @@ Ressources :
                 ("Publiez-vous une declaration environnementale ?", "Nous ne publions pas de declaration EMAS formelle. Notre reporting environnemental interne est partageable sur demande sous accord de confidentialite."),
             ]),
             ("pefc", [
-                ("Vos produits sont-ils certifies PEFC ?", "[A completer selon statut : si applicable, N° certificat PEFC chaine de controle + annee d obtention. Sinon : non applicable a notre activite.]"),
+                ("Vos produits sont-ils certifies PEFC ?", "[A completer selon statut : si applicable, NÂ° certificat PEFC chaine de controle + annee d obtention. Sinon : non applicable a notre activite.]"),
                 ("Pouvez-vous fournir un certificat PEFC par lot ?", "Oui, sur demande nous fournissons la tracabilite PEFC lot par lot avec le certificat CoC correspondant."),
                 ("Utilisez-vous du bois issu de forets certifiees ?", "Nos matieres cellulosiques proviennent de fournisseurs certifies PEFC (ou FSC selon disponibilite et demande client)."),
             ]),
             ("fsc", [
-                ("Vos produits sont-ils certifies FSC ?", "[A completer selon statut : si applicable, N° certificat FSC chaine de controle + variantes disponibles (100 %, Mix, Recycled).]"),
+                ("Vos produits sont-ils certifies FSC ?", "[A completer selon statut : si applicable, NÂ° certificat FSC chaine de controle + variantes disponibles (100 %, Mix, Recycled).]"),
                 ("Quelle difference entre FSC 100 %, FSC Mix et FSC Recycled ?", "FSC 100 % : matiere integralement issue de forets certifiees FSC. FSC Mix : melange forets FSC + matiere recyclee + matiere controlee. FSC Recycled : 100 % recycle. La variante est precisee sur chaque commande."),
                 ("Pouvez-vous fournir un certificat FSC par livraison ?", "Oui, mention FSC + numero de certificat portee sur le bon de livraison et la facture."),
             ]),
@@ -5414,7 +5414,7 @@ Ressources :
                 ("Les resultats SMETA sont-ils partageables ?", "Oui, via activation de partage sur la plateforme Sedex avec votre societe."),
             ]),
             ("sapin-ii", [
-                ("Etes-vous assujettis a la loi Sapin II ?", "Non, SIFA n atteint pas les seuils Sapin II (500 salaries + 100 M€ CA). Nous appliquons neanmoins les bonnes pratiques anti-corruption."),
+                ("Etes-vous assujettis a la loi Sapin II ?", "Non, SIFA n atteint pas les seuils Sapin II (500 salaries + 100 Mâ‚¬ CA). Nous appliquons neanmoins les bonnes pratiques anti-corruption."),
                 ("Avez-vous un code de conduite anti-corruption ?", "Oui, code de conduite anti-corruption + charte cadeaux formalises. Signature par les collaborateurs concernes."),
                 ("Avez-vous un dispositif d alerte interne ?", "Oui, canal d alerte confidentiel accessible aux collaborateurs et parties prenantes. Contact disponible sur demande."),
             ]),
@@ -5439,9 +5439,9 @@ Ressources :
                 ("Vos fournisseurs sont-ils certifies pour les 3TG ?", "Pour les rares cas concernes, les fournisseurs doivent attester d un sourcing responsable via smelter validation ou certification equivalente."),
             ]),
             ("iso-9001", [
-                ("Etes-vous certifies ISO 9001 ?", "[A completer selon statut SIFA : oui, certifies par organisme depuis annee, N° certificat. Ou : non certifies mais SMQ equivalent applique.]"),
+                ("Etes-vous certifies ISO 9001 ?", "[A completer selon statut SIFA : oui, certifies par organisme depuis annee, NÂ° certificat. Ou : non certifies mais SMQ equivalent applique.]"),
                 ("Puis-je consulter votre certificat ?", "Oui, copie du certificat en cours de validite fournie sur simple demande."),
-                ("Quelle est votre date d audit annuel ?", "Audit externe annuel realise en [mois]. Prochain audit prevu en [date] — dates precises communicables sur demande."),
+                ("Quelle est votre date d audit annuel ?", "Audit externe annuel realise en [mois]. Prochain audit prevu en [date] â€” dates precises communicables sur demande."),
             ]),
             ("tracabilite-lot", [
                 ("Etes-vous capable de tracer un lot fini vers ses matieres premieres ?", "Oui, chaque OF est lie a ses lots MP consommes dans notre systeme (MyProd). Tracabilite lot par lot conservee 5 ans minimum."),
@@ -5517,8 +5517,8 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 146, "qualite_ref_qa_accordion")
 
-    # v147 — Prix m² distinct par laize pour les matières bobines (frontal/glassine/complexe).
-    # Ajoute un flag prix_par_laize sur matieres_premieres (0=prix unique matière, 1=prix par laize)
+    # v147 â€” Prix mÂ² distinct par laize pour les matiÃ¨res bobines (frontal/glassine/complexe).
+    # Ajoute un flag prix_par_laize sur matieres_premieres (0=prix unique matiÃ¨re, 1=prix par laize)
     # et une colonne prix_eur_m2 sur mp_matiere_laizes pour stocker le prix distinct par laize.
     if not conn.execute(
         "SELECT 1 FROM schema_migrations WHERE version=147 LIMIT 1"
@@ -5536,9 +5536,9 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 147, "mp_prix_par_laize")
 
-    # v148 — Prix €/m² sur chaque mouvement d'entrée matière première.
-    # Permet de tracer le prix payé à chaque réception pour les bobines et de calculer
-    # un PMP (prix moyen pondéré) automatique. NULL pour les mouvements sans prix connu.
+    # v148 â€” Prix â‚¬/mÂ² sur chaque mouvement d'entrÃ©e matiÃ¨re premiÃ¨re.
+    # Permet de tracer le prix payÃ© Ã  chaque rÃ©ception pour les bobines et de calculer
+    # un PMP (prix moyen pondÃ©rÃ©) automatique. NULL pour les mouvements sans prix connu.
     if not conn.execute(
         "SELECT 1 FROM schema_migrations WHERE version=148 LIMIT 1"
     ).fetchone():
@@ -5575,7 +5575,7 @@ Ressources :
         _record_schema_migration(conn, 150, "mp_mouvements_dossier_link")
 
     # v149 - Documents maintenance : pieces jointes attachees a chaque code
-    # (contrôle ou intervention). Fichiers stockes sur disque sous
+    # (contrÃ´le ou intervention). Fichiers stockes sur disque sous
     # data/uploads/maintenance_docs/{code}/, metadata en base.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=149 LIMIT 1").fetchone():
         conn.execute(
@@ -5692,34 +5692,34 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 154, "documents_rh_access_log_table")
 
-    # v155 — Tâches de maintenance assignées : une ligne = une occurrence
-    # concrète d'une opération de maintenance (contrôle ou intervention) à
-    # réaliser sur une machine, à une date donnée, par un opérateur donné.
-    # L'admin maintenance (Loïc) crée ces tâches depuis la vue Planning et les
-    # assigne aux opérateurs. Les opérateurs (rôle `fabrication`) les
-    # voient dans leur vue « Mes tâches »
-    # et les complètent en fin de journée (durée réelle, pièces changées,
+    # v155 â€” TÃ¢ches de maintenance assignÃ©es : une ligne = une occurrence
+    # concrÃ¨te d'une opÃ©ration de maintenance (contrÃ´le ou intervention) Ã 
+    # rÃ©aliser sur une machine, Ã  une date donnÃ©e, par un opÃ©rateur donnÃ©.
+    # L'admin maintenance (LoÃ¯c) crÃ©e ces tÃ¢ches depuis la vue Planning et les
+    # assigne aux opÃ©rateurs. Les opÃ©rateurs (rÃ´le `fabrication`) les
+    # voient dans leur vue Â« Mes tÃ¢ches Â»
+    # et les complÃ¨tent en fin de journÃ©e (durÃ©e rÃ©elle, piÃ¨ces changÃ©es,
     # observations, photos, statut final).
     #
-    # `source` distingue les tâches planifiées à l'avance (`planifie`, cas
-    # standard) des interventions non planifiées déclarées à la volée par un
-    # opérateur (`non_planifie`, ex. panne machine survenue en cours de session).
+    # `source` distingue les tÃ¢ches planifiÃ©es Ã  l'avance (`planifie`, cas
+    # standard) des interventions non planifiÃ©es dÃ©clarÃ©es Ã  la volÃ©e par un
+    # opÃ©rateur (`non_planifie`, ex. panne machine survenue en cours de session).
     #
-    # `statut` suit le cycle de vie : a_faire → en_cours → termine (ou reporte
-    # si l'opérateur ne peut pas la faire aujourd'hui).
+    # `statut` suit le cycle de vie : a_faire â†’ en_cours â†’ termine (ou reporte
+    # si l'opÃ©rateur ne peut pas la faire aujourd'hui).
     #
     # FK sur `maintenance_codes(code)` sans ON DELETE CASCADE : si un code est
-    # supprimé côté paramètres, la contrainte empêchera la suppression tant que
-    # des tâches y font référence (à condition que PRAGMA foreign_keys=ON), ce
-    # qui protège l'historique. À terme on ajoutera plutôt un flag `archived`
-    # sur maintenance_codes pour désactiver un code sans casser l'historique.
+    # supprimÃ© cÃ´tÃ© paramÃ¨tres, la contrainte empÃªchera la suppression tant que
+    # des tÃ¢ches y font rÃ©fÃ©rence (Ã  condition que PRAGMA foreign_keys=ON), ce
+    # qui protÃ¨ge l'historique. Ã€ terme on ajoutera plutÃ´t un flag `archived`
+    # sur maintenance_codes pour dÃ©sactiver un code sans casser l'historique.
     #
-    # `operator_id` est nullable : permet de créer une tâche non encore
-    # assignée dans le planning (poche à distribuer).
+    # `operator_id` est nullable : permet de crÃ©er une tÃ¢che non encore
+    # assignÃ©e dans le planning (poche Ã  distribuer).
     #
-    # Numéro v155 (et pas v151 comme initialement prévu) car les slots 151-154
-    # ont été pris par les migrations RH (users_matricule, documents_rh_table,
-    # notes_de_frais_table, documents_rh_access_log_table) mergées entre-temps.
+    # NumÃ©ro v155 (et pas v151 comme initialement prÃ©vu) car les slots 151-154
+    # ont Ã©tÃ© pris par les migrations RH (users_matricule, documents_rh_table,
+    # notes_de_frais_table, documents_rh_access_log_table) mergÃ©es entre-temps.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=155 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS maintenance_tasks (
@@ -5762,11 +5762,11 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 155, "maintenance_tasks_table")
 
-    # v156 — MyExpé : transporteurs avec numéros de téléphone multiples (numéro + service).
+    # v156 â€” MyExpÃ© : transporteurs avec numÃ©ros de tÃ©lÃ©phone multiples (numÃ©ro + service).
     # Ajoute contact_tels TEXT (JSON list de {numero, service}). Backfill depuis
-    # contact_tel legacy : soit une string simple, soit plusieurs séparées par , ; ou saut de ligne.
-    # Numéro v156 (initialement prévue en v155, renumérotée au merge staging pour ne pas
-    # entrer en collision avec maintenance_tasks_table de Loïc, mergée le même jour).
+    # contact_tel legacy : soit une string simple, soit plusieurs sÃ©parÃ©es par , ; ou saut de ligne.
+    # NumÃ©ro v156 (initialement prÃ©vue en v155, renumÃ©rotÃ©e au merge staging pour ne pas
+    # entrer en collision avec maintenance_tasks_table de LoÃ¯c, mergÃ©e le mÃªme jour).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=156 LIMIT 1").fetchone():
         import json as _json
         import re as _re
@@ -5800,10 +5800,10 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 156, "expe_transporteurs_contact_tels")
 
-    # v157 — Créneaux horaires sur les tâches de maintenance : ajoute
-    # heure_debut / heure_fin nullable à maintenance_tasks. Les tâches créées
-    # depuis le calendrier admin (vues mois/semaine/jour) auront des créneaux
-    # explicites ; les tâches libres créées par un opérateur en cours de
+    # v157 â€” CrÃ©neaux horaires sur les tÃ¢ches de maintenance : ajoute
+    # heure_debut / heure_fin nullable Ã  maintenance_tasks. Les tÃ¢ches crÃ©Ã©es
+    # depuis le calendrier admin (vues mois/semaine/jour) auront des crÃ©neaux
+    # explicites ; les tÃ¢ches libres crÃ©Ã©es par un opÃ©rateur en cours de
     # session laissent ces champs vides.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=157 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_tasks)").fetchall()}
@@ -5814,19 +5814,19 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 157, "maintenance_tasks_time_slots")
 
-    # v158 — Refonte du modèle Maintenance : passe d'un modèle plat
-    # (1 maintenance_tasks = 1 op + 1 opérateur) à un modèle 3-tables plus
+    # v158 â€” Refonte du modÃ¨le Maintenance : passe d'un modÃ¨le plat
+    # (1 maintenance_tasks = 1 op + 1 opÃ©rateur) Ã  un modÃ¨le 3-tables plus
     # riche :
-    #   maintenance_events           : le créneau (machine, date, heures, source)
-    #   maintenance_event_ops        : les N opérations d'un créneau (statut/saisie
-    #                                  partagés par tout le groupe)
-    #   maintenance_event_operators  : les M opérateurs assignés au créneau
+    #   maintenance_events           : le crÃ©neau (machine, date, heures, source)
+    #   maintenance_event_ops        : les N opÃ©rations d'un crÃ©neau (statut/saisie
+    #                                  partagÃ©s par tout le groupe)
+    #   maintenance_event_operators  : les M opÃ©rateurs assignÃ©s au crÃ©neau
     #
-    # `updated_by` sur maintenance_event_ops assure la traçabilité : on sait
-    # quel membre du groupe a rempli / modifié quoi.
+    # `updated_by` sur maintenance_event_ops assure la traÃ§abilitÃ© : on sait
+    # quel membre du groupe a rempli / modifiÃ© quoi.
     #
-    # La table `maintenance_tasks` (v155 + v157) devient obsolète et est
-    # supprimée : les rares tâches déjà créées en dev sont jetées.
+    # La table `maintenance_tasks` (v155 + v157) devient obsolÃ¨te et est
+    # supprimÃ©e : les rares tÃ¢ches dÃ©jÃ  crÃ©Ã©es en dev sont jetÃ©es.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=158 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS maintenance_events (
@@ -5900,17 +5900,17 @@ Ressources :
         conn.execute("DROP TABLE IF EXISTS maintenance_tasks")
         conn.commit()
         _record_schema_migration(conn, 158, "maintenance_events_refonte")
-    # v159 — Module MyLearning : e-learning avec habilitation progressive.
-    # 7 tables couvrant catalogue formations, modules vidéo YouTube,
-    # quiz de validation, mapping formation → permissions, progression
-    # utilisateur, habilitations obtenues et parcours d'accueil par rôle.
+    # v159 â€” Module MyLearning : e-learning avec habilitation progressive.
+    # 7 tables couvrant catalogue formations, modules vidÃ©o YouTube,
+    # quiz de validation, mapping formation â†’ permissions, progression
+    # utilisateur, habilitations obtenues et parcours d'accueil par rÃ´le.
     # Voir app/core/permissions.py pour la liste des permission_code.
     #
     # Note importante : les ON DELETE CASCADE ci-dessous sont inactifs
-    # tant que get_db() n'active pas PRAGMA foreign_keys=ON (cf. étape 3
+    # tant que get_db() n'active pas PRAGMA foreign_keys=ON (cf. Ã©tape 3
     # admin CRUD : la suppression d'une formation devra explicitement
     # supprimer les modules, quiz, permissions, progression et habilitations
-    # associés en Python, ou activer foreign_keys ponctuellement).
+    # associÃ©s en Python, ou activer foreign_keys ponctuellement).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=159 LIMIT 1").fetchone():
         conn.executescript("""
             -- Catalogue des parcours de formation. Un parcours = un poste.
@@ -5919,21 +5919,21 @@ Ressources :
                 code         TEXT UNIQUE NOT NULL,       -- ex: 'operateur_cohesio'
                 titre        TEXT NOT NULL,
                 description  TEXT,
-                role_cible   TEXT,                        -- rôle métier libre (ex: 'Opérateur Cohésio')
+                role_cible   TEXT,                        -- rÃ´le mÃ©tier libre (ex: 'OpÃ©rateur CohÃ©sio')
                 ordre        INTEGER DEFAULT 100,
                 actif        INTEGER DEFAULT 1,
                 cree_le      TEXT NOT NULL,
                 maj_le       TEXT
             );
 
-            -- Modules d'un parcours (chapitres vidéo).
+            -- Modules d'un parcours (chapitres vidÃ©o).
             CREATE TABLE IF NOT EXISTS formation_modules (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 formation_id INTEGER NOT NULL,
                 ordre        INTEGER DEFAULT 100,
                 titre        TEXT NOT NULL,
                 description  TEXT,
-                youtube_id   TEXT NOT NULL,               -- ID de la vidéo YouTube (ex: 'dQw4w9WgXcQ')
+                youtube_id   TEXT NOT NULL,               -- ID de la vidÃ©o YouTube (ex: 'dQw4w9WgXcQ')
                 duree_sec    INTEGER DEFAULT 0,
                 actif        INTEGER DEFAULT 1,
                 cree_le      TEXT NOT NULL,
@@ -5943,7 +5943,7 @@ Ressources :
                 ON formation_modules(formation_id, ordre);
 
             -- Questions du quiz de fin de module. choix_json est un tableau
-            -- JSON de chaînes (ex: ["Choix A","Choix B","Choix C","Choix D"]).
+            -- JSON de chaÃ®nes (ex: ["Choix A","Choix B","Choix C","Choix D"]).
             CREATE TABLE IF NOT EXISTS formation_quiz (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 module_id      INTEGER NOT NULL,
@@ -5957,9 +5957,9 @@ Ressources :
             CREATE INDEX IF NOT EXISTS idx_formation_quiz_module
                 ON formation_quiz(module_id, ordre);
 
-            -- Mapping formation → permissions débloquées à la validation.
-            -- Une formation peut débloquer plusieurs permissions (ex: le
-            -- parcours "Opérateur Cohésio" donne prod.saisie_operateur ET
+            -- Mapping formation â†’ permissions dÃ©bloquÃ©es Ã  la validation.
+            -- Une formation peut dÃ©bloquer plusieurs permissions (ex: le
+            -- parcours "OpÃ©rateur CohÃ©sio" donne prod.saisie_operateur ET
             -- prod.suppression_saisie).
             CREATE TABLE IF NOT EXISTS formation_permissions (
                 formation_id     INTEGER NOT NULL,
@@ -5970,7 +5970,7 @@ Ressources :
 
             -- Progression utilisateur module par module.
             -- pct_vu : 0-100 (%). quiz_score : 0-100 (%) ou NULL si pas de quiz.
-            -- valide_le : timestamp ISO si module validé (visionnage + quiz OK).
+            -- valide_le : timestamp ISO si module validÃ© (visionnage + quiz OK).
             CREATE TABLE IF NOT EXISTS user_progression (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id    INTEGER NOT NULL,
@@ -5986,9 +5986,9 @@ Ressources :
             CREATE INDEX IF NOT EXISTS idx_user_progression_user
                 ON user_progression(user_id);
 
-            -- Cache dénormalisé des habilitations (permissions obtenues).
-            -- Alimenté quand tous les modules d'une formation sont validés.
-            -- Utilisé pour des lookup O(1) au moment du guard require_habilitation.
+            -- Cache dÃ©normalisÃ© des habilitations (permissions obtenues).
+            -- AlimentÃ© quand tous les modules d'une formation sont validÃ©s.
+            -- UtilisÃ© pour des lookup O(1) au moment du guard require_habilitation.
             CREATE TABLE IF NOT EXISTS user_habilitations (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id         INTEGER NOT NULL,
@@ -6002,9 +6002,9 @@ Ressources :
             CREATE INDEX IF NOT EXISTS idx_user_habilitations_user
                 ON user_habilitations(user_id, permission_code);
 
-            -- Parcours d'accueil obligatoire par rôle.
-            -- À la création d'un compte, le rôle détermine 1..N parcours
-            -- à valider avant d'accéder pleinement à l'app.
+            -- Parcours d'accueil obligatoire par rÃ´le.
+            -- Ã€ la crÃ©ation d'un compte, le rÃ´le dÃ©termine 1..N parcours
+            -- Ã  valider avant d'accÃ©der pleinement Ã  l'app.
             CREATE TABLE IF NOT EXISTS role_parcours_defaut (
                 role         TEXT NOT NULL,
                 formation_id INTEGER NOT NULL,
@@ -6015,22 +6015,22 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 159, "mylearning_module")
 
-    # v160 — MyLearning step 2 : refonte du schéma modules pour supporter
-    # plusieurs vidéos par module + séparation stricte tracking vidéo vs
+    # v160 â€” MyLearning step 2 : refonte du schÃ©ma modules pour supporter
+    # plusieurs vidÃ©os par module + sÃ©paration stricte tracking vidÃ©o vs
     # validation module.
     #
-    # Changements par rapport à v159 :
+    # Changements par rapport Ã  v159 :
     #   - formation_modules perd `youtube_id` et `duree_sec` (ces champs
-    #     appartiennent désormais à formation_videos, N vidéos par module).
+    #     appartiennent dÃ©sormais Ã  formation_videos, N vidÃ©os par module).
     #   - Nouvelle table `formation_videos` (module_id, ordre, titre,
     #     youtube_id, duree_sec).
-    #   - `user_progression` (v159) devient obsolète — remplacée par :
-    #       * user_video_progression : pct_vu par vidéo (granulaire)
+    #   - `user_progression` (v159) devient obsolÃ¨te â€” remplacÃ©e par :
+    #       * user_video_progression : pct_vu par vidÃ©o (granulaire)
     #       * user_module_validation : quiz_score + valide_le par module
     #
-    # Comme aucun contenu MyLearning n'a été créé entre v159 et v160
-    # (l'écran admin n'existait pas encore à l'étape 1), le DROP + CREATE
-    # est safe : aucune donnée perdue en prod comme en staging.
+    # Comme aucun contenu MyLearning n'a Ã©tÃ© crÃ©Ã© entre v159 et v160
+    # (l'Ã©cran admin n'existait pas encore Ã  l'Ã©tape 1), le DROP + CREATE
+    # est safe : aucune donnÃ©e perdue en prod comme en staging.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=160 LIMIT 1").fetchone():
         conn.executescript("""
             -- Purge des tables v159 qui changent de structure.
@@ -6052,13 +6052,13 @@ Ressources :
             CREATE INDEX idx_formation_modules_formation_v2
                 ON formation_modules(formation_id, ordre);
 
-            -- Vidéos d'un module (N vidéos possibles, ordonnées).
+            -- VidÃ©os d'un module (N vidÃ©os possibles, ordonnÃ©es).
             CREATE TABLE formation_videos (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 module_id   INTEGER NOT NULL,
                 ordre       INTEGER DEFAULT 100,
                 titre       TEXT NOT NULL,
-                youtube_id  TEXT NOT NULL,               -- 11 caractères YouTube
+                youtube_id  TEXT NOT NULL,               -- 11 caractÃ¨res YouTube
                 duree_sec   INTEGER DEFAULT 0,
                 cree_le     TEXT NOT NULL,
                 FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
@@ -6066,14 +6066,14 @@ Ressources :
             CREATE INDEX idx_formation_videos_module
                 ON formation_videos(module_id, ordre);
 
-            -- Quiz : questions QCM 4 choix, 1 bonne réponse.
-            -- Contrainte métier (côté API) : au moins 1 question par module.
+            -- Quiz : questions QCM 4 choix, 1 bonne rÃ©ponse.
+            -- Contrainte mÃ©tier (cÃ´tÃ© API) : au moins 1 question par module.
             CREATE TABLE formation_quiz (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 module_id      INTEGER NOT NULL,
                 ordre          INTEGER DEFAULT 100,
                 question       TEXT NOT NULL,
-                choix_json     TEXT NOT NULL,             -- JSON array (généralement 4 choix)
+                choix_json     TEXT NOT NULL,             -- JSON array (gÃ©nÃ©ralement 4 choix)
                 bonne_reponse  INTEGER NOT NULL,          -- index 0-based dans choix_json
                 explication    TEXT,
                 FOREIGN KEY (module_id) REFERENCES formation_modules(id) ON DELETE CASCADE
@@ -6081,7 +6081,7 @@ Ressources :
             CREATE INDEX idx_formation_quiz_module_v2
                 ON formation_quiz(module_id, ordre);
 
-            -- Progression utilisateur au niveau vidéo (granulaire).
+            -- Progression utilisateur au niveau vidÃ©o (granulaire).
             CREATE TABLE user_video_progression (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id    INTEGER NOT NULL,
@@ -6095,9 +6095,9 @@ Ressources :
             CREATE INDEX idx_user_video_prog_user
                 ON user_video_progression(user_id);
 
-            -- Validation d'un module (quiz réussi + toutes vidéos vues).
-            -- quiz_score : 0-100 (% de bonnes réponses).
-            -- valide_le : timestamp ISO si module validé, NULL sinon.
+            -- Validation d'un module (quiz rÃ©ussi + toutes vidÃ©os vues).
+            -- quiz_score : 0-100 (% de bonnes rÃ©ponses).
+            -- valide_le : timestamp ISO si module validÃ©, NULL sinon.
             CREATE TABLE user_module_validation (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id    INTEGER NOT NULL,
@@ -6115,12 +6115,12 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 160, "mylearning_videos_split")
 
-    # ─── v161 — MyTraduction : cache des traductions DeepL ─────────
+    # â”€â”€â”€ v161 â€” MyTraduction : cache des traductions DeepL â”€â”€â”€â”€â”€â”€â”€â”€â”€
     #
-    # Table de cache pour éviter de repayer 2× la même traduction (quota
-    # DeepL Free = 500k car/mois). Clé = hash(text + source_lang + target_lang
-    # + formality). Les entrées ne sont jamais purgées automatiquement — un
-    # même texte donne toujours la même traduction, autant garder le cache.
+    # Table de cache pour Ã©viter de repayer 2Ã— la mÃªme traduction (quota
+    # DeepL Free = 500k car/mois). ClÃ© = hash(text + source_lang + target_lang
+    # + formality). Les entrÃ©es ne sont jamais purgÃ©es automatiquement â€” un
+    # mÃªme texte donne toujours la mÃªme traduction, autant garder le cache.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=161 LIMIT 1").fetchone():
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS translations_cache (
@@ -6154,17 +6154,17 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 161, "mytraduction_cache")
 
-    # v162 — Maintenance : opérations multi-machines dans un même créneau.
-    # Un créneau (maintenance_events) peut désormais contenir des opérations
-    # rattachées à des machines différentes. Chaque opération stocke sa/ses
-    # machines dans `maintenance_event_ops.machines_csv` (CSV, séparateur " · ").
-    # `maintenance_events.machine` reste renseigné en résumé (CSV) pour la
-    # rétrocompatibilité (palette calendrier, filtres, non_planifie).
+    # v162 â€” Maintenance : opÃ©rations multi-machines dans un mÃªme crÃ©neau.
+    # Un crÃ©neau (maintenance_events) peut dÃ©sormais contenir des opÃ©rations
+    # rattachÃ©es Ã  des machines diffÃ©rentes. Chaque opÃ©ration stocke sa/ses
+    # machines dans `maintenance_event_ops.machines_csv` (CSV, sÃ©parateur " Â· ").
+    # `maintenance_events.machine` reste renseignÃ© en rÃ©sumÃ© (CSV) pour la
+    # rÃ©trocompatibilitÃ© (palette calendrier, filtres, non_planifie).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=162 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
         if "machines_csv" not in cols:
             conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN machines_csv TEXT")
-        # Backfill : pour chaque op existante sans machines_csv, on hérite de
+        # Backfill : pour chaque op existante sans machines_csv, on hÃ©rite de
         # la machine de son event (comportement d'avant la refonte).
         conn.execute("""
             UPDATE maintenance_event_ops
@@ -6176,16 +6176,16 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 162, "maintenance_event_ops_machines_csv")
 
-    # v163 — Maintenance : modèles de session (« templates »).
-    # Un modèle = un ensemble prédéfini d'opérations avec leurs machines,
-    # qu'un admin peut instancier rapidement en tant que créneau. Les modifs
-    # d'un modèle resynchronisent les créneaux futurs qui en dépendent
-    # (écrasement des ops locales).
+    # v163 â€” Maintenance : modÃ¨les de session (Â« templates Â»).
+    # Un modÃ¨le = un ensemble prÃ©dÃ©fini d'opÃ©rations avec leurs machines,
+    # qu'un admin peut instancier rapidement en tant que crÃ©neau. Les modifs
+    # d'un modÃ¨le resynchronisent les crÃ©neaux futurs qui en dÃ©pendent
+    # (Ã©crasement des ops locales).
     #
     # `maintenance_events.template_id` (nullable) trace la provenance d'un
-    # créneau et pilote la resync. Sur suppression d'un modèle, ON DELETE
-    # CASCADE côté events est INACTIF (foreign_keys pas activées globalement) :
-    # la cascade est faite côté application dans le router.
+    # crÃ©neau et pilote la resync. Sur suppression d'un modÃ¨le, ON DELETE
+    # CASCADE cÃ´tÃ© events est INACTIF (foreign_keys pas activÃ©es globalement) :
+    # la cascade est faite cÃ´tÃ© application dans le router.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=163 LIMIT 1").fetchone():
         conn.execute(
             """CREATE TABLE IF NOT EXISTS maintenance_templates (
@@ -6213,7 +6213,7 @@ Ressources :
             "CREATE INDEX IF NOT EXISTS idx_maint_template_ops_template "
             "ON maintenance_template_ops(template_id)"
         )
-        # Colonne template_id sur les créneaux (nullable = créneau autonome).
+        # Colonne template_id sur les crÃ©neaux (nullable = crÃ©neau autonome).
         cols_ev = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
         if "template_id" not in cols_ev:
             conn.execute("ALTER TABLE maintenance_events ADD COLUMN template_id INTEGER")
@@ -6224,12 +6224,12 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 163, "maintenance_templates")
 
-    # v164 — Alertes maintenance : bouton "Fermer l'alerte" configurable.
+    # v164 â€” Alertes maintenance : bouton "Fermer l'alerte" configurable.
     # Ajoute une colonne `dismissed` (0/1) sur maintenance_alert_acks. Les
-    # rows dismissed=1 sont invisibles dans l'historique des contrôles mais
-    # servent à débloquer la logique event (l'alerte ne re-fire qu'au prochain
-    # 89). Aucun log_action, aucune trace visible → l'opérateur peut esquiver
-    # une alerte non pertinente sans polluer la qualité.
+    # rows dismissed=1 sont invisibles dans l'historique des contrÃ´les mais
+    # servent Ã  dÃ©bloquer la logique event (l'alerte ne re-fire qu'au prochain
+    # 89). Aucun log_action, aucune trace visible â†’ l'opÃ©rateur peut esquiver
+    # une alerte non pertinente sans polluer la qualitÃ©.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=164 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_alert_acks)").fetchall()}
         if "dismissed" not in cols:
@@ -6241,7 +6241,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 164, "maintenance_alert_acks_dismissed")
 
-    # v166 — Qualité : split rôle administration + traçabilité de prise en connaissance des NC par service.
+    # v166 â€” QualitÃ© : split rÃ´le administration + traÃ§abilitÃ© de prise en connaissance des NC par service.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=166 LIMIT 1").fetchone():
         conn.execute(
             "UPDATE users SET role='administration_ventes' WHERE role='administration'"
@@ -6264,7 +6264,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 166, "qualite_split_admin_role_and_nc_ack")
 
-    # v167 — Fournisseurs : flag has_fsc (les existants restent certifiés)
+    # v167 â€” Fournisseurs : flag has_fsc (les existants restent certifiÃ©s)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=167 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
         if "has_fsc" not in cols:
@@ -6275,7 +6275,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 167, "fournisseurs_has_fsc_flag")
 
-    # v168 — Liaison fournisseurs ↔ (matière première, laize)
+    # v168 â€” Liaison fournisseurs â†” (matiÃ¨re premiÃ¨re, laize)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=168 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS matiere_laize_fournisseurs (
@@ -6293,7 +6293,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 168, "matiere_laize_fournisseurs_link")
 
-    # v169 — Numéro de lot sur les réceptions matière
+    # v169 â€” NumÃ©ro de lot sur les rÃ©ceptions matiÃ¨re
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=169 LIMIT 1").fetchone():
         sr_cols = {r["name"] for r in conn.execute("PRAGMA table_info(stock_receptions)").fetchall()}
         if "lot_numero" not in sr_cols:
@@ -6302,7 +6302,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 169, "stock_receptions_lot_numero")
 
-    # v170 — Inventaire matière : sessions + intervalle configurable par matière
+    # v170 â€” Inventaire matiÃ¨re : sessions + intervalle configurable par matiÃ¨re
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=170 LIMIT 1").fetchone():
         mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
         if "intervalle_inventaire_jours" not in mp_cols:
@@ -6333,7 +6333,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 170, "inventaires_matieres")
 
-    # v171 — Module impression cloud (agents, imprimantes, templates, jobs)
+    # v171 â€” Module impression cloud (agents, imprimantes, templates, jobs)
     # Permet d'imprimer depuis le SaaS vers des imprimantes du LAN usine via un
     # agent local (Raspberry Pi ou PC) qui poll les jobs et les envoie en TCP:9100.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=171 LIMIT 1").fetchone():
@@ -6408,7 +6408,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 171, "print_module_tables")
 
-    # v172 — MyBAT : ajout colonne fiche_technique ('a_faire' | 'fait')
+    # v172 â€” MyBAT : ajout colonne fiche_technique ('a_faire' | 'fait')
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=172 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(bat_entries)").fetchall()}
         if "fiche_technique" not in cols:
@@ -6418,8 +6418,8 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 172, "bat_entries_fiche_technique")
 
-    # v173 — MyQualité : Ressources Fournisseurs (certificats par fournisseur,
-    # liens N-N vers fiches du référentiel RSE, log annonces d'expiration).
+    # v173 â€” MyQualitÃ© : Ressources Fournisseurs (certificats par fournisseur,
+    # liens N-N vers fiches du rÃ©fÃ©rentiel RSE, log annonces d'expiration).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=173 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS qualite_fournisseur_certificats (
@@ -6447,8 +6447,8 @@ Ressources :
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_qfcf_fiche ON qualite_fournisseur_certificat_fiches(fiche_id)")
-        # Log d'annonces d'expiration déjà émises : un enregistrement par (certificat, bucket).
-        # bucket parmi : 'expired', 'j30', 'j60' — évite de spammer plusieurs fois la même alerte.
+        # Log d'annonces d'expiration dÃ©jÃ  Ã©mises : un enregistrement par (certificat, bucket).
+        # bucket parmi : 'expired', 'j30', 'j60' â€” Ã©vite de spammer plusieurs fois la mÃªme alerte.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS qualite_cert_expiration_annonces (
                 certificat_id INTEGER NOT NULL REFERENCES qualite_fournisseur_certificats(id) ON DELETE CASCADE,
@@ -6460,11 +6460,11 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 173, "qualite_ressources_fournisseurs")
 
-    # v174 — MyQualité : extension Audit avec matrice fournisseurs × certifications.
-    # audit_fournisseurs : fournisseurs impliqués dans l'audit (N-N avec fournisseurs_fsc).
-    # audit_certifications_demandees : certifications demandées par le client (N-N avec fiches).
-    # audit_matrice_overrides : override manuel du statut d'une case (fournisseur × fiche)
-    #   pour marquer 'na', 'demande_envoyee', etc. quand l'auto-déduction ne suffit pas.
+    # v174 â€” MyQualitÃ© : extension Audit avec matrice fournisseurs Ã— certifications.
+    # audit_fournisseurs : fournisseurs impliquÃ©s dans l'audit (N-N avec fournisseurs_fsc).
+    # audit_certifications_demandees : certifications demandÃ©es par le client (N-N avec fiches).
+    # audit_matrice_overrides : override manuel du statut d'une case (fournisseur Ã— fiche)
+    #   pour marquer 'na', 'demande_envoyee', etc. quand l'auto-dÃ©duction ne suffit pas.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=174 LIMIT 1").fetchone():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_fournisseurs (
@@ -6501,10 +6501,10 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 174, "qualite_audit_matrice_fournisseurs_certifs")
 
-    # Migration 175 — MyMaintenance : les créneaux (planifie) peuvent avoir un
-    # nom libre pour identifier une session ("Nettoyage matinal", "Grande révision").
-    # Colonne nullable, pas de valeur par défaut : les créneaux existants restent
-    # sans nom, le frontend affiche l'horaire par défaut.
+    # Migration 175 â€” MyMaintenance : les crÃ©neaux (planifie) peuvent avoir un
+    # nom libre pour identifier une session ("Nettoyage matinal", "Grande rÃ©vision").
+    # Colonne nullable, pas de valeur par dÃ©faut : les crÃ©neaux existants restent
+    # sans nom, le frontend affiche l'horaire par dÃ©faut.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=175 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
         if "nom" not in cols:
@@ -6512,11 +6512,11 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 175, "maintenance_events_nom")
 
-    # Migration 176 — Planning prod : flag "journée entière" (00:00 → 23:59).
-    # Peut être activé à trois niveaux : override journalier, config semaine,
-    # default machine. Le flag est prioritaire sur les heures stockées : quand
-    # actif, getWhForDate() renvoie 0-24 pour ce jour. Rétro-compatible : les
-    # entrées existantes ont journee_entiere=0 (comportement inchangé).
+    # Migration 176 â€” Planning prod : flag "journÃ©e entiÃ¨re" (00:00 â†’ 23:59).
+    # Peut Ãªtre activÃ© Ã  trois niveaux : override journalier, config semaine,
+    # default machine. Le flag est prioritaire sur les heures stockÃ©es : quand
+    # actif, getWhForDate() renvoie 0-24 pour ce jour. RÃ©tro-compatible : les
+    # entrÃ©es existantes ont journee_entiere=0 (comportement inchangÃ©).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=176 LIMIT 1").fetchone():
         cols_m = {r["name"] for r in conn.execute("PRAGMA table_info(machines)").fetchall()}
         if "journee_entiere" not in cols_m:
@@ -6530,11 +6530,11 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 176, "planning_journee_entiere_flag")
 
-    # Migration 177 — Planning RH : configuration des équipes par machine
-    # (matin/aprem/nuit + mode alternance). Alimente le bouton réglages du
-    # planning RH ; les créneaux affichés sont désormais lus en base plutôt
-    # que codés dans planning_rh_page.py. Une machine sans ligne dans cette
-    # table utilise les défauts codés côté frontend (compat).
+    # Migration 177 â€” Planning RH : configuration des Ã©quipes par machine
+    # (matin/aprem/nuit + mode alternance). Alimente le bouton rÃ©glages du
+    # planning RH ; les crÃ©neaux affichÃ©s sont dÃ©sormais lus en base plutÃ´t
+    # que codÃ©s dans planning_rh_page.py. Une machine sans ligne dans cette
+    # table utilise les dÃ©fauts codÃ©s cÃ´tÃ© frontend (compat).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=177 LIMIT 1").fetchone():
         existing = {r[0] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
@@ -6562,14 +6562,14 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 177, "rh_machine_config")
 
-    # v178 — Codes maintenance : scinde la catégorie "interventions" en deux
-    # nouvelles catégories "entretien" et "remplacements". Les deux gardent
-    # exactement les mêmes propriétés que l'ancienne "interventions"
+    # v178 â€” Codes maintenance : scinde la catÃ©gorie "interventions" en deux
+    # nouvelles catÃ©gories "entretien" et "remplacements". Les deux gardent
+    # exactement les mÃªmes propriÃ©tÃ©s que l'ancienne "interventions"
     # (apparition dans la section Maintenance, saisie dans une session, etc.).
-    # Migration des données existantes : tous les codes "interventions" (et
-    # les legacy "suivi") sont déplacés vers "entretien" par défaut. L'admin
+    # Migration des donnÃ©es existantes : tous les codes "interventions" (et
+    # les legacy "suivi") sont dÃ©placÃ©s vers "entretien" par dÃ©faut. L'admin
     # peut ensuite reclasser certains codes vers "remplacements" via
-    # Paramètres → Maintenance.
+    # ParamÃ¨tres â†’ Maintenance.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=178 LIMIT 1").fetchone():
         conn.execute(
             "UPDATE maintenance_codes SET categorie='entretien' "
@@ -6578,16 +6578,16 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 178, "maintenance_codes_split_interventions")
 
-    # Migration 179 — MyMaintenance : validation indépendante par (op, machine).
+    # Migration 179 â€” MyMaintenance : validation indÃ©pendante par (op, machine).
     # Avant : une op multi-machines = 1 ligne dans maintenance_event_ops avec
-    # machines_csv = "Coh1 · Coh2" et 1 statut partagé → marquer termine sur
+    # machines_csv = "Coh1 Â· Coh2" et 1 statut partagÃ© â†’ marquer termine sur
     # une machine hidden la task des 2.
-    # Après : split en N lignes (une par machine), chacune avec son statut,
-    # durée, commentaires, done_at, done_by indépendants.
+    # AprÃ¨s : split en N lignes (une par machine), chacune avec son statut,
+    # durÃ©e, commentaires, done_at, done_by indÃ©pendants.
     # Change aussi la contrainte UNIQUE(event_id, code) -> UNIQUE(event_id, code, machines_csv)
-    # pour permettre le même code sur plusieurs machines dans un créneau.
+    # pour permettre le mÃªme code sur plusieurs machines dans un crÃ©neau.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=179 LIMIT 1").fetchone():
-        # 1. Nouvelle table avec contrainte ajustée
+        # 1. Nouvelle table avec contrainte ajustÃ©e
         conn.execute("""CREATE TABLE IF NOT EXISTS maintenance_event_ops_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             event_id INTEGER NOT NULL,
@@ -6610,7 +6610,7 @@ Ressources :
         )""")
 
         # 2. Backfill : split chaque row par machine
-        SEP = " · "  # meme separateur que _MACHINES_SEP cote router
+        SEP = " Â· "  # meme separateur que _MACHINES_SEP cote router
         rows = conn.execute(
             """SELECT o.id, o.event_id, o.code, o.machines_csv, o.statut,
                       o.duree_reelle_min, o.pieces_changees, o.observations,
@@ -6637,7 +6637,7 @@ Ressources :
                          r["updated_by"], r["updated_at"]),
                     )
                 except Exception:
-                    # Doublon (event_id, code, machines_csv) ignoré par prudence.
+                    # Doublon (event_id, code, machines_csv) ignorÃ© par prudence.
                     pass
 
         # 3. Bascule ancienne <-> nouvelle
@@ -6650,13 +6650,13 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 179, "maintenance_event_ops_split_per_machine")
 
-    # Migration 180 — Fournisseurs : notion de groupe (multi-branches).
+    # Migration 180 â€” Fournisseurs : notion de groupe (multi-branches).
     # Ajoute deux colonnes texte libres sur fournisseurs_fsc :
     #   - groupe : nom du groupe parent (ex: "Fedrigoni"). NULL si independant.
     #   - branche : nom de la branche/division dans le groupe (ex: "Italy").
     # Ajoute une colonne groupe_ref sur qualite_fournisseur_certificats :
     #   NULL = certif attache a la branche (fournisseur_id).
-    #   valeur = nom du groupe → certif partage entre toutes les branches du groupe.
+    #   valeur = nom du groupe â†’ certif partage entre toutes les branches du groupe.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=180 LIMIT 1").fetchone():
         cols_four = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
         if "groupe" not in cols_four:
@@ -6673,7 +6673,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 180, "fournisseurs_groupe_branche")
 
-    # Migration 181 — Guides in-app : suivi lecture des tutos MyQualite (et
+    # Migration 181 â€” Guides in-app : suivi lecture des tutos MyQualite (et
     # autres modules a venir). Table de progression par (utilisateur, guide).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=181 LIMIT 1").fetchone():
         conn.execute("""CREATE TABLE IF NOT EXISTS user_guide_progress (
@@ -6697,7 +6697,7 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 181, "user_guide_progress")
 
-    # Migration 183 — MyExpé : lier un départ au devis retenu qui l'a genere.
+    # Migration 183 â€” MyExpÃ© : lier un dÃ©part au devis retenu qui l'a genere.
     # Corrige le 500 sur POST /api/expe/devis/reponses/{id}/retenir qui inserait
     # deux colonnes inexistantes (source_devis_reponse_id, source_devis_demande_id)
     # dans expe_departs. La 182 est deja reservee cote staging pour
@@ -6725,10 +6725,10 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 183, "expe_departs_source_devis_link")
 
-    # Migration 184 — MyMaintenance : nettoyage one-shot des créneaux planifie
-    # créés historiquement par des opérateurs via l'ancien flow "Nouvelle tâche"
-    # (feature retirée). Désormais seul l'admin peut créer des créneaux planifie.
-    # CASCADE via FK : supprime aussi les ops rattachées et les operators.
+    # Migration 184 â€” MyMaintenance : nettoyage one-shot des crÃ©neaux planifie
+    # crÃ©Ã©s historiquement par des opÃ©rateurs via l'ancien flow "Nouvelle tÃ¢che"
+    # (feature retirÃ©e). DÃ©sormais seul l'admin peut crÃ©er des crÃ©neaux planifie.
+    # CASCADE via FK : supprime aussi les ops rattachÃ©es et les operators.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=184 LIMIT 1").fetchone():
         conn.execute(
             """DELETE FROM maintenance_events
@@ -6738,11 +6738,11 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 184, "cleanup_operator_planifie_creneaux")
 
-    # Migration 185 — MyMaintenance : consignes admin par op planifiée.
-    # L'admin peut ajouter des instructions/détails textuels sur chaque op
-    # d'un créneau. Nullable, pas de valeur par défaut. Le champ est propre
-    # à chaque row (une op sur Coh1 et la même sur Coh2 = 2 rows = 2 champs
-    # consignes indépendants). Visibles côté opérateur (icône i + panneau)
+    # Migration 185 â€” MyMaintenance : consignes admin par op planifiÃ©e.
+    # L'admin peut ajouter des instructions/dÃ©tails textuels sur chaque op
+    # d'un crÃ©neau. Nullable, pas de valeur par dÃ©faut. Le champ est propre
+    # Ã  chaque row (une op sur Coh1 et la mÃªme sur Coh2 = 2 rows = 2 champs
+    # consignes indÃ©pendants). Visibles cÃ´tÃ© opÃ©rateur (icÃ´ne i + panneau)
     # et dans l'historique admin.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=185 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
@@ -6751,15 +6751,15 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 185, "maintenance_event_ops_consignes")
 
-    # Migration 186 — Système de gestion des accès database-driven.
-    # Deux tables : role_access_defaults (référentiel rôle × app × module,
-    # modifiable dans Paramètres) et user_access_overrides (surcharges par
-    # utilisateur, même granularité). Niveau 4 valeurs : none / read / write
+    # Migration 186 â€” SystÃ¨me de gestion des accÃ¨s database-driven.
+    # Deux tables : role_access_defaults (rÃ©fÃ©rentiel rÃ´le Ã— app Ã— module,
+    # modifiable dans ParamÃ¨tres) et user_access_overrides (surcharges par
+    # utilisateur, mÃªme granularitÃ©). Niveau 4 valeurs : none / read / write
     # / admin (ordinal, admin >= write >= read >= none). module_id = '_app'
-    # = accès général à l'appli, sinon nom d'onglet (sous-module).
-    # Seed depuis default_app_access_for_role (aucune régression). La colonne
-    # legacy users.access_overrides (JSON) est copiée vers user_access_overrides
-    # puis conservée en fallback ; sera droppée dans une migration ultérieure.
+    # = accÃ¨s gÃ©nÃ©ral Ã  l'appli, sinon nom d'onglet (sous-module).
+    # Seed depuis default_app_access_for_role (aucune rÃ©gression). La colonne
+    # legacy users.access_overrides (JSON) est copiÃ©e vers user_access_overrides
+    # puis conservÃ©e en fallback ; sera droppÃ©e dans une migration ultÃ©rieure.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=186 LIMIT 1").fetchone():
         conn.execute(
             "CREATE TABLE IF NOT EXISTS role_access_defaults ("
@@ -6842,33 +6842,33 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 186, "access_control_tables_and_seed")
 
-    # Migration 187 - Fondation MyStock <-> /pricing (Coûts matières).
+    # Migration 187 - Fondation MyStock <-> /pricing (CoÃ»ts matiÃ¨res).
     #
-    # Contexte : deux tables décrivent aujourd'hui la même chose de deux façons :
-    #   - `mc_material` (module /pricing, alimenté par import Excel)
-    #   - `matieres_premieres` + `mp_valorisation` (MyStock, vérité opérationnelle)
-    # Objectif : faire de MyStock la source unique du prix et des caractéristiques
-    # matière, et transformer /pricing en outil direction (dashboard + édition
+    # Contexte : deux tables dÃ©crivent aujourd'hui la mÃªme chose de deux faÃ§ons :
+    #   - `mc_material` (module /pricing, alimentÃ© par import Excel)
+    #   - `matieres_premieres` + `mp_valorisation` (MyStock, vÃ©ritÃ© opÃ©rationnelle)
+    # Objectif : faire de MyStock la source unique du prix et des caractÃ©ristiques
+    # matiÃ¨re, et transformer /pricing en outil direction (dashboard + Ã©dition
     # inline avec synchronisation bidirectionnelle).
     #
     # Cette migration pose UNIQUEMENT la fondation :
-    #   1. Enrichit `matieres_premieres` avec les 8 champs manquants côté pricing
-    #      engine (poids, base tarifaire, rôle produit, container import, taxe,
-    #      flag import) - tous nullable, aucun défaut cassant.
+    #   1. Enrichit `matieres_premieres` avec les 8 champs manquants cÃ´tÃ© pricing
+    #      engine (poids, base tarifaire, rÃ´le produit, container import, taxe,
+    #      flag import) - tous nullable, aucun dÃ©faut cassant.
     #   2. Ajoute `matieres_premieres.mc_material_id` (FK nullable) pour tracer
     #      l'appairage entre les deux mondes.
-    #   3. Backfille `pricing_role` depuis la catégorie MyStock (frontal ->
+    #   3. Backfille `pricing_role` depuis la catÃ©gorie MyStock (frontal ->
     #      frontal, adhesif -> adhesif, glassine -> glassine, complexe -> autre).
     #   4. Backfille `mc_material_id` par match nom case-insensitive ou
     #      appellation_code == reference ; pour chaque match, copie les
-    #      caractéristiques depuis mc_material (weight_per_m2, weight_gsm,
+    #      caractÃ©ristiques depuis mc_material (weight_per_m2, weight_gsm,
     #      price_basis, is_imported, container_kg, container_cost_usd,
     #      tax_incidence) vers matieres_premieres.
     #
-    # Aucune donnée n'est effacée ni écrasée : les lignes matieres_premieres
-    # sans match restent inchangées, les mc_material continuent d'être lues
+    # Aucune donnÃ©e n'est effacÃ©e ni Ã©crasÃ©e : les lignes matieres_premieres
+    # sans match restent inchangÃ©es, les mc_material continuent d'Ãªtre lues
     # par /pricing exactement comme avant. La sync bidirectionnelle et le
-    # remplacement de mc_material par une vue seront des migrations séparées.
+    # remplacement de mc_material par une vue seront des migrations sÃ©parÃ©es.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=187 LIMIT 1").fetchone():
         mp_cols = {row[1] for row in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
         _mp_add = [
@@ -6890,8 +6890,8 @@ Ressources :
             "ON matieres_premieres(mc_material_id)"
         )
 
-        # Backfill pricing_role depuis la catégorie MyStock (idempotent : ne
-        # touche que les lignes où pricing_role est vide).
+        # Backfill pricing_role depuis la catÃ©gorie MyStock (idempotent : ne
+        # touche que les lignes oÃ¹ pricing_role est vide).
         _role_map = {
             "frontal":  "frontal",
             "adhesif":  "adhesif",
@@ -6908,7 +6908,7 @@ Ressources :
             )
 
         # Backfill mc_material_id : match nom, puis appellation_code, puis
-        # copie les caractéristiques pricing depuis mc_material. Uniquement
+        # copie les caractÃ©ristiques pricing depuis mc_material. Uniquement
         # si la table mc_material existe (v78+).
         try:
             has_mc = conn.execute(
@@ -6939,9 +6939,9 @@ Ressources :
                 "WHERE mp.mc_material_id IS NULL"
             )
 
-            # Copie des caractéristiques pricing depuis mc_material vers
-            # matieres_premieres pour chaque ligne appairée. On ne remplace
-            # jamais une valeur déjà saisie côté MyStock (COALESCE garde
+            # Copie des caractÃ©ristiques pricing depuis mc_material vers
+            # matieres_premieres pour chaque ligne appairÃ©e. On ne remplace
+            # jamais une valeur dÃ©jÃ  saisie cÃ´tÃ© MyStock (COALESCE garde
             # l'existant).
             _copy_map = [
                 ("weight_per_m2",      "m.weight_per_m2"),
@@ -6964,15 +6964,15 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 187, "mp_pricing_bridge")
 
-    # Migration 188 — MyMaintenance : purge one-shot des ops et operators
-    # orphelins. Bug historique : le PRAGMA foreign_keys n'est pas activé sur
-    # get_db(), donc les DELETE sur maintenance_events ne CASCADE pas → chaque
-    # suppression de créneau laissait des rows dans maintenance_event_ops et
+    # Migration 188 â€” MyMaintenance : purge one-shot des ops et operators
+    # orphelins. Bug historique : le PRAGMA foreign_keys n'est pas activÃ© sur
+    # get_db(), donc les DELETE sur maintenance_events ne CASCADE pas â†’ chaque
+    # suppression de crÃ©neau laissait des rows dans maintenance_event_ops et
     # maintenance_event_operators avec un event_id pointant vers un event qui
     # n'existe plus. Rows invisibles dans l'UI (les JOIN les excluent) mais
-    # présentes physiquement en DB.
+    # prÃ©sentes physiquement en DB.
     # Le fix v2.2.11 ajoute des DELETE explicites dans delete_event pour ne
-    # plus créer de nouveaux orphelins. Cette migration nettoie le passif.
+    # plus crÃ©er de nouveaux orphelins. Cette migration nettoie le passif.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=188 LIMIT 1").fetchone():
         conn.execute(
             """DELETE FROM maintenance_event_ops
@@ -6985,28 +6985,28 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 188, "cleanup_orphan_maintenance_event_ops")
 
-    # Migration 189 — Retire le système d'alertes automatiques liées aux
-    # contrôles non périodiques (v2.2.15 + fix v2.2.16). L'alerte utile
-    # ("Inspection des produits finis", historiquement liée au code '01')
+    # Migration 189 â€” Retire le systÃ¨me d'alertes automatiques liÃ©es aux
+    # contrÃ´les non pÃ©riodiques (v2.2.15 + fix v2.2.16). L'alerte utile
+    # ("Inspection des produits finis", historiquement liÃ©e au code '01')
     # devient une alerte classique manuelle qui conserve toutes ses acks.
     #
     # Actions (idempotentes via garde schema_migrations 189) :
     #   a. Trouve l'alerte cible par linked_maint_code='01' (chemin
     #      canonique) ou fallback LIKE fuzzy sur le nom. Rename propre
-    #      → "Inspection des produits finis". Détache + rebadge manual.
+    #      â†’ "Inspection des produits finis". DÃ©tache + rebadge manual.
     #   b. GARDE-FOU STRICT : ne DELETE les autres alertes auto QUE si
-    #      l'alerte cible a été trouvée et sécurisée. Sinon aucun delete.
-    #      (Évite le bug v2.2.15 où qpf_id=None → id != -1 balayait tout.)
+    #      l'alerte cible a Ã©tÃ© trouvÃ©e et sÃ©curisÃ©e. Sinon aucun delete.
+    #      (Ã‰vite le bug v2.2.15 oÃ¹ qpf_id=None â†’ id != -1 balayait tout.)
     #   c. Convertit les codes categorie='controles' et periodique=0 en
-    #      periodique=1 avec intervalle='—' si vide.
+    #      periodique=1 avec intervalle='â€”' si vide.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=189 LIMIT 1").fetchone():
         _now_189 = datetime.now().isoformat()
-        # a. Trouve l'alerte cible — chemin canonique via linked_maint_code
+        # a. Trouve l'alerte cible â€” chemin canonique via linked_maint_code
         qpf = conn.execute(
             "SELECT id, nom FROM maintenance_alerts "
             "WHERE linked_maint_code='01' LIMIT 1"
         ).fetchone()
-        # Fallback : LIKE fuzzy sur les libellés plausibles
+        # Fallback : LIKE fuzzy sur les libellÃ©s plausibles
         if qpf is None:
             qpf = conn.execute(
                 """SELECT id, nom FROM maintenance_alerts
@@ -7028,9 +7028,9 @@ Ressources :
                 (_now_189, qpf_id)
             )
         # b. GARDE-FOU STRICT : DELETE des autres alertes auto SEULEMENT
-        # si l'alerte cible a été positivement identifiée et sécurisée.
-        # Sinon on s'abstient (préserve la donnée en cas de renommage
-        # inattendu — l'admin peut nettoyer manuellement plus tard).
+        # si l'alerte cible a Ã©tÃ© positivement identifiÃ©e et sÃ©curisÃ©e.
+        # Sinon on s'abstient (prÃ©serve la donnÃ©e en cas de renommage
+        # inattendu â€” l'admin peut nettoyer manuellement plus tard).
         if qpf_id is not None:
             orphan_ids = [r["id"] for r in conn.execute(
                 "SELECT id FROM maintenance_alerts "
@@ -7038,7 +7038,7 @@ Ressources :
             ).fetchall()]
             if orphan_ids:
                 ph = ",".join(["?"] * len(orphan_ids))
-                # CASCADE FK inactif sur SQLite → purge manuelle des acks
+                # CASCADE FK inactif sur SQLite â†’ purge manuelle des acks
                 conn.execute(
                     f"DELETE FROM maintenance_alert_acks WHERE alert_id IN ({ph})",
                     orphan_ids,
@@ -7047,12 +7047,12 @@ Ressources :
                     f"DELETE FROM maintenance_alerts WHERE id IN ({ph})",
                     orphan_ids,
                 )
-        # c. Convertit les codes non-périodiques en périodiques
-        # (safe : aucune perte de données, juste normalisation du flag)
+        # c. Convertit les codes non-pÃ©riodiques en pÃ©riodiques
+        # (safe : aucune perte de donnÃ©es, juste normalisation du flag)
         conn.execute(
             """UPDATE maintenance_codes
                SET periodique=1,
-                   intervalle=COALESCE(NULLIF(TRIM(intervalle),''), '—'),
+                   intervalle=COALESCE(NULLIF(TRIM(intervalle),''), 'â€”'),
                    updated_at=?
                WHERE categorie='controles' AND periodique=0""",
             (_now_189,)
@@ -7060,11 +7060,11 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 189, "remove_auto_control_alerts_system")
 
-    # Migration 190 — Retire le concept de périodicité (v2.2.17).
-    # Tous les codes maintenance sont désormais considérés comme périodiques
-    # côté modèle métier. La colonne `periodique` reste en DB pour compat
-    # (aucun DROP COLUMN, réversible), mais elle est forcée à 1 partout et
-    # cachée de l'UI (formulaire + tableau).
+    # Migration 190 â€” Retire le concept de pÃ©riodicitÃ© (v2.2.17).
+    # Tous les codes maintenance sont dÃ©sormais considÃ©rÃ©s comme pÃ©riodiques
+    # cÃ´tÃ© modÃ¨le mÃ©tier. La colonne `periodique` reste en DB pour compat
+    # (aucun DROP COLUMN, rÃ©versible), mais elle est forcÃ©e Ã  1 partout et
+    # cachÃ©e de l'UI (formulaire + tableau).
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=190 LIMIT 1").fetchone():
         conn.execute(
             "UPDATE maintenance_codes SET periodique=1, updated_at=? WHERE periodique=0",
@@ -7072,6 +7072,91 @@ Ressources :
         )
         conn.commit()
         _record_schema_migration(conn, 190, "force_all_maintenance_codes_periodic")
+
+    # v191 -- Enrichissement fournisseurs_fsc : contacts, adresse, langue, tags
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=191 LIMIT 1").fetchone():
+        ff_cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        _ff_add = [
+            ("adresse",         "TEXT"),
+            ("code_postal",     "TEXT"),
+            ("ville",           "TEXT"),
+            ("pays",            "TEXT DEFAULT 'FR'"),
+            ("langue_default",  "TEXT DEFAULT 'fr'"),
+            ("tags",            "TEXT"),
+            ("notes",           "TEXT"),
+            ("actif",           "INTEGER NOT NULL DEFAULT 1"),
+            ("updated_at",      "TEXT"),
+        ]
+        for col, ddl in _ff_add:
+            if col not in ff_cols:
+                conn.execute(f"ALTER TABLE fournisseurs_fsc ADD COLUMN {col} {ddl}")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseurs_fsc_actif ON fournisseurs_fsc(actif)")
+        conn.commit()
+        _record_schema_migration(conn, 191, "fournisseurs_fsc_contacts_infos")
+
+    # v192 -- Table fournisseur_contacts (N contacts par fournisseur)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=192 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS fournisseur_contacts (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            fournisseur_id  INTEGER NOT NULL REFERENCES fournisseurs_fsc(id) ON DELETE CASCADE,
+            nom             TEXT NOT NULL,
+            fonction        TEXT,
+            emails          TEXT,
+            tels            TEXT,
+            langue          TEXT DEFAULT 'fr',
+            is_principal    INTEGER NOT NULL DEFAULT 0,
+            actif           INTEGER NOT NULL DEFAULT 1,
+            notes           TEXT,
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseur_contacts_fournisseur ON fournisseur_contacts(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseur_contacts_principal ON fournisseur_contacts(fournisseur_id, is_principal)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseur_contacts_actif ON fournisseur_contacts(actif)")
+        conn.commit()
+        _record_schema_migration(conn, 192, "fournisseur_contacts")
+
+    # v193 -- ao_fournisseurs : FKs optionnels vers fournisseurs_fsc + fournisseur_contacts
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=193 LIMIT 1").fetchone():
+        af_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "fournisseur_id" not in af_cols:
+            conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN fournisseur_id INTEGER")
+        if "fournisseur_contact_id" not in af_cols:
+            conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN fournisseur_contact_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_fournisseurs_fournisseur ON ao_fournisseurs(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_fournisseurs_contact ON ao_fournisseurs(fournisseur_contact_id)")
+        conn.commit()
+        _record_schema_migration(conn, 193, "ao_fournisseurs_fks")
+
+    # v194 -- ao_demandes : cloture + fournisseur retenu
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=194 LIMIT 1").fetchone():
+        aod_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+        if "fournisseur_retenu_id" not in aod_cols:
+            conn.execute("ALTER TABLE ao_demandes ADD COLUMN fournisseur_retenu_id INTEGER")
+        if "date_cloture" not in aod_cols:
+            conn.execute("ALTER TABLE ao_demandes ADD COLUMN date_cloture TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_demandes_retenu ON ao_demandes(fournisseur_retenu_id)")
+        conn.commit()
+        _record_schema_migration(conn, 194, "ao_demandes_cloture_retention")
+    # Migration 195 â€” Backfill usage_count des codes libres (v2.2.37 fix).
+    # NOTE : renumÃ©rotÃ©e 191 â†’ 194 â†’ 195 (v2.2.40) car staging accumule des
+    # migrations en parallÃ¨le (fournisseurs_fsc_contacts_infos, ao_demandes...).
+    # Le compteur `usage_count` sur maintenance_codes (libre=1) n'est
+    # historiquement peuplÃ© que par la fonction merge. Depuis v2.2.37 il est
+    # aussi incrÃ©mentÃ© Ã  chaque INSERT d'op avec un code LIB-*, mais les
+    # donnÃ©es antÃ©rieures ont un compteur Ã  0. Cette migration re-calcule
+    # usage_count Ã  partir du vrai nombre d'ops enregistrÃ©es.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
+        conn.execute(
+            """UPDATE maintenance_codes
+               SET usage_count = COALESCE((
+                     SELECT COUNT(*) FROM maintenance_event_ops
+                     WHERE maintenance_event_ops.code = maintenance_codes.code
+                   ), 0)
+               WHERE libre = 1"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 195, "backfill_libres_usage_count")
 
 
 def create_default_admin():
@@ -7086,7 +7171,7 @@ def create_default_admin():
         )
         conn.commit()
 
-# ─── Détection doublons ───────────────────────────────────────────
+# â”€â”€â”€ DÃ©tection doublons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def is_duplicate(conn, operateur, date_operation, operation_code, no_dossier):
     row = conn.execute(
         """SELECT id FROM production_data
@@ -7097,14 +7182,14 @@ def is_duplicate(conn, operateur, date_operation, operation_code, no_dossier):
     return row is not None
 
 
-# ─── Helpers parsing ──────────────────────────────────────────────
+# â”€â”€â”€ Helpers parsing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def parse_french_number(val):
     if val is None:
         return 0
     s = str(val).strip()
     if not s:
         return 0
-    s = s.replace(' ','').replace(' ','').replace(' ','').replace(',','.')
+    s = s.replace(' ','').replace('Â ','').replace('â€¯','').replace(',','.')
     try:
         return float(s)
     except ValueError:
@@ -7147,23 +7232,23 @@ def parse_file(file_bytes, filename):
     elif ext in ("xls", "xlsx", "xlsm"):
         return pd.read_excel(io.BytesIO(file_bytes), dtype=str)
     else:
-        raise ValueError(f"Format non supporté: .{ext}")
+        raise ValueError(f"Format non supportÃ©: .{ext}")
 
 
 COLUMN_MAP = {
-    "opérateur": "operateur", "operateur": "operateur",
-    "date et heure d'opération": "date_operation",
+    "opÃ©rateur": "operateur", "operateur": "operateur",
+    "date et heure d'opÃ©ration": "date_operation",
     "date et heure d'operation": "date_operation",
-    "opération": "operation", "operation": "operation",
+    "opÃ©ration": "operation", "operation": "operation",
     "service": "service", "machine": "machine",
-    "no dossier": "no_dossier", "n° dossier": "no_dossier",
+    "no dossier": "no_dossier", "nÂ° dossier": "no_dossier",
     "client": "client",
-    "désignation produit": "designation",
+    "dÃ©signation produit": "designation",
     "designation produit": "designation",
-    "désignation produit ": "designation",
-    "quantité à traiter": "quantite_a_traiter",
+    "dÃ©signation produit ": "designation",
+    "quantitÃ© Ã  traiter": "quantite_a_traiter",
     "quantite a traiter": "quantite_a_traiter",
-    "quantité traitée": "quantite_traitee",
+    "quantitÃ© traitÃ©e": "quantite_traitee",
     "quantite traitee": "quantite_traitee",
     "no cde": "no_cde",
     "date exp.p.": "date_exp", "date exp": "date_exp",
