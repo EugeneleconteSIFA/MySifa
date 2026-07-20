@@ -112,8 +112,18 @@ body.sb-open .sidebar-overlay{display:block}
 .btn-icon.btn-del-ao:hover{background:rgba(248,113,113,.12);color:var(--danger);border-color:var(--danger)}
 .ao-actions-cell{text-align:right;white-space:nowrap}
 .ao-actions-cell .btn{vertical-align:middle}
+.ao-params-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:0 0 16px auto;max-width:340px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.ao-params-panel h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin:0 0 12px 0}
+.ao-params-panel .app-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ao-params-panel .app-row:last-child{margin-bottom:0}
+.ao-params-panel label{flex:0 0 130px;font-size:12px;font-weight:600;color:var(--text2)}
+.ao-params-panel input[type=number]{flex:1;padding:6px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit}
+.ao-params-panel .app-suffix{font-size:12px;color:var(--muted);min-width:20px}
+.ao-params-panel .app-help{font-size:11px;color:var(--muted);line-height:1.4;margin-top:6px;font-style:italic}
+.ao-list-ref-link{color:var(--accent);text-decoration:none;font-weight:700}
+.ao-list-ref-link:hover{text-decoration:underline}
 .filter-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-.filter-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.filter-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .filter-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .data-table{width:100%;border-collapse:collapse;font-size:13px}
 .data-table th,.data-table td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left}
@@ -125,7 +135,7 @@ body.sb-open .sidebar-overlay{display:block}
 .empty-state{padding:48px 24px;text-align:center;color:var(--muted)}
 .empty-state strong{display:block;color:var(--text2);font-size:15px;margin-bottom:8px}
 .detail-tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
-.detail-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.detail-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .detail-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
 .breadcrumb{font-size:12px;color:var(--muted);margin-bottom:12px}
@@ -1366,7 +1376,7 @@ function renderList() {
       '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
       '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
       '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
-    rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td>'+
+    rows += '<tr><td><a href="#" class="ao-list-ref-link btn-view" data-id="'+a.id+'">'+escHtml(a.reference)+'</a></td>'+
       '<td>'+escHtml(a.titre)+'</td>'+
       '<td>'+cliTxt+'</td>'+
       '<td>'+refsTxt+'</td>'+
@@ -1401,6 +1411,42 @@ function buildNavPagerHtml(list, currentId, labelSingular) {
     '</div>';
 }
 
+function formatTransportHelper(pct) {
+  const p = parseFloat(pct) || 0;
+  const base = 50000;
+  const t = base * p / 100;
+  const fmt = v => v.toLocaleString('fr-FR', {maximumFractionDigits: 0});
+  return 'Pour ' + fmt(base) + ' EUR de marchandise : ' + fmt(t) + ' EUR de transport';
+}
+
+async function saveAoTransport(aoId, pct) {
+  try {
+    await api('/api/ao/' + aoId + '/params', {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({prix_transport_pct: pct})
+    });
+    if (S.ao) S.ao.prix_transport_pct = pct;
+  } catch(e) { showToast(e.message || 'Erreur transport.', 'danger'); }
+}
+
+async function loadEurUsdRate() {
+  try {
+    const r = await api('/api/ao/config/eur-usd');
+    const el = document.getElementById('app-eur-usd');
+    if (el && r && typeof r.eur_usd_rate === 'number') el.value = r.eur_usd_rate || '';
+  } catch(e) { /* silencieux */ }
+}
+
+async function saveEurUsdRate(rate) {
+  try {
+    await api('/api/ao/config/eur-usd', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({eur_usd_rate: rate})
+    });
+    showToast('Taux EUR/USD mis a jour.', 'success');
+  } catch(e) { showToast(e.message || 'Erreur EUR/USD.', 'danger'); }
+}
+
 function renderDetailHeader() {
   const ao = S.ao;
   const d = S.detail;
@@ -1425,6 +1471,17 @@ function renderDetailHeader() {
     '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
     '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
     '<div class="detail-actions">'+actions+'</div>'+
+    '<div class="ao-params-panel">'+
+      '<h3>Parametres de calcul</h3>'+
+      '<div class="app-row"><label for="app-transport">Prix transport</label>'+
+        '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
+        '<span class="app-suffix">%</span></div>'+
+      '<div class="app-help" id="app-transport-help">'+formatTransportHelper(ao.prix_transport_pct||0)+'</div>'+
+      '<div class="app-row" style="margin-top:10px"><label for="app-eur-usd">Taux EUR/USD</label>'+
+        '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
+        '<span class="app-suffix"></span></div>'+
+      '<div class="app-help">Synchronise avec Cout matiere &amp; Valorisation stock</div>'+
+    '</div>'+
     '<div class="detail-tabs">'+
     (() => {
       const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
@@ -2356,6 +2413,27 @@ function bindDetailEvents() {
   document.getElementById('btn-back')?.addEventListener('click', backToList);
   document.getElementById('bc-list')?.addEventListener('click', e => { e.preventDefault(); backToList(); });
   document.querySelectorAll('.detail-tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  // AO params panel : transport % + EUR/USD
+  (function bindAoParamsPanel(){
+    const inpT = document.getElementById('app-transport');
+    const help = document.getElementById('app-transport-help');
+    if (inpT) {
+      inpT.addEventListener('input', () => { if (help) help.textContent = formatTransportHelper(inpT.value); });
+      inpT.addEventListener('change', () => {
+        const v = Math.max(0, Math.min(100, parseFloat(inpT.value) || 0));
+        inpT.value = v;
+        if (S.ao) saveAoTransport(S.ao.id, v);
+      });
+    }
+    const inpU = document.getElementById('app-eur-usd');
+    if (inpU) {
+      loadEurUsdRate();
+      inpU.addEventListener('change', () => {
+        const v = parseFloat(inpU.value);
+        if (!isNaN(v) && v > 0) saveEurUsdRate(v);
+      });
+    }
+  })();
   document.querySelectorAll('.detail-hdr .btn-nav-prev, .detail-hdr .btn-nav-next').forEach(btn => {
     btn.addEventListener('click', () => {
       const arr = filteredAos();

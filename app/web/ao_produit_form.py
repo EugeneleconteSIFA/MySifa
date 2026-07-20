@@ -198,6 +198,7 @@ function renderProduitForm() {
       '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
+    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-client-row')+
     pfRow('Client', clientPicker, 'pf-inline-wide pf-client-row')+
     '</div></div>'+
 
@@ -473,6 +474,7 @@ function exportProduitPdf() {
 
 function bindProduitFormEvents() {
   document.getElementById('btn-pf-back')?.addEventListener('click', closeProduitForm);
+  try { bindRefSifaAutocomplete(); } catch(e) { /* no-op */ }
   document.getElementById('btn-pf-save')?.addEventListener('click', () => { saveProduitForm(); });
   document.getElementById('btn-pf-save-bottom')?.addEventListener('click', () => { saveProduitForm(); });
   document.querySelectorAll('.pf-sticky-bar .btn-nav-prev, .pf-sticky-bar .btn-nav-next').forEach(btn => {
@@ -521,6 +523,100 @@ function bindProduitFormEvents() {
   if (refInp && !refInp.value.trim()) {
     requestAnimationFrame(() => { refInp.focus(); });
   }
+}
+
+
+async function searchFichesTechniques(q) {
+  try {
+    const rows = await api('/api/ao/fiches-techniques?q=' + encodeURIComponent(q||'') + '&limit=20');
+    return Array.isArray(rows) ? rows : [];
+  } catch(e) { return []; }
+}
+
+async function fetchFicheTechnique(ref) {
+  return api('/api/ao/fiches-techniques/by-ref/' + encodeURIComponent(ref));
+}
+
+// Applique la fiche technique aux champs VIDES uniquement.
+function fillProduitFromFiche(fiche) {
+  if (!fiche) return {applied: 0, skipped: 0};
+  const setIfEmpty = (id, val) => {
+    if (val == null || val === '') return false;
+    const el = document.getElementById(id);
+    if (!el) return false;
+    const cur = (el.value || '').trim();
+    if (cur === '' || cur === '0') { el.value = val; return true; }
+    return false;
+  };
+  let applied = 0, skipped = 0;
+  // Etiquette
+  if (setIfEmpty('pf-et-laize', fiche.laize_optimale || fiche.laize)) applied++; else if (fiche.laize) skipped++;
+  // Bobines
+  if (setIfEmpty('pf-bob-nb', fiche.nb_etiq_bobin)) applied++;
+  if (setIfEmpty('pf-bob-diam', fiche.dia_ext)) applied++;
+  if (setIfEmpty('pf-bob-mand', fiche.mandrin_longueur)) applied++;
+  // Impressions
+  if (setIfEmpty('pf-imp-recto', fiche.recto)) applied++;
+  if (setIfEmpty('pf-imp-verso', fiche.verso)) applied++;
+  // Matiere : nom en texte (frontal/adhesif sont des IDs cote produit).
+  // On ne remplit PAS ces selects — mapping ID/nom trop fragile. On log.
+  // Client texte (si champ client vide et fiche a un nom, ne rien faire — le picker est pilote a part).
+  // Cartons/palettes
+  if (setIfEmpty('pf-cart-bob', fiche.nb_bobines_carton)) applied++;
+  if (setIfEmpty('pf-cart-sol', fiche.nb_au_sol)) applied++;
+  if (setIfEmpty('pf-cart-etages', fiche.nb_etage)) applied++;
+  if (setIfEmpty('pf-pal-sol', fiche.palette_nb_cartons_sol)) applied++;
+  if (setIfEmpty('pf-pal-etages', fiche.palette_nb_cartons_hauteur)) applied++;
+  // Reference du produit : si vide et on a la ref de la fiche, la reprendre
+  if (setIfEmpty('pf-ref', fiche.reference)) applied++;
+  return {applied, skipped};
+}
+
+function bindRefSifaAutocomplete() {
+  const inp = document.getElementById('pf-refsifa');
+  const list = document.getElementById('pf-refsifa-list');
+  const btnClear = document.getElementById('btn-pf-refsifa-clear');
+  if (!inp || !list) return;
+  let hideT = null;
+  const hide = () => { list.style.display = 'none'; };
+  const show = () => { list.style.display = 'block'; };
+  const render = (rows) => {
+    if (!rows.length) { list.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:12px">Aucune fiche</div>'; show(); return; }
+    list.innerHTML = rows.map(r =>
+      '<div class="pf-refsifa-item" data-ref="' + escAttr(r.reference) + '" style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">' +
+        '<strong>' + escHtml(r.reference) + '</strong> - ' + escHtml(r.designation||'') +
+        (r.client ? ' <span style="color:var(--muted)">(' + escHtml(r.client) + ')</span>' : '') +
+      '</div>'
+    ).join('');
+    show();
+    list.querySelectorAll('.pf-refsifa-item').forEach(it => {
+      it.addEventListener('mousedown', async (ev) => {
+        ev.preventDefault();
+        const ref = it.dataset.ref;
+        inp.value = ref;
+        hide();
+        try {
+          const fiche = await fetchFicheTechnique(ref);
+          const res = fillProduitFromFiche(fiche);
+          showToast(res.applied + ' champs remplis depuis la fiche ' + ref + '.', 'success');
+        } catch(e) { showToast(e.message || 'Erreur fiche technique.', 'danger'); }
+      });
+    });
+  };
+  let debT = null;
+  inp.addEventListener('input', () => {
+    if (debT) clearTimeout(debT);
+    debT = setTimeout(async () => {
+      const rows = await searchFichesTechniques(inp.value);
+      render(rows);
+    }, 200);
+  });
+  inp.addEventListener('focus', async () => {
+    const rows = await searchFichesTechniques(inp.value);
+    render(rows);
+  });
+  inp.addEventListener('blur', () => { if (hideT) clearTimeout(hideT); hideT = setTimeout(hide, 200); });
+  if (btnClear) btnClear.addEventListener('click', () => { inp.value = ''; hide(); inp.focus(); });
 }
 
 async function loadMatieresForProduit() {
