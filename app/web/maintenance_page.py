@@ -7367,6 +7367,32 @@ async function loadPlanningHistorique(){
     listEl.innerHTML = '<p style="color:var(--danger)">Erreur : ' + escHtml(e.message) + '</p>';
   }
 }
+// v2.2.50 : historique visuel enrichi avec double-clic → détail créneau
+function _histInitials(nom){
+  const parts = String(nom || '').trim().split(/\s+/);
+  if(!parts.length) return '?';
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+}
+function _histColorForString(s){
+  // hash simple → palette 6 couleurs stables
+  const palette = ['#22d3ee','#fbbf24','#a78bfa','#f472b6','#34d399','#60a5fa'];
+  let h = 0;
+  for(const ch of String(s || '')) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
+  return palette[Math.abs(h) % palette.length];
+}
+function _histMachineChipStyle(m){
+  const bg = _histColorForString(m);
+  return 'display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;background:' + bg + '22;color:' + bg + ';border:1px solid ' + bg + '55;font-size:11px;font-weight:700;line-height:1.3';
+}
+function _histOperatorAvatarStyle(nom){
+  const bg = _histColorForString(nom);
+  return 'display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:' + bg + ';color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;margin-right:-6px;border:2px solid var(--card);flex-shrink:0';
+}
+function _histStatusColor(ratio){
+  if(ratio >= 1) return 'var(--ok,#34d399)';       // tout fait — vert
+  if(ratio > 0)  return 'var(--warn,#fbbf24)';     // partiel — orange
+  return 'var(--danger,#f87171)';                  // rien — rouge
+}
 function renderPlanningHistorique(events){
   const listEl = document.getElementById('plan-hist-list');
   if(!listEl) return;
@@ -7379,7 +7405,17 @@ function renderPlanningHistorique(events){
     (ev.ops || []).forEach(o => {
       (o.machines || []).forEach(m => { if(!machineUnion.includes(m)) machineUnion.push(m); });
     });
-    const machinesLabel = machineUnion.length ? machineUnion.join(', ') : (ev.machine || '—');
+    // Progression : compter les op-machine faites vs total
+    let total = 0, done = 0;
+    (ev.ops || []).forEach(o => {
+      const nMach = (o.machines || []).length || 1;
+      total += nMach;
+      if(o.statut === 'termine') done += nMach;
+    });
+    const ratio = total > 0 ? (done / total) : 0;
+    const statusColor = _histStatusColor(ratio);
+    const pct = Math.round(ratio * 100);
+    // Opérateurs présents : done_by unique, fallback assignés
     const doneBySet = new Set();
     (ev.ops || []).forEach(o => { if(o.done_by != null) doneBySet.add(Number(o.done_by)); });
     const opsList = Array.isArray(ev.operators) ? ev.operators : [];
@@ -7387,20 +7423,81 @@ function renderPlanningHistorique(events){
       const u = opsList.find(x => Number(x.id) === uid);
       return u ? (u.nom || 'op. #' + uid) : ('op. #' + uid);
     });
-    const opsPresents = doneByNames.length ? doneByNames : opsList.map(u => u.nom || '');
-    const opsLabel = opsPresents.length ? opsPresents.join(', ') : '—';
+    const opsPresents = doneByNames.length ? doneByNames : opsList.map(u => u.nom || '').filter(Boolean);
     const dateFr = _fmtIsoDateFr(ev.date_prevue);
     const horaires = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + '–' + ev.heure_fin) : '';
-    return '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:8px;display:flex;flex-wrap:wrap;align-items:center;gap:12px">' +
-      '<div style="flex:1;min-width:220px">' +
-        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">' + escHtml(dateFr) + (horaires ? ' · ' + escHtml(horaires) : '') + '</div>' +
-        '<div style="font-size:12px;color:var(--text2);margin-bottom:2px"><strong>Machines :</strong> ' + escHtml(machinesLabel) + '</div>' +
-        '<div style="font-size:12px;color:var(--text2)"><strong>Opérateurs présents :</strong> ' + escHtml(opsLabel) + '</div>' +
+    // Rendu
+    const machineChips = machineUnion.length
+      ? machineUnion.map(m => '<span style="' + _histMachineChipStyle(m) + '">' + escHtml(m) + '</span>').join('')
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Aucune machine</span>';
+    const opAvatars = opsPresents.length
+      ? '<div style="display:inline-flex;align-items:center">' + opsPresents.slice(0, 4).map(n =>
+          '<span style="' + _histOperatorAvatarStyle(n) + '" title="' + escAttr(n) + '">' + escHtml(_histInitials(n)) + '</span>'
+        ).join('') +
+        (opsPresents.length > 4 ? '<span style="margin-left:8px;font-size:11px;color:var(--muted);font-weight:600">+' + (opsPresents.length - 4) + '</span>' : '') +
+        '</div>'
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">—</span>';
+    return '<div data-hist-ev-id="' + escAttr(ev.id) + '" ondblclick="planHistOpenDetails(\'' + escAttr(ev.id) + '\')" ' +
+        'style="padding:14px 16px;border:1px solid var(--border);border-left:4px solid ' + statusColor + ';border-radius:10px;background:var(--card);margin-bottom:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s" ' +
+        'title="Double-cliquez pour voir le détail" ' +
+        'onmouseover="this.style.boxShadow=\'0 2px 12px rgba(0,0,0,0.08)\'" ' +
+        'onmouseout="this.style.boxShadow=\'none\'">' +
+      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">' +
+        // Colonne 1 : Date + horaires + progress bar
+        '<div style="flex:1;min-width:220px">' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="' + statusColor + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+            '<span style="font-size:13px;font-weight:700;color:var(--text)">' + escHtml(dateFr) + '</span>' +
+            (horaires ? '<span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--text2);font-weight:600">· ' + escHtml(horaires) + '</span>' : '') +
+          '</div>' +
+          // Progress bar ops
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<div style="flex:1;max-width:180px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden;border:1px solid var(--border)">' +
+              '<div style="height:100%;background:' + statusColor + ';width:' + pct + '%;transition:width .3s"></div>' +
+            '</div>' +
+            '<span style="font-size:11px;font-weight:700;color:' + statusColor + ';font-family:ui-monospace,monospace">' + done + ' / ' + total + '</span>' +
+          '</div>' +
+        '</div>' +
+        // Colonne 2 : Machines chips
+        '<div style="min-width:180px">' +
+          '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:5px">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>' +
+            'Machines' +
+          '</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:4px">' + machineChips + '</div>' +
+        '</div>' +
+        // Colonne 3 : Opérateurs avatars
+        '<div style="min-width:150px">' +
+          '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:5px">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
+            'Opérateurs présents' +
+          '</div>' +
+          opAvatars +
+        '</div>' +
+        // Bouton Reprogrammer
+        '<button type="button" onclick="event.stopPropagation();planHistReprogrammer(\'' + escAttr(ev.id) + '\')" style="background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s;display:inline-flex;align-items:center;gap:6px">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
+          'Reprogrammer' +
+        '</button>' +
       '</div>' +
-      '<button type="button" onclick="planHistReprogrammer(\'' + escAttr(ev.id) + '\')" style="background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s">Reprogrammer</button>' +
     '</div>';
   }).join('');
   listEl.innerHTML = rowsHtml;
+}
+
+// v2.2.50 : ouvre le modal Détails créneau depuis l'historique (converti au format calendar)
+async function planHistOpenDetails(eventId){
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials: 'include' });
+    if(!r.ok){ showToast('Créneau introuvable.', 'danger'); return; }
+    const data = await r.json();
+    const ev = data.event || data;
+    if(!ev){ showToast('Données manquantes.', 'danger'); return; }
+    const clientEv = (typeof _apiEventToClient === 'function') ? _apiEventToClient(ev) : ev;
+    openPlanningDetailsModal([clientEv]);
+  }catch(e){
+    showToast('Erreur : ' + e.message, 'danger');
+  }
 }
 async function planHistReprogrammer(eventId){
   try{
