@@ -2213,11 +2213,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                     <div style="display:flex;align-items:center;justify-content:center;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:10px">
                       <code style="font-family:monospace;font-size:14px;color:var(--text);font-weight:600">wmic printer get name</code>
                     </div>
-                    <div style="margin-bottom:8px">
+                    <div>
                       Copie-colle le nom retourné (attention aux <strong>espaces</strong>, <strong>majuscules</strong> et <strong>parenthèses</strong>).
-                    </div>
-                    <div style="padding-top:8px;border-top:1px dashed var(--border);color:var(--warn)">
-                      ⚠️ Ce n'est <strong>PAS</strong> le "Nom de partage" avec underscores dans l'onglet <em>Partage</em> — c'est le nom local original.
                     </div>
                   </div>
                 </div>
