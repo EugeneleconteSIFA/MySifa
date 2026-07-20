@@ -8639,7 +8639,10 @@ async function admFetchOperators(){
 /* ── Vue Mes tâches ──────────────────────────────────────────────── */
 
 async function opLoadTasks(){
-  if(MAINT_ROLE !== 'operator') return;
+  // v2.2.47 : autorise opérateur ET admin naviguant sur Mes tâches
+  // (body.admin-op-active), sinon ne fetch pas inutilement.
+  const isAdminOnOpView = (MAINT_ROLE !== 'operator' && document.body.classList.contains('admin-op-active'));
+  if(MAINT_ROLE !== 'operator' && !isAdminOnOpView) return;
   const today = new Date();
   const in60 = new Date(); in60.setDate(today.getDate() + 60);
   const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
@@ -8676,6 +8679,51 @@ async function opLoadTasks(){
   }
   opRenderTasks();
 }
+
+// v2.2.47 : auto-refresh silencieux des tâches (poll 20s).
+// Utile quand plusieurs opérateurs travaillent sur le même créneau : chacun
+// voit l'avancement de l'autre en temps réel sans avoir à changer de section.
+// Pause si tab en background ou modal ouvert (évite steal focus + fetch inutile).
+let _opAutoRefreshInterval = null;
+const _OP_AUTO_REFRESH_MS = 20000;
+function _opShouldAutoRefresh(){
+  // Actif seulement si l'onglet est visible
+  if(document.visibilityState !== 'visible') return false;
+  // Actif seulement si l'user est sur la vue Mes tâches (op-tasks)
+  const onOpTasks = MAINT_ROLE === 'operator' ||
+    (document.body.classList.contains('admin-op-active') &&
+     document.getElementById('view-op-tasks') &&
+     document.getElementById('view-op-tasks').classList.contains('active'));
+  if(!onOpTasks) return false;
+  // Pause si un modal opérateur est ouvert (single-op, saisie, new, etc.)
+  const anyOpen = document.querySelector('.op-modal-overlay.active');
+  if(anyOpen) return false;
+  return true;
+}
+function _opAutoRefreshTick(){
+  if(!_opShouldAutoRefresh()) return;
+  try{
+    // Silent : pas de spinner, pas de toast. En cas d'erreur, opLoadTasks
+    // logue en console mais ne wipe pas la vue.
+    if(typeof opLoadTasks === 'function') opLoadTasks();
+  }catch(e){ console.warn('[opAutoRefresh]', e); }
+}
+function opAutoRefreshStart(){
+  if(_opAutoRefreshInterval) return;
+  _opAutoRefreshInterval = setInterval(_opAutoRefreshTick, _OP_AUTO_REFRESH_MS);
+}
+function opAutoRefreshStop(){
+  if(_opAutoRefreshInterval){
+    clearInterval(_opAutoRefreshInterval);
+    _opAutoRefreshInterval = null;
+  }
+}
+// Refresh immédiat quand l'user revient sur l'onglet (visibilitychange).
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') _opAutoRefreshTick();
+});
+// Démarre le polling au chargement.
+opAutoRefreshStart();
 
 function _countRemainingOps(ev){
   return (ev.ops || []).filter(o => o.statut !== 'termine').length;
