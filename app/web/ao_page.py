@@ -112,11 +112,12 @@ body.sb-open .sidebar-overlay{display:block}
 .btn-icon.btn-del-ao:hover{background:rgba(248,113,113,.12);color:var(--danger);border-color:var(--danger)}
 .ao-actions-cell{text-align:right;white-space:nowrap}
 .ao-actions-cell .btn{vertical-align:middle}
-.ao-params-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:0 0 16px 16px;width:320px;max-width:100%;box-shadow:0 1px 3px rgba(0,0,0,.05);float:right;clear:right}
-@media(max-width:720px){.ao-params-panel{float:none;margin:0 0 16px 0;width:100%}}
-.detail-hdr,.detail-meta,.detail-actions{clear:none}
-.detail-tabs{clear:both}
-.ao-params-panel h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin:0 0 12px 0}
+.ao-params-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin:0 0 16px 0;width:100%;box-shadow:0 1px 3px rgba(0,0,0,.05);display:flex;flex-wrap:wrap;align-items:center;gap:16px 24px}
+.ao-params-panel h3{margin:0;flex:0 0 auto;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--accent)}
+.ao-params-panel .app-group{display:flex;flex-direction:column;gap:4px;flex:1 1 260px;min-width:220px}
+.ao-params-panel .app-group .app-row{margin:0}
+.ao-params-panel .app-group .app-help{margin-top:0}
+@media(max-width:600px){.ao-params-panel{gap:12px}}
 .ao-params-panel .app-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .ao-params-panel .app-row:last-child{margin-bottom:0}
 .ao-params-panel label{flex:0 0 130px;font-size:12px;font-weight:600;color:var(--text2)}
@@ -1470,21 +1471,24 @@ function renderDetailHeader() {
   }
   if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
   const navPager = buildNavPagerHtml(filteredAos(), ao.id, 'appel d\'offre');
-  return '<div class="ao-params-panel">'+
-      '<h3>Parametres de calcul</h3>'+
-      '<div class="app-row"><label for="app-transport">Prix transport</label>'+
-        '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
-        '<span class="app-suffix">%</span></div>'+
-      '<div class="app-help" id="app-transport-help">'+formatTransportHelper(ao.prix_transport_pct||0)+'</div>'+
-      '<div class="app-row" style="margin-top:10px"><label for="app-eur-usd">Taux EUR/USD</label>'+
-        '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
-        '<span class="app-suffix"></span></div>'+
-      '<div class="app-help">Synchronise avec Cout matiere &amp; Valorisation stock</div>'+
-    '</div>'+
-    '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
+  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
     '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
     '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
     '<div class="detail-actions">'+actions+'</div>'+
+    '<div class="ao-params-panel">'+
+      '<h3>Parametres de calcul</h3>'+
+      '<div class="app-group">'+
+        '<div class="app-row"><label for="app-transport">Prix transport</label>'+
+          '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
+          '<span class="app-suffix">%</span></div>'+
+        '<div class="app-help" id="app-transport-help">'+formatTransportHelper(ao.prix_transport_pct||0)+'</div>'+
+      '</div>'+
+      '<div class="app-group">'+
+        '<div class="app-row"><label for="app-eur-usd">Taux EUR/USD</label>'+
+          '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
+          '<span class="app-suffix"></span></div>'+
+      '</div>'+
+    '</div>'+
     '<div class="detail-tabs">'+
     (() => {
       const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
