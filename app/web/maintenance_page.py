@@ -331,6 +331,15 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
 .cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
 .cal-wv-day-col.today{background:var(--accent-bg)}
+/* v2.2.52 : bandeau non-planifié en haut de chaque jour (Week/Day view) */
+.cal-wv-nonpl-strip{position:sticky;top:0;z-index:3;padding:6px 4px;background:linear-gradient(180deg,var(--card) 0%,var(--card) 70%,transparent 100%);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:3px;max-height:auto}
+.cal-wv-nonpl-strip:empty{display:none}
+.cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:background .15s,color .15s}
+.cal-wv-nonpl-chip:hover{background:rgba(148,163,184,.28);color:var(--text)}
+.cal-wv-nonpl-chip[data-statut="termine"]{background:rgba(52,211,153,.15);color:var(--ok,#059669);border-left-color:var(--ok,#34d399)}
+.cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
+.cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
+.cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-icon{background:var(--ok,#34d399)}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
@@ -2877,6 +2886,8 @@ function renderCalWeek(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
+    // v2.2.52 : ajoute le bandeau non-planifié en haut du jour
+    _renderNonPlanifStrip(iso, col);
   });
 }
 function renderCalDay(){
@@ -2926,8 +2937,39 @@ function renderCalDay(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
+    // v2.2.52 : ajoute le bandeau non-planifié en haut du jour
+    _renderNonPlanifStrip(cIso, col);
   });
 }
+
+// v2.2.52 : rend le bandeau non-planifié en haut d'un jour (Week/Day view)
+function _renderNonPlanifStrip(iso, col){
+  if(!col) return;
+  const events = (PLANNING_STATE.list || []).filter(ev =>
+    ev.date === iso && ev.source === 'non_planifie'
+  );
+  if(!events.length) return;
+  const strip = document.createElement('div');
+  strip.className = 'cal-wv-nonpl-strip';
+  events.forEach(ev => {
+    (ev.operations || []).forEach(op => {
+      const chip = document.createElement('div');
+      chip.className = 'cal-wv-nonpl-chip';
+      chip.setAttribute('data-statut', op.statut || 'a_faire');
+      chip.setAttribute('data-event-id', ev.id);
+      const machine = (op.machines && op.machines[0]) || ev.machine || '';
+      chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') + '\n(Non planifiée · cliquer pour voir le détail)';
+      chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') + (machine ? ' · ' + escHtml(machine) : '');
+      chip.addEventListener('click', e => {
+        e.stopPropagation();
+        openPlanningDetailsModal([ev]);
+      });
+      strip.appendChild(chip);
+    });
+  });
+  col.insertBefore(strip, col.firstChild);
+}
+
 // ── Lane packing (Google-Calendar style) ──────────────────────────────
 function _packDayEvents(events){
   const sorted = events.slice()
