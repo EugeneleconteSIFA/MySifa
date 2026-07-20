@@ -829,6 +829,18 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-event-box-actions button:hover{color:var(--text);border-color:var(--accent)}
 .op-event-box-actions button.danger:hover{color:var(--danger);border-color:var(--danger)}
 .op-event-box-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+/* v2.2.62 : sous-sections machine à l'intérieur d'un créneau */
+.op-creneau-machine-group{margin-top:14px}
+.op-creneau-machine-group:first-of-type{margin-top:6px}
+.op-creneau-machine-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.35px}
+.op-creneau-machine-head .op-creneau-machine-dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.op-creneau-machine-head .op-creneau-machine-count{margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:10px;font-weight:700;padding:1px 8px;border-radius:999px;text-transform:none;letter-spacing:0}
+/* Section "Opérations personnelles" (source=non_planifie) — visuel dégradé */
+.op-perso-section{margin-top:28px;padding-top:18px;border-top:2px dashed var(--border)}
+.op-perso-section-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;border-radius:10px;background:var(--bg);color:var(--text2);border:1px dashed var(--border)}
+.op-perso-section-head strong{font-size:13px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--text2)}
+.op-perso-section-head .op-perso-section-count{background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
+.op-perso-section-head .op-perso-section-hint{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-weight:500;text-transform:none;letter-spacing:0}
 /* ── Carte d'op individuelle ────────────────────────────────────── */
 .op-op-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,transform .15s;position:relative}
 .op-op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
@@ -9435,10 +9447,14 @@ function opRenderTasks(){
   const evToday = events.filter(ev => ev.date_prevue === today);
   const evUpcoming = events.filter(ev => ev.date_prevue > today);
 
-  // Total ops visibles (toutes machines confondues) pour le sous-titre.
+  // Compte les ops visibles selon les nouvelles règles :
+  // - Créneaux planifiés : ops filtrées par toggle (termine cachées si OFF)
+  // - Ops perso (non_planifie) : uniquement si toggle ON, puis même filtre statut
   const _countVisibleOps = (evs) => {
     let n = 0;
     for(const ev of evs){
+      const isPerso = (ev.source === 'non_planifie');
+      if(isPerso && !showTermine) continue;
       for(const op of (ev.ops || [])){
         if(!showTermine && op.statut === 'termine') continue;
         n++;
@@ -9448,7 +9464,6 @@ function opRenderTasks(){
   };
   const visibleToday = _countVisibleOps(evToday);
   const visibleUpcoming = _countVisibleOps(evUpcoming);
-
   if(cntT) cntT.textContent = visibleToday;
   if(cntU) cntU.textContent = visibleUpcoming;
   if(summary){
@@ -9456,7 +9471,7 @@ function opRenderTasks(){
     summary.textContent = total + (total > 1 ? ' opérations visibles' : ' opération visible');
   }
 
-  // Compteur global du toggle : nb d'ops terminées aujourd'hui, toutes machines.
+  // Compteur "terminées aujourd'hui" pour le toggle (créneaux + perso confondus)
   let doneTodayAll = 0;
   for(const ev of evToday){
     for(const op of (ev.ops || [])){
@@ -9465,31 +9480,129 @@ function opRenderTasks(){
   }
   if(toggleCount) toggleCount.textContent = doneTodayAll;
 
-  // Rendu Aujourd'hui — 1 section par machine (dans l'ordre canonique),
-  // machines vides skippées automatiquement par _renderMachineSection.
-  const sectionsToday = _MACHINE_ORDER
-    .map(m => _renderMachineSection(m, evToday, showTermine))
-    .filter(Boolean)
-    .join('');
-  if(!sectionsToday){
+  // Sépare créneaux planifiés / ops perso, trie les créneaux par heure_debut ASC.
+  const _bucketEvents = (evs) => {
+    const creneaux = [];
+    const persos = [];
+    for(const ev of evs){
+      if(ev.source === 'non_planifie') persos.push(ev);
+      else creneaux.push(ev);
+    }
+    creneaux.sort((a, b) => {
+      const ha = a.heure_debut || 'zz';
+      const hb = b.heure_debut || 'zz';
+      if(ha !== hb) return ha.localeCompare(hb);
+      return (a.id || 0) - (b.id || 0);
+    });
+    return { creneaux, persos };
+  };
+
+  const renderBucket = (evs, isToday) => {
+    const { creneaux, persos } = _bucketEvents(evs);
+    const creneauBoxes = creneaux
+      .map(ev => _renderCreneauBox(ev, showTermine, isToday))
+      .filter(Boolean);
+    // Ops perso : uniquement si toggle "Afficher terminées" activé
+    const persoHtml = showTermine ? _renderPersoSection(persos, showTermine) : '';
+    return { creneauBoxes, persoHtml };
+  };
+
+  // Aujourd'hui
+  const rT = renderBucket(evToday, true);
+  if(!rT.creneauBoxes.length && !rT.persoHtml){
     const msg = showTermine
       ? '<strong>Aucune tâche aujourd\'hui</strong>Ta journée est vide.'
       : `<strong>Rien à faire aujourd\'hui</strong>${doneTodayAll ? 'Active « Afficher terminées » pour voir ce qui a été fait.' : 'Aucun créneau programmé.'}`;
     listT.innerHTML = '<div class="op-op-empty">' + msg + '</div>';
   } else {
-    listT.innerHTML = sectionsToday;
+    listT.innerHTML = rT.creneauBoxes.join('') + rT.persoHtml;
   }
 
-  // Rendu À venir — même logique.
-  const sectionsUpcoming = _MACHINE_ORDER
-    .map(m => _renderMachineSection(m, evUpcoming, showTermine))
-    .filter(Boolean)
-    .join('');
-  if(!sectionsUpcoming){
+  // À venir
+  const rU = renderBucket(evUpcoming, false);
+  if(!rU.creneauBoxes.length && !rU.persoHtml){
     listU.innerHTML = '<div class="op-op-empty"><strong>Aucun créneau à venir</strong>Ta liste est à jour.</div>';
   } else {
-    listU.innerHTML = sectionsUpcoming;
+    listU.innerHTML = rU.creneauBoxes.join('') + rU.persoHtml;
   }
+}
+
+// v2.2.62 : rendu d'une grande case créneau (source=planifie), sous-sections par machine.
+function _renderCreneauBox(ev, showTermine, isToday){
+  const groups = _groupOpsByMachine(ev);
+  // Filtre les ops par statut selon toggle, puis skip les machines devenues vides.
+  const filteredGroups = groups.map(g => ({
+    machine: g.machine,
+    ops: g.ops.filter(o => showTermine || o.statut !== 'termine')
+  })).filter(g => g.ops.length > 0);
+  if(!filteredGroups.length) return '';
+
+  const totalOps = filteredGroups.reduce((s, g) => s + g.ops.length, 0);
+  const allOps = groups.reduce((arr, g) => arr.concat(g.ops), []);
+  const totalAllOps = allOps.length;
+  const doneAll = allOps.length > 0 && allOps.every(o => o.statut === 'termine');
+
+  const timeLabel = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
+    : 'Sans créneau';
+  const nom = (ev.nom || '').trim();
+  const dateChip = isToday ? '' : `<span class="op-event-count">${_fmtDateFrShort(ev.date_prevue)}</span>`;
+  const nomHtml = nom ? `<span class="op-event-box-nom">${escHtml(nom)}</span>` : '';
+  // Compteur : "X op." si tout visible, "X/Y op." si filtré
+  const countLabel = (totalOps === totalAllOps)
+    ? (totalOps + ' op.')
+    : (totalOps + '/' + totalAllOps + ' op.');
+
+  const groupsHtml = filteredGroups.map(g => {
+    const cards = g.ops.map(op => _renderOpCardIndividual(op, ev)).join('');
+    return `<div class="op-creneau-machine-group">
+      <div class="op-creneau-machine-head">
+        <span class="op-creneau-machine-dot"></span>${escHtml(g.machine)}
+        <span class="op-creneau-machine-count">${g.ops.length} op.</span>
+      </div>
+      <div class="op-event-box-cards">${cards}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="op-event-box ${doneAll ? 'all-done' : ''}">
+    <div class="op-event-box-head">
+      <strong>Créneau</strong>
+      <span class="op-event-time">${escHtml(timeLabel)}</span>
+      ${nomHtml}
+      <span class="op-event-count">${countLabel}</span>
+      ${dateChip}
+    </div>
+    ${groupsHtml}
+  </div>`;
+}
+
+// v2.2.62 : section « Opérations personnelles » (source=non_planifie) — en bas, seulement si toggle ON.
+function _renderPersoSection(evs, showTermine){
+  if(!evs.length) return '';
+  const items = [];
+  for(const ev of evs){
+    for(const op of (ev.ops || [])){
+      if(!showTermine && op.statut === 'termine') continue;
+      items.push({ op, ev });
+    }
+  }
+  if(!items.length) return '';
+  // Trie : date_prevue DESC (plus récent en premier), tie-break id DESC
+  items.sort((a, b) => {
+    const da = a.ev.date_prevue || '';
+    const db = b.ev.date_prevue || '';
+    if(da !== db) return db.localeCompare(da);
+    return (b.ev.id || 0) - (a.ev.id || 0);
+  });
+  const cards = items.map(({op, ev}) => _renderOpCardIndividual(op, ev)).join('');
+  return `<section class="op-perso-section">
+    <div class="op-perso-section-head">
+      <strong>Opérations personnelles</strong>
+      <span class="op-perso-section-count">${items.length} op.</span>
+      <span class="op-perso-section-hint">Enregistrées par toi, hors créneau planifié</span>
+    </div>
+    <div class="op-event-box-cards">${cards}</div>
+  </section>`;
 }
 
 function opSetTab(name){
