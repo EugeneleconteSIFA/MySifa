@@ -7188,6 +7188,15 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 196, "expe_devis_type_palette_and_retention_file")
 
+    # v195 -- ao_demandes.prix_transport_pct (0..100, ecrase le prix vente par (1+pct/100))
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+        if "prix_transport_pct" not in cols:
+            conn.execute("ALTER TABLE ao_demandes ADD COLUMN prix_transport_pct REAL NOT NULL DEFAULT 0")
+        conn.commit()
+        _record_schema_migration(conn, 195, "ao_demandes_prix_transport_pct")
+
+
 
 def create_default_admin():
     import bcrypt

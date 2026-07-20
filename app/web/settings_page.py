@@ -2205,29 +2205,19 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                 <div id="pr-wiz-imp-queue-row" style="display:none;grid-column:span 2">
                   <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom exact de la queue Windows *</label>
                   <input type="text" id="pr-wiz-imp-queue" class="pr-inp" placeholder="Ex : Zebra Z4M (300 dpi)" style="width:100%">
-                  <div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px">
-                    <div style="font-weight:700;color:var(--text);margin-bottom:4px">Comment récupérer le nom exact ?</div>
-                    <div style="margin-bottom:6px">
-                      <strong>Méthode graphique</strong> : sur le PC hôte, ouvre <em>Panneau de configuration → Périphériques et imprimantes</em>. Le nom affiché sous l'icône = le nom à coller (majuscules, espaces, parenthèses inclus).
+                  <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.6;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+                    <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:14px">Comment récupérer le nom exact ?</div>
+                    <div style="margin-bottom:10px">
+                      Sur le PC hôte, ouvre <strong>l'invite de commande</strong> (Menu Démarrer → tape <code style="background:var(--card);border:1px solid var(--border);padding:1px 6px;border-radius:3px;font-family:monospace;font-size:12px">cmd</code>) et lance :
                     </div>
-                    <div style="margin-bottom:4px"><strong>⚠️ Attention</strong> : ce n'est <strong>PAS</strong> le "Nom de partage" (avec underscores) qu'on voit dans l'onglet Partage — c'est le nom local original.</div>
-                    <div style="margin-top:8px;padding-top:6px;border-top:1px dashed var(--border)">
-                      <strong>Méthode 100% sûre</strong> — lance une de ces commandes sur le PC hôte pour lister les noms exacts :
-                      <div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">
-                        <div style="display:flex;gap:4px;align-items:center">
-                          <span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700">PS</span>
-                          <code style="background:var(--card);border:1px solid var(--border);padding:2px 6px;border-radius:3px;font-family:monospace;font-size:11px;color:var(--text)">Get-Printer | Select-Object Name</code>
-                        </div>
-                        <div style="display:flex;gap:4px;align-items:center">
-                          <span style="font-size:10px;background:var(--muted);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700">PS 2.0</span>
-                          <code style="background:var(--card);border:1px solid var(--border);padding:2px 6px;border-radius:3px;font-family:monospace;font-size:11px;color:var(--text)">Get-WmiObject -Query "Select Name from Win32_Printer" | Select Name</code>
-                        </div>
-                        <div style="display:flex;gap:4px;align-items:center">
-                          <span style="font-size:10px;background:var(--muted);color:#fff;padding:1px 5px;border-radius:3px;font-weight:700">CMD</span>
-                          <code style="background:var(--card);border:1px solid var(--border);padding:2px 6px;border-radius:3px;font-family:monospace;font-size:11px;color:var(--text)">wmic printer get name</code>
-                        </div>
-                      </div>
-                      <div style="margin-top:6px;font-size:10.5px;color:var(--muted)">Copie-colle exactement le nom retourné (attention aux espaces, majuscules, parenthèses, accents).</div>
+                    <div style="display:flex;align-items:center;justify-content:center;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:10px">
+                      <code style="font-family:monospace;font-size:14px;color:var(--text);font-weight:600">wmic printer get name</code>
+                    </div>
+                    <div style="margin-bottom:8px">
+                      Copie-colle le nom retourné (attention aux <strong>espaces</strong>, <strong>majuscules</strong> et <strong>parenthèses</strong>).
+                    </div>
+                    <div style="padding-top:8px;border-top:1px dashed var(--border);color:var(--warn)">
+                      ⚠️ Ce n'est <strong>PAS</strong> le "Nom de partage" avec underscores dans l'onglet <em>Partage</em> — c'est le nom local original.
                     </div>
                   </div>
                 </div>

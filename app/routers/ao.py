@@ -153,7 +153,8 @@ def list_ao(request: Request):
                          JOIN ao_produits p ON p.ref = l.ref_produit
                          LEFT JOIN clients            cg ON cg.id = p.client_id
                          LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
-                         WHERE l.ao_id = d.id) AS clients
+                         WHERE l.ao_id = d.id) AS clients,
+                      COALESCE(d.prix_transport_pct, 0) AS prix_transport_pct
                FROM ao_demandes d
                ORDER BY d.date_creation DESC"""
         ).fetchall()
@@ -724,6 +725,159 @@ def _produit_from_body(body: dict, conn) -> tuple[str, str, str, str | None, int
     notes = (body.get("notes") or "").strip() or None
     fiche_json = json.dumps(fiche, ensure_ascii=False)
     return ref, designation, unite, notes, client_id, fiche_json
+
+
+
+# =========================================================================
+# --- AO params + fiches techniques + config EUR/USD -----------------------
+# =========================================================================
+
+@router.patch("/{ao_id}/params")
+async def update_ao_params(request: Request, ao_id: int):
+    """Met a jour les parametres de calcul de l'AO (pour l'instant : prix_transport_pct)."""
+    _require_ao(request)
+    body = await request.json()
+    pct = body.get("prix_transport_pct")
+    try:
+        pct = float(pct) if pct is not None else 0.0
+    except (TypeError, ValueError):
+        pct = 0.0
+    pct = max(0.0, min(100.0, pct))
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=?", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO introuvable.")
+        conn.execute(
+            "UPDATE ao_demandes SET prix_transport_pct=? WHERE id=?",
+            (pct, ao_id),
+        )
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id, "prix_transport_pct": pct}
+
+
+@router.get("/fiches-techniques")
+def search_fiches_techniques(request: Request, q: str = "", limit: int = 20):
+    """Recherche autocomplete sur fiches_techniques (reference, designation, client)."""
+    _require_ao(request)
+    q_norm = (q or "").strip()
+    try:
+        limit = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        limit = 20
+    with get_db() as conn:
+        if not q_norm:
+            rows = conn.execute(
+                """SELECT id, reference, designation, client, format, matiere
+                   FROM fiches_techniques
+                   ORDER BY date_import DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        else:
+            like = f"%{q_norm}%"
+            rows = conn.execute(
+                """SELECT id, reference, designation, client, format, matiere
+                   FROM fiches_techniques
+                   WHERE reference LIKE ? COLLATE NOCASE
+                      OR IFNULL(designation,'') LIKE ? COLLATE NOCASE
+                      OR IFNULL(client,'')      LIKE ? COLLATE NOCASE
+                   ORDER BY
+                     CASE WHEN reference LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                     reference COLLATE NOCASE
+                   LIMIT ?""",
+                (like, like, like, f"{q_norm}%", limit),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/fiches-techniques/by-ref/{reference}")
+def get_fiche_technique(request: Request, reference: str):
+    """Retourne la fiche technique complete (tous les champs disponibles)."""
+    _require_ao(request)
+    ref = (reference or "").strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Reference vide.")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            (ref,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Fiche technique introuvable pour '{ref}'.")
+        return dict(row)
+
+
+@router.get("/config/eur-usd")
+def get_eur_usd(request: Request):
+    """Retourne le taux EUR/USD actif. Source de verite : mc_setting.eur_usd_rate.
+    Fallback : matiere_config.taux_change_usd."""
+    _require_ao(request)
+    with get_db() as conn:
+        rate = 0.0
+        try:
+            row = conn.execute(
+                "SELECT value_decimal FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+            ).fetchone()
+            if row and row[0] is not None:
+                rate = float(row[0])
+        except Exception:
+            rate = 0.0
+        if rate <= 0:
+            try:
+                row = conn.execute(
+                    "SELECT valeur FROM matiere_config WHERE cle='taux_change_usd' LIMIT 1"
+                ).fetchone()
+                if row:
+                    rate = float(row[0])
+            except Exception:
+                pass
+    return {"eur_usd_rate": rate}
+
+
+@router.post("/config/eur-usd")
+async def set_eur_usd(request: Request):
+    """Ecrit le taux EUR/USD dans les deux tables (source unifiee).
+    Corps : { "eur_usd_rate": <float> }"""
+    user = _require_ao(request)
+    body = await request.json()
+    try:
+        rate = float(body.get("eur_usd_rate") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="eur_usd_rate invalide.")
+    if rate <= 0:
+        raise HTTPException(status_code=400, detail="eur_usd_rate doit etre > 0.")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        # 1. mc_setting (source canonique)
+        try:
+            existing = conn.execute(
+                "SELECT 1 FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE mc_setting SET value_decimal=?, updated_at=?, updated_by=?, source=? WHERE key='eur_usd_rate'",
+                    (rate, now, user.get("id"), "ao_panel"),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO mc_setting (key, value_decimal, updated_at, updated_by, source) VALUES ('eur_usd_rate', ?, ?, ?, ?)",
+                    (rate, now, user.get("id"), "ao_panel"),
+                )
+        except Exception as e:
+            # Table peut-etre absente (migration MyCouts pas passee). On log en douceur.
+            print(f"[eur-usd] mc_setting write failed: {e}")
+        # 2. matiere_config (compat Cout matiere)
+        try:
+            conn.execute(
+                """INSERT INTO matiere_config (cle, valeur, updated_at) VALUES (?,?,?)
+                   ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, updated_at=excluded.updated_at""",
+                ("taux_change_usd", str(rate), now),
+            )
+        except Exception as e:
+            print(f"[eur-usd] matiere_config write failed: {e}")
+        conn.commit()
+    return {"ok": True, "eur_usd_rate": rate}
+
 
 
 def _serialize_produit_row(row: dict, conn) -> dict:
