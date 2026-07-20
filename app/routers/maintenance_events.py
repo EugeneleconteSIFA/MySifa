@@ -307,21 +307,18 @@ class OperatorAddBody(BaseModel):
 
 @router.get("/api/maintenance/operators")
 def list_operators(request: Request):
-    """Liste des utilisateurs assignables (actifs).
-    v2.2.43 : élargi aux rôles admin (direction/administration/superadmin) car
-    certains admins réalisent aussi la maintenance eux-mêmes et doivent pouvoir
-    s'assigner sur un créneau."""
+    """Liste des utilisateurs assignables : opérateurs fabrication + Manuel Lesaffre.
+    v2.2.45 : ciblé sur Manuel Lesaffre uniquement (au lieu de tous les admins)
+    puisqu'il est le seul admin à réaliser aussi la maintenance."""
     _require_access(request)
-    # Reprend ROLES_ADMIN de config + ajoute fabrication.
-    from config import ROLES_ADMIN
-    allowed_roles = sorted(ROLES_ADMIN | {ROLE_FABRICATION})
-    placeholders = ",".join(["?"] * len(allowed_roles))
     with get_db() as conn:
         rows = conn.execute(
-            f"SELECT id, nom, email, identifiant "
-            f"FROM users WHERE role IN ({placeholders}) AND actif = 1 "
-            f"ORDER BY nom",
-            allowed_roles,
+            "SELECT id, nom, email, identifiant "
+            "FROM users "
+            "WHERE (role = ? OR LOWER(COALESCE(nom, '')) LIKE '%lesaffre%') "
+            "  AND actif = 1 "
+            "ORDER BY nom",
+            (ROLE_FABRICATION,),
         ).fetchall()
     return {"operators": [dict(r) for r in rows]}
 
