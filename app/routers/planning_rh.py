@@ -1071,3 +1071,40 @@ async def set_machine_config(machine_id: int, request: Request):
         pass
 
     return {"ok": True, "machine_id": machine_id}
+
+# ─── v2.2.59 : créneaux de maintenance de l'user courant (Planning RH · Ma semaine) ──
+
+@router.get("/my-maintenance")
+def get_my_maintenance(
+    request: Request,
+    from_week: str,
+    to_week: str,
+):
+    """Liste les créneaux de maintenance où l'user courant est assigné,
+    dans la plage de semaines [from_week..to_week]. Payload minimal pour
+    l'affichage inline dans « Mon planning »."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(401, "Non connecté")
+    lundi_from, _ = _week_bounds(from_week)
+    _, dim_to = _week_bounds(to_week)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT e.id, e.date_prevue, e.heure_debut, e.heure_fin,
+                      e.machine, e.source, e.nom,
+                      (SELECT COUNT(*) FROM maintenance_event_ops
+                        WHERE event_id = e.id) AS ops_count,
+                      (SELECT COUNT(*) FROM maintenance_event_ops
+                        WHERE event_id = e.id AND statut = 'termine') AS ops_termine
+               FROM maintenance_events e
+               JOIN maintenance_event_operators eo
+                 ON eo.event_id = e.id
+               WHERE eo.operator_id = ?
+                 AND e.date_prevue >= ?
+                 AND e.date_prevue <= ?
+               ORDER BY e.date_prevue ASC, e.heure_debut ASC, e.id ASC""",
+            (user["id"], lundi_from.isoformat(), dim_to.isoformat()),
+        ).fetchall()
+    events = [dict(r) for r in rows]
+    return {"events": events}
+
