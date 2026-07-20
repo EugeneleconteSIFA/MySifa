@@ -728,6 +728,7 @@ body[data-maint-role="operator"] .adm-only{display:none !important}
 body[data-maint-role="admin"] .op-main{display:none}
 body[data-maint-role="admin"].admin-op-active .op-main{display:flex}
 body[data-maint-role="admin"].admin-op-active .view.adm-only{display:none !important}
+body[data-maint-role="admin"].admin-op-active .content{display:none}
 body[data-maint-role="operator"] .content{display:none !important}
 
 /* Conteneur opérateur : padding + colonne, prend toute la hauteur restante. */
