@@ -1128,6 +1128,81 @@ body.light .alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,17
 .alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
 body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
 .alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* v2.2.28 : panel Codes maintenance scopé .maint-codes-panel-embed */
+/* ═══════════════════════════════════════════════════════════ */
+.maint-codes-panel-embed .table-wrap{overflow:auto;border-radius:10px;border:1px solid var(--border)}
+.maint-codes-panel-embed .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:12px}
+.maint-codes-panel-embed .op-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px}
+.maint-codes-panel-embed .op-filter{flex:1;min-width:200px;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+.maint-codes-panel-embed .op-filter:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+body.light .maint-codes-panel-embed .op-filter:focus{box-shadow:0 0 0 3px rgba(8,145,178,.1)}
+.maint-codes-panel-embed .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
+.maint-codes-panel-embed .maint-doc-add-btn:hover{filter:brightness(1.06)}
+.maint-codes-panel-embed .maint-doc-add-btn:active{transform:translateY(1px)}
+.maint-codes-panel-embed .maint-doc-add-btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
+.maint-codes-panel-embed .op-form-panel{margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+.maint-codes-panel-embed .op-form-panel h3{margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.maint-codes-panel-embed .op-table-wrap{margin-top:4px}
+.maint-codes-panel-embed .op-table{font-size:12px}
+.maint-codes-panel-embed .op-table th{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
+.maint-codes-panel-embed .op-table td{padding:10px 12px;vertical-align:middle}
+.maint-codes-panel-embed .op-table tbody tr:hover td{background:rgba(34,211,238,.04)}
+body.light .maint-codes-panel-embed .op-table tbody tr:hover td{background:rgba(8,145,178,.05)}
+.maint-codes-panel-embed .op-table tr.op-cat-row td{
+body.light .maint-codes-panel-embed .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
+.maint-codes-panel-embed .op-table tr.op-cat-row:first-child td{padding-top:8px}
+.maint-codes-panel-embed .op-code-cell{font-family:ui-monospace,monospace;font-weight:800;font-size:13px;color:var(--accent);width:56px}
+.maint-codes-panel-embed .op-lbl-cell{font-weight:600;color:var(--text);max-width:280px;white-space:normal}
+.maint-codes-panel-embed .op-pill{
+.maint-codes-panel-embed .op-pill.info{color:var(--text2);border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.1)}
+.maint-codes-panel-embed .op-pill.attention{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.12)}
+.maint-codes-panel-embed .op-pill.critique{color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.12)}
+.maint-codes-panel-embed .op-pill.calage{color:var(--ok);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.1)}
+.maint-codes-panel-embed .op-pill.arret{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.1)}
+.maint-codes-panel-embed .op-pill.production{color:#60a5fa;border-color:rgba(96,165,250,.4);background:rgba(96,165,250,.1)}
+.maint-codes-panel-embed .op-pill.changement{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.1)}
+.maint-codes-panel-embed .op-pill.nettoyage{color:#c084fc;border-color:rgba(192,132,252,.4);background:rgba(192,132,252,.1)}
+.maint-codes-panel-embed .op-pill.autre{color:var(--muted);border-color:var(--border);background:rgba(148,163,184,.08)}
+.maint-codes-panel-embed .op-pill.controles{color:var(--ok,#34d399);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.12)}
+.maint-codes-panel-embed .op-pill.interventions{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.maint-codes-panel-embed .op-pill.entretien{color:#a78bfa;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.12)}
+.maint-codes-panel-embed .op-pill.remplacements{color:#fb923c;border-color:rgba(251,146,60,.4);background:rgba(251,146,60,.12)}
+.maint-codes-panel-embed .op-req{font-size:11px;font-weight:600;color:var(--muted)}
+.maint-codes-panel-embed .op-req.yes{color:var(--ok)}
+.maint-codes-panel-embed .op-req.no{color:var(--muted)}
+.maint-codes-panel-embed .op-table th:last-child,.op-table td:last-child{text-align:right}
+.maint-codes-panel-embed .op-act{display:inline-flex;gap:6px;justify-content:flex-end;flex-wrap:nowrap}
+.maint-codes-panel-embed .hidden{display:none}
+.maint-codes-panel-embed .form-grid{grid-template-columns:1fr}
+.maint-codes-panel-embed .table-wrap{-webkit-overflow-scrolling:touch;max-width:100%}
+.maint-codes-panel-embed .op-act{flex-wrap:wrap}
+.maint-codes-panel-embed .op-lbl-cell{max-width:160px}
+.maint-codes-panel-embed .alert-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.maint-codes-panel-embed .alert-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+.maint-codes-panel-embed .alert-modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+.maint-codes-panel-embed .alert-modal-head h3{margin:0;font-size:15px;color:var(--text)}
+.maint-codes-panel-embed .alert-modal-body{padding:18px 20px}
+.maint-codes-panel-embed .alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
+.maint-codes-panel-embed .alert-field{margin-bottom:14px}
+.maint-codes-panel-embed .alert-field-label{display:block;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.maint-codes-panel-embed .alert-field-input,.alert-field-select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box}
+.maint-codes-panel-embed .alert-field-input:disabled{color:var(--muted);cursor:not-allowed}
+.maint-codes-panel-embed .alert-field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.maint-codes-panel-embed .alert-field-sub{margin-top:8px;padding:10px 12px;background:var(--bg);border:1px dashed var(--border);border-radius:8px}
+.maint-codes-panel-embed .alert-field-help{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5}
+.maint-codes-panel-embed input,select{width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit}
+.maint-codes-panel-embed .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+.maint-codes-panel-embed .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
+.maint-codes-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.maint-codes-panel-embed .btn:hover{filter:brightness(1.08)}
+.maint-codes-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
+.maint-codes-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
+.maint-codes-panel-embed .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit}
+.maint-codes-panel-embed .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.maint-codes-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.maint-codes-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
 </style>
 </head>
 <body data-maint-role="__MAINT_ROLE__">
@@ -1471,7 +1546,7 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
           </button>
           <button type="button" class="ops-subtab" data-ops-subtab="liste" onclick="setOpsSubtab('liste')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            Liste des opérations
+            Gestion des opérations
           </button>
         </div>
 
@@ -1566,59 +1641,65 @@ body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,
 
         </div><!-- /ops-subview-historique -->
 
-        <!-- Sous-onglet : Liste -->
+        <!-- v2.2.28 : Gestion des opérations (miroir Paramètres → Codes maintenance) -->
         <div class="ops-subview" id="ops-subview-liste" style="display:none">
-
-        <!-- Bandeau d'information : table en lecture seule -->
-        <div class="ops-readonly-notice">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          <div>
-            Ce tableau est <strong>en lecture seule</strong> et présenté à titre indicatif.
-            Pour ajouter, modifier ou supprimer un code maintenance, rendez-vous dans
-            <strong>Paramètres → Maintenance</strong>.
-          </div>
-        </div>
-
-        <!-- Liste d'opérations de maintenance (catalogue) -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count" id="cat-count">0 opération</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
+        <div class="maint-codes-panel-embed">
+        <div id="maint-subtab-codes" class="maint-subtab">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des opérations</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
             </div>
           </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody id="cat-tbody" class="js-cat-tbody"></tbody>
-            </table>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en trois catégories : Contrôles, Nettoyage et Interventions.</p>
+          <div id="maint-form-wrap" class="hidden op-form-panel">
+            <h3 id="maint-form-title">Nouveau code</h3>
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+              <input type="text" id="maint-code" placeholder="Code (ex. 10)" inputmode="numeric" maxlength="4">
+              <input type="text" id="maint-label" placeholder="Libellé">
+              <select id="maint-niveau">
+                <option value="1">N1</option>
+                <option value="2">N2</option>
+                <option value="3">N3</option>
+              </select>
+              <select id="maint-categorie">
+                <option value="controles">Contrôles</option>
+                <option value="entretien">Nettoyage</option>
+                <option value="remplacements">Interventions</option>
+              </select>
+              <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
+              <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
+              <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
+            </div>
+            <div id="maint-form-docs" style="display:none;margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:12px">
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px">Documents attaches</div>
+                  <div id="maint-form-docs-hint" style="font-size:11px;color:var(--muted);margin-top:2px">Fichiers explicatifs consultes par les operateurs.</div>
+                </div>
+                <span style="font-size:11px;color:var(--muted);white-space:nowrap">20 Mo max</span>
+              </div>
+              <input type="file" id="maint-form-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden" onchange="_maintOnDocFileChange()">
+              <div id="maint-form-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+                <p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>
+              </div>
+              <button type="button" class="maint-doc-add-btn" id="maint-form-doc-add-btn" onclick="_maintTriggerDocPicker()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Ajouter un fichier</span>
+              </button>
+            </div>
           </div>
+          <div class="op-toolbar">
+            <input type="search" id="maint-filter" class="op-filter" placeholder="Filtrer (code, libellé, niveau, catégorie…)" oninput="renderMaintList()">
+          </div>
+          <div id="maint-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
-
+        </div>
+        </div><!-- /maint-codes-panel-embed -->
         </div><!-- /ops-subview-liste -->
       </div>
     </div>
@@ -2111,6 +2192,8 @@ function setOpsSubtab(name){
   document.querySelectorAll('.ops-subview').forEach(div => { div.style.display = 'none'; });
   const target = document.getElementById('ops-subview-' + name);
   if(target) target.style.display = '';
+  // v2.2.28 : recharge les codes maintenance à l'ouverture de l'onglet Gestion
+  if(name === 'liste' && typeof loadMaintCodes === 'function') loadMaintCodes();
 }
 // Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
 const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
@@ -10418,6 +10501,707 @@ window.opSetPlanTab = opSetPlanTabWithCal;
     refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   }
 })();
+
+// ═══════════════════════════════════════════════════════════════════
+// v2.2.28 : Panel Codes maintenance — duplication de settings_page.py
+// Réutilise les adapters esc/toast/api de v2.2.19 (déjà en place).
+// ═══════════════════════════════════════════════════════════════════
+async function loadMaintCodes() {
+  try {
+    const r = await api('/api/maintenance/codes');
+    _maintItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
+    _maintItems = [];
+  }
+  // Migration one-shot : si la liste serveur est vide ET qu'on a des codes en
+  // localStorage (heritage de l'ancienne implementation), on propose l'import.
+  if (_maintItems.length === 0) {
+    try {
+      const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
+      const local = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(local) && local.length > 0) {
+        if (confirm(local.length + ' code(s) maintenance trouve(s) dans le stockage local du navigateur.\n\nLes importer dans la base de donnees ? (recommande, ils seront ensuite disponibles sur tous les navigateurs et synchronises v2 -> v1)')) {
+          try {
+            const res = await api('/api/maintenance/codes/bulk-import', {
+              method: 'POST',
+              body: JSON.stringify({ items: local }),
+            });
+            toast((res?.imported || 0) + ' code(s) importe(s)');
+            try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
+            const r2 = await api('/api/maintenance/codes');
+            _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
+          } catch (e) {
+            toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  renderMaintList();
+}
+// ─── Interventions libres (Lot 2) ────────────────────────────────
+// Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
+let _libresItems = [];
+let _libresSelection = new Set();
+
+async function loadLibres() {
+  const listEl = document.getElementById('libres-list');
+  if (!listEl) return;
+  try {
+    const r = await api('/api/maintenance/codes/libres');
+    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
+  } catch (e) {
+    _libresItems = [];
+  }
+  _libresSelection.clear();
+  _updateLibresSelectionUI();
+  renderLibresList();
+}
+
+function _fmtLibreDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+  } catch (e) { return '—'; }
+}
+
+function _updateLibresSelectionUI() {
+  const btn = document.getElementById('libres-merge-btn');
+  const cnt = document.getElementById('libres-selection-count');
+  const n = _libresSelection.size;
+  if (btn) btn.disabled = (n !== 2);
+  if (cnt) {
+    if (n === 0) cnt.textContent = '';
+    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
+    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
+    else cnt.textContent = n + ' selectionnes (max 2)';
+  }
+}
+
+function libresToggleSelection(code, checked) {
+  if (checked) {
+    _libresSelection.add(code);
+    if (_libresSelection.size > 2) {
+      const arr = Array.from(_libresSelection);
+      _libresSelection = new Set(arr.slice(-2));
+      renderLibresList();
+    }
+  } else {
+    _libresSelection.delete(code);
+  }
+  _updateLibresSelectionUI();
+}
+
+function renderLibresList() {
+  const el = document.getElementById('libres-list');
+  if (!el) return;
+  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
+  let items = _libresItems.slice();
+  if (q) {
+    items = items.filter(o =>
+      String(o.label || '').toLowerCase().includes(q) ||
+      String(o.code || '').toLowerCase().includes(q)
+    );
+  }
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
+      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
+    return;
+  }
+  const rows = items.map(o => {
+    const codeEsc = esc(String(o.code));
+    const labelEsc = esc(String(o.label || ''));
+    const checked = _libresSelection.has(o.code) ? ' checked' : '';
+    const usage = o.usage_count;
+    const usageChip = usage > 0
+      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
+    const canDelete = (usage === 0);
+    const delBtn = canDelete
+      ? '<button type="button" class="btn-sm btn-ghost danger" data-libre-del="' + codeEsc + '">Archiver</button>'
+      : '<button type="button" class="btn-sm btn-ghost" disabled title="Fusionne avec un autre titre pour supprimer" style="opacity:.4;cursor:not-allowed">Archiver</button>';
+    return '<tr>' +
+      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
+      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
+      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
+      '<td>' + usageChip + '</td>' +
+      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
+        delBtn +
+      '</td>' +
+    '</tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
+    '<thead><tr>' +
+      '<th></th>' +
+      '<th>Code</th>' +
+      '<th>Titre</th>' +
+      '<th>Usage</th>' +
+      '<th>Derniere utilisation</th>' +
+      '<th>Cree le</th>' +
+      '<th style="text-align:right">Actions</th>' +
+    '</tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div>';
+  // Bind event delegation (checkbox + rename + delete)
+  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
+    });
+  });
+  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-rename');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresRename(code, it.label);
+    });
+  });
+  el.querySelectorAll('[data-libre-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.getAttribute('data-libre-del');
+      const it = _libresItems.find(x => x.code === code);
+      if (it) libresDelete(code, it.label);
+    });
+  });
+}
+
+async function libresRename(code, currentLabel) {
+  const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
+  if (newLabel === null) return;
+  const trimmed = (newLabel || '').trim();
+  if (!trimmed) { toast('Titre obligatoire', true); return; }
+  if (trimmed === currentLabel) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), {
+      method: 'PATCH',
+      body: JSON.stringify({ label: trimmed }),
+    });
+    toast('Titre modifie');
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresDelete(code, label) {
+  if (!confirm('Archiver definitivement "' + label + '" (' + code + ') ?\n\nCette action est reversible uniquement via SQL manuel.')) return;
+  try {
+    await api('/api/maintenance/codes/libres/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Titre archive');
+    _libresSelection.delete(code);
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+async function libresMergeSelected() {
+  if (_libresSelection.size !== 2) return;
+  const codes = Array.from(_libresSelection);
+  const items = codes.map(c => _libresItems.find(x => x.code === c)).filter(Boolean);
+  if (items.length !== 2) { toast('Selection invalide', true); return; }
+  const opts = items.map((it, i) => (i + 1) + '. ' + it.label + ' (' + it.usage_count + ' saisie' + (it.usage_count > 1 ? 's' : '') + ')').join('\n');
+  const choice = prompt(
+    'Quel titre garder pour la fusion ?\n\n' + opts + '\n\nSaisis 1 ou 2 :',
+    items[0].usage_count >= items[1].usage_count ? '1' : '2'
+  );
+  if (choice === null) return;
+  const idx = parseInt(choice, 10) - 1;
+  if (idx !== 0 && idx !== 1) { toast('Choix invalide (1 ou 2 attendu)', true); return; }
+  const winner = items[idx];
+  const loser = items[1 - idx];
+  if (!confirm(
+    'Fusionner "' + loser.label + '" (' + loser.usage_count + ' saisie' + (loser.usage_count > 1 ? 's' : '') + ') vers "' + winner.label + '" ?\n\n' +
+    'Toutes les saisies passees de "' + loser.label + '" seront desormais attribuees a "' + winner.label + '".\n' +
+    'Le titre "' + loser.label + '" (' + loser.code + ') sera supprime.'
+  )) return;
+  try {
+    await api('/api/maintenance/codes/libres/merge', {
+      method: 'POST',
+      body: JSON.stringify({ winner_code: winner.code, loser_code: loser.code }),
+    });
+    toast('Fusion effectuee');
+    _libresSelection.clear();
+    await loadLibres();
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur', true);
+  }
+}
+
+function _maintCatLabel(cat) {
+  // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
+  // et "remplacements" (UI: Interventions). Labels renommés v179.
+  // 'interventions' et 'suivi' (legacy) sont remappés vers Nettoyage à l'affichage.
+  if (cat === 'remplacements') return 'Interventions';
+  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
+  return 'Contrôles';
+}
+let _lastAckByCode = {};
+function renderMaintList() {
+  const el = document.getElementById('maint-list');
+  if (!el) return;
+  // Reconstruire la map code -> dernière intervention depuis les alertes auto.
+  _lastAckByCode = {};
+  if (Array.isArray(_alertsData)) {
+    _alertsData.forEach(a => {
+      if (a && a.linked_maint_code) {
+        _lastAckByCode[String(a.linked_maint_code)] = a.last_ack_at || '';
+      }
+    });
+  }
+  const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
+  let items = _maintItems.slice();
+  // Normaliser la catégorie sur les anciens enregistrements
+  items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
+  if (q) {
+    items = items.filter(o => {
+      const periodLbl = (o.periodique ? 'oui' : 'non');
+      return String(o.code || '').toLowerCase().includes(q) ||
+        String(o.label || '').toLowerCase().includes(q) ||
+        ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
+        _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
+        // v2.2.17 — periodique retiré du filtre
+        String(o.intervalle || '').toLowerCase().includes(q) ||
+        String(o.metrage_ref || '').toLowerCase().includes(q);
+    });
+  }
+  // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
+  // legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'affichage.
+  const _normCat = (c) => {
+    if (c === 'remplacements') return 'remplacements';
+    if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
+    return 'controles';
+  };
+  const _catOrder = (c) => {
+    const n = _normCat(c);
+    return n === 'controles' ? 0 : (n === 'entretien' ? 1 : 2);
+  };
+  items.sort((a, b) => {
+    const da = _catOrder(a.categorie);
+    const db = _catOrder(b.categorie);
+    if (da !== db) return da - db;
+    const ac = String(a.code || '').padStart(6, '0');
+    const bc = String(b.code || '').padStart(6, '0');
+    return ac.localeCompare(bc, 'fr');
+  });
+  if (!items.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
+    return;
+  }
+  const byCat = { controles: [], entretien: [], remplacements: [] };
+  items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
+  let body = '';
+  ['controles', 'entretien', 'remplacements'].forEach(cat => {
+    if (!byCat[cat].length) return;
+    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+    byCat[cat].forEach(o => {
+      const c = esc(String(o.code));
+      const niv = parseInt(o.niveau, 10) || 1;
+      const catCls = cat;
+      // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
+      const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
+      const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
+      body += '<tr>'
+        + '<td class="op-code-cell">' + c + '</td>'
+        + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
+        + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
+        + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
+        + '<td>' + intervalleDisplay + '</td>'
+        + '<td>' + metrageDisplay + '</td>'
+        + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
+        +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+        +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
+        + '</button></td>'
+        + '<td><div class="op-act">'
+        + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
+        + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
+        + '</div></td></tr>';
+    });
+  });
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+  el.querySelectorAll('[data-maint-edit]').forEach(btn => {
+    btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
+  });
+  el.querySelectorAll('[data-maint-del]').forEach(btn => {
+    btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
+  });
+  el.querySelectorAll('[data-maint-docs]').forEach(btn => {
+    btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
+  });
+}
+
+// ── Documents attaches aux codes maintenance ─────────────────────────────
+async function openMaintDocsModal(code) {
+  const item = _maintItems.find(x => String(x.code) === String(code));
+  const label = item ? item.label : '';
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
+    + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+    + '<div class="alert-modal-body">'
+    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
+    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
+    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
+    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+    +     '<span>Ajouter un fichier</span>'
+    +   '</button>'
+    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
+    + '</div>'
+    + '<div class="alert-modal-foot">'
+    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
+    + '</div></div>';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const listEl = overlay.querySelector('#maint-docs-list');
+  const renderDocs = (items) => {
+    if (!items.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document pour l\'instant.</p>';
+      return;
+    }
+    listEl.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes / 1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0, 16).replace('T', ' ')) : '';
+      return '<div class="maint-doc-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
+        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
+        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
+        +   '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
+        +   '<button type="button" class="btn-sm btn-ghost danger" data-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    listEl.querySelectorAll('[data-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await refresh();
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  };
+  const refresh = async () => {
+    try {
+      const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+      renderDocs(Array.isArray(r.items) ? r.items : []);
+    } catch(e) {
+      listEl.innerHTML = '<p style="color:var(--danger);font-size:12px">' + esc(e.message || 'Erreur') + '</p>';
+    }
+  };
+  await refresh();
+
+  const fileInp = overlay.querySelector('#maint-doc-file');
+  const addBtn = overlay.querySelector('#maint-doc-add-btn');
+  addBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
+    addBtn.disabled = true;
+    const fd = new FormData();
+    fd.append('file', f);
+    try {
+      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
+        method: 'POST', credentials: 'same-origin', body: fd
+      });
+      if (!res.ok) {
+        let msg = 'Upload echoue';
+        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+        toast(msg, true); return;
+      }
+      toast('Document ajoute');
+      fileInp.value = '';
+      await refresh();
+      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
+  });
+}
+function openMaintForm(code) {
+  _maintEditCode = code || null;
+  const wrap = document.getElementById('maint-form-wrap');
+  const title = document.getElementById('maint-form-title');
+  const codeInp = document.getElementById('maint-code');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  const catSel = document.getElementById('maint-categorie');
+  // v2.2.17 — perSel retiré (périodicité cachée).
+  const intInp = document.getElementById('maint-intervalle');
+  const mInp   = document.getElementById('maint-metrage-ref');
+  if (code) {
+    const o = _maintItems.find(x => String(x.code) === String(code));
+    if (!o) return;
+    title.textContent = 'Modifier le code ' + code;
+    codeInp.value = o.code;
+    codeInp.disabled = true;
+    document.getElementById('maint-label').value = o.label || '';
+    document.getElementById('maint-niveau').value = String(o.niveau || 1);
+    if (catSel) {
+      // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+      // Codes legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'édition.
+      let c;
+      if (o.categorie === 'remplacements') c = 'remplacements';
+      else if (o.categorie === 'entretien' || o.categorie === 'interventions' || o.categorie === 'suivi') c = 'entretien';
+      else c = 'controles';
+      catSel.value = c;
+    }
+    if (intInp) intInp.value = o.intervalle || '';
+    if (mInp)   mInp.value   = o.metrage_ref || '';
+  } else {
+    title.textContent = 'Nouveau code';
+    codeInp.value = '';
+    codeInp.disabled = false;
+    document.getElementById('maint-label').value = '';
+    document.getElementById('maint-niveau').value = '1';
+    if (catSel) catSel.value = 'controles';
+    if (intInp) intInp.value = '';
+    if (mInp)   mInp.value   = '';
+  }
+  // Section Documents : visible dans les 2 modes.
+  // En creation : la liste est masquee (aucun doc encore), l'upload est
+  // possible des que le code est saisi. En edition : la liste est chargee
+  // et l'upload attache directement au code existant.
+  const docsWrap = document.getElementById('maint-form-docs');
+  const docsList = document.getElementById('maint-form-docs-list');
+  const docsHint = document.getElementById('maint-form-docs-hint');
+  if (docsWrap) {
+    docsWrap.style.display = '';
+    _maintResetDocPicker();
+    _bindMaintFormDocUpload(code);
+    if (code) {
+      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
+      if (docsList) docsList.style.display = '';
+      _renderMaintFormDocs(code);
+    } else {
+      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
+      if (docsList) docsList.style.display = 'none';
+    }
+  }
+  codeInp.focus();
+}
+
+async function _renderMaintFormDocs(code) {
+  const list = document.getElementById('maint-form-docs-list');
+  if (!list) return;
+  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
+  try {
+    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
+    const items = Array.isArray(r.items) ? r.items : [];
+    if (!items.length) {
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>';
+      return;
+    }
+    list.innerHTML = items.map(d => {
+      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
+      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
+      const meta = [sz, dt, d.uploaded_by ? esc(d.uploaded_by) : ''].filter(Boolean).join(' · ');
+      return '<div class="maint-doc-row">'
+        + '<div class="maint-doc-row-info">'
+        +   '<span class="maint-doc-row-name" title="' + esc(d.filename) + '">' + esc(d.filename) + '</span>'
+        +   '<span class="maint-doc-row-meta">' + meta + '</span>'
+        + '</div>'
+        + '<a class="maint-doc-row-link" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener">Telecharger</a>'
+        + '<button type="button" class="maint-doc-row-del" data-form-doc-del="' + d.id + '">Supprimer</button>'
+        + '</div>';
+    }).join('');
+    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
+      b.addEventListener('click', async () => {
+        if (!confirm('Supprimer ce document ?')) return;
+        try {
+          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
+          toast('Document supprime');
+          await _renderMaintFormDocs(code);
+          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
+      });
+    });
+  } catch(e) {
+    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
+  }
+}
+
+// Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
+async function _maintTriggerDocPicker() {
+  const codeInp = document.getElementById('maint-code');
+  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
+  if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
+  // En creation : sauvegarde le code en base avant l'upload, pour eviter
+  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
+  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
+  if (!codeExists) {
+    const labelInp = document.getElementById('maint-label');
+    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
+    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
+    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+    const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
+      ? rawCat
+      : (rawCat === 'interventions' ? 'entretien' : 'controles');
+    // v2.2.17 — periodique forcé à true (concept retiré côté UI).
+    const periodique = true;
+    const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
+    const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
+    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
+    try {
+      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
+      toast('Code enregistre - upload en cours');
+      _maintEditCode = codeNow;
+      codeInp.disabled = true;
+      await loadMaintCodes();
+      const listEl = document.getElementById('maint-form-docs-list');
+      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
+    } catch(e) {
+      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
+      return;
+    }
+  }
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.click();
+}
+
+// Compat : appele par openMaintForm, mais l'upload est declenche directement
+// par onchange du <input type=file>. No-op.
+function _bindMaintFormDocUpload(code) { /* upload direct via _maintOnDocFileChange */ }
+
+// Picker onchange -> upload immediat (pas de bouton Envoyer intermediaire).
+async function _maintOnDocFileChange() {
+  const inp = document.getElementById('maint-form-doc-file');
+  const f = inp && inp.files && inp.files[0];
+  if (!f) return;
+  if (f.size > 20 * 1024 * 1024) {
+    toast('Fichier trop volumineux (max 20 Mo)', true);
+    inp.value = '';
+    return;
+  }
+  const codeInp = document.getElementById('maint-code');
+  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
+  if (!codeNow) {
+    toast('Renseigne d\'abord le code', true);
+    inp.value = '';
+    return;
+  }
+  const btn = document.getElementById('maint-form-doc-add-btn');
+  if (btn) btn.disabled = true;
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
+      method: 'POST', credentials: 'same-origin', body: fd
+    });
+    if (!res.ok) {
+      let msg = 'Upload echoue';
+      try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
+      toast(msg, true); return;
+    }
+    toast('Document ajoute');
+    inp.value = '';
+    const listEl = document.getElementById('maint-form-docs-list');
+    if (listEl) listEl.style.display = '';
+    await _renderMaintFormDocs(codeNow);
+    if (typeof loadMaintCodes === 'function') await loadMaintCodes();
+  } catch(e) {
+    toast('Erreur reseau', true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _maintResetDocPicker() {
+  const inp = document.getElementById('maint-form-doc-file');
+  if (inp) inp.value = '';
+}
+// Active/désactive Intervalle et Réf. métrage selon Périodique :
+//   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
+//     remplir l'intervalle de temps et/ou la référence métrage).
+//   - Périodique = NON : les deux champs sont vidés et grisés.
+function _maintTogglePeriodiqueUI(){
+  // v2.2.17 — perSel retiré (périodicité cachée).
+  const intInp = document.getElementById('maint-intervalle');
+  const mInp   = document.getElementById('maint-metrage-ref');
+  if (!perSel || !intInp || !mInp) return;
+  perSel.disabled = false;
+  const isPeriodic = (perSel.value === 'oui');
+  intInp.disabled = !isPeriodic;
+  intInp.style.opacity = isPeriodic ? '1' : '0.5';
+  mInp.disabled   = !isPeriodic;
+  mInp.style.opacity = isPeriodic ? '1' : '0.5';
+  mInp.style.display = '';
+  if (!isPeriodic) {
+    intInp.value = '';
+    mInp.value   = '';
+  }
+}
+function closeMaintForm() {
+  _maintEditCode = null;
+  const wrap = document.getElementById('maint-form-wrap');
+  if (wrap) wrap.classList.add('hidden');
+}
+async function saveMaintForm() {
+  const code = (document.getElementById('maint-code').value || '').trim();
+  const label = (document.getElementById('maint-label').value || '').trim();
+  const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
+  const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
+  // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
+  // Legacy 'interventions' est remappée vers 'entretien' pour rester compat.
+  const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
+    ? rawCat
+    : (rawCat === 'interventions' ? 'entretien' : 'controles');
+  // v2.2.17 — periodique forcé à true (concept retiré côté UI).
+  const periodique = true;
+  const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
+  const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
+  if (!code) { toast('Code obligatoire', true); return; }
+  if (!label) { toast('Libellé obligatoire', true); return; }
+  if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  try {
+    if (_maintEditCode) {
+      await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      toast('Code mis à jour');
+    } else {
+      await api('/api/maintenance/codes', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      toast('Code ajouté');
+    }
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur lors de l\'enregistrement', true);
+    return;
+  }
+  closeMaintForm();
+  await loadMaintCodes();
+  // Sync côté Alertes : une création/modif de code peut créer, renommer
+  // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
+  if(typeof loadAlerts === 'function') await loadAlerts();
+}
+async function deleteMaintCode(code) {
+  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  try {
+    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
+    toast('Code supprimé');
+  } catch (e) {
+    toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
+    return;
+  }
+  await loadMaintCodes();
+  // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
+  // côté backend — on force le rechargement pour que la liste se mette à jour.
+  if(typeof loadAlerts === 'function') await loadAlerts();
+}
+
 </script>
 
 </body>
