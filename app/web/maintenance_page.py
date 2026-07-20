@@ -1510,6 +1510,24 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <div class="page-subtitle">Calendrier de maintenance</div>
           </div>
         </div>
+        <div class="ops-subtabs" role="tablist" style="margin-bottom:16px">
+          <button type="button" class="ops-subtab active" data-plan-subtab="calendrier" onclick="setPlanSubtab('calendrier')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Calendrier
+          </button>
+          <button type="button" class="ops-subtab" data-plan-subtab="historique" onclick="setPlanSubtab('historique')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+            Historique
+          </button>
+        </div>
+        <div id="plan-subview-historique" style="display:none">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+            <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
+            <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l\'avancement, réutilise les tâches en modèle.</p>
+            <div id="plan-hist-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div>
+        </div>
+        <div id="plan-subview-calendrier">
 
         <section class="cal-sec">
           <div class="cal-hdr">
@@ -1589,6 +1607,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </div>
       </div>
+
+        </div><!-- /plan-subview-calendrier -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
@@ -3143,36 +3163,58 @@ function openPlanningDetailsModal(events){
       (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
     });
     const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
-    // v2 : regroupe les rows dupliquées (même code sur N machines après split)
-    //      en 1 ligne par code, avec l'union des machines sous forme de chips.
+    // v2.2.48 : regroupe par code, préserve statut/done_by/done_at par machine.
     const _grouped = new Map();
     for(const op of ops){
       const key = op.opTypeId || op._op_id || op.opName || Math.random();
       if(!_grouped.has(key)){
-        _grouped.set(key, {
-          opName:   op.opName || '—',
-          opNiveau: op.opNiveau || null,
-          opFreq:   op.opFreq || '',
-          machines: [],
-        });
+        _grouped.set(key, { opName: op.opName || '—', machineData: [] });
       }
       const entry = _grouped.get(key);
       for(const m of (op.machines || [])){
-        if(!entry.machines.includes(m)) entry.machines.push(m);
+        if(entry.machineData.find(x => x.machine === m)) continue;
+        entry.machineData.push({
+          machine: m,
+          statut: op.statut || 'a_faire',
+          done_at: op.done_at || null,
+          done_by: op.done_by || null,
+        });
       }
     }
+    const opsListForNames = Array.isArray(ev.operators) ? ev.operators : [];
+    const _resolveName = (uid) => {
+      if(uid == null) return '';
+      const u = opsListForNames.find(x => Number(x.id) === Number(uid));
+      return u ? (u.nom || '') : '';
+    };
+    const _fmtDoneAt = (iso) => {
+      if(!iso) return '';
+      const m = String(iso).match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+      return m ? (m[1] + ':' + m[2]) : String(iso).slice(11,16);
+    };
     const groupedOps = Array.from(_grouped.values());
     const opsHtml = groupedOps.length
       ? groupedOps.map(op => {
-          const machChips = op.machines.map(m =>
-            '<span class="plan-det-case-op-mach">' + escHtml(m) + '</span>'
-          ).join('');
-          return '<div class="plan-det-case-op">' +
-            '<span class="plan-det-case-op-bullet"></span>' +
-            '<span class="plan-det-case-op-name">' + escHtml(op.opName) + '</span>' +
-            (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
-            (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
-            (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
+          const rows = op.machineData.map(md => {
+            const done = md.statut === 'termine';
+            const icon = done
+              ? '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
+              : '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
+            const label = done
+              ? ('Effectuée' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
+                 (md.done_by ? ' · par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
+                 (md.done_at ? ' à ' + escHtml(_fmtDoneAt(md.done_at)) : ''))
+              : ((op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' — en attente'));
+            return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:' + (done ? 'var(--text2)' : 'var(--muted)') + '">' +
+              icon + '<span>' + label + '</span>' +
+            '</div>';
+          }).join('');
+          return '<div class="plan-det-case-op" style="flex-direction:column;align-items:stretch;gap:2px">' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+              '<span class="plan-det-case-op-bullet"></span>' +
+              '<span class="plan-det-case-op-name" style="white-space:normal">' + escHtml(op.opName) + '</span>' +
+            '</div>' +
+            '<div style="margin-left:16px;margin-top:2px">' + rows + '</div>' +
           '</div>';
         }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
@@ -7276,6 +7318,117 @@ async function loadMe(){
     if(target && VIEW_META[target]) switchView(target);
   }catch(e){}
 })();
+
+// ═══════════════════════════════════════════════════════════════════
+// v2.2.48 : Sous-onglets Planning + Historique des créneaux
+// ═══════════════════════════════════════════════════════════════════
+const PLAN_SUBTAB_KEY = 'mysifa_maint_plan_subtab_v1';
+function _getPlanSubtab(){
+  try{ return localStorage.getItem(PLAN_SUBTAB_KEY) || 'calendrier'; }
+  catch(e){ return 'calendrier'; }
+}
+function setPlanSubtab(name){
+  if(name !== 'calendrier' && name !== 'historique') name = 'calendrier';
+  try{ localStorage.setItem(PLAN_SUBTAB_KEY, name); }catch(e){}
+  document.querySelectorAll('[data-plan-subtab]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-plan-subtab') === name);
+  });
+  const cal = document.getElementById('plan-subview-calendrier');
+  const hist = document.getElementById('plan-subview-historique');
+  if(cal) cal.style.display = (name === 'calendrier') ? '' : 'none';
+  if(hist) hist.style.display = (name === 'historique') ? '' : 'none';
+  if(name === 'historique') loadPlanningHistorique();
+  else if(name === 'calendrier'){ try { renderCal(); } catch(e){} }
+}
+async function loadPlanningHistorique(){
+  const listEl = document.getElementById('plan-hist-list');
+  if(!listEl) return;
+  const today = new Date();
+  const past = new Date(); past.setDate(today.getDate() - 180);
+  try{
+    const r = await fetch('/api/maintenance/events?date_from=' + _fmtDateISO(past) + '&date_to=' + _fmtDateISO(today) + '&_=' + Date.now(),
+      { credentials: 'include', cache: 'no-store' });
+    if(!r.ok){ listEl.innerHTML = '<p style="color:var(--danger)">Erreur de chargement.</p>'; return; }
+    const data = await r.json();
+    const todayIso = _fmtDateISO(today);
+    const events = (data.events || []).filter(ev =>
+      ev.source === 'planifie' && ev.date_prevue && ev.date_prevue < todayIso
+    );
+    events.sort((a,b) => (b.date_prevue || '').localeCompare(a.date_prevue || ''));
+    renderPlanningHistorique(events);
+  }catch(e){
+    listEl.innerHTML = '<p style="color:var(--danger)">Erreur : ' + escHtml(e.message) + '</p>';
+  }
+}
+function renderPlanningHistorique(events){
+  const listEl = document.getElementById('plan-hist-list');
+  if(!listEl) return;
+  if(!events.length){
+    listEl.innerHTML = '<p style="color:var(--muted);font-style:italic;font-size:13px;text-align:center;padding:24px 0">Aucun créneau planifié dans les 6 derniers mois.</p>';
+    return;
+  }
+  const rowsHtml = events.map(ev => {
+    const machineUnion = [];
+    (ev.ops || []).forEach(o => {
+      (o.machines || []).forEach(m => { if(!machineUnion.includes(m)) machineUnion.push(m); });
+    });
+    const machinesLabel = machineUnion.length ? machineUnion.join(', ') : (ev.machine || '—');
+    const doneBySet = new Set();
+    (ev.ops || []).forEach(o => { if(o.done_by != null) doneBySet.add(Number(o.done_by)); });
+    const opsList = Array.isArray(ev.operators) ? ev.operators : [];
+    const doneByNames = Array.from(doneBySet).map(uid => {
+      const u = opsList.find(x => Number(x.id) === uid);
+      return u ? (u.nom || 'op. #' + uid) : ('op. #' + uid);
+    });
+    const opsPresents = doneByNames.length ? doneByNames : opsList.map(u => u.nom || '');
+    const opsLabel = opsPresents.length ? opsPresents.join(', ') : '—';
+    const dateFr = _fmtIsoDateFr(ev.date_prevue);
+    const horaires = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + '–' + ev.heure_fin) : '';
+    return '<div style="padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:8px;display:flex;flex-wrap:wrap;align-items:center;gap:12px">' +
+      '<div style="flex:1;min-width:220px">' +
+        '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">' + escHtml(dateFr) + (horaires ? ' · ' + escHtml(horaires) : '') + '</div>' +
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:2px"><strong>Machines :</strong> ' + escHtml(machinesLabel) + '</div>' +
+        '<div style="font-size:12px;color:var(--text2)"><strong>Opérateurs présents :</strong> ' + escHtml(opsLabel) + '</div>' +
+      '</div>' +
+      '<button type="button" onclick="planHistReprogrammer(\'' + escAttr(ev.id) + '\')" style="background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s">Reprogrammer</button>' +
+    '</div>';
+  }).join('');
+  listEl.innerHTML = rowsHtml;
+}
+async function planHistReprogrammer(eventId){
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials: 'include' });
+    if(!r.ok){ showToast('Créneau introuvable.', 'danger'); return; }
+    const data = await r.json();
+    const ev = data.event || data;
+    if(!ev || !ev.ops || !ev.ops.length){ showToast('Ce créneau n\'a pas d\'opération à copier.', 'danger'); return; }
+    const defaultName = 'Modèle du ' + (ev.date_prevue || '');
+    const name = prompt('Nom du modèle à créer depuis ce créneau :', defaultName);
+    if(!name || !name.trim()) return;
+    const opsMap = new Map();
+    for(const o of ev.ops){
+      if(!opsMap.has(o.code)) opsMap.set(o.code, { code: o.code, machines: [] });
+      const entry = opsMap.get(o.code);
+      for(const m of (o.machines || [])){
+        if(!entry.machines.includes(m)) entry.machines.push(m);
+      }
+    }
+    const ops = Array.from(opsMap.values()).filter(o => o.machines.length);
+    const rNew = await fetch('/api/maintenance/templates', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name: name.trim(), description: 'Créé depuis créneau du ' + (ev.date_prevue || ''), ops }),
+    });
+    if(!rNew.ok){
+      const err = await rNew.json().catch(()=>({}));
+      throw new Error(err.detail || 'Enregistrement refusé');
+    }
+    showToast('Modèle « ' + name.trim() + ' » créé — utilisable depuis Nouveau créneau.', 'info');
+    if(typeof loadTemplates === 'function') loadTemplates(true);
+  }catch(e){
+    showToast('Erreur : ' + e.message, 'danger');
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // v2.2.19 : Panel Alertes maintenance — duplication de settings_page.py
