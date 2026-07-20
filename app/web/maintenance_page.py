@@ -1800,9 +1800,17 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des opérations</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn" onclick="openMaintForm()">+ Ajouter un code</button>
+              <button type="button" class="btn btn-sec" id="libres-merge-btn" disabled onclick="libresMergeSelected()" title="Fusionne les 2 titres sélectionnés en un seul (les saisies passées sont réaffectées)." style="display:none">Fusionner sélection</button>
+              <span id="libres-selection-count" style="font-size:11px;color:var(--muted);display:none"></span>
+              <button type="button" class="btn" id="maint-add-btn" onclick="openMaintForm()">+ Ajouter un code</button>
             </div>
           </div>
+          <!-- v2.2.36 : tabs Récurrentes / Inhabituelles -->
+          <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:12px">
+            <button type="button" id="maint-tab-recurrentes" onclick="switchMaintView('recurrentes')" style="padding:6px 14px;font-size:12px;background:var(--accent);color:var(--accent-fg,#fff);border:none;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit">Récurrentes</button>
+            <button type="button" id="maint-tab-inhabituelles" onclick="switchMaintView('inhabituelles')" style="padding:6px 14px;font-size:12px;background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit">Inhabituelles</button>
+          </div>
+          <div id="maint-view-recurrentes">
           <p class="sub" style="margin-top:-4px;margin-bottom:14px">Référentiel des codes d'opérations de maintenance regroupés en trois catégories : Contrôles, Nettoyage et Interventions.</p>
           <div id="maint-form-wrap" class="hidden op-form-panel">
             <h3 id="maint-form-title">Nouveau code</h3>
@@ -2354,6 +2362,8 @@ function setOpsSubtab(name){
   if(target) target.style.display = '';
   // v2.2.28 : recharge les codes maintenance à l'ouverture de l'onglet Gestion
   if(name === 'liste' && typeof loadMaintCodes === 'function') loadMaintCodes();
+  // v2.2.36 : force la vue Récurrentes à chaque arrivée sur l'onglet Gestion
+  if(name === 'liste' && typeof switchMaintView === 'function') switchMaintView('recurrentes');
 }
 // Sous-onglet actif dans la vue Contrôles ('historique' | 'liste').
 const CTRL_SUBTAB_KEY = 'mysifa_maint_ctrl_subtab_v1';
@@ -11374,6 +11384,30 @@ async function deleteMaintCode(code) {
   // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
   // côté backend — on force le rechargement pour que la liste se mette à jour.
   if(typeof loadAlerts === 'function') await loadAlerts();
+}
+
+
+// v2.2.36 : bascule entre les 2 vues du panel Gestion des opérations
+function switchMaintView(view) {
+  if (view !== 'recurrentes' && view !== 'inhabituelles') view = 'recurrentes';
+  const isRec = (view === 'recurrentes');
+  const vRec = document.getElementById('maint-view-recurrentes');
+  const vInh = document.getElementById('maint-view-inhabituelles');
+  const tRec = document.getElementById('maint-tab-recurrentes');
+  const tInh = document.getElementById('maint-tab-inhabituelles');
+  const btnAdd = document.getElementById('maint-add-btn');
+  const btnMerge = document.getElementById('libres-merge-btn');
+  const spanCount = document.getElementById('libres-selection-count');
+  if (vRec) vRec.style.display = isRec ? '' : 'none';
+  if (vInh) vInh.style.display = isRec ? 'none' : '';
+  const activeStyle = 'padding:6px 14px;font-size:12px;background:var(--accent);color:var(--accent-fg,#fff);border:none;font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit';
+  const inactiveStyle = 'padding:6px 14px;font-size:12px;background:transparent;color:var(--muted);border:1px solid var(--border);font-weight:700;border-radius:8px;cursor:pointer;font-family:inherit';
+  if (tRec) tRec.setAttribute('style', isRec ? activeStyle : inactiveStyle);
+  if (tInh) tInh.setAttribute('style', isRec ? inactiveStyle : activeStyle);
+  if (btnAdd) btnAdd.style.display = isRec ? 'inline-flex' : 'none';
+  if (btnMerge) btnMerge.style.display = isRec ? 'none' : '';
+  if (spanCount) spanCount.style.display = isRec ? 'none' : '';
+  if (!isRec && typeof loadLibres === 'function') loadLibres();
 }
 
 </script>
