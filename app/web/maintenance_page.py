@@ -340,8 +340,14 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event-title{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.2px;color:inherit}
 .cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
 .cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
-.cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow:hidden}
-.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px}
+/* v2.2.51 : ops list dans cal-event = scrollable + texte wrapable */
+.cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}
+.cal-event-ops::-webkit-scrollbar{width:5px}
+.cal-event-ops::-webkit-scrollbar-track{background:transparent}
+.cal-event-ops::-webkit-scrollbar-thumb{background:rgba(255,255,255,.30);border-radius:3px}
+.cal-event-ops::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.5)}
+.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:normal;word-break:break-word;letter-spacing:.1px;padding-right:2px}
+.cal-event-op-more{opacity:.75;font-style:italic;font-size:11.5px}
 .cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
 .cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
 .cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
@@ -3012,19 +3018,12 @@ function _makeEventBlock(item){
     inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
   }
   if(showOpsList){
-    // Lignes disponibles ≈ (height - 24px titre - 12px time) / 14px
-    const lineH = 17;
-    const reservedTitle = 28;
-    const reservedTime = showTime ? 18 : 0;
-    const available = Math.max(1, Math.floor((height - reservedTitle - reservedTime - 6) / lineH));
-    const visible = ops.slice(0, available);
+    // v2.2.51 : plus de troncature — la liste est scrollable via CSS.
+    // On affiche toutes les ops ; l'user scroll dans la carte si besoin.
     inner += '<div class="cal-event-ops">';
-    visible.forEach(op => {
+    ops.forEach(op => {
       inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
     });
-    if(opsCount > visible.length){
-      inner += '<div class="cal-event-op cal-event-op-more">+ ' + (opsCount - visible.length) + ' autre' + ((opsCount - visible.length) > 1 ? 's' : '') + '</div>';
-    }
     inner += '</div>';
   } else if(opsCount > 0 && height >= 32 && !showOpsList){
     // Trop court pour une liste : afficher la 1re op + "(+N)"
