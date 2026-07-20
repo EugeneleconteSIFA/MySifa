@@ -38,3 +38,7 @@ myprod-widget/dist/
 !.env.example
 __pycache__/
 *.pyc
+
+# Dossiers temporaires cree par Claude (bypass cache MCP)
+_to_delete/
+_tmp_fresh*/
