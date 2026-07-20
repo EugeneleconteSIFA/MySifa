@@ -720,12 +720,14 @@ body.light .toast.info{background:#fff;color:var(--text)}
    La page rend la même structure DOM pour tous ; le body porte
    data-maint-role="admin" ou "operator" et les règles ci-dessous
    masquent ce qui n'est pas pertinent pour le rôle courant. */
-body[data-maint-role="admin"] .op-only{display:none !important}
+body[data-maint-role="admin"] .op-only:not(#view-op-tasks):not(#view-op-planning){display:none !important}
 body[data-maint-role="operator"] .adm-only{display:none !important}
 /* Bascule du contenu principal : admin voit .content, opérateur voit
    .op-main. Deux conteneurs distincts pour éviter toute interaction
    parasite entre les vues admin et les vues opérateur. */
-body[data-maint-role="admin"] .op-main{display:none !important}
+body[data-maint-role="admin"] .op-main{display:none}
+body[data-maint-role="admin"].admin-op-active .op-main{display:flex}
+body[data-maint-role="admin"].admin-op-active .view.adm-only{display:none !important}
 body[data-maint-role="operator"] .content{display:none !important}
 
 /* Conteneur opérateur : padding + colonne, prend toute la hauteur restante. */
@@ -1402,6 +1404,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
       Opérations de maintenance
+    </button>
+    <!-- v2.2.43 : "Mes tâches" aussi disponible pour l'admin (certains admins font la maintenance) -->
+    <button type="button" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Mes tâches
     </button>
     <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -2406,6 +2413,10 @@ function setCtrlSubtab(name){
 
 function switchView(name){
   if(!VIEW_META[name]) return;
+  // v2.2.43 : quand admin bascule sur une vue op (op-tasks / op-planning),
+  // afficher .op-main + masquer les vues admin via body.admin-op-active.
+  const isOpView = (name === 'op-tasks' || name === 'op-planning');
+  document.body.classList.toggle('admin-op-active', isOpView);
   // Vues admin (.view) : bascule via inline display comme historiquement.
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   const admTarget = document.getElementById('view-' + name);
