@@ -2439,7 +2439,7 @@ function buildMyMaintDetailModal(){
     const opRow = document.createElement('div');
     const isDone = (op.statut === 'termine');
     opRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:9px 12px;background:'+(isDone?'rgba(52,211,153,.10)':'var(--bg)')+';border-left:3px solid '+(isDone?'var(--ok,#34d399)':'var(--border)')+';border-radius:6px;margin-bottom:5px;font-size:13px';
-    const _lbl = op.label || op.code_libelle || op.code || '';
+    const _lbl = op.code_label || op.label || op.code_libelle || op.code || '';
     const _mac = op.machine || op.machines_csv || '';
     opRow.innerHTML =
       '<div style="flex:1;min-width:0">'+
