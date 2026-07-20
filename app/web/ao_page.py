@@ -1550,8 +1550,8 @@ async function openAddFournisseurModalV2() {
       }
     };
   }
-  render();
   ov.appendChild(box); m.appendChild(ov);
+  render();
 }
 
 async function openEditFournisseurAoModal(fourniId) {
