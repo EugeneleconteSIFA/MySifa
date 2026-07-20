@@ -106,13 +106,26 @@ def _serialize_agent(row) -> dict:
 
 
 def _serialize_imprimante(row) -> dict:
+    # v1.6 — `type_connexion` peut valoir 'tcp_ip' (defaut) ou 'windows_local'.
+    # Pour 'windows_local', `ip_locale`/`port` ne sont pas utilises et
+    # `nom_queue_windows` designe la queue installee sur le PC hote (cote agent).
+    try:
+        type_connexion = row["type_connexion"] or "tcp_ip"
+    except (IndexError, KeyError):
+        type_connexion = "tcp_ip"
+    try:
+        nom_queue_windows = row["nom_queue_windows"]
+    except (IndexError, KeyError):
+        nom_queue_windows = None
     return {
         "id": row["id"],
         "nom": row["nom"],
         "poste": row["poste"],
         "agent_id": row["agent_id"],
+        "type_connexion": type_connexion,
         "ip_locale": row["ip_locale"],
         "port": row["port"],
+        "nom_queue_windows": nom_queue_windows,
         "langage": row["langage"],
         "largeur_mm": row["largeur_mm"],
         "hauteur_mm": row["hauteur_mm"],
@@ -216,12 +229,18 @@ def delete_agent(agent_id: int, request: Request):
 # ENDPOINTS ADMIN — Imprimantes
 # ═══════════════════════════════════════════════════════════════════════
 
+TYPES_CONNEXION = ("tcp_ip", "windows_local")
+
+
 class ImprimanteBase(BaseModel):
     nom: str = Field(min_length=1, max_length=80)
     poste: Optional[str] = None
     agent_id: Optional[int] = None
-    ip_locale: str = Field(min_length=1, max_length=64)
-    port: int = 9100
+    # v1.6 — `type_connexion` determine si on cible IP:port ou une queue Windows.
+    type_connexion: str = "tcp_ip"
+    ip_locale: Optional[str] = None            # requis si type_connexion='tcp_ip'
+    port: Optional[int] = 9100
+    nom_queue_windows: Optional[str] = None    # requis si type_connexion='windows_local'
     langage: str = "zpl"
     largeur_mm: int = 102
     hauteur_mm: int = 152
@@ -233,8 +252,10 @@ class ImprimantePatch(BaseModel):
     nom: Optional[str] = None
     poste: Optional[str] = None
     agent_id: Optional[int] = None
+    type_connexion: Optional[str] = None
     ip_locale: Optional[str] = None
     port: Optional[int] = None
+    nom_queue_windows: Optional[str] = None
     langage: Optional[str] = None
     largeur_mm: Optional[int] = None
     hauteur_mm: Optional[int] = None
@@ -248,6 +269,9 @@ def _validate_imprimante(payload) -> None:
         raise HTTPException(status_code=400, detail=f"Langage invalide (attendu: {LANGAGES}).")
     if payload.port is not None and not (1 <= int(payload.port) <= 65535):
         raise HTTPException(status_code=400, detail="Port invalide (1-65535).")
+    tc = getattr(payload, "type_connexion", None)
+    if tc is not None and tc not in TYPES_CONNEXION:
+        raise HTTPException(status_code=400, detail=f"Type de connexion invalide (attendu: {TYPES_CONNEXION}).")
 
 
 @router.get("/imprimantes")
@@ -255,7 +279,8 @@ def list_imprimantes(request: Request):
     user = get_current_user(request)
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT id,nom,poste,agent_id,ip_locale,port,langage,largeur_mm,hauteur_mm,dpi,actif,note "
+            "SELECT id,nom,poste,agent_id,type_connexion,ip_locale,port,nom_queue_windows,"
+            "langage,largeur_mm,hauteur_mm,dpi,actif,note "
             "FROM imprimantes ORDER BY COALESCE(poste,''), nom"
         ).fetchall()
     return [_serialize_imprimante(r) for r in rows]
@@ -265,14 +290,33 @@ def list_imprimantes(request: Request):
 def create_imprimante(payload: ImprimanteBase, request: Request):
     u = require_superadmin(request)
     _validate_imprimante(payload)
+    tc = (payload.type_connexion or "tcp_ip").strip()
+    if tc not in TYPES_CONNEXION:
+        raise HTTPException(status_code=400, detail=f"Type de connexion invalide (attendu: {TYPES_CONNEXION}).")
+    # Normalise selon type_connexion : champs non utilises = valeurs vides
+    # plutot que NULL pour rester compatible avec la contrainte NOT NULL heritee.
+    if tc == "tcp_ip":
+        if not payload.ip_locale or not str(payload.ip_locale).strip():
+            raise HTTPException(status_code=400, detail="IP requise pour une imprimante TCP/IP.")
+        ip = str(payload.ip_locale).strip()
+        port = int(payload.port or 9100)
+        queue = None
+    else:  # windows_local
+        if not payload.nom_queue_windows or not str(payload.nom_queue_windows).strip():
+            raise HTTPException(status_code=400, detail="Nom de la queue Windows requis pour une imprimante locale.")
+        ip = ""
+        port = 0
+        queue = str(payload.nom_queue_windows).strip()
     now = _now()
     with get_db() as conn:
         cur = conn.execute(
-            "INSERT INTO imprimantes (nom,poste,agent_id,ip_locale,port,langage,largeur_mm,hauteur_mm,dpi,"
-            "actif,created_at,created_by,note) VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?)",
+            "INSERT INTO imprimantes (nom,poste,agent_id,type_connexion,ip_locale,port,nom_queue_windows,"
+            "langage,largeur_mm,hauteur_mm,dpi,actif,created_at,created_by,note) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?,?,?)",
             (
                 payload.nom.strip(), (payload.poste or "").strip() or None, payload.agent_id,
-                payload.ip_locale.strip(), int(payload.port), payload.langage,
+                tc, ip, port, queue,
+                payload.langage,
                 int(payload.largeur_mm), int(payload.hauteur_mm), int(payload.dpi),
                 now, u.get("email"), (payload.note or "").strip() or None,
             ),
@@ -296,7 +340,8 @@ def patch_imprimante(imprimante_id: int, payload: ImprimantePatch, request: Requ
     require_superadmin(request)
     _validate_imprimante(payload)
     fields, values = [], []
-    for f in ("nom", "poste", "agent_id", "ip_locale", "port", "langage",
+    for f in ("nom", "poste", "agent_id", "type_connexion", "ip_locale", "port",
+              "nom_queue_windows", "langage",
               "largeur_mm", "hauteur_mm", "dpi", "note"):
         val = getattr(payload, f)
         if val is not None:
@@ -613,18 +658,33 @@ def agent_heartbeat(request: Request):
         # Retourne aussi la liste des imprimantes rattachées à cet agent
         # (l'agent en a besoin pour connaître les ip/port cibles).
         rows = conn.execute(
-            "SELECT id,nom,ip_locale,port,langage FROM imprimantes WHERE agent_id=? AND actif=1",
+            "SELECT id,nom,type_connexion,ip_locale,port,nom_queue_windows,langage "
+            "FROM imprimantes WHERE agent_id=? AND actif=1",
             (agent["id"],),
         ).fetchall()
         conn.commit()
+    def _hb_imp(r):
+        tc = "tcp_ip"
+        queue = None
+        try:
+            tc = (r["type_connexion"] or "tcp_ip")
+        except (IndexError, KeyError):
+            pass
+        try:
+            queue = r["nom_queue_windows"]
+        except (IndexError, KeyError):
+            pass
+        return {
+            "id": r["id"], "nom": r["nom"],
+            "type_connexion": tc,
+            "ip": r["ip_locale"], "port": r["port"],
+            "nom_queue_windows": queue,
+            "langage": r["langage"],
+        }
     return {
         "ok": True,
         "server_time": now,
-        "imprimantes": [
-            {"id": r["id"], "nom": r["nom"], "ip": r["ip_locale"], "port": r["port"],
-             "langage": r["langage"]}
-            for r in rows
-        ],
+        "imprimantes": [_hb_imp(r) for r in rows],
     }
 
 
@@ -638,7 +698,7 @@ def agent_get_jobs(request: Request, limit: int = 20):
         # agent (ou celles dont agent_id est NULL — pas encore rattachées).
         rows = conn.execute(
             "SELECT pj.id,pj.imprimante_id,pj.payload,pj.payload_langage,pj.tentatives,"
-            "i.nom AS imp_nom,i.ip_locale,i.port "
+            "i.nom AS imp_nom,i.type_connexion,i.ip_locale,i.port,i.nom_queue_windows "
             "FROM print_jobs pj JOIN imprimantes i ON i.id=pj.imprimante_id "
             "WHERE pj.status='pending' AND (i.agent_id=? OR i.agent_id IS NULL) "
             "ORDER BY pj.id ASC LIMIT ?",
@@ -654,14 +714,28 @@ def agent_get_jobs(request: Request, limit: int = 20):
             )
             conn.commit()
     import base64
+    def _imp_info(r):
+        tc = "tcp_ip"
+        try:
+            tc = (r["type_connexion"] or "tcp_ip")
+        except (IndexError, KeyError):
+            pass
+        info = {
+            "id": r["imprimante_id"], "nom": r["imp_nom"],
+            "type_connexion": tc,
+            "ip": r["ip_locale"], "port": r["port"],
+        }
+        if tc == "windows_local":
+            try:
+                info["nom_queue_windows"] = r["nom_queue_windows"]
+            except (IndexError, KeyError):
+                info["nom_queue_windows"] = None
+        return info
     return {
         "jobs": [
             {
                 "id": r["id"],
-                "imprimante": {
-                    "id": r["imprimante_id"], "nom": r["imp_nom"],
-                    "ip": r["ip_locale"], "port": r["port"],
-                },
+                "imprimante": _imp_info(r),
                 "langage": r["payload_langage"],
                 "payload_b64": base64.b64encode(bytes(r["payload"])).decode("ascii"),
                 "tentatives": r["tentatives"] + 1,

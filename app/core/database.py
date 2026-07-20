@@ -7139,6 +7139,19 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 194, "ao_demandes_cloture_retention")
 
+    # v195 — Impression : support imprimantes Windows locales (USB / LPT).
+    # Jusqu'ici, les imprimantes etaient forcement atteignables en TCP:9100. Ajoute
+    # `type_connexion` = 'tcp_ip' | 'windows_local' + `nom_queue_windows` pour
+    # cibler une queue installee sur le PC hote (le driver Windows gere USB/LPT/etc).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(imprimantes)").fetchall()}
+        if "type_connexion" not in cols:
+            conn.execute("ALTER TABLE imprimantes ADD COLUMN type_connexion TEXT NOT NULL DEFAULT 'tcp_ip'")
+        if "nom_queue_windows" not in cols:
+            conn.execute("ALTER TABLE imprimantes ADD COLUMN nom_queue_windows TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 195, "imprimantes_type_connexion_windows_local")
+
 
 def create_default_admin():
     import bcrypt

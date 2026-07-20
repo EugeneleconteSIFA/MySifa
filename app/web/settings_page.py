@@ -1845,13 +1845,31 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <label class="pr-lbl">Agent local</label>
               <select id="pr-f-agent" class="pr-inp"><option value="">Aucun</option></select>
             </div>
-            <div>
+            <div style="grid-column:span 2">
+              <label class="pr-lbl">Type de connexion</label>
+              <div style="display:flex;gap:16px;align-items:center;font-size:13px;color:var(--text);padding:6px 0">
+                <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+                  <input type="radio" name="pr-f-type" value="tcp_ip" id="pr-f-type-tcp" checked onchange="prToggleTypeConnexion()">
+                  Réseau (TCP/IP)
+                </label>
+                <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+                  <input type="radio" name="pr-f-type" value="windows_local" id="pr-f-type-win" onchange="prToggleTypeConnexion()">
+                  Locale (USB / LPT via PC hôte)
+                </label>
+              </div>
+            </div>
+            <div id="pr-f-tcp-ip-row">
               <label class="pr-lbl">Adresse IP</label>
               <input id="pr-f-ip" type="text" class="pr-inp" placeholder="192.168.1.42">
             </div>
-            <div>
+            <div id="pr-f-tcp-port-row">
               <label class="pr-lbl">Port</label>
               <input id="pr-f-port" type="number" class="pr-inp" value="9100">
+            </div>
+            <div id="pr-f-queue-row" style="grid-column:span 2;display:none">
+              <label class="pr-lbl">Nom de la queue Windows (côté PC hôte)</label>
+              <input id="pr-f-queue" type="text" class="pr-inp" placeholder="Ex : Zebra QL-800 ou ZDesigner GK420t">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Exact nom tel qu'il apparaît dans <em>Panneau de configuration &gt; Périphériques et imprimantes</em> sur le PC hôte. L'agent MySifa doit être installé sur ce PC (voir <code>tools/print_agent/install_agent_windows.ps1</code>).</div>
             </div>
             <div>
               <label class="pr-lbl">Langage</label>
@@ -8098,7 +8116,7 @@ function prRenderImprimantes() {
               <span style="font-size:11px;background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${_escH(i.langage)}</span>
             </div>
             <div style="font-size:12px;color:var(--muted);margin-top:4px">
-              ${_escH(i.poste || 'Sans poste')} · ${_escH(i.ip_locale)}:${i.port} · ${i.largeur_mm}×${i.hauteur_mm}mm @ ${i.dpi}dpi · Agent : ${agentLbl}
+              ${_escH(i.poste || 'Sans poste')} · ${(i.type_connexion === 'windows_local') ? ('Queue Windows : ' + _escH(i.nom_queue_windows || '?')) : (_escH(i.ip_locale || '?') + ':' + (i.port || 9100))} · ${i.largeur_mm}×${i.hauteur_mm}mm @ ${i.dpi}dpi · Agent : ${agentLbl}
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
@@ -8108,6 +8126,13 @@ function prRenderImprimantes() {
         </div>
       </div>`;
   }).join('');
+}
+
+function prToggleTypeConnexion() {
+  const isWin = document.getElementById('pr-f-type-win').checked;
+  document.getElementById('pr-f-tcp-ip-row').style.display = isWin ? 'none' : '';
+  document.getElementById('pr-f-tcp-port-row').style.display = isWin ? 'none' : '';
+  document.getElementById('pr-f-queue-row').style.display = isWin ? '' : 'none';
 }
 
 function prEditImprimante(id) {
@@ -8120,8 +8145,14 @@ function prEditImprimante(id) {
   agSel.innerHTML = '<option value="">Aucun</option>' + PR.agents.map(a =>
     `<option value="${a.id}">${_escH(a.nom)}</option>`).join('');
   agSel.value = (i && i.agent_id) ? String(i.agent_id) : '';
-  document.getElementById('pr-f-ip').value = i ? i.ip_locale : '';
-  document.getElementById('pr-f-port').value = i ? i.port : 9100;
+  // v1.6 — type de connexion (tcp_ip par defaut pour retrocompat)
+  const tc = (i && i.type_connexion) || 'tcp_ip';
+  document.getElementById('pr-f-type-tcp').checked = (tc === 'tcp_ip');
+  document.getElementById('pr-f-type-win').checked = (tc === 'windows_local');
+  document.getElementById('pr-f-ip').value = (i && i.ip_locale) ? i.ip_locale : '';
+  document.getElementById('pr-f-port').value = (i && i.port) ? i.port : 9100;
+  document.getElementById('pr-f-queue').value = (i && i.nom_queue_windows) || '';
+  prToggleTypeConnexion();
   document.getElementById('pr-f-langage').value = i ? i.langage : 'zpl';
   document.getElementById('pr-f-dpi').value = i ? i.dpi : 203;
   document.getElementById('pr-f-largeur').value = i ? i.largeur_mm : 102;
@@ -8137,12 +8168,16 @@ function prCloseModal() {
 }
 
 async function prSaveImprimante() {
+  const isWin = document.getElementById('pr-f-type-win').checked;
+  const tc = isWin ? 'windows_local' : 'tcp_ip';
   const body = {
     nom: document.getElementById('pr-f-nom').value.trim(),
     poste: document.getElementById('pr-f-poste').value.trim() || null,
     agent_id: parseInt(document.getElementById('pr-f-agent').value, 10) || null,
-    ip_locale: document.getElementById('pr-f-ip').value.trim(),
-    port: parseInt(document.getElementById('pr-f-port').value, 10) || 9100,
+    type_connexion: tc,
+    ip_locale: isWin ? null : document.getElementById('pr-f-ip').value.trim(),
+    port: isWin ? null : (parseInt(document.getElementById('pr-f-port').value, 10) || 9100),
+    nom_queue_windows: isWin ? document.getElementById('pr-f-queue').value.trim() : null,
     langage: document.getElementById('pr-f-langage').value,
     dpi: parseInt(document.getElementById('pr-f-dpi').value, 10) || 203,
     largeur_mm: parseInt(document.getElementById('pr-f-largeur').value, 10) || 102,
@@ -8150,7 +8185,9 @@ async function prSaveImprimante() {
     note: document.getElementById('pr-f-note').value.trim() || null,
   };
   if (!body.nom) { prToast('Nom requis.', 'danger'); return; }
-  if (!body.ip_locale) { prToast('IP requise.', 'danger'); return; }
+  if (tc === 'tcp_ip' && !body.ip_locale) { prToast('IP requise pour une imprimante réseau.', 'danger'); return; }
+  if (tc === 'windows_local' && !body.nom_queue_windows) { prToast('Nom de la queue Windows requis.', 'danger'); return; }
+  if (tc === 'windows_local' && !body.agent_id) { prToast('Un agent local doit être rattaché — c\'est le PC hôte qui possède la queue.', 'danger'); return; }
   try {
     if (PR.editingImp) {
       await prFetch('/api/print/imprimantes/' + PR.editingImp, {
