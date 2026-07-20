@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from app.services.audit_service import log_action
@@ -2560,6 +2560,23 @@ def comparateur(request: Request, body: dict = Body(...)):
 EXPE_DEVIS_CC = "expeditions@sifa.pro"
 
 
+_ALLOWED_TYPE_PALETTES = {"europe", "perdue", "autre", "vrac"}
+
+
+def _normalize_type_palette(value):
+    """Renvoie une valeur de type_palette valide (parmi la whitelist) ou None."""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    if not s:
+        return None
+    if s not in _ALLOWED_TYPE_PALETTES:
+        # Tolerant : on ignore silencieusement une valeur inconnue plutot que
+        # de bloquer la creation d'une demande.
+        return None
+    return s
+
+
 def _next_demande_reference(conn, year: str) -> str:
     """Renvoie la prochaine référence YYYY-N pour l'année donnée."""
     rows = conn.execute(
@@ -2592,8 +2609,9 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
             """
             INSERT INTO expe_demandes_devis
             (depart_id, poids_total_kg, nb_palette, code_postal_destination,
-             type_envoi, contraintes, statut, created_at, created_by_email, reference, client)
-            VALUES (?,?,?,?,?,?,'ouverte',?,?,?,?)
+             type_envoi, type_palette, contraintes, statut, created_at,
+             created_by_email, reference, client)
+            VALUES (?,?,?,?,?,?,?,'ouverte',?,?,?,?)
             """,
             (
                 body.get("depart_id"),
@@ -2601,6 +2619,7 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
                 body.get("nb_palette"),
                 (body.get("code_postal_destination") or "").strip(),
                 (body.get("type_envoi") or "messagerie").strip(),
+                _normalize_type_palette(body.get("type_palette")),
                 (body.get("contraintes") or "").strip() or None,
                 now,
                 email,
@@ -2686,6 +2705,28 @@ def download_demande_devis_piece_jointe(request: Request, demande_id: int):
     return FileResponse(
         path=str(path_abs),
         filename=row["piece_jointe_filename"] or path_abs.name,
+    )
+
+
+@router.get("/devis/reponses/{reponse_id}/retention-fichier")
+def download_retention_fichier(request: Request, reponse_id: int):
+    """Telecharge le fichier joint lors de la retenue d'une offre (si present)."""
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT retention_file_path, retention_file_filename
+                 FROM expe_devis_reponses WHERE id=?""",
+            (reponse_id,),
+        ).fetchone()
+    if not row or not row["retention_file_path"]:
+        raise HTTPException(404, "Aucun fichier de retenue pour cette reponse.")
+    from config import BASE_DIR
+    path_abs = Path(BASE_DIR) / row["retention_file_path"]
+    if not path_abs.exists():
+        raise HTTPException(404, "Fichier introuvable sur le disque.")
+    return FileResponse(
+        path=str(path_abs),
+        filename=row["retention_file_filename"] or path_abs.name,
     )
 
 
@@ -2943,13 +2984,24 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
 
 
 @router.post("/devis/reponses/{reponse_id}/retenir")
-def retenir_reponse_devis(request: Request, reponse_id: int):
+async def retenir_reponse_devis(
+    request: Request,
+    reponse_id: int,
+    commentaire: Optional[str] = Form(None),
+    fichier: Optional[UploadFile] = File(None),
+):
     """Retient une proposition de devis :
       1. Marque la réponse `retenue` et les autres `refusee`, clôture la demande.
       2. Crée automatiquement un départ pré-rempli (date = aujourd'hui,
          transporteur / CP / poids / palettes issus du devis).
       3. Envoie un email de confirmation au transporteur retenu, en CC service
          expéditions et reply-to l'utilisateur qui valide.
+      4. Optionnel : joint un commentaire libre et une pièce jointe (bon de
+         commande, instructions particulières…) à cet email et les archive en DB.
+
+    Multipart/form-data attendu (les 2 champs sont facultatifs) :
+      - commentaire : texte libre
+      - fichier     : pièce jointe (max 20 Mo)
     """
     user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
@@ -2971,6 +3023,30 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
         demande = dict(demande_row)
         rep_d = dict(rep)
 
+        # Sauvegarde optionnelle : commentaire + piece jointe attaches a la
+        # retenue. Persisted sur la ligne reponse pour tracabilite et joints
+        # a l'email de confirmation transporteur ci-dessous.
+        retention_comment = (commentaire or "").strip() or None
+        retention_file_rel: str | None = None
+        retention_file_name: str | None = None
+        retention_file_bytes: bytes | None = None
+
+        if fichier is not None:
+            MAX_BYTES = 20 * 1024 * 1024
+            retention_file_bytes = await fichier.read()
+            if len(retention_file_bytes) > MAX_BYTES:
+                raise HTTPException(413, "Fichier trop volumineux (max 20 Mo).")
+            orig = (fichier.filename or "fichier").strip()
+            safe = _devis_safe_filename(orig)
+            unique = f"ret{reponse_id}_{uuid.uuid4().hex[:8]}_{safe}"
+            sub_dir = _devis_upload_dir() / "retention"
+            sub_dir.mkdir(parents=True, exist_ok=True)
+            path_abs = sub_dir / unique
+            with open(path_abs, "wb") as out:
+                out.write(retention_file_bytes)
+            retention_file_rel = f"{_DEVIS_UPLOAD_SUBDIR}/retention/{unique}"
+            retention_file_name = orig
+
         conn.execute(
             """
             UPDATE expe_devis_reponses SET statut='refusee'
@@ -2979,8 +3055,13 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
             (demande_id, reponse_id),
         )
         conn.execute(
-            "UPDATE expe_devis_reponses SET statut='retenue' WHERE id=?",
-            (reponse_id,),
+            """UPDATE expe_devis_reponses
+                SET statut='retenue',
+                    retention_comment=?,
+                    retention_file_path=?,
+                    retention_file_filename=?
+                WHERE id=?""",
+            (retention_comment, retention_file_rel, retention_file_name, reponse_id),
         )
         conn.execute(
             "UPDATE expe_demandes_devis SET statut='cloturee' WHERE id=?",
@@ -3043,14 +3124,26 @@ def retenir_reponse_devis(request: Request, reponse_id: int):
     if dest_email and "@" in dest_email:
         try:
             subject, body_html = email_expe_devis_confirmation(
-                demande=demande, reponse=rep_d, depart=depart_dict, user=user
+                demande=demande,
+                reponse=rep_d,
+                depart=depart_dict,
+                user=user,
+                retention_comment=retention_comment,
+                retention_file_name=retention_file_name,
             )
+            atts = None
+            if retention_file_bytes and retention_file_name:
+                atts = [{
+                    "filename": retention_file_name,
+                    "content": retention_file_bytes,
+                }]
             email_sent = bool(send_email(
                 to=dest_email,
                 subject=subject,
                 html_body=body_html,
                 reply_to=email_user,
                 cc=EXPE_DEVIS_CC,
+                attachments=atts,
             ))
             if not email_sent:
                 email_error = "send_email_returned_false"

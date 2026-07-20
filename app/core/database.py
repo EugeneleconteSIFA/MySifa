@@ -7152,6 +7152,23 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 195, "imprimantes_type_connexion_windows_local")
 
+    # v196 -- MyExpe (devis transporteurs) : type de palette sur les demandes,
+    # commentaire + fichier joint lors de la retenue d'une offre. Colonnes
+    # nullable, seedees a NULL pour ne rien casser en prod.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=196 LIMIT 1").fetchone():
+        d_cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_demandes_devis)").fetchall()}
+        if "type_palette" not in d_cols:
+            conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN type_palette TEXT")
+        r_cols = {r["name"] for r in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()}
+        if "retention_comment" not in r_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN retention_comment TEXT")
+        if "retention_file_path" not in r_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN retention_file_path TEXT")
+        if "retention_file_filename" not in r_cols:
+            conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN retention_file_filename TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 196, "expe_devis_type_palette_and_retention_file")
+
 
 def create_default_admin():
     import bcrypt

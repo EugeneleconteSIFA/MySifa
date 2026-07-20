@@ -1642,6 +1642,7 @@ function ouvrirModalNouvelleDemande(departPreRempli){
     nb_palette:d.nb_palette!=null?String(d.nb_palette):'',
     code_postal_destination:d.code_postal_destination||'',
     type_envoi:(d.nb_palette||0)>=6?'affretement':(d.type_envoi||'messagerie'),
+    type_palette:'',
     contraintes:'',
     piece_jointe_file:null
   }}});
@@ -1666,6 +1667,7 @@ async function validerNouvelleDemande(){
         nb_palette:parseFloat(f.nb_palette)||null,
         code_postal_destination:cp,
         type_envoi:f.type_envoi||'messagerie',
+        type_palette:(f.type_palette||'').trim()||null,
         contraintes:(f.contraintes||'').trim()||null
       })
     });
@@ -1714,7 +1716,8 @@ async function ouvrirModalEnvoi(demandeId){
 
 async function confirmerEnvoi(demandeId){
   const m=S.expeDevisModal;
-  const checks=m&&m.checks?m.checks:{};
+  if(!m||m.type!=='envoi'||m._sending)return;  // anti-double-clic
+  const checks=m.checks||{};
   const trpIds=[],extras=[];
   Object.keys(checks).forEach(k=>{
     const c=checks[k];
@@ -1726,6 +1729,7 @@ async function confirmerEnvoi(demandeId){
     showToast('Sélectionner au moins un transporteur','danger');
     return;
   }
+  m._sending=true;render();
   try{
     const res=await api('/api/expe/devis/demandes/'+demandeId+'/envoyer',{
       method:'POST',
@@ -1738,7 +1742,9 @@ async function confirmerEnvoi(demandeId){
     await chargerDemandes();
     await ouvrirDetailDemande(demandeId);
   }catch(e){
+    if(m)m._sending=false;
     showToast(e.message||'Erreur envoi','danger');
+    render();
   }
 }
 
@@ -1767,17 +1773,43 @@ async function validerSaisieReponse(reponseId,demandeId){
   }
 }
 
-async function retenirReponse(reponseId,demandeId){
-  if(!confirm('Retenir ce transporteur et clôturer la demande ?'))return;
+function retenirReponse(reponseId,demandeId){
+  // Ouvre un modal dedie pour saisir commentaire + fichier optionnel avant
+  // de confirmer la retenue. La retenue est declenchee via
+  // confirmerRetenirAvecFichier().
+  set({expeDevisModal:{type:'retenir',reponseId,demandeId,form:{
+    commentaire:'',
+    fichier:null,
+    inflight:false
+  }}});
+}
+
+async function confirmerRetenirAvecFichier(reponseId,demandeId){
+  const m=S.expeDevisModal;
+  if(!m||m.type!=='retenir'||m.inflight)return;
+  m.inflight=true;render();
   try{
-    const res=await api('/api/expe/devis/reponses/'+reponseId+'/retenir',{method:'POST'});
+    const fd=new FormData();
+    const c=(m.form.commentaire||'').trim();
+    if(c)fd.append('commentaire',c);
+    if(m.form.fichier&&m.form.fichier instanceof File){
+      fd.append('fichier',m.form.fichier);
+    }
+    const r=await fetch('/api/expe/devis/reponses/'+reponseId+'/retenir',{
+      method:'POST',
+      credentials:'include',
+      body:fd
+    });
+    if(!r.ok){
+      const txt=await r.text().catch(()=>String(r.status));
+      throw new Error(txt||('HTTP '+r.status));
+    }
+    const res=await r.json();
     let msg='Transporteur retenu. Départ créé dans Suivi des départs.';
     if(res&&res.email_envoye)msg+=' Email envoyé à '+(res.email_destinataire||'—')+'.';
     else if(res&&res.email_error)msg+=' Email non envoyé ('+res.email_error+').';
     showToast(msg,'success');
     fermerExpeDevisModal();
-    // Bascule sur l'onglet Suivi des départs pour montrer le nouveau départ,
-    // avec highlight temporaire de la ligne (badge « issu d'un devis » visible).
     const newDepartId=res&&res.depart_id?Number(res.depart_id):null;
     S.expeDepartHighlightId=newDepartId;
     set({expeTab:'suivi_departs',expeDepartSubTab:'jour'});
@@ -1791,7 +1823,9 @@ async function retenirReponse(reponseId,demandeId){
       },1300);
     }
   }catch(e){
+    if(m)m.inflight=false;
     showToast(e.message||'Erreur','danger');
+    render();
   }
 }
 
@@ -1811,6 +1845,20 @@ async function cloturerDemande(demandeId,ev){
 function devisRefLabel(d){
   if(!d)return '';
   return d.reference?('Demande '+d.reference):('Demande #'+d.id);
+}
+
+// Table des libelles UI pour le type de palette. Les cles techniques (europe,
+// perdue, autre, vrac) sont partagees avec le backend + le portail transporteur.
+const EXPE_PALETTE_LABELS_FR = {
+  '': 'Non precise',
+  europe: 'Palette Europe (EUR/EPAL)',
+  perdue: 'Palette perdue',
+  autre: 'Autre palette',
+  vrac: 'Sans palette (vrac)'
+};
+function expePaletteLabel(code){
+  const k=(code||'').toString().trim().toLowerCase();
+  return EXPE_PALETTE_LABELS_FR[k]||k;
 }
 
 function ouvrirModalProspect(prospectId){
@@ -1926,6 +1974,14 @@ function renderExpeDevisModal(){
       h('option',{value:'affretement',selected:f.type_envoi==='affretement'},'Affrètement')
     );
     typeSel.addEventListener('change',e=>{m.form.type_envoi=e.target.value;});
+    const palSel=h('select',{className:'expe-devis-inp'},
+      h('option',{value:'',selected:!f.type_palette},'— Non précisé —'),
+      h('option',{value:'europe',selected:f.type_palette==='europe'},'Palette Europe (EUR/EPAL)'),
+      h('option',{value:'perdue',selected:f.type_palette==='perdue'},'Palette perdue'),
+      h('option',{value:'autre',selected:f.type_palette==='autre'},'Autre palette'),
+      h('option',{value:'vrac',selected:f.type_palette==='vrac'},'Sans palette (vrac)')
+    );
+    palSel.addEventListener('change',e=>{m.form.type_palette=e.target.value;});
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Nouvelle demande de devis'),closeBtn));
     box.appendChild(h('div',{className:'expe-devis-grid'},
@@ -1938,6 +1994,7 @@ function renderExpeDevisModal(){
       mk('Palettes','nb_palette',{type:'number',step:'1'}),
       mk('CP destination *','code_postal_destination'),
       h('label',{className:'expe-devis-label'},'Type d\'envoi',typeSel),
+      h('label',{className:'expe-devis-label'},'Type de palette',palSel),
       (()=>{
         const c=h('input',{type:'text',className:'expe-devis-inp',value:f.contraintes||'',placeholder:'Délai, RDV…'});
         c.addEventListener('input',e=>{m.form.contraintes=e.target.value;});
@@ -1978,6 +2035,7 @@ function renderExpeDevisModal(){
       (d.poids_total_kg?d.poids_total_kg+' kg · ':'')+
       (d.nb_palette?d.nb_palette+' pal. · ':'')+
       escHtml(d.type_envoi||'')+
+      (d.type_palette?' · '+escHtml(expePaletteLabel(d.type_palette)):'')+
       (d.contraintes?' · '+escHtml(d.contraintes):'')
     ));
     // Lien vers la pièce jointe si présente
@@ -2012,12 +2070,27 @@ function renderExpeDevisModal(){
       const delTxt=r.delai_jours!=null?'J+'+r.delai_jours:'—';
       const isBestPrix=r.prix!=null&&bestPrix!=null&&Number(r.prix)===bestPrix;
       const isBestDelai=r.delai_jours!=null&&bestDelai!=null&&Number(r.delai_jours)===bestDelai;
+      const commentParts=[];
+      if(r.commentaire)commentParts.push(h('div',null,escHtml(r.commentaire)));
+      if(r.statut==='retenue'&&r.retention_comment){
+        commentParts.push(h('div',{style:{marginTop:'4px',padding:'6px 8px',background:'var(--accent-bg)',borderRadius:'6px',color:'var(--text2)'}},
+          h('strong',{style:{color:'var(--accent)'}},'Message envoyé : '),
+          escHtml(r.retention_comment)
+        ));
+      }
+      if(r.statut==='retenue'&&r.retention_file_path){
+        commentParts.push(h('a',{
+          href:'/api/expe/devis/reponses/'+r.id+'/retention-fichier',
+          target:'_blank',rel:'noopener',
+          style:{display:'inline-block',marginTop:'4px',fontSize:'12px',color:'var(--accent)',textDecoration:'none'}
+        },'Pièce jointe : '+escHtml(r.retention_file_filename||'fichier')));
+      }
       return h('tr',null,
         h('td',{style:{fontWeight:'600'}},escHtml(r.nom_transporteur||'—')),
         h('td',null,h('span',{style:{color:sl.c,textDecoration:sl.strike?'line-through':'none'}},sl.t)),
         h('td',null,expeDevisCellValeur(prixTxt,isBestPrix)),
         h('td',null,expeDevisCellValeur(delTxt,isBestDelai)),
-        h('td',{style:{fontSize:'12px',color:'var(--text2)'}},escHtml(r.commentaire||'')),
+        h('td',{style:{fontSize:'12px',color:'var(--text2)'}},...commentParts),
         h('td',null,...acts)
       );
     }):[h('tr',null,h('td',{colSpan:6,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucune réponse.'))];
@@ -2116,10 +2189,15 @@ function renderExpeDevisModal(){
       });
     }
     box.appendChild(list);
-    box.appendChild(h('div',{className:'expe-devis-modal-foot'},
-      h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler'),
-      h('button',{type:'button',className:'btn btn-accent',onClick:()=>void confirmerEnvoi(m.demandeId)},'Envoyer')
-    ));
+    const envAnnuler=h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler');
+    const envBtn=h('button',{type:'button',className:'btn btn-accent',onClick:()=>void confirmerEnvoi(m.demandeId)},m._sending?'Envoi en cours…':'Envoyer');
+    if(m._sending){
+      envBtn.disabled=true;
+      envBtn.style.opacity='.65';
+      envBtn.style.cursor='wait';
+      envAnnuler.disabled=true;
+    }
+    box.appendChild(h('div',{className:'expe-devis-modal-foot'},envAnnuler,envBtn));
   }else if(m.type==='saisie'){
     const f=m.form||{};
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
@@ -2139,7 +2217,47 @@ function renderExpeDevisModal(){
       h('button',{type:'button',className:'btn btn-ghost',onClick:()=>void ouvrirDetailDemande(m.demandeId)},'Retour'),
       h('button',{type:'button',className:'btn btn-accent',onClick:()=>void validerSaisieReponse(m.reponseId,m.demandeId)},'Enregistrer')
     ));
-  }else if(m.type==='prospect'){
+  }else if(m.type==='retenir'){
+    const f=m.form||{};
+    box.appendChild(h('div',{className:'expe-devis-modal-head'},
+      h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Retenir cette offre'),closeBtn));
+    box.appendChild(h('p',{style:{fontSize:'13px',color:'var(--text2)',margin:'0 0 14px',lineHeight:'1.55'}},
+      'Un email de confirmation sera envoyé au transporteur avec le récap de la mission. Vous pouvez y joindre un commentaire libre et une pièce jointe (bon de commande, instructions particulières…).'
+    ));
+    const com=h('textarea',{className:'expe-devis-inp',rows:4,placeholder:'Message à joindre à l\'email de confirmation (optionnel)',style:{resize:'vertical',minHeight:'96px',fontFamily:'inherit'}});
+    com.value=f.commentaire||'';
+    com.addEventListener('input',e=>{f.commentaire=e.target.value;});
+    // Piece jointe : input file cache, bouton stylé
+    const fileInp=h('input',{type:'file',style:{display:'none'}});
+    const btnLbl=h('span',null,f.fichier?'Changer de fichier':'Sélectionner un fichier');
+    const pjBtn=h('button',{type:'button',className:'btn btn-ghost',onClick:()=>fileInp.click()},btnLbl);
+    const pjInfo=h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'6px'}},
+      f.fichier?('Sélectionné : '+(f.fichier.name||'')):'Optionnel — max 20 Mo'
+    );
+    fileInp.addEventListener('change',e=>{
+      const ff=(e.target.files&&e.target.files[0])||null;
+      f.fichier=ff;
+      btnLbl.textContent=ff?'Changer de fichier':'Sélectionner un fichier';
+      pjInfo.textContent=ff?('Sélectionné : '+(ff.name||'')):'Optionnel — max 20 Mo';
+    });
+    box.appendChild(h('div',{className:'expe-devis-grid',style:{gridTemplateColumns:'1fr'}},
+      h('label',{className:'expe-devis-label'},'Message pour le transporteur',com),
+      h('label',{className:'expe-devis-label'},'Pièce jointe',
+        h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:'2px'}},pjBtn,pjInfo,fileInp)
+      )
+    ));
+    const cancelBtn=h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler');
+    const confirmBtn=h('button',{type:'button',className:'btn btn-accent',
+      onClick:()=>void confirmerRetenirAvecFichier(m.reponseId,m.demandeId)
+    },m.inflight?'Envoi…':'Retenir et envoyer');
+    if(m.inflight){
+      confirmBtn.disabled=true;
+      confirmBtn.style.opacity='.65';
+      confirmBtn.style.cursor='wait';
+      cancelBtn.disabled=true;
+    }
+    box.appendChild(h('div',{className:'expe-devis-modal-foot'},cancelBtn,confirmBtn));
+    }else if(m.type==='prospect'){
     const f=m.form||{};
     const mk=(label,key,opts)=>{
       const o=opts||{};
@@ -2233,6 +2351,7 @@ function renderExpeDevisSection(){
               h('div',{style:{fontSize:'12px',color:'var(--muted)'}},
                 (d.poids_total_kg?d.poids_total_kg+' kg ':'')+
                 (d.nb_palette?d.nb_palette+' pal. ':'')+
+                (d.type_palette?'· '+escHtml(expePaletteLabel(d.type_palette))+' ':'')+
                 '· '+(d.created_at||'').slice(0,10)
               )
             ),
