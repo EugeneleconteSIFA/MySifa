@@ -140,7 +140,7 @@ body.sb-open .sidebar-overlay{display:block}
 .badge-success{background:rgba(52,211,153,.15);color:var(--success)}
 .empty-state{padding:48px 24px;text-align:center;color:var(--muted)}
 .empty-state strong{display:block;color:var(--text2);font-size:15px;margin-bottom:8px}
-.detail-tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
+.detail-tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;align-items:center}
 .detail-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .detail-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
@@ -1476,21 +1476,7 @@ function renderDetailHeader() {
   return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
     '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
     '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
-    '<div class="detail-actions">'+actions+
-    '<div class="ao-params-panel">'+
-      '<h3>Parametres de calcul</h3>'+
-      '<div class="app-group">'+
-        '<div class="app-row"><label for="app-transport">Prix transport</label>'+
-          '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
-          '<span class="app-suffix">%</span></div>'+
-        '<div class="app-help" id="app-transport-help">'+formatTransportHelper(ao.prix_transport_pct||0)+'</div>'+
-      '</div>'+
-      '<div class="app-group">'+
-        '<div class="app-row"><label for="app-eur-usd">Taux EUR/USD</label>'+
-          '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
-          '<span class="app-suffix"></span></div>'+
-      '</div>'+
-    '</div></div>'+
+    '<div class="detail-actions">'+actions+'</div>'+
     '<div class="detail-tabs">'+
     (() => {
       const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
@@ -1504,7 +1490,19 @@ function renderDetailHeader() {
       return ['lignes','fournisseurs','comparaison','messages','documents'].map(t =>
         '<button class="detail-tab'+(S.tab===t?' active':'')+'" data-tab="'+t+'">'+labels[t]+'</button>'
       ).join('');
-    })()+'</div>';
+    })()+'<div class="ao-params-panel">'+
+      '<div class="app-group">'+
+        '<div class="app-row"><label for="app-transport">Prix transport</label>'+
+          '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
+          '<span class="app-suffix">%</span></div>'+
+        '<div class="app-help" id="app-transport-help">'+formatTransportHelper(ao.prix_transport_pct||0)+'</div>'+
+      '</div>'+
+      '<div class="app-group">'+
+        '<div class="app-row"><label for="app-eur-usd">Taux EUR/USD</label>'+
+          '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
+          '<span class="app-suffix"></span></div>'+
+      '</div>'+
+    '</div>'+'</div>';
 }
 
 function renderLignes() {
