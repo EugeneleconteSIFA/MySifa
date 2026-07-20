@@ -534,7 +534,7 @@ async function searchFichesTechniques(q) {
 }
 
 async function fetchFicheTechnique(ref) {
-  return api('/api/ao/fiches-techniques/by-ref/' + encodeURIComponent(ref));
+  return api('/api/ao/fiches-techniques/by-ref?ref=' + encodeURIComponent(ref));
 }
 
 // Applique la fiche technique aux champs VIDES uniquement.

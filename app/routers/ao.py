@@ -790,20 +790,20 @@ def search_fiches_techniques(request: Request, q: str = "", limit: int = 20):
     return [dict(r) for r in rows]
 
 
-@router.get("/fiches-techniques/by-ref/{reference}")
-def get_fiche_technique(request: Request, reference: str):
-    """Retourne la fiche technique complete (tous les champs disponibles)."""
+@router.get("/fiches-techniques/by-ref")
+def get_fiche_technique(request: Request, ref: str = ""):
+    """Retourne la fiche technique complete (query param `ref` : supporte les slashes)."""
     _require_ao(request)
-    ref = (reference or "").strip()
-    if not ref:
+    reference = (ref or "").strip()
+    if not reference:
         raise HTTPException(status_code=400, detail="Reference vide.")
     with get_db() as conn:
         row = conn.execute(
             "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
-            (ref,),
+            (reference,),
         ).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail=f"Fiche technique introuvable pour '{ref}'.")
+            raise HTTPException(status_code=404, detail=f"Fiche technique introuvable pour '{reference}'.")
         return dict(row)
 
 
