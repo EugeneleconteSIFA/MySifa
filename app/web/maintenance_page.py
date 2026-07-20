@@ -314,7 +314,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 .cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
-.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:max-content}
+.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:1268px}
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
 .cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
@@ -324,7 +324,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
 .cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:max-content}
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:1268px}
 .cal-wv-times-col{display:flex;flex-direction:column}
 .cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
@@ -334,16 +334,16 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* v2.2.53 : min-width:0 + overflow:hidden empêche les chips d'étirer la colonne */
 .cal-wv-day-col{min-width:0}
 /* Bandeau non-planifié repliable en haut de chaque jour (Week/Day view) */
-.cal-wv-nonpl-strip{position:sticky;top:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;overflow:hidden}
+.cal-wv-nonpl-strip{position:sticky;top:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;min-width:0;overflow:hidden}
 .cal-wv-nonpl-strip:empty{display:none}
 .cal-wv-nonpl-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;background:rgba(148,163,184,.05);transition:background .12s}
 .cal-wv-nonpl-header:hover{background:rgba(148,163,184,.12);color:var(--text2)}
 .cal-wv-nonpl-header-lbl{display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-wv-nonpl-header-chev{transition:transform .18s}
 .cal-wv-nonpl-strip.is-open .cal-wv-nonpl-header-chev{transform:rotate(90deg)}
-.cal-wv-nonpl-list{display:none;flex-direction:column;gap:3px;padding:4px 4px 6px;max-height:200px;overflow-y:auto}
+.cal-wv-nonpl-list{display:none;flex-direction:column;gap:3px;padding:4px 4px 6px;max-height:200px;min-width:0;overflow-y:auto;overflow-x:hidden}
 .cal-wv-nonpl-strip.is-open .cal-wv-nonpl-list{display:flex}
-.cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;box-sizing:border-box;transition:background .15s,color .15s}
+.cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%;width:100%;box-sizing:border-box;transition:background .15s,color .15s}
 .cal-wv-nonpl-chip:hover{background:rgba(148,163,184,.28);color:var(--text)}
 .cal-wv-nonpl-chip[data-statut="termine"]{background:rgba(52,211,153,.15);color:var(--ok,#059669);border-left-color:var(--ok,#34d399)}
 .cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
