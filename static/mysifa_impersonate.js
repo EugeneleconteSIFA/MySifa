@@ -22,13 +22,14 @@
     fabrication: 'Fabrication',
     logistique: 'Logistique',
     commercial: 'Commercial',
-    administration: 'Administration',
+    administration_ventes: 'Administration ventes',
+    administration_technique: 'Administration technique',
     direction: 'Direction',
     comptabilite: 'Comptabilité',
     expedition: 'Expédition'
   };
   var ROLES_ORDER = [
-    'fabrication', 'logistique', 'commercial', 'administration', 'administration_ventes', 'administration_technique',
+    'fabrication', 'logistique', 'commercial', 'administration_ventes', 'administration_technique',
     'direction', 'comptabilite', 'expedition'
   ];
 
