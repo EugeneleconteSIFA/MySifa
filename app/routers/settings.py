@@ -4221,6 +4221,69 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
     return {"ok": True}
 
 
+def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str):
+    """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
+    target couvre cette machine, quand l'opérateur saisit un code non-productif
+    (arrêt, pause, calage, technique, fin dossier — tout sauf 01 et 03).
+
+    Une ligne est insérée dans maintenance_alert_acks pour chaque alerte avec le
+    motif dans le champ comment. Effet : compteur périodique reset, plus de lignes
+    vierges dans l'historique, modales à l'écran se ferment au prochain polling.
+    """
+    if not machine:
+        return
+    from database import get_db  # noqa: F401 (import garde le style existant)
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        rows = conn.execute(
+            "SELECT id, params FROM maintenance_alerts WHERE active=1"
+        ).fetchall()
+    except Exception:
+        return
+    if code_label:
+        reason = f"Fermée auto : {code} – {code_label}"
+    else:
+        reason = f"Fermée auto : code {code}"
+    reason = reason[:2000]
+    user_id = user.get("id") if user else None
+    user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
+    responses_json = "{}"
+    for r in rows:
+        try:
+            params = _json_alerts.loads(r["params"] or "{}")
+        except (ValueError, TypeError):
+            continue
+        trig = params.get("trigger") or {}
+        if trig.get("type") != "periodic":
+            continue
+        target = params.get("target") or {}
+        machines_target = target.get("machines")
+        if not isinstance(machines_target, list) or not machines_target:
+            legacy = target.get("machine")
+            machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+        if "*" not in machines_target and machine not in machines_target:
+            continue
+        try:
+            conn.execute(
+                """INSERT INTO maintenance_alert_acks
+                   (alert_id, user_id, user_nom, machine, no_dossier,
+                    ack_at, responses, comment)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (int(r["id"]), user_id, user_nom, machine, no_dossier or "",
+                 now_paris, responses_json, reason),
+            )
+            conn.execute(
+                "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
+                (now_paris, now_paris, int(r["id"])),
+            )
+        except Exception:
+            continue
+    try:
+        conn.commit()
+    except Exception:
+        pass
+
+
 @router.post("/api/maintenance/alerts/{alert_id}/ack")
 async def maintenance_alerts_ack(alert_id: int, request: Request):
     """Acquittement opérateur d'une alerte. Enregistre l'historique et met
