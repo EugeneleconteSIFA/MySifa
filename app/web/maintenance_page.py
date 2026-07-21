@@ -1063,8 +1063,8 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
 /* v2.2.70 : cartes créneau (header prominent au-dessus, puis mini-tableau) */
 .op-plan-creneaux-list{display:flex;flex-direction:column;gap:16px}
-.op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s}
-.op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(34,211,238,.10)}
+.op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);transition:box-shadow .18s,transform .12s,border-color .15s}
+.op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.10),0 2px 6px rgba(34,211,238,.15);transform:translateY(-1px)}
 .op-plan-creneau-header{background:var(--accent-bg);color:var(--text);border-left:4px solid var(--accent);padding:12px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:background .15s}
 .op-plan-creneau-header:hover{background:rgba(34,211,238,.18)}
 .op-plan-creneau-header .op-plan-ch-chev{color:var(--accent);font-size:16px;line-height:1}
