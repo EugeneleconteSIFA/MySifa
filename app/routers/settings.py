@@ -3862,7 +3862,7 @@ def maintenance_alerts_active(request: Request):
                 # séquence, pas un seul code.
                 if event == "after_calage" and effective_machine:
                     # Trouver le dossier actif : dernier no_dossier saisi sur la
-                    # machine dans les 24h. Suffit pour identifier le contexte.
+                    # machine dans les 24h.
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                     _dos_row = conn.execute(
                         """SELECT no_dossier FROM production_data
@@ -3873,36 +3873,64 @@ def maintenance_alerts_active(request: Request):
                     ).fetchone()
                     if _dos_row and _dos_row["no_dossier"]:
                         _dos = str(_dos_row["no_dossier"]).strip()
-                        # Verrou par dossier : si un ack existe déjà pour cette alerte
-                        # + ce dossier → skip (l'opérateur a déjà validé pour ce dossier).
+                        # Verrou par dossier
                         _ack_check = conn.execute(
                             """SELECT 1 FROM maintenance_alert_acks
                                WHERE alert_id=? AND no_dossier=? LIMIT 1""",
                             (int(r["id"]), _dos),
                         ).fetchone()
                         if not _ack_check:
-                            # Chercher le dernier code prod (01/03/88) sur cette machine
-                            # dans ce dossier.
-                            _last_prod = conn.execute(
-                                """SELECT MAX(date_operation) AS m FROM production_data
+                            # v2.2.77 — Contrainte 1 : la DERNIÈRE saisie du dossier
+                            # (peu importe le code) doit être un code prod (01/03/88).
+                            # Sinon un dossier ancien contenant historiquement une
+                            # séquence calage→prod ferait re-fire l'alerte à chaque
+                            # saisie neutre (Arrivée personnel, Pause…).
+                            _last_op = conn.execute(
+                                """SELECT operation_code FROM production_data
                                    WHERE no_dossier=? AND machine=?
-                                     AND operation_code IN ('01','03','88')""",
+                                   ORDER BY date_operation DESC LIMIT 1""",
                                 (_dos, effective_machine),
                             ).fetchone()
-                            if _last_prod and _last_prod["m"]:
-                                _last_prod_at = _last_prod["m"]
-                                # Chercher un code catégorie=calage AVANT le dernier prod
-                                # dans le même dossier + machine.
-                                _calage_check = conn.execute(
-                                    """SELECT 1 FROM production_data
+                            if _last_op and _last_op["operation_code"] in ("01", "03", "88"):
+                                # v2.2.77 — Contrainte 2 : le calage doit être ENTRE
+                                # l'avant-dernier prod et le dernier prod du dossier
+                                # (ou avant le prod unique si c'est le seul).
+                                _last_prod = conn.execute(
+                                    """SELECT MAX(date_operation) AS m FROM production_data
                                        WHERE no_dossier=? AND machine=?
-                                         AND operation_category='calage'
-                                         AND date_operation < ? LIMIT 1""",
-                                    (_dos, effective_machine, _last_prod_at),
+                                         AND operation_code IN ('01','03','88')""",
+                                    (_dos, effective_machine),
                                 ).fetchone()
-                                if _calage_check:
-                                    should_show = True
-                                    trigger_no_dossier = _dos
+                                if _last_prod and _last_prod["m"]:
+                                    _last_prod_at = _last_prod["m"]
+                                    _second_prod = conn.execute(
+                                        """SELECT MAX(date_operation) AS m FROM production_data
+                                           WHERE no_dossier=? AND machine=?
+                                             AND operation_code IN ('01','03','88')
+                                             AND date_operation < ?""",
+                                        (_dos, effective_machine, _last_prod_at),
+                                    ).fetchone()
+                                    _second_prod_at = _second_prod["m"] if _second_prod else None
+                                    if _second_prod_at:
+                                        _calage_check = conn.execute(
+                                            """SELECT 1 FROM production_data
+                                               WHERE no_dossier=? AND machine=?
+                                                 AND operation_category='calage'
+                                                 AND date_operation > ?
+                                                 AND date_operation < ? LIMIT 1""",
+                                            (_dos, effective_machine, _second_prod_at, _last_prod_at),
+                                        ).fetchone()
+                                    else:
+                                        _calage_check = conn.execute(
+                                            """SELECT 1 FROM production_data
+                                               WHERE no_dossier=? AND machine=?
+                                                 AND operation_category='calage'
+                                                 AND date_operation < ? LIMIT 1""",
+                                            (_dos, effective_machine, _last_prod_at),
+                                        ).fetchone()
+                                    if _calage_check:
+                                        should_show = True
+                                        trigger_no_dossier = _dos
                 elif op_code and effective_machine and effective_operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
