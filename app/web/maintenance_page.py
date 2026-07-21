@@ -314,7 +314,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 .cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
-.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:max-content}
+.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:1268px}
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
 .cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
@@ -324,13 +324,43 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
 .cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(170px,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:max-content}
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:1268px}
 .cal-wv-times-col{display:flex;flex-direction:column}
 .cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
 .cal-wv-day-col{position:relative;display:flex;flex-direction:column;border-left:1px solid var(--border);min-height:100%}
 .cal-wv-day-col.weekend{background:rgba(167,139,250,.04)}
 .cal-wv-day-col.today{background:var(--accent-bg)}
+/* v2.2.53 : min-width:0 + overflow:hidden empêche les chips d'étirer la colonne */
+.cal-wv-day-col{min-width:0}
+/* Bandeau non-planifié repliable en haut de chaque jour (Week/Day view) */
+.cal-wv-nonpl-strip{position:absolute;top:0;left:0;right:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;min-width:0;overflow:hidden;box-sizing:border-box}
+.cal-wv-nonpl-strip:empty{display:none}
+.cal-wv-nonpl-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;background:rgba(148,163,184,.05);transition:background .12s}
+.cal-wv-nonpl-header:hover{background:rgba(148,163,184,.12);color:var(--text2)}
+.cal-wv-nonpl-header-lbl{display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-wv-nonpl-header-chev{transition:transform .18s}
+.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-header-chev{transform:rotate(90deg)}
+.cal-wv-nonpl-list{display:none;flex-direction:column;gap:3px;padding:4px 4px 6px;max-height:200px;min-width:0;overflow-y:auto;overflow-x:hidden}
+.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-list{display:flex}
+.cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%;width:100%;box-sizing:border-box;transition:background .15s,color .15s}
+.cal-wv-nonpl-chip:hover{background:rgba(148,163,184,.28);color:var(--text)}
+.cal-wv-nonpl-chip[data-statut="termine"]{background:rgba(52,211,153,.15);color:var(--ok,#059669);border-left-color:var(--ok,#34d399)}
+.cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
+.cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle;flex-shrink:0}
+.cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-icon{background:var(--ok,#34d399)}
+/* v2.2.54 : variante Day view — bandeau plus visible, déplié par défaut */
+.cal-wv-nonpl-strip.mode-day{border:1px solid var(--accent);border-radius:8px;margin:8px 8px 12px;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header{background:var(--accent);color:var(--accent-fg,#fff);padding:8px 12px;font-size:12px;font-weight:800;letter-spacing:.5px;border-radius:7px 7px 0 0}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header:hover{filter:brightness(1.08);color:var(--accent-fg,#fff)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header-chev{stroke-width:3.4}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-list{padding:8px 10px;max-height:none;gap:6px}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;white-space:normal;line-height:1.4}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-main{flex:1;min-width:0;font-weight:700;color:var(--text)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;font-weight:500}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
+.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
@@ -340,8 +370,14 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event-title{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.2px;color:inherit}
 .cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
 .cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
-.cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow:hidden}
-.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.1px}
+/* v2.2.51 : ops list dans cal-event = scrollable + texte wrapable */
+.cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}
+.cal-event-ops::-webkit-scrollbar{width:5px}
+.cal-event-ops::-webkit-scrollbar-track{background:transparent}
+.cal-event-ops::-webkit-scrollbar-thumb{background:rgba(255,255,255,.30);border-radius:3px}
+.cal-event-ops::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.5)}
+.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:normal;word-break:break-word;letter-spacing:.1px;padding-right:2px}
+.cal-event-op-more{opacity:.75;font-style:italic;font-size:11.5px}
 .cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
 .cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
 .cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
@@ -793,6 +829,22 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-event-box-actions button:hover{color:var(--text);border-color:var(--accent)}
 .op-event-box-actions button.danger:hover{color:var(--danger);border-color:var(--danger)}
 .op-event-box-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+/* v2.2.62 : sous-sections machine à l'intérieur d'un créneau */
+.op-creneau-machine-group{margin-top:14px}
+.op-creneau-machine-group:first-of-type{margin-top:6px}
+.op-creneau-machine-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.35px}
+.op-creneau-machine-head .op-creneau-machine-dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+.op-creneau-machine-head .op-creneau-machine-count{margin-left:auto;background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:10px;font-weight:700;padding:1px 8px;border-radius:999px;text-transform:none;letter-spacing:0}
+/* Section "Opérations personnelles" (source=non_planifie) — visuel dégradé */
+.op-perso-section{margin-top:28px;padding-top:18px;border-top:2px dashed var(--border)}
+.op-perso-section-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 14px;border-radius:10px;background:var(--bg);color:var(--text2);border:1px dashed var(--border)}
+.op-perso-section-head strong{font-size:13px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--text2)}
+.op-perso-section-head .op-perso-section-count{background:var(--card);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:700;padding:2px 10px;border-radius:999px}
+.op-perso-section-head .op-perso-section-hint{margin-left:auto;font-size:11px;color:var(--muted);font-style:italic;font-weight:500;text-transform:none;letter-spacing:0}
+/* v2.2.63 : badge machine dans les cards d'ops perso */
+.op-op-card-machine{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:4px 10px;background:var(--accent-bg);color:var(--accent);border-radius:5px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;align-self:flex-start;max-width:100%}
+.op-op-card-machine .op-op-card-machine-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.op-op-card-machine .op-op-card-machine-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 /* ── Carte d'op individuelle ────────────────────────────────────── */
 .op-op-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,transform .15s;position:relative}
 .op-op-card:hover{border-color:var(--accent);transform:translateY(-1px)}
@@ -1510,6 +1562,24 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <div class="page-subtitle">Calendrier de maintenance</div>
           </div>
         </div>
+        <div class="ops-subtabs" role="tablist" style="margin-bottom:16px">
+          <button type="button" class="ops-subtab active" data-plan-subtab="calendrier" onclick="setPlanSubtab('calendrier')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Calendrier
+          </button>
+          <button type="button" class="ops-subtab" data-plan-subtab="historique" onclick="setPlanSubtab('historique')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+            Historique
+          </button>
+        </div>
+        <div id="plan-subview-historique" style="display:none">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+            <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
+            <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l'avancement, réutilise les tâches en modèle.</p>
+            <div id="plan-hist-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div>
+        </div>
+        <div id="plan-subview-calendrier">
 
         <section class="cal-sec">
           <div class="cal-hdr">
@@ -1589,6 +1659,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </div>
       </div>
+
+        </div><!-- /plan-subview-calendrier -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
@@ -2774,12 +2846,15 @@ function renderCalMonth(){
 function onCalMonthCellClick(e){
   // Si le clic vient d'une chip-événement, son propre handler gère
   if(e.target.closest('.cal-day-event')) return;
-  // Mode opérateur : lecture seule, on n'ouvre pas le modal de création
-  if(MAINT_ROLE === 'operator') return;
   const cell = e.currentTarget && e.currentTarget.closest ? e.currentTarget.closest('.cal-cell') : null;
   const iso = (cell && cell.getAttribute('data-date')) || (e.currentTarget && e.currentTarget.getAttribute && e.currentTarget.getAttribute('data-date'));
   if(!iso) return;
-  openCaseModal({ iso: iso, defaultHour: 8 });
+  // v2.2.54 : bascule sur la vue Jour du jour cliqué (au lieu d'ouvrir la création)
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m){
+    CAL_STATE.dayDate = new Date(parseInt(m[1],10), parseInt(m[2],10) - 1, parseInt(m[3],10));
+    if(typeof setCalView === 'function') setCalView('day');
+  }
 }
 function onCalMonthEventClick(e, id){
   if(e && e.stopPropagation) e.stopPropagation();
@@ -2851,6 +2926,8 @@ function renderCalWeek(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
+    // v2.2.58 : strip flottant absolu dans le day col — n'affecte plus les autres jours
+    _renderNonPlanifStrip(iso, col, 'week');
   });
 }
 function renderCalDay(){
@@ -2900,8 +2977,83 @@ function renderCalDay(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
+    // v2.2.58 : strip flottant absolu — pas d'impact sur l'alignement
+    _renderNonPlanifStrip(cIso, col, 'day');
   });
 }
+
+// v2.2.54 : bandeau non-planifié — mode 'week' (compact, replié) ou 'day' (large, déplié)
+function _renderNonPlanifStrip(iso, col, mode){
+  if(!col) return;
+  const events = (PLANNING_STATE.list || []).filter(ev =>
+    ev.date === iso && ev.source === 'non_planifie'
+  );
+  if(!events.length) return;
+  let opsCount = 0;
+  events.forEach(ev => { opsCount += (ev.operations || []).length; });
+  if(!opsCount) return;
+  const isDay = (mode === 'day');
+  const strip = document.createElement('div');
+  strip.className = 'cal-wv-nonpl-strip' + (isDay ? ' mode-day is-open' : '');
+  // Header
+  const header = document.createElement('div');
+  header.className = 'cal-wv-nonpl-header';
+  header.title = 'Cliquer pour ' + (opsCount > 1 ? 'déplier/replier' : 'voir') + ' les ops non planifiées de ce jour';
+  header.innerHTML =
+    '<span class="cal-wv-nonpl-header-lbl">' +
+      '<svg class="cal-wv-nonpl-header-chev" width="' + (isDay ? 11 : 9) + '" height="' + (isDay ? 11 : 9) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+      '<span>' + opsCount + ' opération' + (opsCount > 1 ? 's' : '') + ' non planifiée' + (opsCount > 1 ? 's' : '') + '</span>' +
+    '</span>';
+  header.addEventListener('click', e => {
+    e.stopPropagation();
+    strip.classList.toggle('is-open');
+  });
+  strip.appendChild(header);
+  // Liste
+  const list = document.createElement('div');
+  list.className = 'cal-wv-nonpl-list';
+  // helper heure done_at
+  const _fmtHM = (iso2) => {
+    if(!iso2) return '';
+    const m = String(iso2).match(/T(\d{2}):(\d{2})/);
+    return m ? (m[1] + ':' + m[2]) : '';
+  };
+  events.forEach(ev => {
+    (ev.operations || []).forEach(op => {
+      const chip = document.createElement('div');
+      chip.className = 'cal-wv-nonpl-chip';
+      chip.setAttribute('data-statut', op.statut || 'a_faire');
+      chip.setAttribute('data-event-id', ev.id);
+      const machine = (op.machines && op.machines[0]) || ev.machine || '';
+      const timeStr = (op.statut === 'termine') ? _fmtHM(op.done_at) : '';
+      chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') + '\n(Non planifiée · cliquer pour voir le détail)';
+      if(isDay){
+        // Rendu enrichi mode Day
+        const statusIcon = (op.statut === 'termine')
+          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+          : '';
+        chip.innerHTML =
+          '<span class="cal-wv-nonpl-chip-status">' + statusIcon + '</span>' +
+          '<div class="cal-wv-nonpl-chip-main">' +
+            escHtml(op.opName || '—') +
+            (machine ? '<div class="cal-wv-nonpl-chip-sub">' + escHtml(machine) + '</div>' : '') +
+          '</div>' +
+          (timeStr ? '<span class="cal-wv-nonpl-chip-time">' + escHtml(timeStr) + '</span>' : '');
+      } else {
+        // Rendu compact mode Week
+        chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') + (machine ? ' · ' + escHtml(machine) : '');
+      }
+      chip.addEventListener('click', e => {
+        e.stopPropagation();
+        openPlanningDetailsModal([ev]);
+      });
+      list.appendChild(chip);
+    });
+  });
+  strip.appendChild(list);
+  col.insertBefore(strip, col.firstChild);
+}
+
 // ── Lane packing (Google-Calendar style) ──────────────────────────────
 function _packDayEvents(events){
   const sorted = events.slice()
@@ -2959,8 +3111,11 @@ function _makeEventBlock(item){
   const ev = item.ev;
   const startMin = item.s, endMin = item.e;
   if(startMin == null || endMin == null || endMin <= startMin) return null;
-  const top = ((startMin - CAL_HOUR_START*60) / 60) * CAL_HOUR_PX;
-  const height = Math.max(22, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
+  // v2.2.55 : la vue Jour a des rows plus hautes (72px vs 62px pour la semaine).
+  // Sync avec le CSS pour éviter le décalage vertical cumulatif.
+  const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+  const top = ((startMin - CAL_HOUR_START*60) / 60) * px;
+  const height = Math.max(22, ((endMin - startMin) / 60) * px - 2);
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
@@ -2992,19 +3147,12 @@ function _makeEventBlock(item){
     inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
   }
   if(showOpsList){
-    // Lignes disponibles ≈ (height - 24px titre - 12px time) / 14px
-    const lineH = 17;
-    const reservedTitle = 28;
-    const reservedTime = showTime ? 18 : 0;
-    const available = Math.max(1, Math.floor((height - reservedTitle - reservedTime - 6) / lineH));
-    const visible = ops.slice(0, available);
+    // v2.2.51 : plus de troncature — la liste est scrollable via CSS.
+    // On affiche toutes les ops ; l'user scroll dans la carte si besoin.
     inner += '<div class="cal-event-ops">';
-    visible.forEach(op => {
+    ops.forEach(op => {
       inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
     });
-    if(opsCount > visible.length){
-      inner += '<div class="cal-event-op cal-event-op-more">+ ' + (opsCount - visible.length) + ' autre' + ((opsCount - visible.length) > 1 ? 's' : '') + '</div>';
-    }
     inner += '</div>';
   } else if(opsCount > 0 && height >= 32 && !showOpsList){
     // Trop court pour une liste : afficher la 1re op + "(+N)"
@@ -3143,36 +3291,58 @@ function openPlanningDetailsModal(events){
       (op.machines || []).forEach(m => { if(machineUnion.indexOf(m) < 0) machineUnion.push(m); });
     });
     const machinesLabel = machineUnion.length ? machineUnion.join(' · ') : (ev.machine || '—');
-    // v2 : regroupe les rows dupliquées (même code sur N machines après split)
-    //      en 1 ligne par code, avec l'union des machines sous forme de chips.
+    // v2.2.48 : regroupe par code, préserve statut/done_by/done_at par machine.
     const _grouped = new Map();
     for(const op of ops){
       const key = op.opTypeId || op._op_id || op.opName || Math.random();
       if(!_grouped.has(key)){
-        _grouped.set(key, {
-          opName:   op.opName || '—',
-          opNiveau: op.opNiveau || null,
-          opFreq:   op.opFreq || '',
-          machines: [],
-        });
+        _grouped.set(key, { opName: op.opName || '—', machineData: [] });
       }
       const entry = _grouped.get(key);
       for(const m of (op.machines || [])){
-        if(!entry.machines.includes(m)) entry.machines.push(m);
+        if(entry.machineData.find(x => x.machine === m)) continue;
+        entry.machineData.push({
+          machine: m,
+          statut: op.statut || 'a_faire',
+          done_at: op.done_at || null,
+          done_by: op.done_by || null,
+        });
       }
     }
+    const opsListForNames = Array.isArray(ev.operators) ? ev.operators : [];
+    const _resolveName = (uid) => {
+      if(uid == null) return '';
+      const u = opsListForNames.find(x => Number(x.id) === Number(uid));
+      return u ? (u.nom || '') : '';
+    };
+    const _fmtDoneAt = (iso) => {
+      if(!iso) return '';
+      const m = String(iso).match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/);
+      return m ? (m[1] + ':' + m[2]) : String(iso).slice(11,16);
+    };
     const groupedOps = Array.from(_grouped.values());
     const opsHtml = groupedOps.length
       ? groupedOps.map(op => {
-          const machChips = op.machines.map(m =>
-            '<span class="plan-det-case-op-mach">' + escHtml(m) + '</span>'
-          ).join('');
-          return '<div class="plan-det-case-op">' +
-            '<span class="plan-det-case-op-bullet"></span>' +
-            '<span class="plan-det-case-op-name">' + escHtml(op.opName) + '</span>' +
-            (op.opNiveau ? '<span class="niv-badge" data-niv="' + escAttr(String(op.opNiveau)) + '">N' + escHtml(String(op.opNiveau)) + '</span>' : '') +
-            (machChips ? '<span class="plan-det-case-op-mach-wrap">' + machChips + '</span>' : '') +
-            (op.opFreq ? '<span class="plan-det-case-op-freq">Fréquence : ' + escHtml(op.opFreq) + '</span>' : '') +
+          const rows = op.machineData.map(md => {
+            const done = md.statut === 'termine';
+            const icon = done
+              ? '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
+              : '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
+            const label = done
+              ? ('Effectuée' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
+                 (md.done_by ? ' · par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
+                 (md.done_at ? ' à ' + escHtml(_fmtDoneAt(md.done_at)) : ''))
+              : ((op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' — en attente'));
+            return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:' + (done ? 'var(--text2)' : 'var(--muted)') + '">' +
+              icon + '<span>' + label + '</span>' +
+            '</div>';
+          }).join('');
+          return '<div class="plan-det-case-op" style="flex-direction:column;align-items:stretch;gap:2px">' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+              '<span class="plan-det-case-op-bullet"></span>' +
+              '<span class="plan-det-case-op-name" style="white-space:normal">' + escHtml(op.opName) + '</span>' +
+            '</div>' +
+            '<div style="margin-left:16px;margin-top:2px">' + rows + '</div>' +
           '</div>';
         }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
@@ -3878,6 +4048,11 @@ async function submitCaseModal(e){
       if(syncError) throw syncError;
       showToast('Créneau mis à jour.', 'info');
     } else {
+      // v2.2.49 : bloque côté client si aucun opérateur (double-guard avec backend)
+      if(!operatorIds || !operatorIds.length){
+        showToast('Sélectionne au moins un opérateur pour ce créneau.', 'danger');
+        return;
+      }
       const rNew = await fetch('/api/maintenance/events', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
@@ -7278,6 +7453,216 @@ async function loadMe(){
 })();
 
 // ═══════════════════════════════════════════════════════════════════
+// v2.2.48 : Sous-onglets Planning + Historique des créneaux
+// ═══════════════════════════════════════════════════════════════════
+const PLAN_SUBTAB_KEY = 'mysifa_maint_plan_subtab_v1';
+function _getPlanSubtab(){
+  try{ return localStorage.getItem(PLAN_SUBTAB_KEY) || 'calendrier'; }
+  catch(e){ return 'calendrier'; }
+}
+function setPlanSubtab(name){
+  if(name !== 'calendrier' && name !== 'historique') name = 'calendrier';
+  try{ localStorage.setItem(PLAN_SUBTAB_KEY, name); }catch(e){}
+  document.querySelectorAll('[data-plan-subtab]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-plan-subtab') === name);
+  });
+  const cal = document.getElementById('plan-subview-calendrier');
+  const hist = document.getElementById('plan-subview-historique');
+  if(cal) cal.style.display = (name === 'calendrier') ? '' : 'none';
+  if(hist) hist.style.display = (name === 'historique') ? '' : 'none';
+  if(name === 'historique') loadPlanningHistorique();
+  else if(name === 'calendrier'){ try { renderCal(); } catch(e){} }
+}
+async function loadPlanningHistorique(){
+  const listEl = document.getElementById('plan-hist-list');
+  if(!listEl) return;
+  const today = new Date();
+  const past = new Date(); past.setDate(today.getDate() - 180);
+  try{
+    const r = await fetch('/api/maintenance/events?date_from=' + _fmtDateISO(past) + '&date_to=' + _fmtDateISO(today) + '&_=' + Date.now(),
+      { credentials: 'include', cache: 'no-store' });
+    if(!r.ok){ listEl.innerHTML = '<p style="color:var(--danger)">Erreur de chargement.</p>'; return; }
+    const data = await r.json();
+    const todayIso = _fmtDateISO(today);
+    // v2.2.49 : inclut aujourd'hui (<=) — un créneau créé et validé le jour même
+    // doit apparaître dans l'historique tout de suite.
+    const events = (data.events || []).filter(ev =>
+      ev.source === 'planifie' && ev.date_prevue && ev.date_prevue <= todayIso
+    );
+    events.sort((a,b) => (b.date_prevue || '').localeCompare(a.date_prevue || ''));
+    renderPlanningHistorique(events);
+  }catch(e){
+    listEl.innerHTML = '<p style="color:var(--danger)">Erreur : ' + escHtml(e.message) + '</p>';
+  }
+}
+// v2.2.50 : historique visuel enrichi avec double-clic → détail créneau
+function _histInitials(nom){
+  const parts = String(nom || '').trim().split(/\s+/);
+  if(!parts.length) return '?';
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+}
+function _histColorForString(s){
+  // hash simple → palette 6 couleurs stables
+  const palette = ['#22d3ee','#fbbf24','#a78bfa','#f472b6','#34d399','#60a5fa'];
+  let h = 0;
+  for(const ch of String(s || '')) h = ((h << 5) - h + ch.charCodeAt(0)) | 0;
+  return palette[Math.abs(h) % palette.length];
+}
+function _histMachineChipStyle(m){
+  const bg = _histColorForString(m);
+  return 'display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;background:' + bg + '22;color:' + bg + ';border:1px solid ' + bg + '55;font-size:11px;font-weight:700;line-height:1.3';
+}
+function _histOperatorAvatarStyle(nom){
+  const bg = _histColorForString(nom);
+  return 'display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:' + bg + ';color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;margin-right:-6px;border:2px solid var(--card);flex-shrink:0';
+}
+function _histStatusColor(ratio){
+  if(ratio >= 1) return 'var(--ok,#34d399)';       // tout fait — vert
+  if(ratio > 0)  return 'var(--warn,#fbbf24)';     // partiel — orange
+  return 'var(--danger,#f87171)';                  // rien — rouge
+}
+function renderPlanningHistorique(events){
+  const listEl = document.getElementById('plan-hist-list');
+  if(!listEl) return;
+  if(!events.length){
+    listEl.innerHTML = '<p style="color:var(--muted);font-style:italic;font-size:13px;text-align:center;padding:24px 0">Aucun créneau planifié dans les 6 derniers mois.</p>';
+    return;
+  }
+  const rowsHtml = events.map(ev => {
+    const machineUnion = [];
+    (ev.ops || []).forEach(o => {
+      (o.machines || []).forEach(m => { if(!machineUnion.includes(m)) machineUnion.push(m); });
+    });
+    // Progression : compter les op-machine faites vs total
+    let total = 0, done = 0;
+    (ev.ops || []).forEach(o => {
+      const nMach = (o.machines || []).length || 1;
+      total += nMach;
+      if(o.statut === 'termine') done += nMach;
+    });
+    const ratio = total > 0 ? (done / total) : 0;
+    const statusColor = _histStatusColor(ratio);
+    const pct = Math.round(ratio * 100);
+    // Opérateurs présents : done_by unique, fallback assignés
+    const doneBySet = new Set();
+    (ev.ops || []).forEach(o => { if(o.done_by != null) doneBySet.add(Number(o.done_by)); });
+    const opsList = Array.isArray(ev.operators) ? ev.operators : [];
+    const doneByNames = Array.from(doneBySet).map(uid => {
+      const u = opsList.find(x => Number(x.id) === uid);
+      return u ? (u.nom || 'op. #' + uid) : ('op. #' + uid);
+    });
+    const opsPresents = doneByNames.length ? doneByNames : opsList.map(u => u.nom || '').filter(Boolean);
+    const dateFr = _fmtIsoDateFr(ev.date_prevue);
+    const horaires = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + '–' + ev.heure_fin) : '';
+    // Rendu
+    const machineChips = machineUnion.length
+      ? machineUnion.map(m => '<span style="' + _histMachineChipStyle(m) + '">' + escHtml(m) + '</span>').join('')
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Aucune machine</span>';
+    const opAvatars = opsPresents.length
+      ? '<div style="display:inline-flex;align-items:center">' + opsPresents.slice(0, 4).map(n =>
+          '<span style="' + _histOperatorAvatarStyle(n) + '" title="' + escAttr(n) + '">' + escHtml(_histInitials(n)) + '</span>'
+        ).join('') +
+        (opsPresents.length > 4 ? '<span style="margin-left:8px;font-size:11px;color:var(--muted);font-weight:600">+' + (opsPresents.length - 4) + '</span>' : '') +
+        '</div>'
+      : '<span style="color:var(--muted);font-size:11px;font-style:italic">—</span>';
+    return '<div data-hist-ev-id="' + escAttr(ev.id) + '" ondblclick="planHistOpenDetails(\'' + escAttr(ev.id) + '\')" ' +
+        'style="padding:14px 16px;border:1px solid var(--border);border-left:4px solid ' + statusColor + ';border-radius:10px;background:var(--card);margin-bottom:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s" ' +
+        'title="Double-cliquez pour voir le détail" ' +
+        'onmouseover="this.style.boxShadow=\'0 2px 12px rgba(0,0,0,0.08)\'" ' +
+        'onmouseout="this.style.boxShadow=\'none\'">' +
+      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">' +
+        // Colonne 1 : Date + horaires + progress bar
+        '<div style="flex:1;min-width:220px">' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="' + statusColor + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+            '<span style="font-size:13px;font-weight:700;color:var(--text)">' + escHtml(dateFr) + '</span>' +
+            (horaires ? '<span style="font-family:ui-monospace,monospace;font-size:12px;color:var(--text2);font-weight:600">· ' + escHtml(horaires) + '</span>' : '') +
+          '</div>' +
+          // Progress bar ops
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<div style="flex:1;max-width:180px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden;border:1px solid var(--border)">' +
+              '<div style="height:100%;background:' + statusColor + ';width:' + pct + '%;transition:width .3s"></div>' +
+            '</div>' +
+            '<span style="font-size:11px;font-weight:700;color:' + statusColor + ';font-family:ui-monospace,monospace">' + done + ' / ' + total + '</span>' +
+          '</div>' +
+        '</div>' +
+        // Colonne 2 : Machines chips
+        '<div style="min-width:180px">' +
+          '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:5px">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>' +
+            'Machines' +
+          '</div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:4px">' + machineChips + '</div>' +
+        '</div>' +
+        // Colonne 3 : Opérateurs avatars
+        '<div style="min-width:150px">' +
+          '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;display:flex;align-items:center;gap:5px">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>' +
+            'Opérateurs présents' +
+          '</div>' +
+          opAvatars +
+        '</div>' +
+        // Bouton Reprogrammer
+        '<button type="button" onclick="event.stopPropagation();planHistReprogrammer(\'' + escAttr(ev.id) + '\')" style="background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s;display:inline-flex;align-items:center;gap:6px">' +
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>' +
+          'Reprogrammer' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  listEl.innerHTML = rowsHtml;
+}
+
+// v2.2.50 : ouvre le modal Détails créneau depuis l'historique (converti au format calendar)
+async function planHistOpenDetails(eventId){
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials: 'include' });
+    if(!r.ok){ showToast('Créneau introuvable.', 'danger'); return; }
+    const data = await r.json();
+    const ev = data.event || data;
+    if(!ev){ showToast('Données manquantes.', 'danger'); return; }
+    const clientEv = (typeof _apiEventToClient === 'function') ? _apiEventToClient(ev) : ev;
+    openPlanningDetailsModal([clientEv]);
+  }catch(e){
+    showToast('Erreur : ' + e.message, 'danger');
+  }
+}
+async function planHistReprogrammer(eventId){
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), { credentials: 'include' });
+    if(!r.ok){ showToast('Créneau introuvable.', 'danger'); return; }
+    const data = await r.json();
+    const ev = data.event || data;
+    if(!ev || !ev.ops || !ev.ops.length){ showToast('Ce créneau n\'a pas d\'opération à copier.', 'danger'); return; }
+    const defaultName = 'Modèle du ' + (ev.date_prevue || '');
+    const name = prompt('Nom du modèle à créer depuis ce créneau :', defaultName);
+    if(!name || !name.trim()) return;
+    const opsMap = new Map();
+    for(const o of ev.ops){
+      if(!opsMap.has(o.code)) opsMap.set(o.code, { code: o.code, machines: [] });
+      const entry = opsMap.get(o.code);
+      for(const m of (o.machines || [])){
+        if(!entry.machines.includes(m)) entry.machines.push(m);
+      }
+    }
+    const ops = Array.from(opsMap.values()).filter(o => o.machines.length);
+    const rNew = await fetch('/api/maintenance/templates', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name: name.trim(), description: 'Créé depuis créneau du ' + (ev.date_prevue || ''), ops }),
+    });
+    if(!rNew.ok){
+      const err = await rNew.json().catch(()=>({}));
+      throw new Error(err.detail || 'Enregistrement refusé');
+    }
+    showToast('Modèle « ' + name.trim() + ' » créé — utilisable depuis Nouveau créneau.', 'info');
+    if(typeof loadTemplates === 'function') loadTemplates(true);
+  }catch(e){
+    showToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // v2.2.19 : Panel Alertes maintenance — duplication de settings_page.py
 // Adapters : esc/toast/api pour matcher les conventions maintenance_page
 // ═══════════════════════════════════════════════════════════════════
@@ -8733,7 +9118,6 @@ function _countRemainingOps(ev){
 // groupe "Sans machine". Une op multi-machines apparaît dans chaque groupe.
 function _groupOpsByMachine(ev){
   const groups = new Map();
-  const order = [];
   const ops = (ev && ev.ops) ? ev.ops : [];
   for(const o of ops){
     let machines = Array.isArray(o.machines) ? o.machines.slice() : [];
@@ -8741,11 +9125,22 @@ function _groupOpsByMachine(ev){
       machines = ev.machine ? [ev.machine] : ['Sans machine'];
     }
     for(const m of machines){
-      if(!groups.has(m)){ groups.set(m, []); order.push(m); }
+      if(!groups.has(m)) groups.set(m, []);
       groups.get(m).push(o);
     }
   }
-  return order.map(m => ({ machine: m, ops: groups.get(m) }));
+  // v2.2.64 : ordre canonique stable — _MACHINE_ORDER d'abord, puis alphabétique
+  // pour les machines hors liste. Évite l'ordre non déterministe issu de la
+  // première occurrence dans ev.ops.
+  const canon = (typeof _MACHINE_ORDER !== 'undefined') ? _MACHINE_ORDER : [];
+  const rank = new Map(canon.map((m, i) => [m, i]));
+  const sortedMachines = [...groups.keys()].sort((a, b) => {
+    const ra = rank.has(a) ? rank.get(a) : Infinity;
+    const rb = rank.has(b) ? rank.get(b) : Infinity;
+    if(ra !== rb) return ra - rb;
+    return String(a).localeCompare(String(b), 'fr', {sensitivity:'base'});
+  });
+  return sortedMachines.map(m => ({ machine: m, ops: groups.get(m) }));
 }
 
 function _renderOpCard(ev, opts){
@@ -8911,7 +9306,9 @@ function _bucketsForMachine(events, machine, showTermine){
 }
 
 // Rendu d'une carte d'op individuelle (utilisé dans les créneaux ET dans le bloc non-programmées).
-function _renderOpCardIndividual(op, ev){
+function _renderOpCardIndividual(op, ev, opts){
+  opts = opts || {};
+  const showMachine = !!opts.showMachine;
   const isDone = op.statut === 'termine';
   const statusLabel = _statutLabel(op.statut);
   // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
@@ -8937,12 +9334,17 @@ function _renderOpCardIndividual(op, ev){
          <span>Consignes de l'admin</span>
        </button>`
     : '';
+  const machinesList = showMachine ? _opMachines(op, ev) : [];
+  const machineChip = (showMachine && machinesList.length)
+    ? `<div class="op-op-card-machine"><span class="op-op-card-machine-dot"></span><span class="op-op-card-machine-lbl">${machinesList.map(m => escHtml(m)).join(' · ')}</span></div>`
+    : '';
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
       <span class="op-op-card-status op-status op-status-${op.statut}">${statusLabel}</span>
     </div>
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
+    ${machineChip}
     ${consignesChip}
     <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
       ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
@@ -9066,10 +9468,14 @@ function opRenderTasks(){
   const evToday = events.filter(ev => ev.date_prevue === today);
   const evUpcoming = events.filter(ev => ev.date_prevue > today);
 
-  // Total ops visibles (toutes machines confondues) pour le sous-titre.
+  // Compte les ops visibles selon les nouvelles règles :
+  // - Créneaux planifiés : ops filtrées par toggle (termine cachées si OFF)
+  // - Ops perso (non_planifie) : uniquement si toggle ON, puis même filtre statut
   const _countVisibleOps = (evs) => {
     let n = 0;
     for(const ev of evs){
+      const isPerso = (ev.source === 'non_planifie');
+      if(isPerso && !showTermine) continue;
       for(const op of (ev.ops || [])){
         if(!showTermine && op.statut === 'termine') continue;
         n++;
@@ -9079,7 +9485,6 @@ function opRenderTasks(){
   };
   const visibleToday = _countVisibleOps(evToday);
   const visibleUpcoming = _countVisibleOps(evUpcoming);
-
   if(cntT) cntT.textContent = visibleToday;
   if(cntU) cntU.textContent = visibleUpcoming;
   if(summary){
@@ -9087,7 +9492,7 @@ function opRenderTasks(){
     summary.textContent = total + (total > 1 ? ' opérations visibles' : ' opération visible');
   }
 
-  // Compteur global du toggle : nb d'ops terminées aujourd'hui, toutes machines.
+  // Compteur "terminées aujourd'hui" pour le toggle (créneaux + perso confondus)
   let doneTodayAll = 0;
   for(const ev of evToday){
     for(const op of (ev.ops || [])){
@@ -9096,31 +9501,129 @@ function opRenderTasks(){
   }
   if(toggleCount) toggleCount.textContent = doneTodayAll;
 
-  // Rendu Aujourd'hui — 1 section par machine (dans l'ordre canonique),
-  // machines vides skippées automatiquement par _renderMachineSection.
-  const sectionsToday = _MACHINE_ORDER
-    .map(m => _renderMachineSection(m, evToday, showTermine))
-    .filter(Boolean)
-    .join('');
-  if(!sectionsToday){
+  // Sépare créneaux planifiés / ops perso, trie les créneaux par heure_debut ASC.
+  const _bucketEvents = (evs) => {
+    const creneaux = [];
+    const persos = [];
+    for(const ev of evs){
+      if(ev.source === 'non_planifie') persos.push(ev);
+      else creneaux.push(ev);
+    }
+    creneaux.sort((a, b) => {
+      const ha = a.heure_debut || 'zz';
+      const hb = b.heure_debut || 'zz';
+      if(ha !== hb) return ha.localeCompare(hb);
+      return (a.id || 0) - (b.id || 0);
+    });
+    return { creneaux, persos };
+  };
+
+  const renderBucket = (evs, isToday) => {
+    const { creneaux, persos } = _bucketEvents(evs);
+    const creneauBoxes = creneaux
+      .map(ev => _renderCreneauBox(ev, showTermine, isToday))
+      .filter(Boolean);
+    // Ops perso : uniquement si toggle "Afficher terminées" activé
+    const persoHtml = showTermine ? _renderPersoSection(persos, showTermine) : '';
+    return { creneauBoxes, persoHtml };
+  };
+
+  // Aujourd'hui
+  const rT = renderBucket(evToday, true);
+  if(!rT.creneauBoxes.length && !rT.persoHtml){
     const msg = showTermine
       ? '<strong>Aucune tâche aujourd\'hui</strong>Ta journée est vide.'
       : `<strong>Rien à faire aujourd\'hui</strong>${doneTodayAll ? 'Active « Afficher terminées » pour voir ce qui a été fait.' : 'Aucun créneau programmé.'}`;
     listT.innerHTML = '<div class="op-op-empty">' + msg + '</div>';
   } else {
-    listT.innerHTML = sectionsToday;
+    listT.innerHTML = rT.creneauBoxes.join('') + rT.persoHtml;
   }
 
-  // Rendu À venir — même logique.
-  const sectionsUpcoming = _MACHINE_ORDER
-    .map(m => _renderMachineSection(m, evUpcoming, showTermine))
-    .filter(Boolean)
-    .join('');
-  if(!sectionsUpcoming){
+  // À venir
+  const rU = renderBucket(evUpcoming, false);
+  if(!rU.creneauBoxes.length && !rU.persoHtml){
     listU.innerHTML = '<div class="op-op-empty"><strong>Aucun créneau à venir</strong>Ta liste est à jour.</div>';
   } else {
-    listU.innerHTML = sectionsUpcoming;
+    listU.innerHTML = rU.creneauBoxes.join('') + rU.persoHtml;
   }
+}
+
+// v2.2.62 : rendu d'une grande case créneau (source=planifie), sous-sections par machine.
+function _renderCreneauBox(ev, showTermine, isToday){
+  const groups = _groupOpsByMachine(ev);
+  // Filtre les ops par statut selon toggle, puis skip les machines devenues vides.
+  const filteredGroups = groups.map(g => ({
+    machine: g.machine,
+    ops: g.ops.filter(o => showTermine || o.statut !== 'termine')
+  })).filter(g => g.ops.length > 0);
+  if(!filteredGroups.length) return '';
+
+  const totalOps = filteredGroups.reduce((s, g) => s + g.ops.length, 0);
+  const allOps = groups.reduce((arr, g) => arr.concat(g.ops), []);
+  const totalAllOps = allOps.length;
+  const doneAll = allOps.length > 0 && allOps.every(o => o.statut === 'termine');
+
+  const timeLabel = (ev.heure_debut && ev.heure_fin)
+    ? (ev.heure_debut + ' – ' + ev.heure_fin)
+    : 'Sans créneau';
+  const nom = (ev.nom || '').trim();
+  const dateChip = isToday ? '' : `<span class="op-event-count">${_fmtDateFrShort(ev.date_prevue)}</span>`;
+  const nomHtml = nom ? `<span class="op-event-box-nom">${escHtml(nom)}</span>` : '';
+  // Compteur : "X op." si tout visible, "X/Y op." si filtré
+  const countLabel = (totalOps === totalAllOps)
+    ? (totalOps + ' op.')
+    : (totalOps + '/' + totalAllOps + ' op.');
+
+  const groupsHtml = filteredGroups.map(g => {
+    const cards = g.ops.map(op => _renderOpCardIndividual(op, ev)).join('');
+    return `<div class="op-creneau-machine-group">
+      <div class="op-creneau-machine-head">
+        <span class="op-creneau-machine-dot"></span>${escHtml(g.machine)}
+        <span class="op-creneau-machine-count">${g.ops.length} op.</span>
+      </div>
+      <div class="op-event-box-cards">${cards}</div>
+    </div>`;
+  }).join('');
+
+  return `<div class="op-event-box ${doneAll ? 'all-done' : ''}">
+    <div class="op-event-box-head">
+      <strong>Créneau</strong>
+      <span class="op-event-time">${escHtml(timeLabel)}</span>
+      ${nomHtml}
+      <span class="op-event-count">${countLabel}</span>
+      ${dateChip}
+    </div>
+    ${groupsHtml}
+  </div>`;
+}
+
+// v2.2.62 : section « Opérations personnelles » (source=non_planifie) — en bas, seulement si toggle ON.
+function _renderPersoSection(evs, showTermine){
+  if(!evs.length) return '';
+  const items = [];
+  for(const ev of evs){
+    for(const op of (ev.ops || [])){
+      if(!showTermine && op.statut === 'termine') continue;
+      items.push({ op, ev });
+    }
+  }
+  if(!items.length) return '';
+  // Trie : date_prevue DESC (plus récent en premier), tie-break id DESC
+  items.sort((a, b) => {
+    const da = a.ev.date_prevue || '';
+    const db = b.ev.date_prevue || '';
+    if(da !== db) return db.localeCompare(da);
+    return (b.ev.id || 0) - (a.ev.id || 0);
+  });
+  const cards = items.map(({op, ev}) => _renderOpCardIndividual(op, ev, {showMachine:true})).join('');
+  return `<section class="op-perso-section">
+    <div class="op-perso-section-head">
+      <strong>Opérations personnelles</strong>
+      <span class="op-perso-section-count">${items.length} op.</span>
+      <span class="op-perso-section-hint">Enregistrées par toi, hors créneau planifié</span>
+    </div>
+    <div class="op-event-box-cards">${cards}</div>
+  </section>`;
 }
 
 function opSetTab(name){

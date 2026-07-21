@@ -2204,9 +2204,18 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                 <!-- Champ Locale (nom queue Windows) -->
                 <div id="pr-wiz-imp-queue-row" style="display:none;grid-column:span 2">
                   <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom exact de la queue Windows *</label>
-                  <input type="text" id="pr-wiz-imp-queue" class="pr-inp" placeholder="Ex : Zebra QL-800 ou ZDesigner GK420t" style="width:100%">
-                  <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4">
-                    <strong>Astuce</strong> : sur le PC hôte, ouvre <em>Panneau de configuration → Périphériques et imprimantes</em>. Le nom affiché sous l'icône de l'imprimante = le nom exact à coller ici (avec majuscules, espaces, accents).
+                  <input type="text" id="pr-wiz-imp-queue" class="pr-inp" placeholder="Ex : Zebra Z4M (300 dpi)" style="width:100%">
+                  <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.6;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+                    <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:14px">Comment récupérer le nom exact ?</div>
+                    <div style="margin-bottom:10px">
+                      Sur le PC hôte, ouvre <strong>l'invite de commande</strong> (Menu Démarrer → tape <code style="background:var(--card);border:1px solid var(--border);padding:1px 6px;border-radius:3px;font-family:monospace;font-size:12px">cmd</code>) et lance :
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:center;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:10px">
+                      <code style="font-family:monospace;font-size:14px;color:var(--text);font-weight:600">wmic printer get name</code>
+                    </div>
+                    <div>
+                      Copie-colle le nom retourné (attention aux <strong>espaces</strong>, <strong>majuscules</strong> et <strong>parenthèses</strong>).
+                    </div>
                   </div>
                 </div>
 

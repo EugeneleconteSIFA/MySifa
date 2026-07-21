@@ -153,7 +153,8 @@ def list_ao(request: Request):
                          JOIN ao_produits p ON p.ref = l.ref_produit
                          LEFT JOIN clients            cg ON cg.id = p.client_id
                          LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
-                         WHERE l.ao_id = d.id) AS clients
+                         WHERE l.ao_id = d.id) AS clients,
+                      COALESCE(d.prix_transport_pct, 0) AS prix_transport_pct
                FROM ao_demandes d
                ORDER BY d.date_creation DESC"""
         ).fetchall()
@@ -724,6 +725,159 @@ def _produit_from_body(body: dict, conn) -> tuple[str, str, str, str | None, int
     notes = (body.get("notes") or "").strip() or None
     fiche_json = json.dumps(fiche, ensure_ascii=False)
     return ref, designation, unite, notes, client_id, fiche_json
+
+
+
+# =========================================================================
+# --- AO params + fiches techniques + config EUR/USD -----------------------
+# =========================================================================
+
+@router.patch("/{ao_id}/params")
+async def update_ao_params(request: Request, ao_id: int):
+    """Met a jour les parametres de calcul de l'AO (pour l'instant : prix_transport_pct)."""
+    _require_ao(request)
+    body = await request.json()
+    pct = body.get("prix_transport_pct")
+    try:
+        pct = float(pct) if pct is not None else 0.0
+    except (TypeError, ValueError):
+        pct = 0.0
+    pct = max(0.0, min(100.0, pct))
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=?", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO introuvable.")
+        conn.execute(
+            "UPDATE ao_demandes SET prix_transport_pct=? WHERE id=?",
+            (pct, ao_id),
+        )
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id, "prix_transport_pct": pct}
+
+
+@router.get("/fiches-techniques")
+def search_fiches_techniques(request: Request, q: str = "", limit: int = 20):
+    """Recherche autocomplete sur fiches_techniques (reference, designation, client)."""
+    _require_ao(request)
+    q_norm = (q or "").strip()
+    try:
+        limit = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        limit = 20
+    with get_db() as conn:
+        if not q_norm:
+            rows = conn.execute(
+                """SELECT id, reference, designation, client, format, matiere
+                   FROM fiches_techniques
+                   ORDER BY date_import DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        else:
+            like = f"%{q_norm}%"
+            rows = conn.execute(
+                """SELECT id, reference, designation, client, format, matiere
+                   FROM fiches_techniques
+                   WHERE reference LIKE ? COLLATE NOCASE
+                      OR IFNULL(designation,'') LIKE ? COLLATE NOCASE
+                      OR IFNULL(client,'')      LIKE ? COLLATE NOCASE
+                   ORDER BY
+                     CASE WHEN reference LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                     reference COLLATE NOCASE
+                   LIMIT ?""",
+                (like, like, like, f"{q_norm}%", limit),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/fiches-techniques/by-ref")
+def get_fiche_technique(request: Request, ref: str = ""):
+    """Retourne la fiche technique complete (query param `ref` : supporte les slashes)."""
+    _require_ao(request)
+    reference = (ref or "").strip()
+    if not reference:
+        raise HTTPException(status_code=400, detail="Reference vide.")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            (reference,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Fiche technique introuvable pour '{reference}'.")
+        return dict(row)
+
+
+@router.get("/config/eur-usd")
+def get_eur_usd(request: Request):
+    """Retourne le taux EUR/USD actif. Source de verite : mc_setting.eur_usd_rate.
+    Fallback : matiere_config.taux_change_usd."""
+    _require_ao(request)
+    with get_db() as conn:
+        rate = 0.0
+        try:
+            row = conn.execute(
+                "SELECT value_decimal FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+            ).fetchone()
+            if row and row[0] is not None:
+                rate = float(row[0])
+        except Exception:
+            rate = 0.0
+        if rate <= 0:
+            try:
+                row = conn.execute(
+                    "SELECT valeur FROM matiere_config WHERE cle='taux_change_usd' LIMIT 1"
+                ).fetchone()
+                if row:
+                    rate = float(row[0])
+            except Exception:
+                pass
+    return {"eur_usd_rate": rate}
+
+
+@router.post("/config/eur-usd")
+async def set_eur_usd(request: Request):
+    """Ecrit le taux EUR/USD dans les deux tables (source unifiee).
+    Corps : { "eur_usd_rate": <float> }"""
+    user = _require_ao(request)
+    body = await request.json()
+    try:
+        rate = float(body.get("eur_usd_rate") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="eur_usd_rate invalide.")
+    if rate <= 0:
+        raise HTTPException(status_code=400, detail="eur_usd_rate doit etre > 0.")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        # 1. mc_setting (source canonique)
+        try:
+            existing = conn.execute(
+                "SELECT 1 FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE mc_setting SET value_decimal=?, updated_at=?, updated_by=?, source=? WHERE key='eur_usd_rate'",
+                    (rate, now, user.get("id"), "ao_panel"),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO mc_setting (key, value_decimal, updated_at, updated_by, source) VALUES ('eur_usd_rate', ?, ?, ?, ?)",
+                    (rate, now, user.get("id"), "ao_panel"),
+                )
+        except Exception as e:
+            # Table peut-etre absente (migration MyCouts pas passee). On log en douceur.
+            print(f"[eur-usd] mc_setting write failed: {e}")
+        # 2. matiere_config (compat Cout matiere)
+        try:
+            conn.execute(
+                """INSERT INTO matiere_config (cle, valeur, updated_at) VALUES (?,?,?)
+                   ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, updated_at=excluded.updated_at""",
+                ("taux_change_usd", str(rate), now),
+            )
+        except Exception as e:
+            print(f"[eur-usd] matiere_config write failed: {e}")
+        conn.commit()
+    return {"ok": True, "eur_usd_rate": rate}
+
 
 
 def _serialize_produit_row(row: dict, conn) -> dict:
@@ -1935,6 +2089,11 @@ def comparaison_ao(request: Request, ao_id: int):
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
         eur_usd = get_eur_usd_rate(conn)
+        _ao_pct_row = conn.execute(
+            "SELECT COALESCE(prix_transport_pct, 0) AS pct FROM ao_demandes WHERE id=?",
+            (ao_id,),
+        ).fetchone()
+        transport_pct = float(_ao_pct_row[0]) if _ao_pct_row else 0.0
 
         lignes_out: list[dict[str, Any]] = []
         rows_flat: list[dict[str, Any]] = []
@@ -1953,6 +2112,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 for r in conn.execute(
                     """SELECT r.id AS reponse_id, f.id AS fourni_id, f.nom_fournisseur,
                               r.quotation, r.prix_unitaire, r.devise, r.unite_quotation,
+                              COALESCE(r.unite_manuel, 0) AS unite_manuel,
                               r.coef, r.devise_prix_devis,
                               r.delai_jours, r.commentaire
                        FROM ao_reponses r
@@ -1968,7 +2128,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 raw = rep_by_fourni.get(int(f["id"]))
                 if raw:
                     reponses.append(
-                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct)
                     )
             prices_mille = [
                 float(r["prix_au_mille"])
@@ -1998,7 +2158,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 fid = int(f["id"])
                 raw = rep_by_fourni.get(fid)
                 if raw:
-                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct)
                 else:
                     rep = enrich_reponse_pricing(
                         {
@@ -2013,6 +2173,7 @@ def comparaison_ao(request: Request, ao_id: int):
                         },
                         ctx,
                         eur_usd_rate=eur_usd,
+                        transport_pct=transport_pct,
                     )
                 rows_flat.append({
                     "ligne_id": ln["id"],
@@ -2021,7 +2182,7 @@ def comparaison_ao(request: Request, ao_id: int):
                     "nom_fournisseur": rep.get("nom_fournisseur"),
                     **ctx,
                     **{k: rep.get(k) for k in (
-                        "quotation", "devise", "unite_quotation",
+                        "quotation", "devise", "unite_quotation", "unite_manuel",
                         "prix_calcule", "prix_au_mille", "coef",
                         "devise_prix_devis", "prix_vente",
                         "delai_jours", "commentaire",
@@ -2043,6 +2204,11 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
     body = await request.json()
     coef = body.get("coef")
     devise_prix_devis = body.get("devise_prix_devis")
+    unite_quotation = body.get("unite_quotation")
+    if unite_quotation is not None:
+        unite_quotation = (unite_quotation or "").strip().lower()
+        if unite_quotation not in UNITES_QUOTATION:
+            raise HTTPException(status_code=400, detail="Unite invalide.")
     if coef is not None:
         try:
             coef = float(coef)
@@ -2077,6 +2243,11 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
                 "UPDATE ao_reponses SET devise_prix_devis=? WHERE id=?",
                 (devise_prix_devis, reponse_id),
             )
+        if unite_quotation is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET unite_quotation=?, unite_manuel=1 WHERE id=?",
+                (unite_quotation, reponse_id),
+            )
         conn.commit()
         updated = conn.execute(
             "SELECT * FROM ao_reponses WHERE id=?", (reponse_id,)
@@ -2093,11 +2264,16 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
         eur_usd = get_eur_usd_rate(conn)
+        _ao_pct_row2 = conn.execute(
+            "SELECT COALESCE(prix_transport_pct, 0) AS pct FROM ao_demandes WHERE id=?",
+            (ao_id,),
+        ).fetchone()
+        transport_pct2 = float(_ao_pct_row2[0]) if _ao_pct_row2 else 0.0
         produit = produits_map.get((row["ref_produit"] or "").strip().lower())
         ctx = ligne_context_from_produit(
             row["ref_produit"], row["quantite"], produit, matieres_map
         )
-        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd)
+        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct2)
 
 
 @router.get("/{ao_id}/non-lus")

@@ -11,6 +11,9 @@ from config import APP_ORG_NAME
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
+# v1.7 — modal partage pour impression de PDF (OF, fiches techniques) vers
+# une imprimante bureautique via l'agent local. Cf. app/web/print_modal.py.
+from app.web.print_modal import PRINT_MODAL_CSS, PRINT_MODAL_JS
 
 router = APIRouter()
 
@@ -466,6 +469,115 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
 .fab-tab-btn svg{opacity:.65}
 .fab-tab-btn.active svg{opacity:1}
+
+/* ── Tabs plus visibles pour opérateurs ─────────────────────── */
+.fab-footer-tabs-row{
+  display:flex;align-items:center;justify-content:center;width:100%;
+  margin-bottom:2px;
+}
+.fab-tab-nav--prominent{
+  border-width:1.5px;border-radius:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,.10);
+}
+.fab-tab-nav--prominent .fab-tab-btn{
+  width:auto;min-width:82px;padding:9px 14px 7px;
+  font-size:11px;letter-spacing:.6px;
+  color:var(--text2);
+}
+.fab-tab-nav--prominent .fab-tab-btn svg{
+  width:18px;height:18px;opacity:.85;margin-bottom:2px;
+}
+.fab-tab-nav--prominent .fab-tab-btn.active{
+  color:var(--accent);background:var(--accent-bg);
+  box-shadow:inset 0 -2px 0 var(--accent);
+}
+.fab-tab-nav--prominent .fab-tab-btn.active svg{opacity:1}
+
+/* ── Panneau Stock natif (miroir de MyStock Production) ────── */
+.fab-stock-native{
+  display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;
+  padding:20px 24px;gap:18px;
+}
+.fab-prod-head{margin-bottom:2px}
+.fab-prod-head-title{
+  font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
+}
+.fab-prod-head-sub{font-size:13px;color:var(--muted);line-height:1.4}
+.fab-prod-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;
+}
+.fab-prod-card{
+  display:flex;align-items:center;gap:14px;padding:16px 18px;
+  border-radius:14px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;font-family:inherit;text-align:left;
+  transition:all .15s;color:var(--text);
+}
+.fab-prod-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.10);border-color:var(--accent)}
+.fab-prod-card:active{transform:translateY(0);filter:brightness(.97)}
+.fab-prod-card-ico{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;
+}
+.fab-prod-card-mp-in  .fab-prod-card-ico{background:#38bdf8}
+.fab-prod-card-mp-out .fab-prod-card-ico{background:#fbbf24;color:#7c2d12}
+.fab-prod-card-z1-in  .fab-prod-card-ico{background:#34d399}
+.fab-prod-card-z1-out .fab-prod-card-ico{background:#f87171}
+.fab-prod-card-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:2px;letter-spacing:.2px}
+.fab-prod-card-sub{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+
+.fab-prod-z1-card{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;
+}
+.fab-prod-z1-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:10px;flex-wrap:wrap;
+}
+.fab-prod-z1-title{
+  font-size:14px;font-weight:800;color:var(--text);
+  display:flex;align-items:center;gap:8px;
+}
+.fab-prod-z1-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.fab-prod-z1-refresh{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;transition:all .15s;
+}
+.fab-prod-z1-refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.fab-prod-empty{padding:32px 20px;text-align:center;color:var(--muted);font-size:13px}
+.fab-prod-empty-hint{font-size:11px;color:var(--muted);opacity:.7;margin-top:6px}
+.fab-prod-err{padding:20px;color:var(--danger);font-size:13px;text-align:center}
+.fab-prod-z1-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.fab-prod-z1-row{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  transition:border-color .1s;
+}
+.fab-prod-z1-row:hover{border-color:var(--accent)}
+.fab-prod-z1-left{flex:1;min-width:0}
+.fab-prod-z1-ref{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.3px}
+.fab-prod-z1-des{font-size:12px;color:var(--text2);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab-prod-z1-meta{display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.fab-prod-z1-meta span{display:inline-flex;align-items:center;gap:4px}
+.fab-prod-z1-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.fab-prod-z1-qty{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.fab-prod-z1-actions{display:flex;gap:5px}
+.fab-prod-z1-btn{
+  display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;
+  border:1px solid var(--border);background:var(--card);cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:700;color:var(--text2);transition:all .12s;
+}
+.fab-prod-z1-btn-add:hover{border-color:var(--success);color:var(--success);background:rgba(52,211,153,.10)}
+.fab-prod-z1-btn-edit:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+
+/* ── Centrage sections footer ──────────────────────────────── */
+.fab-footer{align-items:center}
+.fab-footer-info{justify-content:center}
+.fab-footer-actions{align-items:center;justify-content:center;gap:6px}
+.fab-footer-tools{align-items:stretch;justify-content:center}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
 .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -947,7 +1059,9 @@ let S = {
   searchQuery: '',
 
   // Footer tabs
-  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'of'
+  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'stats' (Stock) | 'of'
+  stockProdZ1: {refs:[],total_unites:0,nb_refs:0}, // Z1 en attente sortie de prod
+  stockProdLoading: false,
 
   // Import OF PDF
   ofImports: [],
@@ -1315,6 +1429,10 @@ function icon(name,size=16){
     grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
     'minus-circle':'<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>',
     box:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'log-in':'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>',
+    package:'<path d="M16.5 9.4l-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
+    users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -1518,6 +1636,13 @@ async function triggerOp(opCode, opLabel, extra={}){
     });
     if(d && d.success){
       showToast('Saisie enregistrée : '+opStr);
+      // v2.2.66 : refresh immédiat des alertes — le backend a peut-être ack
+      // automatiquement des périodiques (code non-productif ou fin_dossier).
+      try {
+        if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
+          window.MysifaAlerts.refresh();
+        }
+      } catch(_) {}
     }
   }catch(e){
     showToast('Erreur : '+e.message,'danger');
@@ -1849,7 +1974,7 @@ async function switchFabTab(tab){
     if(S.ofSubTab==='fiche') await loadFiches();
   }
   if(tab==='stats'){
-    await loadDossierStats();
+    await loadStockProduction();
   }
 }
 
@@ -2233,6 +2358,18 @@ function renderOfPanel(){
       }, svgIcon('edit',14)),
     ];
     if(row.pdf_filename){
+      // v1.7 — bouton imprimer (avant le telecharger PDF) : ouvre le popup
+      // de choix imprimante + params, puis POST /api/print/pdf.
+      actBtns.push(h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Imprimer',
+        onClick:()=>openPrintModal({
+          entityType:'of',
+          entityId:row.id,
+          title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
+          subtitle:(row.reference?('Ref '+row.reference+' — '):'') + (row.machine||''),
+        }),
+      }, svgIcon('printer',14)));
       actBtns.push(h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
         title:'Télécharger PDF',
@@ -2395,6 +2532,14 @@ function renderFichesPanel(){
   const rows=(S.fiches||[]).map(row=>{
     const acts=[
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')},svgIcon('file',14)),
+      // v1.7 — bouton imprimer : ouvre le popup de choix imprimante + params,
+      // puis POST /api/print/pdf avec entity_type='fiche'.
+      h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Imprimer',onClick:()=>openPrintModal({
+        entityType:'fiche',
+        entityId:row.id,
+        title:'Imprimer fiche '+(row.reference||('#'+row.id)),
+        subtitle:[row.format,row.machine].filter(Boolean).join(' — '),
+      })},svgIcon('printer',14)),
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Modifier',onClick:()=>openFicheEditModal(row)},svgIcon('edit',14)),
     ];
     if(S.user&&S.user.role==='superadmin'){
@@ -3335,151 +3480,165 @@ function renderTracaPanel(){
   );
 }
 
-function renderStatsPanel(){
-  const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'-';
-  const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
-  if(!ref){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
-        h('span',{className:'fab-main-sub'},machineName)
-      ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},
-        'Aucun dossier actif. Demarrez un dossier (op 01) pour voir ses stats.'
-      )
-    );
+function _fmtDateStockProd(iso){
+  if(!iso) return '—';
+  const s = String(iso);
+  const d = s.slice(0,10).split('-');
+  const hm = s.length >= 16 ? s.slice(11,16) : '';
+  if(d.length===3) return d[2]+'/'+d[1]+(hm?' '+hm:'');
+  return s;
+}
+function _fmtU(n, unit){
+  const num = Number(n||0);
+  const s = num.toLocaleString('fr-FR');
+  return s + (unit ? ' '+unit : '');
+}
+async function loadStockProduction(){
+  set({stockProdLoading:true});
+  try{
+    const d = await apiFetch('/api/stock/sortie-prod');
+    set({stockProdZ1: d || {refs:[],total_unites:0,nb_refs:0}, stockProdLoading:false});
+  }catch(e){
+    set({stockProdZ1: {refs:[],total_unites:0,nb_refs:0,_err: e.message||'Erreur de chargement.'},
+         stockProdLoading:false});
   }
-  const st = S.dossierStats;
-  if(S.dossierStatsLoading || !st){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
-        h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
-        h('span',{className:'fab-main-sub'},machineName)
-      ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...')
-    );
-  }
-  if(st._err){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier')
-      ),
-      h('div',{style:{padding:'24px',color:'var(--danger)'}}, st._err)
-    );
-  }
-
-  // Section Produits finis (Z1)
-  const pfRows = (st.pf_totaux || []).map(r => {
-    const dt = r.created_at ? new Date(r.created_at) : null;
-    const dateStr = dt && !isNaN(dt)
-      ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
-      : '-';
-    return h('tr',null,
-      h('td',null, r.produit_reference || '-'),
-      h('td',{style:{color:'var(--text2)'}}, r.produit_designation || ''),
-      h('td',{style:{textAlign:'right',fontWeight:'700'}},
-        Number(r.quantite).toLocaleString('fr-FR') + ' ' + (r.produit_unite || '')),
-      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, dateStr),
-      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, r.created_by_name || '-'),
-    );
-  });
-  const pfTotalQte = (st.pf_totaux || []).reduce((s, r) => s + Number(r.quantite || 0), 0);
-
-  // Section Palettes
-  const palRows = (st.palettes || []).map(p => h('div',{
-    style:{display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',
-           background:'var(--bg)',borderRadius:'8px',marginBottom:'6px',
-           border:'1px solid var(--border)'}
+}
+function _stockGoTo(action){
+  // Redirige vers MyStock avec le sous-onglet Production actif.
+  // action = 'entree-mp' | 'sortie-mp' | 'entree-z1' | 'sortie-z1'
+  const url = '/stock?tab=production&auto=' + encodeURIComponent(action||'');
+  window.location.href = url;
+}
+function _buildStockActionCard(opts){
+  return h('button',{
+    className:'fab-prod-card fab-prod-card-'+opts.kind,
+    type:'button',
+    onClick:opts.onClick,
   },
-    h('div',{style:{flex:'1'}},
-      h('div',{style:{fontWeight:'600',fontSize:'13px',color:'var(--text)'}},
-        (p.palette_reference || '-') + (p.is_europe ? ' · EUROPE' : ' · perdue')),
-      h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, p.palette_designation || '')
-    ),
-    h('div',{style:{fontSize:'20px',fontWeight:'800',color:'var(--accent)'}},
-      String(p.nombre_total) + ' pal.')
-  ));
-
-  // Section MP scannees
-  const mpCount = (st.mp_scannees || []).length;
-
-  return h('div',{className:'fab-main', style:{overflow:'auto'}},
-    h('div',{className:'fab-main-head'},
-      h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
-      h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
-      h('span',{className:'fab-main-sub'},machineName)
-    ),
-    h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}},
-      // Resume en tetes de cartes
-      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}},
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Entrees Z1'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
-            String(st.nb_z1_entrees || 0)),
-          h('div',{style:{fontSize:'11px',color:'var(--text2)',marginTop:'2px'}},
-            Number(pfTotalQte).toLocaleString('fr-FR') + ' unites')
-        ),
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Palettes'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
-            String(st.nb_palettes_total || 0))
-        ),
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'MP scannees'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}}, String(mpCount))
-        )
-      ),
-
-      // Section PF Z1
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('package',14),' Produits finis en Z1'),
-        pfRows.length
-          ? h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
-              h('thead',null, h('tr',null,
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Reference'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Designation'),
-                h('th',{style:{textAlign:'right',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Quantite'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Date'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Operateur'),
-              )),
-              h('tbody',null, ...pfRows.map(r => {
-                // patch les styles des cellules
-                r.querySelectorAll && r.querySelectorAll('td').forEach(td => { td.style.padding = '8px'; td.style.borderBottom = '1px solid var(--border)'; });
-                return r;
-              }))
-            )
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune entree Z1 pour ce dossier.')
-      ),
-
-      // Section Palettes
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('layers',14),' Palettes utilisees'),
-        palRows.length
-          ? h('div',null, ...palRows)
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune palette enregistree pour ce dossier.')
-      ),
-
-      // Section MP scannees (renvoi vers Traca pour le detail)
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('scan',14),' Matieres premieres scannees'),
-        mpCount > 0
-          ? h('div',null,
-              h('div',{style:{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}},
-                String(mpCount) + ' bobine' + (mpCount > 1 ? 's' : '') + ' scannee' + (mpCount > 1 ? 's' : '') + ' liee' + (mpCount > 1 ? 's' : '') + ' a ce dossier.'),
-              h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',
-                onClick: () => { void switchFabTab('traca'); }},
-                svgIcon('arrow-right',12),' Voir le detail dans Traca')
-            )
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune matiere scannee pour ce dossier.')
-      )
+    h('div',{className:'fab-prod-card-ico'}, svgIcon(opts.icon,22)),
+    h('div',{className:'fab-prod-card-txt'},
+      h('div',{className:'fab-prod-card-title'}, opts.title),
+      h('div',{className:'fab-prod-card-sub'}, opts.sub),
     )
+  );
+}
+function _renderStockZ1List(){
+  const z1 = S.stockProdZ1 || {refs:[],total_unites:0,nb_refs:0};
+  const currentName = String((S.user && S.user.nom) || '').trim().toLowerCase();
+
+  const head = h('div',{className:'fab-prod-z1-head'},
+    h('div',null,
+      h('div',{className:'fab-prod-z1-title'},
+        svgIcon('package',16),
+        ' Contenu Z1 — En attente sortie de prod',
+      ),
+      h('div',{className:'fab-prod-z1-sub'},
+        z1.nb_refs ?
+          (z1.nb_refs + ' référence' + (z1.nb_refs>1?'s':'') + ' · '
+           + Number(z1.total_unites||0).toLocaleString('fr-FR')
+           + ' unité' + ((z1.total_unites||0)>1?'s':''))
+          : 'Aucun produit en Z1.'
+      ),
+    ),
+    h('button',{
+      className:'fab-prod-z1-refresh',
+      type:'button',
+      title:'Rafraîchir',
+      onClick:()=>loadStockProduction()
+    }, svgIcon('refresh-ccw',14),' Actualiser'),
+  );
+
+  let body;
+  if(S.stockProdLoading){
+    body = h('div',{className:'fab-prod-empty'},'Chargement…');
+  } else if(z1._err){
+    body = h('div',{className:'fab-prod-err'}, z1._err);
+  } else if(!z1.refs || !z1.refs.length){
+    body = h('div',{className:'fab-prod-empty'},
+      h('div',{style:{fontSize:'24px',color:'var(--muted)',marginBottom:'4px'}},'·'),
+      h('div',null,'Aucune sortie de production enregistrée.'),
+      h('div',{className:'fab-prod-empty-hint'},
+        'Cliquez sur « Entrée Z1 » pour ajouter ce qui sort de production.'
+      ),
+    );
+  } else {
+    const rows = z1.refs.map(r => {
+      const lineOp = String(r.dernier_operateur || '').trim().toLowerCase();
+      const canEdit = currentName && lineOp && currentName === lineOp;
+      const rightChildren = [
+        h('div',{className:'fab-prod-z1-qty'}, _fmtU(r.quantite||0, r.unite||'')),
+      ];
+      if(canEdit){
+        rightChildren.push(h('div',{className:'fab-prod-z1-actions'},
+          h('button',{
+            className:'fab-prod-z1-btn fab-prod-z1-btn-add',
+            type:'button',
+            title:'Ajouter une quantité à cette référence',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('add-to:'+r.id); },
+          }, svgIcon('plus-circle',12),' Ajouter'),
+          h('button',{
+            className:'fab-prod-z1-btn fab-prod-z1-btn-edit',
+            type:'button',
+            title:'Modifier la quantité totale en Z1',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('edit:'+r.id); },
+          }, svgIcon('edit',12),' Modifier'),
+        ));
+      }
+      return h('div',{className:'fab-prod-z1-row'},
+        h('div',{className:'fab-prod-z1-left'},
+          h('div',{className:'fab-prod-z1-ref'}, r.reference || '—'),
+          h('div',{className:'fab-prod-z1-des'}, r.designation || ''),
+          h('div',{className:'fab-prod-z1-meta'},
+            h('span',{className:'fab-prod-z1-meta-date'},
+              svgIcon('clock',11),' '+ _fmtDateStockProd(r.derniere_entree || r.date_fifo)),
+            h('span',{className:'fab-prod-z1-meta-op'},
+              svgIcon('users',11),' '+ (r.dernier_operateur || '—')),
+          ),
+        ),
+        h('div',{className:'fab-prod-z1-right'}, ...rightChildren)
+      );
+    });
+    body = h('div',{className:'fab-prod-z1-list'}, ...rows);
+  }
+
+  return h('div',{className:'fab-prod-z1-card'}, head, body);
+}
+
+function renderStatsPanel(){
+  // Vue Stock native — miroir visuel de MyStock (buildProductionView),
+  // sans iframe, alimentée par /api/stock/sortie-prod.  Les clics sur
+  // les 4 cartes redirigent vers /stock?tab=production&auto=<action>
+  // pour ouvrir la modale correspondante (les modales de MyStock ne
+  // sont pas dupliquées ici).
+  return h('div',{className:'fab-main fab-stock-native'},
+    h('div',{className:'fab-prod-head'},
+      h('h2',{className:'fab-prod-head-title'}, 'Production'),
+      h('div',{className:'fab-prod-head-sub'},
+        'Saisie rapide des entrées/sorties matières premières et sortie de production (Z1).'),
+    ),
+    h('div',{className:'fab-prod-grid'},
+      _buildStockActionCard({
+        kind:'mp-in',  icon:'log-in',      title:'Entrée MP',
+        sub:'Réception matière',
+        onClick:()=>_stockGoTo('entree-mp'),
+      }),
+      _buildStockActionCard({
+        kind:'mp-out', icon:'log-out',     title:'Sortie MP',
+        sub:'Consommation production',
+        onClick:()=>_stockGoTo('sortie-mp'),
+      }),
+      _buildStockActionCard({
+        kind:'z1-in',  icon:'plus-circle', title:'Entrée Z1',
+        sub:'Sortie de production',
+        onClick:()=>_stockGoTo('entree-z1'),
+      }),
+      _buildStockActionCard({
+        kind:'z1-out', icon:'edit',        title:'Sortie Z1',
+        sub:'Corriger / retirer',
+        onClick:()=>_stockGoTo('sortie-z1'),
+      }),
+    ),
+    _renderStockZ1List()
   );
 }
 
@@ -3766,32 +3925,55 @@ async function openTracabiliteModal(noDossier){
   }
 }
 
+/* ── Tabs footer : définitions + filtrage rôle ─────────────── */
+function _fabTabDefs(){
+  // Tab 'stats' est renommé "Stock" (icône package) pour donner
+  // accès aux vues MyStock depuis la fabrication.
+  return [
+    {key:'saisie', icon:'edit',    label:'Saisie'},
+    {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
+    {key:'traca',  icon:'scan',    label:'Traça'},
+    {key:'stats',  icon:'box',     label:'Stock'},
+    {key:'of',     icon:'file',    label:'Fiches + OF', ofOnly:true},
+  ];
+}
+function _isFabricationOperator(){
+  const r = S.user && S.user.role;
+  // Un pur opérateur fabrication OU un admin qui a explicitement
+  // basculé en vue opérateur : on masque Imprimer et Fiches+OF.
+  return r === 'fabrication' || S.saisieViewMode === 'operator';
+}
+function _visibleFabTabs(){
+  const opView = _isFabricationOperator();
+  return _fabTabDefs().filter(t => {
+    if(t.adminOnly && opView) return false;
+    if(t.ofOnly && (!canAccessOfTab() || opView)) return false;
+    return true;
+  });
+}
+function _renderFabTabNav(extraClass){
+  const tabs = _visibleFabTabs().map(t =>
+    h('button',{
+      className:'fab-tab-btn'+(S.fabTab===t.key?' active':''),
+      title:t.label,
+      onClick:()=>{ void switchFabTab(t.key); }
+    }, svgIcon(t.icon,16), t.label)
+  );
+  return h('div',{className:'fab-tab-nav'+(extraClass?' '+extraClass:'')}, ...tabs);
+}
+
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
   // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
   const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
   if(isAdminView){
-    const adminTabBtns = [
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
-        svgIcon('edit',16),'Saisie'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
-        svgIcon('printer',16),'Imprimer'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-        svgIcon('scan',16),'Traça'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
-        svgIcon('bar-chart-2',16),'Stats'),
-    ];
-    if(canAccessOfTab()){
-      adminTabBtns.push(
-        h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-          svgIcon('file',16),'Fiches + OF')
-      );
-    }
+    const adminTabNav = _renderFabTabNav();
+    adminTabNav.style.marginLeft = 'auto';
     return h('div',{className:'fab-footer fab-footer--admin'},
       h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase',flexShrink:0}},
         'Vue admin — lecture seule'),
-      h('div',{className:'fab-tab-nav',style:{marginLeft:'auto'}}, ...adminTabBtns)
+      adminTabNav
     );
   }
 
@@ -3970,24 +4152,10 @@ function renderFooter(){
     )
   );
 
-  // Tab nav (always visible at bottom of footer)
-  const tabBtns = [
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
-      svgIcon('edit',16),'Saisie'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
-      svgIcon('printer',16),'Imprimer'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-      svgIcon('scan',16),'Traça'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
-      svgIcon('bar-chart-2',16),'Stats'),
-  ];
-  if(canAccessOfTab()){
-    tabBtns.push(
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-        svgIcon('file',16),'Fiches + OF')
-    );
-  }
-  const tabNav = h('div',{className:'fab-tab-nav'}, ...tabBtns);
+  // Tab nav : maintenant positionné ENTRE les infos dossier et
+  // le bouton "Fin de production" (dans centerSection, en tête).
+  // Rendu identique quel que soit l'onglet actif -> footer unifié.
+  const tabNav = _renderFabTabNav('fab-tab-nav--prominent');
 
   const isOperatorView = S.saisieViewMode === 'operator';
 
@@ -4002,43 +4170,20 @@ function renderFooter(){
   }, svgIcon(isLight?'sun':'moon',14),
     h('span',{className:'fab-theme-label'}, isLight?'Clair':'Sombre'));
 
-  const tabNavWrap = h('div',{className:'fab-footer-row2'}, tabNav, themeBtn);
-
-  // When on non-saisie tabs, show a minimal status line instead of full footer
-  if(S.fabTab!=='saisie'){
-    const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
-    const dossierLabel = S.dossier ? fabDossierRefLabel(S.dossier) : 'Aucun dossier';
-    const fscFooterBtn = S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
-      ? h('button',{
-          className:'fab-btn fab-btn-ghost',
-          style:{fontSize:'10px',padding:'2px 8px'},
-          onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
-        },'FSC')
-      : null;
-    const footerCls = 'fab-footer fab-footer-operator fab-footer--alt';
-    return h('div',{className:footerCls,style:{gridTemplateColumns:'1fr'}},
-      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',
-        fontSize:'10px',color:'var(--muted)',padding:'2px 0',flexWrap:'wrap'}},
-        h('span',null, svgIcon('tool',11),' '+machineName),
-        h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',null,dossierLabel),
-        h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 6px'}}, etatLabel(S.etat)),
-        fscFooterBtn,
-        themeBtn
-      ),
-      h('div',{className:'fab-footer-row2',style:{justifyContent:'center'}}, tabNav)
-    );
-  }
+  // centerSection : la nav des onglets est empilée AU-DESSUS des
+  // action buttons ("Fin de production", etc.), bien centrée et
+  // agrandie pour être immédiatement visible.
+  const actionsSection = h('div',{className:'fab-footer-actions'},
+    machineSelectorRow,
+    h('div',{className:'fab-footer-btns'},...btns),
+    h('div',{className:'fab-footer-tabs-row'}, tabNav),
+    h('div',{className:'fab-footer-row2'}, themeBtn)
+  );
 
   const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '');
   return h('div',{className:footerCls},
     infoSection,
-    h('div',{className:'fab-footer-actions'},
-      machineSelectorRow,
-      h('div',{className:'fab-footer-btns'},...btns),
-      tabNavWrap
-    ),
+    actionsSection,
     toolsSection
   );
 }
@@ -6413,3 +6558,17 @@ init();
 </html>"""
 
 FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+
+# v1.7 — Injection du modal partage d'impression PDF (CSS + JS) juste avant la
+# fin du </head> et de </script>. On evite les placeholders et on injecte
+# directement pour rester compatible avec toute modif ulterieure du template.
+FABRICATION_HTML = FABRICATION_HTML.replace(
+    "</style>",
+    PRINT_MODAL_CSS + "\n</style>",
+    1,  # premiere occurrence seulement (le </style> principal du <head>)
+)
+FABRICATION_HTML = FABRICATION_HTML.replace(
+    "init();\n</script>",
+    PRINT_MODAL_JS + "\ninit();\n</script>",
+    1,
+)

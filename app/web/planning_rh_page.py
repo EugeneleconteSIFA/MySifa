@@ -916,6 +916,7 @@ const S = {
   canEditAtelier: false, canEditRH: false,
   viewRange: 2, baseOffset: 0, detailMode: false,
   machines: [], personnel: [], planning: [], conges: [], soldes: [],
+  myMaintenance: [], myMaintDetail: null,   // v2.2.59 : créneaux de maintenance de l'user courant
   annee: new Date().getFullYear(),
   modal: null, toast: null, loading: false,
   opOffset: 0,          // opérateur : décalage semaine
@@ -1089,6 +1090,16 @@ async function loadData(){
       S.conges=conges?.conges||[];
       S.machineConfigs=mcfgs?.configs||[];
       S.machineConfigsLoaded=true;
+      // v2.2.59 : charger les créneaux de maintenance de l'user courant si opérateur
+      const _isOp = S.user && !S.isEditor && !S.isReadOnlyAdmin;
+      if(_isOp){
+        try {
+          const md = await api(`/my-maintenance?from_week=${from}&to_week=${to}`);
+          S.myMaintenance = md?.events || [];
+        } catch(_) { S.myMaintenance = []; }
+      } else {
+        S.myMaintenance = [];
+      }
     }
   }catch(e){toast('Erreur chargement : '+e.message,'error');}
   S.loading=false; render();
@@ -1494,6 +1505,12 @@ function renderMobileTopbar(){
   `;
 }
 
+// v2.2.59 : escape HTML helper
+function escHtml(s){
+  if(s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function icon(name,sz=14){
   const icons={
     calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
@@ -1514,6 +1531,7 @@ function icon(name,sz=14){
     check:'<polyline points="20 6 9 17 4 12"/>',
     mail:'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    wrench:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
   };
   return`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icons[name]||''}</svg>`;
@@ -2362,6 +2380,95 @@ function editConge(id){
 }
 function cancelEditConge(){S.editConge=null;S.congeForm={user_id:'',date_debut:'',date_fin:'',nb_jours:'',type_conge:'CP',note:''};render();}
 
+// v2.2.59 : modal détail d'un créneau de maintenance (vue opérateur RH) ──
+async function openMyMaintDetail(eventId){
+  try {
+    const r = await fetch('/api/maintenance/events/' + eventId, {credentials:'include'});
+    if(!r.ok) throw new Error('Erreur ' + r.status);
+    const d = await r.json();
+    S.myMaintDetail = d.event || d;
+    S.modal = 'my_maint_detail';
+    render();
+  } catch(e) {
+    toast('Impossible de charger le créneau : ' + e.message, 'error');
+  }
+}
+
+function buildMyMaintDetailModal(){
+  if(S.modal !== 'my_maint_detail' || !S.myMaintDetail) return null;
+  const ev = S.myMaintDetail;
+  const ov = document.createElement('div'); ov.className = 'rh-modal-ov';
+  ov.addEventListener('mousedown', e => { if(e.target===ov){ S.modal=null; S.myMaintDetail=null; render(); }});
+  const box = document.createElement('div'); box.className = 'rh-dd-modal-box';
+  box.style.cssText += ';max-width:640px;max-height:85vh;overflow-y:auto';
+
+  const _dt = new Date(ev.date_prevue + 'T00:00:00');
+  const _dLbl = _dt.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  const _hLbl = (ev.heure_debut||'') + (ev.heure_fin?(' – '+ev.heure_fin):'');
+
+  const hdr = document.createElement('div');
+  hdr.innerHTML =
+    `<button class="rh-modal-close" onclick="S.modal=null;S.myMaintDetail=null;render();">${icon('x',16)}</button>`+
+    `<h3>${icon('wrench',18)} Créneau de maintenance</h3>`+
+    `<div class="rh-dd-subtitle" style="text-transform:capitalize">${escHtml(_dLbl)} · ${escHtml(_hLbl)}</div>`;
+  box.appendChild(hdr);
+
+  // Machines
+  const macLine = document.createElement('div');
+  macLine.style.cssText = 'margin:14px 0 6px;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:13px';
+  macLine.innerHTML = `<span style="color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Machine(s)</span><div style="margin-top:4px;font-weight:700;color:var(--text)">${escHtml(ev.machine||'—')}</div>`;
+  box.appendChild(macLine);
+
+  // Opérateurs assignés
+  if(ev.operators && ev.operators.length){
+    const opLine = document.createElement('div');
+    opLine.style.cssText = 'margin:6px 0;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:13px';
+    const opNames = ev.operators.map(o => escHtml(o.nom || o.name || '?')).join(' · ');
+    opLine.innerHTML = `<span style="color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px">Opérateurs assignés</span><div style="margin-top:4px;color:var(--text)">${opNames}</div>`;
+    box.appendChild(opLine);
+  }
+
+  // Opérations
+  const opsWrap = document.createElement('div');
+  opsWrap.style.cssText = 'margin-top:12px';
+  const opsLbl = document.createElement('div');
+  opsLbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px';
+  opsLbl.textContent = 'Opérations (' + (ev.ops||[]).length + ')';
+  opsWrap.appendChild(opsLbl);
+  (ev.ops || []).forEach(op => {
+    const opRow = document.createElement('div');
+    const isDone = (op.statut === 'termine');
+    opRow.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:9px 12px;background:'+(isDone?'rgba(52,211,153,.10)':'var(--bg)')+';border-left:3px solid '+(isDone?'var(--ok,#34d399)':'var(--border)')+';border-radius:6px;margin-bottom:5px;font-size:13px';
+    const _lbl = op.code_label || op.label || op.code_libelle || op.code || '';
+    const _mac = op.machine || op.machines_csv || '';
+    opRow.innerHTML =
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-weight:600;color:var(--text)">'+escHtml(_lbl)+'</div>'+
+        (_mac ? '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+escHtml(_mac)+'</div>' : '')+
+      '</div>'+
+      '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0;'+(isDone?'background:var(--ok,#34d399);color:#fff':'background:var(--card);color:var(--muted);border:1px solid var(--border)')+'">'+(isDone?'✓ Terminé':'À faire')+'</span>';
+    opsWrap.appendChild(opRow);
+  });
+  if(!(ev.ops||[]).length){
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:10px 12px;color:var(--muted);font-style:italic;font-size:12px';
+    empty.textContent = 'Aucune opération dans ce créneau.';
+    opsWrap.appendChild(empty);
+  }
+  box.appendChild(opsWrap);
+
+  // Actions
+  const acts = document.createElement('div');
+  acts.className = 'rh-modal-acts';
+  acts.innerHTML =
+    `<a href="/maintenance#planning" style="padding:8px 14px;border-radius:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);text-decoration:none;font-size:13px;font-weight:600">Ouvrir dans MyMaintenance →</a>`+
+    `<button type="button" style="padding:8px 14px;border-radius:6px;background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:700;cursor:pointer" onclick="S.modal=null;S.myMaintDetail=null;render();">Fermer</button>`;
+  box.appendChild(acts);
+
+  ov.appendChild(box);
+  return ov;
+}
+
 // ── Vue opérateur ──────────────────────────────────────
 function buildOperatorView(){
   const wrap=document.createElement('div'); wrap.className='rh-op-wrap';
@@ -2443,6 +2550,38 @@ function buildOperatorView(){
       noPlanDiv.style.cssText='font-size:12px;color:var(--muted);font-style:italic;padding:4px 0;';
       noPlanDiv.textContent='Aucune affectation';
       planCard.appendChild(noPlanDiv);
+    }
+    // v2.2.59 : créneaux de maintenance de la semaine
+    const _wkMon = weekMonday(ws);
+    const _wkSun = new Date(_wkMon); _wkSun.setDate(_wkMon.getDate()+6);
+    const _isoMon = _wkMon.toISOString().slice(0,10);
+    const _isoSun = _wkSun.toISOString().slice(0,10);
+    const wkMaint = (S.myMaintenance||[]).filter(m => m.date_prevue >= _isoMon && m.date_prevue <= _isoSun);
+    if(wkMaint.length){
+      const maintLbl = document.createElement('div');
+      maintLbl.style.cssText='margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px;margin-bottom:6px';
+      maintLbl.innerHTML = `${icon('wrench',12)} Créneaux de maintenance`;
+      planCard.appendChild(maintLbl);
+      wkMaint.forEach(m => {
+        const chip = document.createElement('div');
+        chip.className = 'rh-op-maint-chip';
+        const isDone = (m.ops_count>0 && m.ops_termine >= m.ops_count);
+        chip.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 12px;background:'+(isDone?'rgba(52,211,153,.10)':'var(--accent-bg)')+';border-left:3px solid '+(isDone?'var(--ok,#34d399)':'var(--accent)')+';border-radius:6px;margin-bottom:4px;cursor:pointer;transition:filter .15s,transform .12s';
+        chip.onmouseover = () => { chip.style.filter = 'brightness(1.08)'; chip.style.transform = 'translateX(2px)'; };
+        chip.onmouseout = () => { chip.style.filter = ''; chip.style.transform = ''; };
+        chip.onclick = () => openMyMaintDetail(m.id);
+        const _dt = new Date(m.date_prevue + 'T00:00:00');
+        const _dLbl = _dt.toLocaleDateString('fr-FR', {weekday:'short', day:'numeric', month:'short'});
+        const _hLbl = (m.heure_debut||'') + (m.heure_fin?(' – '+m.heure_fin):'');
+        const _progress = m.ops_count ? (m.ops_termine + '/' + m.ops_count + ' op.') : (m.ops_count + ' op.');
+        chip.innerHTML =
+          '<div style="flex:1;min-width:0">'+
+            '<div style="font-weight:700;color:var(--text);font-size:13px">'+escHtml(_dLbl.charAt(0).toUpperCase()+_dLbl.slice(1))+' · '+escHtml(_hLbl)+'</div>'+
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px">'+escHtml(m.machine||'—')+' · '+escHtml(_progress)+(isDone?' <span style="color:var(--ok,#34d399);font-weight:700">✓</span>':'')+'</div>'+
+          '</div>'+
+          '<span style="color:var(--muted);font-size:16px;flex-shrink:0">›</span>';
+        planCard.appendChild(chip);
+      });
     }
   });
   if(!hasAnyPlan && weeks.length===1){
@@ -2660,6 +2799,9 @@ function renderModals(){
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else if(S.modal==='machine_config'){
     const m=buildMachineConfigModal();
+    mr.innerHTML=''; if(m)mr.appendChild(m);
+  }else if(S.modal==='my_maint_detail'){
+    const m=buildMyMaintDetailModal();
     mr.innerHTML=''; if(m)mr.appendChild(m);
   }else{
     mr.innerHTML='';

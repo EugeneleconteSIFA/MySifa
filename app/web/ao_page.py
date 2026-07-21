@@ -112,8 +112,24 @@ body.sb-open .sidebar-overlay{display:block}
 .btn-icon.btn-del-ao:hover{background:rgba(248,113,113,.12);color:var(--danger);border-color:var(--danger)}
 .ao-actions-cell{text-align:right;white-space:nowrap}
 .ao-actions-cell .btn{vertical-align:middle}
+.ao-params-panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px 12px;margin-left:auto;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
+.ao-params-panel h3{margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent)}
+.ao-params-panel .app-group{display:flex;flex-direction:column;gap:2px}
+.ao-params-panel .app-group .app-row{margin:0;display:flex;align-items:center;gap:6px}
+.ao-params-panel .app-group .app-row label{flex:0 0 auto;font-size:11px}
+.ao-params-panel .app-group .app-row input[type=number]{width:80px;flex:0 0 auto;padding:4px 8px;font-size:12px}
+.ao-params-panel .app-group .app-help{margin:0;font-size:10px;line-height:1.3;font-style:italic;color:var(--muted)}
+@media(max-width:820px){.ao-params-panel{margin-left:0;width:100%}}
+.ao-params-panel .app-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.ao-params-panel .app-row:last-child{margin-bottom:0}
+.ao-params-panel label{flex:0 0 130px;font-size:12px;font-weight:600;color:var(--text2)}
+.ao-params-panel input[type=number]{flex:1;padding:6px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit}
+.ao-params-panel .app-suffix{font-size:12px;color:var(--muted);min-width:20px}
+.ao-params-panel .app-help{font-size:11px;color:var(--muted);line-height:1.4;margin-top:6px;font-style:italic}
+.ao-list-ref-link{color:var(--accent);text-decoration:none;font-weight:700}
+.ao-list-ref-link:hover{text-decoration:underline}
 .filter-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-.filter-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.filter-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .filter-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .data-table{width:100%;border-collapse:collapse;font-size:13px}
 .data-table th,.data-table td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left}
@@ -124,8 +140,8 @@ body.sb-open .sidebar-overlay{display:block}
 .badge-success{background:rgba(52,211,153,.15);color:var(--success)}
 .empty-state{padding:48px 24px;text-align:center;color:var(--muted)}
 .empty-state strong{display:block;color:var(--text2);font-size:15px;margin-bottom:8px}
-.detail-tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap}
-.detail-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.detail-tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;align-items:center}
+.detail-tab{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .detail-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
 .breadcrumb{font-size:12px;color:var(--muted);margin-bottom:12px}
@@ -1366,7 +1382,7 @@ function renderList() {
       '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
       '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
       '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
-    rows += '<tr><td><strong>'+escHtml(a.reference)+'</strong></td>'+
+    rows += '<tr><td><a href="#" class="ao-list-ref-link btn-view" data-id="'+a.id+'">'+escHtml(a.reference)+'</a></td>'+
       '<td>'+escHtml(a.titre)+'</td>'+
       '<td>'+cliTxt+'</td>'+
       '<td>'+refsTxt+'</td>'+
@@ -1399,6 +1415,50 @@ function buildNavPagerHtml(list, currentId, labelSingular) {
     '<span class="nav-pos">'+(idx+1)+' / '+total+'</span>'+
     '<button type="button" class="btn-icon btn-nav-next"'+nextDis+' title="'+escAttr(titleNext)+'">'+icon('arrow-right',14)+'</button>'+
     '</div>';
+}
+
+function formatTransportHelper(pct) {
+  const p = parseFloat(pct) || 0;
+  const base = 50000;
+  const t = base * p / 100;
+  const fmt = v => v.toLocaleString('fr-FR', {maximumFractionDigits: 0});
+  return 'Pour ' + fmt(base) + ' EUR de marchandise : ' + fmt(t) + ' EUR de transport';
+}
+
+async function saveAoTransport(aoId, pct) {
+  try {
+    await api('/api/ao/' + aoId + '/params', {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({prix_transport_pct: pct})
+    });
+    if (S.ao) S.ao.prix_transport_pct = pct;
+    if (S.view === 'detail' && S.tab === 'comparaison' && S.ao) {
+      await loadComparaison(S.ao.id);
+      render();
+    }
+  } catch(e) { showToast(e.message || 'Erreur transport.', 'danger'); }
+}
+
+async function loadEurUsdRate() {
+  try {
+    const r = await api('/api/ao/config/eur-usd');
+    const el = document.getElementById('app-eur-usd');
+    if (el && r && typeof r.eur_usd_rate === 'number') el.value = r.eur_usd_rate || '';
+  } catch(e) { /* silencieux */ }
+}
+
+async function saveEurUsdRate(rate) {
+  try {
+    await api('/api/ao/config/eur-usd', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({eur_usd_rate: rate})
+    });
+    showToast('Taux EUR/USD mis a jour.', 'success');
+    if (S.view === 'detail' && S.tab === 'comparaison' && S.ao) {
+      await loadComparaison(S.ao.id);
+      render();
+    }
+  } catch(e) { showToast(e.message || 'Erreur EUR/USD.', 'danger'); }
 }
 
 function renderDetailHeader() {
@@ -1438,7 +1498,19 @@ function renderDetailHeader() {
       return ['lignes','fournisseurs','comparaison','messages','documents'].map(t =>
         '<button class="detail-tab'+(S.tab===t?' active':'')+'" data-tab="'+t+'">'+labels[t]+'</button>'
       ).join('');
-    })()+'</div>';
+    })()+'<div class="ao-params-panel">'+
+      '<div class="app-group">'+
+        '<div class="app-row"><label for="app-transport">Prix transport</label>'+
+          '<input type="number" id="app-transport" step="0.1" min="0" max="100" value="'+escAttr(ao.prix_transport_pct||0)+'">'+
+          '<span class="app-suffix">%</span></div>'+
+        '<div class="app-help" id="app-transport-help">'+formatTransportHelper(ao.prix_transport_pct||0)+'</div>'+
+      '</div>'+
+      '<div class="app-group">'+
+        '<div class="app-row"><label for="app-eur-usd">Taux EUR/USD</label>'+
+          '<input type="number" id="app-eur-usd" step="0.0001" min="0" placeholder="1.0850">'+
+          '<span class="app-suffix"></span></div>'+
+      '</div>'+
+    '</div>'+'</div>';
 }
 
 function renderLignes() {
@@ -1529,7 +1601,118 @@ async function openCloturerAoModal() {
 }
 
 // ── Wizard creation AO en 3 etapes ──
-async function openCreateAoWizard() {
+function openQuickProduitModal(onCreated) {
+  // Modal nestable qui se pose sur tout (wizard inclus) via z-index eleve
+  const existing = document.getElementById('quick-produit-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'quick-produit-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:80px;overflow-y:auto';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:min(520px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.35);color:var(--text)';
+  modal.innerHTML = '<h3 style="margin:0 0 14px 0;font-size:16px;font-weight:700">Nouveau produit</h3>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Reference *</label>'+
+    '<input id="qp-ref" type="text" placeholder="Ex: 1145/0050" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit" autocomplete="off"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Designation</label>'+
+    '<input id="qp-des" type="text" placeholder="Ex: Etiquettes 101,6x152,4mm" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit" autocomplete="off"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Client (optionnel)</label>'+
+    '<div style="position:relative">'+
+    '<input id="qp-client-search" type="text" placeholder="Tape un nom (min 2 lettres)..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit">'+
+    '<div id="qp-client-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:180px;overflow:auto;z-index:2"></div>'+
+    '<div id="qp-client-selected" style="display:none;margin-top:6px;padding:6px 10px;background:var(--accent-bg,rgba(34,211,238,.08));border:1px solid var(--border);border-radius:8px;font-size:13px"></div>'+
+    '</div></div>'+
+    '<div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Unite</label>'+
+    '<select id="qp-unite" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit">'+
+    '<option value="unite">unite</option><option value="etiquettes">etiquettes</option><option value="bobine">bobine</option><option value="palette">palette</option>'+
+    '</select></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:8px">'+
+    '<button type="button" id="qp-cancel" class="btn btn-ghost">Annuler</button>'+
+    '<button type="button" id="qp-save" class="btn btn-accent">Creer</button>'+
+    '</div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  let selectedClient = null;
+  const cleanup = () => overlay.remove();
+
+  document.getElementById('qp-cancel').onclick = () => { cleanup(); };
+  overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+
+  // Client picker inline
+  const searchInp = document.getElementById('qp-client-search');
+  const resultsDiv = document.getElementById('qp-client-results');
+  const selectedDiv = document.getElementById('qp-client-selected');
+  let searchTimer = null;
+  searchInp.addEventListener('input', () => {
+    const q = searchInp.value.trim();
+    clearTimeout(searchTimer);
+    if (q.length < 2) { resultsDiv.style.display = 'none'; return; }
+    searchTimer = setTimeout(async () => {
+      try {
+        const rows = await api('/api/ao/picker/clients?search=' + encodeURIComponent(q) + '&limit=15');
+        if (!rows || !rows.length) {
+          resultsDiv.innerHTML = '<div style="padding:8px 10px;color:var(--muted);font-size:12px">Aucun client</div>';
+          resultsDiv.style.display = 'block';
+          return;
+        }
+        resultsDiv.innerHTML = rows.map(c => {
+          const label = c.raison_sociale || c.nom || ('Client #' + c.id);
+          return '<div class="qp-cli-row" data-cid="'+c.id+'" data-label="'+escAttr(label)+'" style="padding:8px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"><strong>'+escHtml(label)+'</strong></div>';
+        }).join('');
+        resultsDiv.style.display = 'block';
+        resultsDiv.querySelectorAll('.qp-cli-row').forEach(row => {
+          row.onclick = () => {
+            selectedClient = {id: parseInt(row.dataset.cid, 10), label: row.dataset.label};
+            selectedDiv.innerHTML = '<strong>' + escHtml(selectedClient.label) + '</strong> <button type="button" id="qp-cli-clear" style="border:none;background:transparent;color:var(--danger);cursor:pointer;padding:0 4px">x</button>';
+            selectedDiv.style.display = 'block';
+            searchInp.style.display = 'none';
+            resultsDiv.style.display = 'none';
+            document.getElementById('qp-cli-clear').onclick = () => {
+              selectedClient = null;
+              selectedDiv.style.display = 'none';
+              searchInp.style.display = '';
+              searchInp.value = '';
+            };
+          };
+        });
+      } catch(e) {
+        resultsDiv.innerHTML = '<div style="padding:8px 10px;color:var(--danger);font-size:12px">Erreur: '+escHtml(e.message||String(e))+'</div>';
+        resultsDiv.style.display = 'block';
+      }
+    }, 220);
+  });
+
+  document.getElementById('qp-save').onclick = async () => {
+    const ref = (document.getElementById('qp-ref').value || '').trim();
+    const designation = (document.getElementById('qp-des').value || '').trim();
+    const unite = document.getElementById('qp-unite').value || 'unite';
+    if (!ref) { showToast('Reference obligatoire.', 'danger'); return; }
+    const saveBtn = document.getElementById('qp-save');
+    saveBtn.disabled = true;
+    try {
+      const body = {ref: ref, designation: designation || ref, unite: unite};
+      if (selectedClient) body.client_id = selectedClient.id;
+      const created = await api('/api/ao/produits', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      try { await loadProduits(); } catch(e) {}
+      showToast('Produit ' + (created.ref || ref) + ' cree.', 'success');
+      cleanup();
+      if (typeof onCreated === 'function') onCreated(created);
+    } catch(e) {
+      showToast(e.message || 'Erreur creation produit.', 'danger');
+      saveBtn.disabled = false;
+    }
+  };
+
+  // Focus ref field
+  setTimeout(() => document.getElementById('qp-ref')?.focus(), 50);
+}
+
+async function openCreateAoWizard(initialState) {
   const m = document.getElementById('mroot');
   if (!m) return;
   m.innerHTML = '';
@@ -1538,7 +1721,13 @@ async function openCreateAoWizard() {
   box.style.maxWidth = '760px';
   box.style.width = '92vw';
 
-  const state = {
+  let state;
+  const _hasValidInitial = initialState && Array.isArray(initialState.lignes) && initialState.info;
+  if (_hasValidInitial) {
+    state = initialState;
+    if (typeof state.step !== 'number') state.step = 2;
+  } else {
+    state = {
     step: 1,
     info: {
       titre: '',
@@ -1556,22 +1745,24 @@ async function openCreateAoWizard() {
     selectedContactKeys: new Set(),
     manualFourni: { nom: '', email: '', langue: 'fr' },
     _autoP: false,
-  };
-
-  // Charge fournisseurs+contacts et produits en parallele
-  try {
-    const [fours] = await Promise.all([
-      api('/api/ao/picker/fournisseurs-with-contacts'),
-    ]);
-    state.availableFournisseurs = fours || [];
-  } catch (e) {
-    showToast('Erreur chargement donnees: ' + (e.message || e), 'danger');
+    };
   }
 
-  // Auto-preselect contacts principaux
-  state.availableFournisseurs.forEach(f => (f.contacts || []).forEach(c => {
-    if (c.is_principal) state.selectedContactKeys.add(f.id + ':' + c.id);
-  }));
+  // Charge fournisseurs+contacts et produits en parallele (skip si etat existant)
+  if (!_hasValidInitial) {
+    try {
+      const [fours] = await Promise.all([
+        api('/api/ao/picker/fournisseurs-with-contacts'),
+      ]);
+      state.availableFournisseurs = fours || [];
+    } catch (e) {
+      showToast('Erreur chargement donnees: ' + (e.message || e), 'danger');
+    }
+    // Auto-preselect contacts principaux
+    state.availableFournisseurs.forEach(f => (f.contacts || []).forEach(c => {
+      if (c.is_principal) state.selectedContactKeys.add(f.id + ':' + c.id);
+    }));
+  }
 
   function renderStepIndicator() {
     const steps = ['Infos AO', 'Produits', 'Fournisseurs'];
@@ -1619,6 +1810,7 @@ async function openCreateAoWizard() {
 
   function renderStep2() {
     const prodOpts = '<option value="">— saisie manuelle —</option>' +
+      '<option value="__CREATE__">+ Creer un nouveau produit</option>' +
       (state.availableProduits || []).map(p =>
         '<option value="' + p.id + '">' + escHtml(p.ref) + ' — ' + escHtml(p.designation) + '</option>'
       ).join('');
@@ -1807,6 +1999,7 @@ async function openCreateAoWizard() {
               resultsDiv.style.display = 'block';
               resultsDiv.querySelectorAll('.w-client-row').forEach(row => {
                 row.onclick = () => {
+                  commitStep1FromDOM();
                   state.info.client_id = parseInt(row.dataset.cid, 10);
                   state.info.client_label = row.dataset.clabel;
                   render();
@@ -1822,7 +2015,7 @@ async function openCreateAoWizard() {
         });
       }
       const clr = document.getElementById('w-client-clear');
-      if (clr) clr.onclick = () => { state.info.client_id = null; state.info.client_label = ''; render(); };
+      if (clr) clr.onclick = () => { commitStep1FromDOM(); state.info.client_id = null; state.info.client_label = ''; render(); };
     }
 
     // Step 2 : add / delete row + prefill from catalogue
@@ -1841,8 +2034,31 @@ async function openCreateAoWizard() {
         };
       });
       box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
-        sel.onchange = () => {
+        sel.onchange = async () => {
           const pid = sel.value;
+          if (pid === '__CREATE__') {
+            sel.value = '';
+            commitStep2FromDOM();
+            // Save wizard state + hook, close modal, switch to full produit form
+            S._pendingWizardHook = {
+              lineIdx: idx,
+              onSaved: (created) => {
+                state.availableProduits = S.produits || [];
+                state.lignes[idx].ref_produit = created.ref;
+                state.lignes[idx].designation = created.designation || '';
+                openCreateAoWizard(state);
+              },
+              onCanceled: () => {
+                openCreateAoWizard(state);
+              }
+            };
+            // Close wizard modal (mroot)
+            m.innerHTML = '';
+            // Switch to produits section + open produit form
+            S.section = 'produits';
+            await openProduitForm(null);
+            return;
+          }
           if (!pid) return;
           const p = (state.availableProduits || []).find(x => String(x.id) === String(pid));
           if (!p) return;
@@ -1851,6 +2067,14 @@ async function openCreateAoWizard() {
           row.querySelector('.w-l-des').value = p.designation || '';
           if (!row.querySelector('.w-l-qte').value) row.querySelector('.w-l-qte').value = '';
         };
+      });
+      // Auto-select des selects w-l-pick base sur state.lignes[idx].ref_produit
+      box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
+        const ref = state.lignes[idx] && state.lignes[idx].ref_produit;
+        if (ref) {
+          const p = (state.availableProduits || []).find(x => x.ref === ref);
+          if (p) sel.value = String(p.id);
+        }
       });
     }
 
@@ -2286,7 +2510,7 @@ function renderComparaison() {
       '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
       '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>'+
       '<td>'+escHtml(devF)+'</td>'+
-      '<td>'+escHtml(formatUniteQuot(r.unite_quotation))+'</td>'+
+      '<td>'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+' style="font-size:11px;padding:2px 4px">'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+(r.unite_manuel ? ' <span style="font-size:9px;padding:1px 5px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">manuel</span>' : '')+'</td>'+
       '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
       '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
       '<td><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
@@ -2356,6 +2580,27 @@ function bindDetailEvents() {
   document.getElementById('btn-back')?.addEventListener('click', backToList);
   document.getElementById('bc-list')?.addEventListener('click', e => { e.preventDefault(); backToList(); });
   document.querySelectorAll('.detail-tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  // AO params panel : transport % + EUR/USD
+  (function bindAoParamsPanel(){
+    const inpT = document.getElementById('app-transport');
+    const help = document.getElementById('app-transport-help');
+    if (inpT) {
+      inpT.addEventListener('input', () => { if (help) help.textContent = formatTransportHelper(inpT.value); });
+      inpT.addEventListener('change', () => {
+        const v = Math.max(0, Math.min(100, parseFloat(inpT.value) || 0));
+        inpT.value = v;
+        if (S.ao) saveAoTransport(S.ao.id, v);
+      });
+    }
+    const inpU = document.getElementById('app-eur-usd');
+    if (inpU) {
+      loadEurUsdRate();
+      inpU.addEventListener('change', () => {
+        const v = parseFloat(inpU.value);
+        if (!isNaN(v) && v > 0) saveEurUsdRate(v);
+      });
+    }
+  })();
   document.querySelectorAll('.detail-hdr .btn-nav-prev, .detail-hdr .btn-nav-next').forEach(btn => {
     btn.addEventListener('click', () => {
       const arr = filteredAos();
@@ -2441,6 +2686,17 @@ function bindDetailEvents() {
       render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
+  document.querySelectorAll('.inp-unite-quot').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const rid = sel.dataset.rep;
+      if (!rid) return;
+      try {
+        await saveReponsePricing(rid, {unite_quotation: sel.value});
+        // refetch entire comparaison pour recalculer les prix
+        if (S.ao) { await loadComparaison(S.ao.id); render(); }
+      } catch(e) { showToast(e.message || 'Erreur unite.', 'danger'); }
+    });
+  });
   document.querySelectorAll('.inp-coef').forEach(inp => {
     inp.addEventListener('change', async () => {
       const rid = inp.dataset.rep;

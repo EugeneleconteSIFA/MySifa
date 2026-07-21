@@ -310,6 +310,54 @@ Ces règles ont été violées deux fois par des IA (Cursor puis Claude) et ont 
 /* Variantes : .btn-accent (fond --accent), .btn-danger (fond --danger), .btn-ghost (transparent) */
 ```
 
+**Règles absolues sur les boutons — à respecter partout, sans exception**
+
+1. **Pas de fond transparent au repos.** Un bouton avec `background: transparent`
+   sur un fond de page `var(--bg)` est visuellement absent tant que le curseur
+   n'est pas dessus — l'utilisateur ne voit pas l'affordance. Toujours donner
+   un fond explicite :
+   - Bouton posé **sur la page** (fond `var(--bg)`) → `background: var(--card)`
+     (blanc en mode clair, sombre en mode dark) pour contraster avec le fond.
+   - Bouton posé **à l'intérieur d'une card / modal** (fond `var(--card)`) →
+     `background: var(--bg)` (gris clair / plus sombre) pour contraster avec
+     la card.
+   - Bouton **actif / sélectionné** → `background: var(--accent-bg)` +
+     `border: 1px solid var(--accent)` + `color: var(--accent)`.
+   - Bouton **danger / destructif** → fond `var(--danger)` + texte blanc.
+
+   La variante `.btn-ghost` de la CSS globale reste tolérée uniquement pour
+   des cas très localisés (ex. bouton "×" de fermeture posé sur un fond déjà
+   coloré) — jamais comme choix par défaut pour un CTA visible dans la page.
+
+2. **Cohérence hover.** Si le repos est `var(--card)`, le hover doit être
+   `var(--bg)` (effet "s'assombrit" en mode clair, "s'éclaircit" en mode
+   dark). Et **toujours définir le `mouseleave` symétrique** qui rétablit le
+   fond de repos — sinon le bouton "reste" en état hover après un clic.
+   Anti-pattern classique : `mouseleave` qui remet `transparent` alors que le
+   repos est `var(--card)` → flash inversé au sortir du bouton.
+
+3. **Boutons à fond coloré (accent, success, danger, warn) — la couleur du
+   texte et de l'icône dépend du thème.** Un bouton `background: var(--accent)`
+   (cyan) affiche du texte lisible en mode dark avec `color: #0a0e17` (le fond
+   dark), mais en mode light il faut du texte foncé pour rester lisible sur
+   le cyan. Pattern à adopter :
+   ```css
+   /* Sur fond --accent : texte foncé qui reste lisible dans les 2 thèmes */
+   .btn-accent { background: var(--accent); color: var(--bg); }
+   ```
+   Le principe : `color: var(--bg)` produit **automatiquement** un texte
+   contrasté (foncé sur clair, clair sur foncé) parce que `--bg` bascule
+   avec le thème. Idem pour un bouton `background: var(--danger)` (rouge)
+   qui reste toujours foncé → `color: #ffffff` est acceptable. Le point clé :
+   **jamais** `color: var(--text)` ou `color: var(--text2)` sur un bouton à
+   fond coloré — ces variables suivent le thème et vont produire du texte
+   sombre sur fond sombre en mode dark, invisible.
+
+   Bug historique : une IA a mis `color: var(--text2)` sur un badge cyan
+   `background: var(--accent-bg)` — invisible en mode dark (text2 = clair
+   sur accent-bg qui est déjà clair). Toujours tester dans les deux thèmes
+   à chaque ajout de composant à fond coloré.
+
 **Inputs / Champs**
 ```css
 background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
