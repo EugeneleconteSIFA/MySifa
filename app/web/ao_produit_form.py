@@ -436,6 +436,15 @@ async function saveProduitForm() {
     }
     showToast('Fiche produit enregistrée.', 'success');
     await loadProduits();
+    if (S._pendingWizardHook && typeof S._pendingWizardHook.onSaved === 'function') {
+      const hook = S._pendingWizardHook;
+      S._pendingWizardHook = null;
+      S.produitForm = null;
+      S.produitView = 'list';
+      S.section = 'ao';
+      hook.onSaved(saved);
+      return;
+    }
     S.produitForm = produitFromApi(saved);
     render();
   } catch (e) {
@@ -459,6 +468,15 @@ async function openProduitForm(edit) {
 }
 
 function closeProduitForm() {
+  if (S._pendingWizardHook && typeof S._pendingWizardHook.onCanceled === 'function') {
+    const hook = S._pendingWizardHook;
+    S._pendingWizardHook = null;
+    S.produitView = 'list';
+    S.produitForm = null;
+    S.section = 'ao';
+    hook.onCanceled();
+    return;
+  }
   S.produitView = 'list';
   S.produitForm = null;
   render();
