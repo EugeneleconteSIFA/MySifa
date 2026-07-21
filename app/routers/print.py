@@ -57,6 +57,7 @@ from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.services.auth_service import get_current_user, require_superadmin
 from app.services.print_render import (
+    DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL,
     LANGAGES,
     USAGES,
     default_templates_seed,
@@ -534,6 +535,7 @@ class LabelRequest(BaseModel):
     data: dict
     imprimante_id: Optional[int] = None       # override du défaut utilisateur
     copies: int = 1                            # nombre de copies (bobines à étiqueter)
+    variante: str = "full"                     # v1.7 : "full" (nouveau + defaut) ou "compact" (reimpression)
 
 
 @router.post("/label")
@@ -577,21 +579,28 @@ def emit_label(payload: LabelRequest, request: Request):
             raise HTTPException(status_code=404, detail="Imprimante introuvable.")
         if not imp["actif"]:
             raise HTTPException(status_code=409, detail="Imprimante désactivée.")
-        # Cherche le template
-        tpl = conn.execute(
-            "SELECT id,contenu FROM imprimante_templates "
-            "WHERE imprimante_id=? AND usage_key=? AND actif=1 LIMIT 1",
-            (imp_id, payload.usage_key),
-        ).fetchone()
-        if not tpl:
-            raise HTTPException(
-                status_code=409,
-                detail=(f"Aucun template actif pour l'usage « {payload.usage_key} » "
-                        f"sur l'imprimante « {imp['nom']} ». À configurer dans /settings > Imprimantes."),
-            )
+        # v1.7 - Cherche le template selon la variante (full = template DB, compact = hardcode)
+        if payload.variante == "compact":
+            # Template compact hardcode (107x50mm) pour la reimpression - bypasse la DB
+            tpl_content = DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL
+            tpl_id = None
+        else:
+            tpl = conn.execute(
+                "SELECT id,contenu FROM imprimante_templates "
+                "WHERE imprimante_id=? AND usage_key=? AND actif=1 LIMIT 1",
+                (imp_id, payload.usage_key),
+            ).fetchone()
+            if not tpl:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(f"Aucun template actif pour l'usage « {payload.usage_key} » "
+                            f"sur l'imprimante « {imp['nom']} ». À configurer dans /settings > Imprimantes."),
+                )
+            tpl_content = tpl["contenu"]
+            tpl_id = tpl_id
         # Rendu + insertion des jobs
         try:
-            payload_bytes = render_template(tpl["contenu"], payload.data or {}, imp["langage"])
+            payload_bytes = render_template(tpl_content, payload.data or {}, imp["langage"])
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur rendu template: {e}")
         now = _now()
@@ -603,7 +612,7 @@ def emit_label(payload: LabelRequest, request: Request):
                 "INSERT INTO print_jobs (imprimante_id,agent_id,usage_key,template_id,payload,"
                 "payload_langage,status,created_at,created_by,data_json) "
                 "VALUES (?,?,?,?,?,?,'pending',?,?,?)",
-                (imp_id, imp["agent_id"], payload.usage_key, tpl["id"],
+                (imp_id, imp["agent_id"], payload.usage_key, tpl_id,
                  payload_bytes, imp["langage"], now, email, data_json),
             )
             job_ids.append(cur.lastrowid)
