@@ -3899,13 +3899,16 @@ def maintenance_alerts_active(request: Request):
                             (int(r["id"]), _dos),
                         ).fetchone()
                         if not _ack_check:
-                            # v2.2.79 — Chercher le dernier code calage du dossier,
-                            # puis le premier prod APRÈS ce calage (déclencheur).
+                            # v2.2.79 — Chercher le dernier code calage RÉCENT du dossier
+                            # (dans la fenêtre 24h, comme _window). Un calage historique
+                            # trop ancien n'a plus vocation à déclencher l'alerte : le
+                            # dossier peut avoir été rouvert un autre jour.
                             _last_calage = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
                                    WHERE no_dossier=? AND machine=?
-                                     AND operation_category='calage'""",
-                                (_dos, effective_machine),
+                                     AND operation_category='calage'
+                                     AND date_operation >= ?""",
+                                (_dos, effective_machine, _window),
                             ).fetchone()
                             _last_calage_at = _last_calage["m"] if _last_calage else None
                             if _last_calage_at:
