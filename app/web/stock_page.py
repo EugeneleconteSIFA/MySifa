@@ -14718,22 +14718,25 @@ function valToggleSort(column) {
 }
 
 function buildValorisationSparkline() {
-  // Renvoie le bloc "Tendance 30 derniers jours" : petit titre + sparkline SVG
-  // fluide. Occupe l'espace libre a droite de la card total. Design tres epure :
-  // aucune legende, aucun axe, pas d'infobulle, juste une courbe verte + zone
-  // de remplissage tres discrete + un point sur la derniere valeur.
+  // Bloc "Tendance 30 derniers jours" : petit titre + sparkline lissee.
+  // - Courbe smoothed via Bezier cubique (Catmull-Rom → cubique) : pas d'angles
+  //   pointus, rendu fluide meme quand une valeur decroche.
+  // - Padding vertical genereux : l'amplitude ne colle pas aux bords.
+  // - Hover interactif : ligne verticale + point vert + tooltip flottant
+  //   (date + valeur formatee). Zone de capture = tout le SVG.
   const v = valEnsureState();
   const trend = v.trend || { points: [], loading: false };
   const wrap = el('div', {
-    style: 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:6px'
+    style: 'flex:1 1 auto;min-width:0;position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:6px'
   });
   wrap.append(el('div', {
     style: 'font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:right'
   }, 'Tendance 30 derniers jours'));
 
   const svgNS = 'http://www.w3.org/2000/svg';
+  const W = 200, H = 60, padTop = 8, padBot = 8;
   const svg = document.createElementNS(svgNS, 'svg');
-  svg.setAttribute('viewBox', '0 0 200 60');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.style.width = '100%';
   svg.style.height = '60px';
@@ -14742,80 +14745,216 @@ function buildValorisationSparkline() {
 
   const pts = (trend.points || []).filter(p => p && typeof p.total === 'number');
   if (pts.length < 2) {
-    // Placeholder discret : une petite ligne horizontale grise quand pas de data
+    // Placeholder discret : point de suspension quand data pas encore prete.
     const placeholderText = document.createElementNS(svgNS, 'text');
-    placeholderText.setAttribute('x', '100');
-    placeholderText.setAttribute('y', '35');
+    placeholderText.setAttribute('x', String(W / 2));
+    placeholderText.setAttribute('y', String(H / 2 + 3));
     placeholderText.setAttribute('text-anchor', 'middle');
     placeholderText.setAttribute('fill', 'var(--muted)');
     placeholderText.setAttribute('font-size', '10');
     placeholderText.setAttribute('opacity', '0.5');
     placeholderText.textContent = trend.loading ? '…' : '';
     svg.appendChild(placeholderText);
-  } else {
-    const totals = pts.map(p => Number(p.total || 0));
-    const min = Math.min(...totals);
-    const max = Math.max(...totals);
-    const range = max - min || 1;
-    const W = 200, H = 60, padTop = 6, padBot = 6;
-    const usableH = H - padTop - padBot;
-    const stepX = pts.length > 1 ? W / (pts.length - 1) : 0;
-    const y = (t) => padTop + usableH - ((t - min) / range) * usableH;
-    const coords = totals.map((t, i) => [i * stepX, y(t)]);
-
-    // Zone remplie sous la courbe (gradient très discret)
-    const gradId = 'val-spark-grad-' + Math.floor(Math.random() * 1e9);
-    const defs = document.createElementNS(svgNS, 'defs');
-    const grad = document.createElementNS(svgNS, 'linearGradient');
-    grad.setAttribute('id', gradId);
-    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
-    grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
-    const s1 = document.createElementNS(svgNS, 'stop');
-    s1.setAttribute('offset', '0%');
-    s1.setAttribute('stop-color', '#16a34a');
-    s1.setAttribute('stop-opacity', '0.22');
-    const s2 = document.createElementNS(svgNS, 'stop');
-    s2.setAttribute('offset', '100%');
-    s2.setAttribute('stop-color', '#16a34a');
-    s2.setAttribute('stop-opacity', '0');
-    grad.appendChild(s1); grad.appendChild(s2);
-    defs.appendChild(grad);
-    svg.appendChild(defs);
-
-    const areaPath = document.createElementNS(svgNS, 'path');
-    let dArea = 'M ' + coords[0][0] + ' ' + H;
-    coords.forEach(([x, yy]) => { dArea += ' L ' + x + ' ' + yy; });
-    dArea += ' L ' + coords[coords.length - 1][0] + ' ' + H + ' Z';
-    areaPath.setAttribute('d', dArea);
-    areaPath.setAttribute('fill', 'url(#' + gradId + ')');
-    svg.appendChild(areaPath);
-
-    // Ligne
-    const linePath = document.createElementNS(svgNS, 'path');
-    let dLine = 'M ' + coords[0][0] + ' ' + coords[0][1];
-    for (let i = 1; i < coords.length; i++) {
-      dLine += ' L ' + coords[i][0] + ' ' + coords[i][1];
-    }
-    linePath.setAttribute('d', dLine);
-    linePath.setAttribute('fill', 'none');
-    linePath.setAttribute('stroke', '#16a34a');
-    linePath.setAttribute('stroke-width', '1.6');
-    linePath.setAttribute('stroke-linecap', 'round');
-    linePath.setAttribute('stroke-linejoin', 'round');
-    // vector-effect empeche l'epaisseur de trait de scaler avec preserveAspectRatio=none
-    linePath.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(linePath);
-
-    // Point sur la derniere valeur (aujourd'hui)
-    const last = coords[coords.length - 1];
-    const dot = document.createElementNS(svgNS, 'circle');
-    dot.setAttribute('cx', last[0]);
-    dot.setAttribute('cy', last[1]);
-    dot.setAttribute('r', '2.5');
-    dot.setAttribute('fill', '#16a34a');
-    dot.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(dot);
+    wrap.append(svg);
+    return wrap;
   }
+
+  const totals = pts.map(p => Number(p.total || 0));
+  const rawMin = Math.min.apply(null, totals);
+  const rawMax = Math.max.apply(null, totals);
+  // Marge de 8% en haut et en bas de l'amplitude pour eviter que la courbe
+  // colle aux bords (rendu plus doux visuellement, notamment quand une valeur
+  // "decroche" du reste).
+  const amplitude = (rawMax - rawMin) || Math.max(1, rawMax * 0.001);
+  const margin = amplitude * 0.08;
+  const min = rawMin - margin;
+  const max = rawMax + margin;
+  const range = (max - min) || 1;
+  const usableH = H - padTop - padBot;
+  const stepX = pts.length > 1 ? W / (pts.length - 1) : 0;
+  const y = (t) => padTop + usableH - ((t - min) / range) * usableH;
+  const coords = totals.map((t, i) => [i * stepX, y(t)]);
+
+  // ── Lissage Catmull-Rom → cubic Bezier ──
+  // Chaque segment devient une courbe C avec 2 points de controle deduits des
+  // voisins. Tension 0.18 : lisse mais pas mou -- garde la lisibilite des pics.
+  function smoothPath(coordArr) {
+    if (coordArr.length < 2) return '';
+    let d = 'M ' + coordArr[0][0].toFixed(2) + ' ' + coordArr[0][1].toFixed(2);
+    const T = 0.18;
+    for (let i = 0; i < coordArr.length - 1; i++) {
+      const p0 = coordArr[i - 1] || coordArr[i];
+      const p1 = coordArr[i];
+      const p2 = coordArr[i + 1];
+      const p3 = coordArr[i + 2] || p2;
+      const cp1x = p1[0] + (p2[0] - p0[0]) * T;
+      const cp1y = p1[1] + (p2[1] - p0[1]) * T;
+      const cp2x = p2[0] - (p3[0] - p1[0]) * T;
+      const cp2y = p2[1] - (p3[1] - p1[1]) * T;
+      d += ' C ' + cp1x.toFixed(2) + ' ' + cp1y.toFixed(2)
+        + ', ' + cp2x.toFixed(2) + ' ' + cp2y.toFixed(2)
+        + ', ' + p2[0].toFixed(2) + ' ' + p2[1].toFixed(2);
+    }
+    return d;
+  }
+  const smoothD = smoothPath(coords);
+
+  // Zone remplie sous la courbe (gradient très discret)
+  const gradId = 'val-spark-grad-' + Math.floor(Math.random() * 1e9);
+  const defs = document.createElementNS(svgNS, 'defs');
+  const grad = document.createElementNS(svgNS, 'linearGradient');
+  grad.setAttribute('id', gradId);
+  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+  grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+  const s1 = document.createElementNS(svgNS, 'stop');
+  s1.setAttribute('offset', '0%');
+  s1.setAttribute('stop-color', '#16a34a');
+  s1.setAttribute('stop-opacity', '0.22');
+  const s2 = document.createElementNS(svgNS, 'stop');
+  s2.setAttribute('offset', '100%');
+  s2.setAttribute('stop-color', '#16a34a');
+  s2.setAttribute('stop-opacity', '0');
+  grad.appendChild(s1); grad.appendChild(s2);
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  const areaPath = document.createElementNS(svgNS, 'path');
+  // Reprend la courbe lissee et referme jusqu'a la baseline
+  const areaD = smoothD + ' L ' + coords[coords.length - 1][0].toFixed(2) + ' ' + H
+    + ' L ' + coords[0][0].toFixed(2) + ' ' + H + ' Z';
+  areaPath.setAttribute('d', areaD);
+  areaPath.setAttribute('fill', 'url(#' + gradId + ')');
+  svg.appendChild(areaPath);
+
+  // Ligne lissee
+  const linePath = document.createElementNS(svgNS, 'path');
+  linePath.setAttribute('d', smoothD);
+  linePath.setAttribute('fill', 'none');
+  linePath.setAttribute('stroke', '#16a34a');
+  linePath.setAttribute('stroke-width', '1.8');
+  linePath.setAttribute('stroke-linecap', 'round');
+  linePath.setAttribute('stroke-linejoin', 'round');
+  linePath.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(linePath);
+
+  // Point sur la derniere valeur (aujourd'hui) -- toujours visible.
+  const last = coords[coords.length - 1];
+  const dot = document.createElementNS(svgNS, 'circle');
+  dot.setAttribute('cx', last[0].toFixed(2));
+  dot.setAttribute('cy', last[1].toFixed(2));
+  dot.setAttribute('r', '2.5');
+  dot.setAttribute('fill', '#16a34a');
+  dot.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(dot);
+
+  // ── Hover interactif ──
+  // Elements masques par defaut, actives via mousemove sur le rect de capture.
+  const hoverLine = document.createElementNS(svgNS, 'line');
+  hoverLine.setAttribute('y1', String(padTop - 2));
+  hoverLine.setAttribute('y2', String(H - padBot + 2));
+  hoverLine.setAttribute('stroke', '#16a34a');
+  hoverLine.setAttribute('stroke-width', '1');
+  hoverLine.setAttribute('stroke-dasharray', '2 2');
+  hoverLine.setAttribute('opacity', '0.5');
+  hoverLine.setAttribute('vector-effect', 'non-scaling-stroke');
+  hoverLine.style.display = 'none';
+  svg.appendChild(hoverLine);
+
+  const hoverDot = document.createElementNS(svgNS, 'circle');
+  hoverDot.setAttribute('r', '3.5');
+  hoverDot.setAttribute('fill', '#16a34a');
+  hoverDot.setAttribute('stroke', 'var(--card)');
+  hoverDot.setAttribute('stroke-width', '1.5');
+  hoverDot.setAttribute('vector-effect', 'non-scaling-stroke');
+  hoverDot.style.display = 'none';
+  svg.appendChild(hoverDot);
+
+  // Rectangle transparent qui capture les evenements sur toute la surface
+  const captureRect = document.createElementNS(svgNS, 'rect');
+  captureRect.setAttribute('x', '0'); captureRect.setAttribute('y', '0');
+  captureRect.setAttribute('width', String(W));
+  captureRect.setAttribute('height', String(H));
+  captureRect.setAttribute('fill', 'transparent');
+  captureRect.style.cursor = 'crosshair';
+  svg.appendChild(captureRect);
+
+  // Tooltip HTML positionne absolu (plus flexible que du <text> SVG pour la
+  // typo et le passage au-dessus du bord).
+  const tooltip = el('div', {
+    style:
+      'position:absolute;pointer-events:none;background:var(--card);' +
+      'border:1px solid var(--border);border-radius:8px;' +
+      'padding:6px 10px;font-size:11px;line-height:1.35;' +
+      'box-shadow:0 4px 12px rgba(0,0,0,.12);' +
+      'white-space:nowrap;transform:translate(-50%, -100%);' +
+      'transition:opacity .1s;opacity:0;z-index:10'
+  });
+  const tooltipDate = el('div', {
+    style: 'font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px'
+  });
+  const tooltipValue = el('div', {
+    style: 'font-size:13px;font-weight:700;color:#16a34a;font-variant-numeric:tabular-nums'
+  });
+  tooltip.append(tooltipDate, tooltipValue);
+  wrap.append(tooltip);
+
+  // Formate "2026-07-21" en "21 juil." (mois court, sans zéro initial jour)
+  const MOIS_COURT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+                       'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  function fmtDateShort(iso) {
+    if (!iso || iso.length < 10) return iso || '';
+    const y = iso.slice(0, 4), m = parseInt(iso.slice(5, 7), 10), d = parseInt(iso.slice(8, 10), 10);
+    if (isNaN(m) || isNaN(d)) return iso;
+    return d + ' ' + (MOIS_COURT[m - 1] || '') + ' ' + y;
+  }
+
+  captureRect.addEventListener('mousemove', (ev) => {
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    // Convertit la coordonnee ecran -> coordonnee viewBox X (0..W)
+    const relX = ((ev.clientX - rect.left) / rect.width) * W;
+    // Trouve l'index le plus proche
+    let idx = Math.round(relX / stepX);
+    if (idx < 0) idx = 0;
+    if (idx >= coords.length) idx = coords.length - 1;
+    const [cx, cy] = coords[idx];
+    // Positionne indicators SVG (en viewBox coords)
+    hoverLine.setAttribute('x1', String(cx));
+    hoverLine.setAttribute('x2', String(cx));
+    hoverLine.style.display = '';
+    hoverDot.setAttribute('cx', String(cx));
+    hoverDot.setAttribute('cy', String(cy));
+    hoverDot.style.display = '';
+    // Positionne tooltip (en pixels ecran, relatif au wrap)
+    const wrapRect = wrap.getBoundingClientRect();
+    // Coord ecran du point hover
+    const screenX = rect.left + (cx / W) * rect.width;
+    const screenY = rect.top + (cy / H) * rect.height;
+    let tx = screenX - wrapRect.left;
+    let ty = screenY - wrapRect.top - 8; // 8px de marge au-dessus du point
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+    tooltipDate.textContent = fmtDateShort(pts[idx].date);
+    tooltipValue.textContent = valFormatEuro(pts[idx].total);
+    tooltip.style.opacity = '1';
+    // Clamp horizontal : evite que le tooltip deborde a droite/gauche du wrap
+    // (mesure apres textContent pour avoir la vraie largeur)
+    requestAnimationFrame(() => {
+      const tRect = tooltip.getBoundingClientRect();
+      const wRect = wrap.getBoundingClientRect();
+      const halfW = tRect.width / 2;
+      let clampedX = tx;
+      if (screenX - wRect.left - halfW < 0) clampedX = halfW;
+      if (screenX - wRect.left + halfW > wRect.width) clampedX = wRect.width - halfW;
+      tooltip.style.left = clampedX + 'px';
+    });
+  });
+
+  captureRect.addEventListener('mouseleave', () => {
+    hoverLine.style.display = 'none';
+    hoverDot.style.display = 'none';
+    tooltip.style.opacity = '0';
+  });
 
   wrap.append(svg);
   return wrap;
@@ -14970,7 +15109,7 @@ function buildValorisationCategoriePills() {
   const wrap = el('div', { style:
     'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
-  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
+  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
   // Précalcule les totaux par sous-section frontal (à partir des items)
@@ -15218,7 +15357,7 @@ function buildValorisationTableRow(item) {
     );
     const editBtn = el('button', {
       type: 'button', title: 'Éditer prix m² et métrage',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
+      style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
       on: { click: () => openValorisationParamsModal(item.matiere_id) },
     });
     editBtn.appendChild(iconEl('edit', 11));
@@ -15253,7 +15392,7 @@ function buildValorisationTableRow(item) {
       prixUnitTxt, ' · ', upTxt);
     const editBtn = el('button', {
       type: 'button', title: 'Éditer prix unitaire et conditionnement',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
+      style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
       on: { click: () => openValorisationConditionnementModal(item.matiere_id || item.id) },
     });
     editBtn.appendChild(iconEl('edit', 11));
@@ -15398,11 +15537,11 @@ function buildValorisationTableRow(item) {
   // Action 3 : package → toggle taxe_importation (vert si actif)
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix de cette référence',
-    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
     on: {
       click: () => openValorisationHistorique(item.matiere_id || item.id),
       mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
     },
   });
   histBtn.appendChild(iconEl('clock', 14));
@@ -15424,14 +15563,14 @@ function buildValorisationTableRow(item) {
         'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
         + (usdOn
             ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-            : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+            : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
       on: {
         click: () => toggleValorisationUSD(item.matiere_id || item.id),
         mouseenter: (e) => {
           if (!usdOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
         },
         mouseleave: (e) => {
-          if (!usdOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+          if (!usdOn) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
         },
       },
     });
@@ -15455,14 +15594,14 @@ function buildValorisationTableRow(item) {
           'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
           + (taxOn
               ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-              : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+              : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
         on: {
           click: () => toggleValorisationTaxe(item.matiere_id || item.id),
           mouseenter: (e) => {
             if (!taxOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
           },
           mouseleave: (e) => {
-            if (!taxOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+            if (!taxOn) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
           },
         },
       });
@@ -15496,14 +15635,14 @@ function buildValorisationTableRow(item) {
           'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
           + (trActive
               ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-              : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+              : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
         on: {
           click: () => toggleValorisationTransport(item.matiere_id || item.id),
           mouseenter: (e) => {
             if (!trActive) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
           },
           mouseleave: (e) => {
-            if (!trActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+            if (!trActive) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
           },
         },
       });
@@ -15589,7 +15728,7 @@ async function openValorisationConditionnementModal(matiereId) {
   const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
   actions.appendChild(el('button', {
     type: 'button',
-    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;cursor:pointer',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer',
     on: { click: () => { root.innerHTML = ''; } },
   }, 'Annuler'));
   const saveBtn = el('button', {
@@ -15673,7 +15812,7 @@ async function openValorisationParamsModal(matiereId) {
   const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
   actions.appendChild(el('button', {
     type: 'button',
-    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;cursor:pointer',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer',
     on: { click: () => { root.innerHTML = ''; } },
   }, 'Annuler'));
   const saveBtn = el('button', {
@@ -15813,7 +15952,7 @@ function renderValorisationHistoriqueModal() {
       mat ? (mat.reference + ' — ' + (mat.designation || '')) : 'Chargement…')
   );
   const closeBtn = el('button', {
-    type: 'button', style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
+    type: 'button', style: 'background:var(--bg);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
     on: { click: closeValorisationHistorique } }, '×');
   head.append(headTitles, closeBtn);
 
@@ -16059,7 +16198,7 @@ function renderPFHistoriqueModal() {
     ),
     el('button', {
       type: 'button',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
+      style: 'background:var(--bg);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
       on: { click: closePFHistorique },
     }, '×'),
   );
@@ -16214,7 +16353,7 @@ function buildValorisationPFToolbar() {
   // Refresh
   const refreshBtn = el('button', {
     type: 'button', title: 'Recharger',
-    style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
+    style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
     on: { click: () => loadValorisationPF() },
   });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
@@ -16229,7 +16368,7 @@ function buildValorisationPFFilterPills() {
   const wrap = el('div', { id: 'val-pf-pills-wrap', style:
     'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
-  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
+  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
   const warn = 'padding:7px 14px;border-radius:999px;border:1px solid #fb923c;background:rgba(251,146,60,0.15);color:#fb923c;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
@@ -16373,7 +16512,7 @@ function buildValorisationPFTableRow(item) {
   // Historique
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix',
-    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
     on: { click: () => openPFHistorique(item.id) },
   });
   histBtn.appendChild(iconEl('clock', 14));
@@ -16453,7 +16592,7 @@ function buildValorisationSectionChevron(collapsed, onToggle) {
   const btn = el('button', {
     type: 'button',
     title: collapsed ? 'Afficher la section' : 'Masquer la section',
-    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:transform .15s, background .15s;' + (collapsed ? '' : 'transform:rotate(90deg)'),
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:transform .15s, background .15s;' + (collapsed ? '' : 'transform:rotate(90deg)'),
     on: { click: onToggle },
   });
   // chevron-right inline SVG (le bouton tourne pour pointer vers le bas)
@@ -16600,7 +16739,7 @@ function buildValorisationGlobalToolbar() {
     if (isSnapshot) {
       const resetLink = el('button', {
         type: 'button', title: 'Revenir à aujourd\'hui',
-        style: 'padding:3px 8px;border:1px solid #f59e0b;border-radius:6px;background:transparent;color:#c2410c;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.3px',
+        style: 'padding:3px 8px;border:1px solid #f59e0b;border-radius:6px;background:var(--card);color:#c2410c;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.3px',
         on: {
           click: async () => {
             v.snapshotDate = null;
@@ -16733,12 +16872,12 @@ function buildValorisationGlobalToolbar() {
   // ── Bouton Rafraîchir (MP + PF) ──
   const refreshBtn = el('button', {
     type: 'button', title: 'Recharger MP + PF',
-      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
+      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
     on: {
       // Parallelise MP+PF pour diviser le temps du refresh
       click: async () => { await Promise.all([loadValorisation(), loadValorisationPF()]); },
       mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
     } });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
   wrap.append(refreshBtn);
@@ -16748,11 +16887,11 @@ function buildValorisationGlobalToolbar() {
     const settingsBtn = el('button', {
       type: 'button',
       title: 'Paramètres MyCouts',
-      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
+      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
       on: {
         click: () => openValorisationSettingsModal(),
         mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+        mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
       },
     });
     settingsBtn.appendChild(iconEl('settings', 14));
@@ -16864,7 +17003,7 @@ async function openValorisationSettingsModal() {
   rateRow.appendChild(rateInp);
   const refreshFxBtn = el('button', {
     type: 'button', title: 'Récupérer le taux courant depuis exchangerate.host',
-    style: 'padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600',
+    style: 'padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600',
   });
   refreshFxBtn.appendChild(iconEl('refresh-ccw', 12));
   refreshFxBtn.appendChild(el('span', null, 'Rafraîchir'));
@@ -16941,7 +17080,7 @@ async function openValorisationSettingsModal() {
   const actions = el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:22px;border-top:1px solid var(--border);padding-top:16px' });
   const cancelBtn = el('button', {
     type: 'button',
-    style: 'padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-weight:600',
+    style: 'padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-weight:600',
     on: { click: () => { root.innerHTML = ''; } },
   }, 'Annuler');
   const saveBtn = el('button', {
