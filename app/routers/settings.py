@@ -3662,7 +3662,8 @@ def _is_machine_in_production(conn, machine: str) -> bool:
     if not row:
         return False
     code = str(row["operation_code"] or "").strip()
-    return code in ("01", "03", "88")
+    # v2.2.83 : 01 (Début prod) ne compte plus comme "en production"
+    return code in ("03", "88")
 
 
 def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
@@ -3697,9 +3698,10 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     # explicites (89, 87, 50-85) mais AUSSI le Calage (02), les événements
     # personnel (86), les annulations (90), etc. Toute interruption remet le
     # compteur à zéro et déclenche la grâce de 5 min à la reprise.
+    # v2.2.83 : 01 (Début prod) devient un code "stop" (interrompt la session)
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
+           WHERE machine=? AND operation_code NOT IN ('03', '88')
            AND operation_code IS NOT NULL AND operation_code != ''""",
         (machine,),
     ).fetchone()
@@ -3710,14 +3712,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if last_stop_iso:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('01', '03', '88')
+               WHERE machine=? AND operation_code IN ('03', '88')
                AND date_operation > ?""",
             (machine, last_stop_iso),
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
+               WHERE machine=? AND operation_code IN ('03', '88')""",
             (machine,),
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None

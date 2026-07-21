@@ -1511,11 +1511,11 @@ async def create_saisie(request: Request):
             except Exception:
                 pass  # Ne jamais bloquer la saisie opérateur
 
-        # v2.2.65 — Fermeture auto des alertes périodiques quand la saisie n'est
-        # PAS de la production active (code != 01 et != 03) OU fin_dossier=True.
-        # Évite les lignes vierges dans l'historique des alertes lors d'un arrêt.
+        # v2.2.83 — Fermeture auto des alertes périodiques : seuls 03 (Production)
+        # et 88 (Reprise production) maintiennent le chrono actif. 01 (Début prod)
+        # ne compte plus comme "production active" — comme demandé par Eugène.
         try:
-            if cl["code"] not in ("01", "03") or fin_dossier_flag:
+            if cl["code"] not in ("03", "88") or fin_dossier_flag:
                 from app.routers.settings import _auto_ack_periodic_alerts_on_arret
                 _auto_ack_periodic_alerts_on_arret(
                     conn, user, machine_name, no_dossier or "",
