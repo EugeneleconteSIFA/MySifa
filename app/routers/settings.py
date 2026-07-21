@@ -3200,9 +3200,18 @@ def _require_alerts_admin(request: Request) -> dict:
     """v2.2.18 — Élargi aux rôles direction et administration pour permettre
     la gestion des alertes maintenance depuis MyMaintenance (l'admin métier
     n'a pas accès à /settings mais peut gérer les alertes depuis sa vue).
+    v2.2.74 — Élargi aux nouveaux rôles administration_ventes et
+    administration_technique (cohérence avec l'accès à MyMaintenance côté
+    admin, gate déjà ouverte dans maintenance_events._ADMIN_ROLES v2.2.46).
     """
     user = get_current_user(request)
-    if user.get("role") not in (ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION):
+    if user.get("role") not in (
+        ROLE_SUPERADMIN,
+        ROLE_DIRECTION,
+        ROLE_ADMINISTRATION,
+        ROLE_ADMINISTRATION_VENTES,
+        ROLE_ADMINISTRATION_TECHNIQUE,
+    ):
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs maintenance.")
     return user
 
