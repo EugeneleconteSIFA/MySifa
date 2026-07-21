@@ -136,27 +136,50 @@ def _pj_file_path(ao_id: int, stored_name: str) -> str:
 
 # ─── Liste et création ───────────────────────────────────────────
 
+
+def _translate_or_original(text, target_lang, conn):
+    """Traduit text vers target_lang via translate_service + cache.
+    Retourne l'original en cas d'erreur ou si target = fr."""
+    if not text or not (text or "").strip():
+        return text
+    tgt = (target_lang or "").strip().upper()
+    if not tgt or tgt in ("FR", "FR-FR"):
+        return text
+    try:
+        from app.services.translate_service import translate as _svc_translate
+        res = _svc_translate(conn, text=text, target_lang=tgt, source_lang="FR", formality="default")
+        return res.get("translated") or text
+    except Exception:
+        return text
+
+
 @router.get("")
-def list_ao(request: Request):
+def list_ao(request: Request, filter: str = ""):
+    """List AOs. Par defaut : actifs uniquement (deleted_at IS NULL).
+    filter=corbeille : uniquement les supprimes."""
     _require_ao(request)
+    show_deleted = (filter or "").strip().lower() == "corbeille"
+    where_deleted = "d.deleted_at IS NOT NULL" if show_deleted else "d.deleted_at IS NULL"
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT d.id, d.reference, d.titre, d.statut, d.date_creation, d.date_limite,
-                      (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id) AS nb_fournisseurs,
-                      (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id AND f.statut = 'repondu') AS nb_reponses,
-                      (SELECT GROUP_CONCAT(DISTINCT l.ref_produit)
-                         FROM ao_lignes l
-                         WHERE l.ao_id = d.id
-                           AND l.ref_produit IS NOT NULL AND l.ref_produit != '') AS refs_produits,
-                      (SELECT GROUP_CONCAT(DISTINCT COALESCE(cg.raison_sociale, lc.nom))
-                         FROM ao_lignes l
-                         JOIN ao_produits p ON p.ref = l.ref_produit
-                         LEFT JOIN clients            cg ON cg.id = p.client_id
-                         LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
-                         WHERE l.ao_id = d.id) AS clients,
-                      COALESCE(d.prix_transport_pct, 0) AS prix_transport_pct
-               FROM ao_demandes d
-               ORDER BY d.date_creation DESC"""
+            f"""SELECT d.id, d.reference, d.titre, d.statut, d.date_creation, d.date_limite,
+                       d.deleted_at,
+                       (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id) AS nb_fournisseurs,
+                       (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id AND f.statut = 'repondu') AS nb_reponses,
+                       (SELECT GROUP_CONCAT(DISTINCT l.ref_produit)
+                          FROM ao_lignes l
+                          WHERE l.ao_id = d.id
+                            AND l.ref_produit IS NOT NULL AND l.ref_produit != '') AS refs_produits,
+                       (SELECT GROUP_CONCAT(DISTINCT COALESCE(cg.raison_sociale, lc.nom))
+                          FROM ao_lignes l
+                          JOIN ao_produits p ON p.ref = l.ref_produit
+                          LEFT JOIN clients            cg ON cg.id = p.client_id
+                          LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+                          WHERE l.ao_id = d.id) AS clients,
+                       COALESCE(d.prix_transport_pct, 0) AS prix_transport_pct
+                FROM ao_demandes d
+                WHERE {where_deleted}
+                ORDER BY d.date_creation DESC"""
         ).fetchall()
     return [_row_dict(r) for r in rows]
 
@@ -1266,10 +1289,40 @@ async def cloturer_ao(request: Request, ao_id: int):
 
 @router.delete("/{ao_id}")
 def delete_ao(request: Request, ao_id: int):
-    """Suppression complète d'un appel d'offre (lignes, fournisseurs, réponses,
-    messages, pièces jointes et fichiers sur disque)."""
+    """Soft-delete : deplace l'AO dans la corbeille (deleted_at = now).
+    Pour supprimer definitivement : voir DELETE /{ao_id}/definitif."""
+    _require_ao(request)
+    now = _now_paris_iso()
+    with get_db() as conn:
+        row = conn.execute("SELECT id, deleted_at FROM ao_demandes WHERE id=?", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO introuvable.")
+        conn.execute("UPDATE ao_demandes SET deleted_at=? WHERE id=?", (now, ao_id))
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id, "deleted_at": now}
+
+
+@router.post("/{ao_id}/restaurer")
+def restaurer_ao(request: Request, ao_id: int):
+    """Restaure un AO de la corbeille."""
+    _require_ao(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=? AND deleted_at IS NOT NULL", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO non trouve dans la corbeille.")
+        conn.execute("UPDATE ao_demandes SET deleted_at=NULL WHERE id=?", (ao_id,))
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id}
+
+
+@router.delete("/{ao_id}/definitif")
+def delete_ao_definitif(request: Request, ao_id: int):
+    """Suppression definitive (uniquement si deja dans la corbeille)."""
     user = _require_ao(request)
     with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=? AND deleted_at IS NOT NULL", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="AO doit d'abord etre dans la corbeille.")
         ao = _get_ao_or_404(conn, ao_id)
         # Récupère les noms de fichiers PJ pour suppression disque
         pjs = conn.execute(

@@ -7267,6 +7267,16 @@ Ressources :
         _record_schema_migration(conn, 200, "ao_pieces_jointes_vu_par_fournisseur")
 
 
+    # v201 -- ao_demandes.deleted_at (soft-delete pour corbeille)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=201 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+        if "deleted_at" not in cols:
+            conn.execute("ALTER TABLE ao_demandes ADD COLUMN deleted_at TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ao_demandes_deleted_at ON ao_demandes(deleted_at)")
+        conn.commit()
+        _record_schema_migration(conn, 201, "ao_demandes_deleted_at")
+
+
 
 def create_default_admin():
     import bcrypt

@@ -665,7 +665,8 @@ function toggleSidebar() {
 function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove('sb-open'); }
 
 async function loadList() {
-  S.aos = await api('/api/ao');
+  const url = S.filtre === 'corbeille' ? '/api/ao?filter=corbeille' : '/api/ao';
+  S.aos = await api(url);
 }
 
 async function loadCarnet() {
@@ -702,6 +703,7 @@ async function loadMessages(aoId, fourniId) {
 
 function filteredAos() {
   const f = S.filtre;
+  if (f === 'corbeille') return S.aos || [];
   if (f === 'tous') return S.aos;
   return S.aos.filter(a => a.statut === f);
 }
@@ -1378,10 +1380,13 @@ function renderList() {
     const titre = escAttr(a.titre||'');
     const cliTxt = a.clients ? escHtml(a.clients) : '<span style="color:var(--muted)">—</span>';
     const refsTxt = a.refs_produits ? escHtml(a.refs_produits) : '<span style="color:var(--muted)">—</span>';
-    const actions =
-      '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
-      '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
-      '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
+    const inCorbeille = S.filtre === 'corbeille';
+    const actions = inCorbeille
+      ? '<button class="btn btn-ghost btn-sm btn-restore-ao" data-id="'+a.id+'">Restaurer</button> '+
+        '<button class="btn-icon btn-del-ao-def" data-id="'+a.id+'" data-ref="'+ref+'" title="Supprimer definitivement" style="color:var(--danger)">'+icon('trash',14)+'</button>'
+      : '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
+        '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
+        '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
     rows += '<tr><td><a href="#" class="ao-list-ref-link btn-view" data-id="'+a.id+'">'+escHtml(a.reference)+'</a></td>'+
       '<td>'+escHtml(a.titre)+'</td>'+
       '<td>'+cliTxt+'</td>'+
@@ -1394,7 +1399,7 @@ function renderList() {
   });
   return '<div class="page-hdr"><h1>Appels d\'offre</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offre</button></div>'+
     '<div class="filter-tabs">'+
-    ['tous','brouillon','envoyee','cloturee'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':'Clôturée')+'</button>').join('')+
+    ['tous','brouillon','envoyee','cloturee','corbeille'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':f==='cloturee'?'Clôturée':'Corbeille')+'</button>').join('')+
     '</div>'+
     (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Références produits</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
     '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
@@ -2596,6 +2601,26 @@ function bindListEvents() {
   document.getElementById('btn-new-ao')?.addEventListener('click', openCreateAoWizard);
   document.querySelectorAll('.filter-tab').forEach(b => b.addEventListener('click', () => { S.filtre = b.dataset.f; render(); }));
   document.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(parseInt(b.dataset.id,10))));
+  document.querySelectorAll('.btn-restore-ao').forEach(b => b.addEventListener('click', async () => {
+    const id = parseInt(b.dataset.id, 10);
+    try {
+      await api('/api/ao/' + id + '/restaurer', {method: 'POST'});
+      showToast('AO restaure.', 'success');
+      await loadList();
+      render();
+    } catch(e) { showToast(e.message || 'Erreur restauration.', 'danger'); }
+  }));
+  document.querySelectorAll('.btn-del-ao-def').forEach(b => b.addEventListener('click', async () => {
+    const id = parseInt(b.dataset.id, 10);
+    const ref = b.dataset.ref || '';
+    if (!confirm('Supprimer DEFINITIVEMENT l\'AO ' + ref + ' ? Cette action est irreversible.')) return;
+    try {
+      await api('/api/ao/' + id + '/definitif', {method: 'DELETE'});
+      showToast('AO supprime definitivement.', 'success');
+      await loadList();
+      render();
+    } catch(e) { showToast(e.message || 'Erreur suppression definitive.', 'danger'); }
+  }));
   document.querySelectorAll('.btn-del-ao').forEach(b => b.addEventListener('click', (e) => {
     e.stopPropagation();
     openModalConfirmDelete(parseInt(b.dataset.id,10), b.dataset.ref, b.dataset.statut);
