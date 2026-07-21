@@ -102,6 +102,7 @@ def calc_prix_vente(
     coef: float | None,
     devise_prix_devis: str | None,
     eur_usd_rate: float,
+    transport_pct: float = 0.0,
 ) -> float | None:
     if prix_au_mille is None:
         return None
@@ -109,12 +110,21 @@ def calc_prix_vente(
     if c is None or c <= 0:
         c = 1.0
     base = prix_au_mille * c
-    return convert_amount(
+    converted = convert_amount(
         base,
         _norm_devise(devise_fournisseur),
         _norm_devise(devise_prix_devis),
         eur_usd_rate,
     )
+    if converted is None:
+        return None
+    try:
+        pct = float(transport_pct or 0)
+    except (TypeError, ValueError):
+        pct = 0.0
+    if pct < 0:
+        pct = 0.0
+    return converted * (1.0 + pct / 100.0)
 
 
 def enrich_reponse_pricing(
@@ -122,6 +132,7 @@ def enrich_reponse_pricing(
     ligne_ctx: dict[str, Any],
     *,
     eur_usd_rate: float,
+    transport_pct: float = 0.0,
 ) -> dict[str, Any]:
     """Ajoute les champs calculés à une réponse fournisseur."""
     quotation = _float_or_none(reponse.get("quotation"))
@@ -141,7 +152,7 @@ def enrich_reponse_pricing(
     prix_au_mille = calc_prix_au_mille(quotation, unite, nb_bob)
     prix_calcule = calc_prix_calcule(quotation, unite, qte, nb_bob)
     prix_vente = calc_prix_vente(
-        prix_au_mille, devise, coef, devise_devis, eur_usd_rate
+        prix_au_mille, devise, coef, devise_devis, eur_usd_rate, transport_pct
     )
 
     out = dict(reponse)

@@ -16487,8 +16487,9 @@ function buildValorisationGlobalToolbar() {
     dateInp.addEventListener('change', async () => {
       const iso = dateInp.value || '';
       v.snapshotDate = (iso && iso !== todayIso) ? iso : null;
-      await loadValorisation();
-      await loadValorisationPF();
+      // Chargement MP + PF en parallele : divise le temps d'attente par ~2
+      // vs. l'ancien await sequentiel (chaque endpoint fait son propre snapshot).
+      await Promise.all([loadValorisation(), loadValorisationPF()]);
     });
     // Lien « Aujourd'hui » (visible seulement en mode snapshot)
     // Chevron pour signaler l'affordance (calendrier ouvrable)
@@ -16504,14 +16505,55 @@ function buildValorisationGlobalToolbar() {
           click: async () => {
             v.snapshotDate = null;
             dateInp.value = todayIso;
-            await loadValorisation();
-            await loadValorisationPF();
+            // Parallelisation MP+PF (2x moins d'attente)
+            await Promise.all([loadValorisation(), loadValorisationPF()]);
           },
         },
       }, 'Aujourd\'hui');
       dateWrap.append(resetLink);
     }
     wrap.append(dateWrap);
+  }
+
+  // ── Badge « Chargement… » visible pendant le fetch (MP ou PF) ──
+  // Indispensable pour le mode figure : le recalcul serveur (snapshot stock +
+  // prix a la date) peut prendre quelques secondes. Sans ce badge, l'ancienne
+  // table reste affichee sans signal visuel -> l'utilisateur croit que rien
+  // ne se passe et reclique.
+  const pfState = (v.pf) ? v.pf : null;
+  const isLoading = !!(v.loading || (pfState && pfState.loading));
+  if (isLoading) {
+    const loadingBadge = el('div', {
+      id: 'val-loading-badge',
+      style:
+        'display:inline-flex;align-items:center;gap:8px;padding:6px 12px;' +
+        'border:1px solid var(--accent);border-radius:10px;' +
+        'background:rgba(59,130,246,0.08);color:var(--accent);' +
+        'font-size:12px;font-weight:700;text-transform:uppercase;' +
+        'letter-spacing:.4px;user-select:none',
+    });
+    // Spinner SVG circulaire anime (pas de dependance CSS externe)
+    const spinner = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    spinner.setAttribute('width', '14');
+    spinner.setAttribute('height', '14');
+    spinner.setAttribute('viewBox', '0 0 24 24');
+    spinner.setAttribute('fill', 'none');
+    spinner.style.animation = 'val-spin 0.9s linear infinite';
+    spinner.innerHTML =
+      '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"/>' +
+      '<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>';
+    // Injecte le keyframe une seule fois (idempotent)
+    if (!document.getElementById('val-spin-kf')) {
+      const st = document.createElement('style');
+      st.id = 'val-spin-kf';
+      st.textContent = '@keyframes val-spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(st);
+    }
+    loadingBadge.appendChild(spinner);
+    // Libelle contextuel : « Recalcul en cours » si snapshot, sinon « Chargement »
+    const label = v.snapshotDate ? 'Recalcul à la date…' : 'Chargement…';
+    loadingBadge.appendChild(el('span', null, label));
+    wrap.append(loadingBadge);
   }
 
   // ── Espaceur (pousse les actions à droite) ──
@@ -16593,7 +16635,8 @@ function buildValorisationGlobalToolbar() {
     type: 'button', title: 'Recharger MP + PF',
       style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
     on: {
-      click: async () => { await loadValorisation(); await loadValorisationPF(); },
+      // Parallelise MP+PF pour diviser le temps du refresh
+      click: async () => { await Promise.all([loadValorisation(), loadValorisationPF()]); },
       mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
       mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
     } });
@@ -16830,8 +16873,8 @@ async function openValorisationSettingsModal() {
       });
       root.innerHTML = '';
       showToast('Paramètres enregistrés.', 'success');
-      await loadValorisation();  // Recharge MP avec les nouveaux taux/taxe
-      await loadValorisationPF();  // Recharge PF pour appliquer charge prod / stockage
+      // Recharge MP + PF en parallele avec les nouveaux taux/taxe/charges
+      await Promise.all([loadValorisation(), loadValorisationPF()]);
     } catch (e) {
       showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
       saveBtn.disabled = false;

@@ -365,6 +365,52 @@ def _get_container_params(conn) -> tuple[float, float, float, float]:
 # historisé avant ou à la date. Aucun changement historisé avant la date → prix
 # actuel (le prix courant s'appliquait déjà à l'époque, faute d'historique).
 
+# ─── Cache des snapshots (perf) ──────────────────────────────────────────────
+# Les snapshots (stock + prix à une date passée) sont couteux : on doit scanner
+# toute la table mouvements/historique et retrouver le premier evt post-date par
+# reference. Sur une base volumineuse, ca prend plusieurs secondes.
+#
+# Ces snapshots sont deterministes en fonction de (date_iso, contenu de la table).
+# On les met en cache in-process, avec pour cle (date_iso, max_id) : des qu'un
+# nouveau mouvement est insere, max_id change et le cache est invalide
+# automatiquement. Verifier max_id coute une simple lecture indexee (PRIMARY KEY).
+#
+# Effet : 2eme click sur la meme date -> quasi-instantane (sans I/O disque
+# significatif). Le cache est purement en memoire, borne a 32 entrees par table
+# (~50 dates differentes suffit largement pour une session utilisateur), et est
+# perdu au restart -- pas de risque de corruption.
+_SNAPSHOT_CACHE_MAX_ENTRIES = 32
+_MP_STOCK_SNAPSHOT_CACHE: dict[tuple[str, int], tuple[dict[int, float], dict[tuple[int, int], float]]] = {}
+_MP_PRICE_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+_PF_STOCK_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+_PF_PRICE_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+
+
+def _table_max_id(conn, table: str) -> int:
+    """Retourne MAX(id) de la table (0 si vide). Utilise la PK -> O(log n)."""
+    try:
+        row = conn.execute(f"SELECT COALESCE(MAX(id), 0) AS m FROM {table}").fetchone()
+        return int(row["m"] or 0) if row else 0
+    except sqlite3.Error:
+        return 0
+
+
+def _cache_get_or_set(cache: dict, key: tuple, factory):
+    """Renvoie cache[key] si present, sinon calcule via factory() et stocke.
+    Purge FIFO si le cache depasse _SNAPSHOT_CACHE_MAX_ENTRIES."""
+    if key in cache:
+        return cache[key]
+    value = factory()
+    if len(cache) >= _SNAPSHOT_CACHE_MAX_ENTRIES:
+        # Purge la plus vieille entree (FIFO -- dict Python 3.7+ garde l'ordre d'insertion)
+        try:
+            first_key = next(iter(cache))
+            cache.pop(first_key, None)
+        except StopIteration:
+            pass
+    cache[key] = value
+    return value
+
 
 def _date_iso_end_of_day(date_iso: str) -> str:
     """YYYY-MM-DD → YYYY-MM-DDT23:59:59 (fin de journée locale, cohérent avec le
@@ -378,6 +424,18 @@ def _mp_stock_snapshot_at_date(conn, date_iso: str) -> tuple[dict[int, float], d
     - stock_non_laize : dict {matiere_id → quantite}
     - stock_laize     : dict {(matiere_id, laize_id) → quantite}
     """
+    # Cache in-process : cle = (date, MAX(mp_mouvements.id)). Auto-invalide des
+    # qu'un mouvement est ajoute (nouveau MAX id).
+    cache_key = (date_iso, _table_max_id(conn, "mp_mouvements"))
+    return _cache_get_or_set(
+        _MP_STOCK_SNAPSHOT_CACHE, cache_key,
+        lambda: _mp_stock_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _mp_stock_snapshot_at_date_uncached(
+    conn, date_iso: str,
+) -> tuple[dict[int, float], dict[tuple[int, int], float]]:
     end = _date_iso_end_of_day(date_iso)
     # Non-laizées : premier mouvement > end avec laize_id NULL
     rows = conn.execute(
@@ -456,6 +514,15 @@ def _pf_stock_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
     Reconstitution : premier mouvement > end par (produit_id, emplacement) — on somme
     ensuite les quantite_avant pour retrouver le stock global.
     Fallback = stock actuel agrégé toutes emplacements pour les produits sans mouvement postérieur."""
+    # Cache : cle = (date, MAX(mouvements_stock.id))
+    cache_key = (date_iso, _table_max_id(conn, "mouvements_stock"))
+    return _cache_get_or_set(
+        _PF_STOCK_SNAPSHOT_CACHE, cache_key,
+        lambda: _pf_stock_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _pf_stock_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]:
     end = _date_iso_end_of_day(date_iso)
     rows = conn.execute(
         """
@@ -514,6 +581,14 @@ def _mp_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
     - Matières laizées     : prix = prix_eur_m2 courant à la date
     L'historique mp_valorisation_historique stocke les deux dans la même colonne
     prix_apres (le sens dépend du type de matière — géré par le caller)."""
+    cache_key = (date_iso, _table_max_id(conn, "mp_valorisation_historique"))
+    return _cache_get_or_set(
+        _MP_PRICE_SNAPSHOT_CACHE, cache_key,
+        lambda: _mp_price_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _mp_price_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]:
     end = _date_iso_end_of_day(date_iso)
     rows = conn.execute(
         """
@@ -541,6 +616,14 @@ def _mp_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
 
 def _pf_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
     """Retourne dict {produit_id → prix_unitaire_ht} au soir de date_iso."""
+    cache_key = (date_iso, _table_max_id(conn, "pf_valorisation_historique"))
+    return _cache_get_or_set(
+        _PF_PRICE_SNAPSHOT_CACHE, cache_key,
+        lambda: _pf_price_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _pf_price_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]:
     end = _date_iso_end_of_day(date_iso)
     rows = conn.execute(
         """
