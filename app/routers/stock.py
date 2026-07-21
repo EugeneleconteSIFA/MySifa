@@ -5236,6 +5236,100 @@ def _enrich_items_with_usd(
         it["transport_supplement_eur_per_m2"] = round(supp_per_m2, 4)
 
 
+# ─── Trend valorisation (30 derniers jours) ──────────────────────────────────
+# Cache endpoint keye par la version des 4 tables sources + les params qui
+# influencent le total (taux USD, taxe, containers, charges PF). Des qu'un
+# nouveau mouvement / prix / parametre change, la cle change et le trend
+# est recalcule. Sinon renvoi instantane. Purement en memoire.
+_VALO_TREND_CACHE: dict[tuple, list[dict]] = {}
+_VALO_TREND_CACHE_MAX_ENTRIES = 8
+
+
+def _compute_valorisation_trend(conn, days: int) -> list[dict]:
+    """Retourne [{"date": "YYYY-MM-DD", "total": float}, ...] pour les `days`
+    derniers jours (aujourd'hui inclus, tri croissant).
+
+    Le total = MP reel (avec taxe/USD/transport) + PF (avec charges si applicable).
+    C'est ce qui s'affiche en gros vert dans la card "Stock valorise -- Total".
+
+    Perf : appelle _valorisation_query_at_date + _pf_valo_query_at_date en boucle
+    (30 iterations). Chaque iteration reuse le cache des snapshots (defini plus
+    haut). Le resultat final est ensuite cache au niveau endpoint : 2e appel = 0.
+    """
+    from datetime import date as _date  # local import, evite pollution top-level
+    today = _date.today()
+    taux = _get_taux_eur_usd(conn)
+    tax_pct = _get_import_tax_pct(conn)
+    c_full, c_half, q_full, q_half = _get_container_params(conn)
+    charge = _get_charge_production_pct(conn)
+    storage = _get_storage_fees_pct(conn)
+
+    points: list[dict] = []
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        d_iso = d.strftime("%Y-%m-%d")
+        # snapshot_date=None pour aujourd'hui (evite un calcul inutile)
+        snap = None if i == 0 else d_iso
+        items_mp = _valorisation_query_at_date(conn, snap)
+        items_pf = _pf_valo_query_at_date(conn, snap)
+        _enrich_items_with_usd(items_mp, taux, tax_pct, c_full, c_half, q_full, q_half)
+        summary_mp = _valorisation_summary(items_mp, taux, tax_pct, c_full, c_half, q_full, q_half)
+        _pf_enrich_charges(items_pf, charge_prod_pct=charge, storage_fees_pct=storage)
+        summary_pf = _pf_valo_summary(items_pf, charge_prod_pct=charge, storage_fees_pct=storage)
+        # Meme regle que buildValorisationKpis cote frontend : reel MP + (charges PF si actives)
+        total_mp = float(summary_mp.get("total_mp_reel") or summary_mp.get("total_mp") or 0)
+        if charge > 0 or storage > 0:
+            total_pf = float(summary_pf.get("total_pf_avec_charges") or 0)
+        else:
+            total_pf = float(summary_pf.get("total_pf") or 0)
+        points.append({"date": d_iso, "total": round(total_mp + total_pf, 2)})
+    return points
+
+
+@router.get("/api/stock/valorisation/trend")
+def get_valorisation_trend(request: Request, days: int = 30):
+    """Renvoie la valo totale (MP reel + PF avec charges) pour chaque jour des
+    `days` derniers jours. Utilise pour le sparkline dans la scorecard totale.
+
+    Reserve Direction / superadmin (comme le KPI reel MP+PF)."""
+    user = require_stock_matieres_admin(request)
+    # Bornes de securite : 7 <= days <= 90 (pas d'usage au-dela)
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = 30
+    if days < 7:
+        days = 7
+    if days > 90:
+        days = 90
+    with get_db() as conn:
+        # Cle cache : versions + params (les params modifient le total meme sans
+        # nouveau mouvement -- ex. changement de taux USD via les settings).
+        cache_key = (
+            days,
+            _table_max_id(conn, "mp_mouvements"),
+            _table_max_id(conn, "mouvements_stock"),
+            _table_max_id(conn, "mp_valorisation_historique"),
+            _table_max_id(conn, "pf_valorisation_historique"),
+            round(_get_taux_eur_usd(conn), 6),
+            round(_get_import_tax_pct(conn), 4),
+            round(_get_charge_production_pct(conn), 4),
+            round(_get_storage_fees_pct(conn), 4),
+        )
+        if cache_key in _VALO_TREND_CACHE:
+            points = _VALO_TREND_CACHE[cache_key]
+        else:
+            points = _compute_valorisation_trend(conn, days)
+            if len(_VALO_TREND_CACHE) >= _VALO_TREND_CACHE_MAX_ENTRIES:
+                try:
+                    first = next(iter(_VALO_TREND_CACHE))
+                    _VALO_TREND_CACHE.pop(first, None)
+                except StopIteration:
+                    pass
+            _VALO_TREND_CACHE[cache_key] = points
+    return {"points": points, "days": days}
+
+
 @router.get("/api/stock/valorisation")
 def get_valorisation(request: Request, date: str | None = None):
     """Valorisation MP. Query optionnel `date=YYYY-MM-DD` → figée à cette date

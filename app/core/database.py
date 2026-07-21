@@ -7249,13 +7249,13 @@ Ressources :
         _record_schema_migration(conn, 198, "valorisation_snapshot_perf_indexes")
 
 
-    # v198 -- ao_reponses.unite_manuel (badge "manuel" quand l'interne modifie l'unite)
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=198 LIMIT 1").fetchone():
+    # v199 -- ao_reponses.unite_manuel (badge "manuel" quand l'interne modifie l'unite)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=199 LIMIT 1").fetchone():
         cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
         if "unite_manuel" not in cols:
             conn.execute("ALTER TABLE ao_reponses ADD COLUMN unite_manuel INTEGER NOT NULL DEFAULT 0")
         conn.commit()
-        _record_schema_migration(conn, 198, "ao_reponses_unite_manuel")
+        _record_schema_migration(conn, 199, "ao_reponses_unite_manuel")
 
 
 
