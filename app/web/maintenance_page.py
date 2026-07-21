@@ -1062,9 +1062,13 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-table tbody tr.mine{background:var(--accent-bg)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
 /* v2.2.70 : cartes créneau (header prominent au-dessus, puis mini-tableau) */
-.op-plan-creneaux-list{display:flex;flex-direction:column;gap:16px}
-.op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);transition:box-shadow .18s,transform .12s,border-color .15s}
-.op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.10),0 2px 6px rgba(34,211,238,.15);transform:translateY(-1px)}
+.op-plan-days-wrap{display:flex;flex-direction:column;gap:22px}
+.op-plan-day-section-head{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.op-plan-day-section-head .op-plan-day-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.op-plan-creneaux-list{display:flex;flex-direction:column;gap:14px}
+.op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:box-shadow .18s,transform .12s,border-color .15s}
+.op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 12px 32px rgba(0,0,0,.14),0 4px 10px rgba(34,211,238,.20);transform:translateY(-2px)}
+.op-plan-creneau-card:active{transform:translateY(0);box-shadow:0 4px 14px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.06)}
 .op-plan-creneau-header{background:var(--accent-bg);color:var(--text);border-left:4px solid var(--accent);padding:12px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:background .15s}
 .op-plan-creneau-header:hover{background:rgba(34,211,238,.18)}
 .op-plan-creneau-header .op-plan-ch-chev{color:var(--accent);font-size:16px;line-height:1}
@@ -10781,22 +10785,49 @@ async function opDeleteEvent(eventId){
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
 function _opRenderPlanTable(events, meId){
-  // v2.2.68 : regroupement par créneau + filtre créneaux programmés uniquement.
-  // Les ops non-planifiées (source=non_planifie) sont exclues — elles n'ont
-  // pas leur place dans le Planning personnel.
+  // v2.2.73 : regroupement par date puis par créneau. Aujourd'hui + 30 jours.
+  // Les ops non-planifiées (source=non_planifie) sont exclues du Planning perso.
   const filtered = events.filter(ev => ev.source !== 'non_planifie');
   if(filtered.length === 0){
-    return '<div class="op-empty"><h3>Aucun créneau programmé</h3>Pour cette date.</div>';
+    return '<div class="op-empty"><h3>Aucun créneau programmé</h3>Pas d\'affectation aujourd\'hui ni dans les 30 prochains jours.</div>';
   }
-  // Tri chronologique par heure_debut ASC, tie-break par id
-  filtered.sort((a, b) => {
-    const ha = a.heure_debut || 'zz';
-    const hb = b.heure_debut || 'zz';
-    if(ha !== hb) return ha.localeCompare(hb);
-    return (a.id || 0) - (b.id || 0);
-  });
+  // Groupe par date (date_prevue)
+  const byDate = new Map();
+  for(const ev of filtered){
+    const d = ev.date_prevue || '';
+    if(!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d).push(ev);
+  }
+  // Tri des dates ascendant, puis dans chaque date par heure_debut
+  const sortedDates = Array.from(byDate.keys()).sort();
+  for(const d of sortedDates){
+    byDate.get(d).sort((a, b) => {
+      const ha = a.heure_debut || 'zz';
+      const hb = b.heure_debut || 'zz';
+      if(ha !== hb) return ha.localeCompare(hb);
+      return (a.id || 0) - (b.id || 0);
+    });
+  }
 
-  const cardsHtml = filtered.map(ev => {
+  const todayIso = _fmtDateISO(new Date());
+  const tomorrowD = new Date(); tomorrowD.setDate(tomorrowD.getDate() + 1);
+  const tomorrowIso = _fmtDateISO(tomorrowD);
+  const _dateLbl = (iso) => {
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return iso;
+    const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    const s = d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  const _daySectionHtml = (iso) => {
+    let lbl;
+    if(iso === todayIso) lbl = 'Aujourd\'hui · ' + _dateLbl(iso);
+    else if(iso === tomorrowIso) lbl = 'Demain · ' + _dateLbl(iso);
+    else lbl = _dateLbl(iso);
+    return '<div class="op-plan-day-section-head"><span class="op-plan-day-dot"></span>' + escHtml(lbl) + '</div>';
+  };
+
+  const renderCreneauCard = (ev) => {
     // v2.2.71 : 1 ligne par op (pas par machine). Une op multi-machines
     // affiche la liste des machines séparées par ' · '.
     const rows = [];
@@ -10843,8 +10874,8 @@ function _opRenderPlanTable(events, meId){
       <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
     </tr>`).join('');
 
-    return `<div class="op-plan-creneau-card">
-      <div class="op-plan-creneau-header" onclick="opOpenPlanDetail(${ev.id})">
+    return `<div class="op-plan-creneau-card" onclick="opOpenPlanDetail(${ev.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();opOpenPlanDetail(${ev.id});}">
+      <div class="op-plan-creneau-header">
         <span class="op-plan-ch-chev">▸</span>
         <span class="op-plan-ch-time">${escHtml(timeLbl)}</span>
         ${nom ? '<span class="op-plan-ch-nom">' + escHtml(nom) + '</span>' : ''}
@@ -10857,9 +10888,14 @@ function _opRenderPlanTable(events, meId){
         <tbody>${tbodyHtml}</tbody>
       </table>
     </div>`;
-  }).join('');
+  };  // renderCreneauCard
 
-  return '<div class="op-plan-creneaux-list">' + cardsHtml + '</div>';
+  // Assemble : pour chaque date, une section-head + les cartes créneau
+  const sectionsHtml = sortedDates.map(iso => {
+    const cardsForDate = byDate.get(iso).map(renderCreneauCard).join('');
+    return _daySectionHtml(iso) + '<div class="op-plan-creneaux-list">' + cardsForDate + '</div>';
+  }).join('');
+  return '<div class="op-plan-days-wrap">' + sectionsHtml + '</div>';
 }
 
 // v2.2.68 : modal détail créneau lecture seule (Planning personnel)
@@ -10952,28 +10988,29 @@ function _opRenderPlanDetailModal(ev){
 
 async function opLoadPlanning(){
   if(MAINT_ROLE !== 'operator') return;
+  // v2.2.73 : fetch aujourd'hui + 30 jours à venir. Le date picker est
+  // conservé pour l'onglet Planning général mais ignoré pour le Personnel
+  // qui affiche systématiquement aujourd'hui → J+30 groupé par date.
+  const today = _fmtDateISO(new Date());
+  const _todayD = new Date();
+  const _endD = new Date(_todayD); _endD.setDate(_endD.getDate() + 30);
+  const _endIso = _fmtDateISO(_endD);
   const dateInput = document.getElementById('op-plan-date');
-  const d = dateInput.value || _fmtDateISO(new Date());
-  if(!dateInput.value) dateInput.value = d;
-  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
-                       '&date_to=' + encodeURIComponent(d) + '&_=' + Date.now(),
+  if(dateInput && !dateInput.value) dateInput.value = today;
+  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(today) +
+                       '&date_to=' + encodeURIComponent(_endIso) + '&_=' + Date.now(),
                        { credentials:'include', cache: 'no-store' });
   if(!r.ok){
     const persoEl = document.getElementById('op-plan-personnel');
     if(persoEl) persoEl.innerHTML = _opRenderPlanTable([], null);
-    // NB : #op-plan-general est géré par le calendrier admin monté via
-    // _mountOperatorGeneralCalendar — ne jamais écraser son innerHTML ici.
     return;
   }
   const data = await r.json();
   const events = data.events || [];
   const meId = (S && S.me) ? S.me.id : null;
-  // Onglet Personnel : events où je suis dans le groupe.
   const perso = events.filter(ev => (ev.operators || []).some(o => o.id === meId));
   const persoEl = document.getElementById('op-plan-personnel');
   if(persoEl) persoEl.innerHTML = _opRenderPlanTable(perso, meId);
-  // Onglet Général : rendu par renderCal() sur le calendrier admin monté.
-  // Ne pas écraser #op-plan-general ici — voir _mountOperatorGeneralCalendar.
 }
 
 function opSetPlanTab(name){
