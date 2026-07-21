@@ -1601,6 +1601,117 @@ async function openCloturerAoModal() {
 }
 
 // ── Wizard creation AO en 3 etapes ──
+function openQuickProduitModal(onCreated) {
+  // Modal nestable qui se pose sur tout (wizard inclus) via z-index eleve
+  const existing = document.getElementById('quick-produit-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'quick-produit-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:flex-start;justify-content:center;padding-top:80px;overflow-y:auto';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 24px;width:min(520px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.35);color:var(--text)';
+  modal.innerHTML = '<h3 style="margin:0 0 14px 0;font-size:16px;font-weight:700">Nouveau produit</h3>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Reference *</label>'+
+    '<input id="qp-ref" type="text" placeholder="Ex: 1145/0050" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit" autocomplete="off"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Designation</label>'+
+    '<input id="qp-des" type="text" placeholder="Ex: Etiquettes 101,6x152,4mm" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit" autocomplete="off"></div>'+
+    '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Client (optionnel)</label>'+
+    '<div style="position:relative">'+
+    '<input id="qp-client-search" type="text" placeholder="Tape un nom (min 2 lettres)..." autocomplete="off" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);box-sizing:border-box;font-family:inherit">'+
+    '<div id="qp-client-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:180px;overflow:auto;z-index:2"></div>'+
+    '<div id="qp-client-selected" style="display:none;margin-top:6px;padding:6px 10px;background:var(--accent-bg,rgba(34,211,238,.08));border:1px solid var(--border);border-radius:8px;font-size:13px"></div>'+
+    '</div></div>'+
+    '<div style="margin-bottom:16px"><label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px">Unite</label>'+
+    '<select id="qp-unite" style="width:100%;padding:8px 10px;font-size:14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit">'+
+    '<option value="unite">unite</option><option value="etiquettes">etiquettes</option><option value="bobine">bobine</option><option value="palette">palette</option>'+
+    '</select></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:8px">'+
+    '<button type="button" id="qp-cancel" class="btn btn-ghost">Annuler</button>'+
+    '<button type="button" id="qp-save" class="btn btn-accent">Creer</button>'+
+    '</div>';
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  let selectedClient = null;
+  const cleanup = () => overlay.remove();
+
+  document.getElementById('qp-cancel').onclick = () => { cleanup(); };
+  overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+
+  // Client picker inline
+  const searchInp = document.getElementById('qp-client-search');
+  const resultsDiv = document.getElementById('qp-client-results');
+  const selectedDiv = document.getElementById('qp-client-selected');
+  let searchTimer = null;
+  searchInp.addEventListener('input', () => {
+    const q = searchInp.value.trim();
+    clearTimeout(searchTimer);
+    if (q.length < 2) { resultsDiv.style.display = 'none'; return; }
+    searchTimer = setTimeout(async () => {
+      try {
+        const rows = await api('/api/ao/picker/clients?search=' + encodeURIComponent(q) + '&limit=15');
+        if (!rows || !rows.length) {
+          resultsDiv.innerHTML = '<div style="padding:8px 10px;color:var(--muted);font-size:12px">Aucun client</div>';
+          resultsDiv.style.display = 'block';
+          return;
+        }
+        resultsDiv.innerHTML = rows.map(c => {
+          const label = c.raison_sociale || c.nom || ('Client #' + c.id);
+          return '<div class="qp-cli-row" data-cid="'+c.id+'" data-label="'+escAttr(label)+'" style="padding:8px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)"><strong>'+escHtml(label)+'</strong></div>';
+        }).join('');
+        resultsDiv.style.display = 'block';
+        resultsDiv.querySelectorAll('.qp-cli-row').forEach(row => {
+          row.onclick = () => {
+            selectedClient = {id: parseInt(row.dataset.cid, 10), label: row.dataset.label};
+            selectedDiv.innerHTML = '<strong>' + escHtml(selectedClient.label) + '</strong> <button type="button" id="qp-cli-clear" style="border:none;background:transparent;color:var(--danger);cursor:pointer;padding:0 4px">x</button>';
+            selectedDiv.style.display = 'block';
+            searchInp.style.display = 'none';
+            resultsDiv.style.display = 'none';
+            document.getElementById('qp-cli-clear').onclick = () => {
+              selectedClient = null;
+              selectedDiv.style.display = 'none';
+              searchInp.style.display = '';
+              searchInp.value = '';
+            };
+          };
+        });
+      } catch(e) {
+        resultsDiv.innerHTML = '<div style="padding:8px 10px;color:var(--danger);font-size:12px">Erreur: '+escHtml(e.message||String(e))+'</div>';
+        resultsDiv.style.display = 'block';
+      }
+    }, 220);
+  });
+
+  document.getElementById('qp-save').onclick = async () => {
+    const ref = (document.getElementById('qp-ref').value || '').trim();
+    const designation = (document.getElementById('qp-des').value || '').trim();
+    const unite = document.getElementById('qp-unite').value || 'unite';
+    if (!ref) { showToast('Reference obligatoire.', 'danger'); return; }
+    const saveBtn = document.getElementById('qp-save');
+    saveBtn.disabled = true;
+    try {
+      const body = {ref: ref, designation: designation || ref, unite: unite};
+      if (selectedClient) body.client_id = selectedClient.id;
+      const created = await api('/api/ao/produits', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      try { await loadProduits(); } catch(e) {}
+      showToast('Produit ' + (created.ref || ref) + ' cree.', 'success');
+      cleanup();
+      if (typeof onCreated === 'function') onCreated(created);
+    } catch(e) {
+      showToast(e.message || 'Erreur creation produit.', 'danger');
+      saveBtn.disabled = false;
+    }
+  };
+
+  // Focus ref field
+  setTimeout(() => document.getElementById('qp-ref')?.focus(), 50);
+}
+
 async function openCreateAoWizard() {
   const m = document.getElementById('mroot');
   if (!m) return;
@@ -1915,26 +2026,17 @@ async function openCreateAoWizard() {
         };
       });
       box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
-        sel.onchange = async () => {
+        sel.onchange = () => {
           const pid = sel.value;
           if (pid === '__CREATE__') {
             sel.value = '';
             commitStep2FromDOM();
-            const ref = (prompt('Ref du nouveau produit :') || '').trim();
-            if (!ref) return;
-            const designation = (prompt('Designation :', ref) || '').trim();
-            try {
-              const created = await api('/api/ao/produits', {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ref: ref, designation: designation, unite: 'unite'})
-              });
-              await loadProduits();
+            openQuickProduitModal((created) => {
               state.availableProduits = S.produits || [];
-              state.lignes[idx].ref_produit = created.ref || ref;
-              state.lignes[idx].designation = created.designation || designation;
-              showToast('Produit ' + (created.ref || ref) + ' cree.', 'success');
-            } catch(e) { showToast(e.message || 'Erreur creation produit.', 'danger'); }
-            render();
+              state.lignes[idx].ref_produit = created.ref;
+              state.lignes[idx].designation = created.designation || '';
+              render();
+            });
             return;
           }
           if (!pid) return;
