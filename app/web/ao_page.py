@@ -1712,7 +1712,7 @@ function openQuickProduitModal(onCreated) {
   setTimeout(() => document.getElementById('qp-ref')?.focus(), 50);
 }
 
-async function openCreateAoWizard() {
+async function openCreateAoWizard(initialState) {
   const m = document.getElementById('mroot');
   if (!m) return;
   m.innerHTML = '';
@@ -1721,7 +1721,12 @@ async function openCreateAoWizard() {
   box.style.maxWidth = '760px';
   box.style.width = '92vw';
 
-  const state = {
+  let state;
+  if (initialState) {
+    state = initialState;
+    if (typeof state.step !== 'number') state.step = 2;
+  } else {
+    state = {
     step: 1,
     info: {
       titre: '',
@@ -1739,22 +1744,24 @@ async function openCreateAoWizard() {
     selectedContactKeys: new Set(),
     manualFourni: { nom: '', email: '', langue: 'fr' },
     _autoP: false,
-  };
-
-  // Charge fournisseurs+contacts et produits en parallele
-  try {
-    const [fours] = await Promise.all([
-      api('/api/ao/picker/fournisseurs-with-contacts'),
-    ]);
-    state.availableFournisseurs = fours || [];
-  } catch (e) {
-    showToast('Erreur chargement donnees: ' + (e.message || e), 'danger');
+    };
   }
 
-  // Auto-preselect contacts principaux
-  state.availableFournisseurs.forEach(f => (f.contacts || []).forEach(c => {
-    if (c.is_principal) state.selectedContactKeys.add(f.id + ':' + c.id);
-  }));
+  // Charge fournisseurs+contacts et produits en parallele (skip si etat existant)
+  if (!initialState) {
+    try {
+      const [fours] = await Promise.all([
+        api('/api/ao/picker/fournisseurs-with-contacts'),
+      ]);
+      state.availableFournisseurs = fours || [];
+    } catch (e) {
+      showToast('Erreur chargement donnees: ' + (e.message || e), 'danger');
+    }
+    // Auto-preselect contacts principaux
+    state.availableFournisseurs.forEach(f => (f.contacts || []).forEach(c => {
+      if (c.is_principal) state.selectedContactKeys.add(f.id + ':' + c.id);
+    }));
+  }
 
   function renderStepIndicator() {
     const steps = ['Infos AO', 'Produits', 'Fournisseurs'];
@@ -2026,17 +2033,29 @@ async function openCreateAoWizard() {
         };
       });
       box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
-        sel.onchange = () => {
+        sel.onchange = async () => {
           const pid = sel.value;
           if (pid === '__CREATE__') {
             sel.value = '';
             commitStep2FromDOM();
-            openQuickProduitModal((created) => {
-              state.availableProduits = S.produits || [];
-              state.lignes[idx].ref_produit = created.ref;
-              state.lignes[idx].designation = created.designation || '';
-              render();
-            });
+            // Save wizard state + hook, close modal, switch to full produit form
+            S._pendingWizardHook = {
+              lineIdx: idx,
+              onSaved: (created) => {
+                state.availableProduits = S.produits || [];
+                state.lignes[idx].ref_produit = created.ref;
+                state.lignes[idx].designation = created.designation || '';
+                openCreateAoWizard(state);
+              },
+              onCanceled: () => {
+                openCreateAoWizard(state);
+              }
+            };
+            // Close wizard modal (mroot)
+            m.innerHTML = '';
+            // Switch to produits section + open produit form
+            S.section = 'produits';
+            await openProduitForm(null);
             return;
           }
           if (!pid) return;
@@ -2047,6 +2066,14 @@ async function openCreateAoWizard() {
           row.querySelector('.w-l-des').value = p.designation || '';
           if (!row.querySelector('.w-l-qte').value) row.querySelector('.w-l-qte').value = '';
         };
+      });
+      // Auto-select des selects w-l-pick base sur state.lignes[idx].ref_produit
+      box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
+        const ref = state.lignes[idx] && state.lignes[idx].ref_produit;
+        if (ref) {
+          const p = (state.availableProduits || []).find(x => x.ref === ref);
+          if (p) sel.value = String(p.id);
+        }
       });
     }
 
