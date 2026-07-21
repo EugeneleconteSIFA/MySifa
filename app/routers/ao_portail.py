@@ -408,6 +408,46 @@ def list_portail_demandes(request: Request, token: str):
         }
 
 
+
+def _translate_offre_texts(data: dict, target_lang: str, conn) -> dict:
+    """Traduit les champs texte de l'offre selon target_lang (FR/EN/DE/...)."""
+    if not data or not target_lang:
+        return data
+    tgt = (target_lang or "").strip().upper()
+    if not tgt or tgt in ("FR", "FR-FR"):
+        return data
+    try:
+        from app.services.translate_service import translate as _svc_translate
+    except Exception:
+        return data
+
+    def _t(text):
+        if not text or not str(text).strip():
+            return text
+        try:
+            res = _svc_translate(conn, text=str(text), target_lang=tgt, source_lang="FR", formality="default")
+            return res.get("translated") or text
+        except Exception:
+            return text
+
+    ao = data.get("ao") if isinstance(data, dict) else None
+    if isinstance(ao, dict):
+        if ao.get("description"):
+            ao["description"] = _t(ao["description"])
+        if ao.get("titre"):
+            ao["titre"] = _t(ao["titre"])
+    lignes = data.get("lignes") if isinstance(data, dict) else []
+    if isinstance(lignes, list):
+        for ln in lignes:
+            if not isinstance(ln, dict):
+                continue
+            if ln.get("notes"):
+                ln["notes"] = _t(ln["notes"])
+            if ln.get("designation"):
+                ln["designation"] = _t(ln["designation"])
+    return data
+
+
 @router_api.get("/ao/{token}")
 def get_portail_data(request: Request, token: str):
     ip = _client_ip(request)
@@ -424,7 +464,14 @@ def get_portail_data(request: Request, token: str):
             conn.commit()
             fourni["statut"] = "ouvert"
             fourni["date_ouverture"] = now
-        return _portail_payload(conn, ao, fourni)
+        payload = _portail_payload(conn, ao, fourni)
+        # Traduction auto selon langue fournisseur
+        try:
+            _lang = (fourni.get("langue") if isinstance(fourni, dict) else None) or ""
+        except Exception:
+            _lang = ""
+        payload = _translate_offre_texts(payload, _lang, conn)
+        return payload
 
 
 @router_api.post("/ao/{token}/repondre")
