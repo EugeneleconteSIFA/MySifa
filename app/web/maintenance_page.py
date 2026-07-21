@@ -10677,7 +10677,12 @@ function opOpenSingleOpModal(eventId, opId){
   const cancelValEl = document.getElementById('op-single-cancel-validation');
   if(titleEl) titleEl.textContent = isDone ? 'Opération terminée' : 'Marquer comme terminée';
   if(submitEl) submitEl.textContent = isDone ? 'Enregistrer les modifications' : 'Marquer comme terminée';
-  if(cancelValEl) cancelValEl.style.display = isDone ? '' : 'none';
+  // v2.2.75 : sur une op perso (non_planifie créée par l'user), le bouton
+  // "Annuler la validation" fait doublon avec le bouton "Supprimer" qui est
+  // plus intuitif — on le cache.
+  const _meId = (S && S.me) ? S.me.id : null;
+  const _isMinePerso = (ev.source === 'non_planifie') && (_meId != null) && (ev.created_by === _meId);
+  if(cancelValEl) cancelValEl.style.display = (isDone && !_isMinePerso) ? '' : 'none';
   document.getElementById('op-modal-single').classList.add('active');
 }
 
