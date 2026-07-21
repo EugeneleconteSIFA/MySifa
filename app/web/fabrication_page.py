@@ -1636,6 +1636,13 @@ async function triggerOp(opCode, opLabel, extra={}){
     });
     if(d && d.success){
       showToast('Saisie enregistrée : '+opStr);
+      // v2.2.66 : refresh immédiat des alertes — le backend a peut-être ack
+      // automatiquement des périodiques (code non-productif ou fin_dossier).
+      try {
+        if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
+          window.MysifaAlerts.refresh();
+        }
+      } catch(_) {}
     }
   }catch(e){
     showToast('Erreur : '+e.message,'danger');
