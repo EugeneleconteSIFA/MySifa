@@ -4386,6 +4386,9 @@ function renderDebutModal(){
       });
       if(r&&r.success){
         showToast('Début de production enregistré');
+        // v2.2.67 : refresh alertes (code 01 = pas d'ack auto, mais on refresh
+        // par cohérence avec les autres endpoints — pas de coût)
+        try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
         fabPauseAutoRefresh(10000);
         await loadSession({noRender:true, silent:true});
       }
@@ -4522,6 +4525,8 @@ function renderFinModal(){
       });
       if(r&&r.success){
         showToast(S.finDossierOui ? 'Dossier clôturé ✅' : 'Fin de production enregistrée 🔄');
+        // v2.2.67 : refresh alertes — code 89 déclenche l'ack auto backend v2.2.65
+        try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
         fabPauseAutoRefresh(10000);
         await loadSession({noRender:true, silent:true});
       }
