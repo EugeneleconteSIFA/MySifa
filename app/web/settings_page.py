@@ -2138,7 +2138,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                     <div style="display:flex;gap:10px;align-items:flex-start">
                       <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
                       <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
-                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct sur ce PC).
+                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct depuis ce wizard sur le PC hôte). <strong>Il doit atterrir dans le dossier Téléchargements</strong> (comportement navigateur par défaut).
                       </div>
                     </div>
                   </div>
@@ -8733,7 +8733,8 @@ async function prWizCreateAgent() {
     // Affiche le bloc token + installer
     document.getElementById('pr-wiz-token-display').value = r.token;
     // Génère la commande d'install pré-remplie avec le token
-    const cmd = `powershell -ExecutionPolicy Bypass -File .\\install_agent_windows.ps1 -Token "${r.token}"`;
+    // v2 - chemin absolu vers Downloads : pas besoin de cd manuel avant
+    const cmd = `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\install_agent_windows.ps1" -Token "${r.token}"`;
     document.getElementById('pr-wiz-install-cmd').value = cmd;
     document.getElementById('pr-wiz-agent-created').style.display = '';
     // Cache le bloc install si c'est TCP/IP (l'agent tourne peut-être ailleurs, on ne force pas)
