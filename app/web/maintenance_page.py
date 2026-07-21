@@ -1061,6 +1061,55 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-table tbody tr:last-child td{border-bottom:none}
 .op-plan-table tbody tr.mine{background:var(--accent-bg)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
+/* v2.2.70 : cartes créneau (header prominent au-dessus, puis mini-tableau) */
+.op-plan-days-wrap{display:flex;flex-direction:column;gap:22px}
+.op-plan-day-section-head{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.op-plan-day-section-head .op-plan-day-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.op-plan-creneaux-list{display:flex;flex-direction:column;gap:14px}
+.op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:box-shadow .18s,transform .12s,border-color .15s}
+.op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 12px 32px rgba(0,0,0,.14),0 4px 10px rgba(34,211,238,.20);transform:translateY(-2px)}
+.op-plan-creneau-card:active{transform:translateY(0);box-shadow:0 4px 14px rgba(0,0,0,.10),0 1px 3px rgba(0,0,0,.06)}
+.op-plan-creneau-header{background:var(--accent-bg);color:var(--text);border-left:4px solid var(--accent);padding:12px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:background .15s}
+.op-plan-creneau-header:hover{background:rgba(34,211,238,.18)}
+.op-plan-creneau-header .op-plan-ch-chev{color:var(--accent);font-size:16px;line-height:1}
+.op-plan-creneau-header .op-plan-ch-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;font-weight:800;font-size:15px;color:var(--accent);letter-spacing:.3px}
+.op-plan-creneau-header .op-plan-ch-nom{font-weight:700;font-size:14px;color:var(--text);padding-left:10px;border-left:1px solid var(--border)}
+.op-plan-creneau-header .op-plan-ch-count{background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+.op-plan-creneau-header .op-plan-ch-status{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;background:var(--card);color:var(--accent);border:1px solid var(--accent)}
+.op-plan-creneau-header .op-plan-ch-status.done{background:var(--ok,#34d399);color:#fff;border-color:var(--ok,#34d399)}
+.op-plan-creneau-header .op-plan-ch-status.progress{background:var(--warn,#fbbf24);color:#000;border-color:var(--warn,#fbbf24)}
+.op-plan-creneau-header .op-plan-ch-team{margin-left:auto;font-size:12px;color:var(--muted);font-weight:500;font-style:italic}
+.op-plan-creneau-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:transparent}
+.op-plan-creneau-table thead th{background:var(--bg);text-align:left;padding:10px 16px;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.op-plan-creneau-table tbody td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--text2)}
+.op-plan-creneau-table tbody tr:last-child td{border-bottom:none}
+.op-plan-creneau-table tbody tr:hover{background:var(--bg)}
+.op-plan-creneau-table tbody td.op-plan-cell-mac{font-weight:600;color:var(--text)}
+.op-plan-creneau-table tbody td.op-plan-cell-lbl{color:var(--text)}
+/* Modal détail créneau (op) */
+.op-plan-detail-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1400;padding:20px;animation:opPlanDetFade .15s}
+.op-plan-detail-box{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;padding:22px;position:relative;animation:opPlanDetSlide .18s}
+.op-plan-detail-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
+.op-plan-detail-close:hover{color:var(--danger);border-color:var(--danger)}
+.op-plan-detail-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;padding-right:36px;display:flex;align-items:center;gap:9px}
+.op-plan-detail-sub{font-size:13px;color:var(--muted);margin-bottom:16px;text-transform:capitalize}
+.op-plan-detail-info{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+.op-plan-detail-info-lbl{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.op-plan-detail-info-val{color:var(--text);font-weight:600}
+.op-plan-detail-ops-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+.op-plan-detail-op-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--bg);border-left:3px solid var(--border);border-radius:6px;margin-bottom:5px;font-size:13px}
+.op-plan-detail-op-row.is-done{background:rgba(52,211,153,.10);border-left-color:var(--ok,#34d399)}
+.op-plan-detail-op-lbl{flex:1;min-width:0;font-weight:600;color:var(--text)}
+.op-plan-detail-op-mac{font-size:11px;color:var(--muted);margin-top:2px}
+.op-plan-detail-op-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0}
+.op-plan-detail-op-badge.done{background:var(--ok,#34d399);color:#fff}
+.op-plan-detail-op-badge.todo{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.op-plan-detail-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.op-plan-detail-actions button{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:filter .15s}
+.op-plan-detail-actions .btn-close{background:var(--accent);color:#fff}
+.op-plan-detail-actions .btn-close:hover{filter:brightness(1.08)}
+@keyframes opPlanDetFade{from{opacity:0}to{opacity:1}}
+@keyframes opPlanDetSlide{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── Modal saisie / création (partagé opérateur & admin) ─────────── */
 .op-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:20px}
@@ -9523,8 +9572,10 @@ function opRenderTasks(){
     const creneauBoxes = creneaux
       .map(ev => _renderCreneauBox(ev, showTermine, isToday))
       .filter(Boolean);
-    // Ops perso : uniquement si toggle "Afficher terminées" activé
-    const persoHtml = showTermine ? _renderPersoSection(persos, showTermine) : '';
+    // v2.2.71 : la section perso est toujours affichée si des ops perso 'à faire'
+    // existent. Le toggle contrôle uniquement l'inclusion des ops terminées (filtre
+    // interne dans _renderPersoSection).
+    const persoHtml = _renderPersoSection(persos, showTermine);
     return { creneauBoxes, persoHtml };
   };
 
@@ -10734,62 +10785,232 @@ async function opDeleteEvent(eventId){
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
 function _opRenderPlanTable(events, meId){
-  // Aplati les events → 1 ligne par (event, op, machine). Une op multi-machines
-  // produit une ligne par machine.
-  if(events.length === 0){
-    return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
+  // v2.2.73 : regroupement par date puis par créneau. Aujourd'hui + 30 jours.
+  // Les ops non-planifiées (source=non_planifie) sont exclues du Planning perso.
+  const filtered = events.filter(ev => ev.source !== 'non_planifie');
+  if(filtered.length === 0){
+    return '<div class="op-empty"><h3>Aucun créneau programmé</h3>Pas d\'affectation aujourd\'hui ni dans les 30 prochains jours.</div>';
   }
-  const rows = [];
-  for(const ev of events){
-    const mine = (ev.operators || []).some(o => o.id === meId);
-    const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assigné</em>';
-    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : '—';
+  // Groupe par date (date_prevue)
+  const byDate = new Map();
+  for(const ev of filtered){
+    const d = ev.date_prevue || '';
+    if(!byDate.has(d)) byDate.set(d, []);
+    byDate.get(d).push(ev);
+  }
+  // Tri des dates ascendant, puis dans chaque date par heure_debut
+  const sortedDates = Array.from(byDate.keys()).sort();
+  for(const d of sortedDates){
+    byDate.get(d).sort((a, b) => {
+      const ha = a.heure_debut || 'zz';
+      const hb = b.heure_debut || 'zz';
+      if(ha !== hb) return ha.localeCompare(hb);
+      return (a.id || 0) - (b.id || 0);
+    });
+  }
+
+  const todayIso = _fmtDateISO(new Date());
+  const tomorrowD = new Date(); tomorrowD.setDate(tomorrowD.getDate() + 1);
+  const tomorrowIso = _fmtDateISO(tomorrowD);
+  const _dateLbl = (iso) => {
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return iso;
+    const d = new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    const s = d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  };
+  const _daySectionHtml = (iso) => {
+    let lbl;
+    if(iso === todayIso) lbl = 'Aujourd\'hui · ' + _dateLbl(iso);
+    else if(iso === tomorrowIso) lbl = 'Demain · ' + _dateLbl(iso);
+    else lbl = _dateLbl(iso);
+    return '<div class="op-plan-day-section-head"><span class="op-plan-day-dot"></span>' + escHtml(lbl) + '</div>';
+  };
+
+  const renderCreneauCard = (ev) => {
+    // v2.2.71 : 1 ligne par op (pas par machine). Une op multi-machines
+    // affiche la liste des machines séparées par ' · '.
+    const rows = [];
     for(const op of (ev.ops || [])){
       let machines = Array.isArray(op.machines) && op.machines.length
-        ? op.machines
+        ? op.machines.slice()
         : (ev.machine ? [ev.machine] : ['—']);
-      for(const m of machines){
-        rows.push({ mine, ev, op, operatorsStr, time, machine: m });
+      // Tri interne des machines de l'op selon _MACHINE_ORDER
+      if(typeof _MACHINE_ORDER !== 'undefined'){
+        const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+        machines.sort((a, b) => {
+          const ra = rank.has(a) ? rank.get(a) : Infinity;
+          const rb = rank.has(b) ? rank.get(b) : Infinity;
+          if(ra !== rb) return ra - rb;
+          return String(a).localeCompare(String(b), 'fr');
+        });
       }
+      rows.push({ op, machines });
     }
-  }
-  return `<table class="op-plan-table">
-    <thead><tr><th>Créneau</th><th>Machine</th><th>Code</th><th>Opération</th><th>Groupe</th><th>Statut</th></tr></thead>
-    <tbody>${rows.map(r => `<tr class="${r.mine ? 'mine' : ''}">
-      <td>${r.time}</td>
-      <td><strong>${escHtml(r.machine)}</strong></td>
+    // Tri des ops par 1ère machine (rang canonique le plus bas)
+    if(typeof _MACHINE_ORDER !== 'undefined'){
+      const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+      const minRank = (r) => Math.min.apply(null, r.machines.map(m => rank.has(m) ? rank.get(m) : Infinity));
+      rows.sort((a, b) => {
+        const ra = minRank(a), rb = minRank(b);
+        if(ra !== rb) return ra - rb;
+        return String(a.machines[0] || '').localeCompare(String(b.machines[0] || ''), 'fr');
+      });
+    }
+
+    const timeLbl = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans horaire';
+    const nom = (ev.nom || '').trim();
+    const others = (ev.operators || []).filter(o => o.id !== meId).map(o => escHtml(o.nom));
+    const teamLbl = others.length ? ('avec ' + others.join(', ')) : 'seul';
+    const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine');
+    const anyDone = rows.some(r => r.op.statut === 'termine');
+    const statusCls = allDone ? 'done' : (anyDone ? 'progress' : '');
+    const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
+
+    const tbodyHtml = rows.map(r => `<tr>
+      <td class="op-plan-cell-mac">${r.machines.map(m => escHtml(m)).join(' · ')}</td>
       <td><span class="op-code">${r.op.code}</span></td>
-      <td>${r.op.code_label || '—'}</td>
-      <td style="font-size:12px">${r.operatorsStr}</td>
+      <td class="op-plan-cell-lbl">${escHtml(r.op.code_label || '—')}</td>
       <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
-    </tr>`).join('')}</tbody>
-  </table>`;
+    </tr>`).join('');
+
+    return `<div class="op-plan-creneau-card" onclick="opOpenPlanDetail(${ev.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();opOpenPlanDetail(${ev.id});}">
+      <div class="op-plan-creneau-header">
+        <span class="op-plan-ch-chev">▸</span>
+        <span class="op-plan-ch-time">${escHtml(timeLbl)}</span>
+        ${nom ? '<span class="op-plan-ch-nom">' + escHtml(nom) + '</span>' : ''}
+        <span class="op-plan-ch-count">${rows.length} op.</span>
+        <span class="op-plan-ch-status ${statusCls}">${statusTxt}</span>
+        <span class="op-plan-ch-team">${teamLbl}</span>
+      </div>
+      <table class="op-plan-creneau-table">
+        <thead><tr><th>Machine</th><th>Code</th><th>Opération</th><th>Statut</th></tr></thead>
+        <tbody>${tbodyHtml}</tbody>
+      </table>
+    </div>`;
+  };  // renderCreneauCard
+
+  // Assemble : pour chaque date, une section-head + les cartes créneau
+  const sectionsHtml = sortedDates.map(iso => {
+    const cardsForDate = byDate.get(iso).map(renderCreneauCard).join('');
+    return _daySectionHtml(iso) + '<div class="op-plan-creneaux-list">' + cardsForDate + '</div>';
+  }).join('');
+  return '<div class="op-plan-days-wrap">' + sectionsHtml + '</div>';
+}
+
+// v2.2.68 : modal détail créneau lecture seule (Planning personnel)
+async function opOpenPlanDetail(eventId){
+  try {
+    const r = await fetch('/api/maintenance/events/' + eventId + '?_=' + Date.now(),
+                          { credentials:'include', cache:'no-store' });
+    if(!r.ok) throw new Error('Erreur ' + r.status);
+    const d = await r.json();
+    const ev = d.event || d;
+    _opRenderPlanDetailModal(ev);
+  } catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+function _opRenderPlanDetailModal(ev){
+  const ov = document.createElement('div');
+  ov.className = 'op-plan-detail-ov';
+  ov.addEventListener('click', e => { if(e.target === ov) ov.remove(); });
+  const _dt = new Date(ev.date_prevue + 'T00:00:00');
+  const _dLbl = _dt.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  const _hLbl = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans horaire';
+
+  // v2.2.71 : 1 ligne par op (regroupe multi-machines), pas de code affiché.
+  const opsFlat = [];
+  for(const op of (ev.ops || [])){
+    let machines = Array.isArray(op.machines) && op.machines.length
+      ? op.machines.slice()
+      : (ev.machine ? [ev.machine] : ['—']);
+    if(typeof _MACHINE_ORDER !== 'undefined'){
+      const rk = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+      machines.sort((a, b) => {
+        const ra = rk.has(a) ? rk.get(a) : Infinity;
+        const rb = rk.has(b) ? rk.get(b) : Infinity;
+        if(ra !== rb) return ra - rb;
+        return String(a).localeCompare(String(b), 'fr');
+      });
+    }
+    opsFlat.push({ op, machines });
+  }
+  // Tri des ops par 1ère machine (rang canonique)
+  if(typeof _MACHINE_ORDER !== 'undefined'){
+    const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+    const minRank = (r) => Math.min.apply(null, r.machines.map(m => rank.has(m) ? rank.get(m) : Infinity));
+    opsFlat.sort((a, b) => {
+      const ra = minRank(a), rb = minRank(b);
+      if(ra !== rb) return ra - rb;
+      return String(a.machines[0] || '').localeCompare(String(b.machines[0] || ''), 'fr');
+    });
+  }
+  const opsHtml = opsFlat.map(({op, machines}) => {
+    const isDone = op.statut === 'termine';
+    return `<div class="op-plan-detail-op-row ${isDone ? 'is-done' : ''}">
+      <div style="flex:1;min-width:0">
+        <div class="op-plan-detail-op-lbl">${escHtml(op.code_label || '—')}</div>
+        <div class="op-plan-detail-op-mac">${machines.map(m => escHtml(m)).join(' · ')}</div>
+      </div>
+      <span class="op-plan-detail-op-badge ${isDone ? 'done' : 'todo'}">${isDone ? '✓ Terminé' : 'À faire'}</span>
+    </div>`;
+  }).join('');
+  const opsBlock = opsFlat.length
+    ? opsHtml
+    : '<div style="padding:10px;color:var(--muted);font-style:italic;font-size:12px">Aucune opération dans ce créneau.</div>';
+
+  const operatorsList = (ev.operators || []).map(o => escHtml(o.nom || '?')).join(' · ') || '<em>Aucun</em>';
+  const nomBlock = (ev.nom || '').trim() ? '<div class="op-plan-detail-info"><div class="op-plan-detail-info-lbl">Nom du créneau</div><div class="op-plan-detail-info-val">' + escHtml(ev.nom) + '</div></div>' : '';
+
+  ov.innerHTML =
+    '<div class="op-plan-detail-box">' +
+      '<button type="button" class="op-plan-detail-close" onclick="this.closest(\'.op-plan-detail-ov\').remove()" aria-label="Fermer">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>' +
+      '<div class="op-plan-detail-title">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+        'Créneau de maintenance' +
+      '</div>' +
+      '<div class="op-plan-detail-sub">' + escHtml(_dLbl) + ' · ' + escHtml(_hLbl) + '</div>' +
+      nomBlock +
+      '<div class="op-plan-detail-info"><div class="op-plan-detail-info-lbl">Machine(s)</div><div class="op-plan-detail-info-val">' + escHtml(ev.machine || '—') + '</div></div>' +
+      '<div class="op-plan-detail-info"><div class="op-plan-detail-info-lbl">Opérateurs assignés</div><div class="op-plan-detail-info-val">' + operatorsList + '</div></div>' +
+      '<div class="op-plan-detail-ops-lbl">Opérations (' + opsFlat.length + ')</div>' +
+      opsBlock +
+      '<div class="op-plan-detail-actions">' +
+        '<button type="button" class="btn-close" onclick="this.closest(\'.op-plan-detail-ov\').remove()">Fermer</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
 }
 
 async function opLoadPlanning(){
   if(MAINT_ROLE !== 'operator') return;
+  // v2.2.73 : fetch aujourd'hui + 30 jours à venir. Le date picker est
+  // conservé pour l'onglet Planning général mais ignoré pour le Personnel
+  // qui affiche systématiquement aujourd'hui → J+30 groupé par date.
+  const today = _fmtDateISO(new Date());
+  const _todayD = new Date();
+  const _endD = new Date(_todayD); _endD.setDate(_endD.getDate() + 30);
+  const _endIso = _fmtDateISO(_endD);
   const dateInput = document.getElementById('op-plan-date');
-  const d = dateInput.value || _fmtDateISO(new Date());
-  if(!dateInput.value) dateInput.value = d;
-  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(d) +
-                       '&date_to=' + encodeURIComponent(d) + '&_=' + Date.now(),
+  if(dateInput && !dateInput.value) dateInput.value = today;
+  const r = await fetch('/api/maintenance/events?date_from=' + encodeURIComponent(today) +
+                       '&date_to=' + encodeURIComponent(_endIso) + '&_=' + Date.now(),
                        { credentials:'include', cache: 'no-store' });
   if(!r.ok){
     const persoEl = document.getElementById('op-plan-personnel');
     if(persoEl) persoEl.innerHTML = _opRenderPlanTable([], null);
-    // NB : #op-plan-general est géré par le calendrier admin monté via
-    // _mountOperatorGeneralCalendar — ne jamais écraser son innerHTML ici.
     return;
   }
   const data = await r.json();
   const events = data.events || [];
   const meId = (S && S.me) ? S.me.id : null;
-  // Onglet Personnel : events où je suis dans le groupe.
   const perso = events.filter(ev => (ev.operators || []).some(o => o.id === meId));
   const persoEl = document.getElementById('op-plan-personnel');
   if(persoEl) persoEl.innerHTML = _opRenderPlanTable(perso, meId);
-  // Onglet Général : rendu par renderCal() sur le calendrier admin monté.
-  // Ne pas écraser #op-plan-general ici — voir _mountOperatorGeneralCalendar.
 }
 
 function opSetPlanTab(name){

@@ -408,6 +408,46 @@ def list_portail_demandes(request: Request, token: str):
         }
 
 
+
+def _translate_offre_texts(data: dict, target_lang: str, conn) -> dict:
+    """Traduit les champs texte de l'offre selon target_lang (FR/EN/DE/...)."""
+    if not data or not target_lang:
+        return data
+    tgt = (target_lang or "").strip().upper()
+    if not tgt or tgt in ("FR", "FR-FR"):
+        return data
+    try:
+        from app.services.translate_service import translate as _svc_translate
+    except Exception:
+        return data
+
+    def _t(text):
+        if not text or not str(text).strip():
+            return text
+        try:
+            res = _svc_translate(conn, text=str(text), target_lang=tgt, source_lang="FR", formality="default")
+            return res.get("translated") or text
+        except Exception:
+            return text
+
+    ao = data.get("ao") if isinstance(data, dict) else None
+    if isinstance(ao, dict):
+        if ao.get("description"):
+            ao["description"] = _t(ao["description"])
+        if ao.get("titre"):
+            ao["titre"] = _t(ao["titre"])
+    lignes = data.get("lignes") if isinstance(data, dict) else []
+    if isinstance(lignes, list):
+        for ln in lignes:
+            if not isinstance(ln, dict):
+                continue
+            if ln.get("notes"):
+                ln["notes"] = _t(ln["notes"])
+            if ln.get("designation"):
+                ln["designation"] = _t(ln["designation"])
+    return data
+
+
 @router_api.get("/ao/{token}")
 def get_portail_data(request: Request, token: str):
     ip = _client_ip(request)
@@ -424,7 +464,14 @@ def get_portail_data(request: Request, token: str):
             conn.commit()
             fourni["statut"] = "ouvert"
             fourni["date_ouverture"] = now
-        return _portail_payload(conn, ao, fourni)
+        payload = _portail_payload(conn, ao, fourni)
+        # Traduction auto selon langue fournisseur
+        try:
+            _lang = (fourni.get("langue") if isinstance(fourni, dict) else None) or ""
+        except Exception:
+            _lang = ""
+        payload = _translate_offre_texts(payload, _lang, conn)
+        return payload
 
 
 @router_api.post("/ao/{token}/repondre")
@@ -551,7 +598,56 @@ def list_portail_messages(request: Request, token: str):
                ORDER BY date ASC""",
             (fourni["id"],),
         ).fetchall()
+        # Mark interne messages as read once fournisseur consulted them
+        conn.execute(
+            """UPDATE ao_messages SET lu=1
+               WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
+            (fourni["id"],),
+        )
+        conn.commit()
     return [_row_dict(r) for r in rows]
+
+
+@router_api.get("/ao/{token}/counts")
+def get_portail_counts(request: Request, token: str):
+    """Retourne le nombre de messages interne non lus + documents non vus."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        msg = conn.execute(
+            """SELECT COUNT(*) FROM ao_messages
+               WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
+            (fourni["id"],),
+        ).fetchone()[0]
+        try:
+            docs = conn.execute(
+                """SELECT COUNT(*) FROM ao_pieces_jointes
+                   WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
+                     AND COALESCE(vu_par_fournisseur, 0)=0""",
+                (ao["id"], fourni["id"]),
+            ).fetchone()[0]
+        except Exception:
+            docs = 0
+    return {"messages_non_lus": int(msg or 0), "documents_nouveaux": int(docs or 0)}
+
+
+@router_api.post("/ao/{token}/documents/mark-viewed")
+def portail_mark_docs_viewed(request: Request, token: str):
+    """Marque tous les documents comme vus par le fournisseur."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        try:
+            conn.execute(
+                """UPDATE ao_pieces_jointes SET vu_par_fournisseur=1
+                   WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
+                     AND COALESCE(vu_par_fournisseur, 0)=0""",
+                (ao["id"], fourni["id"]),
+            )
+            conn.commit()
+        except Exception:
+            pass
+    return {"ok": True}
 
 
 @router_api.post("/ao/{token}/messages")

@@ -665,7 +665,8 @@ function toggleSidebar() {
 function closeSidebar() { S.sidebarOpen = false; document.body.classList.remove('sb-open'); }
 
 async function loadList() {
-  S.aos = await api('/api/ao');
+  const url = S.filtre === 'corbeille' ? '/api/ao?filter=corbeille' : '/api/ao';
+  S.aos = await api(url);
 }
 
 async function loadCarnet() {
@@ -702,6 +703,7 @@ async function loadMessages(aoId, fourniId) {
 
 function filteredAos() {
   const f = S.filtre;
+  if (f === 'corbeille') return S.aos || [];
   if (f === 'tous') return S.aos;
   return S.aos.filter(a => a.statut === f);
 }
@@ -1378,10 +1380,13 @@ function renderList() {
     const titre = escAttr(a.titre||'');
     const cliTxt = a.clients ? escHtml(a.clients) : '<span style="color:var(--muted)">—</span>';
     const refsTxt = a.refs_produits ? escHtml(a.refs_produits) : '<span style="color:var(--muted)">—</span>';
-    const actions =
-      '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
-      '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
-      '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
+    const inCorbeille = S.filtre === 'corbeille';
+    const actions = inCorbeille
+      ? '<button class="btn btn-ghost btn-sm btn-restore-ao" data-id="'+a.id+'">Restaurer</button> '+
+        '<button class="btn-icon btn-del-ao-def" data-id="'+a.id+'" data-ref="'+ref+'" title="Supprimer definitivement" style="color:var(--danger)">'+icon('trash',14)+'</button>'
+      : '<button class="btn btn-ghost btn-sm btn-view" data-id="'+a.id+'">Voir</button> '+
+        '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
+        '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
     rows += '<tr><td><a href="#" class="ao-list-ref-link btn-view" data-id="'+a.id+'">'+escHtml(a.reference)+'</a></td>'+
       '<td>'+escHtml(a.titre)+'</td>'+
       '<td>'+cliTxt+'</td>'+
@@ -1394,7 +1399,7 @@ function renderList() {
   });
   return '<div class="page-hdr"><h1>Appels d\'offre</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offre</button></div>'+
     '<div class="filter-tabs">'+
-    ['tous','brouillon','envoyee','cloturee'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':'Clôturée')+'</button>').join('')+
+    ['tous','brouillon','envoyee','cloturee','corbeille'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':f==='cloturee'?'Clôturée':'Corbeille')+'</button>').join('')+
     '</div>'+
     (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Références produits</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
     '<div class="card empty-state"><strong>Aucun appel d\'offre</strong>Créez un premier appel d\'offre pour inviter vos fournisseurs.</div>');
@@ -2254,6 +2259,7 @@ async function openAddFournisseurModalV2() {
 
   const state = {
     search: '',
+    showEmpty: false,
     selectedContacts: new Set(),
     manualTab: false,
     _autoP: false,
@@ -2270,7 +2276,7 @@ async function openAddFournisseurModalV2() {
         if (c.is_principal) state.selectedContacts.add(f.id + ':' + c.id);
       }));
     }
-    const filtered = state.search
+    let filtered = state.search
       ? state.fournisseurs.filter(f => {
           const q = state.search.toLowerCase();
           return (f.nom || '').toLowerCase().includes(q)
@@ -2278,6 +2284,10 @@ async function openAddFournisseurModalV2() {
             || (f.contacts || []).some(c => (c.nom || '').toLowerCase().includes(q));
         })
       : state.fournisseurs;
+    // Filtre : uniquement fournisseurs avec >=1 contact (sauf toggle showEmpty)
+    if (!state.showEmpty) {
+      filtered = filtered.filter(f => ((f.contacts || []).length > 0));
+    }
 
     let html = '<h3>Ajouter un fournisseur</h3>' +
       '<div style="display:flex;gap:6px;margin-bottom:12px">' +
@@ -2292,6 +2302,11 @@ async function openAddFournisseurModalV2() {
         '<select id="m-langue-manual"><option value="fr">Francais</option><option value="en">English</option></select></div>';
     } else {
       html += '<div class="field"><input id="m-search" placeholder="Rechercher fournisseur, ville, contact..." value="' + escAttr(state.search) + '" autocomplete="off"></div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0;gap:8px;flex-wrap:wrap">'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer">'+
+        '<input type="checkbox" id="m-show-empty"'+(state.showEmpty?' checked':'')+'> Afficher fournisseurs sans contact</label>'+
+        '<button type="button" class="btn btn-ghost btn-sm" id="m-create-four" style="font-size:12px">+ Creer un fournisseur</button>'+
+        '</div>' +
         '<div style="max-height:400px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px" id="m-list">';
       if (!filtered.length) {
         html += '<div style="padding:20px;color:var(--muted);text-align:center">Aucun fournisseur.</div>';
@@ -2338,6 +2353,26 @@ async function openAddFournisseurModalV2() {
     if (!state.manualTab) {
       const s = document.getElementById('m-search');
       if (s) s.addEventListener('input', () => { state.search = s.value; render(); });
+      box.querySelector('#m-show-empty')?.addEventListener('change', e => {
+        state.showEmpty = e.target.checked;
+        render();
+      });
+      box.querySelector('#m-create-four')?.addEventListener('click', async () => {
+        const nom = (prompt('Nom du fournisseur (societe) :') || '').trim();
+        if (!nom) return;
+        const ville = (prompt('Ville (optionnel) :') || '').trim();
+        try {
+          await api('/api/settings/fournisseurs-fsc', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({nom: nom, ville: ville || null, actif: 1})
+          });
+          await _reloadFournisseursCache(state);
+          state.showEmpty = true;
+          state.search = nom;
+          render();
+          showToast('Fournisseur ' + nom + ' cree.', 'success');
+        } catch(e) { showToast(e.message || 'Erreur creation fournisseur.', 'danger'); }
+      });
       box.querySelectorAll('[data-contact-key]').forEach(cb => {
         cb.onchange = () => {
           const k = cb.dataset.contactKey;
@@ -2566,6 +2601,26 @@ function bindListEvents() {
   document.getElementById('btn-new-ao')?.addEventListener('click', openCreateAoWizard);
   document.querySelectorAll('.filter-tab').forEach(b => b.addEventListener('click', () => { S.filtre = b.dataset.f; render(); }));
   document.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(parseInt(b.dataset.id,10))));
+  document.querySelectorAll('.btn-restore-ao').forEach(b => b.addEventListener('click', async () => {
+    const id = parseInt(b.dataset.id, 10);
+    try {
+      await api('/api/ao/' + id + '/restaurer', {method: 'POST'});
+      showToast('AO restaure.', 'success');
+      await loadList();
+      render();
+    } catch(e) { showToast(e.message || 'Erreur restauration.', 'danger'); }
+  }));
+  document.querySelectorAll('.btn-del-ao-def').forEach(b => b.addEventListener('click', async () => {
+    const id = parseInt(b.dataset.id, 10);
+    const ref = b.dataset.ref || '';
+    if (!confirm('Supprimer DEFINITIVEMENT l\'AO ' + ref + ' ? Cette action est irreversible.')) return;
+    try {
+      await api('/api/ao/' + id + '/definitif', {method: 'DELETE'});
+      showToast('AO supprime definitivement.', 'success');
+      await loadList();
+      render();
+    } catch(e) { showToast(e.message || 'Erreur suppression definitive.', 'danger'); }
+  }));
   document.querySelectorAll('.btn-del-ao').forEach(b => b.addEventListener('click', (e) => {
     e.stopPropagation();
     openModalConfirmDelete(parseInt(b.dataset.id,10), b.dataset.ref, b.dataset.statut);

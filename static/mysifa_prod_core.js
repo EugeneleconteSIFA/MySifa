@@ -1681,7 +1681,9 @@ function renderOfTab(){
       async()=>{if(page<Math.ceil(total/50)-1){set({ofPage:page+1});await loadOfImports();render();}}
     ),
     h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std'},
+      // v1.7.3 — classe 'table-actions-wide' active le table-layout:fixed
+      // + width 260px sur la colonne Actions (cf. CSS th.th-actions).
+      h('table',{className:'table-std table-actions-wide'},
         h('thead',null,h('tr',null,
           h('th',{style:{width:'36px'}},
             h('input',{type:'checkbox',style:'cursor:pointer',
@@ -1821,7 +1823,9 @@ function renderFichesTab(){
       async()=>{if(page<Math.ceil(total/50)-1){set({fichePage:page+1});await loadFiches();render();}}
     ),
     h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std'},
+      // v1.7.3 — classe 'table-actions-wide' active le table-layout:fixed
+      // + width 260px sur la colonne Actions (cf. CSS th.th-actions).
+      h('table',{className:'table-std table-actions-wide'},
         h('thead',null,h('tr',null,
           h('th',{style:{width:'36px'}},
             h('input',{type:'checkbox',style:'cursor:pointer',
