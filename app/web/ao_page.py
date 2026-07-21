@@ -1432,6 +1432,10 @@ async function saveAoTransport(aoId, pct) {
       body: JSON.stringify({prix_transport_pct: pct})
     });
     if (S.ao) S.ao.prix_transport_pct = pct;
+    if (S.view === 'detail' && S.tab === 'comparaison' && S.ao) {
+      await loadComparaison(S.ao.id);
+      render();
+    }
   } catch(e) { showToast(e.message || 'Erreur transport.', 'danger'); }
 }
 
@@ -1450,6 +1454,10 @@ async function saveEurUsdRate(rate) {
       body: JSON.stringify({eur_usd_rate: rate})
     });
     showToast('Taux EUR/USD mis a jour.', 'success');
+    if (S.view === 'detail' && S.tab === 'comparaison' && S.ao) {
+      await loadComparaison(S.ao.id);
+      render();
+    }
   } catch(e) { showToast(e.message || 'Erreur EUR/USD.', 'danger'); }
 }
 
@@ -1683,6 +1691,7 @@ async function openCreateAoWizard() {
 
   function renderStep2() {
     const prodOpts = '<option value="">— saisie manuelle —</option>' +
+      '<option value="__CREATE__">+ Creer un nouveau produit</option>' +
       (state.availableProduits || []).map(p =>
         '<option value="' + p.id + '">' + escHtml(p.ref) + ' — ' + escHtml(p.designation) + '</option>'
       ).join('');
@@ -1871,6 +1880,7 @@ async function openCreateAoWizard() {
               resultsDiv.style.display = 'block';
               resultsDiv.querySelectorAll('.w-client-row').forEach(row => {
                 row.onclick = () => {
+                  commitStep1FromDOM();
                   state.info.client_id = parseInt(row.dataset.cid, 10);
                   state.info.client_label = row.dataset.clabel;
                   render();
@@ -1886,7 +1896,7 @@ async function openCreateAoWizard() {
         });
       }
       const clr = document.getElementById('w-client-clear');
-      if (clr) clr.onclick = () => { state.info.client_id = null; state.info.client_label = ''; render(); };
+      if (clr) clr.onclick = () => { commitStep1FromDOM(); state.info.client_id = null; state.info.client_label = ''; render(); };
     }
 
     // Step 2 : add / delete row + prefill from catalogue
@@ -1905,8 +1915,28 @@ async function openCreateAoWizard() {
         };
       });
       box.querySelectorAll('.w-l-pick').forEach((sel, idx) => {
-        sel.onchange = () => {
+        sel.onchange = async () => {
           const pid = sel.value;
+          if (pid === '__CREATE__') {
+            sel.value = '';
+            commitStep2FromDOM();
+            const ref = (prompt('Ref du nouveau produit :') || '').trim();
+            if (!ref) return;
+            const designation = (prompt('Designation :', ref) || '').trim();
+            try {
+              const created = await api('/api/ao/produits', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ref: ref, designation: designation, unite: 'unite'})
+              });
+              await loadProduits();
+              state.availableProduits = S.produits || [];
+              state.lignes[idx].ref_produit = created.ref || ref;
+              state.lignes[idx].designation = created.designation || designation;
+              showToast('Produit ' + (created.ref || ref) + ' cree.', 'success');
+            } catch(e) { showToast(e.message || 'Erreur creation produit.', 'danger'); }
+            render();
+            return;
+          }
           if (!pid) return;
           const p = (state.availableProduits || []).find(x => String(x.id) === String(pid));
           if (!p) return;
@@ -2350,7 +2380,7 @@ function renderComparaison() {
       '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
       '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>'+
       '<td>'+escHtml(devF)+'</td>'+
-      '<td>'+escHtml(formatUniteQuot(r.unite_quotation))+'</td>'+
+      '<td>'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+' style="font-size:11px;padding:2px 4px">'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+(r.unite_manuel ? ' <span style="font-size:9px;padding:1px 5px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">manuel</span>' : '')+'</td>'+
       '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
       '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
       '<td><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
@@ -2526,6 +2556,17 @@ function bindDetailEvents() {
       render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));
+  document.querySelectorAll('.inp-unite-quot').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const rid = sel.dataset.rep;
+      if (!rid) return;
+      try {
+        await saveReponsePricing(rid, {unite_quotation: sel.value});
+        // refetch entire comparaison pour recalculer les prix
+        if (S.ao) { await loadComparaison(S.ao.id); render(); }
+      } catch(e) { showToast(e.message || 'Erreur unite.', 'danger'); }
+    });
+  });
   document.querySelectorAll('.inp-coef').forEach(inp => {
     inp.addEventListener('change', async () => {
       const rid = inp.dataset.rep;

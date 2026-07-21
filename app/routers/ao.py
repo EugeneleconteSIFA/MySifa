@@ -2089,6 +2089,11 @@ def comparaison_ao(request: Request, ao_id: int):
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
         eur_usd = get_eur_usd_rate(conn)
+        _ao_pct_row = conn.execute(
+            "SELECT COALESCE(prix_transport_pct, 0) AS pct FROM ao_demandes WHERE id=?",
+            (ao_id,),
+        ).fetchone()
+        transport_pct = float(_ao_pct_row[0]) if _ao_pct_row else 0.0
 
         lignes_out: list[dict[str, Any]] = []
         rows_flat: list[dict[str, Any]] = []
@@ -2107,6 +2112,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 for r in conn.execute(
                     """SELECT r.id AS reponse_id, f.id AS fourni_id, f.nom_fournisseur,
                               r.quotation, r.prix_unitaire, r.devise, r.unite_quotation,
+                              COALESCE(r.unite_manuel, 0) AS unite_manuel,
                               r.coef, r.devise_prix_devis,
                               r.delai_jours, r.commentaire
                        FROM ao_reponses r
@@ -2122,7 +2128,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 raw = rep_by_fourni.get(int(f["id"]))
                 if raw:
                     reponses.append(
-                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct)
                     )
             prices_mille = [
                 float(r["prix_au_mille"])
@@ -2152,7 +2158,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 fid = int(f["id"])
                 raw = rep_by_fourni.get(fid)
                 if raw:
-                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct)
                 else:
                     rep = enrich_reponse_pricing(
                         {
@@ -2167,6 +2173,7 @@ def comparaison_ao(request: Request, ao_id: int):
                         },
                         ctx,
                         eur_usd_rate=eur_usd,
+                        transport_pct=transport_pct,
                     )
                 rows_flat.append({
                     "ligne_id": ln["id"],
@@ -2175,7 +2182,7 @@ def comparaison_ao(request: Request, ao_id: int):
                     "nom_fournisseur": rep.get("nom_fournisseur"),
                     **ctx,
                     **{k: rep.get(k) for k in (
-                        "quotation", "devise", "unite_quotation",
+                        "quotation", "devise", "unite_quotation", "unite_manuel",
                         "prix_calcule", "prix_au_mille", "coef",
                         "devise_prix_devis", "prix_vente",
                         "delai_jours", "commentaire",
@@ -2197,6 +2204,11 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
     body = await request.json()
     coef = body.get("coef")
     devise_prix_devis = body.get("devise_prix_devis")
+    unite_quotation = body.get("unite_quotation")
+    if unite_quotation is not None:
+        unite_quotation = (unite_quotation or "").strip().lower()
+        if unite_quotation not in UNITES_QUOTATION:
+            raise HTTPException(status_code=400, detail="Unite invalide.")
     if coef is not None:
         try:
             coef = float(coef)
@@ -2231,6 +2243,11 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
                 "UPDATE ao_reponses SET devise_prix_devis=? WHERE id=?",
                 (devise_prix_devis, reponse_id),
             )
+        if unite_quotation is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET unite_quotation=?, unite_manuel=1 WHERE id=?",
+                (unite_quotation, reponse_id),
+            )
         conn.commit()
         updated = conn.execute(
             "SELECT * FROM ao_reponses WHERE id=?", (reponse_id,)
@@ -2247,11 +2264,16 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
         eur_usd = get_eur_usd_rate(conn)
+        _ao_pct_row2 = conn.execute(
+            "SELECT COALESCE(prix_transport_pct, 0) AS pct FROM ao_demandes WHERE id=?",
+            (ao_id,),
+        ).fetchone()
+        transport_pct2 = float(_ao_pct_row2[0]) if _ao_pct_row2 else 0.0
         produit = produits_map.get((row["ref_produit"] or "").strip().lower())
         ctx = ligne_context_from_produit(
             row["ref_produit"], row["quantite"], produit, matieres_map
         )
-        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd)
+        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct2)
 
 
 @router.get("/{ao_id}/non-lus")

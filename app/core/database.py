@@ -7196,6 +7196,67 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 197, "ao_demandes_prix_transport_pct")
 
+    # v198 -- MyStock Valorisation "figer a une date passee" : perf indexes.
+    # Les endpoints /api/stock/valorisation?date=... et /api/stock/valorisation/pf?date=...
+    # reconstituent le stock a une date via des CTE ROW_NUMBER() OVER (PARTITION BY ...
+    # ORDER BY created_at) sur mp_mouvements / mouvements_stock, avec un WHERE
+    # created_at > ?. Sans index sur created_at ni sur la cle de partition, chaque
+    # snapshot fait un full-scan + tri en memoire. Idem pour les snapshots de prix
+    # historises (mp_valorisation_historique / pf_valorisation_historique) qui prennent
+    # le dernier prix_apres <= date par matiere/produit.
+    # Impact : chargement multi-secondes de la valorisation figee -> quasi-instantane
+    # sur des tables volumineuses.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=198 LIMIT 1").fetchone():
+        # mp_mouvements : filtre created_at > ? + partition (matiere_id, laize_id).
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_mvt_created_at ON mp_mouvements(created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_mvt_snapshot "
+            "ON mp_mouvements(matiere_id, laize_id, created_at, id)"
+        )
+        # mouvements_stock : filtre created_at > ? + partition (produit_id, emplacement).
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_stock_created_at ON mouvements_stock(created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_stock_snapshot "
+            "ON mouvements_stock(produit_id, emplacement, created_at, id)"
+        )
+        # mp_valorisation_historique : le dernier prix <= date par matiere.
+        # (idx_mp_valo_hist_mat existe deja mais couvre juste matiere_id -- pas la
+        #  partie tri.)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mp_valo_hist_snapshot "
+            "ON mp_valorisation_historique(matiere_id, created_at, id)"
+        )
+        # pf_valorisation_historique : idem par produit.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pf_valo_hist_snapshot "
+            "ON pf_valorisation_historique(produit_id, created_at, id)"
+        )
+        # ANALYZE : force le planner a reevaluer ses stats sur ces tables volumineuses.
+        # Sans ca, les nouveaux index peuvent etre ignores tant qu'il n'y a pas eu
+        # de VACUUM/ANALYZE spontane.
+        try:
+            conn.execute("ANALYZE mp_mouvements")
+            conn.execute("ANALYZE mouvements_stock")
+            conn.execute("ANALYZE mp_valorisation_historique")
+            conn.execute("ANALYZE pf_valorisation_historique")
+        except sqlite3.Error:
+            pass
+        conn.commit()
+        _record_schema_migration(conn, 198, "valorisation_snapshot_perf_indexes")
+
+
+    # v198 -- ao_reponses.unite_manuel (badge "manuel" quand l'interne modifie l'unite)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=198 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
+        if "unite_manuel" not in cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN unite_manuel INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        _record_schema_migration(conn, 198, "ao_reponses_unite_manuel")
+
 
 
 def create_default_admin():
