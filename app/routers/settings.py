@@ -2165,7 +2165,7 @@ _ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
 ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
-_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login"}
+_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login", "after_calage"}
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
@@ -2304,6 +2304,18 @@ def _validate_alert_params(params: dict) -> dict:
             if fc in ("bobine_only", "plis_only"):
                 trig["filter_conditionnement"] = fc
             # 'any' ou absent : on n'écrit rien (comportement par défaut).
+        # v2.2.79 : délai en minutes pour after_calage (temps en prod cumulé)
+        if ev == "after_calage":
+            _delay_raw = trig_in.get("delay_minutes", 0)
+            try:
+                _delay = int(_delay_raw) if _delay_raw not in (None, "") else 0
+            except (TypeError, ValueError):
+                _delay = 0
+            if _delay < 0:
+                _delay = 0
+            if _delay > 999:
+                _delay = 999
+            trig["delay_minutes"] = _delay
     # type=manual : pas de params supplémentaires
     out["trigger"] = trig
 
@@ -3839,6 +3851,10 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
+                elif event == "after_calage":
+                    # v2.2.76 : traité en bloc plus bas — nécessite une logique
+                    # spécifique (parcours de la séquence des saisies du dossier).
+                    pass
                 # v164 : fallback super admin (comme la branche periodic).
                 # Si Loic (superadmin) ouvre /prod ou /maintenance sans machine
                 # assignée dans son profil, on utilise la machine cible de
@@ -3852,7 +3868,87 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                if op_code and effective_machine and effective_operateur:
+                # v2.2.76 : cas spécifique after_calage — recherche d'un calage
+                # AVANT le dernier code prod du dossier actif, avec verrou par dossier
+                # sur les acks. On ne dépend pas d'op_code car la logique regarde une
+                # séquence, pas un seul code.
+                if event == "after_calage" and effective_machine:
+                    # v2.2.78 — La toute dernière saisie sur la MACHINE (peu importe
+                    # le dossier) doit être un code prod (01/03/88) avec un no_dossier
+                    # renseigné. Sinon skip.
+                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                    _last_row = conn.execute(
+                        """SELECT no_dossier, operation_code, date_operation
+                           FROM production_data
+                           WHERE machine=? AND date_operation >= ?
+                           ORDER BY date_operation DESC LIMIT 1""",
+                        (effective_machine, _window),
+                    ).fetchone()
+                    _valid_prod_last = (
+                        _last_row
+                        and _last_row["operation_code"] in ("01", "03", "88")
+                        and _last_row["no_dossier"] is not None
+                        and str(_last_row["no_dossier"]).strip() != ""
+                    )
+                    if _valid_prod_last:
+                        _dos = str(_last_row["no_dossier"]).strip()
+                        # Verrou par dossier
+                        _ack_check = conn.execute(
+                            """SELECT 1 FROM maintenance_alert_acks
+                               WHERE alert_id=? AND no_dossier=? LIMIT 1""",
+                            (int(r["id"]), _dos),
+                        ).fetchone()
+                        if not _ack_check:
+                            # v2.2.79 — Chercher le dernier code calage du dossier,
+                            # puis le premier prod APRÈS ce calage (déclencheur).
+                            _last_calage = conn.execute(
+                                """SELECT MAX(date_operation) AS m FROM production_data
+                                   WHERE no_dossier=? AND machine=?
+                                     AND operation_category='calage'""",
+                                (_dos, effective_machine),
+                            ).fetchone()
+                            _last_calage_at = _last_calage["m"] if _last_calage else None
+                            if _last_calage_at:
+                                _declencheur = conn.execute(
+                                    """SELECT MIN(date_operation) AS m FROM production_data
+                                       WHERE no_dossier=? AND machine=?
+                                         AND operation_code IN ('01','03','88')
+                                         AND date_operation > ?""",
+                                    (_dos, effective_machine, _last_calage_at),
+                                ).fetchone()
+                                _declencheur_at = _declencheur["m"] if _declencheur else None
+                                if _declencheur_at:
+                                    # Cumul du temps en prod entre déclencheur et NOW
+                                    _delay_min = int(trig.get("delay_minutes", 0) or 0)
+                                    if _delay_min <= 0:
+                                        should_show = True
+                                        trigger_no_dossier = _dos
+                                    else:
+                                        _seq_rows = conn.execute(
+                                            """SELECT date_operation, operation_code
+                                               FROM production_data
+                                               WHERE no_dossier=? AND machine=?
+                                                 AND date_operation >= ?
+                                               ORDER BY date_operation ASC""",
+                                            (_dos, effective_machine, _declencheur_at),
+                                        ).fetchall()
+                                        _cumul_sec = 0.0
+                                        _prod_codes = ("01", "03", "88")
+                                        _now_iso = now_paris.strftime("%Y-%m-%dT%H:%M:%S")
+                                        for _i, _sr in enumerate(_seq_rows):
+                                            _t_start = _sr["date_operation"]
+                                            _t_end = _seq_rows[_i + 1]["date_operation"] if (_i + 1 < len(_seq_rows)) else _now_iso
+                                            if _sr["operation_code"] in _prod_codes:
+                                                try:
+                                                    _dt_s = datetime.fromisoformat(_t_start)
+                                                    _dt_e = datetime.fromisoformat(_t_end)
+                                                    _cumul_sec += (_dt_e - _dt_s).total_seconds()
+                                                except (TypeError, ValueError):
+                                                    pass
+                                        if _cumul_sec >= _delay_min * 60:
+                                            should_show = True
+                                            trigger_no_dossier = _dos
+                elif op_code and effective_machine and effective_operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",

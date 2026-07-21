@@ -5806,6 +5806,7 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
+  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -5955,6 +5956,11 @@ function _renderAlertFormFields(params, opts) {
     +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
     +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
     +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
+    +       '<div id="af-after-calage-block" data-after-calage-only style="margin-top:10px;display:none">'
+    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant affichage (min de production cumulée)</label>'
+    +         '<input type="number" id="af-trigger-delay-minutes" class="alert-field-input" min="0" max="999" step="1" value="' + (d.trigger.delay_minutes != null ? d.trigger.delay_minutes : 0) + '" placeholder="0 = affichage immédiat">'
+    +         '<div class="alert-field-help">L\'alerte s\'affiche quand l\'opérateur a cumulé au moins ce nombre de minutes en production (codes 01/03/88) depuis la fin du calage. Le compteur se met en pause lors d\'un arrêt/pause/etc. et reprend au prochain code prod. 0 = affichage immédiat.</div>'
+    +       '</div>'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -6172,7 +6178,14 @@ function _afOnDismissToggle() {
 }
 
 // v2.2.42 : no-op depuis le retrait du filtre produit.
-function _afOnTriggerEventChange() { /* no-op */ }
+function _afOnTriggerEventChange() {
+  // v2.2.79 : afficher le champ délai uniquement pour after_calage
+  var _sel = document.getElementById('af-trigger-event');
+  var _block = document.getElementById('af-after-calage-block');
+  if (_sel && _block) {
+    _block.style.display = (_sel.value === 'after_calage') ? '' : 'none';
+  }
+}
 
 function _afRowClick(ev, inputId) {
   // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
@@ -6254,6 +6267,8 @@ function _afOnTriggerChange() {
   document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
     el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
   });
+  // v2.2.79 : après changement de type, sync l'état du bloc after_calage
+  if (typeof _afOnTriggerEventChange === 'function') _afOnTriggerEventChange();
 }
 
 function _afReadParams() {
@@ -6281,6 +6296,16 @@ function _afReadParams() {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
     // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
     delete trig.filter_conditionnement;
+    // v2.2.79 : délai après calage (persisté uniquement si after_calage)
+    if (trig.event === 'after_calage') {
+      var _dEl = document.getElementById('af-trigger-delay-minutes');
+      var _dVal = _dEl ? parseInt(_dEl.value, 10) : 0;
+      if (isNaN(_dVal) || _dVal < 0) _dVal = 0;
+      if (_dVal > 999) _dVal = 999;
+      trig.delay_minutes = _dVal;
+    } else {
+      delete trig.delay_minutes;
+    }
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
