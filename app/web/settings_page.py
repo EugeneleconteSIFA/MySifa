@@ -5806,6 +5806,7 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
+  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
