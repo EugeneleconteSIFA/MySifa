@@ -14561,9 +14561,30 @@ function valEnsureState() {
       exporting: false,
       mpCollapsed: false,
       pfCollapsed: false,
-      snapshotDate: null };
+      snapshotDate: null,
+      // Sparkline 30 jours de la valo totale (MP+PF). Charge en arriere-plan
+      // apres le loadValorisation initial. { points: [{date, total}], loading: bool }
+      trend: { points: [], loading: false } };
   }
   return S.valorisation;
+}
+
+async function loadValorisationTrend() {
+  const v = valEnsureState();
+  if (!v.trend) v.trend = { points: [], loading: false };
+  v.trend.loading = true;
+  try {
+    const data = await api('/api/stock/valorisation/trend?days=30');
+    v.trend.points = Array.isArray(data?.points) ? data.points : [];
+  } catch (e) {
+    // Silencieux : le sparkline est un plus, pas critique. Sur echec on ne
+    // toaste pas, on laisse juste la zone vide.
+    v.trend.points = [];
+  } finally {
+    v.trend.loading = false;
+    // Re-render juste la card total (via full render pour rester simple)
+    renderValorisationView(true);
+  }
 }
 
 async function loadValorisation() {
@@ -14582,6 +14603,14 @@ async function loadValorisation() {
   } finally {
     v.loading = false;
     renderValorisationView(true);
+    // Charge le trend en arriere-plan (fire-and-forget) : n'attend pas la
+    // reponse pour rendre. Le sparkline se remplira quand /trend repond.
+    // Ne recharge qu'en mode "aujourd'hui" -- le trend n'a de sens que par
+    // rapport a la date courante, pas figee. Le cache serveur (max_id +
+    // params) dedoublonne les appels repetes sans data reelle changee.
+    if (!v.snapshotDate) {
+      loadValorisationTrend();
+    }
   }
 }
 
@@ -14688,6 +14717,110 @@ function valToggleSort(column) {
   renderValorisationView(true);
 }
 
+function buildValorisationSparkline() {
+  // Renvoie le bloc "Tendance 30 derniers jours" : petit titre + sparkline SVG
+  // fluide. Occupe l'espace libre a droite de la card total. Design tres epure :
+  // aucune legende, aucun axe, pas d'infobulle, juste une courbe verte + zone
+  // de remplissage tres discrete + un point sur la derniere valeur.
+  const v = valEnsureState();
+  const trend = v.trend || { points: [], loading: false };
+  const wrap = el('div', {
+    style: 'flex:1 1 auto;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:6px'
+  });
+  wrap.append(el('div', {
+    style: 'font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:right'
+  }, 'Tendance 30 derniers jours'));
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', '0 0 200 60');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.width = '100%';
+  svg.style.height = '60px';
+  svg.style.display = 'block';
+  svg.style.overflow = 'visible';
+
+  const pts = (trend.points || []).filter(p => p && typeof p.total === 'number');
+  if (pts.length < 2) {
+    // Placeholder discret : une petite ligne horizontale grise quand pas de data
+    const placeholderText = document.createElementNS(svgNS, 'text');
+    placeholderText.setAttribute('x', '100');
+    placeholderText.setAttribute('y', '35');
+    placeholderText.setAttribute('text-anchor', 'middle');
+    placeholderText.setAttribute('fill', 'var(--muted)');
+    placeholderText.setAttribute('font-size', '10');
+    placeholderText.setAttribute('opacity', '0.5');
+    placeholderText.textContent = trend.loading ? '…' : '';
+    svg.appendChild(placeholderText);
+  } else {
+    const totals = pts.map(p => Number(p.total || 0));
+    const min = Math.min(...totals);
+    const max = Math.max(...totals);
+    const range = max - min || 1;
+    const W = 200, H = 60, padTop = 6, padBot = 6;
+    const usableH = H - padTop - padBot;
+    const stepX = pts.length > 1 ? W / (pts.length - 1) : 0;
+    const y = (t) => padTop + usableH - ((t - min) / range) * usableH;
+    const coords = totals.map((t, i) => [i * stepX, y(t)]);
+
+    // Zone remplie sous la courbe (gradient très discret)
+    const gradId = 'val-spark-grad-' + Math.floor(Math.random() * 1e9);
+    const defs = document.createElementNS(svgNS, 'defs');
+    const grad = document.createElementNS(svgNS, 'linearGradient');
+    grad.setAttribute('id', gradId);
+    grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+    grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+    const s1 = document.createElementNS(svgNS, 'stop');
+    s1.setAttribute('offset', '0%');
+    s1.setAttribute('stop-color', '#16a34a');
+    s1.setAttribute('stop-opacity', '0.22');
+    const s2 = document.createElementNS(svgNS, 'stop');
+    s2.setAttribute('offset', '100%');
+    s2.setAttribute('stop-color', '#16a34a');
+    s2.setAttribute('stop-opacity', '0');
+    grad.appendChild(s1); grad.appendChild(s2);
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+
+    const areaPath = document.createElementNS(svgNS, 'path');
+    let dArea = 'M ' + coords[0][0] + ' ' + H;
+    coords.forEach(([x, yy]) => { dArea += ' L ' + x + ' ' + yy; });
+    dArea += ' L ' + coords[coords.length - 1][0] + ' ' + H + ' Z';
+    areaPath.setAttribute('d', dArea);
+    areaPath.setAttribute('fill', 'url(#' + gradId + ')');
+    svg.appendChild(areaPath);
+
+    // Ligne
+    const linePath = document.createElementNS(svgNS, 'path');
+    let dLine = 'M ' + coords[0][0] + ' ' + coords[0][1];
+    for (let i = 1; i < coords.length; i++) {
+      dLine += ' L ' + coords[i][0] + ' ' + coords[i][1];
+    }
+    linePath.setAttribute('d', dLine);
+    linePath.setAttribute('fill', 'none');
+    linePath.setAttribute('stroke', '#16a34a');
+    linePath.setAttribute('stroke-width', '1.6');
+    linePath.setAttribute('stroke-linecap', 'round');
+    linePath.setAttribute('stroke-linejoin', 'round');
+    // vector-effect empeche l'epaisseur de trait de scaler avec preserveAspectRatio=none
+    linePath.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(linePath);
+
+    // Point sur la derniere valeur (aujourd'hui)
+    const last = coords[coords.length - 1];
+    const dot = document.createElementNS(svgNS, 'circle');
+    dot.setAttribute('cx', last[0]);
+    dot.setAttribute('cy', last[1]);
+    dot.setAttribute('r', '2.5');
+    dot.setAttribute('fill', '#16a34a');
+    dot.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.appendChild(dot);
+  }
+
+  wrap.append(svg);
+  return wrap;
+}
+
 function buildValorisationKpis() {
   const v = valEnsureState();
   const pf = (S.valorisation && S.valorisation.pf) ? S.valorisation.pf : null;
@@ -14738,34 +14871,36 @@ function buildValorisationKpis() {
   };
 
   // ── Total global ──────────────────────────────────────────────
-  // Chiffre recalculé en gros vert au-dessus, chiffre d'origine plus discret dessous
-  // dès qu'un breakdown est actif (MP réel OU PF avec charges).
+  // Layout 2 colonnes : texte a gauche (titre + gros chiffre + base optionnelle),
+  // sparkline "Tendance 30 derniers jours" a droite. Le sparkline occupe l'espace
+  // vide qui existait auparavant.
   const totalHasBreakdown = showReelBreakdown || _pfHasCharges;
-  const kpiTotalChildren = [
+  const kpiTotalLeftChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
   ];
   if (totalHasBreakdown) {
-    kpiTotalChildren.push(
+    kpiTotalLeftChildren.push(
       el('div', { style: 'font-size:24px;font-weight:800;color:#16a34a' }, valFormatEuro(totalGlobalReel))
     );
-    kpiTotalChildren.push(
+    kpiTotalLeftChildren.push(
       el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
         el('span', null, valFormatEuro(totalGlobal)),
         el('span', { style: 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
     );
   } else {
-    kpiTotalChildren.push(
+    kpiTotalLeftChildren.push(
       el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal))
     );
   }
-  kpiTotalChildren.push(
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-      pfLoaded ? 'MP + PF' : 'MP + PF (chargement PF…)')
-  );
+  const kpiTotalLeft = el('div', {
+    style: 'display:flex;flex-direction:column;justify-content:center;min-width:0;flex:0 0 auto',
+  }, ...kpiTotalLeftChildren);
+  const kpiTotalRight = buildValorisationSparkline();
   const kpiTotal = el('div', { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
-    ...kpiTotalChildren
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' +
+    'display:flex;align-items:stretch;gap:14px;overflow:hidden' },
+    kpiTotalLeft, kpiTotalRight
   );
 
   // ── Matières premières — dédoublé EUR / réel si réfs USD ou taxe ──
@@ -14783,30 +14918,9 @@ function buildValorisationKpis() {
         el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
     );
-    const refsLabel = buildBreakdownLabel();
-    const subPieces = [
-      `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`,
-    ];
-    if (refsLabel) subPieces.push(refsLabel);
-    if (tauxTxt) subPieces.push(tauxTxt);
-    if (taxTxt) subPieces.push(taxTxt);
-    if (transportTxt) subPieces.push(transportTxt);
-    kpiMPChildren.push(
-      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
-        subPieces.join(' · ')
-      )
-    );
-  } else {
-    const subPieces = [`${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`];
-    if (canSeeUSD && tauxTxt) subPieces.push(tauxTxt);
-    if (canSeeUSD && taxTxt) subPieces.push(taxTxt);
-    if (canSeeUSD && transportTxt) subPieces.push(transportTxt);
-    kpiMPChildren.push(
-      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-        subPieces.join(' · ')
-      )
-    );
   }
+  // Sous-texte enleve (referentiel / taux USD / taxe / transport) -- infos
+  // dispo dans la table + settings, on garde la card epuree.
   const kpiMP = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
     ...kpiMPChildren
@@ -14836,22 +14950,8 @@ function buildValorisationKpis() {
       el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—')
     );
   }
-  const pfSubPieces = [];
-  if (pfLoaded) {
-    pfSubPieces.push(`${pfS.nb_refs_valorisees || 0} / ${pfS.nb_refs || 0} références valorisées`);
-    if (canSeeUSD && pfChargePct > 0) {
-      pfSubPieces.push('Charge prod. ' + pfChargePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
-    }
-    if (canSeeUSD && pfStoragePct > 0) {
-      pfSubPieces.push('Stockage ' + pfStoragePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
-    }
-  } else {
-    pfSubPieces.push('Chargement…');
-  }
-  kpiPFChildren.push(
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
-      pfSubPieces.join(' · '))
-  );
+  // Sous-texte enleve (referentiel / charges / stockage) -- infos dispo dans
+  // la table + settings, on garde la card epuree.
 
   const kpiPF = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' + (pfLoaded ? '' : 'opacity:.55') },
