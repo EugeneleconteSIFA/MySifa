@@ -16,6 +16,7 @@ from config import (
     ROLES_ADMIN,
     ROLES_ADMINISTRATION_ALL,
     ROLES_PRICING,
+    ROLES_SETTINGS,
     ACCESS_OVERRIDABLE_APPS,
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
@@ -351,6 +352,19 @@ def require_superadmin(request: Request) -> dict:
     user = get_current_user(request)
     if not is_real_superadmin(user):
         raise HTTPException(status_code=403, detail="Accès réservé au super administrateur")
+    return user
+
+
+def can_access_settings(user: dict) -> bool:
+    """Accès à l'application Paramètres — piloté par ROLES_SETTINGS (config.py)."""
+    return bool(user and effective_role(user) in ROLES_SETTINGS)
+
+
+def require_settings(request: Request) -> dict:
+    """Exige un rôle autorisé pour l'application Paramètres (ROLES_SETTINGS)."""
+    user = get_current_user(request)
+    if not can_access_settings(user):
+        raise HTTPException(status_code=403, detail="Accès réservé à l'administration des paramètres")
     return user
 
 
