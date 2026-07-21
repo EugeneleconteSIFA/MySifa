@@ -1,10 +1,10 @@
-"""Paramètres MySifa — super administrateur uniquement."""
+"""Paramètres MySifa — accès piloté par ROLES_SETTINGS (config.py)."""
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import APP_VERSION
-from services.auth_service import get_current_user, is_superadmin
+from services.auth_service import get_current_user, can_access_settings
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
@@ -19,11 +19,11 @@ def settings_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/settings", status_code=302)
         raise
-    if not is_superadmin(user):
+    if not can_access_settings(user):
         return access_denied_response(
-            "Paramètres (super admin)",
+            "Paramètres",
             detail=(
-                "Cette application est réservée au super administrateur. "
+                "Cette application est réservée à l'administration des paramètres. "
                 "Merci de contacter un administrateur en cas de besoin."
             ),
         )

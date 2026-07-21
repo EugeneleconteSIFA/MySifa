@@ -34,7 +34,7 @@ from config import (
     is_known_app_module,
 )
 from app.services.audit_service import log_action
-from services.auth_service import get_current_user, require_superadmin, merged_app_access, parse_access_overrides_raw
+from services.auth_service import get_current_user, require_settings, merged_app_access, parse_access_overrides_raw
 
 router = APIRouter(tags=["settings"])
 
@@ -150,7 +150,7 @@ def access_matrix(request: Request):
         module_id, level}] }.
     Le super admin apparaît en lecture seule côté UI.
     """
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
 
     with get_db() as conn:
@@ -203,7 +203,7 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
     défaut de son rôle. Refuse d'éditer le rôle super admin (intouchable) et
     l'app `settings` (super admin uniquement, non surchargeable).
     """
-    admin_user = require_superadmin(request)
+    admin_user = require_settings(request)
     if body.app_id == "settings":
         raise HTTPException(status_code=400, detail="Paramètres non surchargeable (super admin uniquement).")
     if not is_known_app_module(body.app_id, body.module_id):
@@ -254,7 +254,7 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
 @router.get("/api/settings/role-defaults")
 def role_defaults_endpoint(request: Request):
     """Référentiel rôles éditable — écran /settings → Référentiel rôles."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         role_defaults, _ = _load_all_access(conn)
@@ -297,7 +297,7 @@ class SetRoleDefaultBody(BaseModel):
 @router.put("/api/settings/role-defaults/{role}")
 def set_role_default(role: str, body: SetRoleDefaultBody, request: Request):
     """Édite le référentiel rôle. Refuse le super admin (intouchable) et l'app settings."""
-    admin_user = require_superadmin(request)
+    admin_user = require_settings(request)
     if role == ROLE_SUPERADMIN:
         raise HTTPException(status_code=400, detail="Le super admin a tous les accès (non modifiable).")
     if role not in ASSIGNABLE_ROLES:
@@ -352,7 +352,7 @@ def get_audit_logs(
     action: str = "",
     search: str = "",
 ):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
 
     with get_db() as conn:
@@ -401,7 +401,7 @@ _FSC_CLAIM_LABELS = {
 
 @router.get("/api/fsc/stats")
 def get_fsc_stats(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
 
     with get_db() as conn:
@@ -435,7 +435,7 @@ def get_fsc_registre(
     au: str = "",
     format: str = "json",
 ):
-    require_superadmin(request)
+    require_settings(request)
     import csv
     import datetime as dt
     import io
@@ -551,7 +551,7 @@ def get_fsc_registre(
 
 @router.get("/api/fournisseurs")
 def list_fournisseurs(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     import json
     with get_db() as conn:
@@ -585,7 +585,7 @@ def list_fournisseurs(request: Request):
 @router.get("/api/fournisseurs/groupes")
 def list_fournisseurs_groupes(request: Request):
     """Liste des groupes distincts existants (pour autocomplete)."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -625,7 +625,7 @@ def _normalize_langue_fournisseur(raw):
 
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     import json
     body = await request.json()
@@ -680,7 +680,7 @@ async def create_fournisseur(request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}")
 async def update_fournisseur(fournisseur_id: int, request: Request):
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     import json
     body = await request.json()
@@ -886,7 +886,7 @@ def delete_traca_photo(fournisseur_id: int, request: Request):
 
 @router.delete("/api/fournisseurs/{fournisseur_id}")
 async def delete_fournisseur(fournisseur_id: int, request: Request):
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     four_nom = ""
     with get_db() as conn:
@@ -909,7 +909,7 @@ async def delete_fournisseur(fournisseur_id: int, request: Request):
 @router.get("/api/fournisseurs/{fournisseur_id}/receptions")
 def fournisseur_receptions(fournisseur_id: int, request: Request):
     """Historique des réceptions pour un fournisseur donné."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -939,7 +939,7 @@ def fournisseur_receptions(fournisseur_id: int, request: Request):
 @router.patch("/api/fournisseurs/{fournisseur_id}/actif")
 async def toggle_fournisseur_actif(fournisseur_id: int, request: Request):
     """Bascule / force le flag actif d'un fournisseur (soft archive)."""
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
     with get_db() as conn:
@@ -974,7 +974,7 @@ def export_fournisseurs_csv(request: Request):
     """Export CSV de la liste fournisseurs (colonnes principales + tags)."""
     from fastapi.responses import Response
     import csv, io, json as _json
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1008,7 +1008,7 @@ def export_fournisseurs_csv(request: Request):
             (r["notes"] or "").replace("\n", " "), r["nb_contacts"],
         ])
     log_action(
-        user=require_superadmin(request),
+        user=require_settings(request),
         action="SEARCH",
         module="settings",
         objet=f"Export CSV fournisseurs ({len(rows)} lignes)",
@@ -1080,7 +1080,7 @@ def _unset_other_principal(conn, fournisseur_id: int, keep_contact_id: Optional[
 
 @router.get("/api/fournisseurs/{fournisseur_id}/contacts")
 def list_fournisseur_contacts(fournisseur_id: int, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         ex = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -1097,7 +1097,7 @@ def list_fournisseur_contacts(fournisseur_id: int, request: Request):
 
 @router.post("/api/fournisseurs/{fournisseur_id}/contacts")
 async def create_fournisseur_contact(fournisseur_id: int, request: Request):
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     import json
     body = await request.json()
@@ -1145,7 +1145,7 @@ async def create_fournisseur_contact(fournisseur_id: int, request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
 async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     import json
     body = await request.json()
@@ -1225,7 +1225,7 @@ async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, reque
 
 @router.delete("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
 def delete_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     with get_db() as conn:
         ex_four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -1311,7 +1311,7 @@ async def acknowledge_update(announcement_id: int, request: Request):
 @router.get("/api/updates")
 def list_updates(request: Request):
     """Liste toutes les annonces avec compteur d'acquittements (super admin)."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1327,7 +1327,7 @@ def list_updates(request: Request):
 @router.get("/api/updates/{announcement_id}/acknowledgements")
 def list_acknowledgements(announcement_id: int, request: Request):
     """Détail des acquittements pour une annonce (super admin)."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         ann = conn.execute(
@@ -1349,7 +1349,7 @@ def list_acknowledgements(announcement_id: int, request: Request):
 @router.post("/api/updates")
 async def create_update(request: Request):
     """Créer une nouvelle annonce (super admin)."""
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     body = await request.json()
     scope   = (body.get("scope")   or "").strip()
@@ -1380,7 +1380,7 @@ async def create_update(request: Request):
 @router.patch("/api/updates/{announcement_id}")
 async def patch_update(announcement_id: int, request: Request):
     """Modifier une annonce — ex: activer/désactiver (super admin)."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     body = await request.json()
     with get_db() as conn:
@@ -1410,7 +1410,7 @@ async def patch_update(announcement_id: int, request: Request):
 @router.delete("/api/updates/{announcement_id}")
 def delete_update(announcement_id: int, request: Request):
     """Supprimer une annonce (uniquement si elle n'a pas encore été lue)."""
-    user = require_superadmin(request)
+    user = require_settings(request)
     from database import get_db
     titre_ann = ""
     with get_db() as conn:
@@ -1444,7 +1444,7 @@ def delete_update(announcement_id: int, request: Request):
 
 @router.get("/api/settings/operation-codes")
 def list_operation_codes(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     from app.services.operations_config import categories_for_ui, list_operation_codes as _list
 
@@ -1455,7 +1455,7 @@ def list_operation_codes(request: Request):
 
 @router.post("/api/settings/operation-codes")
 async def create_operation_code(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     from app.services.operations_config import TABLE, validate_operation_payload
     from config import refresh_operations_cache
@@ -1490,7 +1490,7 @@ async def create_operation_code(request: Request):
 
 @router.put("/api/settings/operation-codes/{code}")
 async def update_operation_code(code: str, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     from app.services.operations_config import TABLE, normalize_code, validate_operation_payload
     from config import refresh_operations_cache
@@ -1533,7 +1533,7 @@ async def update_operation_code(code: str, request: Request):
 
 @router.delete("/api/settings/operation-codes/{code}")
 def delete_operation_code(code: str, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     from app.services.operations_config import TABLE, normalize_code
     from config import refresh_operations_cache
@@ -1556,7 +1556,7 @@ def delete_operation_code(code: str, request: Request):
 @router.post("/api/settings/operation-codes/import-json")
 def import_operation_codes_json(request: Request):
     """Réimporte depuis operations.json (upsert tous les codes du fichier)."""
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     from app.services.operations_config import upsert_operation_codes_from_json
     from config import refresh_operations_cache
@@ -1574,7 +1574,7 @@ def import_operation_codes_json(request: Request):
 @router.put("/api/settings/machines/{machine_id}/dernier-metrage")
 async def set_machine_dernier_metrage(machine_id: int, request: Request):
     """Correction manuelle du compteur machine (dernier_metrage) — super admin."""
-    user = require_superadmin(request)
+    user = require_settings(request)
     body = await request.json()
     if not isinstance(body, dict) or "dernier_metrage" not in body:
         raise HTTPException(status_code=400, detail="dernier_metrage requis")
@@ -1621,7 +1621,7 @@ async def set_machine_dernier_metrage(machine_id: int, request: Request):
 @router.put("/api/settings/machines/{machine_id}/nom")
 async def rename_machine(machine_id: int, request: Request):
     """Renommage du nom affiché d'une machine — super admin uniquement."""
-    user = require_superadmin(request)
+    user = require_settings(request)
     body = await request.json()
     if not isinstance(body, dict) or "nom" not in body:
         raise HTTPException(status_code=400, detail="Champ nom requis")
@@ -1679,7 +1679,7 @@ class ApiKeyCreateIn(BaseModel):
 
 @router.get("/api/settings/api-keys")
 def list_api_keys(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1692,7 +1692,7 @@ def list_api_keys(request: Request):
 
 @router.post("/api/settings/api-keys")
 def create_api_key(body: ApiKeyCreateIn, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     user = get_current_user(request)
     from database import get_db
 
@@ -1714,7 +1714,7 @@ def create_api_key(body: ApiKeyCreateIn, request: Request):
 
 @router.patch("/api/settings/api-keys/{key_id}/revoke")
 def revoke_api_key(key_id: int, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     from datetime import datetime
     with get_db() as conn:
@@ -1731,7 +1731,7 @@ def revoke_api_key(key_id: int, request: Request):
 
 @router.delete("/api/settings/api-keys/{key_id}")
 def delete_api_key(key_id: int, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         conn.execute("DELETE FROM api_keys WHERE id=?", (key_id,))
@@ -1749,7 +1749,7 @@ class EmplacementCreate(BaseModel):
 
 @router.get("/api/settings/emplacements")
 def get_emplacements(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         # Créer la table si elle n'existe pas encore
@@ -1767,7 +1767,7 @@ def get_emplacements(request: Request):
 
 @router.post("/api/settings/emplacements")
 def create_emplacement(payload: EmplacementCreate, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     code = payload.code.strip().upper()
     if not code:
         raise HTTPException(400, "Code emplacement vide.")
@@ -1797,7 +1797,7 @@ def create_emplacement(payload: EmplacementCreate, request: Request):
 
 @router.delete("/api/settings/emplacements/{code}")
 def delete_emplacement(code: str, request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from database import get_db
     with get_db() as conn:
         result = conn.execute(
@@ -1811,7 +1811,7 @@ def delete_emplacement(code: str, request: Request):
 
 @router.post("/api/settings/emplacements/reload-csv")
 def reload_emplacements_csv(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     from app.core.database import sync_emplacements_plan_from_csv
     try:
         n = sync_emplacements_plan_from_csv()
@@ -1824,7 +1824,7 @@ def reload_emplacements_csv(request: Request):
 
 @router.post("/api/settings/emplacements/import-csv")
 async def import_emplacements_csv(request: Request, file: UploadFile = File(...)):
-    require_superadmin(request)
+    require_settings(request)
     if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(400, "Le fichier doit être au format CSV (.csv).")
     contents = await file.read()
@@ -1897,7 +1897,7 @@ def _read_origin_app_version() -> Optional[str]:
 
 @router.get("/api/promote/status")
 def promote_status(request: Request):
-    require_superadmin(request)
+    require_settings(request)
 
     # 1. Fetch silencieux pour avoir l'état à jour d'origin/main
     try:
@@ -1971,7 +1971,7 @@ def promote_status(request: Request):
 
 @router.post("/api/promote")
 async def promote_run(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     if ENV_NAME != "v1":
         raise HTTPException(400, "Promotion uniquement disponible depuis v1.")
 
@@ -2029,7 +2029,7 @@ _SYSTEMD_RUN_BIN = _shutil.which("systemd-run", path="/usr/bin:/bin:/usr/local/b
 
 @router.post("/api/sync-db-v1")
 async def sync_db_v1(request: Request):
-    require_superadmin(request)
+    require_settings(request)
     try:
         # systemd-run --no-block lance le script dans une unite transitoire
         # detachee qui survit a l'arret de mysifa-v1. Retour quasi-instantane.
