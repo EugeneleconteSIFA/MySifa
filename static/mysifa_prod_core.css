@@ -929,11 +929,13 @@ body.light .contact-modal input:focus,body.light .contact-modal select:focus{box
    fixe une min-width pour reserver la place.
 
    v1.7.1 — passe de 180px a 240px : un superadmin voit 5 boutons
-   (edit + apercu + imprimer + download + delete). 5*32px + 4*4px gap
-   + padding = ~200px, on prend 240px pour respirer. */
+   (edit + apercu + imprimer + download + delete).
+   v1.7.2 — passe a 320px : sur v1 240px ne suffit pas visuellement,
+   probablement lie aux padding buttons + font metrics. On prend
+   plus large pour couvrir tous les cas + confort visuel. */
 .table-std th.th-actions{
-  min-width:240px;
-  width:240px;
+  min-width:320px;
+  width:320px;
 }
 .table-std td.td-actions{
   max-width:none;
