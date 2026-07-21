@@ -245,9 +245,9 @@ ROLES_PLANNING_VIEW = {
 } | ROLES_ADMINISTRATION_ALL
 # MyProd : tuile portail pour la compta et la logistique, accès limité au planning production (lecture seule côté UI/API).
 ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE, ROLE_LOGISTIQUE}
-ROLES_SETTINGS = {ROLE_SUPERADMIN}
+ROLES_SETTINGS = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 
-# Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé au rôle super admin).
+# Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé aux rôles direction / super admin).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
 
 # ─── Contrôle d'accès database-driven (migration 184) ────────────
