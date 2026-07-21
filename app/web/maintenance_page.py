@@ -1065,7 +1065,7 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-table tbody tr.op-plan-groupheader{background:var(--accent-bg);cursor:pointer;transition:background .15s}
 .op-plan-table tbody tr.op-plan-groupheader:hover{background:rgba(34,211,238,.20)}
 .op-plan-table tbody tr.op-plan-groupheader td{padding:11px 14px;border-bottom:2px solid var(--accent);color:var(--text)}
-.op-plan-table tbody tr.op-plan-groupheader td.op-plan-groupheader-cell{font-weight:700;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-groupheader-content{font-weight:700;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%}
 .op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-chev{color:var(--accent);font-size:14px;line-height:1}
 .op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;color:var(--accent);font-weight:700;font-size:13px}
 .op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-nom{color:var(--text);font-weight:600;font-size:13px}
@@ -10822,13 +10822,15 @@ function _opRenderPlanTable(events, meId){
           : '<span class="op-plan-gh-status" style="background:var(--bg);color:var(--muted);border:1px solid var(--border)">À faire</span>');
 
     const headerRow = `<tr class="op-plan-groupheader" onclick="opOpenPlanDetail(${ev.id})">
-      <td colspan="6" class="op-plan-groupheader-cell">
-        <span class="op-plan-gh-chev">▸</span>
-        <span class="op-plan-gh-time">${escHtml(timeLbl)}</span>
-        ${nom ? '<span class="op-plan-gh-nom">' + escHtml(nom) + '</span>' : ''}
-        <span class="op-plan-gh-count">${rows.length} op.</span>
-        ${statusBadge}
-        <span class="op-plan-gh-team">${teamLbl}</span>
+      <td colspan="6">
+        <div class="op-plan-groupheader-content">
+          <span class="op-plan-gh-chev">▸</span>
+          <span class="op-plan-gh-time">${escHtml(timeLbl)}</span>
+          ${nom ? '<span class="op-plan-gh-nom">' + escHtml(nom) + '</span>' : ''}
+          <span class="op-plan-gh-count">${rows.length} op.</span>
+          ${statusBadge}
+          <span class="op-plan-gh-team">${teamLbl}</span>
+        </div>
       </td>
     </tr>`;
 
