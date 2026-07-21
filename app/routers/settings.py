@@ -3662,7 +3662,8 @@ def _is_machine_in_production(conn, machine: str) -> bool:
     if not row:
         return False
     code = str(row["operation_code"] or "").strip()
-    return code in ("01", "03", "88")
+    # v2.2.83 : 01 (Début prod) ne compte plus comme "en production"
+    return code in ("03", "88")
 
 
 def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
@@ -3697,9 +3698,10 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     # explicites (89, 87, 50-85) mais AUSSI le Calage (02), les événements
     # personnel (86), les annulations (90), etc. Toute interruption remet le
     # compteur à zéro et déclenche la grâce de 5 min à la reprise.
+    # v2.2.83 : 01 (Début prod) devient un code "stop" (interrompt la session)
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
+           WHERE machine=? AND operation_code NOT IN ('03', '88')
            AND operation_code IS NOT NULL AND operation_code != ''""",
         (machine,),
     ).fetchone()
@@ -3710,14 +3712,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if last_stop_iso:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('01', '03', '88')
+               WHERE machine=? AND operation_code IN ('03', '88')
                AND date_operation > ?""",
             (machine, last_stop_iso),
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
+               WHERE machine=? AND operation_code IN ('03', '88')""",
             (machine,),
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
@@ -3877,6 +3879,10 @@ def maintenance_alerts_active(request: Request):
                     # le dossier) doit être un code prod (01/03/88) avec un no_dossier
                     # renseigné. Sinon skip.
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                    # v2.2.81 — Fenêtre plus stricte pour le calage : 4h. Un calage
+                    # d'une équipe précédente / d'un shift antérieur ne doit pas
+                    # déclencher l'alerte au réveil de l'opérateur suivant.
+                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                     _last_row = conn.execute(
                         """SELECT no_dossier, operation_code, date_operation
                            FROM production_data
@@ -3899,14 +3905,34 @@ def maintenance_alerts_active(request: Request):
                             (int(r["id"]), _dos),
                         ).fetchone()
                         if not _ack_check:
-                            # v2.2.79 — Chercher le dernier code calage du dossier,
-                            # puis le premier prod APRÈS ce calage (déclencheur).
-                            _last_calage = conn.execute(
+                            # v2.2.82 — Le calage doit être :
+                            # (a) dans la fenêtre récente (4h)
+                            # (b) postérieur à la dernière fin de production (code 89)
+                            #     du dossier — sinon c'est un calage d'un cycle
+                            #     précédent déjà clos.
+                            _last_89 = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=?
-                                     AND operation_category='calage'""",
+                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
                                 (_dos, effective_machine),
                             ).fetchone()
+                            _last_89_at = _last_89["m"] if _last_89 else None
+                            if _last_89_at:
+                                _last_calage = conn.execute(
+                                    """SELECT MAX(date_operation) AS m FROM production_data
+                                       WHERE no_dossier=? AND machine=?
+                                         AND operation_category='calage'
+                                         AND date_operation >= ?
+                                         AND date_operation > ?""",
+                                    (_dos, effective_machine, _calage_window, _last_89_at),
+                                ).fetchone()
+                            else:
+                                _last_calage = conn.execute(
+                                    """SELECT MAX(date_operation) AS m FROM production_data
+                                       WHERE no_dossier=? AND machine=?
+                                         AND operation_category='calage'
+                                         AND date_operation >= ?""",
+                                    (_dos, effective_machine, _calage_window),
+                                ).fetchone()
                             _last_calage_at = _last_calage["m"] if _last_calage else None
                             if _last_calage_at:
                                 _declencheur = conn.execute(
