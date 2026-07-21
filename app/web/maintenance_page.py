@@ -1061,20 +1061,27 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-table tbody tr:last-child td{border-bottom:none}
 .op-plan-table tbody tr.mine{background:var(--accent-bg)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
-/* v2.2.68 : regroupement par créneau — headers de groupe */
-.op-plan-table tbody tr.op-plan-groupheader{background:var(--accent-bg);cursor:pointer;transition:background .15s}
-.op-plan-table tbody tr.op-plan-groupheader:hover{background:rgba(34,211,238,.20)}
-.op-plan-table tbody tr.op-plan-groupheader td{padding:11px 14px;border-bottom:2px solid var(--accent);color:var(--text)}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-groupheader-content{font-weight:700;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-chev{color:var(--accent);font-size:14px;line-height:1}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;color:var(--accent);font-weight:700;font-size:13px}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-nom{color:var(--text);font-weight:600;font-size:13px}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-count{background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-team{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500;font-style:italic}
-.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-status{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
-.op-plan-table tbody tr.op-plan-childrow td{padding:10px 14px 10px 34px;background:transparent;font-size:12.5px;border-bottom:1px solid var(--border)}
-.op-plan-table tbody tr.op-plan-childrow:last-of-type td{border-bottom:2px solid var(--border)}
-.op-plan-table tbody tr.op-plan-childrow td.op-plan-child-mac{font-weight:600;color:var(--text)}
+/* v2.2.70 : cartes créneau (header prominent au-dessus, puis mini-tableau) */
+.op-plan-creneaux-list{display:flex;flex-direction:column;gap:16px}
+.op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s}
+.op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(34,211,238,.10)}
+.op-plan-creneau-header{background:linear-gradient(90deg,var(--accent) 0%,rgba(34,211,238,.85) 100%);color:#fff;padding:14px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:filter .15s}
+.op-plan-creneau-header:hover{filter:brightness(1.05)}
+.op-plan-creneau-header .op-plan-ch-chev{font-size:16px;line-height:1;opacity:.9}
+.op-plan-creneau-header .op-plan-ch-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;font-weight:800;font-size:15px;letter-spacing:.3px}
+.op-plan-creneau-header .op-plan-ch-nom{font-weight:700;font-size:14px;padding-left:8px;border-left:1px solid rgba(255,255,255,.35)}
+.op-plan-creneau-header .op-plan-ch-count{background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+.op-plan-creneau-header .op-plan-ch-status{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;background:#fff;color:var(--accent)}
+.op-plan-creneau-header .op-plan-ch-status.done{background:var(--ok,#34d399);color:#fff}
+.op-plan-creneau-header .op-plan-ch-status.progress{background:var(--warn,#fbbf24);color:#000}
+.op-plan-creneau-header .op-plan-ch-team{margin-left:auto;font-size:12px;color:rgba(255,255,255,.9);font-weight:500;font-style:italic}
+.op-plan-creneau-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:transparent}
+.op-plan-creneau-table thead th{background:var(--bg);text-align:left;padding:10px 16px;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.op-plan-creneau-table tbody td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--text2)}
+.op-plan-creneau-table tbody tr:last-child td{border-bottom:none}
+.op-plan-creneau-table tbody tr:hover{background:var(--bg)}
+.op-plan-creneau-table tbody td.op-plan-cell-mac{font-weight:600;color:var(--text)}
+.op-plan-creneau-table tbody td.op-plan-cell-lbl{color:var(--text)}
 /* Modal détail créneau (op) */
 .op-plan-detail-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1400;padding:20px;animation:opPlanDetFade .15s}
 .op-plan-detail-box{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;padding:22px;position:relative;animation:opPlanDetSlide .18s}
@@ -10787,7 +10794,7 @@ function _opRenderPlanTable(events, meId){
     return (a.id || 0) - (b.id || 0);
   });
 
-  const groupsHtml = filtered.map(ev => {
+  const cardsHtml = filtered.map(ev => {
     // Aplati les ops du créneau : 1 ligne par (op, machine).
     const rows = [];
     for(const op of (ev.ops || [])){
@@ -10798,7 +10805,7 @@ function _opRenderPlanTable(events, meId){
         rows.push({ op, machine: m });
       }
     }
-    // Tri des machines dans le créneau selon _MACHINE_ORDER canonique
+    // Tri des machines selon _MACHINE_ORDER canonique
     if(typeof _MACHINE_ORDER !== 'undefined'){
       const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
       rows.sort((a, b) => {
@@ -10815,41 +10822,33 @@ function _opRenderPlanTable(events, meId){
     const teamLbl = others.length ? ('avec ' + others.join(', ')) : 'seul';
     const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine');
     const anyDone = rows.some(r => r.op.statut === 'termine');
-    const statusBadge = allDone
-      ? '<span class="op-plan-gh-status" style="background:var(--ok,#34d399);color:#fff">✓ Terminé</span>'
-      : (anyDone
-          ? '<span class="op-plan-gh-status" style="background:var(--warn,#fbbf24);color:#000">En cours</span>'
-          : '<span class="op-plan-gh-status" style="background:var(--bg);color:var(--muted);border:1px solid var(--border)">À faire</span>');
+    const statusCls = allDone ? 'done' : (anyDone ? 'progress' : '');
+    const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
 
-    const headerRow = `<tr class="op-plan-groupheader" onclick="opOpenPlanDetail(${ev.id})">
-      <td colspan="6">
-        <div class="op-plan-groupheader-content">
-          <span class="op-plan-gh-chev">▸</span>
-          <span class="op-plan-gh-time">${escHtml(timeLbl)}</span>
-          ${nom ? '<span class="op-plan-gh-nom">' + escHtml(nom) + '</span>' : ''}
-          <span class="op-plan-gh-count">${rows.length} op.</span>
-          ${statusBadge}
-          <span class="op-plan-gh-team">${teamLbl}</span>
-        </div>
-      </td>
-    </tr>`;
-
-    const childrenRows = rows.map(r => `<tr class="op-plan-childrow">
-      <td></td>
-      <td class="op-plan-child-mac">${escHtml(r.machine)}</td>
+    const tbodyHtml = rows.map(r => `<tr>
+      <td class="op-plan-cell-mac">${escHtml(r.machine)}</td>
       <td><span class="op-code">${r.op.code}</span></td>
-      <td>${escHtml(r.op.code_label || '—')}</td>
-      <td></td>
+      <td class="op-plan-cell-lbl">${escHtml(r.op.code_label || '—')}</td>
       <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
     </tr>`).join('');
 
-    return headerRow + childrenRows;
+    return `<div class="op-plan-creneau-card">
+      <div class="op-plan-creneau-header" onclick="opOpenPlanDetail(${ev.id})">
+        <span class="op-plan-ch-chev">▸</span>
+        <span class="op-plan-ch-time">${escHtml(timeLbl)}</span>
+        ${nom ? '<span class="op-plan-ch-nom">' + escHtml(nom) + '</span>' : ''}
+        <span class="op-plan-ch-count">${rows.length} op.</span>
+        <span class="op-plan-ch-status ${statusCls}">${statusTxt}</span>
+        <span class="op-plan-ch-team">${teamLbl}</span>
+      </div>
+      <table class="op-plan-creneau-table">
+        <thead><tr><th>Machine</th><th>Code</th><th>Opération</th><th>Statut</th></tr></thead>
+        <tbody>${tbodyHtml}</tbody>
+      </table>
+    </div>`;
   }).join('');
 
-  return `<table class="op-plan-table">
-    <thead><tr><th style="width:30px"></th><th>Machine</th><th>Code</th><th>Opération</th><th></th><th>Statut</th></tr></thead>
-    <tbody>${groupsHtml}</tbody>
-  </table>`;
+  return '<div class="op-plan-creneaux-list">' + cardsHtml + '</div>';
 }
 
 // v2.2.68 : modal détail créneau lecture seule (Planning personnel)
