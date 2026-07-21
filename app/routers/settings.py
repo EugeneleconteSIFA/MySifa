@@ -3861,18 +3861,28 @@ def maintenance_alerts_active(request: Request):
                 # sur les acks. On ne dépend pas d'op_code car la logique regarde une
                 # séquence, pas un seul code.
                 if event == "after_calage" and effective_machine:
-                    # Trouver le dossier actif : dernier no_dossier saisi sur la
-                    # machine dans les 24h.
+                    # v2.2.78 — La toute dernière saisie sur la MACHINE (peu importe
+                    # le dossier) doit être un code prod (01/03/88) avec un no_dossier
+                    # renseigné. Sinon l'alerte ne se déclenche pas — évite les
+                    # faux positifs sur les saisies neutres (86 Arrivée personnel,
+                    # etc.) qui n'appartiennent pas à un dossier.
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _dos_row = conn.execute(
-                        """SELECT no_dossier FROM production_data
+                    _last_row = conn.execute(
+                        """SELECT no_dossier, operation_code, date_operation
+                           FROM production_data
                            WHERE machine=? AND date_operation >= ?
-                             AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                            ORDER BY date_operation DESC LIMIT 1""",
                         (effective_machine, _window),
                     ).fetchone()
-                    if _dos_row and _dos_row["no_dossier"]:
-                        _dos = str(_dos_row["no_dossier"]).strip()
+                    _valid_prod_last = (
+                        _last_row
+                        and _last_row["operation_code"] in ("01", "03", "88")
+                        and _last_row["no_dossier"] is not None
+                        and str(_last_row["no_dossier"]).strip() != ""
+                    )
+                    if _valid_prod_last:
+                        _dos = str(_last_row["no_dossier"]).strip()
+                        _last_prod_at = _last_row["date_operation"]
                         # Verrou par dossier
                         _ack_check = conn.execute(
                             """SELECT 1 FROM maintenance_alert_acks
@@ -3880,57 +3890,36 @@ def maintenance_alerts_active(request: Request):
                             (int(r["id"]), _dos),
                         ).fetchone()
                         if not _ack_check:
-                            # v2.2.77 — Contrainte 1 : la DERNIÈRE saisie du dossier
-                            # (peu importe le code) doit être un code prod (01/03/88).
-                            # Sinon un dossier ancien contenant historiquement une
-                            # séquence calage→prod ferait re-fire l'alerte à chaque
-                            # saisie neutre (Arrivée personnel, Pause…).
-                            _last_op = conn.execute(
-                                """SELECT operation_code FROM production_data
+                            # Chercher l'avant-dernier prod du dossier pour définir
+                            # la fenêtre où le calage doit apparaître.
+                            _second_prod = conn.execute(
+                                """SELECT MAX(date_operation) AS m FROM production_data
                                    WHERE no_dossier=? AND machine=?
-                                   ORDER BY date_operation DESC LIMIT 1""",
-                                (_dos, effective_machine),
+                                     AND operation_code IN ('01','03','88')
+                                     AND date_operation < ?""",
+                                (_dos, effective_machine, _last_prod_at),
                             ).fetchone()
-                            if _last_op and _last_op["operation_code"] in ("01", "03", "88"):
-                                # v2.2.77 — Contrainte 2 : le calage doit être ENTRE
-                                # l'avant-dernier prod et le dernier prod du dossier
-                                # (ou avant le prod unique si c'est le seul).
-                                _last_prod = conn.execute(
-                                    """SELECT MAX(date_operation) AS m FROM production_data
+                            _second_prod_at = _second_prod["m"] if _second_prod else None
+                            if _second_prod_at:
+                                _calage_check = conn.execute(
+                                    """SELECT 1 FROM production_data
                                        WHERE no_dossier=? AND machine=?
-                                         AND operation_code IN ('01','03','88')""",
-                                    (_dos, effective_machine),
+                                         AND operation_category='calage'
+                                         AND date_operation > ?
+                                         AND date_operation < ? LIMIT 1""",
+                                    (_dos, effective_machine, _second_prod_at, _last_prod_at),
                                 ).fetchone()
-                                if _last_prod and _last_prod["m"]:
-                                    _last_prod_at = _last_prod["m"]
-                                    _second_prod = conn.execute(
-                                        """SELECT MAX(date_operation) AS m FROM production_data
-                                           WHERE no_dossier=? AND machine=?
-                                             AND operation_code IN ('01','03','88')
-                                             AND date_operation < ?""",
-                                        (_dos, effective_machine, _last_prod_at),
-                                    ).fetchone()
-                                    _second_prod_at = _second_prod["m"] if _second_prod else None
-                                    if _second_prod_at:
-                                        _calage_check = conn.execute(
-                                            """SELECT 1 FROM production_data
-                                               WHERE no_dossier=? AND machine=?
-                                                 AND operation_category='calage'
-                                                 AND date_operation > ?
-                                                 AND date_operation < ? LIMIT 1""",
-                                            (_dos, effective_machine, _second_prod_at, _last_prod_at),
-                                        ).fetchone()
-                                    else:
-                                        _calage_check = conn.execute(
-                                            """SELECT 1 FROM production_data
-                                               WHERE no_dossier=? AND machine=?
-                                                 AND operation_category='calage'
-                                                 AND date_operation < ? LIMIT 1""",
-                                            (_dos, effective_machine, _last_prod_at),
-                                        ).fetchone()
-                                    if _calage_check:
-                                        should_show = True
-                                        trigger_no_dossier = _dos
+                            else:
+                                _calage_check = conn.execute(
+                                    """SELECT 1 FROM production_data
+                                       WHERE no_dossier=? AND machine=?
+                                         AND operation_category='calage'
+                                         AND date_operation < ? LIMIT 1""",
+                                    (_dos, effective_machine, _last_prod_at),
+                                ).fetchone()
+                            if _calage_check:
+                                should_show = True
+                                trigger_no_dossier = _dos
                 elif op_code and effective_machine and effective_operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
