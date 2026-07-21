@@ -14100,6 +14100,108 @@ function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
   if (w) w.document.close();
 }
 
+// v1.6.1 - Modal de selection de l'imprimante par defaut pour la reception matiere
+// Ouvert depuis l'icone imprimante dans le header. Sauvegarde via PUT /api/print/my-defaults.
+async function openReceptionPrinterPicker() {
+  let imprimantes = [];
+  let defaults = {};
+  try {
+    imprimantes = await api('/api/print/my-imprimantes');
+    defaults = await api('/api/print/my-defaults');
+  } catch(e) {
+    showToast('Erreur chargement imprimantes : ' + e.message, 'error');
+    return;
+  }
+  if (!imprimantes || !imprimantes.length) {
+    showToast('Aucune imprimante configuree. Va dans Parametres > Imprimantes.', 'warn');
+    return;
+  }
+  const currentDefault = defaults['reception_matiere'] || '';
+
+  const overlay = el('div', {
+    cls: 'modal-overlay',
+    style: {
+      position: 'fixed', inset: '0', background: 'rgba(0,0,0,.5)', zIndex: '900',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    },
+    on: { click: e => { if (e.target === overlay) overlay.remove(); } }
+  });
+
+  const sheet = el('div', {
+    style: {
+      background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '14px',
+      padding: '22px', maxWidth: '480px', width: '100%',
+      boxShadow: '0 12px 40px rgba(0,0,0,.4)',
+    }
+  });
+
+  sheet.appendChild(el('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', fontWeight: '700', color: 'var(--text)', marginBottom: '6px' }
+  }, iconEl('printer', 18), el('span', null, 'Imprimante par defaut - reception matiere')));
+
+  sheet.appendChild(el('div', {
+    style: { fontSize: '12px', color: 'var(--muted)', marginBottom: '16px', lineHeight: '1.5' }
+  }, 'Cette imprimante sera utilisee automatiquement pour les etiquettes de reception matiere. Tu peux la modifier a tout moment.'));
+
+  const select = el('select', {
+    style: {
+      width: '100%', padding: '9px 12px', borderRadius: '8px',
+      border: '1.5px solid var(--border)', background: 'var(--bg)', color: 'var(--text)',
+      fontSize: '13px', fontFamily: 'inherit', marginBottom: '18px', outline: 'none',
+    }
+  });
+  const optNone = el('option', { attrs: { value: '' } }, '- Aucune (me redemander a chaque fois) -');
+  if (!currentDefault) optNone.selected = true;
+  select.appendChild(optNone);
+  imprimantes.forEach(i => {
+    const label = (i.poste ? i.poste + ' - ' : '') + i.nom;
+    const opt = el('option', { attrs: { value: String(i.id) } }, label);
+    if (String(i.id) === String(currentDefault)) opt.selected = true;
+    select.appendChild(opt);
+  });
+  sheet.appendChild(select);
+
+  const btnRow = el('div', {
+    style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' }
+  });
+  btnRow.appendChild(el('button', {
+    attrs: { type: 'button' },
+    style: {
+      padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border)',
+      background: 'transparent', color: 'var(--text2)', fontSize: '13px', cursor: 'pointer',
+      fontFamily: 'inherit',
+    },
+    on: { click: () => overlay.remove() }
+  }, 'Annuler'));
+  btnRow.appendChild(el('button', {
+    attrs: { type: 'button' },
+    style: {
+      padding: '9px 16px', borderRadius: '8px', border: 'none',
+      background: 'var(--accent)', color: '#fff', fontSize: '13px', fontWeight: '700',
+      cursor: 'pointer', fontFamily: 'inherit',
+    },
+    on: { click: async () => {
+      const val = select.value ? parseInt(select.value, 10) : null;
+      try {
+        const newDefaults = Object.assign({}, defaults, { reception_matiere: val });
+        await api('/api/print/my-defaults', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaults: newDefaults })
+        });
+        showToast(val ? 'Imprimante par defaut enregistree.' : 'Defaut retire (picker au prochain envoi).', 'success');
+        overlay.remove();
+      } catch(e) {
+        showToast('Erreur enregistrement : ' + e.message, 'error');
+      }
+    }}
+  }, 'Enregistrer'));
+  sheet.appendChild(btnRow);
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+}
+
 function buildReception() {
   const wrap = el('div', { cls: 'recep-page' });
 
@@ -14123,6 +14225,18 @@ function buildReception() {
   wrap.appendChild(el('div', { cls: 'recep-head-row' },
     el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière')),
     subtabs,
+    // v1.6.1 - Bouton icone pour choisir l'imprimante par defaut
+    el('button', {
+      attrs: { type: 'button', title: 'Choisir mon imprimante par défaut pour la réception matière' },
+      style: {
+        display: 'inline-flex', alignItems: 'center', gap: '4px',
+        padding: '6px 10px', borderRadius: '6px',
+        border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text2)',
+        fontSize: '11px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit',
+        marginLeft: '8px', flexShrink: '0',
+      },
+      on: { click: () => openReceptionPrinterPicker() }
+    }, iconEl('printer', 14)),
   ));
 
   if (sub === 'nouvelle') {
