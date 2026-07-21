@@ -1061,6 +1061,44 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-table tbody tr:last-child td{border-bottom:none}
 .op-plan-table tbody tr.mine{background:var(--accent-bg)}
 .op-plan-table tbody tr.mine td{color:var(--text)}
+/* v2.2.68 : regroupement par créneau — headers de groupe */
+.op-plan-table tbody tr.op-plan-groupheader{background:var(--accent-bg);cursor:pointer;transition:background .15s}
+.op-plan-table tbody tr.op-plan-groupheader:hover{background:rgba(34,211,238,.20)}
+.op-plan-table tbody tr.op-plan-groupheader td{padding:11px 14px;border-bottom:2px solid var(--accent);color:var(--text)}
+.op-plan-table tbody tr.op-plan-groupheader td.op-plan-groupheader-cell{font-weight:700;font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-chev{color:var(--accent);font-size:14px;line-height:1}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;color:var(--accent);font-weight:700;font-size:13px}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-nom{color:var(--text);font-weight:600;font-size:13px}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-count{background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-team{margin-left:auto;font-size:11px;color:var(--muted);font-weight:500;font-style:italic}
+.op-plan-table tbody tr.op-plan-groupheader .op-plan-gh-status{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.op-plan-table tbody tr.op-plan-childrow td{padding:10px 14px 10px 34px;background:transparent;font-size:12.5px;border-bottom:1px solid var(--border)}
+.op-plan-table tbody tr.op-plan-childrow:last-of-type td{border-bottom:2px solid var(--border)}
+.op-plan-table tbody tr.op-plan-childrow td.op-plan-child-mac{font-weight:600;color:var(--text)}
+/* Modal détail créneau (op) */
+.op-plan-detail-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:1400;padding:20px;animation:opPlanDetFade .15s}
+.op-plan-detail-box{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;padding:22px;position:relative;animation:opPlanDetSlide .18s}
+.op-plan-detail-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
+.op-plan-detail-close:hover{color:var(--danger);border-color:var(--danger)}
+.op-plan-detail-title{font-size:17px;font-weight:800;color:var(--text);margin-bottom:4px;padding-right:36px;display:flex;align-items:center;gap:9px}
+.op-plan-detail-sub{font-size:13px;color:var(--muted);margin-bottom:16px;text-transform:capitalize}
+.op-plan-detail-info{background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px}
+.op-plan-detail-info-lbl{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.op-plan-detail-info-val{color:var(--text);font-weight:600}
+.op-plan-detail-ops-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+.op-plan-detail-op-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:9px 12px;background:var(--bg);border-left:3px solid var(--border);border-radius:6px;margin-bottom:5px;font-size:13px}
+.op-plan-detail-op-row.is-done{background:rgba(52,211,153,.10);border-left-color:var(--ok,#34d399)}
+.op-plan-detail-op-lbl{flex:1;min-width:0;font-weight:600;color:var(--text)}
+.op-plan-detail-op-mac{font-size:11px;color:var(--muted);margin-top:2px}
+.op-plan-detail-op-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;flex-shrink:0}
+.op-plan-detail-op-badge.done{background:var(--ok,#34d399);color:#fff}
+.op-plan-detail-op-badge.todo{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.op-plan-detail-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.op-plan-detail-actions button{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:filter .15s}
+.op-plan-detail-actions .btn-close{background:var(--accent);color:#fff}
+.op-plan-detail-actions .btn-close:hover{filter:brightness(1.08)}
+@keyframes opPlanDetFade{from{opacity:0}to{opacity:1}}
+@keyframes opPlanDetSlide{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 
 /* ── Modal saisie / création (partagé opérateur & admin) ─────────── */
 .op-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;padding:20px}
@@ -10734,36 +10772,158 @@ async function opDeleteEvent(eventId){
 /* ── Vue Planning opérateur (read-only) ──────────────────────────── */
 
 function _opRenderPlanTable(events, meId){
-  // Aplati les events → 1 ligne par (event, op, machine). Une op multi-machines
-  // produit une ligne par machine.
-  if(events.length === 0){
-    return '<div class="op-empty"><h3>Aucune tâche planifiée</h3>Pour cette date.</div>';
+  // v2.2.68 : regroupement par créneau + filtre créneaux programmés uniquement.
+  // Les ops non-planifiées (source=non_planifie) sont exclues — elles n'ont
+  // pas leur place dans le Planning personnel.
+  const filtered = events.filter(ev => ev.source !== 'non_planifie');
+  if(filtered.length === 0){
+    return '<div class="op-empty"><h3>Aucun créneau programmé</h3>Pour cette date.</div>';
   }
-  const rows = [];
-  for(const ev of events){
-    const mine = (ev.operators || []).some(o => o.id === meId);
-    const operatorsStr = (ev.operators || []).map(o => o.nom).join(', ') || '<em style="color:var(--muted)">Non assigné</em>';
-    const time = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : '—';
+  // Tri chronologique par heure_debut ASC, tie-break par id
+  filtered.sort((a, b) => {
+    const ha = a.heure_debut || 'zz';
+    const hb = b.heure_debut || 'zz';
+    if(ha !== hb) return ha.localeCompare(hb);
+    return (a.id || 0) - (b.id || 0);
+  });
+
+  const groupsHtml = filtered.map(ev => {
+    // Aplati les ops du créneau : 1 ligne par (op, machine).
+    const rows = [];
     for(const op of (ev.ops || [])){
       let machines = Array.isArray(op.machines) && op.machines.length
         ? op.machines
         : (ev.machine ? [ev.machine] : ['—']);
       for(const m of machines){
-        rows.push({ mine, ev, op, operatorsStr, time, machine: m });
+        rows.push({ op, machine: m });
       }
     }
-  }
-  return `<table class="op-plan-table">
-    <thead><tr><th>Créneau</th><th>Machine</th><th>Code</th><th>Opération</th><th>Groupe</th><th>Statut</th></tr></thead>
-    <tbody>${rows.map(r => `<tr class="${r.mine ? 'mine' : ''}">
-      <td>${r.time}</td>
-      <td><strong>${escHtml(r.machine)}</strong></td>
+    // Tri des machines dans le créneau selon _MACHINE_ORDER canonique
+    if(typeof _MACHINE_ORDER !== 'undefined'){
+      const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+      rows.sort((a, b) => {
+        const ra = rank.has(a.machine) ? rank.get(a.machine) : Infinity;
+        const rb = rank.has(b.machine) ? rank.get(b.machine) : Infinity;
+        if(ra !== rb) return ra - rb;
+        return String(a.machine).localeCompare(String(b.machine), 'fr');
+      });
+    }
+
+    const timeLbl = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans horaire';
+    const nom = (ev.nom || '').trim();
+    const others = (ev.operators || []).filter(o => o.id !== meId).map(o => escHtml(o.nom));
+    const teamLbl = others.length ? ('avec ' + others.join(', ')) : 'seul';
+    const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine');
+    const anyDone = rows.some(r => r.op.statut === 'termine');
+    const statusBadge = allDone
+      ? '<span class="op-plan-gh-status" style="background:var(--ok,#34d399);color:#fff">✓ Terminé</span>'
+      : (anyDone
+          ? '<span class="op-plan-gh-status" style="background:var(--warn,#fbbf24);color:#000">En cours</span>'
+          : '<span class="op-plan-gh-status" style="background:var(--bg);color:var(--muted);border:1px solid var(--border)">À faire</span>');
+
+    const headerRow = `<tr class="op-plan-groupheader" onclick="opOpenPlanDetail(${ev.id})">
+      <td colspan="6" class="op-plan-groupheader-cell">
+        <span class="op-plan-gh-chev">▸</span>
+        <span class="op-plan-gh-time">${escHtml(timeLbl)}</span>
+        ${nom ? '<span class="op-plan-gh-nom">' + escHtml(nom) + '</span>' : ''}
+        <span class="op-plan-gh-count">${rows.length} op.</span>
+        ${statusBadge}
+        <span class="op-plan-gh-team">${teamLbl}</span>
+      </td>
+    </tr>`;
+
+    const childrenRows = rows.map(r => `<tr class="op-plan-childrow">
+      <td></td>
+      <td class="op-plan-child-mac">${escHtml(r.machine)}</td>
       <td><span class="op-code">${r.op.code}</span></td>
-      <td>${r.op.code_label || '—'}</td>
-      <td style="font-size:12px">${r.operatorsStr}</td>
+      <td>${escHtml(r.op.code_label || '—')}</td>
+      <td></td>
       <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
-    </tr>`).join('')}</tbody>
+    </tr>`).join('');
+
+    return headerRow + childrenRows;
+  }).join('');
+
+  return `<table class="op-plan-table">
+    <thead><tr><th style="width:30px"></th><th>Machine</th><th>Code</th><th>Opération</th><th></th><th>Statut</th></tr></thead>
+    <tbody>${groupsHtml}</tbody>
   </table>`;
+}
+
+// v2.2.68 : modal détail créneau lecture seule (Planning personnel)
+async function opOpenPlanDetail(eventId){
+  try {
+    const r = await fetch('/api/maintenance/events/' + eventId + '?_=' + Date.now(),
+                          { credentials:'include', cache:'no-store' });
+    if(!r.ok) throw new Error('Erreur ' + r.status);
+    const d = await r.json();
+    const ev = d.event || d;
+    _opRenderPlanDetailModal(ev);
+  } catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+function _opRenderPlanDetailModal(ev){
+  const ov = document.createElement('div');
+  ov.className = 'op-plan-detail-ov';
+  ov.addEventListener('click', e => { if(e.target === ov) ov.remove(); });
+  const _dt = new Date(ev.date_prevue + 'T00:00:00');
+  const _dLbl = _dt.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  const _hLbl = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans horaire';
+
+  // Ops : tri par machine canonique
+  const opsFlat = [];
+  for(const op of (ev.ops || [])){
+    const machines = Array.isArray(op.machines) && op.machines.length ? op.machines : (ev.machine ? [ev.machine] : ['—']);
+    for(const m of machines){ opsFlat.push({ op, machine: m }); }
+  }
+  if(typeof _MACHINE_ORDER !== 'undefined'){
+    const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+    opsFlat.sort((a, b) => {
+      const ra = rank.has(a.machine) ? rank.get(a.machine) : Infinity;
+      const rb = rank.has(b.machine) ? rank.get(b.machine) : Infinity;
+      if(ra !== rb) return ra - rb;
+      return String(a.machine).localeCompare(String(b.machine), 'fr');
+    });
+  }
+  const opsHtml = opsFlat.map(({op, machine}) => {
+    const isDone = op.statut === 'termine';
+    return `<div class="op-plan-detail-op-row ${isDone ? 'is-done' : ''}">
+      <div style="flex:1;min-width:0">
+        <div class="op-plan-detail-op-lbl">${escHtml(op.code_label || op.code || '—')}</div>
+        <div class="op-plan-detail-op-mac">${escHtml(machine)} · code ${escHtml(op.code || '')}</div>
+      </div>
+      <span class="op-plan-detail-op-badge ${isDone ? 'done' : 'todo'}">${isDone ? '✓ Terminé' : 'À faire'}</span>
+    </div>`;
+  }).join('');
+  const opsBlock = opsFlat.length
+    ? opsHtml
+    : '<div style="padding:10px;color:var(--muted);font-style:italic;font-size:12px">Aucune opération dans ce créneau.</div>';
+
+  const operatorsList = (ev.operators || []).map(o => escHtml(o.nom || '?')).join(' · ') || '<em>Aucun</em>';
+  const nomBlock = (ev.nom || '').trim() ? '<div class="op-plan-detail-info"><div class="op-plan-detail-info-lbl">Nom du créneau</div><div class="op-plan-detail-info-val">' + escHtml(ev.nom) + '</div></div>' : '';
+
+  ov.innerHTML =
+    '<div class="op-plan-detail-box">' +
+      '<button type="button" class="op-plan-detail-close" onclick="this.closest(\'.op-plan-detail-ov\').remove()" aria-label="Fermer">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>' +
+      '<div class="op-plan-detail-title">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+        'Créneau de maintenance' +
+      '</div>' +
+      '<div class="op-plan-detail-sub">' + escHtml(_dLbl) + ' · ' + escHtml(_hLbl) + '</div>' +
+      nomBlock +
+      '<div class="op-plan-detail-info"><div class="op-plan-detail-info-lbl">Machine(s)</div><div class="op-plan-detail-info-val">' + escHtml(ev.machine || '—') + '</div></div>' +
+      '<div class="op-plan-detail-info"><div class="op-plan-detail-info-lbl">Opérateurs assignés</div><div class="op-plan-detail-info-val">' + operatorsList + '</div></div>' +
+      '<div class="op-plan-detail-ops-lbl">Opérations (' + opsFlat.length + ')</div>' +
+      opsBlock +
+      '<div class="op-plan-detail-actions">' +
+        '<button type="button" class="btn-close" onclick="this.closest(\'.op-plan-detail-ov\').remove()">Fermer</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
 }
 
 async function opLoadPlanning(){
