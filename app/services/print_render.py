@@ -175,31 +175,48 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
 #
 DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 ^CI28
-^PW812
-^LL1218
-^LH0,0
-^FO30,30^A0N,55,55^FDSIFA^FS
-^FO30,95^A0N,22,22^FDIdentification bobine^FS
-^FO490,30^GB292,85,85^FS
-^FO510,52^A0N,42,42^FR^FD{{fsc_banner}}^FS
-^FO30,150^GB752,3,3^FS
-^FO30,185^A0N,22,22^FDREFERENCE PRODUIT^FS
-^FO30,220^A0N,50,50^FD{{ref_produit}}^FS
-^FO30,305^A0N,22,22^FDFOURNISSEUR^FS
-^FO30,340^A0N,40,40^FD{{fournisseur}}^FS
-^FO30,415^GB752,2,2^FS
-^FO30,445^A0N,22,22^FDNUMERO DE LOT^FS
-^FO30,483^A0N,70,70^FD{{lot_numero}}^FS
-^FO30,595^GB752,2,2^FS
-^FO30,615^A0N,20,20^FDCode-barres bobine^FS
-^FO30,650^BY4,3,140^BCN,140,Y,N,N^FD{{code_barre}}^FS
-^FO30,850^BQN,2,7^FDLA,{{lot_numero}}^FS
-^FO270,860^A0N,20,20^FDReception :^FS
-^FO270,890^A0N,28,28^FD{{date_reception}}^FS
-^FO270,940^A0N,20,20^FDOperateur :^FS
-^FO270,970^A0N,28,28^FD{{operateur_nom}}^FS
-^FO30,1155^GB752,1,1^FS
-^FO30,1165^A0N,18,18^FDSIFA Loos - Certifie FSC C012345^FS
+^PW792
+^LL984
+^LH64,64
+^FO0,0^A0N,45,45^FDSIFA^FS
+^FO0,55^A0N,18,18^FDIdentification bobine^FS
+^FO440,0^GB224,72,72^FS
+^FO460,20^A0N,32,32^FR^FD{{fsc_banner}}^FS
+^FO0,100^GB664,2,2^FS
+^FO0,125^A0N,18,18^FDREFERENCE PRODUIT^FS
+^FO0,155^A0N,40,40^FD{{ref_produit}}^FS
+^FO0,225^A0N,18,18^FDFOURNISSEUR^FS
+^FO0,255^A0N,32,32^FD{{fournisseur}}^FS
+^FO0,315^GB664,2,2^FS
+^FO0,340^A0N,18,18^FDNUMERO DE LOT^FS
+^FO0,370^A0N,58,58^FD{{lot_numero}}^FS
+^FO0,460^GB664,2,2^FS
+^FO0,485^A0N,16,16^FDCode-barres bobine^FS
+^FO0,515^BY3,3,110^BCN,110,Y,N,N^FD{{code_barre}}^FS
+^FO0,700^BQN,2,5^FDLA,{{lot_numero}}^FS
+^FO190,715^A0N,18,18^FDReception :^FS
+^FO190,740^A0N,22,22^FD{{date_reception}}^FS
+^FO190,775^A0N,18,18^FDOperateur :^FS
+^FO190,800^A0N,22,22^FD{{operateur_nom}}^FS
+^FO0,850^GB664,1,1^FS
+^FO0,858^A0N,14,14^FDSIFA - Loos - FSC C012345^FS
+^XZ
+"""
+
+# Template COMPACT 107x50mm pour reimpression (203dpi = 8dpmm)
+# 107mm x 8 = 856 dots, 50mm x 8 = 400 dots
+DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
+^CI28
+^PW856
+^LL400
+^LH8,8
+^FO0,0^A0N,45,45^FD{{lot_numero}}^FS
+^FO0,55^GB80,22,22^FS
+^FO4,58^A0N,18,18^FR^FD{{fsc_banner}}^FS
+^FO95,57^A0N,22,22^FD{{ref_produit}}^FS
+^FO0,95^BY3,3,120^BCN,120,Y,N,N^FD{{code_barre}}^FS
+^FO0,265^A0N,16,16^FD{{fournisseur}} - {{date_reception}}^FS
+^FO0,290^A0N,14,14^FDSIFA - Loos^FS
 ^XZ
 """
 
