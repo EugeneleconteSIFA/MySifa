@@ -58,7 +58,7 @@
   const FETCH_OPTS = { credentials: 'same-origin' };
 
   let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
-  let _displayed = new Set();
+  let _displayed = new Map();  // v2.2.66 : id → wrap DOM element (pour pouvoir fermer côté client si backend a ack en silence)
   let _pollTimer = null;
   let _started = false;
 
@@ -530,6 +530,7 @@
   function _renderAlert(alert) {
     const wrap = document.createElement('div');
     wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
+    wrap.setAttribute('data-alert-runtime-id', String(alert.id));
     if (_settings.block_production) wrap.classList.add('ta-blocking');
     const machines = alert.target.machines || ['*'];
     const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(_esc).join(', ');
@@ -632,11 +633,22 @@
         }
       });
     }
+    return wrap;
   }
 
   async function _poll() {
     const r = await _fetchActive();
     const items = (r && Array.isArray(r.items)) ? r.items : [];
+    // v2.2.66 : ferme visuellement les alertes qui ne sont plus renvoyées
+    // par le serveur (ack automatique côté backend — arrêt machine, fin dossier).
+    const activeIds = new Set(items.map(it => it.id));
+    for (const [dispId, wrap] of Array.from(_displayed.entries())) {
+      if (!activeIds.has(dispId)) {
+        try { if (wrap && wrap.remove) wrap.remove(); } catch (e) {}
+        _displayed.delete(dispId);
+      }
+    }
+    // Ajout des nouvelles alertes.
     for (const raw of items) {
       if (_displayed.has(raw.id)) continue;
       // Queue mode : au plus UNE alerte visible à la fois sur l'écran de
@@ -645,9 +657,9 @@
       if (_settings.stack_mode !== 'stack' && _displayed.size > 0) {
         break;
       }
-      _displayed.add(raw.id);
       const alert = _normalizeAlert(raw);
-           _renderAlert(alert);
+      const wrap = _renderAlert(alert);
+      _displayed.set(raw.id, wrap);
       if (_settings.stack_mode !== 'stack') {
         break;
       }
