@@ -493,30 +493,84 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 }
 .fab-tab-nav--prominent .fab-tab-btn.active svg{opacity:1}
 
-/* ── Panneau Stock intégré (iframe MyStock) ────────────────── */
-.fab-stock-main{
-  display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;
+/* ── Panneau Stock natif (miroir de MyStock Production) ────── */
+.fab-stock-native{
+  display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;
+  padding:20px 24px;gap:18px;
 }
-.fab-stock-subnav{
-  display:flex;align-items:center;justify-content:center;gap:6px;
-  padding:8px 12px;border-bottom:1px solid var(--border);
-  background:var(--card);flex-shrink:0;flex-wrap:wrap;
+.fab-prod-head{margin-bottom:2px}
+.fab-prod-head-title{
+  font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
 }
-.fab-stock-subtab{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:7px 14px;border-radius:8px;border:1px solid var(--border);
-  background:var(--bg);color:var(--text2);cursor:pointer;
-  font-family:inherit;font-size:12px;font-weight:700;
-  letter-spacing:.3px;transition:all .15s;
+.fab-prod-head-sub{font-size:13px;color:var(--muted);line-height:1.4}
+.fab-prod-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;
 }
-.fab-stock-subtab:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.fab-stock-subtab.active{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-.fab-stock-subtab.active:hover{filter:brightness(1.05)}
-.fab-stock-subtab svg{opacity:.9}
-.fab-stock-iframe{
-  flex:1;min-height:0;width:100%;border:none;
-  background:var(--bg);display:block;
+.fab-prod-card{
+  display:flex;align-items:center;gap:14px;padding:16px 18px;
+  border-radius:14px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;font-family:inherit;text-align:left;
+  transition:all .15s;color:var(--text);
 }
+.fab-prod-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.10);border-color:var(--accent)}
+.fab-prod-card:active{transform:translateY(0);filter:brightness(.97)}
+.fab-prod-card-ico{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;
+}
+.fab-prod-card-mp-in  .fab-prod-card-ico{background:#38bdf8}
+.fab-prod-card-mp-out .fab-prod-card-ico{background:#fbbf24;color:#7c2d12}
+.fab-prod-card-z1-in  .fab-prod-card-ico{background:#34d399}
+.fab-prod-card-z1-out .fab-prod-card-ico{background:#f87171}
+.fab-prod-card-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:2px;letter-spacing:.2px}
+.fab-prod-card-sub{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+
+.fab-prod-z1-card{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;
+}
+.fab-prod-z1-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:10px;flex-wrap:wrap;
+}
+.fab-prod-z1-title{
+  font-size:14px;font-weight:800;color:var(--text);
+  display:flex;align-items:center;gap:8px;
+}
+.fab-prod-z1-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.fab-prod-z1-refresh{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;transition:all .15s;
+}
+.fab-prod-z1-refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.fab-prod-empty{padding:32px 20px;text-align:center;color:var(--muted);font-size:13px}
+.fab-prod-empty-hint{font-size:11px;color:var(--muted);opacity:.7;margin-top:6px}
+.fab-prod-err{padding:20px;color:var(--danger);font-size:13px;text-align:center}
+.fab-prod-z1-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.fab-prod-z1-row{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  transition:border-color .1s;
+}
+.fab-prod-z1-row:hover{border-color:var(--accent)}
+.fab-prod-z1-left{flex:1;min-width:0}
+.fab-prod-z1-ref{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.3px}
+.fab-prod-z1-des{font-size:12px;color:var(--text2);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab-prod-z1-meta{display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.fab-prod-z1-meta span{display:inline-flex;align-items:center;gap:4px}
+.fab-prod-z1-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.fab-prod-z1-qty{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.fab-prod-z1-actions{display:flex;gap:5px}
+.fab-prod-z1-btn{
+  display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;
+  border:1px solid var(--border);background:var(--card);cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:700;color:var(--text2);transition:all .12s;
+}
+.fab-prod-z1-btn-add:hover{border-color:var(--success);color:var(--success);background:rgba(52,211,153,.10)}
+.fab-prod-z1-btn-edit:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 
 
 /* ── Centrage sections footer ──────────────────────────────── */
@@ -1006,7 +1060,8 @@ let S = {
 
   // Footer tabs
   fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'stats' (Stock) | 'of'
-  stockSubTab: 'production', // sous-onglet actif dans le panneau Stock (iframe /stock)
+  stockProdZ1: {refs:[],total_unites:0,nb_refs:0}, // Z1 en attente sortie de prod
+  stockProdLoading: false,
 
   // Import OF PDF
   ofImports: [],
@@ -1374,6 +1429,10 @@ function icon(name,size=16){
     grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
     'minus-circle':'<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>',
     box:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'log-in':'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>',
+    package:'<path d="M16.5 9.4l-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
+    users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -1908,7 +1967,7 @@ async function switchFabTab(tab){
     if(S.ofSubTab==='fiche') await loadFiches();
   }
   if(tab==='stats'){
-    await loadDossierStats();
+    await loadStockProduction();
   }
 }
 
@@ -3414,49 +3473,165 @@ function renderTracaPanel(){
   );
 }
 
-function _renderStockSubNav(){
-  const tabs = [
-    {key:'production',    icon:'box',     label:'Production'},
-    {key:'matieres',      icon:'grid',    label:'Matières'},
-    {key:'traca',         icon:'printer', label:'Étiquettes'},
-    {key:'historique',    icon:'clock',   label:'Historique'},
-  ];
-  const active = S.stockSubTab || 'production';
-  const btns = tabs.map(t => {
-    const btn = h('button', {
-      className: 'fab-stock-subtab' + (active === t.key ? ' active' : ''),
-      title: t.label,
-      onClick: () => {
-        set({ stockSubTab: t.key });
-        // recharger l'iframe avec le nouveau tab
-        const ifr = document.getElementById('fab-stock-iframe');
-        if (ifr) ifr.src = '/stock?tab=' + encodeURIComponent(t.key) + '&embed=1&_t=' + Date.now();
-      }
-    }, svgIcon(t.icon, 14), ' ' + t.label);
-    return btn;
-  });
-  return h('div', {className: 'fab-stock-subnav'}, ...btns);
+function _fmtDateStockProd(iso){
+  if(!iso) return '—';
+  const s = String(iso);
+  const d = s.slice(0,10).split('-');
+  const hm = s.length >= 16 ? s.slice(11,16) : '';
+  if(d.length===3) return d[2]+'/'+d[1]+(hm?' '+hm:'');
+  return s;
 }
+function _fmtU(n, unit){
+  const num = Number(n||0);
+  const s = num.toLocaleString('fr-FR');
+  return s + (unit ? ' '+unit : '');
+}
+async function loadStockProduction(){
+  set({stockProdLoading:true});
+  try{
+    const d = await apiFetch('/api/stock/sortie-prod');
+    set({stockProdZ1: d || {refs:[],total_unites:0,nb_refs:0}, stockProdLoading:false});
+  }catch(e){
+    set({stockProdZ1: {refs:[],total_unites:0,nb_refs:0,_err: e.message||'Erreur de chargement.'},
+         stockProdLoading:false});
+  }
+}
+function _stockGoTo(action){
+  // Redirige vers MyStock avec le sous-onglet Production actif.
+  // action = 'entree-mp' | 'sortie-mp' | 'entree-z1' | 'sortie-z1'
+  const url = '/stock?tab=production&auto=' + encodeURIComponent(action||'');
+  window.location.href = url;
+}
+function _buildStockActionCard(opts){
+  return h('button',{
+    className:'fab-prod-card fab-prod-card-'+opts.kind,
+    type:'button',
+    onClick:opts.onClick,
+  },
+    h('div',{className:'fab-prod-card-ico'}, svgIcon(opts.icon,22)),
+    h('div',{className:'fab-prod-card-txt'},
+      h('div',{className:'fab-prod-card-title'}, opts.title),
+      h('div',{className:'fab-prod-card-sub'}, opts.sub),
+    )
+  );
+}
+function _renderStockZ1List(){
+  const z1 = S.stockProdZ1 || {refs:[],total_unites:0,nb_refs:0};
+  const currentName = String((S.user && S.user.nom) || '').trim().toLowerCase();
 
-function _renderStockIframe(){
-  const sub = S.stockSubTab || 'production';
-  return h('iframe', {
-    id: 'fab-stock-iframe',
-    src: '/stock?tab=' + encodeURIComponent(sub) + '&embed=1',
-    className: 'fab-stock-iframe',
-    // largeur/hauteur pilotées par CSS (.fab-stock-iframe)
-    // credentials sont hérités (même origine)
-  });
+  const head = h('div',{className:'fab-prod-z1-head'},
+    h('div',null,
+      h('div',{className:'fab-prod-z1-title'},
+        svgIcon('package',16),
+        ' Contenu Z1 — En attente sortie de prod',
+      ),
+      h('div',{className:'fab-prod-z1-sub'},
+        z1.nb_refs ?
+          (z1.nb_refs + ' référence' + (z1.nb_refs>1?'s':'') + ' · '
+           + Number(z1.total_unites||0).toLocaleString('fr-FR')
+           + ' unité' + ((z1.total_unites||0)>1?'s':''))
+          : 'Aucun produit en Z1.'
+      ),
+    ),
+    h('button',{
+      className:'fab-prod-z1-refresh',
+      type:'button',
+      title:'Rafraîchir',
+      onClick:()=>loadStockProduction()
+    }, svgIcon('refresh-ccw',14),' Actualiser'),
+  );
+
+  let body;
+  if(S.stockProdLoading){
+    body = h('div',{className:'fab-prod-empty'},'Chargement…');
+  } else if(z1._err){
+    body = h('div',{className:'fab-prod-err'}, z1._err);
+  } else if(!z1.refs || !z1.refs.length){
+    body = h('div',{className:'fab-prod-empty'},
+      h('div',{style:{fontSize:'24px',color:'var(--muted)',marginBottom:'4px'}},'·'),
+      h('div',null,'Aucune sortie de production enregistrée.'),
+      h('div',{className:'fab-prod-empty-hint'},
+        'Cliquez sur « Entrée Z1 » pour ajouter ce qui sort de production.'
+      ),
+    );
+  } else {
+    const rows = z1.refs.map(r => {
+      const lineOp = String(r.dernier_operateur || '').trim().toLowerCase();
+      const canEdit = currentName && lineOp && currentName === lineOp;
+      const rightChildren = [
+        h('div',{className:'fab-prod-z1-qty'}, _fmtU(r.quantite||0, r.unite||'')),
+      ];
+      if(canEdit){
+        rightChildren.push(h('div',{className:'fab-prod-z1-actions'},
+          h('button',{
+            className:'fab-prod-z1-btn fab-prod-z1-btn-add',
+            type:'button',
+            title:'Ajouter une quantité à cette référence',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('add-to:'+r.id); },
+          }, svgIcon('plus-circle',12),' Ajouter'),
+          h('button',{
+            className:'fab-prod-z1-btn fab-prod-z1-btn-edit',
+            type:'button',
+            title:'Modifier la quantité totale en Z1',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('edit:'+r.id); },
+          }, svgIcon('edit',12),' Modifier'),
+        ));
+      }
+      return h('div',{className:'fab-prod-z1-row'},
+        h('div',{className:'fab-prod-z1-left'},
+          h('div',{className:'fab-prod-z1-ref'}, r.reference || '—'),
+          h('div',{className:'fab-prod-z1-des'}, r.designation || ''),
+          h('div',{className:'fab-prod-z1-meta'},
+            h('span',{className:'fab-prod-z1-meta-date'},
+              svgIcon('clock',11),' '+ _fmtDateStockProd(r.derniere_entree || r.date_fifo)),
+            h('span',{className:'fab-prod-z1-meta-op'},
+              svgIcon('users',11),' '+ (r.dernier_operateur || '—')),
+          ),
+        ),
+        h('div',{className:'fab-prod-z1-right'}, ...rightChildren)
+      );
+    });
+    body = h('div',{className:'fab-prod-z1-list'}, ...rows);
+  }
+
+  return h('div',{className:'fab-prod-z1-card'}, head, body);
 }
 
 function renderStatsPanel(){
-  // Vue Stock intégrée : iframe embarquant /stock?tab=<sub>&embed=1
-  // → 100 % des éléments visuels et techniques de MyStock, sans sa
-  //   sidebar ni son topbar (masqués par le CSS .stock-embed).
-  // La sidebar de gauche de /fabrication reste cliquable en permanence.
-  return h('div', {className:'fab-main fab-stock-main'},
-    _renderStockSubNav(),
-    _renderStockIframe()
+  // Vue Stock native — miroir visuel de MyStock (buildProductionView),
+  // sans iframe, alimentée par /api/stock/sortie-prod.  Les clics sur
+  // les 4 cartes redirigent vers /stock?tab=production&auto=<action>
+  // pour ouvrir la modale correspondante (les modales de MyStock ne
+  // sont pas dupliquées ici).
+  return h('div',{className:'fab-main fab-stock-native'},
+    h('div',{className:'fab-prod-head'},
+      h('h2',{className:'fab-prod-head-title'}, 'Production'),
+      h('div',{className:'fab-prod-head-sub'},
+        'Saisie rapide des entrées/sorties matières premières et sortie de production (Z1).'),
+    ),
+    h('div',{className:'fab-prod-grid'},
+      _buildStockActionCard({
+        kind:'mp-in',  icon:'log-in',      title:'Entrée MP',
+        sub:'Réception matière',
+        onClick:()=>_stockGoTo('entree-mp'),
+      }),
+      _buildStockActionCard({
+        kind:'mp-out', icon:'log-out',     title:'Sortie MP',
+        sub:'Consommation production',
+        onClick:()=>_stockGoTo('sortie-mp'),
+      }),
+      _buildStockActionCard({
+        kind:'z1-in',  icon:'plus-circle', title:'Entrée Z1',
+        sub:'Sortie de production',
+        onClick:()=>_stockGoTo('entree-z1'),
+      }),
+      _buildStockActionCard({
+        kind:'z1-out', icon:'edit',        title:'Sortie Z1',
+        sub:'Corriger / retirer',
+        onClick:()=>_stockGoTo('sortie-z1'),
+      }),
+    ),
+    _renderStockZ1List()
   );
 }
 
