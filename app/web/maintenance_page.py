@@ -1065,16 +1065,16 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-plan-creneaux-list{display:flex;flex-direction:column;gap:16px}
 .op-plan-creneau-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s}
 .op-plan-creneau-card:hover{border-color:var(--accent);box-shadow:0 4px 16px rgba(34,211,238,.10)}
-.op-plan-creneau-header{background:linear-gradient(90deg,var(--accent) 0%,rgba(34,211,238,.85) 100%);color:#fff;padding:14px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:filter .15s}
-.op-plan-creneau-header:hover{filter:brightness(1.05)}
-.op-plan-creneau-header .op-plan-ch-chev{font-size:16px;line-height:1;opacity:.9}
-.op-plan-creneau-header .op-plan-ch-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;font-weight:800;font-size:15px;letter-spacing:.3px}
-.op-plan-creneau-header .op-plan-ch-nom{font-weight:700;font-size:14px;padding-left:8px;border-left:1px solid rgba(255,255,255,.35)}
-.op-plan-creneau-header .op-plan-ch-count{background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
-.op-plan-creneau-header .op-plan-ch-status{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;background:#fff;color:var(--accent)}
-.op-plan-creneau-header .op-plan-ch-status.done{background:var(--ok,#34d399);color:#fff}
-.op-plan-creneau-header .op-plan-ch-status.progress{background:var(--warn,#fbbf24);color:#000}
-.op-plan-creneau-header .op-plan-ch-team{margin-left:auto;font-size:12px;color:rgba(255,255,255,.9);font-weight:500;font-style:italic}
+.op-plan-creneau-header{background:var(--accent-bg);color:var(--text);border-left:4px solid var(--accent);padding:12px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;flex-wrap:wrap;transition:background .15s}
+.op-plan-creneau-header:hover{background:rgba(34,211,238,.18)}
+.op-plan-creneau-header .op-plan-ch-chev{color:var(--accent);font-size:16px;line-height:1}
+.op-plan-creneau-header .op-plan-ch-time{font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;font-weight:800;font-size:15px;color:var(--accent);letter-spacing:.3px}
+.op-plan-creneau-header .op-plan-ch-nom{font-weight:700;font-size:14px;color:var(--text);padding-left:10px;border-left:1px solid var(--border)}
+.op-plan-creneau-header .op-plan-ch-count{background:var(--card);border:1px solid var(--border);color:var(--text2);font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+.op-plan-creneau-header .op-plan-ch-status{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;background:var(--card);color:var(--accent);border:1px solid var(--accent)}
+.op-plan-creneau-header .op-plan-ch-status.done{background:var(--ok,#34d399);color:#fff;border-color:var(--ok,#34d399)}
+.op-plan-creneau-header .op-plan-ch-status.progress{background:var(--warn,#fbbf24);color:#000;border-color:var(--warn,#fbbf24)}
+.op-plan-creneau-header .op-plan-ch-team{margin-left:auto;font-size:12px;color:var(--muted);font-weight:500;font-style:italic}
 .op-plan-creneau-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;background:transparent}
 .op-plan-creneau-table thead th{background:var(--bg);text-align:left;padding:10px 16px;font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
 .op-plan-creneau-table tbody td{padding:11px 16px;border-bottom:1px solid var(--border);color:var(--text2)}
@@ -9568,8 +9568,10 @@ function opRenderTasks(){
     const creneauBoxes = creneaux
       .map(ev => _renderCreneauBox(ev, showTermine, isToday))
       .filter(Boolean);
-    // Ops perso : uniquement si toggle "Afficher terminées" activé
-    const persoHtml = showTermine ? _renderPersoSection(persos, showTermine) : '';
+    // v2.2.71 : la section perso est toujours affichée si des ops perso 'à faire'
+    // existent. Le toggle contrôle uniquement l'inclusion des ops terminées (filtre
+    // interne dans _renderPersoSection).
+    const persoHtml = _renderPersoSection(persos, showTermine);
     return { creneauBoxes, persoHtml };
   };
 
@@ -10795,24 +10797,33 @@ function _opRenderPlanTable(events, meId){
   });
 
   const cardsHtml = filtered.map(ev => {
-    // Aplati les ops du créneau : 1 ligne par (op, machine).
+    // v2.2.71 : 1 ligne par op (pas par machine). Une op multi-machines
+    // affiche la liste des machines séparées par ' · '.
     const rows = [];
     for(const op of (ev.ops || [])){
       let machines = Array.isArray(op.machines) && op.machines.length
-        ? op.machines
+        ? op.machines.slice()
         : (ev.machine ? [ev.machine] : ['—']);
-      for(const m of machines){
-        rows.push({ op, machine: m });
+      // Tri interne des machines de l'op selon _MACHINE_ORDER
+      if(typeof _MACHINE_ORDER !== 'undefined'){
+        const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+        machines.sort((a, b) => {
+          const ra = rank.has(a) ? rank.get(a) : Infinity;
+          const rb = rank.has(b) ? rank.get(b) : Infinity;
+          if(ra !== rb) return ra - rb;
+          return String(a).localeCompare(String(b), 'fr');
+        });
       }
+      rows.push({ op, machines });
     }
-    // Tri des machines selon _MACHINE_ORDER canonique
+    // Tri des ops par 1ère machine (rang canonique le plus bas)
     if(typeof _MACHINE_ORDER !== 'undefined'){
       const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+      const minRank = (r) => Math.min.apply(null, r.machines.map(m => rank.has(m) ? rank.get(m) : Infinity));
       rows.sort((a, b) => {
-        const ra = rank.has(a.machine) ? rank.get(a.machine) : Infinity;
-        const rb = rank.has(b.machine) ? rank.get(b.machine) : Infinity;
+        const ra = minRank(a), rb = minRank(b);
         if(ra !== rb) return ra - rb;
-        return String(a.machine).localeCompare(String(b.machine), 'fr');
+        return String(a.machines[0] || '').localeCompare(String(b.machines[0] || ''), 'fr');
       });
     }
 
@@ -10826,7 +10837,7 @@ function _opRenderPlanTable(events, meId){
     const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
 
     const tbodyHtml = rows.map(r => `<tr>
-      <td class="op-plan-cell-mac">${escHtml(r.machine)}</td>
+      <td class="op-plan-cell-mac">${r.machines.map(m => escHtml(m)).join(' · ')}</td>
       <td><span class="op-code">${r.op.code}</span></td>
       <td class="op-plan-cell-lbl">${escHtml(r.op.code_label || '—')}</td>
       <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
@@ -10873,27 +10884,39 @@ function _opRenderPlanDetailModal(ev){
   const _dLbl = _dt.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
   const _hLbl = (ev.heure_debut && ev.heure_fin) ? (ev.heure_debut + ' – ' + ev.heure_fin) : 'Sans horaire';
 
-  // Ops : tri par machine canonique
+  // v2.2.71 : 1 ligne par op (regroupe multi-machines), pas de code affiché.
   const opsFlat = [];
   for(const op of (ev.ops || [])){
-    const machines = Array.isArray(op.machines) && op.machines.length ? op.machines : (ev.machine ? [ev.machine] : ['—']);
-    for(const m of machines){ opsFlat.push({ op, machine: m }); }
+    let machines = Array.isArray(op.machines) && op.machines.length
+      ? op.machines.slice()
+      : (ev.machine ? [ev.machine] : ['—']);
+    if(typeof _MACHINE_ORDER !== 'undefined'){
+      const rk = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+      machines.sort((a, b) => {
+        const ra = rk.has(a) ? rk.get(a) : Infinity;
+        const rb = rk.has(b) ? rk.get(b) : Infinity;
+        if(ra !== rb) return ra - rb;
+        return String(a).localeCompare(String(b), 'fr');
+      });
+    }
+    opsFlat.push({ op, machines });
   }
+  // Tri des ops par 1ère machine (rang canonique)
   if(typeof _MACHINE_ORDER !== 'undefined'){
     const rank = new Map(_MACHINE_ORDER.map((mm, i) => [mm, i]));
+    const minRank = (r) => Math.min.apply(null, r.machines.map(m => rank.has(m) ? rank.get(m) : Infinity));
     opsFlat.sort((a, b) => {
-      const ra = rank.has(a.machine) ? rank.get(a.machine) : Infinity;
-      const rb = rank.has(b.machine) ? rank.get(b.machine) : Infinity;
+      const ra = minRank(a), rb = minRank(b);
       if(ra !== rb) return ra - rb;
-      return String(a.machine).localeCompare(String(b.machine), 'fr');
+      return String(a.machines[0] || '').localeCompare(String(b.machines[0] || ''), 'fr');
     });
   }
-  const opsHtml = opsFlat.map(({op, machine}) => {
+  const opsHtml = opsFlat.map(({op, machines}) => {
     const isDone = op.statut === 'termine';
     return `<div class="op-plan-detail-op-row ${isDone ? 'is-done' : ''}">
       <div style="flex:1;min-width:0">
-        <div class="op-plan-detail-op-lbl">${escHtml(op.code_label || op.code || '—')}</div>
-        <div class="op-plan-detail-op-mac">${escHtml(machine)} · code ${escHtml(op.code || '')}</div>
+        <div class="op-plan-detail-op-lbl">${escHtml(op.code_label || '—')}</div>
+        <div class="op-plan-detail-op-mac">${machines.map(m => escHtml(m)).join(' · ')}</div>
       </div>
       <span class="op-plan-detail-op-badge ${isDone ? 'done' : 'todo'}">${isDone ? '✓ Terminé' : 'À faire'}</span>
     </div>`;
