@@ -551,7 +551,56 @@ def list_portail_messages(request: Request, token: str):
                ORDER BY date ASC""",
             (fourni["id"],),
         ).fetchall()
+        # Mark interne messages as read once fournisseur consulted them
+        conn.execute(
+            """UPDATE ao_messages SET lu=1
+               WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
+            (fourni["id"],),
+        )
+        conn.commit()
     return [_row_dict(r) for r in rows]
+
+
+@router_api.get("/ao/{token}/counts")
+def get_portail_counts(request: Request, token: str):
+    """Retourne le nombre de messages interne non lus + documents non vus."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        msg = conn.execute(
+            """SELECT COUNT(*) FROM ao_messages
+               WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
+            (fourni["id"],),
+        ).fetchone()[0]
+        try:
+            docs = conn.execute(
+                """SELECT COUNT(*) FROM ao_pieces_jointes
+                   WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
+                     AND COALESCE(vu_par_fournisseur, 0)=0""",
+                (ao["id"], fourni["id"]),
+            ).fetchone()[0]
+        except Exception:
+            docs = 0
+    return {"messages_non_lus": int(msg or 0), "documents_nouveaux": int(docs or 0)}
+
+
+@router_api.post("/ao/{token}/documents/mark-viewed")
+def portail_mark_docs_viewed(request: Request, token: str):
+    """Marque tous les documents comme vus par le fournisseur."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        try:
+            conn.execute(
+                """UPDATE ao_pieces_jointes SET vu_par_fournisseur=1
+                   WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
+                     AND COALESCE(vu_par_fournisseur, 0)=0""",
+                (ao["id"], fourni["id"]),
+            )
+            conn.commit()
+        except Exception:
+            pass
+    return {"ok": True}
 
 
 @router_api.post("/ao/{token}/messages")

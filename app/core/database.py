@@ -7258,6 +7258,15 @@ Ressources :
         _record_schema_migration(conn, 199, "ao_reponses_unite_manuel")
 
 
+    # v200 -- ao_pieces_jointes.vu_par_fournisseur (bulle notif docs sur portail)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=200 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_pieces_jointes)").fetchall()}
+        if "vu_par_fournisseur" not in cols:
+            conn.execute("ALTER TABLE ao_pieces_jointes ADD COLUMN vu_par_fournisseur INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        _record_schema_migration(conn, 200, "ao_pieces_jointes_vu_par_fournisseur")
+
+
 
 def create_default_admin():
     import bcrypt

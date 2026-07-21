@@ -2254,6 +2254,7 @@ async function openAddFournisseurModalV2() {
 
   const state = {
     search: '',
+    showEmpty: false,
     selectedContacts: new Set(),
     manualTab: false,
     _autoP: false,
@@ -2270,7 +2271,7 @@ async function openAddFournisseurModalV2() {
         if (c.is_principal) state.selectedContacts.add(f.id + ':' + c.id);
       }));
     }
-    const filtered = state.search
+    let filtered = state.search
       ? state.fournisseurs.filter(f => {
           const q = state.search.toLowerCase();
           return (f.nom || '').toLowerCase().includes(q)
@@ -2278,6 +2279,10 @@ async function openAddFournisseurModalV2() {
             || (f.contacts || []).some(c => (c.nom || '').toLowerCase().includes(q));
         })
       : state.fournisseurs;
+    // Filtre : uniquement fournisseurs avec >=1 contact (sauf toggle showEmpty)
+    if (!state.showEmpty) {
+      filtered = filtered.filter(f => ((f.contacts || []).length > 0));
+    }
 
     let html = '<h3>Ajouter un fournisseur</h3>' +
       '<div style="display:flex;gap:6px;margin-bottom:12px">' +
@@ -2292,6 +2297,11 @@ async function openAddFournisseurModalV2() {
         '<select id="m-langue-manual"><option value="fr">Francais</option><option value="en">English</option></select></div>';
     } else {
       html += '<div class="field"><input id="m-search" placeholder="Rechercher fournisseur, ville, contact..." value="' + escAttr(state.search) + '" autocomplete="off"></div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0;gap:8px;flex-wrap:wrap">'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer">'+
+        '<input type="checkbox" id="m-show-empty"'+(state.showEmpty?' checked':'')+'> Afficher fournisseurs sans contact</label>'+
+        '<button type="button" class="btn btn-ghost btn-sm" id="m-create-four" style="font-size:12px">+ Creer un fournisseur</button>'+
+        '</div>' +
         '<div style="max-height:400px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:6px" id="m-list">';
       if (!filtered.length) {
         html += '<div style="padding:20px;color:var(--muted);text-align:center">Aucun fournisseur.</div>';
@@ -2338,6 +2348,26 @@ async function openAddFournisseurModalV2() {
     if (!state.manualTab) {
       const s = document.getElementById('m-search');
       if (s) s.addEventListener('input', () => { state.search = s.value; render(); });
+      box.querySelector('#m-show-empty')?.addEventListener('change', e => {
+        state.showEmpty = e.target.checked;
+        render();
+      });
+      box.querySelector('#m-create-four')?.addEventListener('click', async () => {
+        const nom = (prompt('Nom du fournisseur (societe) :') || '').trim();
+        if (!nom) return;
+        const ville = (prompt('Ville (optionnel) :') || '').trim();
+        try {
+          await api('/api/settings/fournisseurs-fsc', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({nom: nom, ville: ville || null, actif: 1})
+          });
+          await _reloadFournisseursCache(state);
+          state.showEmpty = true;
+          state.search = nom;
+          render();
+          showToast('Fournisseur ' + nom + ' cree.', 'success');
+        } catch(e) { showToast(e.message || 'Erreur creation fournisseur.', 'danger'); }
+      });
       box.querySelectorAll('[data-contact-key]').forEach(cb => {
         cb.onchange = () => {
           const k = cb.dataset.contactKey;

@@ -383,6 +383,13 @@ async function api(path, options) {{
   return r.json();
 }}
 
+function formatFrInt(n) {{
+  if (n === null || n === undefined || n === "") return "";
+  const num = Number(n);
+  if (isNaN(num)) return String(n);
+  return num.toLocaleString("fr-FR", {{maximumFractionDigits: 0}});
+}}
+
 function formatDate(iso) {{
   if (!iso) return "";
   const s = String(iso).trim();
@@ -450,6 +457,7 @@ function setTab(tab, opts) {{
   ["offre", "messages", "documents"].forEach(t => {{
     document.getElementById("panel-" + t).classList.toggle("hidden", t !== tab);
   }});
+  loadPortailCounts();
   if (tab === "messages") {{
     loadMessages();
     startMsgPolling();
@@ -460,10 +468,34 @@ function setTab(tab, opts) {{
   if(!silent){{try{{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}}catch(e){{}}}}
 }}
 
+async function loadPortailCounts() {{
+  try {{
+    const c = await fetch("/api/portail/ao/" + TOKEN + "/counts").then(r => r.json());
+    updateTabBadge("tab-messages", c.messages_non_lus || 0);
+    updateTabBadge("tab-documents", c.documents_nouveaux || 0);
+  }} catch(e) {{ /* silencieux */ }}
+}}
+
+function updateTabBadge(tabId, count) {{
+  const el = document.getElementById(tabId);
+  if (!el) return;
+  // Reset : retire ancien badge si existe
+  const oldBadge = el.querySelector(".tab-badge");
+  if (oldBadge) oldBadge.remove();
+  if (count > 0) {{
+    const badge = document.createElement("span");
+    badge.className = "tab-badge";
+    badge.style.cssText = "display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;text-align:center";
+    badge.textContent = String(count);
+    el.appendChild(badge);
+  }}
+}}
+
 function startMsgPolling() {{
   stopMsgPolling();
   S.polling = setInterval(() => {{
     if (S.tab === "messages") loadMessages(true);
+    loadPortailCounts();
   }}, 30000);
 }}
 
@@ -529,8 +561,8 @@ function renderOffre() {{
         "<td>" + escHtml(ln.ref_produit) + "</td>" +
         '<td class="td-muted">' + escHtml(ln.frontal || t("dash")) + "</td>" +
         '<td class="td-muted">' + escHtml(ln.adhesif || t("dash")) + "</td>" +
-        "<td>" + escHtml(ln.etiquettes_par_bobine != null ? ln.etiquettes_par_bobine : t("dash")) + "</td>" +
-        "<td>" + escHtml(ln.quantite) + "</td>" +
+        "<td>" + escHtml(ln.etiquettes_par_bobine != null ? formatFrInt(ln.etiquettes_par_bobine) : t("dash")) + "</td>" +
+        "<td>" + escHtml(formatFrInt(ln.quantite)) + "</td>" +
         '<td><input type="number" step="0.0001" min="0" class="inp-quotation" data-lid="' + ln.id + '" value="' + escHtml(qVal) + '"' + dis + "></td>" +
         '<td><select class="inp-devise" data-lid="' + ln.id + '"' + dis + ">" +
           devSel("EUR", dev) + devSel("USD", dev) +
@@ -624,25 +656,37 @@ function renderMessagerie(silent) {{
   const d = S.data;
   const cloture = d && d.cloture;
   const msgs = S.messages || [];
-  const list = document.getElementById("msg-list-live");
-  const scrollTop = list ? list.scrollTop : 0;
-  const draft = document.getElementById("msg-text")?.value || "";
+  const existingList = document.getElementById("msg-list-live");
+  const existingCompose = document.getElementById("msg-text");
+  const scrollTop = existingList ? existingList.scrollTop : 0;
 
-  let html = '<div class="msg-list" id="msg-list-live">';
+  // Build list HTML only
+  let listHtml = '<div class="msg-list" id="msg-list-live">';
   if (!msgs.length) {{
-    html += '<p class="empty">' + escHtml(t("noMessages")) + '</p>';
+    listHtml += '<p class="empty">' + escHtml(t("noMessages")) + '</p>';
   }} else {{
     msgs.forEach(m => {{
       const interne = m.expediteur !== "fournisseur";
       const cls = interne ? "interne" : "fournisseur";
       const who = interne ? "SIFA" : escHtml(m.auteur_nom || t("you"));
-      html += '<div class="bubble ' + cls + '">' +
+      listHtml += '<div class="bubble ' + cls + '">' +
         '<div class="meta">' + who + " · " + escHtml(formatDate(m.date)) + "</div>" +
         escHtml(m.message) + "</div>";
     }});
   }}
-  html += "</div>";
+  listHtml += "</div>";
 
+  // If silent refresh and compose already rendered, only update list (preserve textarea state)
+  if (silent && existingList && existingCompose) {{
+    existingList.outerHTML = listHtml;
+    const newList = document.getElementById("msg-list-live");
+    if (newList) newList.scrollTop = scrollTop;
+    return;
+  }}
+
+  // Full render (initial or after send)
+  const draft = existingCompose?.value || "";
+  let html = listHtml;
   if (!cloture) {{
     html += '<div class="msg-compose">' +
       '<textarea id="msg-text" rows="3" placeholder="' + escAttr(t("msgPlaceholder")) + '">' + escHtml(draft) + "</textarea>" +
@@ -680,6 +724,10 @@ function renderMessagerie(silent) {{
 }}
 
 function renderDocuments() {{
+  // Mark all docs as viewed silently
+  fetch("/api/portail/ao/" + TOKEN + "/documents/mark-viewed", {{method:"POST"}})
+    .then(() => loadPortailCounts())
+    .catch(() => {{}});
   const el = document.getElementById("panel-documents");
   const d = S.data;
   if (!d) {{
