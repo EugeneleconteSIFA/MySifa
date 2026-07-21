@@ -14605,10 +14605,9 @@ async function loadValorisation() {
     renderValorisationView(true);
     // Charge le trend en arriere-plan (fire-and-forget) : n'attend pas la
     // reponse pour rendre. Le sparkline se remplira quand /trend repond.
-    // Ne recharge qu'en mode "aujourd'hui" -- le trend n'a de sens que par
-    // rapport a la date courante, pas figee. Le cache serveur (max_id +
-    // params) dedoublonne les appels repetes sans data reelle changee.
-    if (!v.snapshotDate) {
+    // Conditions : (1) pas en mode date figee, (2) role Direction/superadmin
+    // (les autres roles ne voient pas le sparkline -- inutile de fetcher).
+    if (!v.snapshotDate && (S.user && (S.user.role === 'superadmin' || S.user.role === 'direction'))) {
       loadValorisationTrend();
     }
   }
@@ -15032,14 +15031,21 @@ function buildValorisationKpis() {
       el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal))
     );
   }
+  // Le sparkline "Tendance 15 derniers jours" n'est visible que pour
+  // Direction / superadmin (meme perimetre que les KPI reels / dedoublement).
+  // Les autres roles voient la card en layout classique (colonne unique).
   const kpiTotalLeft = el('div', {
-    style: 'display:flex;flex-direction:column;justify-content:center;min-width:0;flex:0 0 auto',
+    style: 'display:flex;flex-direction:column;justify-content:center;min-width:0;' +
+           (canSeeUSD ? 'flex:0 0 auto' : 'flex:1 1 auto'),
   }, ...kpiTotalLeftChildren);
-  const kpiTotalRight = buildValorisationSparkline();
+  const kpiTotalContent = [kpiTotalLeft];
+  if (canSeeUSD) {
+    kpiTotalContent.push(buildValorisationSparkline());
+  }
   const kpiTotal = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' +
     'display:flex;align-items:stretch;gap:14px;overflow:hidden' },
-    kpiTotalLeft, kpiTotalRight
+    ...kpiTotalContent
   );
 
   // ── Matières premières — dédoublé EUR / réel si réfs USD ou taxe ──
@@ -15056,6 +15062,12 @@ function buildValorisationKpis() {
         el('span', null, valFormatEuro(totalMP)),
         el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
+    );
+  } else {
+    // Vue non-direction : affiche simplement le total MP en gros vert (sinon
+    // la card serait vide). Cette valeur EST la base pour eux -- pas de reel.
+    kpiMPChildren.push(
+      el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalMP))
     );
   }
   // Sous-texte enleve (referentiel / taux USD / taxe / transport) -- infos
