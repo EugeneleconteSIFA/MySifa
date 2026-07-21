@@ -899,6 +899,22 @@ def get_default_template_content(key: str, request: Request):
     return t
 
 
+@router.get("/agent-script")
+def download_agent_script(request: Request):
+    """Sert print_agent.py a un agent authentifie via X-Agent-Token.
+    Utilise par install_agent_windows.ps1 pour telecharger automatiquement
+    l'agent Python au demarrage (evite au user de copier 2 fichiers)."""
+    _agent_from_token(request)  # auth via X-Agent-Token
+    py_path = Path(__file__).resolve().parent.parent.parent / "tools" / "print_agent" / "print_agent.py"
+    if not py_path.is_file():
+        raise HTTPException(status_code=404, detail="print_agent.py introuvable sur le serveur.")
+    return FileResponse(
+        path=str(py_path),
+        media_type="text/x-python",
+        filename="print_agent.py",
+    )
+
+
 @router.get("/installer/windows")
 def download_windows_installer(request: Request):
     """Sert le script PowerShell d'install de l'agent MySifa pour PC Windows hote.
