@@ -3877,6 +3877,10 @@ def maintenance_alerts_active(request: Request):
                     # le dossier) doit être un code prod (01/03/88) avec un no_dossier
                     # renseigné. Sinon skip.
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                    # v2.2.81 — Fenêtre plus stricte pour le calage : 4h. Un calage
+                    # d'une équipe précédente / d'un shift antérieur ne doit pas
+                    # déclencher l'alerte au réveil de l'opérateur suivant.
+                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                     _last_row = conn.execute(
                         """SELECT no_dossier, operation_code, date_operation
                            FROM production_data
@@ -3899,17 +3903,34 @@ def maintenance_alerts_active(request: Request):
                             (int(r["id"]), _dos),
                         ).fetchone()
                         if not _ack_check:
-                            # v2.2.79 — Chercher le dernier code calage RÉCENT du dossier
-                            # (dans la fenêtre 24h, comme _window). Un calage historique
-                            # trop ancien n'a plus vocation à déclencher l'alerte : le
-                            # dossier peut avoir été rouvert un autre jour.
-                            _last_calage = conn.execute(
+                            # v2.2.82 — Le calage doit être :
+                            # (a) dans la fenêtre récente (4h)
+                            # (b) postérieur à la dernière fin de production (code 89)
+                            #     du dossier — sinon c'est un calage d'un cycle
+                            #     précédent déjà clos.
+                            _last_89 = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=?
-                                     AND operation_category='calage'
-                                     AND date_operation >= ?""",
-                                (_dos, effective_machine, _window),
+                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
+                                (_dos, effective_machine),
                             ).fetchone()
+                            _last_89_at = _last_89["m"] if _last_89 else None
+                            if _last_89_at:
+                                _last_calage = conn.execute(
+                                    """SELECT MAX(date_operation) AS m FROM production_data
+                                       WHERE no_dossier=? AND machine=?
+                                         AND operation_category='calage'
+                                         AND date_operation >= ?
+                                         AND date_operation > ?""",
+                                    (_dos, effective_machine, _calage_window, _last_89_at),
+                                ).fetchone()
+                            else:
+                                _last_calage = conn.execute(
+                                    """SELECT MAX(date_operation) AS m FROM production_data
+                                       WHERE no_dossier=? AND machine=?
+                                         AND operation_category='calage'
+                                         AND date_operation >= ?""",
+                                    (_dos, effective_machine, _calage_window),
+                                ).fetchone()
                             _last_calage_at = _last_calage["m"] if _last_calage else None
                             if _last_calage_at:
                                 _declencheur = conn.execute(
