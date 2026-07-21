@@ -1722,7 +1722,8 @@ async function openCreateAoWizard(initialState) {
   box.style.width = '92vw';
 
   let state;
-  if (initialState) {
+  const _hasValidInitial = initialState && Array.isArray(initialState.lignes) && initialState.info;
+  if (_hasValidInitial) {
     state = initialState;
     if (typeof state.step !== 'number') state.step = 2;
   } else {
@@ -1748,7 +1749,7 @@ async function openCreateAoWizard(initialState) {
   }
 
   // Charge fournisseurs+contacts et produits en parallele (skip si etat existant)
-  if (!initialState) {
+  if (!_hasValidInitial) {
     try {
       const [fours] = await Promise.all([
         api('/api/ao/picker/fournisseurs-with-contacts'),
