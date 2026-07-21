@@ -14574,7 +14574,7 @@ async function loadValorisationTrend() {
   if (!v.trend) v.trend = { points: [], loading: false };
   v.trend.loading = true;
   try {
-    const data = await api('/api/stock/valorisation/trend?days=30');
+    const data = await api('/api/stock/valorisation/trend?days=15');
     v.trend.points = Array.isArray(data?.points) ? data.points : [];
   } catch (e) {
     // Silencieux : le sparkline est un plus, pas critique. Sur echec on ne
@@ -14731,7 +14731,7 @@ function buildValorisationSparkline() {
   });
   wrap.append(el('div', {
     style: 'font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:right'
-  }, 'Tendance 30 derniers jours'));
+  }, 'Tendance 15 derniers jours'));
 
   const svgNS = 'http://www.w3.org/2000/svg';
   const W = 200, H = 60, padTop = 8, padBot = 8;
