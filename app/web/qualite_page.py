@@ -3054,11 +3054,12 @@ async function duplicateSifaDocVersion(id){
   const v = versions.find(x => x.id === id);
   if(!v){showToast('Version introuvable','danger'); return;}
   const code = S.currentSifaDoc.template.code;
-  // Pré-remplir le modal avec les mêmes fournisseurs
+  // Pré-remplir le modal avec les mêmes fournisseurs ET les mêmes overrides de sections
   await openSifaDocGenerate(code, {
     client_nom: v.client_nom,
     audit_id: v.audit_id,
     fournisseurs_ids: v.fournisseurs_ids || [],
+    sections_overrides: v.sections_overrides || {},
   });
 }
 
@@ -3093,8 +3094,8 @@ async function openSifaDocGenerate(code, prefill){
     ref_manual: '',
     fourSearch: '',
     sections: [],           // meta chargée depuis l'API
-    sections_overrides: {}, // {sec_id: {include:bool, custom_body:str}}
-    sectionsExpanded: false,
+    sections_overrides: JSON.parse(JSON.stringify(prefill.sections_overrides || {})), // clone profond
+    sectionsExpanded: !!(prefill.sections_overrides && Object.keys(prefill.sections_overrides).length),
   };
   // Charger les sections du template
   api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(code)+'/sections')
@@ -3102,6 +3103,15 @@ async function openSifaDocGenerate(code, prefill){
     .then(data => {
       if(!S._sifaGen) return;
       S._sifaGen.sections = data.sections || [];
+      // Si des overrides sont préchargés (duplication), ouvrir la liste
+      if(S._sifaGen.sectionsExpanded){
+        const list = document.getElementById('sd-sec-list');
+        const btn = document.getElementById('sd-sec-toggle');
+        const txt = document.getElementById('sd-sec-toggle-txt');
+        if(list){list.style.display='block';}
+        if(btn){btn.classList.add('expanded');}
+        if(txt){txt.textContent='▾ Masquer les sections';}
+      }
       _sdRenderSections();
     })
     .catch(()=>{});

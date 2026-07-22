@@ -313,9 +313,9 @@ def _h2(title, S):
             HRFlowable(width="100%", thickness=0.6, color=BORDER, spaceAfter=6)]
 
 
-def _sec_1(ctx, body):
+def _sec_1(ctx, body, num=1):
     S = ctx["styles"]
-    out = _h2("1. Fabricant", S)
+    out = _h2(f"{num}. Fabricant", S)
     fab_data = [
         [Paragraph("<b>Raison sociale</b>", S["body"]),
          Paragraph("SIFA", S["body"])],
@@ -338,16 +338,16 @@ def _sec_1(ctx, body):
     return out
 
 
-def _sec_2(ctx, body):
+def _sec_2(ctx, body, num=2):
     S = ctx["styles"]
-    out = _h2("2. Nature de l'activité SIFA", S)
+    out = _h2(f"{num}. Nature de l'activité SIFA", S)
     out.append(Paragraph(body or SEC_2_BODY, S["body"]))
     return out
 
 
-def _sec_3(ctx, body):
+def _sec_3(ctx, body, num=3):
     S = ctx["styles"]
-    out = _h2("3. Fournisseurs — origine géographique", S)
+    out = _h2(f"{num}. Fournisseurs — origine géographique", S)
     client_nom = ctx["client_nom"]
     fournisseurs = ctx["fournisseurs"]
     if client_nom:
@@ -372,29 +372,29 @@ def _sec_3(ctx, body):
     return out
 
 
-def _sec_4_intro(ctx, body):
+def _sec_4_intro(ctx, body, num=4):
     S = ctx["styles"]
-    out = _h2("4. Conformités attestées", S)
+    out = _h2(f"{num}. Conformités attestées", S)
     out.append(Paragraph(body or SEC_4_INTRO, S["body"]))
     return out
 
 
-def _sec_4_1(ctx, body, num=1):
+def _sec_4_1(ctx, body, parent_num=4, sub_num=1):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} REACH — Substances extrêmement préoccupantes (SVHC)",
+    return [Paragraph(f"{parent_num}.{sub_num} REACH — Substances extrêmement préoccupantes (SVHC)",
                       S["h3"]),
             Paragraph(body or SEC_4_1_BODY, S["body"])]
 
 
-def _sec_4_2(ctx, body, num=2):
+def _sec_4_2(ctx, body, parent_num=4, sub_num=2):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} California Proposition 65", S["h3"]),
+    return [Paragraph(f"{parent_num}.{sub_num} California Proposition 65", S["h3"]),
             Paragraph(body or SEC_4_2_BODY, S["body"])]
 
 
-def _sec_4_3(ctx, body, num=3):
+def _sec_4_3(ctx, body, parent_num=4, sub_num=3):
     S = ctx["styles"]
-    inner = [Paragraph(f"4.{num} Métaux lourds — traces techniquement inévitables",
+    inner = [Paragraph(f"{parent_num}.{sub_num} Métaux lourds — traces techniquement inévitables",
                        S["h3"]),
              Paragraph(body or SEC_4_3_BODY, S["body"])]
     metaux_data = [
@@ -432,9 +432,9 @@ def _sec_4_3(ctx, body, num=3):
     return [KeepTogether(inner)]
 
 
-def _sec_4_4(ctx, body, num=4):
+def _sec_4_4(ctx, body, parent_num=4, sub_num=4):
     S = ctx["styles"]
-    out = [Paragraph(f"4.{num} Certification FSC", S["h3"]),
+    out = [Paragraph(f"{parent_num}.{sub_num} Certification FSC", S["h3"]),
            Paragraph(body or SEC_4_4_BODY, S["body"])]
     note_para = Paragraph(SEC_4_4_NOTE, S["note_frame"])
     note_tbl = Table([[note_para]], colWidths=[180 * mm])
@@ -452,53 +452,53 @@ def _sec_4_4(ctx, body, num=4):
     return out
 
 
-def _sec_4_5(ctx, body, num=5):
+def _sec_4_5(ctx, body, parent_num=4, sub_num=5):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} Absence de PFAS", S["h3"]),
+    return [Paragraph(f"{parent_num}.{sub_num} Absence de PFAS", S["h3"]),
             Paragraph(body or SEC_4_5_BODY, S["body"])]
 
 
-def _sec_4_6(ctx, body, num=6):
+def _sec_4_6(ctx, body, parent_num=4, sub_num=6):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} Absence de bisphénols (BPA, BPS, BPF)", S["h3"]),
+    return [Paragraph(f"{parent_num}.{sub_num} Absence de bisphénols (BPA, BPS, BPF)", S["h3"]),
             Paragraph(body or SEC_4_6_BODY, S["body"])]
 
 
-def _sec_4_7(ctx, body, num=7):
+def _sec_4_7(ctx, body, parent_num=4, sub_num=7):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} Certificats d'analyse laboratoire (CoA)", S["h3"]),
+    return [Paragraph(f"{parent_num}.{sub_num} Certificats d'analyse laboratoire (CoA)", S["h3"]),
             Paragraph(body or SEC_4_7_BODY, S["body"])]
 
 
-def _sec_4_8(ctx, body, num=8):
+def _sec_4_8(ctx, body, parent_num=4, sub_num=8):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} Cadre général — PPWR", S["h3"]),
+    return [Paragraph(f"{parent_num}.{sub_num} Cadre général — PPWR", S["h3"]),
             Paragraph(body or SEC_4_8_BODY, S["body"])]
 
 
-def _sec_4_9(ctx, body, num=9):
+def _sec_4_9(ctx, body, parent_num=4, sub_num=9):
     S = ctx["styles"]
-    return [Paragraph(f"4.{num} Recyclabilité", S["h3"]),
+    return [Paragraph(f"{parent_num}.{sub_num} Recyclabilité", S["h3"]),
             Paragraph(body or SEC_4_9_BODY, S["body"])]
 
 
-def _sec_5(ctx, body):
+def _sec_5(ctx, body, num=5):
     S = ctx["styles"]
-    out = _h2("5. Contenu recyclé", S)
+    out = _h2(f"{num}. Contenu recyclé", S)
     out.append(Paragraph(body or SEC_5_BODY, S["body"]))
     return out
 
 
-def _sec_6(ctx, body):
+def _sec_6(ctx, body, num=6):
     S = ctx["styles"]
-    out = _h2("6. Base documentaire", S)
+    out = _h2(f"{num}. Base documentaire", S)
     out.append(Paragraph(body or SEC_6_BODY, S["body"]))
     return out
 
 
-def _sec_7(ctx, body):
+def _sec_7(ctx, body, num=7):
     S = ctx["styles"]
-    out = _h2("7. Responsabilité et validité", S)
+    out = _h2(f"{num}. Responsabilité et validité", S)
     validite_mois = ctx["validite_mois"]
     out.append(Paragraph(
         f"<b>Validité : {int(validite_mois)} mois à compter de la date "
@@ -507,9 +507,9 @@ def _sec_7(ctx, body):
     return out
 
 
-def _sec_8(ctx, body):
+def _sec_8(ctx, body, num=8):
     S = ctx["styles"]
-    out = _h2("8. Signature et cachet", S)
+    out = _h2(f"{num}. Signature et cachet", S)
     out.append(Paragraph(
         "Fait à Roubaix, la présente Déclaration engage la responsabilité "
         "de SIFA.", S["body"]))
@@ -572,54 +572,54 @@ def _sec_8(ctx, body):
 # default_body  : texte par défaut affiché dans l'UI de personnalisation
 # builder       : fonction (ctx, body) -> List[Flowable]
 SECTIONS_META = [
-    {"id": "sec_1", "title": "1. Fabricant", "removable": False,
+    {"id": "sec_1", "is_main": True, "title": "1. Fabricant", "removable": False,
      "editable": False, "default_body": "", "builder": _sec_1},
-    {"id": "sec_2", "title": "2. Nature de l'activité SIFA",
+    {"id": "sec_2", "is_main": True, "title": "2. Nature de l'activité SIFA",
      "removable": True, "editable": True, "default_body": SEC_2_BODY,
      "builder": _sec_2},
-    {"id": "sec_3", "title": "3. Fournisseurs — origine géographique",
+    {"id": "sec_3", "is_main": True, "title": "3. Fournisseurs — origine géographique",
      "removable": False, "editable": False, "default_body": "",
      "builder": _sec_3},
-    {"id": "sec_4_intro", "title": "4. Conformités attestées (intro)",
+    {"id": "sec_4_intro", "is_main": True, "title": "4. Conformités attestées (intro)",
      "removable": False, "editable": True, "default_body": SEC_4_INTRO,
      "builder": _sec_4_intro},
-    {"id": "sec_4_1", "sub_group": "4", "title": "4.1 REACH — SVHC",
+    {"id": "sec_4_1", "sub_group": "4", "parent": "sec_4_intro", "title": "4.1 REACH — SVHC",
      "removable": True, "editable": True, "default_body": SEC_4_1_BODY,
      "builder": _sec_4_1},
-    {"id": "sec_4_2", "sub_group": "4", "title": "4.2 California Proposition 65",
+    {"id": "sec_4_2", "sub_group": "4", "parent": "sec_4_intro", "title": "4.2 California Proposition 65",
      "removable": True, "editable": True, "default_body": SEC_4_2_BODY,
      "builder": _sec_4_2},
-    {"id": "sec_4_3", "sub_group": "4", "title": "4.3 Métaux lourds",
+    {"id": "sec_4_3", "sub_group": "4", "parent": "sec_4_intro", "title": "4.3 Métaux lourds",
      "removable": True, "editable": True, "default_body": SEC_4_3_BODY,
      "builder": _sec_4_3},
-    {"id": "sec_4_4", "sub_group": "4", "title": "4.4 Certification FSC",
+    {"id": "sec_4_4", "sub_group": "4", "parent": "sec_4_intro", "title": "4.4 Certification FSC",
      "removable": True, "editable": True, "default_body": SEC_4_4_BODY,
      "builder": _sec_4_4},
-    {"id": "sec_4_5", "sub_group": "4", "title": "4.5 Absence de PFAS",
+    {"id": "sec_4_5", "sub_group": "4", "parent": "sec_4_intro", "title": "4.5 Absence de PFAS",
      "removable": True, "editable": True, "default_body": SEC_4_5_BODY,
      "builder": _sec_4_5},
-    {"id": "sec_4_6", "sub_group": "4", "title": "4.6 Absence de bisphénols",
+    {"id": "sec_4_6", "sub_group": "4", "parent": "sec_4_intro", "title": "4.6 Absence de bisphénols",
      "removable": True, "editable": True, "default_body": SEC_4_6_BODY,
      "builder": _sec_4_6},
-    {"id": "sec_4_7", "sub_group": "4", "title": "4.7 Certificats d'analyse laboratoire (CoA)",
+    {"id": "sec_4_7", "sub_group": "4", "parent": "sec_4_intro", "title": "4.7 Certificats d'analyse laboratoire (CoA)",
      "removable": True, "editable": True, "default_body": SEC_4_7_BODY,
      "builder": _sec_4_7},
-    {"id": "sec_4_8", "sub_group": "4", "title": "4.8 Cadre général — PPWR",
+    {"id": "sec_4_8", "sub_group": "4", "parent": "sec_4_intro", "title": "4.8 Cadre général — PPWR",
      "removable": True, "editable": True, "default_body": SEC_4_8_BODY,
      "builder": _sec_4_8},
-    {"id": "sec_4_9", "sub_group": "4", "title": "4.9 Recyclabilité",
+    {"id": "sec_4_9", "sub_group": "4", "parent": "sec_4_intro", "title": "4.9 Recyclabilité",
      "removable": True, "editable": True, "default_body": SEC_4_9_BODY,
      "builder": _sec_4_9},
-    {"id": "sec_5", "title": "5. Contenu recyclé",
+    {"id": "sec_5", "is_main": True, "title": "5. Contenu recyclé",
      "removable": True, "editable": True, "default_body": SEC_5_BODY,
      "builder": _sec_5},
-    {"id": "sec_6", "title": "6. Base documentaire",
+    {"id": "sec_6", "is_main": True, "title": "6. Base documentaire",
      "removable": True, "editable": True, "default_body": SEC_6_BODY,
      "builder": _sec_6},
-    {"id": "sec_7", "title": "7. Responsabilité et validité",
+    {"id": "sec_7", "is_main": True, "title": "7. Responsabilité et validité",
      "removable": False, "editable": True, "default_body": SEC_7_BODY,
      "builder": _sec_7},
-    {"id": "sec_8", "title": "8. Signature et cachet",
+    {"id": "sec_8", "is_main": True, "title": "8. Signature et cachet",
      "removable": False, "editable": False, "default_body": "",
      "builder": _sec_8},
 ]
@@ -667,32 +667,65 @@ def _build_flowables(ctx, sections_overrides):
     story = _title_block(ctx)
     ov_all = sections_overrides or {}
 
-    # Pré-calcul : renumérotation dynamique des sous-sections du groupe "4"
-    # (si l'utilisateur exclut 4.2 par ex., 4.3 devient 4.2, etc.)
-    sub_counters = {}
-    sub_num_by_id = {}
-    for sec in SECTIONS_META:
-        group = sec.get("sub_group")
-        if not group:
-            continue
+    def _skipped(sec):
         ov = ov_all.get(sec["id"], {})
-        if sec["removable"] and ov.get("include") is False:
-            continue
-        sub_counters[group] = sub_counters.get(group, 0) + 1
-        sub_num_by_id[sec["id"]] = sub_counters[group]
+        return sec["removable"] and ov.get("include") is False
 
+    # Étape 1 : renumérotation dynamique des sections principales
+    # (retirer "2. Nature" → la suivante devient "2" au lieu de "3")
+    main_counter = 0
+    main_num_by_id = {}
     for sec in SECTIONS_META:
-        ov = ov_all.get(sec["id"], {})
-        # include=False → skip cette section (uniquement si removable)
-        if sec["removable"] and ov.get("include") is False:
+        if not sec.get("is_main"):
             continue
+        if _skipped(sec):
+            continue
+        main_counter += 1
+        main_num_by_id[sec["id"]] = main_counter
+
+    # Étape 2 : renumérotation des sous-sections (ex. 4.x)
+    # Pour chaque sous-section, on retient le num du parent (renuméroté)
+    # et un sub_num incrémenté au sein de ce parent.
+    sub_counters = {}   # parent_id → compteur
+    sub_info_by_id = {} # id → {"parent_num": int, "sub_num": int}
+    for sec in SECTIONS_META:
+        parent_id = sec.get("parent")
+        if not parent_id:
+            continue
+        if _skipped(sec):
+            continue
+        parent_num = main_num_by_id.get(parent_id)
+        if parent_num is None:
+            # Le parent a été retiré : on skip la sous-section aussi
+            continue
+        sub_counters[parent_id] = sub_counters.get(parent_id, 0) + 1
+        sub_info_by_id[sec["id"]] = {
+            "parent_num": parent_num,
+            "sub_num": sub_counters[parent_id],
+        }
+
+    # Étape 3 : rendu
+    for sec in SECTIONS_META:
+        if _skipped(sec):
+            continue
+        # Si sous-section dont le parent a été retiré : skip
+        parent_id = sec.get("parent")
+        if parent_id and parent_id not in main_num_by_id:
+            continue
+
         # custom_body → remplace le body par défaut (uniquement si editable)
         body = None
-        if sec["editable"] and ov.get("custom_body"):
-            body = str(ov["custom_body"]).strip() or None
-        # Si la section fait partie d'un sous-groupe, passer le numéro renuméroté
-        if sec["id"] in sub_num_by_id:
-            story.extend(sec["builder"](ctx, body, num=sub_num_by_id[sec["id"]]))
+        if sec["editable"] and ov_all.get(sec["id"], {}).get("custom_body"):
+            body = str(ov_all[sec["id"]]["custom_body"]).strip() or None
+
+        # Appeler le builder avec les bons kwargs de numérotation
+        if sec.get("is_main"):
+            story.extend(sec["builder"](ctx, body, num=main_num_by_id[sec["id"]]))
+        elif sec["id"] in sub_info_by_id:
+            info = sub_info_by_id[sec["id"]]
+            story.extend(sec["builder"](ctx, body,
+                                        parent_num=info["parent_num"],
+                                        sub_num=info["sub_num"]))
         else:
             story.extend(sec["builder"](ctx, body))
     return story

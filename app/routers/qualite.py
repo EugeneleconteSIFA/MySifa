@@ -3442,6 +3442,11 @@ def sifa_docs_get_template(code: str, request: Request):
                 d["fournisseurs_ids"] = json.loads(v["fournisseurs_ids_json"] or "[]")
             except Exception:
                 d["fournisseurs_ids"] = []
+            try:
+                import json
+                d["sections_overrides"] = json.loads(v["sections_overrides_json"] or "{}")
+            except Exception:
+                d["sections_overrides"] = {}
             if d["fournisseurs_ids"]:
                 fours = _fournisseurs_for_pdf(conn, d["fournisseurs_ids"])
                 d["fournisseurs"] = [

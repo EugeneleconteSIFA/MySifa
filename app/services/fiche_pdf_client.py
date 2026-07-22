@@ -180,12 +180,12 @@ _ADHESIF_TYPES = [
 # une valeur brute exotique côté client.
 _GLASSINE_TYPES = [
     # (regex insensible à la casse, label FR, label EN)
-    (r"jaun|yellow",                                     "Jaune Siliconnée",   "Yellow siliconised"),
-    (r"blanc|white",                                     "Blanche Siliconnée", "White siliconised"),
-    (r"kraft|brun|brown",                                "Kraft Siliconnée",   "Brown kraft siliconised"),
+    (r"jaun|yellow",                                     "Jaune Siliconnée",   "Yellow silicone glassine"),
+    (r"blanc|white",                                     "Blanche Siliconnée", "White silicone glassine"),
+    (r"kraft|brun|brown",                                "Kraft Siliconnée",   "Brown kraft silicone glassine"),
     (r"transparent|clear|pet\b|film",                    "Transparente (PET)", "Clear (PET film)"),
     (r"bopp|pp\s*film",                                  "BOPP",               "BOPP film"),
-    (r"silicon|silicone",                                "Jaune Siliconnée",   "Yellow siliconised"),
+    (r"silicon|silicone",                                "Jaune Siliconnée",   "Yellow silicone glassine"),
 ]
 
 
@@ -193,7 +193,7 @@ def _classify_glassine(raw: str) -> tuple[str, str]:
     """
     Extrait le type canonique d'une glassine.
 
-    Ex. 'Glassine jaune 60g' → ('Jaune Siliconnée',   'Yellow siliconised')
+    Ex. 'Glassine jaune 60g' → ('Jaune Siliconnée',   'Yellow silicone glassine')
         'GLASSINE BLANCHE'   → ('Blanche Siliconnée', 'White siliconised')
         'Kraft 65g'          → ('Kraft Siliconnée',   'Brown kraft siliconised')
 
@@ -208,7 +208,7 @@ def _classify_glassine(raw: str) -> tuple[str, str]:
         if re.search(pattern, s, flags=re.IGNORECASE):
             return (fr, en)
     # Défaut SIFA : jaune siliconnée (cas le plus fréquent)
-    return ("Jaune Siliconnée", "Yellow siliconised")
+    return ("Jaune Siliconnée", "Yellow silicone glassine")
 
 
 def _classify_adhesif(raw: str) -> tuple[str, str]:
