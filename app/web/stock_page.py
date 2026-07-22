@@ -2251,16 +2251,26 @@ function iconEl(name, size=16){
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
   if (attrs) {
-    const { cls, className, on, style: s, html, ...rest } = attrs;
+    const { cls, className, on, style: s, html, attrs: subAttrs, ...rest } = attrs;
     const cn = cls || className;
     if (cn) e.className = cn;
     if (on) Object.entries(on).forEach(([ev,fn]) => e.addEventListener(ev, fn));
     if (s && typeof s === 'object') Object.assign(e.style, s);
     else if (typeof s === 'string') e.style.cssText = s;
     if (html) { e.innerHTML = html; }
+    // Support legacy attrs: { key: val } — extrait et applique via setAttribute
+    if (subAttrs && typeof subAttrs === 'object') {
+      Object.entries(subAttrs).forEach(([k,v]) => {
+        if (v === null || v === undefined || v === false) return;
+        if (k === 'disabled' && v) { e.disabled = true; return; }
+        if (k === 'id') { e.id = String(v); return; }
+        e.setAttribute(k, v);
+      });
+    }
     Object.entries(rest).forEach(([k,v]) => {
       if (v === null || v === undefined || v === false) return;
       if (k === 'disabled' && v) { e.disabled = true; return; }
+      if (k === 'id') { e.id = String(v); return; }
       e.setAttribute(k, v);
     });
   }
@@ -14049,9 +14059,9 @@ function renderReceptionMiniModal() {
 
   const overlay = el('div', {
     cls: 'recep-mini-overlay',
-    attrs: { id: 'recep-mini-overlay' },
     on: { click: (e) => { if (e.target === overlay) closeReceptionMiniModal(); } },
   });
+  overlay.id = 'recep-mini-overlay';
   const modal = el('div', { cls: 'recep-mini-modal', on: { click: (e) => e.stopPropagation() } });
 
   // ── Header ──
@@ -14063,7 +14073,7 @@ function renderReceptionMiniModal() {
     el('button', {
       cls: 'recep-mini-close',
       type: 'button',
-      attrs: { title: 'Fermer' },
+      title: 'Fermer',
       on: { click: () => {
         if (S.recepItems.length > 0 && !confirm('Fermer sans valider ? Les ' + S.recepItems.length + ' bobine(s) scannée(s) seront perdues.')) return;
         S.recepItems = [];
@@ -14118,7 +14128,7 @@ function renderReceptionMiniModal() {
   );
   const manInp = el('input', {
     cls: 'recep-manual-inp',
-    attrs: { type: 'text', placeholder: 'Code-barres — puis Entrée', autocomplete: 'off', spellcheck: 'false' },
+    type: 'text', placeholder: 'Code-barres — puis Entrée', autocomplete: 'off', spellcheck: 'false',
   });
   manInp.value = S.recepManual || '';
   manInp.addEventListener('input', e => { S.recepManual = e.target.value; });
@@ -14190,7 +14200,7 @@ function renderReceptionMiniModal() {
     el('button', {
       cls: 'btn-recep btn-recep-success',
       type: 'button',
-      attrs: canValid ? {} : { disabled: 'disabled' },
+      disabled: !canValid,
       style: canValid ? {} : { opacity: '0.5', cursor: 'not-allowed' },
       on: { click: recepValider },
     }, iconEl('check-circle', 15), ' Valider (' + S.recepItems.length + ')'),
@@ -14728,7 +14738,7 @@ function buildReceptionPicker(lockedMatiere) {
   laiField.appendChild(laiSel);
   if (S.recepLaizeCustomOn) {
     const inp = el('input', {
-      attrs: { type: 'number', step: '0.1', min: '1', placeholder: 'Valeur en mm (ex: 425)', autocomplete: 'off' },
+      type: 'number', step: '0.1', min: '1', placeholder: 'Valeur en mm (ex: 425)', autocomplete: 'off',
     });
     inp.value = S.recepLaizeCustomMm || '';
     inp.addEventListener('input', e => { S.recepLaizeCustomMm = e.target.value; });
@@ -14777,6 +14787,11 @@ function buildReceptionNouvelle() {
     },
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
+
+  // ── Picker Catégorie / Matière / Laize (mode structuré) ──
+  if (!S.recepModalMode) {
+    block.appendChild(buildReceptionPicker(false));
+  }
 
   // ── Grille scanner + saisie manuelle ──
   const grid = el('div', { cls: 'recep-layout' });
