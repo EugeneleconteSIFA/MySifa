@@ -666,11 +666,16 @@
   async function _poll() {
     const r = await _fetchActive();
     const items = (r && Array.isArray(r.items)) ? r.items : [];
-    // v2.2.66 : ferme visuellement les alertes qui ne sont plus renvoyées
-    // par le serveur (ack automatique côté backend — arrêt machine, fin dossier).
+    // v2.2.66 + v2.3.8 : ferme visuellement les alertes qui ne sont plus
+    // renvoyées par le serveur, MAIS bypasse les alertes bloquantes affichées
+    // via 423 (elles ne sont pas dans /alerts/active — c'est normal).
     const activeIds = new Set(items.map(it => it.id));
     for (const [dispId, wrap] of Array.from(_displayed.entries())) {
       if (!activeIds.has(dispId)) {
+        // Bypass : alertes bloquantes affichées via showBlockingAlerts
+        if (wrap && wrap.getAttribute && wrap.getAttribute('data-blocking-alert') === '1') {
+          continue;
+        }
         try { if (wrap && wrap.remove) wrap.remove(); } catch (e) {}
         _displayed.delete(dispId);
       }
@@ -693,10 +698,9 @@
     }
   }
 
-  // v2.2.89 : afficher des alertes bloquantes récupérées par le front (via /blocking-for-machine)
+  // v2.2.89 : afficher des alertes bloquantes récupérées par le front (via 423)
   async function _showBlockingAlerts(items) {
     if (!Array.isArray(items) || !items.length) return;
-    // S'assure que les settings sont chargés (backdrop, placement...)
     if (!_started) {
       try { await _loadSettings(); } catch(e){}
     }
@@ -704,6 +708,10 @@
       if (_displayed.has(raw.id)) continue;
       const alert = _normalizeAlert(raw);
       const wrap = _renderAlert(alert);
+      // v2.3.8 : marqueur "blocking" pour bypass le cleanup du poll classique.
+      // Les alertes after_calage ne sont pas dans /alerts/active donc le poll
+      // les supprimerait toutes les 15s sans ce flag.
+      wrap.setAttribute('data-blocking-alert', '1');
       _displayed.set(raw.id, wrap);
     }
   }
