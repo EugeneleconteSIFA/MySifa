@@ -1636,6 +1636,37 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
   padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
 
 /* ── Réception matière ─────────────────────────────────────── */
+.recep-picker-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.recep-picker-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.recep-picker-row{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;align-items:end}
+@media(max-width:800px){.recep-picker-row{grid-template-columns:1fr}}
+.recep-picker-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.recep-picker-field label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.recep-picker-sel{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
+.recep-picker-sel:focus{border-color:var(--accent)}
+.recep-picker-sel[disabled]{opacity:.45;cursor:not-allowed}
+.recep-picker-hint{font-size:11px;color:var(--muted);margin-top:2px}
+.recep-picker-custom{display:flex;gap:6px;align-items:center;margin-top:4px}
+.recep-picker-custom input{flex:1;background:var(--bg);border:1.5px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;outline:none}
+.recep-picker-custom button{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text2);cursor:pointer}
+.recep-picker-locked{background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-weight:600;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.recep-picker-locked-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.recep-picker-locked-ref{font-family:monospace;font-size:13px;color:var(--accent)}
+.recep-picker-locked-des{font-size:11px;color:var(--text2);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recep-mat-badge{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.recep-mat-cell{display:flex;flex-direction:column;gap:1px;min-width:0}
+.recep-mat-cell-ref{font-family:monospace;font-size:12px;color:var(--text);font-weight:600}
+.recep-mat-cell-lai{font-size:11px;color:var(--text2)}
+.recep-mat-cell-empty{color:var(--muted);font-style:italic;font-size:12px}
+/* Modal simplifié fiche matière */
+.recep-mini-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.recep-mini-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:640px;width:100%;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.recep-mini-head{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding-bottom:12px}
+.recep-mini-head-title{font-size:15px;font-weight:700;color:var(--text)}
+.recep-mini-head-sub{font-size:12px;color:var(--muted);font-family:monospace;margin-top:2px}
+.recep-mini-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0 6px;line-height:1}
+.recep-mini-close:hover{color:var(--danger)}
+
 .recep-page{padding:14px 20px 20px;max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .recep-head-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;width:100%;margin-bottom:2px}
 .recep-head-row .recep-title{flex:0 0 auto;min-width:0;margin:0}
@@ -1890,6 +1921,20 @@ let S = {
   recepFournisseurOpen: false, // dropdown ouvert
   recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
   recepLastLot: null,      // dernier lot créé (pour modale impression étiquettes)
+  // Réception structurée par matière (v2)
+  recepMatieresLaizees: null,  // cache des matières laizées {matieres: [...]}
+  recepMatieresLoading: false,
+  recepCategorie: '',      // 'frontal' | 'glassine' | 'complexe'
+  recepMatiereId: null,    // id matière sélectionnée pour la prochaine bobine
+  recepMatiereRef: '',     // référence matière (affichage)
+  recepMatiereDes: '',     // désignation matière (affichage)
+  recepLaizeId: null,      // laize id sélectionnée
+  recepLaizeLabel: '',     // label affiché (ex: "333 mm")
+  recepLaizeValeurMm: null,// valeur mm (redondant, sert au format autre)
+  recepLaizeCustomOn: false,// mode saisie "autre laize"
+  recepLaizeCustomMm: '',  // valeur saisie manuellement
+  recepModalMode: false,   // true = modal simplifié depuis fiche matière
+  recepModalMatiere: null, // matière verrouillée en mode modal
   // Inventaire matière (par référence)
   matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
   matInvLoading: false,
@@ -5403,6 +5448,17 @@ function buildMatiereDetail() {
         type: 'button',
         on: { click: () => openModalMouvement('entree', m) },
       }, '↓ Entrée'),
+    );
+    // Bouton Réception : réservé aux matières laizées (frontal/glassine/complexe)
+    if (m.laizee) {
+      actionBtns.push(el('button', {
+        cls: 'mp-act-btn',
+        type: 'button',
+        style: { background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)', fontWeight: '700' },
+        on: { click: () => openReceptionMatiereModal(m) },
+      }, iconEl('truck', 14), ' Réception'));
+    }
+    actionBtns.push(
       el('button', {
         cls: 'mp-act-btn mp-act-sortie',
         type: 'button',
@@ -13572,14 +13628,102 @@ async function loadRecepHistory() {
   S.recepHistLoading = false; renderContent();
 }
 
+// ── Réception structurée : chargement matières laizées + reset selecteurs ──
+async function loadReceptionMatieres(force) {
+  if (S.recepMatieresLaizees && !force) return S.recepMatieresLaizees;
+  if (S.recepMatieresLoading) return null;
+  S.recepMatieresLoading = true;
+  try {
+    const d = await api('/api/stock/matieres/laizees');
+    S.recepMatieresLaizees = d || { matieres: [] };
+  } catch(e) {
+    showToast('Erreur chargement matières : ' + e.message, 'error');
+    S.recepMatieresLaizees = { matieres: [] };
+  }
+  S.recepMatieresLoading = false;
+  return S.recepMatieresLaizees;
+}
+
+function recepFilterMatieres(categorie) {
+  const data = S.recepMatieresLaizees;
+  if (!data || !data.matieres) return [];
+  if (!categorie) return data.matieres;
+  return data.matieres.filter(m => m.categorie === categorie);
+}
+
+function recepFindMatiere(matiereId) {
+  const data = S.recepMatieresLaizees;
+  if (!data || !data.matieres || !matiereId) return null;
+  return data.matieres.find(m => m.id === parseInt(matiereId, 10)) || null;
+}
+
+function recepPickCategorie(cat) {
+  S.recepCategorie = cat || '';
+  S.recepMatiereId = null; S.recepMatiereRef = ''; S.recepMatiereDes = '';
+  S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  renderContent();
+}
+
+function recepPickMatiere(mid) {
+  const m = recepFindMatiere(mid);
+  if (!m) { S.recepMatiereId = null; S.recepMatiereRef = ''; S.recepMatiereDes = ''; renderContent(); return; }
+  S.recepMatiereId = m.id;
+  S.recepMatiereRef = m.reference || '';
+  S.recepMatiereDes = m.designation || '';
+  S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  renderContent();
+}
+
+function recepPickLaize(lid) {
+  if (lid === '__custom__') {
+    S.recepLaizeCustomOn = true; S.recepLaizeCustomMm = '';
+    S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+    renderContent();
+    return;
+  }
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  const m = recepFindMatiere(S.recepMatiereId);
+  if (!m) return;
+  const l = (m.laizes || []).find(x => x.id === parseInt(lid, 10));
+  if (!l) { S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null; renderContent(); return; }
+  S.recepLaizeId = l.id;
+  S.recepLaizeLabel = l.label || (l.valeur_mm + ' mm');
+  S.recepLaizeValeurMm = l.valeur_mm;
+  renderContent();
+}
+
 function recepAddCode(code) {
   const c = (code || '').trim();
   if (!c) return;
-  // Doublon dans la session en cours → juste signaler, on ajoute quand même (deux bobines peuvent avoir le même code dans des cas rares)
+  // Validation matière + laize (obligatoire dès qu'on a activé le mode structuré)
+  // En mode modal simplifié, la matière est verrouillée via S.recepMatiereId — pas besoin de la ré-vérifier ici.
+  if (!S.recepMatiereId) {
+    showToast('Choisis une matière avant d\'ajouter une bobine.', 'error');
+    return;
+  }
+  if (!S.recepLaizeId && !(S.recepLaizeCustomOn && parseFloat(S.recepLaizeCustomMm) > 0)) {
+    showToast('Choisis une laize avant d\'ajouter une bobine.', 'error');
+    return;
+  }
   const isDup = S.recepItems.some(i => i.code === c);
   const now = new Date();
   const ts = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  S.recepItems = [...S.recepItems, { code: c, ts, isNew: true, isDup }];
+  // Snapshot des selecteurs actuels — ils resteront pre-remplis pour la bobine suivante
+  const laizeValeurMm = S.recepLaizeCustomOn ? parseFloat(S.recepLaizeCustomMm) : (S.recepLaizeValeurMm || null);
+  const laizeLabel = S.recepLaizeCustomOn ? (parseFloat(S.recepLaizeCustomMm) + ' mm (nouvelle)') : (S.recepLaizeLabel || '');
+  const item = {
+    code: c, ts, isNew: true, isDup,
+    categorie: S.recepCategorie,
+    matiere_id: S.recepMatiereId,
+    matiere_ref: S.recepMatiereRef,
+    matiere_designation: S.recepMatiereDes,
+    laize_id: S.recepLaizeCustomOn ? null : S.recepLaizeId,
+    laize_label: laizeLabel,
+    laize_valeur_mm: laizeValeurMm,
+  };
+  S.recepItems = [...S.recepItems, item];
   // Effacer le flag "nouveau" après 600ms (animation CSS)
   setTimeout(() => {
     S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
@@ -13788,11 +13932,18 @@ async function recepValider() {
   }
   try {
     const codes = S.recepItems.map(i => i.code);
+    const items = S.recepItems.map(i => {
+      const it = { code: i.code };
+      if (i.matiere_id) it.matiere_id = i.matiere_id;
+      if (i.laize_id) it.laize_id = i.laize_id;
+      else if (i.laize_valeur_mm) it.laize_valeur_mm = i.laize_valeur_mm;
+      return it;
+    });
     const d = await api('/api/stock/receptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        codes,
+        items,
         note: S.recepNote,
         fournisseur: S.recepFournisseur,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
@@ -13818,9 +13969,20 @@ async function recepValider() {
       };
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
+      // Reset selecteurs de reception structuree (categorie/matiere/laize)
+      // En mode modal simplifie on ferme la modal apres validation
+      if (S.recepModalMode) {
+        S.recepModalMode = false;
+        S.recepModalMatiere = null;
+        closeReceptionMiniModal();
+      }
+      S.recepCategorie = '';
+      S.recepMatiereId = null; S.recepMatiereRef = ''; S.recepMatiereDes = '';
+      S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+      S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
       recepStopCamera();
       await loadRecepHistory();
-      // Ouvrir la modale d'impression étiquettes d'identification (léger délai pour laisser le toast s'afficher)
+      // Ouvrir la modale d'impression etiquettes d'identification (leger delai pour laisser le toast s'afficher)
       setTimeout(() => recepShowPrintModal(S.recepLastLot), 320);
     }
   } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
@@ -13837,6 +13999,223 @@ function recepBuildLotPreview(fournisseur, fscClaim, dt) {
   const fsc = fscMap[fscClaim] || 'NFSC';
   return 'LOT-' + dateStr + '-' + hourStr + '-' + fourn + '-' + fsc;
 }
+
+// ─── Modal simplifié Réception depuis une fiche matière ──────────────────
+// Matière pré-verrouillée, choix laize + scan/saisie manuelle des bobines.
+// Réutilise l'infrastructure existante (recepAddCode, recepValider) via S.recepModalMode.
+async function openReceptionMatiereModal(matiere) {
+  if (!matiere || !matiere.id) return;
+  // Si des bobines sont déjà en cours de scan pour une autre matière, prévenir
+  if (S.recepItems && S.recepItems.length > 0 && S.recepMatiereId && S.recepMatiereId !== matiere.id) {
+    if (!confirm('Une réception est déjà en cours pour une autre matière (' + S.recepItems.length + ' bobine' + (S.recepItems.length > 1 ? 's' : '') + '). La vider et démarrer une nouvelle réception ?')) return;
+    S.recepItems = [];
+  }
+  // Verrouiller la matière dans l'état partagé
+  S.recepModalMode = true;
+  S.recepModalMatiere = matiere;
+  S.recepCategorie = matiere.categorie || '';
+  S.recepMatiereId = matiere.id;
+  S.recepMatiereRef = matiere.reference || '';
+  S.recepMatiereDes = matiere.designation || '';
+  // Pré-remplir la laize si la matière n'en a qu'une seule
+  const laizes = Array.isArray(matiere.stock_par_laize) ? matiere.stock_par_laize : [];
+  if (laizes.length === 1) {
+    S.recepLaizeId = laizes[0].laize_id;
+    S.recepLaizeLabel = laizes[0].label || (laizes[0].valeur_mm + ' mm');
+    S.recepLaizeValeurMm = laizes[0].valeur_mm;
+  } else {
+    S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+  }
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  // Charger le cache des matières laizées (nécessaire pour recepFindMatiere → laizes)
+  await loadReceptionMatieres();
+  renderReceptionMiniModal();
+}
+
+function closeReceptionMiniModal() {
+  const ov = document.getElementById('recep-mini-overlay');
+  if (ov) ov.remove();
+  S.recepModalMode = false;
+  S.recepModalMatiere = null;
+  // On ne reset PAS les autres champs — l'utilisateur peut vouloir aller sur l'onglet
+  // Réception matière et continuer. Le reset complet se fait au moment de la validation.
+}
+
+function renderReceptionMiniModal() {
+  const existing = document.getElementById('recep-mini-overlay');
+  if (existing) existing.remove();
+  if (!S.recepModalMode) return;
+  const m = S.recepModalMatiere || {};
+
+  const overlay = el('div', {
+    cls: 'recep-mini-overlay',
+    attrs: { id: 'recep-mini-overlay' },
+    on: { click: (e) => { if (e.target === overlay) closeReceptionMiniModal(); } },
+  });
+  const modal = el('div', { cls: 'recep-mini-modal', on: { click: (e) => e.stopPropagation() } });
+
+  // ── Header ──
+  const head = el('div', { cls: 'recep-mini-head' },
+    el('div', null,
+      el('div', { cls: 'recep-mini-head-title' }, 'Réception — ' + (m.designation || m.reference || 'matière')),
+      el('div', { cls: 'recep-mini-head-sub' }, (m.categorie || '').toUpperCase() + ' · ' + (m.reference || '')),
+    ),
+    el('button', {
+      cls: 'recep-mini-close',
+      type: 'button',
+      attrs: { title: 'Fermer' },
+      on: { click: () => {
+        if (S.recepItems.length > 0 && !confirm('Fermer sans valider ? Les ' + S.recepItems.length + ' bobine(s) scannée(s) seront perdues.')) return;
+        S.recepItems = [];
+        closeReceptionMiniModal();
+      } },
+    }, '✕'),
+  );
+  modal.appendChild(head);
+
+  // ── Picker (matière verrouillée) ──
+  modal.appendChild(buildReceptionPicker(true));
+
+  // ── Fournisseur + FSC (simplifié — sélecteur natif) ──
+  const fournWrap = el('div', { cls: 'recep-fourn-wrap' });
+  fournWrap.appendChild(el('div', { cls: 'recep-fourn-label' },
+    iconEl('truck', 13), ' Fournisseur',
+    el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'),
+  ));
+  const fournSel = document.createElement('select');
+  fournSel.className = 'recep-picker-sel';
+  const optE = document.createElement('option');
+  optE.value = ''; optE.textContent = '— Choisir un fournisseur —';
+  fournSel.appendChild(optE);
+  (Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : []).forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.nom; o.textContent = f.nom + (f.certificat ? ' — ' + f.certificat : '');
+    if (S.recepFournisseur === f.nom) o.selected = true;
+    fournSel.appendChild(o);
+  });
+  fournSel.addEventListener('change', (e) => {
+    S.recepFournisseur = e.target.value || '';
+    renderReceptionMiniModal();
+  });
+  fournWrap.appendChild(fournSel);
+  const fscTypeSel = document.createElement('select');
+  fscTypeSel.className = 'recep-picker-sel';
+  fscTypeSel.style.marginTop = '6px';
+  [['non_fsc', 'Non FSC'], ['fsc_100', 'FSC 100%'], ['fsc_mix_credit', 'FSC Mix Credit'],
+   ['fsc_mix', 'FSC Mix'], ['fsc_recycled', 'FSC Recycled']].forEach(([v, lbl]) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = lbl;
+    if ((S.recepFscTypeClaim || 'fsc_mix') === v) o.selected = true;
+    fscTypeSel.appendChild(o);
+  });
+  fscTypeSel.addEventListener('change', (e) => { S.recepFscTypeClaim = e.target.value; renderReceptionMiniModal(); });
+  fournWrap.appendChild(fscTypeSel);
+  modal.appendChild(fournWrap);
+
+  // ── Saisie manuelle (mode principal) + scan optionnel ──
+  const inputCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Ajouter une bobine (scan ou saisie)'),
+  );
+  const manInp = el('input', {
+    cls: 'recep-manual-inp',
+    attrs: { type: 'text', placeholder: 'Code-barres — puis Entrée', autocomplete: 'off', spellcheck: 'false' },
+  });
+  manInp.value = S.recepManual || '';
+  manInp.addEventListener('input', e => { S.recepManual = e.target.value; });
+  manInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; e.target.value = ''; e.target.focus(); renderReceptionMiniModal(); setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50); }
+    }
+  });
+  const addBtn = el('button', {
+    cls: 'btn-recep btn-recep-primary',
+    type: 'button',
+    on: { click: () => {
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; manInp.value = ''; renderReceptionMiniModal(); setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50); }
+    } },
+  }, '+ Ajouter');
+  const scanBtn = el('button', {
+    cls: 'btn-recep btn-recep-ghost',
+    type: 'button',
+    on: { click: recepStartCamera },
+  }, iconEl('scan', 14), ' Scanner');
+  inputCard.appendChild(el('div', { cls: 'recep-manual-wrap', style: { display: 'flex', gap: '6px' } }, manInp, addBtn, scanBtn));
+  modal.appendChild(inputCard);
+
+  // ── Tableau bobines ajoutees (compact) ──
+  const listCard = el('div', { cls: 'recep-card' },
+    el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' } },
+      el('div', { cls: 'recep-card-title' }, iconEl('package', 14), ' Bobines à réceptionner'),
+      el('div', { cls: 'recep-count' }, 'Total : ', el('strong', null, String(S.recepItems.length)))),
+  );
+  if (S.recepItems.length === 0) {
+    listCard.appendChild(el('div', { cls: 'recep-empty' }, 'Aucune bobine ajoutée. Choisis la laize et scanne / saisis un code-barres.'));
+  } else {
+    const table = el('table', { cls: 'recep-table' });
+    table.appendChild(el('thead', null, el('tr', null,
+      el('th', null, '#'), el('th', null, 'Code'), el('th', null, 'Laize'), el('th', null, 'Heure'), el('th', null, ''),
+    )));
+    const tbody = el('tbody');
+    S.recepItems.forEach((it, i) => {
+      tbody.appendChild(el('tr', { cls: it.isNew ? 'recep-row-new' : '' },
+        el('td', null, String(i + 1)),
+        el('td', null, el('span', { cls: 'recep-code' }, it.code)),
+        el('td', null, it.laize_label || (it.laize_valeur_mm ? it.laize_valeur_mm + ' mm' : '—')),
+        el('td', null, it.ts),
+        el('td', null, el('button', {
+          cls: 'recep-del-btn',
+          type: 'button',
+          on: { click: () => { S.recepItems = S.recepItems.filter((_, j) => j !== i); renderReceptionMiniModal(); } },
+        }, '✕')),
+      ));
+    });
+    table.appendChild(tbody);
+    listCard.appendChild(el('div', { cls: 'recep-table-wrap' }, table));
+  }
+  modal.appendChild(listCard);
+
+  // ── Boutons Valider / Annuler ──
+  const canValid = S.recepItems.length > 0 && !!S.recepFournisseur;
+  const actions = el('div', { cls: 'recep-actions' },
+    el('button', {
+      cls: 'btn-recep btn-recep-muted',
+      type: 'button',
+      on: { click: () => {
+        if (S.recepItems.length > 0 && !confirm('Annuler la réception ? Les ' + S.recepItems.length + ' bobine(s) scannée(s) seront perdues.')) return;
+        S.recepItems = [];
+        closeReceptionMiniModal();
+      } },
+    }, 'Annuler'),
+    el('button', {
+      cls: 'btn-recep btn-recep-success',
+      type: 'button',
+      attrs: canValid ? {} : { disabled: 'disabled' },
+      style: canValid ? {} : { opacity: '0.5', cursor: 'not-allowed' },
+      on: { click: recepValider },
+    }, iconEl('check-circle', 15), ' Valider (' + S.recepItems.length + ')'),
+  );
+  modal.appendChild(actions);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  // Focus l'input codebarre pour saisie immédiate
+  setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50);
+}
+
+// Wrapper : quand on est en mode modal, on re-render la modal après chaque renderContent
+// (patch discret pour ne pas casser l'existant : après un renderContent, si mode modal actif → refresh modal)
+(function() {
+  const origRender = typeof renderContent === 'function' ? renderContent : null;
+  if (!origRender) return;
+  window.__origRenderContent = origRender;
+  window.renderContent = function() {
+    origRender.apply(this, arguments);
+    if (S.recepModalMode) {
+      try { renderReceptionMiniModal(); } catch(e) { console.error('renderReceptionMiniModal:', e); }
+    }
+  };
+})();
 
 // ── Modale impression étiquettes après validation ──
 function recepShowPrintModal(lot, isReprint) {
@@ -14249,6 +14628,132 @@ function buildReception() {
 }
 
 // ── Sous-onglet : Faire une réception ─────────────────────────────
+// ── Picker Catégorie/Matière/Laize partagé entre onglet et modal simplifié ──
+// lockedMatiere = true → matière verrouillée (mode modal fiche matière)
+function buildReceptionPicker(lockedMatiere) {
+  const wrap = el('div', { cls: 'recep-picker-card' });
+  wrap.appendChild(el('div', { cls: 'recep-picker-title' },
+    iconEl('package', 14), ' Bobine en cours — matière & laize',
+    S.recepMatieresLoading
+      ? el('span', { style: { fontSize: '11px', color: 'var(--muted)', marginLeft: '8px' } }, '(chargement…)')
+      : null,
+  ));
+
+  if (!S.recepMatieresLaizees && !S.recepMatieresLoading) {
+    loadReceptionMatieres().then(() => renderContent());
+  }
+
+  const row = el('div', { cls: 'recep-picker-row' });
+
+  // ── Bloc CATÉGORIE ──
+  const catField = el('div', { cls: 'recep-picker-field' });
+  catField.appendChild(el('label', null, 'Catégorie'));
+  if (lockedMatiere) {
+    catField.appendChild(el('div', { cls: 'recep-picker-locked' },
+      el('span', { cls: 'recep-mat-badge' },
+        (S.recepCategorie || '').toUpperCase() || '—')
+    ));
+  } else {
+    const catSel = document.createElement('select');
+    catSel.className = 'recep-picker-sel';
+    [['', '— Choisir —'], ['complexe', 'Complexe'], ['frontal', 'Frontal'], ['glassine', 'Glassine']].forEach(([v, lbl]) => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = lbl;
+      if (S.recepCategorie === v) o.selected = true;
+      catSel.appendChild(o);
+    });
+    catSel.addEventListener('change', (e) => recepPickCategorie(e.target.value));
+    catField.appendChild(catSel);
+  }
+  row.appendChild(catField);
+
+  // ── Bloc MATIÈRE ──
+  const matField = el('div', { cls: 'recep-picker-field' });
+  matField.appendChild(el('label', null, 'Matière'));
+  if (lockedMatiere) {
+    matField.appendChild(el('div', { cls: 'recep-picker-locked' },
+      el('div', { cls: 'recep-picker-locked-info' },
+        el('div', { cls: 'recep-picker-locked-ref' }, S.recepMatiereRef || '—'),
+        S.recepMatiereDes ? el('div', { cls: 'recep-picker-locked-des' }, S.recepMatiereDes) : null,
+      ),
+      iconEl('lock', 14),
+    ));
+  } else {
+    const mats = recepFilterMatieres(S.recepCategorie);
+    const matSel = document.createElement('select');
+    matSel.className = 'recep-picker-sel';
+    if (!S.recepCategorie) matSel.disabled = true;
+    const optEmpty = document.createElement('option');
+    optEmpty.value = ''; optEmpty.textContent = S.recepCategorie ? '— Choisir une matière —' : '— Choisir catégorie d\'abord —';
+    matSel.appendChild(optEmpty);
+    mats.forEach(m => {
+      const o = document.createElement('option');
+      o.value = String(m.id);
+      o.textContent = m.reference + (m.designation ? ' — ' + m.designation : '');
+      if (S.recepMatiereId === m.id) o.selected = true;
+      matSel.appendChild(o);
+    });
+    matSel.addEventListener('change', (e) => recepPickMatiere(e.target.value));
+    matField.appendChild(matSel);
+    if (S.recepCategorie && !mats.length) {
+      matField.appendChild(el('div', { cls: 'recep-picker-hint' },
+        'Aucune matière ' + S.recepCategorie + ' active — à créer dans le référentiel.'));
+    }
+  }
+  row.appendChild(matField);
+
+  // ── Bloc LAIZE ──
+  const laiField = el('div', { cls: 'recep-picker-field' });
+  laiField.appendChild(el('label', null, 'Laize'));
+  const m = recepFindMatiere(S.recepMatiereId);
+  const laizes = m ? (m.laizes || []) : [];
+  const laiSel = document.createElement('select');
+  laiSel.className = 'recep-picker-sel';
+  if (!S.recepMatiereId) laiSel.disabled = true;
+  const optE = document.createElement('option');
+  optE.value = ''; optE.textContent = S.recepMatiereId ? '— Choisir —' : '— Matière d\'abord —';
+  laiSel.appendChild(optE);
+  laizes.forEach(l => {
+    const o = document.createElement('option');
+    o.value = String(l.id);
+    o.textContent = l.label || (l.valeur_mm + ' mm');
+    if (S.recepLaizeId === l.id && !S.recepLaizeCustomOn) o.selected = true;
+    laiSel.appendChild(o);
+  });
+  const optCustom = document.createElement('option');
+  optCustom.value = '__custom__'; optCustom.textContent = '+ Autre laize (mm)';
+  if (S.recepLaizeCustomOn) optCustom.selected = true;
+  laiSel.appendChild(optCustom);
+  laiSel.addEventListener('change', (e) => recepPickLaize(e.target.value));
+  laiField.appendChild(laiSel);
+  if (S.recepLaizeCustomOn) {
+    const inp = el('input', {
+      attrs: { type: 'number', step: '0.1', min: '1', placeholder: 'Valeur en mm (ex: 425)', autocomplete: 'off' },
+    });
+    inp.value = S.recepLaizeCustomMm || '';
+    inp.addEventListener('input', e => { S.recepLaizeCustomMm = e.target.value; });
+    const cancel = el('button', {
+      type: 'button', attrs: { title: 'Annuler la laize personnalisée' },
+      on: { click: () => { S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = ''; renderContent(); } },
+    }, '✕');
+    laiField.appendChild(el('div', { cls: 'recep-picker-custom' }, inp, cancel));
+    laiField.appendChild(el('div', { cls: 'recep-picker-hint' },
+      'La laize sera créée dans les paramètres et rattachée à la matière.'));
+  }
+  row.appendChild(laiField);
+
+  wrap.appendChild(row);
+
+  const pret = !!(S.recepMatiereId && (S.recepLaizeId || (S.recepLaizeCustomOn && parseFloat(S.recepLaizeCustomMm) > 0)));
+  wrap.appendChild(el('div', { cls: 'recep-picker-hint',
+    style: { color: pret ? 'var(--success)' : 'var(--muted)', fontWeight: pret ? '600' : '500' } },
+    pret
+      ? '✓ Prêt à ajouter des bobines — les infos restent pré-remplies entre chaque ajout.'
+      : 'Choisis d\'abord catégorie → matière → laize pour ajouter des bobines.'));
+
+  return wrap;
+}
+
 function buildReceptionNouvelle() {
   const block = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
 
@@ -14460,17 +14965,27 @@ function buildReceptionNouvelle() {
     table.appendChild(el('thead', null, el('tr', null,
       el('th', null, '#'),
       el('th', null, 'Code-barres'),
+      el('th', null, 'Matière · Laize'),
       el('th', null, 'Heure'),
       el('th', null, '')
     )));
     const tbody = el('tbody');
     S.recepItems.forEach((item, i) => {
+      const matCell = item.matiere_id
+        ? el('div', { cls: 'recep-mat-cell' },
+            el('div', { cls: 'recep-mat-cell-ref' },
+              (item.categorie ? el('span', { cls: 'recep-mat-badge' }, item.categorie.toUpperCase()) : null),
+              ' ' + (item.matiere_ref || ('#' + item.matiere_id))),
+            el('div', { cls: 'recep-mat-cell-lai' }, item.laize_label || (item.laize_valeur_mm ? item.laize_valeur_mm + ' mm' : '—')),
+          )
+        : el('span', { cls: 'recep-mat-cell-empty' }, 'Sans matière');
       const tr = el('tr', { cls: item.isNew ? 'recep-row-new' : '' },
         el('td', null, String(i + 1)),
         el('td', null,
           el('span', { cls: 'recep-code' }, item.code),
           item.isDup ? el('span', { cls: 'recep-dup-badge' }, 'doublon') : null
         ),
+        el('td', null, matCell),
         el('td', null, item.ts),
         el('td', null, el('button', { cls: 'recep-del-btn', attrs: { title: 'Supprimer' }, on: { click: () => {
           S.recepItems = S.recepItems.filter((_, j) => j !== i);

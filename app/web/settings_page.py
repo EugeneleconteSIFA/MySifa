@@ -2276,8 +2276,29 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <h2 style="margin:0 0 4px">Formations &amp; guides in-app</h2>
             <p class="sub" style="margin:0;font-size:12px">Suivi des tutos lus dans MyQualité. Vous pouvez remettre à zéro un guide pour un utilisateur (il le reverra à sa prochaine visite).</p>
           </div>
-          <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-sec btn-sm" id="fmt-toggle-config" onclick="toggleGuidesConfigSection()">Activer / désactiver les guides</button>
+            <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
+          </div>
         </div>
+
+        <!-- Section activation / desactivation des guides -->
+        <div id="fmt-config-section" class="hidden" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0 0 2px;font-size:14px">Activation des guides</h3>
+              <p class="sub" style="margin:0;font-size:11.5px">Un guide désactivé disparaît de son onglet (bouton d'aide masqué) et ne s'ouvre plus automatiquement. La progression déjà enregistrée est conservée.</p>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(true)">Tout activer</button>
+              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(false)">Tout désactiver</button>
+            </div>
+          </div>
+          <div id="fmt-config-list" style="display:flex;flex-direction:column;gap:6px">
+            <div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>
+          </div>
+        </div>
+
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
           <input type="text" id="fmt-search" placeholder="Rechercher (nom, email, rôle, guide...)" autocomplete="off"
             style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
@@ -9297,6 +9318,111 @@ try {
   const rf = document.getElementById('fmt-refresh');
   if(rf) rf.onclick = () => loadFormationsAdmin();
 } catch(e){}
+
+
+// ─── Activation / désactivation des guides ────────────────────────
+let _fmtConfigData = null;   // { guides: [{guide_key, label, module, enabled, updated_at}, ...] }
+let _fmtConfigOpen = false;
+
+function toggleGuidesConfigSection(){
+  const sec = document.getElementById('fmt-config-section');
+  const btn = document.getElementById('fmt-toggle-config');
+  if(!sec) return;
+  _fmtConfigOpen = !_fmtConfigOpen;
+  sec.classList.toggle('hidden', !_fmtConfigOpen);
+  if(btn) btn.textContent = _fmtConfigOpen ? 'Fermer' : 'Activer / désactiver les guides';
+  if(_fmtConfigOpen && !_fmtConfigData) loadGuidesConfig();
+}
+
+async function loadGuidesConfig(){
+  const list = document.getElementById('fmt-config-list');
+  if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>';
+  try {
+    _fmtConfigData = await api('/api/guides/admin/config');
+    renderGuidesConfig();
+  } catch(e){
+    if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--danger,#ef4444)">Erreur chargement : '+ (e.message||'') +'</div>';
+  }
+}
+
+function renderGuidesConfig(){
+  const list = document.getElementById('fmt-config-list');
+  if(!list || !_fmtConfigData) return;
+  const guides = _fmtConfigData.guides || [];
+  if(!guides.length){
+    list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Aucun guide.</div>';
+    return;
+  }
+  list.innerHTML = guides.map(g => {
+    const checked = g.enabled ? 'checked' : '';
+    const stateLabel = g.enabled ? 'Actif' : 'Désactivé';
+    const stateColor = g.enabled ? 'var(--ok)' : 'var(--muted)';
+    return `<label style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;user-select:none">
+      <input type="checkbox" ${checked} data-guide-toggle="${esc(g.guide_key)}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
+        onchange="setGuideEnabled('${esc(g.guide_key).replace(/'/g,"\\'")}', this.checked)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${esc(g.label)}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:ui-monospace,monospace">${esc(g.module||'')}${g.module?' · ':''}${esc(g.guide_key)}</div>
+      </div>
+      <span data-guide-state="${esc(g.guide_key)}" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${stateColor};min-width:70px;text-align:right">${stateLabel}</span>
+    </label>`;
+  }).join('');
+}
+
+async function setGuideEnabled(guideKey, enabled){
+  // Optimistic UI : mettre a jour l'etat local + le pill
+  if(_fmtConfigData){
+    const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
+    if(g) g.enabled = !!enabled;
+  }
+  const stateEl = document.querySelector('[data-guide-state="'+guideKey.replace(/"/g,'\\"')+'"]');
+  if(stateEl){
+    stateEl.textContent = enabled ? 'Actif' : 'Désactivé';
+    stateEl.style.color = enabled ? 'var(--ok)' : 'var(--muted)';
+  }
+  try {
+    await api('/api/guides/admin/config', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({guide_key: guideKey, enabled: !!enabled})
+    });
+    toast(enabled ? 'Guide activé' : 'Guide désactivé');
+  } catch(e){
+    toast('Erreur enregistrement : ' + (e.message||''), true);
+    // Rollback
+    const cb = document.querySelector('[data-guide-toggle="'+guideKey.replace(/"/g,'\\"')+'"]');
+    if(cb) cb.checked = !enabled;
+    if(_fmtConfigData){
+      const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
+      if(g) g.enabled = !enabled;
+    }
+    if(stateEl){
+      stateEl.textContent = !enabled ? 'Actif' : 'Désactivé';
+      stateEl.style.color = !enabled ? 'var(--ok)' : 'var(--muted)';
+    }
+  }
+}
+
+async function setAllGuidesEnabled(enabled){
+  if(!_fmtConfigData) return;
+  const guides = _fmtConfigData.guides || [];
+  const targets = guides.filter(g => !!g.enabled !== !!enabled);
+  if(!targets.length){
+    toast(enabled ? 'Tous les guides sont déjà actifs' : 'Tous les guides sont déjà désactivés');
+    return;
+  }
+  if(!confirm((enabled ? 'Activer' : 'Désactiver') + ' les ' + targets.length + ' guide(s) restant(s) ?')) return;
+  for(const g of targets){
+    try {
+      await api('/api/guides/admin/config', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({guide_key: g.guide_key, enabled: !!enabled})
+      });
+      g.enabled = !!enabled;
+    } catch(e){ /* on continue */ }
+  }
+  renderGuidesConfig();
+  toast(enabled ? 'Guides activés' : 'Guides désactivés');
+}
 
 
 // ─── Appairage matières (bridge MyStock <-> Coûts matières) ────────────
