@@ -315,6 +315,14 @@ body.qualite-readonly .aud-aud-chip .x{display:none}
 .msg-input{flex:1;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;min-height:42px;max-height:160px;outline:none}
 .msg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
 
+/* ── Modal ── */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px 26px 22px;width:100%;max-width:520px;position:relative;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.modal.lg{max-width:720px}
+.modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:4px;border-radius:6px;transition:.15s}
+.modal-close:hover{color:var(--danger)}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:18px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
 /* Alias utilisés par les modaux Ressources fournisseurs / Audit matrice (openCertModal, openAuditPickerFournisseurs, openAuditPickerCertifs, openMatriceCellEditor) */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
