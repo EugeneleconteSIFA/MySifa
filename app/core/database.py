@@ -7300,21 +7300,77 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 203, "stock_reception_items_matiere_laize")
 
-
-
-    # v204 -- guides_config : activation/desactivation globale par guide_key.
-    # Permet a l'admin (Parametres > Formations & guides in-app) de masquer un
-    # guide pour tous les utilisateurs (bouton help cache + auto-open ignore).
+    # Migration 204 : MyQualité — Certifications SIFA (Déclarations UE, etc.)
+    #   - fournisseurs_fsc.pays_origine : origine géographique de la fabrication
+    #     (utilisé dans la section 3 de la Déclaration UE de Conformité)
+    #   - qualite_sifa_doc_templates : catalogue des templates de documents officiels
+    #     SIFA (aujourd'hui : Déclaration UE de Conformité). Extensible.
+    #   - qualite_sifa_doc_versions : une ligne par version générée pour un client.
+    #     Reliée à un audit_dossiers si le client a un audit ouvert, sinon nom libre.
+    #     Le PDF est stocké sur disque, chemin dans pdf_path.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=204 LIMIT 1").fetchone():
-        conn.execute("""CREATE TABLE IF NOT EXISTS guides_config (
-            guide_key TEXT PRIMARY KEY,
-            enabled INTEGER NOT NULL DEFAULT 1,
-            updated_at TEXT,
-            updated_by INTEGER,
-            FOREIGN KEY (updated_by) REFERENCES users(id)
-        )""")
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "pays_origine" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN pays_origine TEXT")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_sifa_doc_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                titre TEXT NOT NULL,
+                sous_titre TEXT,
+                description TEXT,
+                ref_prefix TEXT NOT NULL DEFAULT 'SIFA-DoC',
+                validite_mois INTEGER NOT NULL DEFAULT 12,
+                actif INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_sifa_doc_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id INTEGER NOT NULL REFERENCES qualite_sifa_doc_templates(id) ON DELETE CASCADE,
+                audit_id INTEGER REFERENCES audit_dossiers(id) ON DELETE SET NULL,
+                client_nom TEXT NOT NULL,
+                client_slug TEXT NOT NULL,
+                fournisseurs_ids_json TEXT NOT NULL DEFAULT '[]',
+                ref_document TEXT NOT NULL,
+                date_emission TEXT NOT NULL,
+                validite_mois INTEGER NOT NULL DEFAULT 12,
+                pdf_path TEXT,
+                notes TEXT,
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sifa_doc_versions_template ON qualite_sifa_doc_versions(template_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sifa_doc_versions_audit ON qualite_sifa_doc_versions(audit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sifa_doc_versions_client_slug ON qualite_sifa_doc_versions(client_slug)")
+
+        from datetime import datetime as _dt204
+        _now204 = _dt204.now().isoformat()
+        conn.execute(
+            "INSERT OR IGNORE INTO qualite_sifa_doc_templates "
+            "(code, titre, sous_titre, description, ref_prefix, validite_mois, actif, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ('declaration_ue',
+             'Déclaration UE de Conformité',
+             'EU Declaration of Conformity (DoC)',
+             "Déclaration de conformité aux règlements REACH, Proposition 65, métaux lourds "
+             "(94/62/CE), PFAS, bisphénols, PPWR. Une version est établie par client, listant "
+             "les fournisseurs de matière retenus pour ce client et leur origine géographique.",
+             'SIFA-DoC',
+             12,
+             1,
+             _now204)
+        )
+
         conn.commit()
-        _record_schema_migration(conn, 204, "guides_config")
+        _record_schema_migration(conn, 204, "sifa_certifications_declaration_ue")
+
 
 
 

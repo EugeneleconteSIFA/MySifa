@@ -25,11 +25,11 @@ def qualite_page(request: Request):
         raise
     # Acces module Qualite :
     # - Roles ROLES_QUALITE (superadmin/direction/administration) : acces complet
-    #   (NC, Canaux NC, Audits client, Referentiel RSE).
-    # - Roles ROLES_QUALITE_READONLY (commercial) : lecture seule NC/Canaux/Audits,
+    #   (NC, Certifications SIFA, Audits client, Referentiel RSE).
+    # - Roles ROLES_QUALITE_READONLY (commercial) : lecture seule NC/Audits/Certifs,
     #   pas d'ecriture. Les boutons sont masques via IS_QUALITE_READONLY cote JS.
     # - Autres roles connectes : acces limite au Referentiel en lecture/proposition.
-    #   Les tabs NC / Canaux / Audits sont masques via le flag IS_QUALITE_ADMIN cote JS.
+    #   Les tabs NC / Audits sont masques via le flag IS_QUALITE_ADMIN cote JS.
     is_admin = user["role"] in ROLES_QUALITE
     is_readonly = user["role"] in ROLES_QUALITE_READONLY
     html = (
@@ -263,7 +263,7 @@ body.light .ack-dot.done::after{border-left-color:#fff;border-bottom-color:#fff}
 .form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
 .form-textarea{resize:vertical;min-height:80px;line-height:1.5}
 .form-input[readonly]{background:transparent;cursor:default;color:var(--muted)}
-/* Rôle « commercial » : lecture seule sur NC/Canaux/Audits — on masque tout ce qui écrit,
+/* Rôle « commercial » : lecture seule sur NC/Audits — on masque tout ce qui écrit,
    on rend les champs de saisie non modifiables (curseur classique, pas de focus visuel). */
 body.qualite-readonly .qual-write{display:none !important}
 body.qualite-readonly .form-input,
@@ -315,34 +315,6 @@ body.qualite-readonly .aud-aud-chip .x{display:none}
 .msg-input{flex:1;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;min-height:42px;max-height:160px;outline:none}
 .msg-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.10)}
 
-/* ── Canaux panel ── */
-.canaux-fab{position:fixed;bottom:24px;right:24px;width:54px;height:54px;border-radius:999px;background:var(--accent);color:var(--btn-fg);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 28px rgba(34,211,238,.35);z-index:300;transition:transform .15s}
-.canaux-fab:hover{transform:scale(1.06)}
-.canaux-fab .fab-badge{position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;border-radius:999px;padding:2px 6px;min-width:18px;text-align:center}
-.canaux-panel{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:92vw;background:var(--card);border-left:1px solid var(--border);z-index:9500;transform:translateX(105%);transition:transform .2s ease;display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(0,0,0,.3)}
-.canaux-panel.open{transform:translateX(0)}
-.canaux-head{padding:18px 18px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.canaux-title{font-size:15px;font-weight:800;color:var(--text)}
-.canaux-title span{color:var(--accent)}
-.canaux-sub{font-size:11px;color:var(--muted);margin-top:2px}
-.canaux-close{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:6px;font-size:20px;line-height:1;transition:.15s}
-.canaux-close:hover{color:var(--danger)}
-.canaux-list{flex:1;overflow-y:auto;padding:10px}
-.canal-item{padding:12px 12px;border-radius:10px;cursor:pointer;transition:.12s;border:1px solid transparent;margin-bottom:4px}
-.canal-item:hover{background:var(--accent-bg);border-color:var(--accent)}
-.canal-item.unread{background:var(--accent-bg)}
-.canal-num{font-family:ui-monospace,monospace;font-size:11px;color:var(--accent);font-weight:700}
-.canal-titre{font-size:13px;font-weight:600;color:var(--text);margin-top:2px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.canal-time{font-size:10px;color:var(--muted);margin-top:4px;display:flex;justify-content:space-between}
-
-/* ── Modal ── */
-.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px 26px 22px;width:100%;max-width:520px;position:relative;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.5)}
-.modal.lg{max-width:720px}
-.modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:22px;line-height:1;padding:4px;border-radius:6px;transition:.15s}
-.modal-close:hover{color:var(--danger)}
-.modal-title{font-size:16px;font-weight:800;margin-bottom:18px}
-.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
 /* Alias utilisés par les modaux Ressources fournisseurs / Audit matrice (openCertModal, openAuditPickerFournisseurs, openAuditPickerCertifs, openMatriceCellEditor) */
 .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px}
 .modal-hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
@@ -389,11 +361,6 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       Non-conformités
       <span class="nav-badge" id="sb-unread" style="display:none">0</span>
     </button>
-    <button type="button" class="nav-btn" id="nav-canaux" onclick="toggleCanaux()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-      Canaux NC
-      <span class="nav-badge" id="sb-unread2" style="display:none">0</span>
-    </button>
     <button type="button" class="nav-btn" id="nav-audits" onclick="setView('audits-list')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
       Audits client
@@ -403,6 +370,10 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
       Ressources fournisseurs
       <span class="nav-badge" id="sb-ressources" style="display:none">0</span>
+    </button>
+    <button type="button" class="nav-btn" id="nav-sifa-docs" onclick="setView('sifa-docs-list')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="15" r="3"/><path d="M12 12v-1"/></svg>
+      Certifications SIFA
     </button>
     <button type="button" class="nav-btn" id="nav-ref" onclick="setView('ref-list')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
@@ -442,23 +413,6 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
     <div class="content" id="content"></div>
   </main>
 </div>
-
-<!-- Panneau Canaux -->
-<div class="canaux-panel" id="canaux-panel">
-  <div class="canaux-head">
-    <div>
-      <div class="canaux-title">My<span>Qualité</span> · Canaux</div>
-      <div class="canaux-sub">NC ouvertes avec discussion</div>
-    </div>
-    <button class="canaux-close" onclick="closeCanaux()">×</button>
-  </div>
-  <div class="canaux-list" id="canaux-list"></div>
-</div>
-
-<button class="canaux-fab" onclick="toggleCanaux()" title="Canaux NC">
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-  <span class="fab-badge" id="fab-badge" style="display:none">0</span>
-</button>
 
 <!-- Modal création NC -->
 <div class="modal-ov" id="create-modal" style="display:none" onclick="if(event.target===this)closeCreateModal()">
@@ -592,7 +546,6 @@ const S = {
   current: null,         // NC complet quand en détail
   currentFiles: [],
   currentMessages: [],
-  canaux: [],
   unread: 0,
   filterStatut: 'all',
   filterType: 'all',
@@ -648,6 +601,11 @@ const S = {
   // myAckService : clé du service NC du user courant (ou null s'il n'en a pas)
   ackServices: [],
   myAckService: null,
+  // ── Certifications SIFA (v0.7) ─────────────────────────────────
+  sifaDocsTemplates: [],       // liste des templates disponibles
+  currentSifaDoc: null,        // {template:{...}, versions:[...]} — vue détail
+  sifaDocsPickers: null,       // {audits, fournisseurs} pour le modal génération
+  sifaDocsSearch: '',
   // ── Ressources Fournisseurs (v1.6) ─────────────────────────────
   resList: [],                // fournisseurs sans groupe [{id,nom,...,cert_stats:{...}}]
   resGroupes: [],             // groupes agreges [{groupe, branches:[...], stats:{...}}]
@@ -793,12 +751,6 @@ async function loadAckServices(){
   }catch(e){}
 }
 
-async function loadCanaux(){
-  try{
-    const r=await api('/api/qualite/canaux');
-    if(r.ok){S.canaux=await r.json();renderCanaux();}
-  }catch(e){}
-}
 async function loadUnread(){
   // Compteur agrege Qualite : NC unread + audits unread (+ affectations)
   try{
@@ -833,7 +785,7 @@ function renderMenuQualite(){
   const groups = [
     {
       label: "Suivi qualité",
-      desc: "Non-conformités, canaux, audits reçus.",
+      desc: "Non-conformités, audits reçus.",
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>`,
       items: [
         {v:'list', title:'Non-conformités', desc:'Suivi des NC internes, clients, fournisseurs et logistiques.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>`, show: S.isQualiteAdmin || S.isQualiteReadonly},
@@ -846,6 +798,7 @@ function renderMenuQualite(){
       icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
       items: [
         {v:'ressources-list', title:'Ressources fournisseurs', desc:'Dossier par fournisseur (ou groupe) avec ses certificats et alertes.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>`, show: true},
+        {v:'sifa-docs-list', title:'Certifications SIFA', desc:'Documents officiels SIFA (Déclarations UE, attestations) à envoyer aux clients.', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="15" r="3"/></svg>`, show: true},
         {v:'ref-list', title:'Référentiel RSE', desc:'Normes et certifs (définitions, statut SIFA, réponses type).', icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`, show: true},
       ]
     },
@@ -883,7 +836,7 @@ function renderMenuQualite(){
 }
 
 // ── Vue Liste ──────────────────────────────────────────────────────
-var QUALITE_PERSIST_VIEWS=['menu','list','audits-list','ressources-list','ref-list'];
+var QUALITE_PERSIST_VIEWS=['menu','list','audits-list','ressources-list','sifa-docs-list','ref-list'];
 function _readQualiteView(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
     if(QUALITE_PERSIST_VIEWS.indexOf(h)!==-1)return h;}catch(e){}
@@ -936,6 +889,14 @@ function setView(v, opts){
     const nav=document.getElementById('nav-ref'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent=S.currentRef?S.currentRef.nom:'Fiche';
     renderRefDetail();
+  } else if(v==='sifa-docs-list'){
+    const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent='Certifications SIFA';
+    if(typeof loadSifaDocsList==='function') loadSifaDocsList();
+  } else if(v==='sifa-docs-detail'){
+    const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
+    document.getElementById('mobile-sub').textContent=S.currentSifaDoc?S.currentSifaDoc.titre:'Certification';
+    renderSifaDocDetail();
   }
   maybeAutoOpenGuide(v);
   closeSidebar();
@@ -1449,8 +1410,6 @@ function saveField(field, value){
         // Recharger la liste à la prochaine occasion
         loadNCs();
       }
-      // Si statut changé en cloturee, refresh canaux/unread
-      if(field==='statut') loadCanaux();
     }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
   }, 350);
 }
@@ -1605,45 +1564,7 @@ async function sendMessage(){
     if(inp) inp.value='';
     renderDetail();
     setTimeout(()=>{const l=document.getElementById('msg-list');if(l) l.scrollTop=l.scrollHeight;},10);
-    loadCanaux();
   }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
-}
-
-// ── Canaux ─────────────────────────────────────────────────────────
-function openCanaux(){
-  loadCanaux();
-  document.getElementById('canaux-panel').classList.add('open');
-  closeSidebar();
-}
-function closeCanaux(){document.getElementById('canaux-panel').classList.remove('open');}
-function toggleCanaux(){
-  const p=document.getElementById('canaux-panel');
-  if(p.classList.contains('open')){closeCanaux();}
-  else{openCanaux();}
-}
-
-function renderCanaux(){
-  const list=document.getElementById('canaux-list');
-  if(!list) return;
-  const cs=S.canaux.filter(c=>c.messages_count>0||c.unread_count>0).concat(S.canaux.filter(c=>!c.messages_count&&!c.unread_count));
-  if(!cs.length){
-    list.innerHTML='<div class="empty" style="padding:30px"><div class="empty-title">Aucune NC ouverte</div><div class="empty-sub">Les canaux apparaissent ici dès qu\'une NC reçoit des messages.</div></div>';
-    return;
-  }
-  list.innerHTML=cs.map(c=>{
-    const unread=c.unread_count>0;
-    return `<div class="canal-item${unread?' unread':''}" onclick="closeCanaux();openDetail(${c.id});setTimeout(()=>setDetailTab('discussion'),50);">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
-        <span class="canal-num">${escHtml(c.numero||'')}</span>
-        ${unread?`<span class="unread-pill">${c.unread_count}</span>`:''}
-      </div>
-      <div class="canal-titre">${escHtml(c.titre||'')}</div>
-      <div class="canal-time">
-        <span>${typeLabel(c.type_nc)} · ${gravLabel(c.gravite)}</span>
-        <span>${c.last_message_at?escHtml(relTime(c.last_message_at)):'Pas encore de message'}</span>
-      </div>
-    </div>`;
-  }).join('');
 }
 
 // ── Création NC ────────────────────────────────────────────────────
@@ -2050,6 +1971,10 @@ function renderAuditDetail(){
         <div style="font-size:12px;color:var(--muted)">Audit du ${escHtml(fmtDate(a.date_audit))} · ${(a.auditeurs||[]).length} auditeur(s)</div>
       </div>
       <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="genererDeclarationUEDepuisAudit()" style="padding:8px 14px;font-size:12px" title="Générer une Déclaration UE de Conformité pour ce client">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="15" r="3"/></svg>
+          Générer Déclaration UE
+        </button>
         ${a.statut==='ouvert'?`<button class="btn btn-accent" onclick="cloturerAudit()" style="padding:8px 14px;font-size:12px">Clôturer</button>`:`<button class="btn btn-ghost" onclick="rouvrirAudit()" style="padding:8px 14px;font-size:12px">Rouvrir</button>`}
         <button class="btn btn-danger" onclick="deleteAudit()" style="padding:8px 14px;font-size:12px">Supprimer</button>
       </div>
@@ -2077,6 +2002,19 @@ function renderAuditDetail(){
     <div id="aud-tab-body"></div>
   `;
   renderAuditTab();
+}
+
+function genererDeclarationUEDepuisAudit(){
+  // Raccourci : ouvrir le modal SIFA-docs Déclaration UE pré-rempli avec le client de l'audit + ses fournisseurs
+  const a = S.currentAudit;
+  if(!a) return;
+  const audit_fournisseurs_ids = (a.fournisseurs||[]).map(f => f.id);
+  // Si l'audit n'a pas encore chargé sa matrice, on récupère les fournisseurs depuis les pickers
+  openSifaDocGenerate('declaration_ue', {
+    client_nom: a.client_nom || '',
+    audit_id: a.id,
+    fournisseurs_ids: audit_fournisseurs_ids,
+  });
 }
 
 function setAuditTab(t){
@@ -2405,51 +2343,221 @@ async function removeAuditeur(uid){
   renderAuditDetail();
 }
 
-// ── Modal création audit ────────────────────────────────────────
+// ── Modal création audit — Wizard 2 étapes ────────────────────
+// Étape 1 : Client + date + description + auditeurs
+// Étape 2 : Fournisseurs concernés + Certifications demandées (matrice complète en 1 clic)
 function openCreateAuditModal(){
   if(S.isQualiteReadonly) return;
   const wrap=document.getElementById('mroot')||(function(){
     const d=document.createElement('div');d.id='mroot';document.body.appendChild(d);return d;
   })();
+  S._acAuditeurs=[];
+  S._acStep=1;
+  S._acData={client:'',clientId:null,date:(new Date()).toISOString().slice(0,10),desc:''};
+  S._acFournIds=new Set();
+  S._acFicheIds=new Set();
+  S._acFournSearch='';
+  S._acFicheSearch='';
   wrap.innerHTML=`
   <div class="modal-ov" id="aud-create-ov" style="display:flex" onclick="if(event.target===this)closeAuditCreate()">
-    <div class="modal lg" onclick="event.stopPropagation()">
+    <div class="modal lg" onclick="event.stopPropagation()" style="max-width:780px">
       <button type="button" class="modal-close" onclick="closeAuditCreate()">×</button>
-      <h3 style="margin:0 0 14px;font-size:16px;color:var(--text)">Nouvel audit client</h3>
-      <div style="display:grid;gap:12px">
-        <div>
-          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Client *</label>
-          <input type="text" id="ac-client" placeholder="Rechercher un client ou saisir librement..." oninput="searchClientsForAudit(this.value)" autocomplete="off" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px">
-          <div id="ac-client-results" style="margin-top:6px;max-height:160px;overflow-y:auto"></div>
-          <input type="hidden" id="ac-client-id" value="">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr;gap:12px">
-          <div>
-            <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Date de l'audit *</label>
-            <input type="date" id="ac-date" value="${(new Date()).toISOString().slice(0,10)}" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <h3 style="margin:0;font-size:17px;color:var(--text);flex:1">Nouvel audit client</h3>
+        <div class="ac-steps">
+          <div class="ac-step active" id="ac-step-1">
+            <span class="ac-step-n">1</span>
+            <span class="ac-step-l">Client & équipe</span>
+          </div>
+          <div class="ac-step-sep">›</div>
+          <div class="ac-step" id="ac-step-2">
+            <span class="ac-step-n">2</span>
+            <span class="ac-step-l">Périmètre</span>
           </div>
         </div>
-        <div>
-          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Description *</label>
-          <textarea id="ac-desc" rows="4" placeholder="Objet de l'audit, points à examiner, contexte..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;resize:vertical;min-height:90px;font-family:inherit"></textarea>
-        </div>
-        <div>
-          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Auditeurs *</label>
-          <div id="ac-aud-chips" class="aud-chip-row" style="min-height:24px;margin-bottom:6px"></div>
-          <input type="text" id="ac-aud-search" placeholder="Rechercher un auditeur..." oninput="filterAuditeurs(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px">
-          <div id="ac-aud-list" class="aud-picker-list" style="margin-top:6px;max-height:200px"></div>
-        </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
-        <button type="button" class="btn btn-ghost" onclick="closeAuditCreate()">Annuler</button>
-        <button type="button" class="btn btn-accent" id="ac-submit" onclick="submitCreateAudit()">Créer l'audit</button>
+      <div id="ac-body"></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+        <div id="ac-nav-left">
+          <button type="button" class="btn btn-ghost" onclick="closeAuditCreate()">Annuler</button>
+        </div>
+        <div id="ac-nav-right"></div>
       </div>
     </div>
-  </div>`;
-  S._acAuditeurs=[];
-  loadAuditeursCandidats().then(()=>renderAuditeursPicker(''));
-  searchClientsForAudit('');
+  </div>
+  <style>
+    .ac-steps{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+    .ac-step{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:var(--bg);border:1px solid var(--border);transition:.15s}
+    .ac-step.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .ac-step.done{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+    .ac-step-n{width:20px;height:20px;border-radius:999px;background:var(--card);color:inherit;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:1px solid currentColor}
+    .ac-step.active .ac-step-n,.ac-step.done .ac-step-n{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+    .ac-step-l{font-weight:600}
+    .ac-step-sep{color:var(--muted);font-size:14px}
+    .ac-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px}
+    .ac-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
+    .ac-input:focus{outline:none;border-color:var(--accent)}
+    .ac-textarea{resize:vertical;min-height:80px}
+    .ac-pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:200px;overflow-y:auto;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+    .ac-pick-chk{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:.1s;font-size:12px;color:var(--text)}
+    .ac-pick-chk:hover{border-color:var(--accent)}
+    .ac-pick-chk.checked{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .ac-pick-chk input{margin:0}
+    .ac-pick-sub{font-size:10px;color:var(--muted);margin-top:1px}
+    .ac-hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4}
+  </style>`;
+  loadAuditeursCandidats().then(()=>{
+    _acRenderStep();
+  });
 }
+
+function _acRenderStep(){
+  const body=document.getElementById('ac-body');
+  const navR=document.getElementById('ac-nav-right');
+  const step1=document.getElementById('ac-step-1');
+  const step2=document.getElementById('ac-step-2');
+  if(!body) return;
+  if(S._acStep===1){
+    step1.classList.add('active');step2.classList.remove('active');
+    body.innerHTML=`
+      <div style="display:grid;gap:14px">
+        <div>
+          <label class="ac-lbl">Client *</label>
+          <input type="text" id="ac-client" class="ac-input" placeholder="Rechercher un client ou saisir librement..." value="${escAttr(S._acData.client)}" oninput="S._acData.client=this.value;S._acData.clientId=null;document.getElementById('ac-client-id').value='';searchClientsForAudit(this.value)" autocomplete="off">
+          <div id="ac-client-results" style="margin-top:6px;max-height:160px;overflow-y:auto"></div>
+          <input type="hidden" id="ac-client-id" value="${S._acData.clientId||''}">
+        </div>
+        <div>
+          <label class="ac-lbl">Date de l'audit *</label>
+          <input type="date" id="ac-date" class="ac-input" value="${S._acData.date}" onchange="S._acData.date=this.value">
+        </div>
+        <div>
+          <label class="ac-lbl">Description *</label>
+          <textarea id="ac-desc" class="ac-input ac-textarea" placeholder="Objet de l'audit, points à examiner, contexte..." onchange="S._acData.desc=this.value">${escHtml(S._acData.desc)}</textarea>
+        </div>
+        <div>
+          <label class="ac-lbl">Auditeurs SIFA *</label>
+          <div id="ac-aud-chips" class="aud-chip-row" style="min-height:24px;margin-bottom:6px"></div>
+          <input type="text" id="ac-aud-search" class="ac-input" placeholder="Rechercher un auditeur..." oninput="filterAuditeurs(this.value)">
+          <div id="ac-aud-list" class="aud-picker-list" style="margin-top:6px;max-height:180px"></div>
+        </div>
+      </div>`;
+    navR.innerHTML=`<button type="button" class="btn btn-accent" onclick="_acNext()">Suivant →</button>`;
+    renderChosenAuditeurs();
+    renderAuditeursPicker('');
+    searchClientsForAudit(S._acData.client||'');
+  } else if(S._acStep===2){
+    step1.classList.remove('active');step1.classList.add('done');step2.classList.add('active');
+    body.innerHTML=`
+      <div style="display:grid;gap:16px">
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Client</div>
+          <div style="font-size:14px;color:var(--text);font-weight:700">${escHtml(S._acData.client||'—')}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Audit du ${escHtml(fmtDate(S._acData.date))}</div>
+        </div>
+        <div>
+          <label class="ac-lbl">Fournisseurs concernés par cet audit</label>
+          <input type="search" class="ac-input" placeholder="Filtrer les fournisseurs..." oninput="S._acFournSearch=this.value;_acRenderFours()" style="margin-bottom:6px">
+          <div class="ac-pick-grid" id="ac-fours-grid"></div>
+          <div class="ac-hint">Ces fournisseurs seront ajoutés à la matrice de conformité. Ajustable ensuite dans l'audit.</div>
+        </div>
+        <div>
+          <label class="ac-lbl">Certifications demandées par le client</label>
+          <input type="search" class="ac-input" placeholder="Filtrer les certifications..." oninput="S._acFicheSearch=this.value;_acRenderFiches()" style="margin-bottom:6px">
+          <div class="ac-pick-grid" id="ac-fiches-grid"></div>
+          <div class="ac-hint">Vous pouvez tout ignorer si l'audit ne couvre pas de certifs (juste NC ou observations).</div>
+        </div>
+      </div>`;
+    navR.innerHTML=`
+      <button type="button" class="btn btn-ghost" onclick="_acStep=1;_acRenderStep()" style="margin-right:6px">← Retour</button>
+      <button type="button" class="btn btn-accent" id="ac-submit" onclick="submitCreateAudit()">Créer l'audit</button>`;
+    // Charger pickers audit si pas déjà
+    _acLoadPickers();
+  }
+}
+
+async function _acLoadPickers(){
+  if(!S._acPickers){
+    try{
+      // Fournisseurs : via /sifa-docs/pickers qui renvoie déjà la liste complète
+      // Fiches réf : via /ref/fiches?valide_only=1 (array direct)
+      const [rF, rC] = await Promise.all([
+        api('/api/qualite/sifa-docs/pickers'),
+        api('/api/qualite/ref/fiches?valide_only=1'),
+      ]);
+      const fournisseurs = rF.ok ? (await rF.json()).fournisseurs || [] : [];
+      const fichesRaw = rC.ok ? await rC.json() : [];
+      const fiches = Array.isArray(fichesRaw) ? fichesRaw : (fichesRaw.fiches || []);
+      S._acPickers = {fournisseurs, fiches};
+    }catch(e){S._acPickers={fournisseurs:[],fiches:[]};}
+  }
+  _acRenderFours();
+  _acRenderFiches();
+}
+
+function _acRenderFours(){
+  const wrap=document.getElementById('ac-fours-grid');
+  if(!wrap||!S._acPickers) return;
+  const q=(S._acFournSearch||'').toLowerCase();
+  const all=S._acPickers.fournisseurs||[];
+  const filtered=q?all.filter(f=>(f.nom||'').toLowerCase().includes(q)):all;
+  const sel=S._acFournIds;
+  wrap.innerHTML=filtered.map(f=>{
+    const checked=sel.has(f.id);
+    return `<label class="ac-pick-chk ${checked?'checked':''}" onclick="_acToggleFour(${f.id});event.preventDefault()">
+      <input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation()">
+      <div style="min-width:0;flex:1">
+        <div>${escHtml(f.nom||'')}</div>
+        ${f.licence?`<div class="ac-pick-sub">${escHtml(f.licence)}</div>`:''}
+      </div>
+    </label>`;
+  }).join('')||'<div style="padding:20px;color:var(--muted);font-size:12px;text-align:center;grid-column:1/-1">Aucun résultat</div>';
+}
+function _acToggleFour(id){
+  if(S._acFournIds.has(id))S._acFournIds.delete(id);else S._acFournIds.add(id);
+  _acRenderFours();
+}
+
+function _acRenderFiches(){
+  const wrap=document.getElementById('ac-fiches-grid');
+  if(!wrap||!S._acPickers) return;
+  const q=(S._acFicheSearch||'').toLowerCase();
+  const all=S._acPickers.fiches||[];
+  const filtered=q?all.filter(f=>(f.nom||'').toLowerCase().includes(q)||(f.acronyme||'').toLowerCase().includes(q)):all;
+  const sel=S._acFicheIds;
+  wrap.innerHTML=filtered.map(f=>{
+    const checked=sel.has(f.id);
+    return `<label class="ac-pick-chk ${checked?'checked':''}" onclick="_acToggleFiche(${f.id});event.preventDefault()">
+      <input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation()">
+      <div style="min-width:0;flex:1">
+        <div>${escHtml(f.acronyme||f.nom||'')}</div>
+        ${f.acronyme?`<div class="ac-pick-sub">${escHtml(f.nom||'')}</div>`:''}
+      </div>
+    </label>`;
+  }).join('')||'<div style="padding:20px;color:var(--muted);font-size:12px;text-align:center;grid-column:1/-1">Aucun résultat</div>';
+}
+function _acToggleFiche(id){
+  if(S._acFicheIds.has(id))S._acFicheIds.delete(id);else S._acFicheIds.add(id);
+  _acRenderFiches();
+}
+
+function _acNext(){
+  const client=(document.getElementById('ac-client').value||'').trim();
+  const date=(document.getElementById('ac-date').value||'').trim();
+  const desc=(document.getElementById('ac-desc').value||'').trim();
+  if(!client){showToast('Nom du client obligatoire','danger');return;}
+  if(!date){showToast('Date obligatoire','danger');return;}
+  if(!desc){showToast('Description obligatoire','danger');return;}
+  if(!S._acAuditeurs.length){showToast('Au moins un auditeur obligatoire','danger');return;}
+  S._acData.client=client;
+  S._acData.date=date;
+  S._acData.desc=desc;
+  const idRaw=(document.getElementById('ac-client-id').value||'').trim();
+  S._acData.clientId=idRaw?parseInt(idRaw,10):null;
+  S._acStep=2;
+  _acRenderStep();
+}
+
 
 function closeAuditCreate(){
   const ov=document.getElementById('aud-create-ov');
@@ -2522,19 +2630,17 @@ function pickClient(id,nom){
   document.getElementById('ac-client').value=nom;
   document.getElementById('ac-client-id').value=String(id);
   document.getElementById('ac-client-results').innerHTML='';
+  if(S._acData){S._acData.client=nom;S._acData.clientId=id;}
 }
 
 async function submitCreateAudit(){
   if(S.isQualiteReadonly) return;
-  const client=(document.getElementById('ac-client').value||'').trim();
-  const clientIdRaw=(document.getElementById('ac-client-id').value||'').trim();
-  const clientId=clientIdRaw?parseInt(clientIdRaw,10):null;
-  const date=(document.getElementById('ac-date').value||'').trim();
-  const desc=(document.getElementById('ac-desc').value||'').trim();
-  if(!client){showToast('Nom du client obligatoire','danger');return;}
-  if(!date){showToast('Date obligatoire','danger');return;}
-  if(!desc){showToast('Description obligatoire','danger');return;}
-  if(!S._acAuditeurs.length){showToast('Au moins un auditeur obligatoire','danger');return;}
+  const client=S._acData.client;
+  const clientId=S._acData.clientId;
+  const date=S._acData.date;
+  const desc=S._acData.desc;
+  const four_ids=Array.from(S._acFournIds);
+  const fiche_ids=Array.from(S._acFicheIds);
   const btn=document.getElementById('ac-submit');
   if(btn){btn.disabled=true;btn.textContent='Création...';}
   try{
@@ -2542,7 +2648,7 @@ async function submitCreateAudit(){
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         client_nom:client,
-        client_id:(clientId&&client===document.getElementById('ac-client').value)?clientId:null,
+        client_id:clientId||null,
         date_audit:date,
         description:desc,
         auditeur_ids:S._acAuditeurs.map(u=>u.id)
@@ -2556,8 +2662,26 @@ async function submitCreateAudit(){
       return;
     }
     const created=await r.json();
+    // Étape 2 : envoyer fournisseurs + certifs sélectionnés (best-effort)
+    try{
+      if(four_ids.length){
+        await api('/api/qualite/audits/'+created.id+'/matrice/fournisseurs',{
+          method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ids:four_ids})
+        });
+      }
+      if(fiche_ids.length){
+        await api('/api/qualite/audits/'+created.id+'/matrice/certifications',{
+          method:'PUT',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({ids:fiche_ids})
+        });
+      }
+    }catch(e){}
     closeAuditCreate();
-    showToast('Audit créé.','success');
+    const scope_msg=(four_ids.length||fiche_ids.length)?
+      `Audit créé — ${four_ids.length} fournisseur(s), ${fiche_ids.length} certif(s).`:
+      'Audit créé.';
+    showToast(scope_msg,'success');
     await loadAudits();
     openAudit(created.id);
   }catch(e){
@@ -2609,13 +2733,573 @@ async function addAuditeurNow(uid){
 }
 
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// SIFA — Certifications & Documents officiels
+// ═══════════════════════════════════════════════════════════════════════
+// Vues : sifa-docs-list (liste des templates) et sifa-docs-detail (versions d'un template).
+// Modal : openSifaDocGenerate — sélection client + fournisseurs → génération PDF.
+// Modal : openSifaDocMissingCountries — si des fournisseurs sélectionnés n'ont pas de pays_origine.
+
+(function injectSifaDocsCSS(){
+  if(document.getElementById('sifa-docs-css')) return;
+  const st=document.createElement('style');
+  st.id='sifa-docs-css';
+  st.textContent = `
+    .sd-hero{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;margin-bottom:20px}
+    .sd-hero h1{margin:0 0 4px;font-size:22px;color:var(--text)}
+    .sd-hero p{margin:0;color:var(--text2);font-size:13px;line-height:1.55}
+    .sd-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+    .sd-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;cursor:pointer;transition:.15s;position:relative;overflow:hidden}
+    .sd-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+    .sd-card-head{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+    .sd-card-ico{width:44px;height:44px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .sd-card-titles{flex:1;min-width:0}
+    .sd-card-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px}
+    .sd-card-sub{font-size:11px;color:var(--muted);font-style:italic}
+    .sd-card-desc{font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px}
+    .sd-card-stats{display:flex;gap:14px;font-size:11px;color:var(--muted);padding-top:12px;border-top:1px solid var(--border)}
+    .sd-card-stat b{color:var(--text);font-weight:700}
+    /* Vue détail */
+    .sd-detail-head{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;margin-bottom:18px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+    .sd-detail-head-info{flex:1;min-width:260px}
+    .sd-detail-head-actions{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+    .sd-detail-title{font-size:20px;color:var(--text);margin:0 0 4px;font-weight:800}
+    .sd-detail-sub{color:var(--muted);font-style:italic;font-size:13px;margin-bottom:8px}
+    .sd-detail-desc{color:var(--text2);font-size:12px;line-height:1.55;max-width:720px}
+    .sd-preview-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:18px}
+    .sd-preview-wrap h3{margin:0 0 12px;color:var(--text);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .sd-preview-frame{width:100%;height:520px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+    .sd-versions{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px}
+    .sd-versions-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+    .sd-versions-hd h3{margin:0;color:var(--text);font-size:15px;font-weight:700}
+    .sd-versions-hd .count{color:var(--muted);font-size:12px;font-weight:500}
+    .sd-versions-search{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;min-width:220px}
+    .sd-version-row{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:8px;transition:.12s}
+    .sd-version-row:hover{border-color:var(--accent)}
+    .sd-version-main{min-width:0}
+    .sd-version-client{font-weight:700;color:var(--text);font-size:14px;margin-bottom:2px;display:flex;align-items:center;gap:8px}
+    .sd-version-ref{font-family:'Menlo',monospace;font-size:11px;color:var(--muted);background:var(--card);padding:1px 6px;border-radius:4px;font-weight:500}
+    .sd-version-meta{font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .sd-version-fours{font-size:11px;color:var(--text2);margin-top:4px}
+    .sd-version-fours .four-chip{display:inline-block;background:var(--accent-bg);color:var(--accent);padding:1px 8px;border-radius:999px;margin:2px 4px 0 0;font-size:10px;font-weight:600}
+    .sd-version-actions{display:flex;gap:6px}
+    .sd-version-btn{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);cursor:pointer;font-size:11px;font-weight:600;font-family:inherit;transition:.12s;display:flex;align-items:center;gap:5px}
+    .sd-version-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+    .sd-version-btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+    .sd-version-btn.primary:hover{filter:brightness(1.08)}
+    .sd-version-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+    .sd-empty{padding:40px 20px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px;font-size:13px}
+    /* Modal génération */
+    .sd-gen-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media(max-width:640px){.sd-gen-two-col{grid-template-columns:1fr}}
+    .sd-gen-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px}
+    .sd-gen-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
+    .sd-gen-input:focus{outline:none;border-color:var(--accent)}
+    .sd-audit-picker{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-top:6px}
+    .sd-audit-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;transition:.1s}
+    .sd-audit-item:last-child{border-bottom:none}
+    .sd-audit-item:hover{background:var(--card)}
+    .sd-audit-item.sel{background:var(--accent-bg);color:var(--accent)}
+    .sd-audit-item.sel .meta{color:var(--accent)}
+    .sd-audit-nom{font-weight:600;font-size:13px;color:var(--text)}
+    .sd-audit-item.sel .sd-audit-nom{color:var(--accent)}
+    .sd-audit-item .meta{font-size:11px;color:var(--muted);flex-shrink:0}
+    .sd-fours-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;max-height:280px;overflow-y:auto;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
+    .sd-four-chk{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:.1s;font-size:12px}
+    .sd-four-chk:hover{border-color:var(--accent)}
+    .sd-four-chk.checked{background:var(--accent-bg);border-color:var(--accent)}
+    .sd-four-chk input{margin:0}
+    .sd-four-chk-nom{font-weight:600;color:var(--text);font-size:12px}
+    .sd-four-chk.checked .sd-four-chk-nom{color:var(--accent)}
+    .sd-four-chk-pays{font-size:10px;color:var(--muted)}
+    .sd-four-chk.no-pays .sd-four-chk-pays{color:var(--warn)}
+    .sd-mcountries-list{display:grid;gap:10px;max-height:400px;overflow-y:auto;padding:4px 0}
+    .sd-mcountry-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+    .sd-mcountry-nom{font-weight:600;color:var(--text);font-size:13px}
+    .sd-mcountry-input{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;font-family:inherit}
+    .sd-mcountry-input:focus{outline:none;border-color:var(--accent)}
+  `;
+  document.head.appendChild(st);
+})();
+
+async function loadSifaDocsList(){
+  try{
+    const r = await api('/api/qualite/sifa-docs/templates');
+    if(!r.ok){showToast('Erreur chargement templates','danger'); return;}
+    const data = await r.json();
+    S.sifaDocsTemplates = data.templates || [];
+    renderSifaDocsList();
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+function renderSifaDocsList(){
+  const root = document.getElementById('content');
+  if(!root) return;
+  const templates = S.sifaDocsTemplates || [];
+  const cards = templates.map(t => `
+    <div class="sd-card" onclick="openSifaDoc('${escAttr(t.code)}')">
+      <div class="sd-card-head">
+        <div class="sd-card-ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><circle cx="12" cy="15" r="3"/></svg>
+        </div>
+        <div class="sd-card-titles">
+          <div class="sd-card-title">${escHtml(t.titre)}</div>
+          ${t.sous_titre?`<div class="sd-card-sub">${escHtml(t.sous_titre)}</div>`:''}
+        </div>
+      </div>
+      <div class="sd-card-desc">${escHtml(t.description||'')}</div>
+      <div class="sd-card-stats">
+        <span class="sd-card-stat"><b>${t.versions_count||0}</b> version${(t.versions_count||0)>1?'s':''} générée${(t.versions_count||0)>1?'s':''}</span>
+        <span class="sd-card-stat">Validité <b>${t.validite_mois||12} mois</b></span>
+      </div>
+    </div>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="sd-hero">
+      <h1>Certifications SIFA</h1>
+      <p>Documents officiels SIFA (Déclarations UE de Conformité, attestations) à envoyer aux clients. Un template par type de document, une version par client. Le PDF liste les fournisseurs retenus pour ce client et leur origine géographique.</p>
+    </div>
+    ${templates.length ? `<div class="sd-grid">${cards}</div>` : `
+      <div class="sd-empty">Aucun template disponible.</div>
+    `}
+  `;
+}
+
+async function openSifaDoc(code){
+  try{
+    const r = await api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(code));
+    if(!r.ok){showToast('Template introuvable','danger'); return;}
+    S.currentSifaDoc = await r.json();
+    setView('sifa-docs-detail');
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+function renderSifaDocDetail(){
+  const root = document.getElementById('content');
+  if(!root || !S.currentSifaDoc) return;
+  const t = S.currentSifaDoc.template;
+  const versions = S.currentSifaDoc.versions || [];
+  const q = (S.sifaDocsSearch||'').toLowerCase();
+  const filtered = q ? versions.filter(v =>
+    (v.client_nom||'').toLowerCase().includes(q) ||
+    (v.ref_document||'').toLowerCase().includes(q)
+  ) : versions;
+
+  const rows = filtered.map(v => {
+    const four_chips = (v.fournisseurs||[]).map(f =>
+      `<span class="four-chip">${escHtml(f.nom||'')}</span>`
+    ).join('');
+    const dateStr = v.date_emission ? fmtDate(v.date_emission) : '—';
+    return `<div class="sd-version-row">
+      <div class="sd-version-main">
+        <div class="sd-version-client">
+          ${escHtml(v.client_nom||'—')}
+          <span class="sd-version-ref">${escHtml(v.ref_document||'')}</span>
+        </div>
+        <div class="sd-version-meta">
+          <span>Émis le ${dateStr}</span>
+          <span>·</span>
+          <span>${(v.fournisseurs||[]).length} fournisseur${(v.fournisseurs||[]).length>1?'s':''}</span>
+          ${v.audit_numero?`<span>·</span><span>Audit ${escHtml(v.audit_numero)}</span>`:''}
+          ${v.created_by_nom?`<span>·</span><span>par ${escHtml(v.created_by_nom)}</span>`:''}
+        </div>
+        <div class="sd-version-fours">${four_chips}</div>
+      </div>
+      <div class="sd-version-actions">
+        <a class="sd-version-btn primary" href="/api/qualite/sifa-docs/versions/${v.id}/pdf" target="_blank" title="Télécharger le PDF">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          PDF
+        </a>
+        <button class="sd-version-btn" onclick="duplicateSifaDocVersion(${v.id})" title="Créer une nouvelle version en repartant de celle-ci">Dupliquer</button>
+        ${S.isQualiteAdmin?`<button class="sd-version-btn danger" onclick="deleteSifaDocVersion(${v.id})" title="Supprimer">×</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="sd-detail-head">
+      <button class="btn btn-ghost" onclick="setView('sifa-docs-list')" style="padding:8px 12px;font-size:12px">← Retour</button>
+      <div class="sd-detail-head-info">
+        <div class="sd-detail-title">${escHtml(t.titre)}</div>
+        ${t.sous_titre?`<div class="sd-detail-sub">${escHtml(t.sous_titre)}</div>`:''}
+        <div class="sd-detail-desc">${escHtml(t.description||'')}</div>
+      </div>
+      <div class="sd-detail-head-actions">
+        <a class="btn btn-ghost" href="/api/qualite/sifa-docs/templates/${encodeURIComponent(t.code)}/preview" target="_blank" style="padding:10px 14px;font-size:12px">Aperçu template vierge</a>
+        <button class="btn btn-accent" onclick="openSifaDocGenerate('${escAttr(t.code)}')" style="padding:10px 16px;font-size:13px">
+          + Créer version pour un client
+        </button>
+      </div>
+    </div>
+
+    <div class="sd-versions">
+      <div class="sd-versions-hd">
+        <h3>Versions générées <span class="count">— ${versions.length} au total</span></h3>
+        <input type="search" class="sd-versions-search" placeholder="Rechercher client ou référence…"
+          value="${escAttr(S.sifaDocsSearch)}"
+          oninput="S.sifaDocsSearch=this.value;renderSifaDocDetail()"
+          onkeydown="if(event.key==='Escape'){S.sifaDocsSearch='';this.value='';renderSifaDocDetail();}">
+      </div>
+      ${filtered.length ? rows : `
+        <div class="sd-empty">
+          ${q ? `Aucune version pour « ${escHtml(q)} »` : `Aucune version générée. Utilisez le bouton <b>« Créer version pour un client »</b> ci-dessus pour commencer.`}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+async function deleteSifaDocVersion(id){
+  if(!confirm('Supprimer cette version définitivement ?')) return;
+  try{
+    const r = await api('/api/qualite/sifa-docs/versions/'+id,{method:'DELETE'});
+    if(!r.ok){showToast('Erreur suppression','danger'); return;}
+    showToast('Version supprimée','success');
+    if(S.currentSifaDoc) openSifaDoc(S.currentSifaDoc.template.code);
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+async function duplicateSifaDocVersion(id){
+  // Retrouve la version dans le state courant
+  const versions = (S.currentSifaDoc && S.currentSifaDoc.versions) || [];
+  const v = versions.find(x => x.id === id);
+  if(!v){showToast('Version introuvable','danger'); return;}
+  const code = S.currentSifaDoc.template.code;
+  // Pré-remplir le modal avec les mêmes fournisseurs
+  await openSifaDocGenerate(code, {
+    client_nom: v.client_nom,
+    audit_id: v.audit_id,
+    fournisseurs_ids: v.fournisseurs_ids || [],
+  });
+}
+
+// ─── Modal : génération d'une nouvelle version ─────────────────────
+async function openSifaDocGenerate(code, prefill){
+  prefill = prefill || {};
+  // Charger les pickers si pas déjà chargés
+  if(!S.sifaDocsPickers){
+    try{
+      const r = await api('/api/qualite/sifa-docs/pickers');
+      if(!r.ok){showToast('Erreur chargement','danger'); return;}
+      S.sifaDocsPickers = await r.json();
+    }catch(e){showToast('Erreur réseau','danger'); return;}
+  }
+  const audits = S.sifaDocsPickers.audits || [];
+  const fours = S.sifaDocsPickers.fournisseurs || [];
+  const template = (S.currentSifaDoc && S.currentSifaDoc.template) ||
+                   S.sifaDocsTemplates.find(t => t.code === code) || {};
+
+  const wrap = document.getElementById('mroot') || (function(){
+    const d = document.createElement('div'); d.id='mroot'; document.body.appendChild(d); return d;
+  })();
+
+  // État local du modal
+  S._sifaGen = {
+    templateCode: code,
+    templateTitre: template.titre || 'Certification SIFA',
+    audit_id: prefill.audit_id || null,
+    client_nom: prefill.client_nom || '',
+    fournisseurs_ids: new Set(prefill.fournisseurs_ids || []),
+    date_emission: (new Date()).toISOString().slice(0,10),
+    ref_manual: '',
+    fourSearch: '',
+  };
+
+  wrap.innerHTML = `
+  <div class="modal-ov" id="sd-gen-ov" style="display:flex" onclick="if(event.target===this)closeSifaDocGenerate()">
+    <div class="modal lg" onclick="event.stopPropagation()" style="max-width:820px">
+      <button type="button" class="modal-close" onclick="closeSifaDocGenerate()">×</button>
+      <h3 style="margin:0 0 6px;font-size:17px;color:var(--text)">Nouvelle version — ${escHtml(S._sifaGen.templateTitre)}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:12px">La référence sera calculée automatiquement (${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…). La date d'émission est celle du jour.</p>
+
+      <div style="display:grid;gap:14px">
+        <div>
+          <label class="sd-gen-label">1. Client concerné</label>
+          <div class="sd-gen-two-col">
+            <div>
+              <input type="text" id="sd-gen-client" class="sd-gen-input" placeholder="Nom du client…"
+                     value="${escAttr(S._sifaGen.client_nom)}"
+                     oninput="S._sifaGen.client_nom=this.value;_sdRenderRef();">
+            </div>
+            <div>
+              <input type="date" id="sd-gen-date" class="sd-gen-input"
+                     value="${S._sifaGen.date_emission}"
+                     onchange="S._sifaGen.date_emission=this.value">
+            </div>
+          </div>
+          ${audits.length ? `
+            <div style="margin-top:10px">
+              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Ou reprendre un audit client existant :</div>
+              <div class="sd-audit-picker" id="sd-audit-picker"></div>
+            </div>
+          ` : ''}
+        </div>
+
+        <div>
+          <label class="sd-gen-label">2. Fournisseurs retenus pour ce client</label>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input type="search" class="sd-gen-input" placeholder="Filtrer les fournisseurs…"
+                   oninput="S._sifaGen.fourSearch=this.value;_sdRenderFours()" style="flex:1">
+            <span style="color:var(--muted);font-size:11px;align-self:center" id="sd-fours-count">0 / ${fours.length}</span>
+          </div>
+          <div class="sd-fours-grid" id="sd-fours-grid"></div>
+        </div>
+
+        <div>
+          <label class="sd-gen-label">3. Référence du document</label>
+          <input type="text" id="sd-gen-ref" class="sd-gen-input"
+                 placeholder="Générée automatiquement"
+                 oninput="S._sifaGen.ref_manual=this.value" style="font-family:'Menlo',monospace;font-size:12px">
+          <div style="font-size:10.5px;color:var(--muted);margin-top:4px">Laisser vide pour utiliser la référence auto par client (recommandé)</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted)">Validité <b style="color:var(--text)">${template.validite_mois||12} mois</b> à compter de la date d'émission</div>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-ghost" onclick="closeSifaDocGenerate()">Annuler</button>
+          <button type="button" class="btn btn-accent" id="sd-gen-submit" onclick="submitSifaDocGenerate()">Générer le PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  _sdRenderAudits();
+  _sdRenderFours();
+  _sdRenderRef();
+}
+
+function closeSifaDocGenerate(){
+  const ov = document.getElementById('sd-gen-ov');
+  if(ov) ov.remove();
+  S._sifaGen = null;
+}
+
+function _sdRenderAudits(){
+  if(!S._sifaGen) return;
+  const wrap = document.getElementById('sd-audit-picker');
+  if(!wrap) return;
+  const audits = (S.sifaDocsPickers && S.sifaDocsPickers.audits) || [];
+  wrap.innerHTML = audits.map(a => {
+    const sel = S._sifaGen.audit_id === a.id;
+    return `<div class="sd-audit-item ${sel?'sel':''}" onclick="_sdPickAudit(${a.id},'${escAttr(a.client_nom||'')}')">
+      <div>
+        <div class="sd-audit-nom">${escHtml(a.client_nom||'')}</div>
+      </div>
+      <div class="meta">
+        ${escHtml(a.numero||'')} · ${(a.fournisseur_ids||[]).length} four.
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:12px;color:var(--muted);font-size:12px;text-align:center">Aucun audit ouvert</div>';
+}
+
+function _sdPickAudit(audit_id, client_nom){
+  if(!S._sifaGen) return;
+  // Toggle
+  if(S._sifaGen.audit_id === audit_id){
+    S._sifaGen.audit_id = null;
+  } else {
+    S._sifaGen.audit_id = audit_id;
+    // Récupérer client_nom et fournisseurs de l'audit → pré-cocher
+    const a = (S.sifaDocsPickers.audits||[]).find(x => x.id === audit_id);
+    if(a){
+      if(!S._sifaGen.client_nom || S._sifaGen.client_nom.trim() === ''){
+        S._sifaGen.client_nom = a.client_nom || client_nom || '';
+        const inp = document.getElementById('sd-gen-client');
+        if(inp) inp.value = S._sifaGen.client_nom;
+      }
+      // Ajouter (sans écraser) les fournisseurs de l'audit
+      (a.fournisseur_ids||[]).forEach(fid => S._sifaGen.fournisseurs_ids.add(fid));
+    }
+  }
+  _sdRenderAudits();
+  _sdRenderFours();
+  _sdRenderRef();
+}
+
+function _sdRenderFours(){
+  if(!S._sifaGen) return;
+  const wrap = document.getElementById('sd-fours-grid');
+  const cnt = document.getElementById('sd-fours-count');
+  if(!wrap) return;
+  const all = (S.sifaDocsPickers && S.sifaDocsPickers.fournisseurs) || [];
+  const q = (S._sifaGen.fourSearch||'').toLowerCase();
+  const filtered = q ? all.filter(f =>
+    (f.nom||'').toLowerCase().includes(q) ||
+    (f.pays_origine||'').toLowerCase().includes(q)
+  ) : all;
+  const sel = S._sifaGen.fournisseurs_ids;
+  wrap.innerHTML = filtered.map(f => {
+    const checked = sel.has(f.id);
+    const noPays = !f.pays_origine;
+    return `<label class="sd-four-chk ${checked?'checked':''} ${noPays?'no-pays':''}" onclick="_sdToggleFour(${f.id});event.preventDefault()">
+      <input type="checkbox" ${checked?'checked':''} onclick="event.stopPropagation()">
+      <div style="min-width:0;flex:1">
+        <div class="sd-four-chk-nom">${escHtml(f.nom||'')}</div>
+        <div class="sd-four-chk-pays">${noPays?'⚠ Origine à renseigner':escHtml(f.pays_origine)}</div>
+      </div>
+    </label>`;
+  }).join('') || '<div style="padding:20px;color:var(--muted);font-size:12px;text-align:center;grid-column:1/-1">Aucun résultat</div>';
+  if(cnt) cnt.textContent = `${sel.size} / ${all.length}`;
+}
+
+function _sdToggleFour(fid){
+  if(!S._sifaGen) return;
+  if(S._sifaGen.fournisseurs_ids.has(fid)) S._sifaGen.fournisseurs_ids.delete(fid);
+  else S._sifaGen.fournisseurs_ids.add(fid);
+  _sdRenderFours();
+}
+
+function _sdRenderRef(){
+  if(!S._sifaGen) return;
+  const inp = document.getElementById('sd-gen-ref');
+  if(!inp || S._sifaGen.ref_manual) return;
+  const client = (S._sifaGen.client_nom||'').trim();
+  const template = (S.currentSifaDoc && S.currentSifaDoc.template) ||
+                   S.sifaDocsTemplates.find(t => t.code === S._sifaGen.templateCode) || {};
+  const prefix = template.ref_prefix || 'SIFA-DoC';
+  const slug = client ? client.normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'').toUpperCase().slice(0,40) : 'CLIENT';
+  inp.placeholder = `${prefix}-${slug}-001`;
+}
+
+async function submitSifaDocGenerate(){
+  if(!S._sifaGen) return;
+  const st = S._sifaGen;
+  const client = (st.client_nom||'').trim();
+  if(!client){showToast('Nom de client obligatoire','danger'); return;}
+  const four_ids = Array.from(st.fournisseurs_ids);
+  if(!four_ids.length){showToast('Au moins un fournisseur','danger'); return;}
+  const btn = document.getElementById('sd-gen-submit');
+  if(btn){btn.disabled=true; btn.textContent='Génération…';}
+  const body = {
+    template_code: st.templateCode,
+    audit_id: st.audit_id || null,
+    client_nom: client,
+    fournisseurs_ids: four_ids,
+    date_emission: st.date_emission,
+    ref_document: (st.ref_manual||'').trim() || null,
+  };
+  try{
+    const r = await api('/api/qualite/sifa-docs/versions',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if(!r.ok){
+      let d = {};
+      try{d = await r.json();}catch(e){}
+      // Cas : origines manquantes → ouvrir le modal dédié
+      if(d.detail && d.detail.code === 'MISSING_COUNTRIES'){
+        if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
+        openSifaDocMissingCountries(d.detail.fournisseurs, () => submitSifaDocGenerate());
+        return;
+      }
+      const msg = (d.detail && (d.detail.message || d.detail)) || 'Erreur génération';
+      showToast(typeof msg === 'string' ? msg : 'Erreur génération','danger');
+      if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
+      return;
+    }
+    const created = await r.json();
+    // Si audit lié → sync des fournisseurs vers l'audit
+    if(st.audit_id){
+      try{
+        await api('/api/qualite/sifa-docs/sync-audit-fournisseurs',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({audit_id: st.audit_id, fournisseur_ids: four_ids})
+        });
+      }catch(e){}
+    }
+    closeSifaDocGenerate();
+    showToast('PDF généré : '+created.ref_document,'success');
+    // Recharger le détail du template
+    openSifaDoc(st.templateCode);
+    // Ouvrir le PDF dans un nouvel onglet
+    window.open('/api/qualite/sifa-docs/versions/'+created.id+'/pdf','_blank');
+    // Vider le cache pickers (fournisseurs peuvent avoir été modifiés)
+    S.sifaDocsPickers = null;
+  }catch(e){
+    if(e.message!=='unauth')showToast('Erreur réseau','danger');
+    if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
+  }
+}
+
+// ─── Modal : renseigner l'origine géographique manquante ────────────
+function openSifaDocMissingCountries(fournisseurs, onDone){
+  const wrap = document.getElementById('mroot') || (function(){
+    const d = document.createElement('div'); d.id='mroot'; document.body.appendChild(d); return d;
+  })();
+  const inputs = (fournisseurs||[]).map(f =>
+    `<div class="sd-mcountry-row" data-fid="${f.id}">
+      <div class="sd-mcountry-nom">${escHtml(f.nom||'')}</div>
+      <input type="text" class="sd-mcountry-input" placeholder="Ex. Allemagne, Royaume-Uni, Espagne…" data-mc-input="${f.id}" autocomplete="off">
+    </div>`
+  ).join('');
+
+  wrap.innerHTML = `
+  <div class="modal-ov" id="sd-mc-ov" style="display:flex" onclick="if(event.target===this)closeSifaDocMissingCountries()">
+    <div class="modal lg" onclick="event.stopPropagation()" style="max-width:640px">
+      <button type="button" class="modal-close" onclick="closeSifaDocMissingCountries()">×</button>
+      <h3 style="margin:0 0 6px;font-size:16px;color:var(--text)">Origine géographique de fabrication</h3>
+      <p style="margin:0 0 16px;color:var(--text2);font-size:12.5px;line-height:1.5">Merci de renseigner l'origine géographique de fabrication des fournisseurs suivants. Ces informations seront enregistrées dans <b>Ressources fournisseurs</b> et réutilisées pour toutes les prochaines Déclarations.</p>
+      <div class="sd-mcountries-list">${inputs}</div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+        <button type="button" class="btn btn-ghost" onclick="closeSifaDocMissingCountries()">Annuler</button>
+        <button type="button" class="btn btn-accent" onclick="submitSifaDocMissingCountries()">Enregistrer et continuer</button>
+      </div>
+    </div>
+  </div>`;
+  S._sifaMcOnDone = onDone || null;
+  setTimeout(() => {
+    const first = document.querySelector('[data-mc-input]');
+    if(first) first.focus();
+  }, 60);
+}
+
+function closeSifaDocMissingCountries(){
+  const ov = document.getElementById('sd-mc-ov');
+  if(ov) ov.remove();
+  S._sifaMcOnDone = null;
+}
+
+async function submitSifaDocMissingCountries(){
+  const inputs = document.querySelectorAll('[data-mc-input]');
+  const updates = [];
+  let missing = 0;
+  inputs.forEach(el => {
+    const v = (el.value||'').trim();
+    if(!v){missing++;}
+    else updates.push({id: parseInt(el.getAttribute('data-mc-input'),10), pays_origine: v});
+  });
+  if(missing){showToast(`${missing} champ(s) manquant(s)`,'danger'); return;}
+  try{
+    const r = await api('/api/qualite/sifa-docs/fournisseurs-countries',{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({updates})
+    });
+    if(!r.ok){showToast('Erreur enregistrement','danger'); return;}
+    S.sifaDocsPickers = null;  // Invalider le cache
+    const cb = S._sifaMcOnDone;
+    closeSifaDocMissingCountries();
+    // Recharger les pickers puis relancer la génération
+    if(cb){
+      try{
+        const rp = await api('/api/qualite/sifa-docs/pickers');
+        if(rp.ok) S.sifaDocsPickers = await rp.json();
+      }catch(e){}
+      cb();
+    }
+  }catch(e){if(e.message!=='unauth')showToast('Erreur réseau','danger');}
+}
+
+
 // ── Init ───────────────────────────────────────────────────────────
 async function init(){
   updateThemeBtn();
   await loadMe();
-  // Rôle sans droits Qualite ni lecture seule : on masque NC/Canaux/Audits et on bascule sur le référentiel
+  // Rôle sans droits Qualite ni lecture seule : on masque NC/Audits et on bascule sur le référentiel
   if(!S.isQualiteAdmin && !S.isQualiteReadonly){
-    ['nav-nc','nav-canaux','nav-audits'].forEach(id=>{
+    ['nav-nc','nav-audits','nav-sifa-docs'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.style.display='none';
     });
     // Basculer directement sur le referentiel
@@ -2633,10 +3317,10 @@ async function init(){
     document.body.classList.add('qualite-readonly');
   }
   await loadUsers();
-  await Promise.all([loadNCs(),loadCanaux(),loadUnread(),loadRefMeta(),loadAckServices()]);
+  await Promise.all([loadNCs(),loadUnread(),loadRefMeta(),loadAckServices()]);
   // Précharger les candidats auditeurs (utile dès l'ouverture de la modal création audit)
   if(typeof loadAuditeursCandidats==='function') loadAuditeursCandidats();
-  setInterval(()=>{loadUnread();if(document.getElementById('canaux-panel').classList.contains('open'))loadCanaux();},30000);
+  setInterval(()=>{loadUnread();},30000);
   // Scan expirations certificats fournisseurs : émet des annonces internes si un bucket vient d'être franchi.
   if(S.isQualiteAdmin){ try{ fetch('/api/qualite/ressources/scan-expirations',{method:'POST',credentials:'include'}); }catch(e){} }
   // Guides in-app : charger la progression + auto-ouvrir overview si non validé
@@ -3893,7 +4577,7 @@ ovWelcome: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
   <rect x="8" y="54" width="72" height="26" rx="6" fill="var(--accent-bg)"/>
   <text x="20" y="71" font-size="10" fill="var(--accent)" font-weight="700" font-family="Segoe UI">Non-conf.</text>
   <rect x="8" y="84" width="72" height="26" rx="6" fill="transparent"/>
-  <text x="20" y="101" font-size="10" fill="var(--text2)" font-family="Segoe UI">Canaux</text>
+  <text x="20" y="101" font-size="10" fill="var(--text2)" font-family="Segoe UI">Certifs</text>
   <rect x="8" y="114" width="72" height="26" rx="6" fill="transparent"/>
   <text x="20" y="131" font-size="10" fill="var(--text2)" font-family="Segoe UI">Audits</text>
   <rect x="8" y="144" width="72" height="26" rx="6" fill="transparent"/>
@@ -3910,7 +4594,7 @@ ovWelcome: `<svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
     <circle cx="127" cy="87" r="8" fill="none" stroke="var(--accent)" stroke-width="1.6"/>
     <path d="M 123 87 L 126 90 L 132 84" stroke="var(--accent)" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     <text x="150" y="86" font-size="14" fill="var(--text)" font-weight="800" font-family="Segoe UI">Suivi qualité</text>
-    <text x="150" y="100" font-size="11" fill="var(--muted)" font-family="Segoe UI">NC, canaux, audits reçus.</text>
+    <text x="150" y="100" font-size="11" fill="var(--muted)" font-family="Segoe UI">NC, audits reçus.</text>
     <rect x="112" y="112" width="220" height="26" rx="6" fill="var(--bg)" stroke="var(--border)"/>
     <text x="122" y="129" font-size="12" fill="var(--text)" font-weight="700" font-family="Segoe UI">Non-conformités</text>
     <text x="316" y="129" font-size="12" fill="var(--muted)" font-family="Segoe UI">›</text>
@@ -4628,8 +5312,8 @@ function _qualiteGuides(){
         },
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
-          title: "Canaux NC (échanges)",
-          body: "Chaque NC porte un <strong>canal de discussion</strong> intégré : commentaires horodatés, mentions, notifications aux personnes concernées. Idéal pour tracer les échanges autour d'une NC sans quitter MyQualité."
+          title: "Discussion & échanges",
+          body: "Chaque NC porte un <strong>fil de discussion</strong> intégré (onglet Discussion dans le détail) : commentaires horodatés, mentions, notifications aux personnes concernées. Toute la trace des échanges reste attachée à la NC."
         },
       ]
     },
