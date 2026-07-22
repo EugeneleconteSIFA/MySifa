@@ -147,6 +147,7 @@
           unit: (it && it.unit) || '',
           min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
           max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+          required: !!(it && it.required),
         };
       }
       const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -155,6 +156,7 @@
         responses: responses.length ? responses : ['Conforme'],
         multi: (it && it.multi === false) ? false : true,
         allow_other: !!(it && it.allow_other),
+        required: !!(it && it.required),
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
@@ -205,10 +207,12 @@
                 const maxStr = (it.max != null) ? String(it.max) : '+∞';
                 hint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + _esc(minStr) + ' à ' + _esc(maxStr) + (it.unit ? ' ' + _esc(it.unit) : '') + '</div>';
               }
+              const _reqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
+                + (it.required ? ' data-required="1"' : '')
                 + (it.min != null ? ' data-min="' + _esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + _esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarV + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="window._mysifaAlertOnValueInput(this)">'
                 +   unit
@@ -235,8 +239,9 @@
             const otherArea = it.allow_other
               ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
               : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + '</div>'
+            const _reqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarC + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
               + otherArea
               + '</div>';
@@ -272,9 +277,12 @@
   }
 
   function _isComplete(wrap, alert) {
+    // v2.2.85 : ne bloque que sur les questions REQUIRED. Les autres restent
+    // optionnelles (l'opérateur peut valider sans y répondre).
     if (!alert.checklist.enabled) return true;
     const items = wrap.querySelectorAll('.ta-cl-item');
     for (const it of items) {
+      if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value') {
         const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
@@ -284,6 +292,15 @@
       }
     }
     return true;
+  }
+  // v2.2.85 : recalcule l'état disabled du bouton Valider selon les required
+  function _updateValidateState(wrap, alert) {
+    const btn = wrap.querySelector('.ta-validate');
+    if (!btn) return;
+    const ok = _isComplete(wrap, alert);
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '' : '.5';
+    btn.style.cursor = ok ? '' : 'not-allowed';
   }
 
   // Retrouve le no_dossier sur lequel l'operateur travaille au moment de
@@ -587,30 +604,22 @@
     };
 
     const onValidate = async () => {
-      if (_isComplete(wrap, alert)) {
-        const ok = await _submitAck(alert.id, wrap, alert);
-        if (ok) { _toast('Contrôle validé.'); closeWithSuccess(); }
-        return;
-      }
-      const actions = wrap.querySelector('.ta-sim-actions');
-      if (!actions) return;
-      actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
-        + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
-        + '<div style="display:flex;gap:6px">'
-        +   '<button type="button" class="ta-sim-btn ta-edit" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
-        +   '<button type="button" class="ta-sim-btn ta-confirm" style="flex:1">Valider quand même</button>'
-        + '</div>'
-        + '</div>';
-      actions.querySelector('.ta-confirm').addEventListener('click', async () => {
-        const ok = await _submitAck(alert.id, wrap, alert);
-        if (ok) { _toast('Contrôle validé.'); closeWithSuccess(); }
-      });
-      actions.querySelector('.ta-edit').addEventListener('click', () => {
-        actions.innerHTML = '<button type="button" class="ta-sim-btn ta-validate">' + _esc(alert.validation.button_label) + '</button>';
-        actions.querySelector('.ta-validate').addEventListener('click', onValidate);
-      });
+      // v2.2.85 : bouton disabled tant que required pas OK, donc si on arrive
+      // ici, tout est valide. Plus de warning "valider quand même" — les
+      // questions non-required peuvent rester vides sans souci.
+      if (!_isComplete(wrap, alert)) return;  // sécurité (bouton disabled)
+      const ok = await _submitAck(alert.id, wrap, alert);
+      if (ok) { _toast('Contrôle validé.'); closeWithSuccess(); }
     };
     wrap.querySelector('.ta-validate').addEventListener('click', onValidate);
+    // v2.2.85 : brancher les listeners d'inputs pour mettre à jour l'état disabled
+    // du bouton Valider en temps réel selon les questions obligatoires.
+    const _syncValidate = () => _updateValidateState(wrap, alert);
+    wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val').forEach(el => {
+      el.addEventListener('change', _syncValidate);
+      el.addEventListener('input', _syncValidate);
+    });
+    _syncValidate();
 
     // v164 : bouton dismiss (fermeture silencieuse, aucune trace)
     const dismissBtn = wrap.querySelector('.ta-dismiss');
