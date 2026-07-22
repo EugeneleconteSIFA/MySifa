@@ -1636,6 +1636,10 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
   padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
 
 /* ── Réception matière ─────────────────────────────────────── */
+.recep-add-row{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}
+@media(max-width:600px){.recep-add-row{flex-wrap:wrap}}
+.recep-add-row .recep-manual-inp{flex:1;min-width:0}
+
 .recep-picker-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .recep-picker-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
 .recep-picker-row{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;align-items:end}
@@ -14793,50 +14797,53 @@ function buildReceptionNouvelle() {
     block.appendChild(buildReceptionPicker(false));
   }
 
-  // ── Grille scanner + saisie manuelle ──
-  const grid = el('div', { cls: 'recep-layout' });
+  // ── Section compacte : Ajouter une bobine (scan ou saisie manuelle) ──
+  const addCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('package', 14), ' Ajouter une bobine (scan ou saisie manuelle)')
+  );
+  const addRow = el('div', { cls: 'recep-add-row' });
+  const addInp = el('input', {
+    cls: 'recep-manual-inp',
+    type: 'text',
+    placeholder: 'Code-barres — Entrée pour ajouter',
+    autocomplete: 'off',
+    autocorrect: 'off',
+    spellcheck: 'false',
+  });
+  addInp.value = S.recepManual || '';
+  addInp.addEventListener('input', e => { S.recepManual = e.target.value; });
+  addInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; addInp.value = ''; addInp.focus(); }
+    }
+  });
+  const addBtn = el('button', {
+    cls: 'btn-recep btn-recep-primary',
+    type: 'button',
+    on: { click: () => {
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; addInp.value = ''; addInp.focus(); }
+    } },
+  }, '+ Ajouter');
+  const scanBtn = el('button', {
+    cls: 'btn-recep btn-recep-ghost',
+    type: 'button',
+    on: { click: recepStartCamera },
+  }, iconEl('scan', 14), ' Scanner');
+  addRow.append(addInp, addBtn, scanBtn);
+  addCard.appendChild(addRow);
 
-  const camCard = el('div', { cls: 'recep-card' },
-    el('div', { cls: 'recep-card-title' }, iconEl('scan', 14), ' Scanner une bobine')
-  );
-  const placeholder = el('div', { cls: 'recep-cam-placeholder' },
-    iconEl('scan', 40),
-    el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
-  );
-  camCard.appendChild(placeholder);
-  camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: recepStartCamera } }, iconEl('scan', 14), ' Démarrer le scan'));
-  grid.appendChild(camCard);
+  // Note (optionnel) — compacte sous le champ code-barres
+  const noteInp = el('input', {
+    cls: 'recep-note-inp',
+    type: 'text',
+    placeholder: 'Note (optionnel) — ex: BL fournisseur, remarque…',
+  });
+  noteInp.value = S.recepNote || '';
+  noteInp.addEventListener('input', e => { S.recepNote = e.target.value; });
+  addCard.appendChild(noteInp);
 
-  const manCard = el('div', { cls: 'recep-card' },
-    el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Saisie manuelle'),
-    el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' } }, 'Saisissez ou collez un code-barres puis appuyez sur Entrée'),
-    (() => {
-      const wrap2 = el('div', { cls: 'recep-manual-wrap' });
-      const inp = el('input', { cls: 'recep-manual-inp', attrs: { type: 'text', placeholder: 'Ex: 3700123456789', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false' } });
-      inp.value = S.recepManual || '';
-      inp.addEventListener('input', e => { S.recepManual = e.target.value; });
-      inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
-        }
-      });
-      const btn = el('button', { cls: 'btn-recep btn-recep-ghost', on: { click: () => {
-        if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
-      }}}, '+ Ajouter');
-      wrap2.append(inp, btn);
-      return wrap2;
-    })(),
-    el('div', { cls: 'recep-card-title', style: { marginTop: '8px' } }, iconEl('inbox', 14), ' Note (optionnel)'),
-    (() => {
-      const inp = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Ex: Livraison fournisseur X, bon de livraison 123…' } });
-      inp.value = S.recepNote || '';
-      inp.addEventListener('input', e => { S.recepNote = e.target.value; });
-      return inp;
-    })()
-  );
-  grid.appendChild(manCard);
-  block.appendChild(grid);
+  block.appendChild(addCard);
 
   // ── Tableau bobines scannées + fournisseur/FSC + preview lot ──
   const tableCard = el('div', { cls: 'recep-card' });
