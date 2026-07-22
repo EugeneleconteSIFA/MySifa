@@ -1,10 +1,16 @@
-"""Paramètres MySifa — accès piloté par ROLES_SETTINGS (config.py)."""
+"""Paramètres MySifa — accès par section (ROLES_SETTINGS_* dans config.py)."""
+
+import json as _json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import APP_VERSION
-from services.auth_service import get_current_user, can_access_settings
+from services.auth_service import (
+    get_current_user,
+    can_access_settings,
+    settings_sections_visibility,
+)
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
@@ -27,10 +33,12 @@ def settings_page(request: Request):
                 "Merci de contacter un administrateur en cas de besoin."
             ),
         )
+    visibility = settings_sections_visibility(user)
     return HTMLResponse(
-        content=SETTINGS_HTML.replace("__V_LABEL__", f"v{APP_VERSION}").replace(
-            "/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK
-        )
+        content=SETTINGS_HTML
+            .replace("__V_LABEL__", f"v{APP_VERSION}")
+            .replace("__SETTINGS_VISIBILITY_JSON__", _json.dumps(visibility))
+            .replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
     )
 
 
@@ -523,6 +531,24 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 </style>
 </head>
 <body>
+<script>
+window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
+(function(){
+  var V = window.__SETTINGS_VISIBILITY__ || {};
+  function apply(){
+    document.querySelectorAll('[data-req-section]').forEach(function(el){
+      var sec = el.getAttribute('data-req-section');
+      if (sec && !V[sec]) el.style.display = 'none';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -536,65 +562,65 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         Menu général
       </button>
       <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <div class="nav-subgroup-label"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="operations">
+      <div class="nav-subgroup-label" data-req-section="fabrication"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
-      <button type="button" class="nav-btn" data-tab="maintenance">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="maintenance">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
       </button>
-      <button type="button" class="nav-btn" data-tab="machines">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="machines">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-subgroup-label"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="emplacements">
+      <div class="nav-subgroup-label" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
       </button>
-      <button type="button" class="nav-btn" data-tab="laizes">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="laizes">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
       </button>
-      <button type="button" class="nav-btn" data-tab="importations">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="importations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
       </button>
-      <button type="button" class="nav-btn" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
         Appairage matières
       </button>
-      <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="users">
+      <div class="nav-subgroup-label" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Utilisateurs
       </button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="fournisseurs">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Fournisseurs
       </button>
-      <button type="button" class="nav-btn" data-tab="clients">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="clients">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
         Clients
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="matrix">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="access"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
       </button>
-      <button type="button" class="nav-btn" data-tab="defaults">
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="defaults">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="updates">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="communication"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="communication" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="audit">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -604,30 +630,39 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         </svg>
         Log
       </button>
-      <button type="button" class="nav-btn" data-tab="dashboards">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="dashboards">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Tableaux de bord
       </button>
-      <button type="button" class="nav-btn" data-tab="fsc">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
       </button>
-      <button type="button" class="nav-btn" data-tab="api">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="api">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="printers">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Imprimantes
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="promote">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="promote">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
+      </button>
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimantes
+      </button>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="fsc">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg>
+        Registre FSC
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -679,7 +714,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       </div>
       <div class="menu-grid">
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="fabrication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
             <div><span class="mg-lbl">Fabrication</span><span class="mg-desc">Codes opérations, maintenance et parc machines.</span></div>
@@ -703,7 +738,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="logistique">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
             <div><span class="mg-lbl">Logistique</span><span class="mg-desc">Stock, emplacements et imports transporteurs.</span></div>
@@ -732,7 +767,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="contacts">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
             <div><span class="mg-lbl">Contacts</span><span class="mg-desc">Utilisateurs, fournisseurs et clients (ERP).</span></div>
@@ -756,7 +791,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="access">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
             <div><span class="mg-lbl">Accès &amp; permissions</span><span class="mg-desc">Matrice des accès et rôles par défaut.</span></div>
@@ -775,7 +810,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="communication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
             <div><span class="mg-lbl">Communication</span><span class="mg-desc">Annonces MAJ diffusées aux utilisateurs.</span></div>
@@ -789,7 +824,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="audit_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg></span>
             <div><span class="mg-lbl">Audit &amp; qualité</span><span class="mg-desc">Log d'activité, tableaux de bord, registre FSC.</span></div>
@@ -823,7 +858,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="print_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
             <div><span class="mg-lbl">Impression &amp; déploiement</span><span class="mg-desc">Imprimantes, templates et promotion v1 → v2.</span></div>
@@ -837,6 +872,26 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <button type="button" class="menu-item" data-goto="promote">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Promouvoir v1 → v2</span><span class="mi-desc">Publier le staging en production après validation.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+
+        <div class="menu-group" data-req-section="tools_only">
+          <div class="menu-group-head">
+            <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+            <div><span class="mg-lbl">Outils</span><span class="mg-desc">Imprimantes et registre FSC.</span></div>
+          </div>
+          <div class="menu-items">
+            <button type="button" class="menu-item" data-goto="printers">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Imprimantes</span><span class="mi-desc">Configuration Zebra / Brother, templates étiquettes.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="fsc">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2138,7 +2193,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                     <div style="display:flex;gap:10px;align-items:flex-start">
                       <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
                       <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
-                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct depuis ce wizard sur le PC hôte). <strong>Il doit atterrir dans le dossier Téléchargements</strong> (comportement navigateur par défaut).
+                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct sur ce PC).
                       </div>
                     </div>
                   </div>
@@ -2276,29 +2331,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <h2 style="margin:0 0 4px">Formations &amp; guides in-app</h2>
             <p class="sub" style="margin:0;font-size:12px">Suivi des tutos lus dans MyQualité. Vous pouvez remettre à zéro un guide pour un utilisateur (il le reverra à sa prochaine visite).</p>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-sec btn-sm" id="fmt-toggle-config" onclick="toggleGuidesConfigSection()">Activer / désactiver les guides</button>
-            <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
-          </div>
+          <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
         </div>
-
-        <!-- Section activation / desactivation des guides -->
-        <div id="fmt-config-section" class="hidden" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg)">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-            <div>
-              <h3 style="margin:0 0 2px;font-size:14px">Activation des guides</h3>
-              <p class="sub" style="margin:0;font-size:11.5px">Un guide désactivé disparaît de son onglet (bouton d'aide masqué) et ne s'ouvre plus automatiquement. La progression déjà enregistrée est conservée.</p>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(true)">Tout activer</button>
-              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(false)">Tout désactiver</button>
-            </div>
-          </div>
-          <div id="fmt-config-list" style="display:flex;flex-direction:column;gap:6px">
-            <div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>
-          </div>
-        </div>
-
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
           <input type="text" id="fmt-search" placeholder="Rechercher (nom, email, rôle, guide...)" autocomplete="off"
             style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
@@ -5827,7 +5861,6 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
-  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -5870,7 +5903,6 @@ function _alertDefaults(existing) {
         unit: (it && it.unit) || '',
         min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
-        required: !!(it && it.required),  // v2.2.86 : préserver required
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -5885,7 +5917,6 @@ function _alertDefaults(existing) {
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
-      required: !!(it && it.required),  // v2.2.86 : préserver required
     };
   });
   return {
@@ -5895,7 +5926,6 @@ function _alertDefaults(existing) {
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
-    block_production: !!(p && p.block_production),  // v2.2.88
   };
 }
 
@@ -5980,7 +6010,6 @@ function _renderAlertFormFields(params, opts) {
     +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
     +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
     +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
-    +       '<!-- v2.2.88 : Délai retiré pour after_calage. L\'alerte se déclenche à la saisie du calage. -->'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -6006,14 +6035,6 @@ function _renderAlertFormFields(params, opts) {
     +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
     +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
     +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
-    + '</div>'
-    // v2.2.88 : Bloque la production par alerte
-    + '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-    +   '<div>'
-    +     '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-    +     '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
-    +   '</div>'
-    +   '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
     + '</div>'
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
@@ -6116,7 +6137,6 @@ function _afOnOtherToggle(cb){
 function _afChecklistCard(item) {
   const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
   const type = (item && item.type) || 'choice';
-  const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
   return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
@@ -6125,11 +6145,6 @@ function _afChecklistCard(item) {
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
-    // v2.2.85 : case à cocher Obligatoire (bloque la validation opérateur si vide)
-    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
-    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
-    + '</label>'
     + _afChecklistCardBody(item)
     + '</div>';
 }
@@ -6212,9 +6227,7 @@ function _afOnDismissToggle() {
 }
 
 // v2.2.42 : no-op depuis le retrait du filtre produit.
-function _afOnTriggerEventChange() {
-  // v2.2.88 : bloc délai retiré, plus rien à toggle.
-}
+function _afOnTriggerEventChange() { /* no-op */ }
 
 function _afRowClick(ev, inputId) {
   // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
@@ -6296,8 +6309,6 @@ function _afOnTriggerChange() {
   document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
     el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
   });
-  // v2.2.79 : après changement de type, sync l'état du bloc after_calage
-  if (typeof _afOnTriggerEventChange === 'function') _afOnTriggerEventChange();
 }
 
 function _afReadParams() {
@@ -6325,8 +6336,6 @@ function _afReadParams() {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
     // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
     delete trig.filter_conditionnement;
-    // v2.2.88 : delay_minutes retiré (n'a plus de sens dans le nouveau mode)
-    delete trig.delay_minutes;
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
@@ -6344,8 +6353,6 @@ function _afReadParams() {
         if (unit) item.unit = unit;
         if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
         if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
-        // v2.2.85 : required
-        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         items.push(item);
         return;
       }
@@ -6362,11 +6369,7 @@ function _afReadParams() {
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      // v2.2.85 : required
-      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
-      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
-      if (_reqCk) _choiceItem.required = true;
-      items.push(_choiceItem);
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -6390,8 +6393,6 @@ function _afReadParams() {
     validation: {
       button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
     },
-    // v2.2.88 : block_production par alerte
-    block_production: !!document.getElementById('af-block-production')?.checked,
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
@@ -6539,7 +6540,13 @@ const placementOpts = placements.map(p =>
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
-
+      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+      +     '<div>'
+      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
+      +     '</div>'
+      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+      +   '</div>'
       + '</div>'
       + '<div class="alert-modal-foot">'
       +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
@@ -6555,7 +6562,7 @@ const placementOpts = placements.map(p =>
       const payload = {
         placement: document.getElementById('ags-placement').value,
         size: document.getElementById('ags-size').value,
-
+        block_production: document.getElementById('ags-block').checked,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
@@ -6613,12 +6620,10 @@ async function previewAlert(id) {
                 const maxStr = (it.max != null) ? String(it.max) : '+∞';
                 toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
               }
-              const _taReqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
-                + (it.required ? ' data-required="1"' : '')
                 + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarV + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
@@ -6645,9 +6650,8 @@ async function previewAlert(id) {
             const otherArea = it.allow_other
               ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
               : '';
-            const _taReqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarC + '</div>'
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
               + otherArea
               + '</div>';
@@ -6658,8 +6662,7 @@ async function previewAlert(id) {
   // Construction du wrapper de simulation (positionnement, taille, backdrop)
   const wrap = document.createElement('div');
   wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
-  // v2.2.88 : par alerte (fallback réglage global si présent pour rétrocompat)
-  if (d.block_production || settings.block_production) wrap.classList.add('ta-blocking');
+  if (settings.block_production) wrap.classList.add('ta-blocking');
 
   // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
   const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
@@ -6695,7 +6698,7 @@ async function previewAlert(id) {
 
   // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
   const onKey = (ev) => {
-    if (ev.key === 'Escape' && !d.block_production && !settings.block_production) {
+    if (ev.key === 'Escape' && !settings.block_production) {
       close();
       document.removeEventListener('keydown', onKey);
     }
@@ -6703,7 +6706,7 @@ async function previewAlert(id) {
   document.addEventListener('keydown', onKey);
 
   // Si non bloquant + placement coin : cliquer en dehors ferme
-  if (!d.block_production && !settings.block_production) {
+  if (!settings.block_production) {
     setTimeout(() => {
       const outsideClick = (ev) => {
         if (!wrap.contains(ev.target)) return;
@@ -6718,12 +6721,11 @@ async function previewAlert(id) {
     }, 100);
   }
 
-  // Valider — v2.2.87 : ne bloque que sur les questions REQUIRED
+  // Valider
   function _taIsComplete() {
     if (!clEnabled) return true;
     const items = wrap.querySelectorAll('.ta-cl-item');
     for (const it of items) {
-      if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value') {
         const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
@@ -6733,15 +6735,6 @@ async function previewAlert(id) {
       }
     }
     return true;
-  }
-  // v2.2.87 : sync du bouton Valider selon required
-  function _taSyncValidateState() {
-    const btn = wrap.querySelector('#ta-validate');
-    if (!btn) return;
-    const ok = _taIsComplete();
-    btn.disabled = !ok;
-    btn.style.opacity = ok ? '' : '.5';
-    btn.style.cursor = ok ? '' : 'not-allowed';
   }
   function _taFinalize() {
     toast('Test terminé — aucune donnée enregistrée.');
@@ -6764,17 +6757,12 @@ async function previewAlert(id) {
     document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
   }
   function _taOnValidate() {
-    // v2.2.87 : bouton disabled tant que required pas OK → sécurité si on arrive ici
-    if (!_taIsComplete()) return;
-    _taFinalize();
+    if (_taIsComplete()) { _taFinalize(); return; }
+    const actions = wrap.querySelector('.ta-sim-actions');
+    if (!actions) { _taFinalize(); return; }
+    _taRenderConfirm(actions);
   }
   document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  // v2.2.87 : listeners pour recalculer l'état disabled en temps réel
-  wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val').forEach(el => {
-    el.addEventListener('change', _taSyncValidateState);
-    el.addEventListener('input', _taSyncValidateState);
-  });
-  _taSyncValidateState();
   // v164 : bouton dismiss dans la preview
   const taDismiss = document.getElementById('ta-dismiss');
   if (taDismiss) {
@@ -8800,8 +8788,7 @@ async function prWizCreateAgent() {
     // Affiche le bloc token + installer
     document.getElementById('pr-wiz-token-display').value = r.token;
     // Génère la commande d'install pré-remplie avec le token
-    // v2 - chemin absolu vers Downloads : pas besoin de cd manuel avant
-    const cmd = `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\install_agent_windows.ps1" -Token "${r.token}"`;
+    const cmd = `powershell -ExecutionPolicy Bypass -File .\\install_agent_windows.ps1 -Token "${r.token}"`;
     document.getElementById('pr-wiz-install-cmd').value = cmd;
     document.getElementById('pr-wiz-agent-created').style.display = '';
     // Cache le bloc install si c'est TCP/IP (l'agent tourne peut-être ailleurs, on ne force pas)
@@ -9364,111 +9351,6 @@ try {
   const rf = document.getElementById('fmt-refresh');
   if(rf) rf.onclick = () => loadFormationsAdmin();
 } catch(e){}
-
-
-// ─── Activation / désactivation des guides ────────────────────────
-let _fmtConfigData = null;   // { guides: [{guide_key, label, module, enabled, updated_at}, ...] }
-let _fmtConfigOpen = false;
-
-function toggleGuidesConfigSection(){
-  const sec = document.getElementById('fmt-config-section');
-  const btn = document.getElementById('fmt-toggle-config');
-  if(!sec) return;
-  _fmtConfigOpen = !_fmtConfigOpen;
-  sec.classList.toggle('hidden', !_fmtConfigOpen);
-  if(btn) btn.textContent = _fmtConfigOpen ? 'Fermer' : 'Activer / désactiver les guides';
-  if(_fmtConfigOpen && !_fmtConfigData) loadGuidesConfig();
-}
-
-async function loadGuidesConfig(){
-  const list = document.getElementById('fmt-config-list');
-  if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>';
-  try {
-    _fmtConfigData = await api('/api/guides/admin/config');
-    renderGuidesConfig();
-  } catch(e){
-    if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--danger,#ef4444)">Erreur chargement : '+ (e.message||'') +'</div>';
-  }
-}
-
-function renderGuidesConfig(){
-  const list = document.getElementById('fmt-config-list');
-  if(!list || !_fmtConfigData) return;
-  const guides = _fmtConfigData.guides || [];
-  if(!guides.length){
-    list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Aucun guide.</div>';
-    return;
-  }
-  list.innerHTML = guides.map(g => {
-    const checked = g.enabled ? 'checked' : '';
-    const stateLabel = g.enabled ? 'Actif' : 'Désactivé';
-    const stateColor = g.enabled ? 'var(--ok)' : 'var(--muted)';
-    return `<label style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;user-select:none">
-      <input type="checkbox" ${checked} data-guide-toggle="${esc(g.guide_key)}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
-        onchange="setGuideEnabled('${esc(g.guide_key).replace(/'/g,"\\'")}', this.checked)">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px">${esc(g.label)}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:ui-monospace,monospace">${esc(g.module||'')}${g.module?' · ':''}${esc(g.guide_key)}</div>
-      </div>
-      <span data-guide-state="${esc(g.guide_key)}" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${stateColor};min-width:70px;text-align:right">${stateLabel}</span>
-    </label>`;
-  }).join('');
-}
-
-async function setGuideEnabled(guideKey, enabled){
-  // Optimistic UI : mettre a jour l'etat local + le pill
-  if(_fmtConfigData){
-    const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
-    if(g) g.enabled = !!enabled;
-  }
-  const stateEl = document.querySelector('[data-guide-state="'+guideKey.replace(/"/g,'\\"')+'"]');
-  if(stateEl){
-    stateEl.textContent = enabled ? 'Actif' : 'Désactivé';
-    stateEl.style.color = enabled ? 'var(--ok)' : 'var(--muted)';
-  }
-  try {
-    await api('/api/guides/admin/config', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({guide_key: guideKey, enabled: !!enabled})
-    });
-    toast(enabled ? 'Guide activé' : 'Guide désactivé');
-  } catch(e){
-    toast('Erreur enregistrement : ' + (e.message||''), true);
-    // Rollback
-    const cb = document.querySelector('[data-guide-toggle="'+guideKey.replace(/"/g,'\\"')+'"]');
-    if(cb) cb.checked = !enabled;
-    if(_fmtConfigData){
-      const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
-      if(g) g.enabled = !enabled;
-    }
-    if(stateEl){
-      stateEl.textContent = !enabled ? 'Actif' : 'Désactivé';
-      stateEl.style.color = !enabled ? 'var(--ok)' : 'var(--muted)';
-    }
-  }
-}
-
-async function setAllGuidesEnabled(enabled){
-  if(!_fmtConfigData) return;
-  const guides = _fmtConfigData.guides || [];
-  const targets = guides.filter(g => !!g.enabled !== !!enabled);
-  if(!targets.length){
-    toast(enabled ? 'Tous les guides sont déjà actifs' : 'Tous les guides sont déjà désactivés');
-    return;
-  }
-  if(!confirm((enabled ? 'Activer' : 'Désactiver') + ' les ' + targets.length + ' guide(s) restant(s) ?')) return;
-  for(const g of targets){
-    try {
-      await api('/api/guides/admin/config', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({guide_key: g.guide_key, enabled: !!enabled})
-      });
-      g.enabled = !!enabled;
-    } catch(e){ /* on continue */ }
-  }
-  renderGuidesConfig();
-  toast(enabled ? 'Guides activés' : 'Guides désactivés');
-}
 
 
 // ─── Appairage matières (bridge MyStock <-> Coûts matières) ────────────
