@@ -16,15 +16,18 @@
     const style = document.createElement('style');
     style.id = 'mysifa-alert-runtime-css';
     style.textContent = [
-      '.ta-sim{position:fixed;inset:0;display:flex;z-index:2000;pointer-events:none;padding:20px;box-sizing:border-box}',
+      /* v2.3.15 : ancrage direct au coin — plus de flex pivot autour du milieu */
+      '.ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}',
       '.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}',
-      '.ta-sim.ta-pl-center{align-items:center;justify-content:center}',
-      '.ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}',
-      '.ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}',
-      '.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}',
-      '.ta-sz-small .ta-sim-alert{max-width:260px;width:100%}',
-      '.ta-sz-medium .ta-sim-alert{max-width:340px;width:100%}',
-      '.ta-sz-large .ta-sim-alert{max-width:440px;width:100%}',
+      '.ta-sim-alert{position:absolute;background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto;box-sizing:border-box}',
+      /* Placements — ancrage précis au coin ou au centre */
+      '.ta-sim.ta-pl-top-right .ta-sim-alert{top:20px;right:20px}',
+      '.ta-sim.ta-pl-bottom-right .ta-sim-alert{bottom:20px;right:20px}',
+      '.ta-sim.ta-pl-center .ta-sim-alert{top:50%;left:50%;transform:translate(-50%,-50%)}',
+      /* Tailles — largeurs fixes qui tiennent dans le viewport */
+      '.ta-sz-small .ta-sim-alert{width:260px;max-width:calc(100vw - 40px)}',
+      '.ta-sz-medium .ta-sim-alert{width:340px;max-width:calc(100vw - 40px)}',
+      '.ta-sz-large .ta-sim-alert{width:440px;max-width:calc(100vw - 40px)}',
       '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}',
       '.ta-sim-actions{display:flex;gap:6px;margin-top:10px}',
       '.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}',
@@ -37,7 +40,7 @@
       '.ta-chip-other{border-style:dashed}',
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}',
+      '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}.ta-sim.ta-pl-top-right .ta-sim-alert,.ta-sim.ta-pl-bottom-right .ta-sim-alert{right:12px;left:12px;width:auto}}',
       '.ta-sim-alert{position:relative;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
       '.ta-sim-title{cursor:grab;user-select:none}',
       '.ta-sim-title.ta-dragging{cursor:grabbing}',
