@@ -2762,8 +2762,23 @@ async function addAuditeurNow(uid){
     .sd-card-stat b{color:var(--text);font-weight:700}
     /* Vue détail */
     .sd-detail-head{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;margin-bottom:18px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
-    .sd-detail-head-info{flex:1;min-width:260px}
-    .sd-detail-head-actions{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+    .sd-detail-head-info{flex:1;min-width:220px}
+    .sd-detail-head-actions{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
+    @media(max-width:720px){
+      .sd-detail-head{padding:18px 16px;gap:12px}
+      .sd-detail-head-info{flex:1 1 100%;min-width:0}
+      .sd-detail-head-actions{flex:1 1 100%;flex-direction:column;align-items:stretch;gap:8px}
+      .sd-detail-head-actions .btn{width:100%;justify-content:center;text-align:center;padding:12px 14px !important;font-size:13px !important}
+      .sd-detail-title{font-size:17px}
+      .sd-hero{padding:16px 18px}
+      .sd-hero h1{font-size:18px}
+      .sd-grid{grid-template-columns:1fr;gap:12px}
+      .sd-card{padding:16px 18px}
+      .sd-versions{padding:14px}
+      .sd-version-row{grid-template-columns:1fr;gap:8px}
+      .sd-version-actions{justify-content:flex-start}
+      .sd-versions-search{width:100%;min-width:0}
+    }
     .sd-detail-title{font-size:20px;color:var(--text);margin:0 0 4px;font-weight:800}
     .sd-detail-sub{color:var(--muted);font-style:italic;font-size:13px;margin-bottom:8px}
     .sd-detail-desc{color:var(--text2);font-size:12px;line-height:1.55;max-width:720px}
@@ -2929,7 +2944,7 @@ function renderSifaDocDetail(){
       <div class="sd-detail-head-actions">
         <a class="btn btn-ghost" href="/api/qualite/sifa-docs/templates/${encodeURIComponent(t.code)}/preview" target="_blank" style="padding:10px 14px;font-size:12px">Aperçu template vierge</a>
         <button class="btn btn-accent" onclick="openSifaDocGenerate('${escAttr(t.code)}')" style="padding:10px 16px;font-size:13px">
-          + Créer version pour un client
+          + Nouvelle version
         </button>
       </div>
     </div>
@@ -4243,6 +4258,15 @@ document.addEventListener('keydown', function(ev){
     .four-detail-hd{margin-bottom:16px}
     .four-detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .four-detail-lhs{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    /* Fix mobile : les 2 blocs se stackent proprement, boutons pleine largeur */
+    @media(max-width:720px){
+      .four-detail-top{flex-direction:column;align-items:stretch}
+      .four-detail-lhs{width:100%}
+      .four-detail-top > .qual-write{width:100%;display:flex;gap:8px;flex-wrap:wrap}
+      .four-detail-top > .qual-write > .btn{flex:1 1 auto;justify-content:center;min-height:38px;font-size:12px !important}
+      .cert-labels-box{max-height:45vh}
+      .cert-row{gap:8px}
+    }
     .four-detail-top > .four-detail-lhs > .btn-ghost,
     .four-detail-top > .qual-write > .btn-ghost{background:var(--card);color:var(--text);border-color:var(--border)}
     .four-detail-top > .four-detail-lhs > .btn-ghost:hover,
