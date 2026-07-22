@@ -6015,6 +6015,31 @@ function openFournisseurSettingsModal(id){
               </div>
             </div>
           </div>
+          <div style="padding-top:6px;border-top:1px solid var(--border)">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Origine géographique de fabrication</div>
+            <label class="form-label" for="fs-pays-origine">Pays d'origine des matières</label>
+            <input type="text" id="fs-pays-origine" class="form-input" value="${escAttr(f.pays_origine||'')}" placeholder="ex: Allemagne, Royaume-Uni, Espagne…" list="fs-pays-dl">
+            <datalist id="fs-pays-dl">
+              <option value="Allemagne">
+              <option value="Espagne">
+              <option value="France">
+              <option value="Italie">
+              <option value="Portugal">
+              <option value="Belgique">
+              <option value="Pays-Bas">
+              <option value="Royaume-Uni">
+              <option value="Suède">
+              <option value="Finlande">
+              <option value="Autriche">
+              <option value="Suisse">
+              <option value="Pologne">
+              <option value="Turquie">
+              <option value="Chine">
+              <option value="États-Unis">
+              <option value="Japon">
+            </datalist>
+            <div style="font-size:10.5px;color:var(--muted);margin-top:6px;font-style:italic">Utilisé dans la section 3 « Fournisseurs — origine géographique » de la Déclaration UE de Conformité.</div>
+          </div>
         </div>
       </div>
       <div class="modal-ft">
@@ -6041,11 +6066,12 @@ async function submitFournisseurSettings(id){
   const certificat = has_fsc ? document.getElementById('fs-cert').value.trim() : '';
   const groupe = document.getElementById('fs-groupe').value.trim();
   const branche = document.getElementById('fs-branche').value.trim();
+  const pays_origine = (document.getElementById('fs-pays-origine')?.value||'').trim();
   if(!nom){ showToast('Nom obligatoire','danger'); return; }
   try{
     const r = await api('/api/qualite/ressources/fournisseurs/'+id, {
       method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nom, licence, certificat, has_fsc, groupe, branche})
+      body: JSON.stringify({nom, licence, certificat, has_fsc, groupe, branche, pays_origine})
     });
     if(!r.ok){ showToast('Erreur enregistrement','danger'); return; }
     S.currentRes = await r.json();
