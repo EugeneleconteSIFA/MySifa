@@ -7371,6 +7371,17 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 204, "sifa_certifications_declaration_ue")
 
+    # Migration 205 : sections_overrides_json sur qualite_sifa_doc_versions.
+    # Permet de personnaliser à la génération : exclure ou éditer certaines
+    # sections du template pour un client donné (JSON: {sec_id: {include, custom_body}}).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=205 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_versions)").fetchall()}
+        if "sections_overrides_json" not in cols:
+            conn.execute("ALTER TABLE qualite_sifa_doc_versions ADD COLUMN sections_overrides_json TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 205, "sifa_doc_versions_sections_overrides")
+
+
 
 
 
