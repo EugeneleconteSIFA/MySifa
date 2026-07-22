@@ -3151,12 +3151,7 @@ async function openSifaDocGenerate(code, prefill){
                      onchange="S._sifaGen.date_emission=this.value">
             </div>
           </div>
-          ${audits.length ? `
-            <div style="margin-top:12px">
-              <div class="sd-gen-sublabel">Ou reprendre un audit client existant :</div>
-              <div class="sd-audit-picker" id="sd-audit-picker"></div>
-            </div>
-          ` : ''}
+
         </div>
 
         <div class="sd-gen-section">
@@ -3197,7 +3192,6 @@ async function openSifaDocGenerate(code, prefill){
     </div>
   </div>`;
 
-  _sdRenderAudits();
   _sdRenderFours();
   _sdRenderRef();
 }
@@ -3245,7 +3239,6 @@ function _sdPickAudit(audit_id, client_nom){
       (a.fournisseur_ids||[]).forEach(fid => S._sifaGen.fournisseurs_ids.add(fid));
     }
   }
-  _sdRenderAudits();
   _sdRenderFours();
   _sdRenderRef();
 }

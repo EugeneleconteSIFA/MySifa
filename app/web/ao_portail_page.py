@@ -506,6 +506,22 @@ function stopMsgPolling() {{
   }}
 }}
 
+// Polling permanent des compteurs (indépendant de l'onglet actif) pour
+// que les badges Messages / Documents s'actualisent même si le fournisseur
+// reste sur l'onglet Offre. Fréquence plus lente que le polling messages
+// pour économiser les requêtes.
+function startCountsPolling() {{
+  stopCountsPolling();
+  S.countsPolling = setInterval(loadPortailCounts, 45000);
+}}
+
+function stopCountsPolling() {{
+  if (S.countsPolling) {{
+    clearInterval(S.countsPolling);
+    S.countsPolling = null;
+  }}
+}}
+
 document.getElementById("tabs").addEventListener("click", e => {{
   const btn = e.target.closest(".tab");
   if (btn && btn.dataset.tab) setTab(btn.dataset.tab);
@@ -814,6 +830,12 @@ async function init() {{
     S.data = await api("/api/portail/ao/" + TOKEN);
     applyI18n();
     render();
+    // Charge les compteurs (badges Messages/Documents) dès l'arrivée,
+    // sans attendre que l'utilisateur clique sur un onglet. Puis démarre
+    // un polling permanent pour capter les nouveaux docs/messages même
+    // si le fournisseur reste sur l'onglet Offre.
+    loadPortailCounts();
+    startCountsPolling();
   }} catch (e) {{
     document.getElementById("panel-offre").innerHTML =
       '<p class="notice notice-danger">' + escHtml(e.message) + "</p>";

@@ -3,9 +3,21 @@
 AO_PRODUIT_FORM_CSS = """
 .pf-wrap{max-width:1100px}
 .pf-sticky-bar{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
-justify-content:space-between;padding:10px 0;margin-bottom:12px;background:var(--bg);
-border-bottom:1px solid var(--border)}
+justify-content:space-between;padding:10px 14px;margin-bottom:16px;
+background:linear-gradient(135deg, var(--card) 0%, var(--accent-bg) 100%);
+border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
+box-shadow:0 2px 8px rgba(15,23,42,.04)}
 .pf-sticky-bar .pf-actions{display:flex;gap:8px;flex-wrap:wrap}
+/* Titre de page renforcé : accent coloré + micro-badge de statut */
+.pf-page-hdr{display:flex;align-items:center;gap:14px;margin:4px 0 18px;padding:14px 18px;
+background:linear-gradient(135deg, var(--accent-bg) 0%, transparent 60%);
+border-left:4px solid var(--accent);border-radius:0 12px 12px 0}
+.pf-page-hdr .pf-page-icon{display:inline-flex;align-items:center;justify-content:center;
+width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;flex-shrink:0}
+.pf-page-hdr h1{font-size:20px;font-weight:800;margin:0;line-height:1.2;color:var(--text)}
+.pf-page-hdr .pf-page-sub{font-size:12px;color:var(--muted);margin-top:2px;font-weight:500}
+.pf-page-hdr .pf-page-status{margin-left:auto;padding:4px 10px;border-radius:999px;font-size:11px;
+font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:var(--accent-bg);color:var(--accent)}
 .pf-section{margin-bottom:18px}
 .pf-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
 color:var(--accent);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
@@ -190,7 +202,14 @@ function renderProduitForm() {
     icon('file-text',14)+' PDF</button>'+
     '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
-    '<div class="page-hdr" style="margin-bottom:10px"><h1 style="font-size:18px">'+(d.id?'Modifier':'Nouveau')+' produit</h1></div>'+
+    '<div class="pf-page-hdr">'+
+      '<span class="pf-page-icon">'+icon('package',20)+'</span>'+
+      '<div>'+
+        '<h1>'+(d.id?'Modifier':'Nouveau')+' produit</h1>'+
+        '<div class="pf-page-sub">'+(d.ref ? escHtml(d.ref) : 'Fiche produit MyAO')+(d.client_label ? ' · '+escHtml(d.client_label) : '')+'</div>'+
+      '</div>'+
+      (d.id ? '<span class="pf-page-status">Enregistré</span>' : '<span class="pf-page-status" style="background:rgba(251,191,36,.15);color:var(--warn)">Nouveau</span>')+
+    '</div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Infos générales</div><div class="pf-card pf-general">'+
     pfRow('Réf. produit', '<input id="pf-ref" value="'+escAttr(d.ref)+'" required>')+
@@ -487,7 +506,7 @@ function exportProduitPdf() {
     showToast('Enregistrez le produit avant d\'exporter.', 'warn');
     return;
   }
-  window.open('/api/ao/produits/'+S.produitForm.id+'/export', '_blank');
+  window.open('/api/ao/produits/'+S.produitForm.id+'/pdf-fournisseur', '_blank');
 }
 
 function bindProduitFormEvents() {
