@@ -174,6 +174,43 @@ _ADHESIF_TYPES = [
 ]
 
 
+# ── Dictionnaire des types de glassine ──────────────────────────────
+# Réponse « par défaut » attendue : « Jaune Siliconnée » (la très grande
+# majorité des fiches SIFA). Les autres cas sont là pour ne pas rendre
+# une valeur brute exotique côté client.
+_GLASSINE_TYPES = [
+    # (regex insensible à la casse, label FR, label EN)
+    (r"jaun|yellow",                                     "Jaune Siliconnée",   "Yellow siliconised"),
+    (r"blanc|white",                                     "Blanche Siliconnée", "White siliconised"),
+    (r"kraft|brun|brown",                                "Kraft Siliconnée",   "Brown kraft siliconised"),
+    (r"transparent|clear|pet\b|film",                    "Transparente (PET)", "Clear (PET film)"),
+    (r"bopp|pp\s*film",                                  "BOPP",               "BOPP film"),
+    (r"silicon|silicone",                                "Jaune Siliconnée",   "Yellow siliconised"),
+]
+
+
+def _classify_glassine(raw: str) -> tuple[str, str]:
+    """
+    Extrait le type canonique d'une glassine.
+
+    Ex. 'Glassine jaune 60g' → ('Jaune Siliconnée',   'Yellow siliconised')
+        'GLASSINE BLANCHE'   → ('Blanche Siliconnée', 'White siliconised')
+        'Kraft 65g'          → ('Kraft Siliconnée',   'Brown kraft siliconised')
+
+    Si rien ne matche mais que le champ est renseigné, on renvoie par
+    défaut « Jaune Siliconnée » (c'est le liner le plus courant SIFA).
+    Si le champ est vide, on renvoie '—' / '—'.
+    """
+    if not raw or raw == "—":
+        return ("—", "—")
+    s = str(raw).strip()
+    for pattern, fr, en in _GLASSINE_TYPES:
+        if re.search(pattern, s, flags=re.IGNORECASE):
+            return (fr, en)
+    # Défaut SIFA : jaune siliconnée (cas le plus fréquent)
+    return ("Jaune Siliconnée", "Yellow siliconised")
+
+
 def _classify_adhesif(raw: str) -> tuple[str, str]:
     """
     Extrait le type canonique d'un libellé adhésif brut.
@@ -516,8 +553,8 @@ def generate_fiche_client_pdf(fiche: dict) -> bytes:
     #    son propre classifieur bilingue).
     format_fr    = _sentence_case(_v(fiche.get("format")))
     frontal_fr   = _sentence_case(_v(fiche.get("support") or fiche.get("matiere")))
-    adhesif_fr, adhesif_en = _classify_adhesif(_get_adhesif_raw(fiche))
-    glassine_fr  = _sentence_case(_fmt_glassine(fiche))
+    adhesif_fr, adhesif_en   = _classify_adhesif(_get_adhesif_raw(fiche))
+    glassine_fr, glassine_en = _classify_glassine(_fmt_glassine(fiche))
     nb_impr_fr   = _sentence_case(_fmt_nb_impressions(fiche))
     condi_fr     = _sentence_case(_fmt_conditionnement(fiche))
 
@@ -529,7 +566,7 @@ def generate_fiche_client_pdf(fiche: dict) -> bytes:
         ("Adhésif", "Adhesive",
          adhesif_fr, adhesif_en),
         ("Glassine", "Release liner",
-         glassine_fr, _sentence_case(_translate_fr_to_en(glassine_fr))),
+         glassine_fr, glassine_en),
         ("Nombre d'impressions", "Number of print colours",
          nb_impr_fr, _sentence_case(_translate_fr_to_en(nb_impr_fr))),
         ("Conditionnement", "Packaging",
