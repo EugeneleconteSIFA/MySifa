@@ -125,7 +125,7 @@ body.sb-open .sidebar-overlay{display:block}
 .mobile-home-btn:hover{color:var(--accent)}
 
 /* ── Content ── */
-.content{padding:28px 32px;max-width:1280px;width:100%}
+.content{padding:28px 32px;max-width:1600px;width:100%}
 @media(max-width:768px){.content{padding:16px}}
 
 /* ── Page header ── */
@@ -176,8 +176,8 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 .badge-clickable:hover{filter:brightness(1.2)}
 
 /* ── Action group ── */
-.action-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.ico-btn{background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;border-radius:7px;padding:5px 8px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:inherit;transition:.15s}
+.action-group{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:flex-end}
+.ico-btn{background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;border-radius:7px;padding:5px 8px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:inherit;transition:.15s;white-space:nowrap;flex-shrink:0}
 .ico-btn:hover{border-color:var(--accent);color:var(--accent)}
 .ico-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
 .ico-btn.ok:hover{border-color:var(--ok);color:var(--ok)}
