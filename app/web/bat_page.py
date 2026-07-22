@@ -137,7 +137,7 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Boutons ── */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn:hover{filter:brightness(1.08)}
-.btn-accent{background:var(--accent);color:#0a0e17}
+.btn-accent{background:var(--accent);color:#fff}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
@@ -176,7 +176,8 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 .badge-clickable:hover{filter:brightness(1.2)}
 
 /* ── Action group ── */
-.action-group{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:flex-end}
+.table-wrap th:last-child,.table-wrap td:last-child{width:1%;white-space:nowrap;text-align:right}
+.action-group{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;justify-content:flex-end;min-width:260px}
 .ico-btn{background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;border-radius:7px;padding:5px 8px;font-size:12px;display:inline-flex;align-items:center;gap:5px;font-family:inherit;transition:.15s;white-space:nowrap;flex-shrink:0}
 .ico-btn:hover{border-color:var(--accent);color:var(--accent)}
 .ico-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
