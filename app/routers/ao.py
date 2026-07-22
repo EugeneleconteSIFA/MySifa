@@ -2165,7 +2165,8 @@ def comparaison_ao(request: Request, ao_id: int):
                 for r in conn.execute(
                     """SELECT r.id AS reponse_id, f.id AS fourni_id, f.nom_fournisseur,
                               r.quotation, r.prix_unitaire, r.devise, r.unite_quotation,
-                              COALESCE(r.unite_manuel, 0) AS unite_manuel,
+                              r.unite_quotation_original,
+                              CASE WHEN COALESCE(r.unite_quotation_original, r.unite_quotation) != r.unite_quotation THEN 1 ELSE 0 END AS unite_manuel,
                               r.coef, r.devise_prix_devis,
                               r.delai_jours, r.commentaire
                        FROM ao_reponses r
@@ -2235,7 +2236,7 @@ def comparaison_ao(request: Request, ao_id: int):
                     "nom_fournisseur": rep.get("nom_fournisseur"),
                     **ctx,
                     **{k: rep.get(k) for k in (
-                        "quotation", "devise", "unite_quotation", "unite_manuel",
+                        "quotation", "devise", "unite_quotation", "unite_quotation_original", "unite_manuel",
                         "prix_calcule", "prix_au_mille", "coef",
                         "devise_prix_devis", "prix_vente",
                         "delai_jours", "commentaire",
@@ -2297,9 +2298,16 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
                 (devise_prix_devis, reponse_id),
             )
         if unite_quotation is not None:
+            # Recup original pour calculer unite_manuel
+            row_orig = conn.execute(
+                "SELECT COALESCE(unite_quotation_original, unite_quotation) AS orig FROM ao_reponses WHERE id=?",
+                (reponse_id,),
+            ).fetchone()
+            orig_unite = (row_orig[0] if row_orig else None) or unite_quotation
+            manuel_flag = 0 if unite_quotation == orig_unite else 1
             conn.execute(
-                "UPDATE ao_reponses SET unite_quotation=?, unite_manuel=1 WHERE id=?",
-                (unite_quotation, reponse_id),
+                "UPDATE ao_reponses SET unite_quotation=?, unite_manuel=? WHERE id=?",
+                (unite_quotation, manuel_flag, reponse_id),
             )
         conn.commit()
         updated = conn.execute(

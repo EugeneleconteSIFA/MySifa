@@ -7277,6 +7277,17 @@ Ressources :
         _record_schema_migration(conn, 201, "ao_demandes_deleted_at")
 
 
+    # v202 -- ao_reponses.unite_quotation_original (preserve l'unite fournisseur pour pricing)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=202 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
+        if "unite_quotation_original" not in cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN unite_quotation_original TEXT")
+            # Backfill : l'unite deja saisie est consideree comme originale
+            conn.execute("UPDATE ao_reponses SET unite_quotation_original = unite_quotation WHERE unite_quotation_original IS NULL AND unite_quotation IS NOT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 202, "ao_reponses_unite_quotation_original")
+
+
 
 def create_default_admin():
     import bcrypt
