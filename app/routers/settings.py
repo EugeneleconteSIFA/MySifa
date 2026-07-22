@@ -3337,6 +3337,18 @@ def maintenance_alerts_blocking_for_machine(request: Request, machine: str = "")
     Format identique à /alerts/active pour que le runtime les affiche via
     la même fonction _renderAlert.
     """
+    try:
+        return _blocking_for_machine_impl(request, machine)
+    except Exception as _err:
+        import traceback
+        print(f"[blocking-for-machine] FATAL: {_err}", flush=True)
+        traceback.print_exc()
+        # v2.3.3 : ne jamais renvoyer 500 — retourner liste vide pour ne pas
+        # casser le flow front. L'erreur est loggée pour debug.
+        return {"items": [], "_error": str(_err)}
+
+
+def _blocking_for_machine_impl(request: Request, machine: str = ""):
     user = get_current_user(request)
     machine = (machine or "").strip()
     if not machine:
