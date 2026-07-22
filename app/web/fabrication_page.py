@@ -1454,6 +1454,17 @@ function svgIcon(name,size=16){
 async function apiFetch(path, opts={}){
   const r = await fetch(path, {credentials:'include', ...opts});
   if(r.status===401){ window.location.href='/'; return null; }
+  // v2.2.88 : HTTP 423 = alerte maintenance bloquante due. Force le refresh
+  // du runtime des alertes pour afficher la modale bloquante à l'écran.
+  if(r.status===423){
+    try {
+      if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
+        window.MysifaAlerts.refresh();
+      }
+    } catch(_){}
+    const e = await r.json().catch(()=>({}));
+    throw new Error(e.detail || 'Alerte maintenance à valider avant toute saisie.');
+  }
   if(!r.ok){
     const e = await r.json().catch(()=>({}));
     throw new Error(e.detail||'Erreur '+r.status);
