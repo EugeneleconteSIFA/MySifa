@@ -41,7 +41,7 @@
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
       '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}.ta-sim.ta-pl-top-right .ta-sim-alert{right:12px;left:12px;width:auto}}',
-      '.ta-sim-alert{position:relative;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
+      '.ta-sim-alert{transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',  /* v2.3.19 : position:relative retiré — écrasait le position:absolute + top/right du placement */
       '.ta-sim-title{cursor:grab;user-select:none}',
       '.ta-sim-title.ta-dragging{cursor:grabbing}',
       '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s;z-index:1}',
