@@ -959,7 +959,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.3.10"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.11"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -968,7 +968,26 @@ body.has-topbar .fab-main{padding-top:74px}
   // POST sur /api/maintenance/alerts/{id}/ack — l'historique est tracé en DB.
   if (window.MysifaAlerts) {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => MysifaAlerts.start());
+      document.addEventListener('DOMContentLoaded', () => {
+        MysifaAlerts.start();
+        // v2.3.11 : listener global pour cacher le loading pendant qu'une
+        // alerte bloquante est affichée. La fonction set(...) est globale
+        // dans fabrication_page — si loading était true, on le passe à false.
+        window.addEventListener('mysifa-saisie-awaiting-alert', () => {
+          try {
+            if(typeof set === 'function' && S && S.loading){
+              set({loading: false});
+            }
+          } catch(_){}
+        });
+        window.addEventListener('mysifa-saisie-retrying', () => {
+          try {
+            if(typeof set === 'function' && S && !S.loading){
+              set({loading: true});
+            }
+          } catch(_){}
+        });
+      });
     } else {
       MysifaAlerts.start();
     }
@@ -1485,15 +1504,19 @@ async function apiFetch(path, opts={}){
     // v2.3.6 : attendre l'ACK de l'alerte puis retenter la saisie originale.
     // Si dismiss ou erreur → throw normalement.
     if(hasBlockingAlerts && window.MysifaAlerts && typeof window.MysifaAlerts.waitForBlockingAck === 'function'){
+      // v2.3.11 : signaler à l'UI que la saisie attend une action de l'user
+      // (le code appelant cache son spinner "Enregistrement...")
+      window.dispatchEvent(new CustomEvent('mysifa-saisie-awaiting-alert'));
       try {
         console.log('[MysifaAlerts] 423 — waiting for ack before retry');
         await window.MysifaAlerts.waitForBlockingAck();
         console.log('[MysifaAlerts] alert acked — retrying saisie', path);
-        // Retenter la saisie originale — utilise le même path et opts
+        // v2.3.11 : signaler à l'UI qu'on va retenter (peut ré-afficher spinner)
+        window.dispatchEvent(new CustomEvent('mysifa-saisie-retrying'));
         return apiFetch(path, opts);
       } catch(waitErr){
         console.log('[MysifaAlerts] alert dismissed or error :', waitErr);
-        // Fall through au throw
+        window.dispatchEvent(new CustomEvent('mysifa-saisie-dismissed'));
       }
     }
     throw new Error(msg);
