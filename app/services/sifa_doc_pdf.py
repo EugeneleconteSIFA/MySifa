@@ -255,13 +255,13 @@ SEC_4_6_BODY = (
 )
 
 SEC_4_7_BODY = (
-    "Certains fournisseurs de SIFA transmettent des certificats d'analyse "
-    "(CoA) délivrés par le laboratoire indépendant ISEGA (Aschaffenburg, "
-    "Allemagne) sur les adhésifs concernés. Ces certificats attestent de la "
-    "conformité de ces adhésifs au règlement (CE) n°1935/2004 et au règlement "
-    "(UE) n°10/2011, applicables aux matériaux destinés à entrer en contact "
-    "avec les denrées alimentaires. Les CoA disponibles sont conservés au "
-    "dossier technique SIFA et communicables sur demande."
+    "Selon les fournisseurs, SIFA reçoit des certificats d'analyse (CoA) "
+    "délivrés par des laboratoires indépendants sur les adhésifs concernés. "
+    "Ces certificats attestent de la conformité de ces adhésifs au règlement "
+    "(CE) n°1935/2004 et au règlement (UE) n°10/2011, applicables aux "
+    "matériaux destinés à entrer en contact avec les denrées alimentaires. "
+    "Les CoA disponibles sont conservés au dossier technique SIFA et "
+    "communicables sur demande."
 )
 
 SEC_4_8_BODY = (
