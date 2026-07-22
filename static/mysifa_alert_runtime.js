@@ -163,7 +163,8 @@
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
              description: description,
              trigger: trig, target: { machines }, validation: val, checklist: cl,
-             dismiss_button: dismiss };
+             dismiss_button: dismiss,
+             block_production: !!(p && p.block_production) };  // v2.2.88
   }
 
   function _onValueInput(inp) {
@@ -548,7 +549,8 @@
     const wrap = document.createElement('div');
     wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
     wrap.setAttribute('data-alert-runtime-id', String(alert.id));
-    if (_settings.block_production) wrap.classList.add('ta-blocking');
+    // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
+    if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');
     const machines = alert.target.machines || ['*'];
     const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(_esc).join(', ');
 
