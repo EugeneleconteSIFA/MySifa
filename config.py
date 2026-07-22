@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.3.11"
+APP_VERSION = "2.3.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -156,7 +156,7 @@ PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "ye
 # entrer. Passer à 1 dans le .env pour laisser les opérateurs tester leur
 # vue « Mes tâches » sur v1 avant la promotion en prod. Les endpoints API
 # vérifient ce flag côté serveur — inutile de patcher la sidebar seule.
-MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "1") in {"1", "true", "True", "yes", "YES"}
+MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
@@ -246,6 +246,20 @@ ROLES_PLANNING_VIEW = {
 # MyProd : tuile portail pour la compta et la logistique, accès limité au planning production (lecture seule côté UI/API).
 ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE, ROLE_LOGISTIQUE}
 ROLES_SETTINGS = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+
+# Permissions granulaires sur les onglets de la page Paramètres.
+# Fallback safe = ROLES_SETTINGS (direction + superadmin uniquement) tant que
+# la vraie granularité n'est pas définie côté DB / collègue.
+# Ces constantes sont importées par app/services/auth_service.py.
+ROLES_SETTINGS_ACCESS         = ROLES_SETTINGS
+ROLES_SETTINGS_COMMUNICATION  = ROLES_SETTINGS
+ROLES_SETTINGS_AUDIT_FULL     = ROLES_SETTINGS
+ROLES_SETTINGS_PRINT_FULL     = ROLES_SETTINGS
+ROLES_SETTINGS_FABRICATION    = ROLES_SETTINGS
+ROLES_SETTINGS_LOGISTIQUE     = ROLES_SETTINGS
+ROLES_SETTINGS_CONTACTS       = ROLES_SETTINGS
+ROLES_SETTINGS_PRINTERS       = ROLES_SETTINGS
+ROLES_SETTINGS_FSC            = ROLES_SETTINGS
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé aux rôles direction / super admin).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
