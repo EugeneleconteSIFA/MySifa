@@ -2421,6 +2421,9 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["min"] = vmin
             if vmax is not None:
                 item_out["max"] = vmax
+            # v2.2.85 : required (bool). Défaut false (optionnel = rétro-compat).
+            if bool(it.get("required", False)):
+                item_out["required"] = True
             clean_items.append(item_out)
             continue
         # type "choice" (cases à cocher)
@@ -2469,11 +2472,16 @@ def _validate_alert_params(params: dict) -> dict:
                 if rs and rs in seen_r_set and rs not in seen_nc:
                     clean_nc.append(rs)
                     seen_nc.add(rs)
-        clean_items.append({"type": "choice", "label": label,
-                            "responses": clean_responses, "multi": multi,
-                            "allow_other": allow_other,
-                            "other_is_nc": other_is_nc,
-                            "nc_responses": clean_nc})
+        # v2.2.85 : required (bool). Défaut false.
+        required_choice = bool(it.get("required", False))
+        _choice_item = {"type": "choice", "label": label,
+                        "responses": clean_responses, "multi": multi,
+                        "allow_other": allow_other,
+                        "other_is_nc": other_is_nc,
+                        "nc_responses": clean_nc}
+        if required_choice:
+            _choice_item["required"] = True
+        clean_items.append(_choice_item)
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:

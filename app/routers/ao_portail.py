@@ -526,14 +526,16 @@ async def repondre_ao(request: Request, token: str):
             conn.execute(
                 """INSERT OR REPLACE INTO ao_reponses
                    (ao_fournisseur_id, ligne_id, quotation, prix_unitaire,
-                    devise, unite_quotation, delai_jours, commentaire)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                    devise, unite_quotation, unite_quotation_original, unite_manuel,
+                    delai_jours, commentaire)
+                   VALUES (?,?,?,?,?,?,?,0,?,?)""",
                 (
                     fourni_id,
                     ligne_id,
                     quotation,
                     quotation,
                     devise,
+                    unite_q,
                     unite_q,
                     delai,
                     commentaire,

@@ -5849,6 +5849,7 @@ function _alertDefaults(existing) {
         unit: (it && it.unit) || '',
         min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+        required: !!(it && it.required),  // v2.2.86 : préserver required
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -5863,6 +5864,7 @@ function _alertDefaults(existing) {
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
+      required: !!(it && it.required),  // v2.2.86 : préserver required
     };
   });
   return {
@@ -6088,6 +6090,7 @@ function _afOnOtherToggle(cb){
 function _afChecklistCard(item) {
   const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
   const type = (item && item.type) || 'choice';
+  const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
   return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
@@ -6096,6 +6099,11 @@ function _afChecklistCard(item) {
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
+    // v2.2.85 : case à cocher Obligatoire (bloque la validation opérateur si vide)
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
+    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
+    + '</label>'
     + _afChecklistCardBody(item)
     + '</div>';
 }
@@ -6323,6 +6331,8 @@ function _afReadParams() {
         if (unit) item.unit = unit;
         if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
         if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        // v2.2.85 : required
+        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         items.push(item);
         return;
       }
@@ -6339,7 +6349,11 @@ function _afReadParams() {
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
+      // v2.2.85 : required
+      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
+      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
+      if (_reqCk) _choiceItem.required = true;
+      items.push(_choiceItem);
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -6590,10 +6604,12 @@ async function previewAlert(id) {
                 const maxStr = (it.max != null) ? String(it.max) : '+∞';
                 toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
               }
+              const _taReqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
+                + (it.required ? ' data-required="1"' : '')
                 + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarV + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
@@ -6620,8 +6636,9 @@ async function previewAlert(id) {
             const otherArea = it.allow_other
               ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
               : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
+            const _taReqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarC + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
               + otherArea
               + '</div>';
@@ -6691,11 +6708,12 @@ async function previewAlert(id) {
     }, 100);
   }
 
-  // Valider
+  // Valider — v2.2.87 : ne bloque que sur les questions REQUIRED
   function _taIsComplete() {
     if (!clEnabled) return true;
     const items = wrap.querySelectorAll('.ta-cl-item');
     for (const it of items) {
+      if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value') {
         const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
@@ -6705,6 +6723,15 @@ async function previewAlert(id) {
       }
     }
     return true;
+  }
+  // v2.2.87 : sync du bouton Valider selon required
+  function _taSyncValidateState() {
+    const btn = wrap.querySelector('#ta-validate');
+    if (!btn) return;
+    const ok = _taIsComplete();
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '' : '.5';
+    btn.style.cursor = ok ? '' : 'not-allowed';
   }
   function _taFinalize() {
     toast('Test terminé — aucune donnée enregistrée.');
@@ -6727,12 +6754,17 @@ async function previewAlert(id) {
     document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
   }
   function _taOnValidate() {
-    if (_taIsComplete()) { _taFinalize(); return; }
-    const actions = wrap.querySelector('.ta-sim-actions');
-    if (!actions) { _taFinalize(); return; }
-    _taRenderConfirm(actions);
+    // v2.2.87 : bouton disabled tant que required pas OK → sécurité si on arrive ici
+    if (!_taIsComplete()) return;
+    _taFinalize();
   }
   document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  // v2.2.87 : listeners pour recalculer l'état disabled en temps réel
+  wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val').forEach(el => {
+    el.addEventListener('change', _taSyncValidateState);
+    el.addEventListener('input', _taSyncValidateState);
+  });
+  _taSyncValidateState();
   // v164 : bouton dismiss dans la preview
   const taDismiss = document.getElementById('ta-dismiss');
   if (taDismiss) {

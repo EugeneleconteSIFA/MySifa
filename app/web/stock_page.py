@@ -13839,7 +13839,7 @@ function recepBuildLotPreview(fournisseur, fscClaim, dt) {
 }
 
 // ── Modale impression étiquettes après validation ──
-function recepShowPrintModal(lot) {
+function recepShowPrintModal(lot, isReprint) {
   if (!lot || !lot.lot_numero) return;
   closeMroot();
   const claimLabels = (typeof FSC_CLAIM_LABELS !== 'undefined' && FSC_CLAIM_LABELS)
@@ -13946,7 +13946,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) 
     const r = await api('/api/print/label', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usage_key: 'reception_matiere', copies: nbEtiquettes, data }),
+      body: JSON.stringify({ usage_key: 'reception_matiere', copies: nbEtiquettes, data, variante: isReprint ? 'compact' : 'full' }),
     });
     showToast((r.copies || nbEtiquettes) + ' étiquette(s) envoyée(s) à ' + (r.imprimante || 'imprimante'), 'success');
     closeMroot();
@@ -13955,7 +13955,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) 
     const msg = e && e.message ? e.message : String(e);
     // Erreur 409 "Aucune imprimante configurée" : proposer le picker
     if (msg && (msg.includes('Aucune imprimante') || msg.includes('template'))) {
-      _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, msg);
+      _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, msg, isReprint);
       return;
     }
     // Autres erreurs : toast + fallback proposé
@@ -13964,7 +13964,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) 
 }
 
 // Picker d'imprimante affiché en cas d'absence de défaut utilisateur
-async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg) {
+async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg, isReprint) {
   let imprimantes = [];
   try {
     imprimantes = await api('/api/print/my-imprimantes');
@@ -14013,6 +14013,7 @@ async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel
           copies: nbEtiquettes,
           imprimante_id: impId,
           data,
+          variante: isReprint ? 'compact' : 'full',
         }),
       });
       if (remember) {
@@ -14572,7 +14573,7 @@ function buildReceptionHistorique() {
                 nb_bobines_ajoutees: lot.nb_bobines || 1,
                 nb_bobines_total: lot.nb_bobines || 1,
                 codes: lot.items || [],
-              });
+              }, true);  // v1.7 - isReprint=true : envoie variante=compact au serveur
             }}
           }, iconEl('printer', 14), ' Réimprimer étiquettes');
           detail.appendChild(reprintBtn);
