@@ -2276,8 +2276,29 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <h2 style="margin:0 0 4px">Formations &amp; guides in-app</h2>
             <p class="sub" style="margin:0;font-size:12px">Suivi des tutos lus dans MyQualité. Vous pouvez remettre à zéro un guide pour un utilisateur (il le reverra à sa prochaine visite).</p>
           </div>
-          <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn btn-sec btn-sm" id="fmt-toggle-config" onclick="toggleGuidesConfigSection()">Activer / désactiver les guides</button>
+            <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
+          </div>
         </div>
+
+        <!-- Section activation / desactivation des guides -->
+        <div id="fmt-config-section" class="hidden" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg)">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0 0 2px;font-size:14px">Activation des guides</h3>
+              <p class="sub" style="margin:0;font-size:11.5px">Un guide désactivé disparaît de son onglet (bouton d'aide masqué) et ne s'ouvre plus automatiquement. La progression déjà enregistrée est conservée.</p>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(true)">Tout activer</button>
+              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(false)">Tout désactiver</button>
+            </div>
+          </div>
+          <div id="fmt-config-list" style="display:flex;flex-direction:column;gap:6px">
+            <div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>
+          </div>
+        </div>
+
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
           <input type="text" id="fmt-search" placeholder="Rechercher (nom, email, rôle, guide...)" autocomplete="off"
             style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
@@ -5874,6 +5895,7 @@ function _alertDefaults(existing) {
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
+    block_production: !!(p && p.block_production),  // v2.2.88
   };
 }
 
@@ -5958,11 +5980,7 @@ function _renderAlertFormFields(params, opts) {
     +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
     +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
     +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
-    +       '<div id="af-after-calage-block" data-after-calage-only style="margin-top:10px;display:none">'
-    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant affichage (min de production cumulée)</label>'
-    +         '<input type="number" id="af-trigger-delay-minutes" class="alert-field-input" min="0" max="999" step="1" value="' + (d.trigger.delay_minutes != null ? d.trigger.delay_minutes : 0) + '" placeholder="0 = affichage immédiat">'
-    +         '<div class="alert-field-help">L\'alerte s\'affiche quand l\'opérateur a cumulé au moins ce nombre de minutes en production (codes 01/03/88) depuis la fin du calage. Le compteur se met en pause lors d\'un arrêt/pause/etc. et reprend au prochain code prod. 0 = affichage immédiat.</div>'
-    +       '</div>'
+    +       '<!-- v2.2.88 : Délai retiré pour after_calage. L\'alerte se déclenche à la saisie du calage. -->'
     +     '</div>'
     +   '</div>'
     + '</div>'
@@ -5988,6 +6006,14 @@ function _renderAlertFormFields(params, opts) {
     +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
     +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
     +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
+    + '</div>'
+    // v2.2.88 : Bloque la production par alerte
+    + '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+    +   '<div>'
+    +     '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+    +     '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
+    +   '</div>'
+    +   '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
     + '</div>'
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
@@ -6187,12 +6213,7 @@ function _afOnDismissToggle() {
 
 // v2.2.42 : no-op depuis le retrait du filtre produit.
 function _afOnTriggerEventChange() {
-  // v2.2.79 : afficher le champ délai uniquement pour after_calage
-  var _sel = document.getElementById('af-trigger-event');
-  var _block = document.getElementById('af-after-calage-block');
-  if (_sel && _block) {
-    _block.style.display = (_sel.value === 'after_calage') ? '' : 'none';
-  }
+  // v2.2.88 : bloc délai retiré, plus rien à toggle.
 }
 
 function _afRowClick(ev, inputId) {
@@ -6304,16 +6325,8 @@ function _afReadParams() {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
     // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
     delete trig.filter_conditionnement;
-    // v2.2.79 : délai après calage (persisté uniquement si after_calage)
-    if (trig.event === 'after_calage') {
-      var _dEl = document.getElementById('af-trigger-delay-minutes');
-      var _dVal = _dEl ? parseInt(_dEl.value, 10) : 0;
-      if (isNaN(_dVal) || _dVal < 0) _dVal = 0;
-      if (_dVal > 999) _dVal = 999;
-      trig.delay_minutes = _dVal;
-    } else {
-      delete trig.delay_minutes;
-    }
+    // v2.2.88 : delay_minutes retiré (n'a plus de sens dans le nouveau mode)
+    delete trig.delay_minutes;
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
@@ -6377,6 +6390,8 @@ function _afReadParams() {
     validation: {
       button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
     },
+    // v2.2.88 : block_production par alerte
+    block_production: !!document.getElementById('af-block-production')?.checked,
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
@@ -6524,13 +6539,7 @@ const placementOpts = placements.map(p =>
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
-      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-      +     '<div>'
-      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
-      +     '</div>'
-      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-      +   '</div>'
+
       + '</div>'
       + '<div class="alert-modal-foot">'
       +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
@@ -6546,7 +6555,7 @@ const placementOpts = placements.map(p =>
       const payload = {
         placement: document.getElementById('ags-placement').value,
         size: document.getElementById('ags-size').value,
-        block_production: document.getElementById('ags-block').checked,
+
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
@@ -6649,7 +6658,8 @@ async function previewAlert(id) {
   // Construction du wrapper de simulation (positionnement, taille, backdrop)
   const wrap = document.createElement('div');
   wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
-  if (settings.block_production) wrap.classList.add('ta-blocking');
+  // v2.2.88 : par alerte (fallback réglage global si présent pour rétrocompat)
+  if (d.block_production || settings.block_production) wrap.classList.add('ta-blocking');
 
   // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
   const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
@@ -6685,7 +6695,7 @@ async function previewAlert(id) {
 
   // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
   const onKey = (ev) => {
-    if (ev.key === 'Escape' && !settings.block_production) {
+    if (ev.key === 'Escape' && !d.block_production && !settings.block_production) {
       close();
       document.removeEventListener('keydown', onKey);
     }
@@ -6693,7 +6703,7 @@ async function previewAlert(id) {
   document.addEventListener('keydown', onKey);
 
   // Si non bloquant + placement coin : cliquer en dehors ferme
-  if (!settings.block_production) {
+  if (!d.block_production && !settings.block_production) {
     setTimeout(() => {
       const outsideClick = (ev) => {
         if (!wrap.contains(ev.target)) return;
@@ -9354,6 +9364,111 @@ try {
   const rf = document.getElementById('fmt-refresh');
   if(rf) rf.onclick = () => loadFormationsAdmin();
 } catch(e){}
+
+
+// ─── Activation / désactivation des guides ────────────────────────
+let _fmtConfigData = null;   // { guides: [{guide_key, label, module, enabled, updated_at}, ...] }
+let _fmtConfigOpen = false;
+
+function toggleGuidesConfigSection(){
+  const sec = document.getElementById('fmt-config-section');
+  const btn = document.getElementById('fmt-toggle-config');
+  if(!sec) return;
+  _fmtConfigOpen = !_fmtConfigOpen;
+  sec.classList.toggle('hidden', !_fmtConfigOpen);
+  if(btn) btn.textContent = _fmtConfigOpen ? 'Fermer' : 'Activer / désactiver les guides';
+  if(_fmtConfigOpen && !_fmtConfigData) loadGuidesConfig();
+}
+
+async function loadGuidesConfig(){
+  const list = document.getElementById('fmt-config-list');
+  if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>';
+  try {
+    _fmtConfigData = await api('/api/guides/admin/config');
+    renderGuidesConfig();
+  } catch(e){
+    if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--danger,#ef4444)">Erreur chargement : '+ (e.message||'') +'</div>';
+  }
+}
+
+function renderGuidesConfig(){
+  const list = document.getElementById('fmt-config-list');
+  if(!list || !_fmtConfigData) return;
+  const guides = _fmtConfigData.guides || [];
+  if(!guides.length){
+    list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Aucun guide.</div>';
+    return;
+  }
+  list.innerHTML = guides.map(g => {
+    const checked = g.enabled ? 'checked' : '';
+    const stateLabel = g.enabled ? 'Actif' : 'Désactivé';
+    const stateColor = g.enabled ? 'var(--ok)' : 'var(--muted)';
+    return `<label style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;user-select:none">
+      <input type="checkbox" ${checked} data-guide-toggle="${esc(g.guide_key)}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
+        onchange="setGuideEnabled('${esc(g.guide_key).replace(/'/g,"\\'")}', this.checked)">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13px">${esc(g.label)}</div>
+        <div style="font-size:11px;color:var(--muted);font-family:ui-monospace,monospace">${esc(g.module||'')}${g.module?' · ':''}${esc(g.guide_key)}</div>
+      </div>
+      <span data-guide-state="${esc(g.guide_key)}" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${stateColor};min-width:70px;text-align:right">${stateLabel}</span>
+    </label>`;
+  }).join('');
+}
+
+async function setGuideEnabled(guideKey, enabled){
+  // Optimistic UI : mettre a jour l'etat local + le pill
+  if(_fmtConfigData){
+    const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
+    if(g) g.enabled = !!enabled;
+  }
+  const stateEl = document.querySelector('[data-guide-state="'+guideKey.replace(/"/g,'\\"')+'"]');
+  if(stateEl){
+    stateEl.textContent = enabled ? 'Actif' : 'Désactivé';
+    stateEl.style.color = enabled ? 'var(--ok)' : 'var(--muted)';
+  }
+  try {
+    await api('/api/guides/admin/config', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({guide_key: guideKey, enabled: !!enabled})
+    });
+    toast(enabled ? 'Guide activé' : 'Guide désactivé');
+  } catch(e){
+    toast('Erreur enregistrement : ' + (e.message||''), true);
+    // Rollback
+    const cb = document.querySelector('[data-guide-toggle="'+guideKey.replace(/"/g,'\\"')+'"]');
+    if(cb) cb.checked = !enabled;
+    if(_fmtConfigData){
+      const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
+      if(g) g.enabled = !enabled;
+    }
+    if(stateEl){
+      stateEl.textContent = !enabled ? 'Actif' : 'Désactivé';
+      stateEl.style.color = !enabled ? 'var(--ok)' : 'var(--muted)';
+    }
+  }
+}
+
+async function setAllGuidesEnabled(enabled){
+  if(!_fmtConfigData) return;
+  const guides = _fmtConfigData.guides || [];
+  const targets = guides.filter(g => !!g.enabled !== !!enabled);
+  if(!targets.length){
+    toast(enabled ? 'Tous les guides sont déjà actifs' : 'Tous les guides sont déjà désactivés');
+    return;
+  }
+  if(!confirm((enabled ? 'Activer' : 'Désactiver') + ' les ' + targets.length + ' guide(s) restant(s) ?')) return;
+  for(const g of targets){
+    try {
+      await api('/api/guides/admin/config', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({guide_key: g.guide_key, enabled: !!enabled})
+      });
+      g.enabled = !!enabled;
+    } catch(e){ /* on continue */ }
+  }
+  renderGuidesConfig();
+  toast(enabled ? 'Guides activés' : 'Guides désactivés');
+}
 
 
 // ─── Appairage matières (bridge MyStock <-> Coûts matières) ────────────

@@ -7289,6 +7289,19 @@ Ressources :
 
 
 
+    # v203 -- stock_reception_items lie a matiere_id / laize_id (reception structuree)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=203 LIMIT 1").fetchone():
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(stock_reception_items)").fetchall()}
+        if "matiere_id" not in cols:
+            conn.execute("ALTER TABLE stock_reception_items ADD COLUMN matiere_id INTEGER")
+        if "laize_id" not in cols:
+            conn.execute("ALTER TABLE stock_reception_items ADD COLUMN laize_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recp_items_matiere ON stock_reception_items(matiere_id, laize_id)")
+        conn.commit()
+        _record_schema_migration(conn, 203, "stock_reception_items_matiere_laize")
+
+
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD

@@ -3864,7 +3864,7 @@ function renderExpeDepartModal(){
     mk('Code postal / destination','code_postal_destination'),
     mk('Réf. SIFA','ref_sifa'),
     mk('ARC','arc'),
-    mk('N° commande transporteur','no_cde_transport'),
+    mk('N° Récépissé','no_cde_transport'),
     mk('N° BL','no_bl'),
     palField,
     mk('Nombre de palettes','nb_palette','number','ex: 2'),
