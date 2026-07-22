@@ -2878,6 +2878,34 @@ async function addAuditeurNow(uid){
     .sd-mcountry-nom{font-weight:600;color:var(--text);font-size:13px}
     .sd-mcountry-input{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;font-family:inherit}
     .sd-mcountry-input:focus{outline:none;border-color:var(--accent)}
+    /* Personnalisation sections */
+    .sd-sec-toggle{width:100%;padding:12px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:9px;color:var(--text);font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:space-between;transition:.15s}
+    .sd-sec-toggle:hover{border-color:var(--accent);color:var(--accent)}
+    .sd-sec-toggle.expanded{border-color:var(--accent);color:var(--accent);border-bottom-left-radius:0;border-bottom-right-radius:0}
+    .sd-sec-count{font-size:11px;color:var(--muted);font-weight:500}
+    .sd-sec-list{max-height:340px;overflow-y:auto;background:var(--bg);border:1.5px solid var(--accent);border-top:none;border-radius:0 0 9px 9px;padding:8px}
+    .sd-sec-item{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;transition:.12s}
+    .sd-sec-item.excluded{opacity:.55;background:var(--bg);border-style:dashed}
+    .sd-sec-item.excluded .sd-sec-title{text-decoration:line-through;color:var(--muted)}
+    .sd-sec-hd{display:flex;align-items:center;gap:10px}
+    .sd-sec-chk{display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;min-width:0}
+    .sd-sec-chk input{margin:0;accent-color:var(--accent);width:15px;height:15px;flex-shrink:0}
+    .sd-sec-chk.disabled{cursor:not-allowed;opacity:.65}
+    .sd-sec-title{font-weight:700;color:var(--text);font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sd-sec-flags{display:flex;gap:4px;flex-shrink:0}
+    .sd-sec-flag{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--accent);text-transform:uppercase;letter-spacing:.3px}
+    .sd-sec-flag.required{background:rgba(248,113,113,.14);color:var(--danger)}
+    .sd-sec-edit-btn{background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;padding:4px 10px;border-radius:6px;font-size:10.5px;font-weight:600;font-family:inherit;transition:.12s}
+    .sd-sec-edit-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+    .sd-sec-edit-btn:disabled{opacity:.35;cursor:not-allowed}
+    .sd-sec-edit-btn.dirty{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+    .sd-sec-editor{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);display:none}
+    .sd-sec-item.editing .sd-sec-editor{display:block}
+    .sd-sec-textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:12px;font-family:inherit;line-height:1.5;resize:vertical;min-height:80px;box-sizing:border-box}
+    .sd-sec-textarea:focus{outline:none;border-color:var(--accent)}
+    .sd-sec-actions-row{display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:8px}
+    .sd-sec-reset{font-size:10.5px;color:var(--muted);background:transparent;border:none;cursor:pointer;font-family:inherit;padding:2px 4px}
+    .sd-sec-reset:hover{color:var(--danger)}
   `;
   document.head.appendChild(st);
 })();
@@ -3064,7 +3092,19 @@ async function openSifaDocGenerate(code, prefill){
     date_emission: (new Date()).toISOString().slice(0,10),
     ref_manual: '',
     fourSearch: '',
+    sections: [],           // meta chargée depuis l'API
+    sections_overrides: {}, // {sec_id: {include:bool, custom_body:str}}
+    sectionsExpanded: false,
   };
+  // Charger les sections du template
+  api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(code)+'/sections')
+    .then(r => r.ok ? r.json() : {sections:[]})
+    .then(data => {
+      if(!S._sifaGen) return;
+      S._sifaGen.sections = data.sections || [];
+      _sdRenderSections();
+    })
+    .catch(()=>{});
 
   wrap.innerHTML = `
   <div class="modal-ov" id="sd-gen-ov" style="display:flex" onclick="if(event.target===this)closeSifaDocGenerate()">
@@ -3107,7 +3147,16 @@ async function openSifaDocGenerate(code, prefill){
         </div>
 
         <div>
-          <label class="sd-gen-label">3. Référence du document</label>
+          <label class="sd-gen-label">3. Personnaliser les sections du document (optionnel)</label>
+          <button type="button" class="sd-sec-toggle" id="sd-sec-toggle" onclick="_sdToggleSections()">
+            <span id="sd-sec-toggle-txt">▸ Afficher / masquer les sections</span>
+            <span class="sd-sec-count" id="sd-sec-count"></span>
+          </button>
+          <div class="sd-sec-list" id="sd-sec-list" style="display:none"></div>
+        </div>
+
+        <div>
+          <label class="sd-gen-label">4. Référence du document</label>
           <input type="text" id="sd-gen-ref" class="sd-gen-input"
                  placeholder="Générée automatiquement"
                  oninput="S._sifaGen.ref_manual=this.value" style="font-family:'Menlo',monospace;font-size:12px">
@@ -3239,6 +3288,7 @@ async function submitSifaDocGenerate(){
     fournisseurs_ids: four_ids,
     date_emission: st.date_emission,
     ref_document: (st.ref_manual||'').trim() || null,
+    sections_overrides: st.sections_overrides && Object.keys(st.sections_overrides).length ? st.sections_overrides : null,
   };
   try{
     const r = await api('/api/qualite/sifa-docs/versions',{
@@ -3281,6 +3331,145 @@ async function submitSifaDocGenerate(){
     if(e.message!=='unauth')showToast('Erreur réseau','danger');
     if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
   }
+}
+
+function _sdToggleSections(){
+  if(!S._sifaGen) return;
+  S._sifaGen.sectionsExpanded = !S._sifaGen.sectionsExpanded;
+  const list = document.getElementById('sd-sec-list');
+  const btn = document.getElementById('sd-sec-toggle');
+  const txt = document.getElementById('sd-sec-toggle-txt');
+  if(!list || !btn) return;
+  if(S._sifaGen.sectionsExpanded){
+    list.style.display='block';
+    btn.classList.add('expanded');
+    if(txt) txt.textContent='▾ Masquer les sections';
+    _sdRenderSections();
+  } else {
+    list.style.display='none';
+    btn.classList.remove('expanded');
+    if(txt) txt.textContent='▸ Afficher / masquer les sections';
+  }
+}
+
+function _sdRenderSections(){
+  if(!S._sifaGen) return;
+  const list = document.getElementById('sd-sec-list');
+  const count = document.getElementById('sd-sec-count');
+  const sections = S._sifaGen.sections || [];
+  const ov = S._sifaGen.sections_overrides || {};
+  // Compter modifs
+  let modifs = 0;
+  sections.forEach(s => {
+    const o = ov[s.id] || {};
+    if(o.include === false) modifs++;
+    else if(o.custom_body) modifs++;
+  });
+  if(count) count.textContent = modifs ? `— ${modifs} personnalisation${modifs>1?'s':''}` : '';
+  if(!list) return;
+  if(!sections.length){
+    list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">Chargement...</div>';
+    return;
+  }
+  list.innerHTML = sections.map(s => {
+    const o = ov[s.id] || {};
+    const included = o.include !== false;
+    const hasCustom = !!(o.custom_body && String(o.custom_body).trim());
+    const bodyVal = hasCustom ? o.custom_body : (s.default_body || '');
+    const flags = [];
+    if(!s.removable) flags.push('<span class="sd-sec-flag required">requise</span>');
+    if(!s.editable) flags.push('<span class="sd-sec-flag">fixe</span>');
+    return `<div class="sd-sec-item ${included?'':'excluded'}" id="sd-sec-${escAttr(s.id)}">
+      <div class="sd-sec-hd">
+        <label class="sd-sec-chk ${s.removable?'':'disabled'}">
+          <input type="checkbox" ${included?'checked':''} ${s.removable?'':'disabled'} onchange="_sdSecToggle('${escAttr(s.id)}', this.checked)">
+          <span class="sd-sec-title">${escHtml(s.title)}</span>
+        </label>
+        <div class="sd-sec-flags">${flags.join('')}</div>
+        ${s.editable ? `<button type="button" class="sd-sec-edit-btn ${hasCustom?'dirty':''}" onclick="_sdSecEdit('${escAttr(s.id)}')">${hasCustom?'Édité':'Modifier'}</button>` : ''}
+      </div>
+      ${s.editable ? `<div class="sd-sec-editor">
+        <textarea class="sd-sec-textarea" placeholder="Texte du paragraphe principal (HTML basique : &lt;b&gt;, &lt;i&gt; autorisés)" oninput="_sdSecBody('${escAttr(s.id)}', this.value)">${escHtml(bodyVal)}</textarea>
+        <div class="sd-sec-actions-row">
+          <button type="button" class="sd-sec-reset" onclick="_sdSecReset('${escAttr(s.id)}')">Réinitialiser au texte par défaut</button>
+          <button type="button" class="sd-sec-edit-btn" onclick="_sdSecEdit('${escAttr(s.id)}')">Fermer</button>
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function _sdSecToggle(secId, included){
+  if(!S._sifaGen) return;
+  if(!S._sifaGen.sections_overrides) S._sifaGen.sections_overrides = {};
+  const o = S._sifaGen.sections_overrides[secId] || {};
+  if(included){
+    delete o.include;
+  } else {
+    o.include = false;
+  }
+  if(Object.keys(o).length === 0){
+    delete S._sifaGen.sections_overrides[secId];
+  } else {
+    S._sifaGen.sections_overrides[secId] = o;
+  }
+  _sdRenderSections();
+}
+
+function _sdSecEdit(secId){
+  const item = document.getElementById('sd-sec-'+secId);
+  if(!item) return;
+  item.classList.toggle('editing');
+}
+
+function _sdSecBody(secId, txt){
+  if(!S._sifaGen) return;
+  if(!S._sifaGen.sections_overrides) S._sifaGen.sections_overrides = {};
+  const o = S._sifaGen.sections_overrides[secId] || {};
+  const sec = (S._sifaGen.sections||[]).find(s => s.id === secId);
+  const defaultTxt = sec ? (sec.default_body || '') : '';
+  if(!txt.trim() || txt.trim() === defaultTxt.trim()){
+    delete o.custom_body;
+  } else {
+    o.custom_body = txt;
+  }
+  if(Object.keys(o).length === 0){
+    delete S._sifaGen.sections_overrides[secId];
+  } else {
+    S._sifaGen.sections_overrides[secId] = o;
+  }
+  // Debounce compteur
+  clearTimeout(S._sdSecCountTm);
+  S._sdSecCountTm = setTimeout(()=>{
+    const count = document.getElementById('sd-sec-count');
+    if(!count) return;
+    let modifs = 0;
+    (S._sifaGen.sections||[]).forEach(s => {
+      const oo = (S._sifaGen.sections_overrides||{})[s.id] || {};
+      if(oo.include === false) modifs++;
+      else if(oo.custom_body) modifs++;
+    });
+    count.textContent = modifs ? `— ${modifs} personnalisation${modifs>1?'s':''}` : '';
+    // Marquer le bouton édité
+    const btn = document.querySelector('#sd-sec-'+secId+' .sd-sec-edit-btn');
+    if(btn){
+      if(S._sifaGen.sections_overrides[secId] && S._sifaGen.sections_overrides[secId].custom_body){
+        btn.classList.add('dirty'); btn.textContent = 'Édité';
+      } else {
+        btn.classList.remove('dirty'); btn.textContent = 'Modifier';
+      }
+    }
+  }, 250);
+}
+
+function _sdSecReset(secId){
+  if(!S._sifaGen) return;
+  const ov = S._sifaGen.sections_overrides || {};
+  if(ov[secId]){
+    delete ov[secId].custom_body;
+    if(Object.keys(ov[secId]).length === 0) delete ov[secId];
+  }
+  _sdRenderSections();
 }
 
 // ─── Modal : renseigner l'origine géographique manquante ────────────
@@ -6002,7 +6191,7 @@ function openFournisseurSettingsModal(id){
             </div>
           </div>
           <div style="padding-top:6px;border-top:1px solid var(--border)">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Rattachement groupe</div>
+            <div style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2">Rattachement groupe</div>
             <div class="cert-row">
               <div class="cert-col">
                 <label class="form-label" for="fs-groupe">Groupe (optionnel)</label>
@@ -6016,7 +6205,7 @@ function openFournisseurSettingsModal(id){
             </div>
           </div>
           <div style="padding-top:6px;border-top:1px solid var(--border)">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Origine géographique de fabrication</div>
+            <div style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2">Origine géographique de fabrication</div>
             <label class="form-label" for="fs-pays-origine">Pays d'origine des matières</label>
             <input type="text" id="fs-pays-origine" class="form-input" value="${escAttr(f.pays_origine||'')}" placeholder="ex: Allemagne, Royaume-Uni, Espagne…" list="fs-pays-dl">
             <datalist id="fs-pays-dl">
