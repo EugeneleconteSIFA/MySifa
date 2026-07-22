@@ -346,6 +346,10 @@
   }
 
   async function _submitAck(alertId, wrap, alert) {
+    // v2.3.13 : mode simulation — ne fait rien côté serveur, retourne true.
+    if (alert && alert.__simulate) {
+      return true;
+    }
     const responses = _readResponses(wrap);
     const comment = wrap.querySelector('.ta-comment')?.value || '';
     // v163+ : priorité au no_dossier fourni par le backend dans /alerts/active
@@ -746,6 +750,36 @@
       return new Promise((resolve, reject) => {
         _blockingAckResolvers.push({ resolve, reject });
       });
+    },
+    // v2.3.13 : mode simulation. Prend un objet alerte au format DB
+    // ({id, nom, params, ...}) et l'affiche en réutilisant la vraie fonction
+    // _renderAlert. Aucune trace en base : le submit d'ack est court-circuité.
+    // Utilisé par le bouton "Tester sur moi" de l'admin, garantit que tout
+    // changement du runtime bénéficie automatiquement au simulateur.
+    simulate: async function(rawAlert, opts) {
+      opts = opts || {};
+      if (!_started) {
+        try { await _loadSettings(); } catch(e){}
+      }
+      const alert = _normalizeAlert(rawAlert);
+      alert.__simulate = true;  // flag inspecté par _submitAck
+      const wrap = _renderAlert(alert);
+      wrap.setAttribute('data-simulate', '1');
+      _displayed.set(alert.id, wrap);
+      _displayedBlocking.add(alert.id);  // ne pas cleanup par le poll
+      // Ajouter un bouton "Quitter le test" si demandé
+      if (opts.exitButton !== false) {
+        const exitBtn = document.createElement('button');
+        exitBtn.className = 'ta-sim-exit';
+        exitBtn.textContent = '× Quitter le test';
+        exitBtn.addEventListener('click', () => {
+          try { wrap.remove(); } catch(e) {}
+          _displayed.delete(alert.id);
+          _displayedBlocking.delete(alert.id);
+        });
+        wrap.appendChild(exitBtn);
+      }
+      return wrap;
     },
   };
 })();

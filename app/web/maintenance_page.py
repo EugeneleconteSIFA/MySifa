@@ -8619,182 +8619,27 @@ function _alertTriggerLabel(t) {
 }
 
 async function previewAlert(id) {
+  // v2.3.13 : refactor — appelle directement MysifaAlerts.simulate() au lieu
+  // de dupliquer la logique de rendu. Toute évolution du runtime bénéficie
+  // automatiquement au bouton "Tester sur moi".
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
-  // Charger les réglages globaux : placement, taille, bloque-production
   await loadAlertSettings();
-  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
-  const d = _alertDefaults(a.params);
-  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
-  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
-
-  const checklistHtml = clEnabled
-    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
-      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
-      +   d.checklist.items.map((it, idx) => {
-            const itType = it.type || 'choice';
-            if (itType === 'value') {
-              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
-              let toleranceHint = '';
-              if (it.min != null || it.max != null) {
-                const minStr = (it.min != null) ? String(it.min) : '−∞';
-                const maxStr = (it.max != null) ? String(it.max) : '+∞';
-                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
-              }
-              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
-                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
-                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-                + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
-                +   unit
-                + '</div>'
-                + toleranceHint
-                + '</div>';
-            }
-            const isMulti = it.multi !== false;
-            const inputType = isMulti ? 'checkbox' : 'radio';
-            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
-            const respHtml = it.responses.map((r) =>
-              '<label class="ta-chip">'
-              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
-              + '<span>' + esc(r) + '</span>'
-              + '</label>'
-            ).join('');
-            let otherHtml = '';
-            if (it.allow_other) {
-              otherHtml = '<label class="ta-chip ta-chip-other">'
-                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="_taOnOtherChange(this)">'
-                + '<span>Autre</span>'
-                + '</label>';
-            }
-            const otherArea = it.allow_other
-              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-              : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
-              + otherArea
-              + '</div>';
-          }).join('')
-      + '</div>'
-    : '';
-
-  // Construction du wrapper de simulation (positionnement, taille, backdrop)
-  const wrap = document.createElement('div');
-  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
-  if (settings.block_production) wrap.classList.add('ta-blocking');
-
-  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
-  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
-
-  // Description eventuelle (contexte affiche a l'operateur)
-  const _descText = (a.params && typeof a.params.description === 'string') ? a.params.description.trim() : '';
-  const _descHtml = _descText
-    ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + esc(_descText) + '</div>'
-    : '';
-
-  // Contenu de l'alerte (sans aucune chrome admin)
-  const alertHtml = '<div class="ta-sim-alert">'
-    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
-    + _descHtml
-    + checklistHtml
-    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
-    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-    + '<div class="ta-sim-actions">'
-    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
-    +   (d.dismiss_button && d.dismiss_button.enabled
-        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
-        : '')
-    + '</div>'
-    + '</div>';
-
-  wrap.innerHTML = exitBtn + alertHtml;
-  document.body.appendChild(wrap);
-
-  const close = () => wrap.remove();
-
-  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
-  document.getElementById('ta-sim-exit').addEventListener('click', close);
-
-  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
-  const onKey = (ev) => {
-    if (ev.key === 'Escape' && !settings.block_production) {
-      close();
-      document.removeEventListener('keydown', onKey);
-    }
-  };
-  document.addEventListener('keydown', onKey);
-
-  // Si non bloquant + placement coin : cliquer en dehors ferme
-  if (!settings.block_production) {
-    setTimeout(() => {
-      const outsideClick = (ev) => {
-        if (!wrap.contains(ev.target)) return;
-        if (ev.target.closest('.ta-sim-alert')) return;
-        if (ev.target.closest('.ta-sim-exit')) return;
-        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
-        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
-        close();
-        document.removeEventListener('keydown', onKey);
-      };
-      wrap.addEventListener('click', outsideClick);
-    }, 100);
+  if (!window.MysifaAlerts || typeof window.MysifaAlerts.simulate !== 'function') {
+    toast('Runtime alertes non chargé — impossible de tester', true);
+    return;
   }
-
-  // Valider
-  function _taIsComplete() {
-    if (!clEnabled) return true;
-    const items = wrap.querySelectorAll('.ta-cl-item');
-    for (const it of items) {
-      const t = it.getAttribute('data-type') || 'choice';
-      if (t === 'value') {
-        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
-        if (v === '') return false;
-      } else {
-        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
-      }
-    }
-    return true;
+  if (typeof window.MysifaAlerts.start === 'function') {
+    try { await window.MysifaAlerts.start(); } catch(_){}
   }
-  function _taFinalize() {
-    toast('Test terminé — aucune donnée enregistrée.');
-    close();
-    document.removeEventListener('keydown', onKey);
-  }
-  function _taRenderValidate(actions) {
-    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
-    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  }
-  function _taRenderConfirm(actions) {
-    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
-      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
-      + '<div style="display:flex;gap:6px">'
-      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
-      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
-      + '</div>'
-      + '</div>';
-    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
-    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
-  }
-  function _taOnValidate() {
-    if (_taIsComplete()) { _taFinalize(); return; }
-    const actions = wrap.querySelector('.ta-sim-actions');
-    if (!actions) { _taFinalize(); return; }
-    _taRenderConfirm(actions);
-  }
-  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  // v164 : bouton dismiss dans la preview
-  const taDismiss = document.getElementById('ta-dismiss');
-  if (taDismiss) {
-    taDismiss.addEventListener('click', () => {
-      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
-      close();
-      document.removeEventListener('keydown', onKey);
-    });
-  }
+  await window.MysifaAlerts.simulate({
+    id: a.id,
+    nom: a.nom,
+    linked_maint_code: a.linked_maint_code || '',
+    params: a.params || {},
+  });
 }
+
 
 function openEditAlertModal(id) {
   const a = _alertsData.find(x => x.id === id);
