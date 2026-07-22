@@ -166,11 +166,15 @@
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
+    // v2.3.12 : placement + size par alerte (fallback sur les défauts si absent)
+    const _pl = ['top-right','center','bottom-right'].indexOf(p && p.placement) >= 0 ? p.placement : null;
+    const _sz = ['small','medium','large'].indexOf(p && p.size) >= 0 ? p.size : null;
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
              description: description,
              trigger: trig, target: { machines }, validation: val, checklist: cl,
              dismiss_button: dismiss,
-             block_production: !!(p && p.block_production) };  // v2.2.88
+             block_production: !!(p && p.block_production),
+             placement: _pl, size: _sz };  // v2.3.12
   }
 
   function _onValueInput(inp) {
@@ -342,6 +346,10 @@
   }
 
   async function _submitAck(alertId, wrap, alert) {
+    // v2.3.13 : mode simulation — ne fait rien côté serveur, retourne true.
+    if (alert && alert.__simulate) {
+      return true;
+    }
     const responses = _readResponses(wrap);
     const comment = wrap.querySelector('.ta-comment')?.value || '';
     // v163+ : priorité au no_dossier fourni par le backend dans /alerts/active
@@ -553,7 +561,10 @@
 
   function _renderAlert(alert) {
     const wrap = document.createElement('div');
-    wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
+    // v2.3.12 : priorité aux valeurs par alerte, fallback aux réglages globaux
+    const _p = alert.placement || _settings.placement || 'top-right';
+    const _s = alert.size || _settings.size || 'medium';
+    wrap.className = 'ta-sim ta-pl-' + _p + ' ta-sz-' + _s;
     wrap.setAttribute('data-alert-runtime-id', String(alert.id));
     // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
     if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');
@@ -739,6 +750,36 @@
       return new Promise((resolve, reject) => {
         _blockingAckResolvers.push({ resolve, reject });
       });
+    },
+    // v2.3.13 : mode simulation. Prend un objet alerte au format DB
+    // ({id, nom, params, ...}) et l'affiche en réutilisant la vraie fonction
+    // _renderAlert. Aucune trace en base : le submit d'ack est court-circuité.
+    // Utilisé par le bouton "Tester sur moi" de l'admin, garantit que tout
+    // changement du runtime bénéficie automatiquement au simulateur.
+    simulate: async function(rawAlert, opts) {
+      opts = opts || {};
+      if (!_started) {
+        try { await _loadSettings(); } catch(e){}
+      }
+      const alert = _normalizeAlert(rawAlert);
+      alert.__simulate = true;  // flag inspecté par _submitAck
+      const wrap = _renderAlert(alert);
+      wrap.setAttribute('data-simulate', '1');
+      _displayed.set(alert.id, wrap);
+      _displayedBlocking.add(alert.id);  // ne pas cleanup par le poll
+      // Ajouter un bouton "Quitter le test" si demandé
+      if (opts.exitButton !== false) {
+        const exitBtn = document.createElement('button');
+        exitBtn.className = 'ta-sim-exit';
+        exitBtn.textContent = '× Quitter le test';
+        exitBtn.addEventListener('click', () => {
+          try { wrap.remove(); } catch(e) {}
+          _displayed.delete(alert.id);
+          _displayedBlocking.delete(alert.id);
+        });
+        wrap.appendChild(exitBtn);
+      }
+      return wrap;
     },
   };
 })();
