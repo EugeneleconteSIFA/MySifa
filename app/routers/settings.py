@@ -2166,6 +2166,28 @@ ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
 _ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login", "after_calage"}
+
+# v2.3.2 : codes considérés comme "calage" pour l'alerte after_calage.
+# Liste synchronisée avec la sidebar CALAGE de /prod. On préfère matcher
+# par code exact (operation_code IN ...) plutôt que par operation_category
+# car les codes 82/83/84/85/91 n'ont pas de category dans operations.json.
+_ALERT_CALAGE_CODES = frozenset({
+    "02",  # Calage
+    "10",  # Calage Errepi
+    "11",  # Calage Bunsch
+    "12",  # Changement de couleur
+    "58",  # Changement bobines
+    "59",  # Changement Contre-Partie
+    "60",  # Changement Plaque
+    "74",  # Changement Magnétique
+    "75",  # Changement Cliché
+    "82",  # Changement couteaux bande
+    "83",  # Changement couteaux rive
+    "84",  # Changement contre couteaux bande
+    "85",  # Changement contre couteaux rive
+    "91",  # Changement Anilox
+})
+_ALERT_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_CALAGE_CODES)) + ")"
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
@@ -3269,7 +3291,7 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
                 _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                 _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                 _last_row = conn.execute(
-                    """SELECT no_dossier, operation_category, date_operation
+                    """SELECT no_dossier, operation_code, operation_category, date_operation
                        FROM production_data
                        WHERE machine=? AND date_operation >= ?
                        ORDER BY date_operation DESC LIMIT 1""",
@@ -3277,7 +3299,8 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
                 ).fetchone()
                 if not _last_row:
                     continue
-                if (_last_row["operation_category"] or "").lower() != "calage":
+                # v2.3.2 : match par code exact (voir _ALERT_CALAGE_CODES)
+                if str(_last_row["operation_code"] or "") not in _ALERT_CALAGE_CODES:
                     continue
                 if not _last_row["no_dossier"] or not str(_last_row["no_dossier"]).strip():
                     continue
@@ -3366,14 +3389,14 @@ def maintenance_alerts_blocking_for_machine(request: Request, machine: str = "")
                     _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                     _last_row = conn.execute(
-                        """SELECT no_dossier, operation_category, date_operation
+                        """SELECT no_dossier, operation_code, operation_category, date_operation
                            FROM production_data
                            WHERE machine=? AND date_operation >= ?
                            ORDER BY date_operation DESC LIMIT 1""",
                         (machine, _window),
                     ).fetchone()
                     if (_last_row
-                        and (_last_row["operation_category"] or "").lower() == "calage"
+                        and str(_last_row["operation_code"] or "") in _ALERT_CALAGE_CODES
                         and _last_row["no_dossier"]
                         and str(_last_row["no_dossier"]).strip()
                         and _last_row["date_operation"] >= _calage_window):
