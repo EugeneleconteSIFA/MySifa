@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.2.59"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -156,7 +156,7 @@ PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "ye
 # entrer. Passer à 1 dans le .env pour laisser les opérateurs tester leur
 # vue « Mes tâches » sur v1 avant la promotion en prod. Les endpoints API
 # vérifient ce flag côté serveur — inutile de patcher la sidebar seule.
-MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "1") in {"1", "true", "True", "yes", "YES"}
+MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
@@ -245,9 +245,44 @@ ROLES_PLANNING_VIEW = {
 } | ROLES_ADMINISTRATION_ALL
 # MyProd : tuile portail pour la compta et la logistique, accès limité au planning production (lecture seule côté UI/API).
 ROLES_PROD_COMPTA_PLANNING = {ROLE_COMPTABILITE, ROLE_LOGISTIQUE}
-ROLES_SETTINGS = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+# ─── Accès aux sections de Paramètres ─────────────────────────────
+# Chaque section peut être ouverte indépendamment aux rôles listés.
+# Direction et superadmin voient tout ; les rôles techniques (admin
+# technique, admin ventes, comptabilité) voient un sous-ensemble.
 
-# Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : réservé aux rôles direction / super admin).
+# Sections réservées direction + superadmin uniquement.
+ROLES_SETTINGS_ACCESS        = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_SETTINGS_COMMUNICATION = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_SETTINGS_AUDIT_FULL    = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+ROLES_SETTINGS_PRINT_FULL    = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+
+# Fabrication + Logistique : direction, superadmin, administration technique.
+ROLES_SETTINGS_FABRICATION = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_ADMINISTRATION_TECHNIQUE}
+ROLES_SETTINGS_LOGISTIQUE  = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_ADMINISTRATION_TECHNIQUE}
+
+# Contacts : les 3 rôles administration + comptabilité.
+ROLES_SETTINGS_CONTACTS = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
+
+# Imprimantes + Registre FSC : mêmes rôles que Contacts. Regroupés dans une
+# section « Outils » côté UI pour les rôles techniques (direction/superadmin
+# les voient depuis Impression & déploiement / Audit & qualité).
+ROLES_SETTINGS_PRINTERS = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
+ROLES_SETTINGS_FSC      = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
+
+# Union : rôles autorisés à ouvrir /settings (au moins une section accessible).
+ROLES_SETTINGS = (
+    ROLES_SETTINGS_ACCESS
+    | ROLES_SETTINGS_COMMUNICATION
+    | ROLES_SETTINGS_AUDIT_FULL
+    | ROLES_SETTINGS_PRINT_FULL
+    | ROLES_SETTINGS_FABRICATION
+    | ROLES_SETTINGS_LOGISTIQUE
+    | ROLES_SETTINGS_CONTACTS
+    | ROLES_SETTINGS_PRINTERS
+    | ROLES_SETTINGS_FSC
+)
+
+# Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : accès géré par ROLES_SETTINGS_*).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
 
 # ─── Contrôle d'accès database-driven (migration 184) ────────────

@@ -34,7 +34,20 @@ from config import (
     is_known_app_module,
 )
 from app.services.audit_service import log_action
-from services.auth_service import get_current_user, require_settings, merged_app_access, parse_access_overrides_raw
+from services.auth_service import (
+    get_current_user,
+    require_settings_access,
+    require_settings_communication,
+    require_settings_audit,
+    require_settings_print,
+    require_settings_fabrication,
+    require_settings_logistique,
+    require_settings_contacts,
+    require_settings_printers,
+    require_settings_fsc,
+    merged_app_access,
+    parse_access_overrides_raw,
+)
 
 router = APIRouter(tags=["settings"])
 
@@ -150,7 +163,7 @@ def access_matrix(request: Request):
         module_id, level}] }.
     Le super admin apparaît en lecture seule côté UI.
     """
-    require_settings(request)
+    require_settings_access(request)
     from database import get_db
 
     with get_db() as conn:
@@ -203,7 +216,7 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
     défaut de son rôle. Refuse d'éditer le rôle super admin (intouchable) et
     l'app `settings` (super admin uniquement, non surchargeable).
     """
-    admin_user = require_settings(request)
+    admin_user = require_settings_access(request)
     if body.app_id == "settings":
         raise HTTPException(status_code=400, detail="Paramètres non surchargeable (super admin uniquement).")
     if not is_known_app_module(body.app_id, body.module_id):
@@ -254,7 +267,7 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
 @router.get("/api/settings/role-defaults")
 def role_defaults_endpoint(request: Request):
     """Référentiel rôles éditable — écran /settings → Référentiel rôles."""
-    require_settings(request)
+    require_settings_access(request)
     from database import get_db
     with get_db() as conn:
         role_defaults, _ = _load_all_access(conn)
@@ -297,7 +310,7 @@ class SetRoleDefaultBody(BaseModel):
 @router.put("/api/settings/role-defaults/{role}")
 def set_role_default(role: str, body: SetRoleDefaultBody, request: Request):
     """Édite le référentiel rôle. Refuse le super admin (intouchable) et l'app settings."""
-    admin_user = require_settings(request)
+    admin_user = require_settings_access(request)
     if role == ROLE_SUPERADMIN:
         raise HTTPException(status_code=400, detail="Le super admin a tous les accès (non modifiable).")
     if role not in ASSIGNABLE_ROLES:
@@ -352,7 +365,7 @@ def get_audit_logs(
     action: str = "",
     search: str = "",
 ):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
 
     with get_db() as conn:
@@ -401,7 +414,7 @@ _FSC_CLAIM_LABELS = {
 
 @router.get("/api/fsc/stats")
 def get_fsc_stats(request: Request):
-    require_settings(request)
+    require_settings_fsc(request)
     from database import get_db
 
     with get_db() as conn:
@@ -435,7 +448,7 @@ def get_fsc_registre(
     au: str = "",
     format: str = "json",
 ):
-    require_settings(request)
+    require_settings_fsc(request)
     import csv
     import datetime as dt
     import io
@@ -551,7 +564,7 @@ def get_fsc_registre(
 
 @router.get("/api/fournisseurs")
 def list_fournisseurs(request: Request):
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     import json
     with get_db() as conn:
@@ -585,7 +598,7 @@ def list_fournisseurs(request: Request):
 @router.get("/api/fournisseurs/groupes")
 def list_fournisseurs_groupes(request: Request):
     """Liste des groupes distincts existants (pour autocomplete)."""
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -625,7 +638,7 @@ def _normalize_langue_fournisseur(raw):
 
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -680,7 +693,7 @@ async def create_fournisseur(request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}")
 async def update_fournisseur(fournisseur_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -886,7 +899,7 @@ def delete_traca_photo(fournisseur_id: int, request: Request):
 
 @router.delete("/api/fournisseurs/{fournisseur_id}")
 async def delete_fournisseur(fournisseur_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     four_nom = ""
     with get_db() as conn:
@@ -909,7 +922,7 @@ async def delete_fournisseur(fournisseur_id: int, request: Request):
 @router.get("/api/fournisseurs/{fournisseur_id}/receptions")
 def fournisseur_receptions(fournisseur_id: int, request: Request):
     """Historique des réceptions pour un fournisseur donné."""
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -939,7 +952,7 @@ def fournisseur_receptions(fournisseur_id: int, request: Request):
 @router.patch("/api/fournisseurs/{fournisseur_id}/actif")
 async def toggle_fournisseur_actif(fournisseur_id: int, request: Request):
     """Bascule / force le flag actif d'un fournisseur (soft archive)."""
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
     with get_db() as conn:
@@ -974,7 +987,7 @@ def export_fournisseurs_csv(request: Request):
     """Export CSV de la liste fournisseurs (colonnes principales + tags)."""
     from fastapi.responses import Response
     import csv, io, json as _json
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1008,7 +1021,7 @@ def export_fournisseurs_csv(request: Request):
             (r["notes"] or "").replace("\n", " "), r["nb_contacts"],
         ])
     log_action(
-        user=require_settings(request),
+        user=require_settings_contacts(request),
         action="SEARCH",
         module="settings",
         objet=f"Export CSV fournisseurs ({len(rows)} lignes)",
@@ -1080,7 +1093,7 @@ def _unset_other_principal(conn, fournisseur_id: int, keep_contact_id: Optional[
 
 @router.get("/api/fournisseurs/{fournisseur_id}/contacts")
 def list_fournisseur_contacts(fournisseur_id: int, request: Request):
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         ex = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -1097,7 +1110,7 @@ def list_fournisseur_contacts(fournisseur_id: int, request: Request):
 
 @router.post("/api/fournisseurs/{fournisseur_id}/contacts")
 async def create_fournisseur_contact(fournisseur_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -1145,7 +1158,7 @@ async def create_fournisseur_contact(fournisseur_id: int, request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
 async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -1225,7 +1238,7 @@ async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, reque
 
 @router.delete("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
 def delete_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         ex_four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -1311,7 +1324,7 @@ async def acknowledge_update(announcement_id: int, request: Request):
 @router.get("/api/updates")
 def list_updates(request: Request):
     """Liste toutes les annonces avec compteur d'acquittements (super admin)."""
-    require_settings(request)
+    require_settings_communication(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1327,7 +1340,7 @@ def list_updates(request: Request):
 @router.get("/api/updates/{announcement_id}/acknowledgements")
 def list_acknowledgements(announcement_id: int, request: Request):
     """Détail des acquittements pour une annonce (super admin)."""
-    require_settings(request)
+    require_settings_communication(request)
     from database import get_db
     with get_db() as conn:
         ann = conn.execute(
@@ -1349,7 +1362,7 @@ def list_acknowledgements(announcement_id: int, request: Request):
 @router.post("/api/updates")
 async def create_update(request: Request):
     """Créer une nouvelle annonce (super admin)."""
-    user = require_settings(request)
+    user = require_settings_communication(request)
     from database import get_db
     body = await request.json()
     scope   = (body.get("scope")   or "").strip()
@@ -1380,7 +1393,7 @@ async def create_update(request: Request):
 @router.patch("/api/updates/{announcement_id}")
 async def patch_update(announcement_id: int, request: Request):
     """Modifier une annonce — ex: activer/désactiver (super admin)."""
-    require_settings(request)
+    require_settings_communication(request)
     from database import get_db
     body = await request.json()
     with get_db() as conn:
@@ -1410,7 +1423,7 @@ async def patch_update(announcement_id: int, request: Request):
 @router.delete("/api/updates/{announcement_id}")
 def delete_update(announcement_id: int, request: Request):
     """Supprimer une annonce (uniquement si elle n'a pas encore été lue)."""
-    user = require_settings(request)
+    user = require_settings_communication(request)
     from database import get_db
     titre_ann = ""
     with get_db() as conn:
@@ -1444,7 +1457,7 @@ def delete_update(announcement_id: int, request: Request):
 
 @router.get("/api/settings/operation-codes")
 def list_operation_codes(request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import categories_for_ui, list_operation_codes as _list
 
@@ -1455,7 +1468,7 @@ def list_operation_codes(request: Request):
 
 @router.post("/api/settings/operation-codes")
 async def create_operation_code(request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import TABLE, validate_operation_payload
     from config import refresh_operations_cache
@@ -1490,7 +1503,7 @@ async def create_operation_code(request: Request):
 
 @router.put("/api/settings/operation-codes/{code}")
 async def update_operation_code(code: str, request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import TABLE, normalize_code, validate_operation_payload
     from config import refresh_operations_cache
@@ -1533,7 +1546,7 @@ async def update_operation_code(code: str, request: Request):
 
 @router.delete("/api/settings/operation-codes/{code}")
 def delete_operation_code(code: str, request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import TABLE, normalize_code
     from config import refresh_operations_cache
@@ -1556,7 +1569,7 @@ def delete_operation_code(code: str, request: Request):
 @router.post("/api/settings/operation-codes/import-json")
 def import_operation_codes_json(request: Request):
     """Réimporte depuis operations.json (upsert tous les codes du fichier)."""
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import upsert_operation_codes_from_json
     from config import refresh_operations_cache
@@ -1574,7 +1587,7 @@ def import_operation_codes_json(request: Request):
 @router.put("/api/settings/machines/{machine_id}/dernier-metrage")
 async def set_machine_dernier_metrage(machine_id: int, request: Request):
     """Correction manuelle du compteur machine (dernier_metrage) — super admin."""
-    user = require_settings(request)
+    user = require_settings_fabrication(request)
     body = await request.json()
     if not isinstance(body, dict) or "dernier_metrage" not in body:
         raise HTTPException(status_code=400, detail="dernier_metrage requis")
@@ -1621,7 +1634,7 @@ async def set_machine_dernier_metrage(machine_id: int, request: Request):
 @router.put("/api/settings/machines/{machine_id}/nom")
 async def rename_machine(machine_id: int, request: Request):
     """Renommage du nom affiché d'une machine — super admin uniquement."""
-    user = require_settings(request)
+    user = require_settings_fabrication(request)
     body = await request.json()
     if not isinstance(body, dict) or "nom" not in body:
         raise HTTPException(status_code=400, detail="Champ nom requis")
@@ -1679,7 +1692,7 @@ class ApiKeyCreateIn(BaseModel):
 
 @router.get("/api/settings/api-keys")
 def list_api_keys(request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1692,7 +1705,7 @@ def list_api_keys(request: Request):
 
 @router.post("/api/settings/api-keys")
 def create_api_key(body: ApiKeyCreateIn, request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     user = get_current_user(request)
     from database import get_db
 
@@ -1714,7 +1727,7 @@ def create_api_key(body: ApiKeyCreateIn, request: Request):
 
 @router.patch("/api/settings/api-keys/{key_id}/revoke")
 def revoke_api_key(key_id: int, request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
     from datetime import datetime
     with get_db() as conn:
@@ -1731,7 +1744,7 @@ def revoke_api_key(key_id: int, request: Request):
 
 @router.delete("/api/settings/api-keys/{key_id}")
 def delete_api_key(key_id: int, request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
     with get_db() as conn:
         conn.execute("DELETE FROM api_keys WHERE id=?", (key_id,))
@@ -1749,7 +1762,7 @@ class EmplacementCreate(BaseModel):
 
 @router.get("/api/settings/emplacements")
 def get_emplacements(request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     from database import get_db
     with get_db() as conn:
         # Créer la table si elle n'existe pas encore
@@ -1767,7 +1780,7 @@ def get_emplacements(request: Request):
 
 @router.post("/api/settings/emplacements")
 def create_emplacement(payload: EmplacementCreate, request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     code = payload.code.strip().upper()
     if not code:
         raise HTTPException(400, "Code emplacement vide.")
@@ -1797,7 +1810,7 @@ def create_emplacement(payload: EmplacementCreate, request: Request):
 
 @router.delete("/api/settings/emplacements/{code}")
 def delete_emplacement(code: str, request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     from database import get_db
     with get_db() as conn:
         result = conn.execute(
@@ -1811,7 +1824,7 @@ def delete_emplacement(code: str, request: Request):
 
 @router.post("/api/settings/emplacements/reload-csv")
 def reload_emplacements_csv(request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     from app.core.database import sync_emplacements_plan_from_csv
     try:
         n = sync_emplacements_plan_from_csv()
@@ -1824,7 +1837,7 @@ def reload_emplacements_csv(request: Request):
 
 @router.post("/api/settings/emplacements/import-csv")
 async def import_emplacements_csv(request: Request, file: UploadFile = File(...)):
-    require_settings(request)
+    require_settings_logistique(request)
     if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(400, "Le fichier doit être au format CSV (.csv).")
     contents = await file.read()
@@ -1897,7 +1910,7 @@ def _read_origin_app_version() -> Optional[str]:
 
 @router.get("/api/promote/status")
 def promote_status(request: Request):
-    require_settings(request)
+    require_settings_print(request)
 
     # 1. Fetch silencieux pour avoir l'état à jour d'origin/main
     try:
@@ -1971,7 +1984,7 @@ def promote_status(request: Request):
 
 @router.post("/api/promote")
 async def promote_run(request: Request):
-    require_settings(request)
+    require_settings_print(request)
     if ENV_NAME != "v1":
         raise HTTPException(400, "Promotion uniquement disponible depuis v1.")
 
@@ -2029,7 +2042,7 @@ _SYSTEMD_RUN_BIN = _shutil.which("systemd-run", path="/usr/bin:/bin:/usr/local/b
 
 @router.post("/api/sync-db-v1")
 async def sync_db_v1(request: Request):
-    require_settings(request)
+    require_settings_print(request)
     try:
         # systemd-run --no-block lance le script dans une unite transitoire
         # detachee qui survit a l'arret de mysifa-v1. Retour quasi-instantane.
@@ -2165,7 +2178,7 @@ _ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
 ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
-_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login", "after_calage"}
+_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login"}
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
@@ -2304,18 +2317,6 @@ def _validate_alert_params(params: dict) -> dict:
             if fc in ("bobine_only", "plis_only"):
                 trig["filter_conditionnement"] = fc
             # 'any' ou absent : on n'écrit rien (comportement par défaut).
-        # v2.2.79 : délai en minutes pour after_calage (temps en prod cumulé)
-        if ev == "after_calage":
-            _delay_raw = trig_in.get("delay_minutes", 0)
-            try:
-                _delay = int(_delay_raw) if _delay_raw not in (None, "") else 0
-            except (TypeError, ValueError):
-                _delay = 0
-            if _delay < 0:
-                _delay = 0
-            if _delay > 999:
-                _delay = 999
-            trig["delay_minutes"] = _delay
     # type=manual : pas de params supplémentaires
     out["trigger"] = trig
 
@@ -2358,11 +2359,6 @@ def _validate_alert_params(params: dict) -> dict:
     if len(btn) > 40:
         btn = btn[:40]
     out["validation"] = {"button_label": btn}
-
-    # v2.2.88 : block_production par alerte (défaut False). Quand True,
-    # la modale s'affiche avec backdrop bloquant et le backend refuse toute
-    # saisie de production tant que l'alerte n'est pas ack.
-    out["block_production"] = bool(params.get("block_production", False))
 
     # v164+ : bouton "Fermer l'alerte" configurable. Permet à l'opérateur
     # d'esquiver une alerte non pertinente sans polluer l'historique. Aucune
@@ -2426,9 +2422,6 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["min"] = vmin
             if vmax is not None:
                 item_out["max"] = vmax
-            # v2.2.85 : required (bool). Défaut false (optionnel = rétro-compat).
-            if bool(it.get("required", False)):
-                item_out["required"] = True
             clean_items.append(item_out)
             continue
         # type "choice" (cases à cocher)
@@ -2477,16 +2470,11 @@ def _validate_alert_params(params: dict) -> dict:
                 if rs and rs in seen_r_set and rs not in seen_nc:
                     clean_nc.append(rs)
                     seen_nc.add(rs)
-        # v2.2.85 : required (bool). Défaut false.
-        required_choice = bool(it.get("required", False))
-        _choice_item = {"type": "choice", "label": label,
-                        "responses": clean_responses, "multi": multi,
-                        "allow_other": allow_other,
-                        "other_is_nc": other_is_nc,
-                        "nc_responses": clean_nc}
-        if required_choice:
-            _choice_item["required"] = True
-        clean_items.append(_choice_item)
+        clean_items.append({"type": "choice", "label": label,
+                            "responses": clean_responses, "multi": multi,
+                            "allow_other": allow_other,
+                            "other_is_nc": other_is_nc,
+                            "nc_responses": clean_nc})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:
@@ -3221,106 +3209,13 @@ def maintenance_doc_delete(doc_id: int, request: Request):
 import json as _json_alerts
 
 
-def _check_blocking_alert_due(conn, user, machine: str) -> bool:
-    """v2.2.88 — Retourne True si au moins une alerte bloquante (block_production=True)
-    est actuellement due pour cette machine. Utilisé par /api/fabrication/saisie
-    comme garde-fou pour refuser une saisie tant qu'une alerte non-ack existe.
-
-    Réutilise la même logique de détection que /api/maintenance/alerts/active
-    en la simplifiant : on veut juste savoir s'il existe UNE alerte due bloquante.
-    """
-    if not machine:
-        return False
-    try:
-        rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
-        ).fetchall()
-    except Exception:
-        return False
-    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
-    # Pas de gap : le garde-fou doit être strict, pas soumis à min_gap.
-    user_role = user.get("role") if user else ""
-    user_machine = machine
-    for r in rows:
-        try:
-            params = _json_alerts.loads(r["params"] or "{}")
-        except (ValueError, TypeError):
-            continue
-        # Ne considère que les alertes bloquantes
-        if not bool(params.get("block_production", False)):
-            continue
-        target = params.get("target") or {}
-        if not operator_should_see_alert(user_role, user_machine, target):
-            # Superadmin voit tout ; sinon on skippe si machine hors cible
-            if user_role != ROLE_SUPERADMIN:
-                continue
-        trig = params.get("trigger") or {}
-        ttype = trig.get("type")
-        if ttype == "periodic":
-            try:
-                if _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris):
-                    return True
-            except Exception:
-                continue
-        elif ttype == "event":
-            event = str(trig.get("event") or "").strip()
-            if event == "after_calage":
-                # Réutilise la logique after_calage : dernière saisie machine = calage
-                _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-                _last_row = conn.execute(
-                    """SELECT no_dossier, operation_category, date_operation
-                       FROM production_data
-                       WHERE machine=? AND date_operation >= ?
-                       ORDER BY date_operation DESC LIMIT 1""",
-                    (machine, _window),
-                ).fetchone()
-                if not _last_row:
-                    continue
-                if (_last_row["operation_category"] or "").lower() != "calage":
-                    continue
-                if not _last_row["no_dossier"] or not str(_last_row["no_dossier"]).strip():
-                    continue
-                if _last_row["date_operation"] < _calage_window:
-                    continue
-                _dos = str(_last_row["no_dossier"]).strip()
-                _ack_check = conn.execute(
-                    """SELECT 1 FROM maintenance_alert_acks
-                       WHERE alert_id=? AND no_dossier=? LIMIT 1""",
-                    (int(r["id"]), _dos),
-                ).fetchone()
-                if _ack_check:
-                    continue
-                _last_89 = conn.execute(
-                    """SELECT MAX(date_operation) AS m FROM production_data
-                       WHERE no_dossier=? AND machine=? AND operation_code='89'""",
-                    (_dos, machine),
-                ).fetchone()
-                _last_89_at = _last_89["m"] if _last_89 else None
-                if _last_89_at and _last_row["date_operation"] <= _last_89_at:
-                    continue
-                return True
-            # Autres events (dossier_start / dossier_end) : pas implémentés
-            # comme bloquants pour l'instant. Reste ouvert pour extension.
-    return False
-
-
 def _require_alerts_admin(request: Request) -> dict:
     """v2.2.18 — Élargi aux rôles direction et administration pour permettre
     la gestion des alertes maintenance depuis MyMaintenance (l'admin métier
     n'a pas accès à /settings mais peut gérer les alertes depuis sa vue).
-    v2.2.74 — Élargi aux nouveaux rôles administration_ventes et
-    administration_technique (cohérence avec l'accès à MyMaintenance côté
-    admin, gate déjà ouverte dans maintenance_events._ADMIN_ROLES v2.2.46).
     """
     user = get_current_user(request)
-    if user.get("role") not in (
-        ROLE_SUPERADMIN,
-        ROLE_DIRECTION,
-        ROLE_ADMINISTRATION,
-        ROLE_ADMINISTRATION_VENTES,
-        ROLE_ADMINISTRATION_TECHNIQUE,
-    ):
+    if user.get("role") not in (ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION):
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs maintenance.")
     return user
 
@@ -3759,8 +3654,7 @@ def _is_machine_in_production(conn, machine: str) -> bool:
     if not row:
         return False
     code = str(row["operation_code"] or "").strip()
-    # v2.2.83 : 01 (Début prod) ne compte plus comme "en production"
-    return code in ("03", "88")
+    return code in ("01", "03", "88")
 
 
 def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
@@ -3795,10 +3689,9 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     # explicites (89, 87, 50-85) mais AUSSI le Calage (02), les événements
     # personnel (86), les annulations (90), etc. Toute interruption remet le
     # compteur à zéro et déclenche la grâce de 5 min à la reprise.
-    # v2.2.83 : 01 (Début prod) devient un code "stop" (interrompt la session)
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-           WHERE machine=? AND operation_code NOT IN ('03', '88')
+           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
            AND operation_code IS NOT NULL AND operation_code != ''""",
         (machine,),
     ).fetchone()
@@ -3809,14 +3702,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if last_stop_iso:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('03', '88')
+               WHERE machine=? AND operation_code IN ('01', '03', '88')
                AND date_operation > ?""",
             (machine, last_stop_iso),
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('03', '88')""",
+               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
             (machine,),
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
@@ -3950,10 +3843,6 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
-                elif event == "after_calage":
-                    # v2.2.76 : traité en bloc plus bas — nécessite une logique
-                    # spécifique (parcours de la séquence des saisies du dossier).
-                    pass
                 # v164 : fallback super admin (comme la branche periodic).
                 # Si Loic (superadmin) ouvre /prod ou /maintenance sans machine
                 # assignée dans son profil, on utilise la machine cible de
@@ -3967,51 +3856,7 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                # v2.2.88 : cas after_calage — nouvelle logique. L'alerte doit
-                # s'afficher AVANT la saisie de production, donc quand la dernière
-                # saisie machine est un code CALAGE (pas un prod). Verrou dossier
-                # via ack. Contraintes conservées : fenêtre 4h, post-89.
-                if event == "after_calage" and effective_machine:
-                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _last_row = conn.execute(
-                        """SELECT no_dossier, operation_code, operation_category, date_operation
-                           FROM production_data
-                           WHERE machine=? AND date_operation >= ?
-                           ORDER BY date_operation DESC LIMIT 1""",
-                        (effective_machine, _window),
-                    ).fetchone()
-                    # Nouvelle contrainte : dernière saisie = catégorie calage
-                    # avec no_dossier renseigné et dans la fenêtre 4h.
-                    _is_calage_last = (
-                        _last_row
-                        and (_last_row["operation_category"] or "").lower() == "calage"
-                        and _last_row["no_dossier"] is not None
-                        and str(_last_row["no_dossier"]).strip() != ""
-                        and _last_row["date_operation"] >= _calage_window
-                    )
-                    if _is_calage_last:
-                        _dos = str(_last_row["no_dossier"]).strip()
-                        _last_calage_at = _last_row["date_operation"]
-                        # Verrou par dossier
-                        _ack_check = conn.execute(
-                            """SELECT 1 FROM maintenance_alert_acks
-                               WHERE alert_id=? AND no_dossier=? LIMIT 1""",
-                            (int(r["id"]), _dos),
-                        ).fetchone()
-                        if not _ack_check:
-                            # Contrainte v2.2.82 conservée : calage doit être
-                            # postérieur au dernier code 89 du dossier.
-                            _last_89 = conn.execute(
-                                """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
-                                (_dos, effective_machine),
-                            ).fetchone()
-                            _last_89_at = _last_89["m"] if _last_89 else None
-                            if not _last_89_at or _last_calage_at > _last_89_at:
-                                should_show = True
-                                trigger_no_dossier = _dos
-                elif op_code and effective_machine and effective_operateur:
+                if op_code and effective_machine and effective_operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",
@@ -4387,69 +4232,6 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
                objet="ack:" + str(ack_id),
                detail=f"alert_id={alert_id_val} machine={machine_val}")
     return {"ok": True}
-
-
-def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str):
-    """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
-    target couvre cette machine, quand l'opérateur saisit un code non-productif
-    (arrêt, pause, calage, technique, fin dossier — tout sauf 01 et 03).
-
-    Une ligne est insérée dans maintenance_alert_acks pour chaque alerte avec le
-    motif dans le champ comment. Effet : compteur périodique reset, plus de lignes
-    vierges dans l'historique, modales à l'écran se ferment au prochain polling.
-    """
-    if not machine:
-        return
-    from database import get_db  # noqa: F401 (import garde le style existant)
-    now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
-    try:
-        rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
-        ).fetchall()
-    except Exception:
-        return
-    if code_label:
-        reason = f"Fermée auto : {code} – {code_label}"
-    else:
-        reason = f"Fermée auto : code {code}"
-    reason = reason[:2000]
-    user_id = user.get("id") if user else None
-    user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
-    responses_json = "{}"
-    for r in rows:
-        try:
-            params = _json_alerts.loads(r["params"] or "{}")
-        except (ValueError, TypeError):
-            continue
-        trig = params.get("trigger") or {}
-        if trig.get("type") != "periodic":
-            continue
-        target = params.get("target") or {}
-        machines_target = target.get("machines")
-        if not isinstance(machines_target, list) or not machines_target:
-            legacy = target.get("machine")
-            machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
-        if "*" not in machines_target and machine not in machines_target:
-            continue
-        try:
-            conn.execute(
-                """INSERT INTO maintenance_alert_acks
-                   (alert_id, user_id, user_nom, machine, no_dossier,
-                    ack_at, responses, comment)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (int(r["id"]), user_id, user_nom, machine, no_dossier or "",
-                 now_paris, responses_json, reason),
-            )
-            conn.execute(
-                "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
-                (now_paris, now_paris, int(r["id"])),
-            )
-        except Exception:
-            continue
-    try:
-        conn.commit()
-    except Exception:
-        pass
 
 
 @router.post("/api/maintenance/alerts/{alert_id}/ack")

@@ -17,6 +17,15 @@ from config import (
     ROLES_ADMINISTRATION_ALL,
     ROLES_PRICING,
     ROLES_SETTINGS,
+    ROLES_SETTINGS_ACCESS,
+    ROLES_SETTINGS_COMMUNICATION,
+    ROLES_SETTINGS_AUDIT_FULL,
+    ROLES_SETTINGS_PRINT_FULL,
+    ROLES_SETTINGS_FABRICATION,
+    ROLES_SETTINGS_LOGISTIQUE,
+    ROLES_SETTINGS_CONTACTS,
+    ROLES_SETTINGS_PRINTERS,
+    ROLES_SETTINGS_FSC,
     ACCESS_OVERRIDABLE_APPS,
     ROLE_SUPERADMIN,
     ROLE_DIRECTION,
@@ -355,17 +364,64 @@ def require_superadmin(request: Request) -> dict:
     return user
 
 
+# ─── Accès Paramètres : par section ────────────────────────────────
+# Chaque section a son propre helper. `can_access_settings` = union
+# (au moins une section accessible → l'utilisateur peut ouvrir /settings).
+
+def _make_settings_helpers(roles_set, label):
+    def _can(user):
+        return bool(user and effective_role(user) in roles_set)
+    def _require(request):
+        u = get_current_user(request)
+        if not _can(u):
+            raise HTTPException(status_code=403, detail=f"Accès refusé : {label}")
+        return u
+    return _can, _require
+
+
 def can_access_settings(user: dict) -> bool:
-    """Accès à l'application Paramètres — piloté par ROLES_SETTINGS (config.py)."""
+    """L'utilisateur peut ouvrir /settings (au moins une section)."""
     return bool(user and effective_role(user) in ROLES_SETTINGS)
 
 
 def require_settings(request: Request) -> dict:
-    """Exige un rôle autorisé pour l'application Paramètres (ROLES_SETTINGS)."""
+    """Exige l'accès à au moins une section Paramètres (helper générique)."""
     user = get_current_user(request)
     if not can_access_settings(user):
         raise HTTPException(status_code=403, detail="Accès réservé à l'administration des paramètres")
     return user
+
+
+can_access_settings_access,        require_settings_access        = _make_settings_helpers(ROLES_SETTINGS_ACCESS,        "Accès & permissions")
+can_access_settings_communication, require_settings_communication = _make_settings_helpers(ROLES_SETTINGS_COMMUNICATION, "Communication")
+can_access_settings_audit,         require_settings_audit         = _make_settings_helpers(ROLES_SETTINGS_AUDIT_FULL,    "Audit & qualité")
+can_access_settings_print,         require_settings_print         = _make_settings_helpers(ROLES_SETTINGS_PRINT_FULL,    "Impression & déploiement")
+can_access_settings_fabrication,   require_settings_fabrication   = _make_settings_helpers(ROLES_SETTINGS_FABRICATION,   "Fabrication")
+can_access_settings_logistique,    require_settings_logistique    = _make_settings_helpers(ROLES_SETTINGS_LOGISTIQUE,    "Logistique")
+can_access_settings_contacts,      require_settings_contacts      = _make_settings_helpers(ROLES_SETTINGS_CONTACTS,      "Contacts")
+can_access_settings_printers,      require_settings_printers      = _make_settings_helpers(ROLES_SETTINGS_PRINTERS,      "Imprimantes")
+can_access_settings_fsc,           require_settings_fsc           = _make_settings_helpers(ROLES_SETTINGS_FSC,           "Registre FSC")
+
+
+def settings_sections_visibility(user: dict) -> dict:
+    """Flags de visibilité par section pour l'UI /settings."""
+    role = effective_role(user) if user else ""
+    return {
+        "access":        role in ROLES_SETTINGS_ACCESS,
+        "communication": role in ROLES_SETTINGS_COMMUNICATION,
+        "audit_full":    role in ROLES_SETTINGS_AUDIT_FULL,
+        "print_full":    role in ROLES_SETTINGS_PRINT_FULL,
+        "fabrication":   role in ROLES_SETTINGS_FABRICATION,
+        "logistique":    role in ROLES_SETTINGS_LOGISTIQUE,
+        "contacts":      role in ROLES_SETTINGS_CONTACTS,
+        "printers":      role in ROLES_SETTINGS_PRINTERS,
+        "fsc":           role in ROLES_SETTINGS_FSC,
+        # Section « Outils » : regroupement Imprimantes + Registre FSC pour les
+        # rôles techniques qui n'ont pas les sections complètes Audit / Impression.
+        "tools_only":    (role in ROLES_SETTINGS_PRINTERS or role in ROLES_SETTINGS_FSC)
+                          and role not in ROLES_SETTINGS_AUDIT_FULL
+                          and role not in ROLES_SETTINGS_PRINT_FULL,
+    }
 
 
 def can_access_calendrier(user: dict) -> bool:

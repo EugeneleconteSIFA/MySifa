@@ -6002,7 +6002,7 @@ function openFournisseurSettingsModal(id){
             </div>
           </div>
           <div style="padding-top:6px;border-top:1px solid var(--border)">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Rattachement groupe</div>
+            <div style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2">Rattachement groupe</div>
             <div class="cert-row">
               <div class="cert-col">
                 <label class="form-label" for="fs-groupe">Groupe (optionnel)</label>
@@ -6016,7 +6016,7 @@ function openFournisseurSettingsModal(id){
             </div>
           </div>
           <div style="padding-top:6px;border-top:1px solid var(--border)">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Origine géographique de fabrication</div>
+            <div style="font-size:12px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2">Origine géographique de fabrication</div>
             <label class="form-label" for="fs-pays-origine">Pays d'origine des matières</label>
             <input type="text" id="fs-pays-origine" class="form-input" value="${escAttr(f.pays_origine||'')}" placeholder="ex: Allemagne, Royaume-Uni, Espagne…" list="fs-pays-dl">
             <datalist id="fs-pays-dl">
