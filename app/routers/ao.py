@@ -17,7 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.services.audit_service import log_action
 from app.services.email_service import email_invitation_ao, send_email
@@ -974,6 +974,70 @@ def export_produit_fiche(request: Request, produit_id: int):
     return HTMLResponse(content=html)
 
 
+@router.get("/produits/{produit_id}/pdf-fournisseur")
+def export_produit_fiche_pdf_fournisseur(
+    request: Request,
+    produit_id: int,
+    ao_id: int | None = None,
+):
+    """
+    Génère le PDF fournisseur (bilingue FR/EN) d'une fiche produit MyAO.
+
+    Reprend la charte graphique du PDF client mais avec les données
+    brutes de la fiche produit (pas de mapping/classification).
+
+    Query param optionnel : ao_id — si fourni, la référence de l'AO
+    apparaît en pied de page du PDF.
+    """
+    _require_ao(request)
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
+               FROM ao_produits p
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+               WHERE p.id=?""",
+            (produit_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        produit = _serialize_produit_row(_row_dict(row), conn)
+        fiche = produit.get("fiche") or {}
+        ids: set[int] = set()
+        mat = fiche.get("matiere") or {}
+        for key in ("frontal_id", "adhesif_id", "glassine_id"):
+            if mat.get(key):
+                ids.add(int(mat[key]))
+        cond = fiche.get("conditionnement") or {}
+        for block in (cond.get("carton") or {}, cond.get("palette") or {}):
+            if block.get("matiere_id"):
+                ids.add(int(block["matiere_id"]))
+        mp_map = _load_matieres_map(conn, ids) if ids else {}
+        ao_reference: str | None = None
+        if ao_id:
+            ao_row = conn.execute(
+                "SELECT reference FROM ao_demandes WHERE id=?", (ao_id,)
+            ).fetchone()
+            if ao_row:
+                ao_reference = ao_row["reference"]
+
+    try:
+        from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
+        pdf_bytes = generate_fiche_fournisseur_pdf(
+            produit, matieres_map=mp_map, ao_reference=ao_reference,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
+
+    ref_clean = re.sub(r"[^\w\-]+", "_", str(produit.get("ref") or produit_id).split(" - ")[0])
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fiche_fournisseur_{ref_clean}.pdf"'},
+    )
+
+
 @router.post("/produits")
 async def create_produit(request: Request):
     _require_ao(request)
@@ -1889,6 +1953,111 @@ async def update_fournisseur_ao(request: Request, ao_id: int, fourni_id: int):
 
 # ─── Envoi ───────────────────────────────────────────────────────
 
+def _auto_attach_fournisseur_pdfs(
+    conn,
+    ao_id: int,
+    ao_reference: str | None,
+    lignes_raw: list[dict],
+    produits_map: dict[str, dict],
+    now_iso: str,
+) -> None:
+    """
+    Génère un PDF fournisseur bilingue pour chaque produit référencé dans
+    l'AO et l'insère dans `ao_pieces_jointes`. Appelé au moment de
+    l'envoi de l'AO — les PDFs apparaissent immédiatement dans l'onglet
+    Documents du portail fournisseur.
+
+    Idempotent : les PDFs déjà présents (nom de fichier commençant par
+    "fiche_fournisseur_<ref>") ne sont pas recréés, ce qui permet de
+    relancer l'envoi sans dupliquer les pièces jointes.
+    """
+    try:
+        from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
+    except ImportError:
+        logger.warning("fiche_pdf_fournisseur indisponible, auto-attach ignoré.")
+        return
+
+    # Références produit uniques dans l'AO
+    refs = {(ln.get("ref_produit") or "").strip() for ln in lignes_raw}
+    refs.discard("")
+    if not refs:
+        return
+
+    # Pièces jointes déjà présentes (pour l'idempotence)
+    existing = {
+        r["filename"]
+        for r in conn.execute(
+            "SELECT filename FROM ao_pieces_jointes WHERE ao_id=?", (ao_id,)
+        ).fetchall()
+    }
+
+    dest_dir = _ao_upload_dir(ao_id)
+
+    for ref in sorted(refs):
+        produit = produits_map.get(ref.lower()) or produits_map.get(ref)
+        if not produit or not produit.get("id"):
+            continue
+
+        ref_clean = re.sub(r"[^\w\-]+", "_", ref.split(" - ")[0])
+        filename = f"fiche_fournisseur_{ref_clean}.pdf"
+        if filename in existing:
+            continue
+
+        # Recharge le produit avec client_nom (comme dans /export)
+        row = conn.execute(
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
+               FROM ao_produits p
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+               WHERE p.id=?""",
+            (int(produit["id"]),),
+        ).fetchone()
+        if not row:
+            continue
+        prod_full = _serialize_produit_row(_row_dict(row), conn)
+
+        # Matières map pour ce produit uniquement
+        fiche = prod_full.get("fiche") or {}
+        ids: set[int] = set()
+        mat = fiche.get("matiere") or {}
+        for key in ("frontal_id", "adhesif_id", "glassine_id"):
+            if mat.get(key):
+                ids.add(int(mat[key]))
+        cond = fiche.get("conditionnement") or {}
+        for block in (cond.get("carton") or {}, cond.get("palette") or {}):
+            if block.get("matiere_id"):
+                ids.add(int(block["matiere_id"]))
+        mp_map = _load_matieres_map(conn, ids) if ids else {}
+
+        try:
+            pdf_bytes = generate_fiche_fournisseur_pdf(
+                prod_full, matieres_map=mp_map, ao_reference=ao_reference,
+            )
+        except Exception:
+            logger.exception(
+                "Échec génération PDF fournisseur pour produit %s (AO %s)",
+                ref, ao_reference,
+            )
+            continue
+
+        stored_name = str(uuid.uuid4()) + ".pdf"
+        dest_path = os.path.join(dest_dir, stored_name)
+        try:
+            with open(dest_path, "wb") as f:
+                f.write(pdf_bytes)
+        except OSError:
+            logger.exception("Écriture PDF fournisseur impossible : %s", dest_path)
+            continue
+
+        conn.execute(
+            """INSERT INTO ao_pieces_jointes
+               (ao_id, filename, stored_name, taille_octets, uploaded_by, date)
+               VALUES (?,?,?,?,?,?)""",
+            (ao_id, filename, stored_name, len(pdf_bytes), "auto-fiche-produit", now_iso),
+        )
+
+
 @router.post("/{ao_id}/envoyer")
 def envoyer_ao(request: Request, ao_id: int):
     _require_ao(request)
@@ -1923,6 +2092,14 @@ def envoyer_ao(request: Request, ao_id: int):
                WHERE ao_id=? AND statut='invite' AND date_envoi IS NULL""",
             (ao_id,),
         ).fetchall()
+
+        # ── Auto-attach : génère un PDF fournisseur par produit de l'AO
+        # et l'insère dans ao_pieces_jointes (visible côté portail dans
+        # l'onglet Documents). Idempotent : ne recrée pas les PDFs déjà
+        # attachés lors d'un envoi précédent (détecté par nom de fichier
+        # commençant par "fiche_fournisseur_").
+        _auto_attach_fournisseur_pdfs(conn, ao_id, ao.get("reference"),
+                                      lignes_raw, produits_map, now)
 
         for row in fournisseurs:
             fourni = _row_dict(row)

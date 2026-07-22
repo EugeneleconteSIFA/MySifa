@@ -567,7 +567,7 @@ function renderProduitsRows() {
       });
     });
     el.querySelectorAll('.btn-export-produit').forEach(b => {
-      b.addEventListener('click', () => window.open('/api/ao/produits/'+b.dataset.id+'/export', '_blank'));
+      b.addEventListener('click', () => window.open('/api/ao/produits/'+b.dataset.id+'/pdf-fournisseur', '_blank'));
     });
     el.querySelectorAll('.btn-del-produit').forEach(b => {
       b.addEventListener('click', async () => {
