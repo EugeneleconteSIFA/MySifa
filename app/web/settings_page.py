@@ -1,10 +1,16 @@
-"""Paramètres MySifa — accès piloté par ROLES_SETTINGS (config.py)."""
+"""Paramètres MySifa — accès par section (ROLES_SETTINGS_* dans config.py)."""
+
+import json as _json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import APP_VERSION
-from services.auth_service import get_current_user, can_access_settings
+from services.auth_service import (
+    get_current_user,
+    can_access_settings,
+    settings_sections_visibility,
+)
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
@@ -27,10 +33,12 @@ def settings_page(request: Request):
                 "Merci de contacter un administrateur en cas de besoin."
             ),
         )
+    visibility = settings_sections_visibility(user)
     return HTMLResponse(
-        content=SETTINGS_HTML.replace("__V_LABEL__", f"v{APP_VERSION}").replace(
-            "/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK
-        )
+        content=SETTINGS_HTML
+            .replace("__V_LABEL__", f"v{APP_VERSION}")
+            .replace("__SETTINGS_VISIBILITY_JSON__", _json.dumps(visibility))
+            .replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
     )
 
 
@@ -523,6 +531,24 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 </style>
 </head>
 <body>
+<script>
+window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
+(function(){
+  var V = window.__SETTINGS_VISIBILITY__ || {};
+  function apply(){
+    document.querySelectorAll('[data-req-section]').forEach(function(el){
+      var sec = el.getAttribute('data-req-section');
+      if (sec && !V[sec]) el.style.display = 'none';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -536,65 +562,65 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         Menu général
       </button>
       <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <div class="nav-subgroup-label"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="operations">
+      <div class="nav-subgroup-label" data-req-section="fabrication"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
-      <button type="button" class="nav-btn" data-tab="maintenance">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="maintenance">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
       </button>
-      <button type="button" class="nav-btn" data-tab="machines">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="machines">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-subgroup-label"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="emplacements">
+      <div class="nav-subgroup-label" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
       </button>
-      <button type="button" class="nav-btn" data-tab="laizes">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="laizes">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
       </button>
-      <button type="button" class="nav-btn" data-tab="importations">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="importations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
       </button>
-      <button type="button" class="nav-btn" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
         Appairage matières
       </button>
-      <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="users">
+      <div class="nav-subgroup-label" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Utilisateurs
       </button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="fournisseurs">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Fournisseurs
       </button>
-      <button type="button" class="nav-btn" data-tab="clients">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="clients">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
         Clients
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="matrix">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="access"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
       </button>
-      <button type="button" class="nav-btn" data-tab="defaults">
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="defaults">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="updates">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="communication"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="communication" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="audit">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -604,30 +630,39 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         </svg>
         Log
       </button>
-      <button type="button" class="nav-btn" data-tab="dashboards">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="dashboards">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Tableaux de bord
       </button>
-      <button type="button" class="nav-btn" data-tab="fsc">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
       </button>
-      <button type="button" class="nav-btn" data-tab="api">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="api">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="printers">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Imprimantes
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="promote">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="promote">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
+      </button>
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimantes
+      </button>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="fsc">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg>
+        Registre FSC
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -679,7 +714,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       </div>
       <div class="menu-grid">
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="fabrication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
             <div><span class="mg-lbl">Fabrication</span><span class="mg-desc">Codes opérations, maintenance et parc machines.</span></div>
@@ -703,7 +738,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="logistique">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
             <div><span class="mg-lbl">Logistique</span><span class="mg-desc">Stock, emplacements et imports transporteurs.</span></div>
@@ -732,7 +767,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="contacts">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
             <div><span class="mg-lbl">Contacts</span><span class="mg-desc">Utilisateurs, fournisseurs et clients (ERP).</span></div>
@@ -756,7 +791,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="access">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
             <div><span class="mg-lbl">Accès &amp; permissions</span><span class="mg-desc">Matrice des accès et rôles par défaut.</span></div>
@@ -775,7 +810,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="communication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
             <div><span class="mg-lbl">Communication</span><span class="mg-desc">Annonces MAJ diffusées aux utilisateurs.</span></div>
@@ -789,7 +824,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="audit_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg></span>
             <div><span class="mg-lbl">Audit &amp; qualité</span><span class="mg-desc">Log d'activité, tableaux de bord, registre FSC.</span></div>
@@ -823,7 +858,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="print_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
             <div><span class="mg-lbl">Impression &amp; déploiement</span><span class="mg-desc">Imprimantes, templates et promotion v1 → v2.</span></div>
@@ -837,6 +872,26 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <button type="button" class="menu-item" data-goto="promote">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Promouvoir v1 → v2</span><span class="mi-desc">Publier le staging en production après validation.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+
+        <div class="menu-group" data-req-section="tools_only">
+          <div class="menu-group-head">
+            <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+            <div><span class="mg-lbl">Outils</span><span class="mg-desc">Imprimantes et registre FSC.</span></div>
+          </div>
+          <div class="menu-items">
+            <button type="button" class="menu-item" data-goto="printers">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Imprimantes</span><span class="mi-desc">Configuration Zebra / Brother, templates étiquettes.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="fsc">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2138,7 +2193,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                     <div style="display:flex;gap:10px;align-items:flex-start">
                       <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
                       <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
-                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct depuis ce wizard sur le PC hôte). <strong>Il doit atterrir dans le dossier Téléchargements</strong> (comportement navigateur par défaut).
+                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct sur ce PC).
                       </div>
                     </div>
                   </div>
@@ -8733,8 +8788,7 @@ async function prWizCreateAgent() {
     // Affiche le bloc token + installer
     document.getElementById('pr-wiz-token-display').value = r.token;
     // Génère la commande d'install pré-remplie avec le token
-    // v2 - chemin absolu vers Downloads : pas besoin de cd manuel avant
-    const cmd = `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\install_agent_windows.ps1" -Token "${r.token}"`;
+    const cmd = `powershell -ExecutionPolicy Bypass -File .\\install_agent_windows.ps1 -Token "${r.token}"`;
     document.getElementById('pr-wiz-install-cmd').value = cmd;
     document.getElementById('pr-wiz-agent-created').style.display = '';
     // Cache le bloc install si c'est TCP/IP (l'agent tourne peut-être ailleurs, on ne force pas)
