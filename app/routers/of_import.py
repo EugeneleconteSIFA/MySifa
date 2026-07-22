@@ -738,6 +738,36 @@ def preview_fiche_pdf(fiche_id: int, request: Request):
     )
 
 
+@router.get("/api/fiches-techniques/{fiche_id}/pdf-client")
+def preview_fiche_pdf_client(fiche_id: int, request: Request):
+    """
+    Génère la fiche technique CLIENT (bilingue FR/EN) d'une fiche technique.
+
+    Version simplifiée à destination des clients : ne contient que les
+    caractéristiques essentielles (format, frontal, adhésif, grammage,
+    nombre d'impressions, conditionnement) avec libellés bilingues,
+    en-tête SIFA + coordonnées et pied de page daté/versionné.
+    """
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE id=?", (fiche_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Fiche introuvable.")
+    try:
+        from app.services.fiche_pdf_client import generate_fiche_client_pdf
+        pdf_bytes = generate_fiche_client_pdf(dict(row))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF client : {exc}") from exc
+    ref = re.sub(r"[^\w\-]+", "_", str(row["reference"] or fiche_id))
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fiche_client_{ref}.pdf"'},
+    )
+
+
 @router.delete("/api/fiches-techniques/bulk")
 async def bulk_delete_fiches(request: Request):
     """Suppression en masse de fiches techniques. Body JSON : {"ids": [1, 2, 3]}"""

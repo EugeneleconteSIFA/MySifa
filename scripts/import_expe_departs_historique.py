@@ -163,7 +163,7 @@ def main() -> int:
             "ref_sifa": _as_str(get_cell(r, "ref_sifa", "ref sifa", "reference sifa", "ref")),
             "arc": _as_str(get_cell(r, "arc")),
             "no_cde_transport": _as_str(
-                get_cell(r, "no_cde_transport", "n commande transport", "commande transport", "no commande transporteur")
+                get_cell(r, "no_cde_transport", "n récépissé", "recepisse", "no récépissé")
             ),
             "no_bl": _as_str(get_cell(r, "no_bl", "bl", "n bl", "no bl")),
             "nb_palette": _as_float(get_cell(r, "nb_palette", "nombre de palettes", "palettes", "pal")),
