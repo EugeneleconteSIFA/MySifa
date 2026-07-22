@@ -2387,7 +2387,7 @@ def _validate_alert_params(params: dict) -> dict:
     out["block_production"] = bool(params.get("block_production", False))
 
     # v2.3.12 : placement et size par alerte (au lieu du singleton global).
-    _valid_placements = {"top-right", "center", "bottom-right"}
+    _valid_placements = {"top-right", "center"}  # v2.3.17 : bottom-right retiré
     _valid_sizes = {"small", "medium", "large"}
     _p = str(params.get("placement", "") or "").strip()
     if _p in _valid_placements:

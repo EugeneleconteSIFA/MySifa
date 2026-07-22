@@ -22,7 +22,7 @@
       '.ta-sim-alert{position:absolute;background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto;box-sizing:border-box}',
       /* Placements — ancrage précis au coin ou au centre */
       '.ta-sim.ta-pl-top-right .ta-sim-alert{top:20px;right:20px}',
-      '.ta-sim.ta-pl-bottom-right .ta-sim-alert{bottom:20px;right:20px}',
+      
       '.ta-sim.ta-pl-center .ta-sim-alert{top:50%;left:50%;transform:translate(-50%,-50%)}',
       /* Tailles — largeurs fixes qui tiennent dans le viewport */
       '.ta-sz-small .ta-sim-alert{width:260px;max-width:calc(100vw - 40px)}',
@@ -40,7 +40,7 @@
       '.ta-chip-other{border-style:dashed}',
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}.ta-sim.ta-pl-top-right .ta-sim-alert,.ta-sim.ta-pl-bottom-right .ta-sim-alert{right:12px;left:12px;width:auto}}',
+      '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}.ta-sim.ta-pl-top-right .ta-sim-alert{right:12px;left:12px;width:auto}}',
       '.ta-sim-alert{position:relative;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
       '.ta-sim-title{cursor:grab;user-select:none}',
       '.ta-sim-title.ta-dragging{cursor:grabbing}',
@@ -170,7 +170,7 @@
     });
     const description = (typeof p.description === 'string') ? p.description : '';
     // v2.3.12 : placement + size par alerte (fallback sur les défauts si absent)
-    const _pl = ['top-right','center','bottom-right'].indexOf(p && p.placement) >= 0 ? p.placement : null;
+    const _pl = ['top-right','center'].indexOf(p && p.placement) >= 0 ? p.placement : null;  // v2.3.17
     const _sz = ['small','medium','large'].indexOf(p && p.size) >= 0 ? p.size : null;
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
              description: description,

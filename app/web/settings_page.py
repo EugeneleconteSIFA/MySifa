@@ -527,7 +527,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <!-- v2.3.14 : runtime des alertes chargé aussi sur /settings pour le bouton "Tester sur moi" -->
-<script src="/static/mysifa_alert_runtime.js?v=2.3.15"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.17"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -5898,7 +5898,7 @@ function _alertDefaults(existing) {
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
     block_production: !!(p && p.block_production),  // v2.2.88
-    placement: (p && ['top-right','center','bottom-right'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
+    placement: (p && ['top-right','center'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
     size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
   };
 }
@@ -6019,7 +6019,7 @@ function _renderAlertFormFields(params, opts) {
     +       '<select id="af-placement" class="alert-field-input">'
     +         '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
     +         '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
-    +         '<option value="bottom-right"' + (d.placement === 'bottom-right' ? ' selected' : '') + '>Coin bas droit</option>'
+    +         
     +       '</select>'
     +     '</div>'
     +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'

@@ -7951,7 +7951,7 @@ function _alertDefaults(existing) {
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
-    placement: (p && ['top-right','center','bottom-right'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
+    placement: (p && ['top-right','center'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
     size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
   };
 }
@@ -8706,7 +8706,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.3.15"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.17"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 
