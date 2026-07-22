@@ -2849,29 +2849,42 @@ async function addAuditeurNow(uid){
     .sd-version-btn.primary:hover{filter:brightness(1.08)}
     .sd-version-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
     .sd-empty{padding:40px 20px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px;font-size:13px}
-    /* Modal génération */
+    /* Modal génération — meilleure lisibilité + sections distinctes */
     .sd-gen-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     @media(max-width:640px){.sd-gen-two-col{grid-template-columns:1fr}}
-    .sd-gen-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px}
-    .sd-gen-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
-    .sd-gen-input:focus{outline:none;border-color:var(--accent)}
-    .sd-audit-picker{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-top:6px}
-    .sd-audit-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;transition:.1s}
+    /* Wrapper par section : background + padding + barre d'accent gauche */
+    .sd-gen-section{background:var(--bg);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:16px 18px;transition:.15s}
+    .sd-gen-section:hover{border-color:var(--border);border-left-color:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.04)}
+    body.light .sd-gen-section{background:#f8fafc}
+    /* Titre de section = fort, coloré, plus grand */
+    .sd-gen-label{font-size:13px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:12px;line-height:1.3}
+    .sd-gen-label .sd-gen-num{display:inline-block;width:22px;height:22px;border-radius:6px;background:var(--accent);color:var(--btn-fg);font-size:12px;font-weight:800;text-align:center;line-height:22px;margin-right:8px;vertical-align:middle}
+    /* Sous-titre */
+    .sd-gen-sublabel{font-size:11.5px;color:var(--text2);margin:8px 0 6px;font-weight:600}
+    /* Inputs plus lisibles */
+    .sd-gen-input{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;color:var(--text);font-size:13.5px;font-family:inherit;box-sizing:border-box;transition:.15s}
+    .sd-gen-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+    .sd-gen-input::placeholder{color:var(--muted)}
+    /* Audit picker */
+    .sd-audit-picker{max-height:220px;overflow-y:auto;border:1.5px solid var(--border);border-radius:9px;background:var(--card);margin-top:6px}
+    .sd-audit-item{padding:11px 13px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:12px;transition:.12s}
     .sd-audit-item:last-child{border-bottom:none}
-    .sd-audit-item:hover{background:var(--card)}
-    .sd-audit-item.sel{background:var(--accent-bg);color:var(--accent)}
+    .sd-audit-item:hover{background:var(--accent-bg)}
+    .sd-audit-item.sel{background:var(--accent-bg)}
     .sd-audit-item.sel .meta{color:var(--accent)}
-    .sd-audit-nom{font-weight:600;font-size:13px;color:var(--text)}
+    .sd-audit-nom{font-weight:700;font-size:13.5px;color:var(--text)}
     .sd-audit-item.sel .sd-audit-nom{color:var(--accent)}
-    .sd-audit-item .meta{font-size:11px;color:var(--muted);flex-shrink:0}
-    .sd-fours-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;max-height:280px;overflow-y:auto;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
-    .sd-four-chk{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:.1s;font-size:12px}
-    .sd-four-chk:hover{border-color:var(--accent)}
-    .sd-four-chk.checked{background:var(--accent-bg);border-color:var(--accent)}
-    .sd-four-chk input{margin:0}
-    .sd-four-chk-nom{font-weight:600;color:var(--text);font-size:12px}
+    .sd-audit-item .meta{font-size:11.5px;color:var(--muted);flex-shrink:0;font-weight:500}
+    /* Fournisseurs cards */
+    .sd-fours-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;max-height:300px;overflow-y:auto;padding:10px;background:var(--card);border:1.5px solid var(--border);border-radius:9px}
+    .sd-four-chk{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;cursor:pointer;transition:.15s;font-size:13px}
+    body.light .sd-four-chk{background:#fff}
+    .sd-four-chk:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.06)}
+    .sd-four-chk.checked{background:var(--accent-bg);border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+    .sd-four-chk input{margin:0;accent-color:var(--accent);width:15px;height:15px;flex-shrink:0}
+    .sd-four-chk-nom{font-weight:700;color:var(--text);font-size:13px;line-height:1.3}
     .sd-four-chk.checked .sd-four-chk-nom{color:var(--accent)}
-    .sd-four-chk-pays{font-size:10px;color:var(--muted)}
+    .sd-four-chk-pays{font-size:11px;color:var(--muted);margin-top:2px}
     .sd-four-chk.no-pays .sd-four-chk-pays{color:var(--warn)}
     .sd-mcountries-list{display:grid;gap:10px;max-height:400px;overflow-y:auto;padding:4px 0}
     .sd-mcountry-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
@@ -3120,12 +3133,12 @@ async function openSifaDocGenerate(code, prefill){
   <div class="modal-ov" id="sd-gen-ov" style="display:flex" onclick="if(event.target===this)closeSifaDocGenerate()">
     <div class="modal lg" onclick="event.stopPropagation()" style="max-width:820px">
       <button type="button" class="modal-close" onclick="closeSifaDocGenerate()">×</button>
-      <h3 style="margin:0 0 6px;font-size:17px;color:var(--text)">Nouvelle version — ${escHtml(S._sifaGen.templateTitre)}</h3>
-      <p style="margin:0 0 16px;color:var(--muted);font-size:12px">La référence sera calculée automatiquement (${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…). La date d'émission est celle du jour.</p>
+      <h3 style="margin:0 0 6px;font-size:20px;color:var(--text);font-weight:800;letter-spacing:-.2px">Nouvelle version — ${escHtml(S._sifaGen.templateTitre)}</h3>
+      <p style="margin:0 0 20px;color:var(--text2);font-size:12.5px;line-height:1.5">La référence sera calculée automatiquement (<b style="color:var(--text)">${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…</b>). La date d'émission est celle du jour.</p>
 
-      <div style="display:grid;gap:14px">
-        <div>
-          <label class="sd-gen-label">1. Client concerné</label>
+      <div style="display:grid;gap:16px">
+        <div class="sd-gen-section">
+          <label class="sd-gen-label"><span class="sd-gen-num">1</span>Client concerné</label>
           <div class="sd-gen-two-col">
             <div>
               <input type="text" id="sd-gen-client" class="sd-gen-input" placeholder="Nom du client…"
@@ -3139,25 +3152,25 @@ async function openSifaDocGenerate(code, prefill){
             </div>
           </div>
           ${audits.length ? `
-            <div style="margin-top:10px">
-              <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Ou reprendre un audit client existant :</div>
+            <div style="margin-top:12px">
+              <div class="sd-gen-sublabel">Ou reprendre un audit client existant :</div>
               <div class="sd-audit-picker" id="sd-audit-picker"></div>
             </div>
           ` : ''}
         </div>
 
-        <div>
-          <label class="sd-gen-label">2. Fournisseurs retenus pour ce client</label>
-          <div style="display:flex;gap:8px;margin-bottom:8px">
+        <div class="sd-gen-section">
+          <label class="sd-gen-label"><span class="sd-gen-num">2</span>Fournisseurs retenus pour ce client</label>
+          <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">
             <input type="search" class="sd-gen-input" placeholder="Filtrer les fournisseurs…"
                    oninput="S._sifaGen.fourSearch=this.value;_sdRenderFours()" style="flex:1">
-            <span style="color:var(--muted);font-size:11px;align-self:center" id="sd-fours-count">0 / ${fours.length}</span>
+            <span style="color:var(--muted);font-size:12px;font-weight:600;white-space:nowrap" id="sd-fours-count">0 / ${fours.length}</span>
           </div>
           <div class="sd-fours-grid" id="sd-fours-grid"></div>
         </div>
 
-        <div>
-          <label class="sd-gen-label">3. Personnaliser les sections du document (optionnel)</label>
+        <div class="sd-gen-section">
+          <label class="sd-gen-label"><span class="sd-gen-num">3</span>Personnaliser les sections du document <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">(optionnel)</span></label>
           <button type="button" class="sd-sec-toggle" id="sd-sec-toggle" onclick="_sdToggleSections()">
             <span id="sd-sec-toggle-txt">▸ Afficher / masquer les sections</span>
             <span class="sd-sec-count" id="sd-sec-count"></span>
@@ -3165,12 +3178,12 @@ async function openSifaDocGenerate(code, prefill){
           <div class="sd-sec-list" id="sd-sec-list" style="display:none"></div>
         </div>
 
-        <div>
-          <label class="sd-gen-label">4. Référence du document</label>
+        <div class="sd-gen-section">
+          <label class="sd-gen-label"><span class="sd-gen-num">4</span>Référence du document</label>
           <input type="text" id="sd-gen-ref" class="sd-gen-input"
                  placeholder="Générée automatiquement"
-                 oninput="S._sifaGen.ref_manual=this.value" style="font-family:'Menlo',monospace;font-size:12px">
-          <div style="font-size:10.5px;color:var(--muted);margin-top:4px">Laisser vide pour utiliser la référence auto par client (recommandé)</div>
+                 oninput="S._sifaGen.ref_manual=this.value" style="font-family:ui-monospace,'Menlo',monospace;font-size:13px">
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Laisser vide pour utiliser la référence auto par client (recommandé)</div>
         </div>
       </div>
 
