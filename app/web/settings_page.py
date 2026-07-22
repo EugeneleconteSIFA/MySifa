@@ -6604,10 +6604,12 @@ async function previewAlert(id) {
                 const maxStr = (it.max != null) ? String(it.max) : '+∞';
                 toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
               }
+              const _taReqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
               return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
+                + (it.required ? ' data-required="1"' : '')
                 + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
                 + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarV + '</div>'
                 + '<div style="display:flex;align-items:center;gap:8px">'
                 +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
                 +   unit
@@ -6634,8 +6636,9 @@ async function previewAlert(id) {
             const otherArea = it.allow_other
               ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
               : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
+            const _taReqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarC + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
               + otherArea
               + '</div>';
@@ -6705,11 +6708,12 @@ async function previewAlert(id) {
     }, 100);
   }
 
-  // Valider
+  // Valider — v2.2.87 : ne bloque que sur les questions REQUIRED
   function _taIsComplete() {
     if (!clEnabled) return true;
     const items = wrap.querySelectorAll('.ta-cl-item');
     for (const it of items) {
+      if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value') {
         const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
@@ -6719,6 +6723,15 @@ async function previewAlert(id) {
       }
     }
     return true;
+  }
+  // v2.2.87 : sync du bouton Valider selon required
+  function _taSyncValidateState() {
+    const btn = wrap.querySelector('#ta-validate');
+    if (!btn) return;
+    const ok = _taIsComplete();
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '' : '.5';
+    btn.style.cursor = ok ? '' : 'not-allowed';
   }
   function _taFinalize() {
     toast('Test terminé — aucune donnée enregistrée.');
@@ -6741,12 +6754,17 @@ async function previewAlert(id) {
     document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
   }
   function _taOnValidate() {
-    if (_taIsComplete()) { _taFinalize(); return; }
-    const actions = wrap.querySelector('.ta-sim-actions');
-    if (!actions) { _taFinalize(); return; }
-    _taRenderConfirm(actions);
+    // v2.2.87 : bouton disabled tant que required pas OK → sécurité si on arrive ici
+    if (!_taIsComplete()) return;
+    _taFinalize();
   }
   document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  // v2.2.87 : listeners pour recalculer l'état disabled en temps réel
+  wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val').forEach(el => {
+    el.addEventListener('change', _taSyncValidateState);
+    el.addEventListener('input', _taSyncValidateState);
+  });
+  _taSyncValidateState();
   // v164 : bouton dismiss dans la preview
   const taDismiss = document.getElementById('ta-dismiss');
   if (taDismiss) {
