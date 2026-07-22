@@ -3272,10 +3272,15 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
         if not bool(params.get("block_production", False)):
             continue
         target = params.get("target") or {}
-        if not operator_should_see_alert(user_role, user_machine, target):
-            # Superadmin voit tout ; sinon on skippe si machine hors cible
-            if user_role != ROLE_SUPERADMIN:
-                continue
+        # v2.3.4 : filtre machine strict (aligné avec /blocking-for-machine).
+        # Le superadmin ne bypass plus — il faut que la machine soit dans la
+        # cible sinon l'alerte n'a pas à se déclencher pour lui non plus.
+        machines_target = target.get("machines")
+        if not isinstance(machines_target, list) or not machines_target:
+            legacy = target.get("machine")
+            machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+        if "*" not in machines_target and user_machine not in machines_target:
+            continue
         trig = params.get("trigger") or {}
         ttype = trig.get("type")
         if ttype == "periodic":
