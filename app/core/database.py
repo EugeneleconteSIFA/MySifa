@@ -7302,6 +7302,22 @@ Ressources :
 
 
 
+    # v204 -- guides_config : activation/desactivation globale par guide_key.
+    # Permet a l'admin (Parametres > Formations & guides in-app) de masquer un
+    # guide pour tous les utilisateurs (bouton help cache + auto-open ignore).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=204 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS guides_config (
+            guide_key TEXT PRIMARY KEY,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT,
+            updated_by INTEGER,
+            FOREIGN KEY (updated_by) REFERENCES users(id)
+        )""")
+        conn.commit()
+        _record_schema_migration(conn, 204, "guides_config")
+
+
+
 def create_default_admin():
     import bcrypt
     from config import DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_NOM, DEFAULT_ADMIN_PWD
