@@ -31,7 +31,7 @@ from reportlab.platypus import Paragraph
 SIFA_NAME    = "SIFA"
 SIFA_ADDRESS = "45 rue Rollin — 59100 Roubaix — France"
 SIFA_PHONE   = "+33 (0)3 20 69 01 01"
-SIFA_EMAIL   = "commande@sifa.pro"
+SIFA_EMAIL   = "commandes@sifa.pro"
 
 # ── Couleurs ─────────────────────────────────────────────────────────
 _YELLOW     = colors.HexColor("#FFD100")   # jaune SIFA
