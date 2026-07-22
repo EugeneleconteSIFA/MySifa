@@ -59,6 +59,8 @@
 
   let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
   let _displayed = new Map();  // v2.2.66 : id → wrap DOM element (pour pouvoir fermer côté client si backend a ack en silence)
+  // v2.3.6 : file d'attente de resolvers pour waitForBlockingAck()
+  let _blockingAckResolvers = [];  // [{resolve, reject}]
   let _pollTimer = null;
   let _started = false;
 
@@ -600,9 +602,23 @@
       });
     }
 
-    const closeWithSuccess = () => {
+    const closeWithSuccess = (viaDismiss) => {
       wrap.remove();
       _displayed.delete(alert.id);
+      // v2.3.7 : notifier TOUS les callers apiFetch qui attendent, sans se
+      // limiter aux alertes marquées block_production. Les resolvers ne sont
+      // ajoutés que par apiFetch après un 423 — donc pas de perturbation
+      // pour les autres flows. Plus robuste : on ne dépend plus du champ
+      // block_production qui pourrait mal se propager.
+      console.log('[MysifaAlerts] closeWithSuccess id=', alert.id, 'viaDismiss=', viaDismiss, 'waiters=', _blockingAckResolvers.length);
+      const cbs = _blockingAckResolvers.slice();
+      _blockingAckResolvers = [];
+      cbs.forEach(cb => {
+        try {
+          if (viaDismiss) cb.reject(new Error('dismissed'));
+          else cb.resolve();
+        } catch (e) {}
+      });
     };
 
     const onValidate = async () => {
@@ -638,7 +654,7 @@
             _toast('Fermeture refusée.', true);
             return;
           }
-          closeWithSuccess();
+          closeWithSuccess(true);  // v2.3.6 : dismiss → reject les waiters
         } catch (e) {
           _toast('Erreur réseau — réessaie', true);
         }
@@ -708,5 +724,13 @@
     },
     refresh: function() { return _poll(); },
     showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
+    // v2.3.6 : retourne une Promise résolue quand toutes les alertes bloquantes
+    // à l'écran sont ACK (rejetée si dismiss). Permet à fabrication_page de
+    // retenter automatiquement la saisie 03/88 après validation.
+    waitForBlockingAck: function() {
+      return new Promise((resolve, reject) => {
+        _blockingAckResolvers.push({ resolve, reject });
+      });
+    },
   };
 })();
