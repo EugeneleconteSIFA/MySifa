@@ -5747,6 +5747,7 @@ function _afOnOtherToggle(cb){
 function _afChecklistCard(item) {
   const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
   const type = (item && item.type) || 'choice';
+  const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
   return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
@@ -5755,6 +5756,11 @@ function _afChecklistCard(item) {
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
+    // v2.2.85 : case à cocher Obligatoire (bloque la validation opérateur si vide)
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
+    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
+    + '</label>'
     + _afChecklistCardBody(item)
     + '</div>';
 }
@@ -5982,6 +5988,8 @@ function _afReadParams() {
         if (unit) item.unit = unit;
         if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
         if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        // v2.2.85 : required
+        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         items.push(item);
         return;
       }
@@ -5998,7 +6006,11 @@ function _afReadParams() {
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
+      // v2.2.85 : required
+      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
+      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
+      if (_reqCk) _choiceItem.required = true;
+      items.push(_choiceItem);
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
