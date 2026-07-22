@@ -1740,8 +1740,8 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 body.light .recep-hist-detail .form-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 /* Fournisseur search */
 .recep-fourn-wrap{margin-top:8px}
-.recep-fourn-label{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text);display:flex;align-items:center;gap:8px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2;margin-bottom:6px}
-.recep-fourn-label svg{color:var(--accent);flex-shrink:0}
+.recep-fourn-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);display:flex;align-items:center;gap:6px;margin:8px 0 4px 0;opacity:.85}
+.recep-fourn-label svg{color:var(--text2);flex-shrink:0;opacity:.7}
 .recep-fourn-search-wrap{position:relative}
 .recep-fourn-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;box-sizing:border-box}
 .recep-fourn-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}

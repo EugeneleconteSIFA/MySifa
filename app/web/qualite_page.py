@@ -2370,8 +2370,8 @@ function openCreateAuditModal(){
   <div class="modal-ov" id="aud-create-ov" style="display:flex" onclick="if(event.target===this)closeAuditCreate()">
     <div class="modal lg" onclick="event.stopPropagation()" style="max-width:780px">
       <button type="button" class="modal-close" onclick="closeAuditCreate()">×</button>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <h3 style="margin:0;font-size:17px;color:var(--text);flex:1">Nouvel audit client</h3>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <h3 style="margin:0;font-size:19px;color:var(--text);flex:1;font-weight:800;letter-spacing:-.2px">Nouvel audit client</h3>
         <div class="ac-steps">
           <div class="ac-step active" id="ac-step-1">
             <span class="ac-step-n">1</span>
@@ -2394,25 +2394,57 @@ function openCreateAuditModal(){
     </div>
   </div>
   <style>
+    /* Wizard stepper */
     .ac-steps{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
-    .ac-step{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:var(--bg);border:1px solid var(--border);transition:.15s}
-    .ac-step.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .ac-step{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--bg);border:1px solid var(--border);transition:.2s;font-weight:600}
+    .ac-step.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 8px rgba(34,211,238,.15)}
     .ac-step.done{background:var(--bg);border-color:var(--accent);color:var(--accent)}
-    .ac-step-n{width:20px;height:20px;border-radius:999px;background:var(--card);color:inherit;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:1px solid currentColor}
-    .ac-step.active .ac-step-n,.ac-step.done .ac-step-n{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-    .ac-step-l{font-weight:600}
-    .ac-step-sep{color:var(--muted);font-size:14px}
-    .ac-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px}
-    .ac-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box}
-    .ac-input:focus{outline:none;border-color:var(--accent)}
-    .ac-textarea{resize:vertical;min-height:80px}
-    .ac-pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px;max-height:200px;overflow-y:auto;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px}
-    .ac-pick-chk{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:.1s;font-size:12px;color:var(--text)}
-    .ac-pick-chk:hover{border-color:var(--accent)}
-    .ac-pick-chk.checked{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-    .ac-pick-chk input{margin:0}
-    .ac-pick-sub{font-size:10px;color:var(--muted);margin-top:1px}
-    .ac-hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4}
+    .ac-step-n{width:22px;height:22px;border-radius:999px;background:var(--card);color:inherit;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;border:1.5px solid currentColor}
+    .ac-step.active .ac-step-n,.ac-step.done .ac-step-n{background:var(--accent);color:var(--btn-fg);border-color:var(--accent)}
+    .ac-step-l{font-weight:700;font-size:12px}
+    .ac-step-sep{color:var(--muted);font-size:16px;opacity:.5}
+    /* Section titles (dans le modal) */
+    .ac-section-title{font-size:13px;font-weight:800;color:var(--text);margin:0 0 12px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+    .ac-section-title .ac-section-num{width:22px;height:22px;border-radius:6px;background:var(--accent);color:var(--btn-fg);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+    .ac-lbl{font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.6px;display:block;margin-bottom:6px}
+    .ac-lbl .ac-req{color:var(--danger);margin-left:2px}
+    /* Inputs */
+    .ac-input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:9px;padding:11px 13px;color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;transition:.15s}
+    .ac-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+    .ac-input::placeholder{color:var(--muted)}
+    .ac-textarea{resize:vertical;min-height:80px;line-height:1.5}
+    /* Dropdown flottant (clients, auditeurs) — pattern AO */
+    .ac-field-wrap{position:relative}
+    .ac-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;max-height:260px;overflow-y:auto;background:var(--card);border:1.5px solid var(--accent);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.35);z-index:100;padding:4px}
+    .ac-dropdown:empty{display:none}
+    .ac-dd-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;cursor:pointer;border-radius:7px;transition:.1s;font-size:13px}
+    .ac-dd-item:hover{background:var(--accent-bg)}
+    .ac-dd-item .ac-dd-nom{color:var(--text);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ac-dd-item .ac-dd-meta{color:var(--muted);font-size:11px;font-weight:500;flex-shrink:0;max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .ac-dd-item:hover .ac-dd-nom{color:var(--accent)}
+    .ac-dd-empty{padding:14px;text-align:center;color:var(--muted);font-size:12px;font-style:italic}
+    /* Chips auditeurs choisis */
+    .ac-chips-row{display:flex;flex-wrap:wrap;gap:6px;min-height:28px;margin-bottom:8px;padding:8px;background:var(--bg);border:1px dashed var(--border);border-radius:8px}
+    .ac-chips-row:empty::before{content:"Aucun auditeur sélectionné";color:var(--muted);font-size:11px;font-style:italic}
+    .ac-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);border-radius:999px;font-size:12px;font-weight:600}
+    .ac-chip .x{cursor:pointer;color:var(--accent);font-weight:800;font-size:14px;line-height:1;margin-left:2px;padding:0 2px;border-radius:3px}
+    .ac-chip .x:hover{color:var(--danger)}
+    /* Résumé étape 2 */
+    .ac-summary{background:linear-gradient(135deg,var(--accent-bg) 0%,var(--bg) 100%);border:1px solid var(--accent);border-radius:12px;padding:14px 16px;box-shadow:0 2px 8px rgba(34,211,238,.08)}
+    .ac-summary-lbl{font-size:10.5px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px}
+    .ac-summary-client{font-size:15px;color:var(--text);font-weight:800;margin-bottom:3px}
+    .ac-summary-sub{font-size:11.5px;color:var(--text2)}
+    /* Grille de sélection fournisseurs/certifs */
+    .ac-pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;max-height:240px;overflow-y:auto;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px}
+    .ac-pick-chk{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--card);border:1.5px solid var(--border);border-radius:9px;cursor:pointer;transition:.15s;font-size:12.5px;color:var(--text);position:relative}
+    .ac-pick-chk:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 3px 10px rgba(0,0,0,.08)}
+    .ac-pick-chk.checked{background:var(--accent-bg);border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+    .ac-pick-chk.checked::after{content:"✓";position:absolute;top:6px;right:8px;color:var(--accent);font-weight:800;font-size:14px}
+    .ac-pick-chk input{margin:2px 0 0 0;accent-color:var(--accent);flex-shrink:0;width:14px;height:14px}
+    .ac-pick-chk > div > div:first-child{font-weight:700;color:var(--text);line-height:1.3}
+    .ac-pick-chk.checked > div > div:first-child{color:var(--accent)}
+    .ac-pick-sub{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:ui-monospace,monospace}
+    .ac-hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.4;font-style:italic}
   </style>`;
   loadAuditeursCandidats().then(()=>{
     _acRenderStep();
@@ -2428,57 +2460,61 @@ function _acRenderStep(){
   if(S._acStep===1){
     step1.classList.add('active');step2.classList.remove('active');
     body.innerHTML=`
-      <div style="display:grid;gap:14px">
+      <div style="display:grid;gap:16px">
         <div>
-          <label class="ac-lbl">Client *</label>
-          <input type="text" id="ac-client" class="ac-input" placeholder="Rechercher un client ou saisir librement..." value="${escAttr(S._acData.client)}" oninput="S._acData.client=this.value;S._acData.clientId=null;document.getElementById('ac-client-id').value='';searchClientsForAudit(this.value)" autocomplete="off">
-          <div id="ac-client-results" style="margin-top:6px;max-height:160px;overflow-y:auto"></div>
+          <label class="ac-lbl">Client<span class="ac-req">*</span></label>
+          <div class="ac-field-wrap">
+            <input type="text" id="ac-client" class="ac-input" placeholder="Rechercher un client ou saisir librement..." value="${escAttr(S._acData.client)}" oninput="S._acData.client=this.value;S._acData.clientId=null;document.getElementById('ac-client-id').value='';searchClientsForAudit(this.value)" onfocus="searchClientsForAudit(this.value)" onblur="setTimeout(()=>{const r=document.getElementById('ac-client-results');if(r)r.innerHTML='';},180)" autocomplete="off">
+            <div class="ac-dropdown" id="ac-client-results"></div>
+          </div>
           <input type="hidden" id="ac-client-id" value="${S._acData.clientId||''}">
         </div>
-        <div>
-          <label class="ac-lbl">Date de l'audit *</label>
-          <input type="date" id="ac-date" class="ac-input" value="${S._acData.date}" onchange="S._acData.date=this.value">
+        <div style="display:grid;grid-template-columns:1fr;gap:16px">
+          <div>
+            <label class="ac-lbl">Date de l'audit<span class="ac-req">*</span></label>
+            <input type="date" id="ac-date" class="ac-input" value="${S._acData.date}" onchange="S._acData.date=this.value">
+          </div>
         </div>
         <div>
-          <label class="ac-lbl">Description *</label>
+          <label class="ac-lbl">Description<span class="ac-req">*</span></label>
           <textarea id="ac-desc" class="ac-input ac-textarea" placeholder="Objet de l'audit, points à examiner, contexte..." onchange="S._acData.desc=this.value">${escHtml(S._acData.desc)}</textarea>
         </div>
         <div>
-          <label class="ac-lbl">Auditeurs SIFA *</label>
-          <div id="ac-aud-chips" class="aud-chip-row" style="min-height:24px;margin-bottom:6px"></div>
-          <input type="text" id="ac-aud-search" class="ac-input" placeholder="Rechercher un auditeur..." oninput="filterAuditeurs(this.value)">
-          <div id="ac-aud-list" class="aud-picker-list" style="margin-top:6px;max-height:180px"></div>
+          <label class="ac-lbl">Auditeurs SIFA<span class="ac-req">*</span></label>
+          <div id="ac-aud-chips" class="ac-chips-row"></div>
+          <div class="ac-field-wrap">
+            <input type="text" id="ac-aud-search" class="ac-input" placeholder="Rechercher un auditeur..." oninput="filterAuditeurs(this.value)" onfocus="renderAuditeursPicker(this.value||'')" onblur="setTimeout(()=>{const l=document.getElementById('ac-aud-list');if(l)l.innerHTML='';},180)" autocomplete="off">
+            <div class="ac-dropdown" id="ac-aud-list"></div>
+          </div>
         </div>
       </div>`;
-    navR.innerHTML=`<button type="button" class="btn btn-accent" onclick="_acNext()">Suivant →</button>`;
+    navR.innerHTML=`<button type="button" class="btn btn-accent" onclick="_acNext()" style="padding:11px 22px;font-size:13px">Suivant →</button>`;
     renderChosenAuditeurs();
-    renderAuditeursPicker('');
-    searchClientsForAudit(S._acData.client||'');
   } else if(S._acStep===2){
     step1.classList.remove('active');step1.classList.add('done');step2.classList.add('active');
     body.innerHTML=`
-      <div style="display:grid;gap:16px">
-        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Client</div>
-          <div style="font-size:14px;color:var(--text);font-weight:700">${escHtml(S._acData.client||'—')}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">Audit du ${escHtml(fmtDate(S._acData.date))}</div>
+      <div style="display:grid;gap:18px">
+        <div class="ac-summary">
+          <div class="ac-summary-lbl">Client concerné</div>
+          <div class="ac-summary-client">${escHtml(S._acData.client||'—')}</div>
+          <div class="ac-summary-sub">Audit du ${escHtml(fmtDate(S._acData.date))} · ${S._acAuditeurs.length} auditeur${S._acAuditeurs.length>1?'s':''}</div>
         </div>
         <div>
-          <label class="ac-lbl">Fournisseurs concernés par cet audit</label>
-          <input type="search" class="ac-input" placeholder="Filtrer les fournisseurs..." oninput="S._acFournSearch=this.value;_acRenderFours()" style="margin-bottom:6px">
+          <div class="ac-section-title"><span class="ac-section-num">1</span>Fournisseurs concernés par cet audit</div>
+          <input type="search" class="ac-input" placeholder="Filtrer les fournisseurs..." oninput="S._acFournSearch=this.value;_acRenderFours()" style="margin-bottom:8px">
           <div class="ac-pick-grid" id="ac-fours-grid"></div>
           <div class="ac-hint">Ces fournisseurs seront ajoutés à la matrice de conformité. Ajustable ensuite dans l'audit.</div>
         </div>
         <div>
-          <label class="ac-lbl">Certifications demandées par le client</label>
-          <input type="search" class="ac-input" placeholder="Filtrer les certifications..." oninput="S._acFicheSearch=this.value;_acRenderFiches()" style="margin-bottom:6px">
+          <div class="ac-section-title"><span class="ac-section-num">2</span>Certifications demandées par le client</div>
+          <input type="search" class="ac-input" placeholder="Filtrer les certifications..." oninput="S._acFicheSearch=this.value;_acRenderFiches()" style="margin-bottom:8px">
           <div class="ac-pick-grid" id="ac-fiches-grid"></div>
           <div class="ac-hint">Vous pouvez tout ignorer si l'audit ne couvre pas de certifs (juste NC ou observations).</div>
         </div>
       </div>`;
     navR.innerHTML=`
-      <button type="button" class="btn btn-ghost" onclick="_acStep=1;_acRenderStep()" style="margin-right:6px">← Retour</button>
-      <button type="button" class="btn btn-accent" id="ac-submit" onclick="submitCreateAudit()">Créer l'audit</button>`;
+      <button type="button" class="btn btn-ghost" onclick="S._acStep=1;_acRenderStep()" style="margin-right:6px">← Retour</button>
+      <button type="button" class="btn btn-accent" id="ac-submit" onclick="submitCreateAudit()" style="padding:11px 22px;font-size:13px">Créer l'audit</button>`;
     // Charger pickers audit si pas déjà
     _acLoadPickers();
   }
@@ -2590,11 +2626,11 @@ function renderAuditeursPicker(q){
   list.innerHTML=items.length?items.map(u=>{
     const sel=selIds.has(u.id);
     const roleLbl={direction:'Direction',administration:'Administration',superadmin:'Super admin'}[u.role]||u.role;
-    return `<div class="aud-picker-item ${sel?'sel':''}" onclick="toggleAuditeur(${u.id},'${escAttr(u.nom||'')}')">
-      <span>${escHtml(u.nom||'')}</span>
-      <span class="meta">${escHtml(roleLbl)}${sel?' · sélectionné':''}</span>
+    return `<div class="ac-dd-item ${sel?'sel':''}" onmousedown="toggleAuditeur(${u.id},'${escAttr(u.nom||'')}')">
+      <span class="ac-dd-nom">${escHtml(u.nom||'')}${sel?' <span style="color:var(--ok);font-weight:800">✓</span>':''}</span>
+      <span class="ac-dd-meta">${escHtml(roleLbl)}</span>
     </div>`;
-  }).join(''):'<div style="padding:12px;color:var(--muted);font-size:12px;text-align:center">Aucun candidat</div>';
+  }).join(''):'<div class="ac-dd-empty">Aucun candidat</div>';
 }
 
 function toggleAuditeur(uid,nom){
@@ -2608,7 +2644,7 @@ function toggleAuditeur(uid,nom){
 function renderChosenAuditeurs(){
   const chips=document.getElementById('ac-aud-chips');
   if(!chips) return;
-  chips.innerHTML=S._acAuditeurs.length?S._acAuditeurs.map(u=>`<span class="aud-aud-chip">${escHtml(u.nom)}<span class="x" onclick="toggleAuditeur(${u.id},'${escAttr(u.nom)}')" title="Retirer">×</span></span>`).join(''):'<span style="color:var(--muted);font-size:12px">Aucun auditeur sélectionné</span>';
+  chips.innerHTML=S._acAuditeurs.length?S._acAuditeurs.map(u=>`<span class="ac-chip">${escHtml(u.nom)}<span class="x" onclick="toggleAuditeur(${u.id},'${escAttr(u.nom)}')" title="Retirer">×</span></span>`).join(''):'';
 }
 
 let _acClientTm=null;
@@ -2630,8 +2666,8 @@ function renderClientsResults(){
   const inp=document.getElementById('ac-client');
   const cur=inp?inp.value.trim():'';
   el.innerHTML=items.length?
-    '<div class="aud-picker-list">'+items.slice(0,8).map(c=>`<div class="aud-picker-item" onclick="pickClient(${c.id},'${escAttr(c.raison_sociale||'')}')"><span>${escHtml(c.raison_sociale||'')}</span><span class="meta">${escHtml(c.code||'')}${c.ville?' · '+escHtml(c.ville):''}</span></div>`).join('')+'</div>':
-    (cur?`<div style="font-size:11px;color:var(--muted);padding:6px 4px">Aucun client trouvé — le nom « ${escHtml(cur)} » sera utilisé en texte libre.</div>`:'');
+    items.slice(0,10).map(c=>`<div class="ac-dd-item" onmousedown="pickClient(${c.id},'${escAttr(c.raison_sociale||'')}')"><span class="ac-dd-nom">${escHtml(c.raison_sociale||'')}</span><span class="ac-dd-meta">${escHtml(c.code||'')}${c.ville?' · '+escHtml(c.ville):''}</span></div>`).join(''):
+    (cur?`<div class="ac-dd-empty">Aucun client trouvé — « ${escHtml(cur)} » sera utilisé en texte libre.</div>`:'');
 }
 
 function pickClient(id,nom){
