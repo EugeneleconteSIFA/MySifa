@@ -1,7 +1,7 @@
 """MySifa — Suivi des guides in-app (tutos par onglet/vue).
 
 Prefix : /api/guides
-Tables : user_guide_progress (migration 181), guides_config (migration 203)
+Tables : user_guide_progress (migration 181), guides_config (migration 204)
 
 Endpoints utilisateur :
   GET  /api/guides/progress               → progression de l'utilisateur courant
