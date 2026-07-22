@@ -527,7 +527,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <!-- v2.3.14 : runtime des alertes chargé aussi sur /settings pour le bouton "Tester sur moi" -->
-<script src="/static/mysifa_alert_runtime.js?v=2.3.19"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.20"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">

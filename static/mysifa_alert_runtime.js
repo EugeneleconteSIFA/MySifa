@@ -16,42 +16,64 @@
     const style = document.createElement('style');
     style.id = 'mysifa-alert-runtime-css';
     style.textContent = [
-      /* v2.3.15 : ancrage direct au coin — plus de flex pivot autour du milieu */
+      /* v2.3.20 — CSS de positionnement réécrit depuis zéro. Approche simple :
+         .ta-sim-alert est en position:fixed (dans le viewport), pas dans un
+         parent flex/absolute. Toutes les propriétés critiques ont !important
+         pour bloquer tout override futur. */
+
+      /* CONTAINER : plein viewport transparent, capture les clics uniquement en mode bloquant */
       '.ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}',
       '.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}',
-      '.ta-sim-alert{position:absolute;background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto;box-sizing:border-box}',
-      /* Placements — ancrage précis au coin ou au centre */
-      '.ta-sim.ta-pl-top-right .ta-sim-alert{top:20px;right:20px}',
-      
-      '.ta-sim.ta-pl-center .ta-sim-alert{top:50%;left:50%;transform:translate(-50%,-50%)}',
-      /* Tailles — largeurs fixes qui tiennent dans le viewport */
-      '.ta-sz-small .ta-sim-alert{width:260px;max-width:calc(100vw - 40px)}',
-      '.ta-sz-medium .ta-sim-alert{width:340px;max-width:calc(100vw - 40px)}',
-      '.ta-sz-large .ta-sim-alert{width:440px;max-width:calc(100vw - 40px)}',
-      '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}',
+
+      /* ALERTE : positionnée dans le viewport (fixed), indépendante du container */
+      '.ta-sim-alert{position:fixed !important;background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto;box-sizing:border-box;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
+
+      /* TAILLES : largeur fixe avec fallback viewport */
+      '.ta-sz-small .ta-sim-alert{width:260px !important;max-width:calc(100vw - 40px) !important}',
+      '.ta-sz-medium .ta-sim-alert{width:340px !important;max-width:calc(100vw - 40px) !important}',
+      '.ta-sz-large .ta-sim-alert{width:440px !important;max-width:calc(100vw - 40px) !important}',
+
+      /* PLACEMENTS : ancrage direct dans le viewport avec reset explicite des autres axes */
+      '.ta-sim.ta-pl-top-right .ta-sim-alert{top:20px !important;right:20px !important;left:auto !important;bottom:auto !important;transform:none !important}',
+      '.ta-sim.ta-pl-center .ta-sim-alert{top:50% !important;left:50% !important;right:auto !important;bottom:auto !important;transform:translate(-50%,-50%) !important}',
+
+      /* Titre et boutons */
+      '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em;cursor:grab;user-select:none}',
+      '.ta-sim-title.ta-dragging{cursor:grabbing}',
       '.ta-sim-actions{display:flex;gap:6px;margin-top:10px}',
       '.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}',
       '.ta-sim-btn:hover{filter:brightness(1.05)}',
+
+      /* Bouton minimize (en haut-droite de l'alerte) */
+      '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s;z-index:1}',
+      '.ta-sim-min:hover{background:var(--bg);color:var(--text)}',
+      '.ta-sim-restore-icon{display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#fff}',
+
+      /* État minimize : bulle 56x56 (override le placement/taille via ta-minimized qui est plus spécifique) */
+      '.ta-sim-alert.ta-minimized{width:56px !important;height:56px !important;min-width:0;max-width:56px !important;padding:0 !important;border-radius:50% !important;cursor:pointer;background:var(--accent);border-color:var(--accent);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:taMinPulse 1.8s ease-in-out infinite}',
+      '.ta-sim-alert.ta-minimized>*:not(.ta-sim-restore-icon){display:none !important}',
+      '.ta-sim-alert.ta-minimized .ta-sim-restore-icon{display:flex}',
+      '.ta-sim-alert.ta-minimized:hover{filter:brightness(1.08);animation:none}',
+
+      /* Chips (réponses) */
       '.ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}',
       '.ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}',
       '.ta-chip:hover{border-color:var(--accent)}',
       '.ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}',
       '.ta-chip span{white-space:nowrap}',
       '.ta-chip-other{border-style:dashed}',
+
+      /* Animations */
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px);max-width:calc(100vw - 24px)}.ta-sim.ta-pl-top-right .ta-sim-alert{right:12px;left:12px;width:auto}}',
-      '.ta-sim-alert{transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',  /* v2.3.19 : position:relative retiré — écrasait le position:absolute + top/right du placement */
-      '.ta-sim-title{cursor:grab;user-select:none}',
-      '.ta-sim-title.ta-dragging{cursor:grabbing}',
-      '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s;z-index:1}',
-      '.ta-sim-min:hover{background:var(--bg);color:var(--text)}',
-      '.ta-sim-restore-icon{display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#fff}',
-      '.ta-sim-alert.ta-minimized{width:56px;height:56px;min-width:0;max-width:56px!important;padding:0;border-radius:50%;cursor:pointer;background:var(--accent);border-color:var(--accent);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:taMinPulse 1.8s ease-in-out infinite}',
-      '.ta-sim-alert.ta-minimized>*:not(.ta-sim-restore-icon){display:none!important}',
-      '.ta-sim-alert.ta-minimized .ta-sim-restore-icon{display:flex}',
-      '.ta-sim-alert.ta-minimized:hover{filter:brightness(1.08);animation:none}',
-      '@keyframes taMinPulse{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.4)}50%{box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 10px rgba(34,211,238,.28)}}'
+      '@keyframes taMinPulse{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.4)}50%{box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 10px rgba(34,211,238,.28)}}',
+
+      /* Mobile : marges réduites, largeur presque pleine */
+      '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px) !important;max-width:calc(100vw - 24px) !important}.ta-sim.ta-pl-top-right .ta-sim-alert{top:12px !important;right:12px !important}}',
+
+      /* Bouton "Quitter le test" du simulateur — fixed indépendant */
+      '.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}',
+      '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}'
     ].join('\n');
     document.head.appendChild(style);
   })();
