@@ -1636,8 +1636,12 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
   padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
 
 /* ── Réception matière ─────────────────────────────────────── */
+.recep-add-row{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}
+@media(max-width:600px){.recep-add-row{flex-wrap:wrap}}
+.recep-add-row .recep-manual-inp{flex:1;min-width:0}
+
 .recep-picker-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.recep-picker-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.recep-picker-title{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text);display:flex;align-items:center;gap:8px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2;margin-bottom:6px}.recep-picker-title svg{color:var(--accent);flex-shrink:0}
 .recep-picker-row{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;align-items:end}
 @media(max-width:800px){.recep-picker-row{grid-template-columns:1fr}}
 .recep-picker-field{display:flex;flex-direction:column;gap:4px;min-width:0}
@@ -1675,7 +1679,7 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 .recep-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.recep-layout{grid-template-columns:1fr}}
 .recep-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
-.recep-card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.recep-card-title{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text);display:flex;align-items:center;gap:8px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2;margin-bottom:2px}.recep-card-title svg{color:var(--accent);flex-shrink:0}
 /* Scanner vidéo */
 .recep-video-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;max-height:260px;display:flex;align-items:center;justify-content:center}
 .recep-video{width:100%;height:100%;object-fit:cover}
@@ -1736,7 +1740,8 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 body.light .recep-hist-detail .form-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 /* Fournisseur search */
 .recep-fourn-wrap{margin-top:8px}
-.recep-fourn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.recep-fourn-label{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text);display:flex;align-items:center;gap:8px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2;margin-bottom:6px}
+.recep-fourn-label svg{color:var(--accent);flex-shrink:0}
 .recep-fourn-search-wrap{position:relative}
 .recep-fourn-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;box-sizing:border-box}
 .recep-fourn-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
@@ -2251,16 +2256,26 @@ function iconEl(name, size=16){
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
   if (attrs) {
-    const { cls, className, on, style: s, html, ...rest } = attrs;
+    const { cls, className, on, style: s, html, attrs: subAttrs, ...rest } = attrs;
     const cn = cls || className;
     if (cn) e.className = cn;
     if (on) Object.entries(on).forEach(([ev,fn]) => e.addEventListener(ev, fn));
     if (s && typeof s === 'object') Object.assign(e.style, s);
     else if (typeof s === 'string') e.style.cssText = s;
     if (html) { e.innerHTML = html; }
+    // Support legacy attrs: { key: val } — extrait et applique via setAttribute
+    if (subAttrs && typeof subAttrs === 'object') {
+      Object.entries(subAttrs).forEach(([k,v]) => {
+        if (v === null || v === undefined || v === false) return;
+        if (k === 'disabled' && v) { e.disabled = true; return; }
+        if (k === 'id') { e.id = String(v); return; }
+        e.setAttribute(k, v);
+      });
+    }
     Object.entries(rest).forEach(([k,v]) => {
       if (v === null || v === undefined || v === false) return;
       if (k === 'disabled' && v) { e.disabled = true; return; }
+      if (k === 'id') { e.id = String(v); return; }
       e.setAttribute(k, v);
     });
   }
@@ -14049,9 +14064,9 @@ function renderReceptionMiniModal() {
 
   const overlay = el('div', {
     cls: 'recep-mini-overlay',
-    attrs: { id: 'recep-mini-overlay' },
     on: { click: (e) => { if (e.target === overlay) closeReceptionMiniModal(); } },
   });
+  overlay.id = 'recep-mini-overlay';
   const modal = el('div', { cls: 'recep-mini-modal', on: { click: (e) => e.stopPropagation() } });
 
   // ── Header ──
@@ -14063,7 +14078,7 @@ function renderReceptionMiniModal() {
     el('button', {
       cls: 'recep-mini-close',
       type: 'button',
-      attrs: { title: 'Fermer' },
+      title: 'Fermer',
       on: { click: () => {
         if (S.recepItems.length > 0 && !confirm('Fermer sans valider ? Les ' + S.recepItems.length + ' bobine(s) scannée(s) seront perdues.')) return;
         S.recepItems = [];
@@ -14118,7 +14133,7 @@ function renderReceptionMiniModal() {
   );
   const manInp = el('input', {
     cls: 'recep-manual-inp',
-    attrs: { type: 'text', placeholder: 'Code-barres — puis Entrée', autocomplete: 'off', spellcheck: 'false' },
+    type: 'text', placeholder: 'Code-barres — puis Entrée', autocomplete: 'off', spellcheck: 'false',
   });
   manInp.value = S.recepManual || '';
   manInp.addEventListener('input', e => { S.recepManual = e.target.value; });
@@ -14190,7 +14205,7 @@ function renderReceptionMiniModal() {
     el('button', {
       cls: 'btn-recep btn-recep-success',
       type: 'button',
-      attrs: canValid ? {} : { disabled: 'disabled' },
+      disabled: !canValid,
       style: canValid ? {} : { opacity: '0.5', cursor: 'not-allowed' },
       on: { click: recepValider },
     }, iconEl('check-circle', 15), ' Valider (' + S.recepItems.length + ')'),
@@ -14728,7 +14743,7 @@ function buildReceptionPicker(lockedMatiere) {
   laiField.appendChild(laiSel);
   if (S.recepLaizeCustomOn) {
     const inp = el('input', {
-      attrs: { type: 'number', step: '0.1', min: '1', placeholder: 'Valeur en mm (ex: 425)', autocomplete: 'off' },
+      type: 'number', step: '0.1', min: '1', placeholder: 'Valeur en mm (ex: 425)', autocomplete: 'off',
     });
     inp.value = S.recepLaizeCustomMm || '';
     inp.addEventListener('input', e => { S.recepLaizeCustomMm = e.target.value; });
@@ -14778,50 +14793,58 @@ function buildReceptionNouvelle() {
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
 
-  // ── Grille scanner + saisie manuelle ──
-  const grid = el('div', { cls: 'recep-layout' });
+  // ── Picker Catégorie / Matière / Laize (mode structuré) ──
+  if (!S.recepModalMode) {
+    block.appendChild(buildReceptionPicker(false));
+  }
 
-  const camCard = el('div', { cls: 'recep-card' },
-    el('div', { cls: 'recep-card-title' }, iconEl('scan', 14), ' Scanner une bobine')
+  // ── Section compacte : Ajouter une bobine (scan ou saisie manuelle) ──
+  const addCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('package', 14), ' Ajouter une bobine (scan ou saisie manuelle)')
   );
-  const placeholder = el('div', { cls: 'recep-cam-placeholder' },
-    iconEl('scan', 40),
-    el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
-  );
-  camCard.appendChild(placeholder);
-  camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: recepStartCamera } }, iconEl('scan', 14), ' Démarrer le scan'));
-  grid.appendChild(camCard);
+  const addRow = el('div', { cls: 'recep-add-row' });
+  const addInp = el('input', {
+    cls: 'recep-manual-inp',
+    type: 'text',
+    placeholder: 'Code-barres — Entrée pour ajouter',
+    autocomplete: 'off',
+    autocorrect: 'off',
+    spellcheck: 'false',
+  });
+  addInp.value = S.recepManual || '';
+  addInp.addEventListener('input', e => { S.recepManual = e.target.value; });
+  addInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; addInp.value = ''; addInp.focus(); }
+    }
+  });
+  const addBtn = el('button', {
+    cls: 'btn-recep btn-recep-primary',
+    type: 'button',
+    on: { click: () => {
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; addInp.value = ''; addInp.focus(); }
+    } },
+  }, '+ Ajouter');
+  const scanBtn = el('button', {
+    cls: 'btn-recep btn-recep-ghost',
+    type: 'button',
+    on: { click: recepStartCamera },
+  }, iconEl('scan', 14), ' Scanner');
+  addRow.append(addInp, addBtn, scanBtn);
+  addCard.appendChild(addRow);
 
-  const manCard = el('div', { cls: 'recep-card' },
-    el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Saisie manuelle'),
-    el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' } }, 'Saisissez ou collez un code-barres puis appuyez sur Entrée'),
-    (() => {
-      const wrap2 = el('div', { cls: 'recep-manual-wrap' });
-      const inp = el('input', { cls: 'recep-manual-inp', attrs: { type: 'text', placeholder: 'Ex: 3700123456789', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false' } });
-      inp.value = S.recepManual || '';
-      inp.addEventListener('input', e => { S.recepManual = e.target.value; });
-      inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
-        }
-      });
-      const btn = el('button', { cls: 'btn-recep btn-recep-ghost', on: { click: () => {
-        if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
-      }}}, '+ Ajouter');
-      wrap2.append(inp, btn);
-      return wrap2;
-    })(),
-    el('div', { cls: 'recep-card-title', style: { marginTop: '8px' } }, iconEl('inbox', 14), ' Note (optionnel)'),
-    (() => {
-      const inp = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Ex: Livraison fournisseur X, bon de livraison 123…' } });
-      inp.value = S.recepNote || '';
-      inp.addEventListener('input', e => { S.recepNote = e.target.value; });
-      return inp;
-    })()
-  );
-  grid.appendChild(manCard);
-  block.appendChild(grid);
+  // Note (optionnel) — compacte sous le champ code-barres
+  const noteInp = el('input', {
+    cls: 'recep-note-inp',
+    type: 'text',
+    placeholder: 'Note (optionnel) — ex: BL fournisseur, remarque…',
+  });
+  noteInp.value = S.recepNote || '';
+  noteInp.addEventListener('input', e => { S.recepNote = e.target.value; });
+  addCard.appendChild(noteInp);
+
+  block.appendChild(addCard);
 
   // ── Tableau bobines scannées + fournisseur/FSC + preview lot ──
   const tableCard = el('div', { cls: 'recep-card' });
