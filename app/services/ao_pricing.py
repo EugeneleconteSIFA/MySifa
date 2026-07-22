@@ -139,7 +139,10 @@ def enrich_reponse_pricing(
     if quotation is None:
         quotation = _float_or_none(reponse.get("prix_unitaire"))
 
-    unite = _norm_unite(reponse.get("unite_quotation"))
+    # unite pour PRICING : toujours celle du fournisseur (unite_quotation_original)
+    # unite pour AFFICHAGE (unite_quotation) peut etre override par l'interne (badge "manuel")
+    unite_display = reponse.get("unite_quotation")
+    unite = _norm_unite(reponse.get("unite_quotation_original") or unite_display)
     devise = _norm_devise(reponse.get("devise"))
     devise_devis = _norm_devise(reponse.get("devise_prix_devis"))
     coef = _float_or_none(reponse.get("coef"))
@@ -158,7 +161,7 @@ def enrich_reponse_pricing(
     out = dict(reponse)
     out["quotation"] = quotation
     out["devise"] = devise
-    out["unite_quotation"] = unite
+    out["unite_quotation"] = _norm_unite(unite_display) if unite_display else unite
     out["coef"] = coef
     out["devise_prix_devis"] = devise_devis
     out["prix_au_mille"] = prix_au_mille
