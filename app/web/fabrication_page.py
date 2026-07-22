@@ -1454,24 +1454,32 @@ function svgIcon(name,size=16){
 async function apiFetch(path, opts={}){
   const r = await fetch(path, {credentials:'include', ...opts});
   if(r.status===401){ window.location.href='/'; return null; }
-  // v2.2.89 : HTTP 423 = alerte maintenance bloquante due sur code 03/88.
-  // Récupère les alertes bloquantes dues via /blocking-for-machine et les
-  // affiche via MysifaAlerts.showBlockingAlerts (elles ne sont plus dans le
-  // polling classique /alerts/active).
+  // v2.2.90 : HTTP 423 = alerte maintenance bloquante due sur code 03/88.
+  // Appel systématique de /blocking-for-machine (même sans machine locale — le
+  // backend fait un fallback via l'user). Logging verbose pour debug.
   if(r.status===423){
     try {
       const machine = (S && S.machine && S.machine.nom) ? S.machine.nom : '';
-      if(machine && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
-        const rb = await fetch('/api/maintenance/alerts/blocking-for-machine?machine=' + encodeURIComponent(machine),
-          { credentials:'same-origin', cache:'no-store' });
-        if(rb.ok){
-          const db = await rb.json().catch(()=>({items:[]}));
-          if(db && Array.isArray(db.items) && db.items.length){
-            await window.MysifaAlerts.showBlockingAlerts(db.items);
+      const url = '/api/maintenance/alerts/blocking-for-machine' + (machine ? ('?machine=' + encodeURIComponent(machine)) : '');
+      const rb = await fetch(url, { credentials:'same-origin', cache:'no-store' });
+      if(rb.ok){
+        const db = await rb.json().catch(()=>({items:[]}));
+        console.log('[MysifaAlerts] 423 → blocking-for-machine :', db);
+        if(db && Array.isArray(db.items) && db.items.length && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
+          await window.MysifaAlerts.showBlockingAlerts(db.items);
+        } else {
+          // Fallback : force un refresh classique au cas où /alerts/active retourne l'alerte
+          console.warn('[MysifaAlerts] 423 mais 0 alertes bloquantes retournées — fallback refresh');
+          if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
+            window.MysifaAlerts.refresh();
           }
         }
+      } else {
+        console.warn('[MysifaAlerts] /blocking-for-machine HTTP', rb.status);
       }
-    } catch(_){}
+    } catch(err){
+      console.warn('[MysifaAlerts] error handling 423 :', err);
+    }
     const e = await r.json().catch(()=>({}));
     throw new Error(e.detail || 'Alerte maintenance à valider avant la saisie de production.');
   }

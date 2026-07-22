@@ -3340,7 +3340,16 @@ def maintenance_alerts_blocking_for_machine(request: Request, machine: str = "")
             if not bool(params.get("block_production", False)):
                 continue
             target = params.get("target") or {}
-            if user_role != ROLE_SUPERADMIN and not operator_should_see_alert(user_role, machine, target):
+            # v2.2.90 : PAS de filtre operator_should_see_alert ici. Si l'user
+            # est bloqué de saisir 03/88 côté serveur (423), il DOIT voir
+            # l'alerte peu importe son rôle métier. Le filtre reste dans le
+            # polling classique /alerts/active. On check seulement que la
+            # machine cible correspond.
+            machines_target = target.get("machines")
+            if not isinstance(machines_target, list) or not machines_target:
+                legacy = target.get("machine")
+                machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+            if "*" not in machines_target and machine not in machines_target:
                 continue
             trig = params.get("trigger") or {}
             ttype = trig.get("type")
