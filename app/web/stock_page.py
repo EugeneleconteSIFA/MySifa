@@ -13908,7 +13908,7 @@ function recepShowPrintModal(lot, isReprint) {
       el('button', { cls: 'btn-recep btn-recep-muted', on: { click: closeMroot } }, 'Fermer'),
       el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
-        recepPrintLabelsSmart(lot, state.refProduit, n, claimLabel);
+        recepPrintLabelsSmart(lot, state.refProduit, n, claimLabel, isReprint);
       }}}, iconEl('printer', 14), ' Imprimer'),
       el('button', { cls: 'btn-recep btn-recep-muted', style: { fontSize: '11px', padding: '6px 10px' }, on: { click: () => {
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
@@ -13925,7 +13925,7 @@ function recepShowPrintModal(lot, isReprint) {
 // Envoie les jobs d'impression au VPS ; l'agent local les récupère et les
 // pousse sur l'imprimante réseau. Fallback navigateur (window.print) via le
 // petit bouton "Navigateur" à côté du bouton principal.
-async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) {
+async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, isReprint) {
   const fscBanner = ((lot && lot.fsc_type_claim) || 'non_fsc') === 'non_fsc'
     ? 'MATIERE NON FSC' : 'MATIERE FSC';
   const now = new Date();
