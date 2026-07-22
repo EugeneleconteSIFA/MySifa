@@ -2386,6 +2386,16 @@ def _validate_alert_params(params: dict) -> dict:
     # saisie de production tant que l'alerte n'est pas ack.
     out["block_production"] = bool(params.get("block_production", False))
 
+    # v2.3.12 : placement et size par alerte (au lieu du singleton global).
+    _valid_placements = {"top-right", "center", "bottom-right"}
+    _valid_sizes = {"small", "medium", "large"}
+    _p = str(params.get("placement", "") or "").strip()
+    if _p in _valid_placements:
+        out["placement"] = _p
+    _s = str(params.get("size", "") or "").strip()
+    if _s in _valid_sizes:
+        out["size"] = _s
+
     # v164+ : bouton "Fermer l'alerte" configurable. Permet à l'opérateur
     # d'esquiver une alerte non pertinente sans polluer l'historique. Aucune
     # trace : simple dismiss silencieux qui débloque juste le prochain trigger.

@@ -1729,7 +1729,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
               <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des alertes</h2>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
+                <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Ajuster le délai minimum entre deux alertes affichées à l'opérateur.">Délai entre alertes</button>
                 <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
                 <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
               </div>
@@ -7951,6 +7951,8 @@ function _alertDefaults(existing) {
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
+    placement: (p && ['top-right','center','bottom-right'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
+    size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
   };
 }
 
@@ -8548,15 +8550,16 @@ const placementOpts = placements.map(p =>
     const sizeOpts = sizes.map(s =>
       '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
     ).join('');
+    // v2.3.12 : modal simplifié — placement/size sont maintenant par alerte.
     overlay.innerHTML = '<div class="alert-modal">'
-      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-head"><h3>Délai entre alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
       + '<div class="alert-modal-body">'
-      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
-      +   '<div class="alert-field">'
+      +   '<!-- v2.3.12 : placement/size retirés (par alerte maintenant) -->'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Placement à l\'écran</label>'
       +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
       +   '</div>'
-      +   '<div class="alert-field">'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Taille</label>'
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
       +   '</div>'
@@ -8565,13 +8568,7 @@ const placementOpts = placements.map(p =>
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
-      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-      +     '<div>'
-      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
-      +     '</div>'
-      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-      +   '</div>'
+
       + '</div>'
       + '<div class="alert-modal-foot">'
       +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'

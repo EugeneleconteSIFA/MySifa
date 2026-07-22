@@ -7373,6 +7373,48 @@ Ressources :
 
 
 
+    # v2.3.12 — Migration placement et size des réglages globaux vers chaque
+    # alerte existante. Après cette migration, chaque alerte porte ses propres
+    # valeurs (défaut top-right + medium si le singleton n'existe pas).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=205 LIMIT 1").fetchone():
+        try:
+            import json as _json_mig
+            # Lire le singleton actuel
+            row = conn.execute(
+                "SELECT placement, size FROM maintenance_alert_settings WHERE id=1 LIMIT 1"
+            ).fetchone()
+            _default_placement = "top-right"
+            _default_size = "medium"
+            if row:
+                _default_placement = row["placement"] or "top-right"
+                _default_size = row["size"] or "medium"
+            # Parcourir toutes les alertes et injecter les valeurs si absentes
+            alerts = conn.execute(
+                "SELECT id, params FROM maintenance_alerts"
+            ).fetchall()
+            for a in alerts:
+                try:
+                    p = _json_mig.loads(a["params"] or "{}")
+                except Exception:
+                    p = {}
+                changed = False
+                if not p.get("placement"):
+                    p["placement"] = _default_placement
+                    changed = True
+                if not p.get("size"):
+                    p["size"] = _default_size
+                    changed = True
+                if changed:
+                    conn.execute(
+                        "UPDATE maintenance_alerts SET params=?, updated_at=datetime('now') WHERE id=?",
+                        (_json_mig.dumps(p, ensure_ascii=False), a["id"]),
+                    )
+            conn.commit()
+        except Exception:
+            pass
+        _record_schema_migration(conn, 205, "alerts_placement_size_per_alert")
+
+
 
 def create_default_admin():
     import bcrypt

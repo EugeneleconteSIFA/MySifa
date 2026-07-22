@@ -166,11 +166,15 @@
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
+    // v2.3.12 : placement + size par alerte (fallback sur les défauts si absent)
+    const _pl = ['top-right','center','bottom-right'].indexOf(p && p.placement) >= 0 ? p.placement : null;
+    const _sz = ['small','medium','large'].indexOf(p && p.size) >= 0 ? p.size : null;
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
              description: description,
              trigger: trig, target: { machines }, validation: val, checklist: cl,
              dismiss_button: dismiss,
-             block_production: !!(p && p.block_production) };  // v2.2.88
+             block_production: !!(p && p.block_production),
+             placement: _pl, size: _sz };  // v2.3.12
   }
 
   function _onValueInput(inp) {
@@ -553,7 +557,10 @@
 
   function _renderAlert(alert) {
     const wrap = document.createElement('div');
-    wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
+    // v2.3.12 : priorité aux valeurs par alerte, fallback aux réglages globaux
+    const _p = alert.placement || _settings.placement || 'top-right';
+    const _s = alert.size || _settings.size || 'medium';
+    wrap.className = 'ta-sim ta-pl-' + _p + ' ta-sz-' + _s;
     wrap.setAttribute('data-alert-runtime-id', String(alert.id));
     // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
     if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');

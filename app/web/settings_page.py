@@ -1518,7 +1518,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             <h2 style="margin:0">Alertes maintenance</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
+              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Ajuster le délai minimum entre deux alertes affichées à l'opérateur.">Délai entre alertes</button>
               <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
               <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
             </div>
@@ -5896,6 +5896,8 @@ function _alertDefaults(existing) {
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
     block_production: !!(p && p.block_production),  // v2.2.88
+    placement: (p && ['top-right','center','bottom-right'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
+    size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
   };
 }
 
@@ -6007,13 +6009,32 @@ function _renderAlertFormFields(params, opts) {
     +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
     +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
     + '</div>'
-    // v2.2.88 : Bloque la production par alerte
-    + '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-    +   '<div>'
-    +     '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-    +     '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
+    // v2.3.12 : Section Affichage regroupant Placement + Taille + Bloque prod
+    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
+    +   '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
+    +       '<select id="af-placement" class="alert-field-input">'
+    +         '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
+    +         '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
+    +         '<option value="bottom-right"' + (d.placement === 'bottom-right' ? ' selected' : '') + '>Coin bas droit</option>'
+    +       '</select>'
+    +     '</div>'
+    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
+    +       '<select id="af-size" class="alert-field-input">'
+    +         '<option value="small"' + (d.size === 'small' ? ' selected' : '') + '>Petite</option>'
+    +         '<option value="medium"' + (d.size === 'medium' ? ' selected' : '') + '>Moyenne</option>'
+    +         '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
+    +       '</select>'
+    +     '</div>'
     +   '</div>'
-    +   '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +   '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-top:14px">'
+    +     '<div>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+    +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
+    +     '</div>'
+    +     '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +   '</div>'
     + '</div>'
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
@@ -6392,6 +6413,9 @@ function _afReadParams() {
     },
     // v2.2.88 : block_production par alerte
     block_production: !!document.getElementById('af-block-production')?.checked,
+    // v2.3.12 : placement et size par alerte
+    placement: (document.getElementById('af-placement')?.value || 'top-right'),
+    size: (document.getElementById('af-size')?.value || 'medium'),
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
@@ -6522,24 +6546,15 @@ const placementOpts = placements.map(p =>
     const sizeOpts = sizes.map(s =>
       '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
     ).join('');
+    // v2.3.12 : modal simplifié — placement/size sont maintenant par alerte.
     overlay.innerHTML = '<div class="alert-modal">'
-      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-head"><h3>Délai entre alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
       + '<div class="alert-modal-body">'
-      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
-      +   '<div class="alert-field">'
-      +     '<label class="alert-field-label">Placement à l\'écran</label>'
-      +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
-      +   '</div>'
-      +   '<div class="alert-field">'
-      +     '<label class="alert-field-label">Taille</label>'
-      +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
-      +   '</div>'
       +   '<div class="alert-field">'
       +     '<label class="alert-field-label">Délai minimum entre deux alertes (minutes)</label>'
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
-
       + '</div>'
       + '<div class="alert-modal-foot">'
       +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
@@ -6553,15 +6568,16 @@ const placementOpts = placements.map(p =>
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        placement: document.getElementById('ags-placement').value,
-        size: document.getElementById('ags-size').value,
-
+        // v2.3.12 : on garde placement/size en base pour rétrocompat runtime.
+        // Ils viennent maintenant des params de chaque alerte, pas de ce modal.
+        placement: _alertGlobalSettings.placement || 'top-right',
+        size: _alertGlobalSettings.size || 'medium',
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings = payload;
-        toast('Réglages enregistrés');
+        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
+        toast('Délai enregistré');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
