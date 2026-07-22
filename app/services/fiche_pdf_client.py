@@ -31,7 +31,7 @@ from reportlab.platypus import Paragraph
 SIFA_NAME    = "SIFA"
 SIFA_ADDRESS = "45 rue Rollin — 59100 Roubaix — France"
 SIFA_PHONE   = "+33 (0)3 20 69 01 01"
-SIFA_EMAIL   = "contact@sifa.pro"
+SIFA_EMAIL   = "commande@sifa.pro"
 
 # ── Couleurs ─────────────────────────────────────────────────────────
 _YELLOW     = colors.HexColor("#FFD100")   # jaune SIFA
@@ -136,6 +136,67 @@ def _v(val: Any) -> str:
     return s if s else "—"
 
 
+def _sentence_case(val: str) -> str:
+    """
+    Applique la casse « phrase » (première lettre en majuscule, reste en
+    minuscules). '—' est renvoyé tel quel. Les caractères non-lettres et
+    les accents sont préservés.
+    """
+    if val is None or val == "—":
+        return "—"
+    s = str(val).strip()
+    if not s:
+        return "—"
+    return s[0].upper() + s[1:].lower()
+
+
+# ── Dictionnaire des types d'adhésif ────────────────────────────────
+# L'utilisateur veut masquer les codes techniques (ex. « Permanent 2028Y »
+# → « Permanent »). On matche le libellé brut sur une liste de motifs
+# regex et on retourne l'étiquette canonique (FR, EN).
+_ADHESIF_TYPES = [
+    # (regex insensible à la casse, label FR, label EN)
+    (r"cong[eé]l|surgel|deep\s*freeze|freezer|frozen",  "Congélation",       "Freezer"),
+    (r"r[eé]frig[eé]r|cold|chill",                       "Réfrigération",     "Chilled"),
+    (r"pneu\b|tire\b|tyre\b",                            "Pneu",              "Tire"),
+    (r"enlevable|amovible|removable|peelable",           "Enlevable",         "Removable"),
+    (r"repositionnable|repositionable",                  "Repositionnable",   "Repositionable"),
+    (r"haute\s*(?:temp|adh[eé]sion)|hot\s*melt|forte\s*adh[eé]sion|high[- ]?tack",
+                                                          "Haute adhésion",    "High-tack"),
+    (r"basse\s*temp|low[- ]?temp",                       "Basse température", "Low-temperature"),
+    (r"agroalimentaire|food[- ]?grade|food\s*contact",   "Agroalimentaire",   "Food-grade"),
+    (r"pharma",                                          "Pharmaceutique",    "Pharmaceutical"),
+    (r"marine|salt\s*water|hydro",                       "Marine",            "Marine"),
+    (r"transparent|clear",                               "Transparent",       "Clear"),
+    # Permanent en dernier car c'est un mot très commun qu'on veut matcher
+    # uniquement si aucun type plus spécifique n'a été détecté.
+    (r"permanent",                                       "Permanent",         "Permanent"),
+]
+
+
+def _classify_adhesif(raw: str) -> tuple[str, str]:
+    """
+    Extrait le type canonique d'un libellé adhésif brut.
+
+    Ex. 'Permanent 2028Y'      → ('Permanent',   'Permanent')
+        'Enlevable RP51'       → ('Enlevable',   'Removable')
+        'Congélation D2050'    → ('Congélation', 'Freezer')
+        'Pneu HD52'            → ('Pneu',        'Tire')
+
+    Si aucun motif ne matche, on renvoie le premier mot du libellé
+    (avec sentence case) comme approximation, en FR/EN identiques.
+    """
+    if not raw or raw == "—":
+        return ("—", "—")
+    s = str(raw).strip()
+    for pattern, fr, en in _ADHESIF_TYPES:
+        if re.search(pattern, s, flags=re.IGNORECASE):
+            return (fr, en)
+    # Fallback : premier mot du libellé
+    first = re.split(r"\s+", s, maxsplit=1)[0]
+    return (_sentence_case(first), _sentence_case(first))
+
+
 def _clean_reference(ref: Any) -> str:
     """
     Tronque la référence produit après le premier ' - ' (ou variante).
@@ -169,8 +230,8 @@ def _translate_fr_to_en(value: str) -> str:
     return s
 
 
-def _fmt_adhesif(fiche: dict) -> str:
-    """Adhésif : préfère 'adhesif' puis 'adhesif_label' puis 'ref_adhesif'."""
+def _get_adhesif_raw(fiche: dict) -> str:
+    """Adhésif brut : préfère 'adhesif' puis 'adhesif_label' puis 'ref_adhesif'."""
     for k in ("adhesif", "adhesif_label", "ref_adhesif"):
         v = fiche.get(k)
         if v is not None and str(v).strip():
@@ -178,42 +239,11 @@ def _fmt_adhesif(fiche: dict) -> str:
     return "—"
 
 
-def _fmt_grammage(fiche: dict) -> str:
-    """
-    Grammage adhésif : extrait le nombre en fin de libellé adhésif
-    (ex. 'Permanent 2028Y - 19' → '19 g/m²').
-
-    Fallback : champ 'qte_au_mille' arrondi si présent.
-    """
-    # 1) Chercher un nombre en fin de libellé adhésif (après ' - ', ' — ' ou ' – ')
-    for k in ("adhesif", "adhesif_label", "ref_adhesif"):
-        v = fiche.get(k)
-        if not v:
-            continue
-        s = str(v).strip()
-        m = re.search(r"[-–—]\s*(\d+(?:[.,]\d+)?)\s*$", s)
-        if m:
-            val = m.group(1).replace(",", ".")
-            # Format propre : entier si pas de décimales significatives
-            try:
-                f = float(val)
-                if f == int(f):
-                    return f"{int(f)} g/m²"
-                return f"{f:g} g/m²"
-            except ValueError:
-                return f"{val} g/m²"
-
-    # 2) Fallback qte_au_mille (arrondi 1 décimale si float)
-    v = fiche.get("qte_au_mille")
+def _fmt_glassine(fiche: dict) -> str:
+    """Glassine : renvoie le libellé du champ 'glassine' tel quel."""
+    v = fiche.get("glassine")
     if v is not None and str(v).strip():
-        s = str(v).strip()
-        try:
-            f = float(s.replace(",", "."))
-            if f == int(f):
-                return f"{int(f)} g/m²"
-            return f"{f:.1f} g/m²"
-        except ValueError:
-            return s
+        return str(v).strip()
     return "—"
 
 
@@ -482,27 +512,28 @@ def generate_fiche_client_pdf(fiche: dict) -> bytes:
     y = _draw_ref_block(c, ml, mr, y - 4 * mm, fiche)
 
     # 4) Les 6 caractéristiques essentielles — label FR/EN + valeur FR/EN
-    #    (valeur EN calculée par traduction lexicale)
-    format_fr = _v(fiche.get("format"))
-    frontal_fr = _v(fiche.get("support") or fiche.get("matiere"))
-    adhesif_fr = _fmt_adhesif(fiche)
-    grammage_fr = _fmt_grammage(fiche)
-    nb_impr_fr = _fmt_nb_impressions(fiche)
-    condi_fr = _fmt_conditionnement(fiche)
+    #    (valeur EN calculée par traduction lexicale, sauf adhésif qui a
+    #    son propre classifieur bilingue).
+    format_fr    = _sentence_case(_v(fiche.get("format")))
+    frontal_fr   = _sentence_case(_v(fiche.get("support") or fiche.get("matiere")))
+    adhesif_fr, adhesif_en = _classify_adhesif(_get_adhesif_raw(fiche))
+    glassine_fr  = _sentence_case(_fmt_glassine(fiche))
+    nb_impr_fr   = _sentence_case(_fmt_nb_impressions(fiche))
+    condi_fr     = _sentence_case(_fmt_conditionnement(fiche))
 
     rows = [
         ("Format de l'étiquette", "Label format",
-         format_fr, _translate_fr_to_en(format_fr)),
+         format_fr, _sentence_case(_translate_fr_to_en(format_fr))),
         ("Frontal", "Facestock",
-         frontal_fr, _translate_fr_to_en(frontal_fr)),
+         frontal_fr, _sentence_case(_translate_fr_to_en(frontal_fr))),
         ("Adhésif", "Adhesive",
-         adhesif_fr, _translate_fr_to_en(adhesif_fr)),
-        ("Grammage adhésif", "Adhesive coat weight",
-         grammage_fr, grammage_fr),  # nombre + unité : pas de traduction
+         adhesif_fr, adhesif_en),
+        ("Glassine", "Release liner",
+         glassine_fr, _sentence_case(_translate_fr_to_en(glassine_fr))),
         ("Nombre d'impressions", "Number of print colours",
-         nb_impr_fr, _translate_fr_to_en(nb_impr_fr)),
+         nb_impr_fr, _sentence_case(_translate_fr_to_en(nb_impr_fr))),
         ("Conditionnement", "Packaging",
-         condi_fr, _translate_fr_to_en(condi_fr)),
+         condi_fr, _sentence_case(_translate_fr_to_en(condi_fr))),
     ]
 
     inner_w = W - ml - mr
