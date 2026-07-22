@@ -1758,6 +1758,13 @@ function renderFichesTab(){
         style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
         title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')
       },iconEl('file',13)),
+      // Fiche technique CLIENT bilingue FR/EN (infos essentielles uniquement,
+      // logo + coordonnées SIFA en-tête, mentions confidentialité en pied).
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Fiche client (FR / EN)',
+        onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-client','_blank')
+      },iconEl('user',13)),
       // v1.7 — bouton Imprimer (entre Prévisualiser et Modifier) : ouvre le popup
       // partagé pour choisir imprimante + params + envoyer le PDF.
       h('button',{
