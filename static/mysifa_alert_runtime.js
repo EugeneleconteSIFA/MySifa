@@ -61,6 +61,10 @@
   let _displayed = new Map();  // v2.2.66 : id → wrap DOM element (pour pouvoir fermer côté client si backend a ack en silence)
   // v2.3.6 : file d'attente de resolvers pour waitForBlockingAck()
   let _blockingAckResolvers = [];  // [{resolve, reject}]
+  // v2.3.9 : Set des IDs d'alertes affichées via showBlockingAlerts. Ces alertes
+  // ne sont PAS dans /alerts/active (retirées en v2.2.89 pour after_calage),
+  // donc le poll cleanup les supprimerait à chaque itération sans ce flag.
+  let _displayedBlocking = new Set();
   let _pollTimer = null;
   let _started = false;
 
@@ -605,11 +609,7 @@
     const closeWithSuccess = (viaDismiss) => {
       wrap.remove();
       _displayed.delete(alert.id);
-      // v2.3.7 : notifier TOUS les callers apiFetch qui attendent, sans se
-      // limiter aux alertes marquées block_production. Les resolvers ne sont
-      // ajoutés que par apiFetch après un 423 — donc pas de perturbation
-      // pour les autres flows. Plus robuste : on ne dépend plus du champ
-      // block_production qui pourrait mal se propager.
+      _displayedBlocking.delete(alert.id);  // v2.3.9
       console.log('[MysifaAlerts] closeWithSuccess id=', alert.id, 'viaDismiss=', viaDismiss, 'waiters=', _blockingAckResolvers.length);
       const cbs = _blockingAckResolvers.slice();
       _blockingAckResolvers = [];
@@ -672,10 +672,10 @@
     const activeIds = new Set(items.map(it => it.id));
     for (const [dispId, wrap] of Array.from(_displayed.entries())) {
       if (!activeIds.has(dispId)) {
-        // Bypass : alertes bloquantes affichées via showBlockingAlerts
-        if (wrap && wrap.getAttribute && wrap.getAttribute('data-blocking-alert') === '1') {
-          continue;
-        }
+        // v2.3.9 : bypass si alerte bloquante (source: 423). Set JS + attribut
+        // DOM en double sécurité.
+        if (_displayedBlocking.has(dispId)) continue;
+        if (wrap && wrap.getAttribute && wrap.getAttribute('data-blocking-alert') === '1') continue;
         try { if (wrap && wrap.remove) wrap.remove(); } catch (e) {}
         _displayed.delete(dispId);
       }
@@ -708,11 +708,11 @@
       if (_displayed.has(raw.id)) continue;
       const alert = _normalizeAlert(raw);
       const wrap = _renderAlert(alert);
-      // v2.3.8 : marqueur "blocking" pour bypass le cleanup du poll classique.
-      // Les alertes after_calage ne sont pas dans /alerts/active donc le poll
-      // les supprimerait toutes les 15s sans ce flag.
+      // v2.3.9 : marqueur DOM + Set JS pour double sécurité contre le cleanup.
       wrap.setAttribute('data-blocking-alert', '1');
       _displayed.set(raw.id, wrap);
+      _displayedBlocking.add(raw.id);
+      console.log('[MysifaAlerts] showBlockingAlerts add id=', raw.id, 'blocking Set size=', _displayedBlocking.size);
     }
   }
 
