@@ -4698,6 +4698,10 @@ const VIEW_TO_GUIDE = {
   'ref-list': 'ref-rse',
 };
 
+function _isGuideDisabled(key){
+  return !!(S._qguideDisabledKeys && S._qguideDisabledKeys.has(key));
+}
+
 async function loadGuideProgress(){
   try{
     const r = await api('/api/guides/progress');
@@ -4711,15 +4715,33 @@ async function loadGuideProgress(){
     }
     S._qguideAckedKeys = acked;
     S._qguideOpenedThisSession = new Set();
+    // Charge en parallèle la config (guides désactivés globalement)
+    try{
+      const rc = await api('/api/guides/config');
+      if(rc && rc.ok){
+        const jc = await rc.json();
+        S._qguideDisabledKeys = new Set(jc.disabled || []);
+      } else {
+        S._qguideDisabledKeys = new Set();
+      }
+    }catch(e){ S._qguideDisabledKeys = new Set(); }
     _refreshHelpBadges();
   }catch(e){}
 }
 
 function _refreshHelpBadges(){
-  // Ajouter classe "unread" sur les boutons help des vues non-acked
+  // Masquer les boutons help des guides desactives ; sinon, ajouter classe
+  // "unread" sur les vues non-acked.
   document.querySelectorAll('.qual-help-btn').forEach(btn => {
     const key = btn.getAttribute('data-guide');
     if(!key) return;
+    if(_isGuideDisabled(key)){
+      btn.style.display = 'none';
+      btn.classList.remove('unread');
+      return;
+    } else {
+      btn.style.display = '';
+    }
     if(S._qguideAckedKeys && S._qguideAckedKeys.has(key)) btn.classList.remove('unread');
     else btn.classList.add('unread');
   });
@@ -4728,6 +4750,7 @@ function _refreshHelpBadges(){
 function maybeAutoOpenGuide(viewName){
   const key = VIEW_TO_GUIDE[viewName];
   if(!key) return;
+  if(_isGuideDisabled(key)) return; // guide desactive globalement
   if(!S._qguideAckedKeys) return; // pas encore charge
   if(S._qguideAckedKeys.has(key)) return;
   if(S._qguideOpenedThisSession.has(key)) return;
@@ -4834,6 +4857,8 @@ async function ackCurrentGuide(){
 let _qguideState = { key: null, idx: 0 };
 
 function openGuide(key, opts){
+  // Guide desactive globalement : ne rien faire (bouton help est deja masque)
+  if(_isGuideDisabled(key)) return;
   const guides = _qualiteGuides();
   const g = guides[key];
   if(!g) return;

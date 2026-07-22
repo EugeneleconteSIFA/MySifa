@@ -1,16 +1,19 @@
 """MySifa — Suivi des guides in-app (tutos par onglet/vue).
 
 Prefix : /api/guides
-Table  : user_guide_progress (voir migration 181 dans app/core/database.py)
+Tables : user_guide_progress (migration 181), guides_config (migration 203)
 
 Endpoints utilisateur :
   GET  /api/guides/progress               → progression de l'utilisateur courant
+  GET  /api/guides/config                 → liste des guides désactivés (pour filtrer côté front)
   POST /api/guides/heartbeat              → marque une etape vue + delta temps
   POST /api/guides/ack                    → marque le guide comme "lu et compris"
 
 Endpoints admin (superadmin/direction) :
   GET    /api/guides/admin/overview       → matrice utilisateurs x guides
   POST   /api/guides/admin/reset          → reset une progression (user + guide)
+  GET    /api/guides/admin/config         → catalogue + état enabled/disabled par guide
+  POST   /api/guides/admin/config         → active/désactive un guide (guide_key, enabled)
 """
 from __future__ import annotations
 
@@ -26,6 +29,17 @@ from app.services.auth_service import get_current_user
 router = APIRouter(prefix="/api/guides", tags=["guides"])
 
 ADMIN_ROLES = {"superadmin", "direction"}
+
+# Catalogue canonique des guides in-app. Ajouter ici quand un nouveau guide
+# est cree cote front (data-guide=... + openGuide(...)) pour qu'il apparaisse
+# dans Parametres > Formations & guides in-app.
+GUIDE_CATALOG = [
+    {"key": "qualite-overview", "label": "MyQualité — Vue d'ensemble", "module": "MyQualité"},
+    {"key": "ressources",       "label": "Ressources fournisseurs",     "module": "MyQualité"},
+    {"key": "nc-list",          "label": "MyQualité — Non-conformités", "module": "MyQualité"},
+    {"key": "audits",           "label": "MyQualité — Audits client",   "module": "MyQualité"},
+    {"key": "ref-rse",          "label": "MyQualité — Référentiel RSE", "module": "MyQualité"},
+]
 
 
 def _now() -> str:
@@ -253,3 +267,86 @@ def admin_reset(body: ResetBody, request: Request):
         )
         conn.commit()
     return {"ok": True}
+
+
+# ─── Config : activation / desactivation des guides ───────────────────────
+
+def _load_disabled_keys(conn) -> set:
+    """Retourne l'ensemble des guide_key desactives (enabled=0)."""
+    rows = conn.execute(
+        "SELECT guide_key FROM guides_config WHERE enabled=0"
+    ).fetchall()
+    return {r["guide_key"] for r in rows}
+
+
+@router.get("/config")
+def get_public_config(request: Request):
+    """Config publique (tout utilisateur authentifie) : liste des guide_key
+    desactives, utilisee par le front pour masquer les boutons help et
+    empecher l'auto-open."""
+    get_current_user(request)  # exige authentification
+    with get_db() as conn:
+        disabled = sorted(_load_disabled_keys(conn))
+    return {"disabled": disabled}
+
+
+@router.get("/admin/config")
+def admin_get_config(request: Request):
+    """Retourne le catalogue complet des guides avec leur etat enabled/disabled."""
+    _require_admin(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT guide_key, enabled, updated_at, updated_by FROM guides_config"
+        ).fetchall()
+        state = {r["guide_key"]: dict(r) for r in rows}
+    guides = []
+    for g in GUIDE_CATALOG:
+        s = state.get(g["key"])
+        guides.append({
+            "guide_key":  g["key"],
+            "label":      g["label"],
+            "module":     g["module"],
+            "enabled":    (int(s["enabled"]) if s else 1) == 1,
+            "updated_at": s["updated_at"] if s else None,
+        })
+    # Ajouter d'eventuels guide_key presents en DB mais pas dans le catalogue
+    # (ex. guide renomme / obsolete) pour que l'admin puisse les nettoyer.
+    known = {g["key"] for g in GUIDE_CATALOG}
+    for k, s in state.items():
+        if k in known:
+            continue
+        guides.append({
+            "guide_key":  k,
+            "label":      k,
+            "module":     "—",
+            "enabled":    int(s["enabled"]) == 1,
+            "updated_at": s["updated_at"],
+        })
+    return {"guides": guides}
+
+
+class ConfigBody(BaseModel):
+    guide_key: str
+    enabled: bool
+
+
+@router.post("/admin/config")
+def admin_set_config(body: ConfigBody, request: Request):
+    """Active ou desactive un guide pour tous les utilisateurs."""
+    admin = _require_admin(request)
+    if not body.guide_key or len(body.guide_key) > 128:
+        raise HTTPException(status_code=400, detail="guide_key invalide")
+    now = _now()
+    enabled_int = 1 if body.enabled else 0
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO guides_config (guide_key, enabled, updated_at, updated_by)
+               VALUES (?,?,?,?)
+               ON CONFLICT(guide_key) DO UPDATE SET
+                 enabled=excluded.enabled,
+                 updated_at=excluded.updated_at,
+                 updated_by=excluded.updated_by""",
+            (body.guide_key, enabled_int, now, admin["id"]),
+        )
+        conn.commit()
+    return {"ok": True, "guide_key": body.guide_key, "enabled": body.enabled}
