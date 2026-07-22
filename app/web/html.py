@@ -1257,12 +1257,38 @@ body.light .stock-add-empl-input::placeholder{
 .stock-empl-suggest-add:hover{background:rgba(167,139,250,.26);color:var(--text)}
 body.light .stock-empl-suggest-add{background:rgba(124,58,237,.12);color:#5b21b6}
 body.light .stock-empl-suggest-add:hover{background:rgba(124,58,237,.2);color:#1e1b4b}
-.nav-tabs{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border)}
-.nav-tab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;
-  color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;
-  transition:all .15s;margin-bottom:-1px}
+/* Sous-onglets de page (nav-tabs) — barre raffinée : plus d'air, fond teinté
+   sur l'onglet actif, trait accent net, badges compteur alignés, scroll
+   horizontal invisible sur mobile. */
+.nav-tabs{display:flex;gap:2px;margin:0 0 22px;padding:4px 4px 0;
+  border-bottom:1px solid var(--border);position:relative;
+  overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tab{position:relative;display:inline-flex;align-items:center;gap:8px;
+  padding:11px 18px 12px;background:transparent;border:none;
+  border-radius:8px 8px 0 0;color:var(--text2);cursor:pointer;
+  font-size:14px;font-weight:500;font-family:inherit;letter-spacing:.1px;
+  white-space:nowrap;margin-bottom:-1px;
+  transition:color .18s ease, background-color .18s ease}
+.nav-tab>svg{opacity:.7;transition:opacity .18s ease}
 .nav-tab:hover{color:var(--text);background:var(--accent-bg)}
-.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.nav-tab:hover>svg{opacity:1}
+.nav-tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.nav-tab.active{color:var(--accent);font-weight:600;background:var(--accent-bg)}
+.nav-tab.active>svg{opacity:1}
+.nav-tab.active::after{content:'';position:absolute;left:14px;right:14px;
+  bottom:-1px;height:2px;background:var(--accent);border-radius:2px 2px 0 0}
+.nav-tab-badge{display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;padding:0 7px;border-radius:10px;
+  background:var(--danger);color:#fff;font-size:11px;font-weight:700;
+  line-height:1;letter-spacing:0}
+.nav-tab-badge--muted{background:var(--text2);opacity:.55}
+.nav-tab.active .nav-tab-badge--muted{opacity:.85}
+@media (max-width:640px){
+  .nav-tabs{margin-bottom:16px;padding:2px 0 0}
+  .nav-tab{padding:10px 14px;font-size:13px;gap:6px}
+  .nav-tab.active::after{left:10px;right:10px}
+}
 
 __EXPE_MAIN_CSS__
 __EXPE_TRANSPORTEURS_CSS__
@@ -6334,9 +6360,11 @@ function renderProdPage(){
   if(isSuper){
     tabs.push({key:'rapport', label:'Rapport hebdo', icon:'bar-chart-2'});
   }
-  const subNav = h('div',{className:'nav-tabs'},
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',
+      role:'tab',
+      'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
         S.subPage=t.key;
@@ -9435,37 +9463,36 @@ function renderFichesTab(){
 }
 
 function renderOfPage(){
+  // Sous-navigation OF harmonisée avec la barre d'onglets de /prod
+  // (classe .nav-tabs partagée, badges centrés, icônes cohérentes).
+  const cur = S.ofSubTab || 'of';
   const ambigusN = Number(S.pendingOfAmbigus || 0);
   const sansOfN  = Number(S.pendingOfSansOf  || 0);
-  const pendingBadge = ambigusN > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(ambigusN))
-    : null;
-  const sansOfBadge = sansOfN > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(sansOfN))
-    : null;
-  const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px',flexWrap:'wrap'}},
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
-      onClick:()=>{set({ofSubTab:'of'});render();}
-    },'Ordres de fabrication'),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='fiche'?'var(--accent)':'transparent'};color:${S.ofSubTab==='fiche'?'var(--accent)':'var(--muted)'};font-family:inherit`,
-      onClick:async()=>{set({ofSubTab:'fiche'});await loadFiches();render();}
-    },'Fiches techniques'),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='pending'?'var(--accent)':'transparent'};color:${S.ofSubTab==='pending'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
-      onClick:async()=>{set({ofSubTab:'pending'});await loadPendingOfMappings();render();}
-    },'Mappings à valider', pendingBadge),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='sansof'?'var(--accent)':'transparent'};color:${S.ofSubTab==='sansof'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
-      onClick:async()=>{set({ofSubTab:'sansof'});await loadDossiersSansOf();render();}
-    },'Dossiers sans OF', sansOfBadge),
+  const mkBadge = (n)=> n>0 ? h('span',{className:'nav-tab-badge'}, String(n)) : null;
+  const tabs = [
+    {key:'of',      label:'Ordres de fabrication', icon:'clipboard',      load:null},
+    {key:'fiche',   label:'Fiches techniques',     icon:'file-text',      load:async()=>{await loadFiches();}},
+    {key:'pending', label:'Mappings à valider',    icon:'alert-triangle', badge:mkBadge(ambigusN), load:async()=>{await loadPendingOfMappings();}},
+    {key:'sansof',  label:'Dossiers sans OF',      icon:'folder',         badge:mkBadge(sansOfN),  load:async()=>{await loadDossiersSansOf();}},
+  ];
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Ordres de fabrication'},
+    ...tabs.map(t=>h('button',{
+      type:'button',
+      role:'tab',
+      'aria-selected': cur===t.key ? 'true' : 'false',
+      className:'nav-tab'+(cur===t.key?' active':''),
+      onClick:async()=>{
+        set({ofSubTab:t.key});
+        if(t.load) await t.load();
+        render();
+      }
+    }, iconEl(t.icon,14), ' '+t.label, t.badge))
   );
   return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
-    S.ofSubTab==='fiche'   ? renderFichesTab()
-      : S.ofSubTab==='pending' ? renderPendingOfMappingsTab()
-      : S.ofSubTab==='sansof'  ? renderDossiersSansOfTab()
+    cur==='fiche'   ? renderFichesTab()
+      : cur==='pending' ? renderPendingOfMappingsTab()
+      : cur==='sansof'  ? renderDossiersSansOfTab()
       : renderOfTab()
   );
 }
