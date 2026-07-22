@@ -35,11 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-<<<<<<< HEAD
-APP_VERSION = "2.2.88"
-=======
 APP_VERSION = "2.3.0"
->>>>>>> feature/ao-transport-fichetech
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
