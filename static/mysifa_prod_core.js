@@ -1854,37 +1854,36 @@ function renderFichesTab(){
 }
 
 function renderOfPage(){
+  // Sous-navigation OF harmonisée avec la barre d'onglets de /prod
+  // (classe .nav-tabs partagée, badges centrés, icônes cohérentes).
+  const cur = S.ofSubTab || 'of';
   const ambigusN = Number(S.pendingOfAmbigus || 0);
   const sansOfN  = Number(S.pendingOfSansOf  || 0);
-  const pendingBadge = ambigusN > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(ambigusN))
-    : null;
-  const sansOfBadge = sansOfN > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(sansOfN))
-    : null;
-  const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px',flexWrap:'wrap'}},
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
-      onClick:()=>{set({ofSubTab:'of'});render();}
-    },'Ordres de fabrication'),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='fiche'?'var(--accent)':'transparent'};color:${S.ofSubTab==='fiche'?'var(--accent)':'var(--muted)'};font-family:inherit`,
-      onClick:async()=>{set({ofSubTab:'fiche'});await loadFiches();render();}
-    },'Fiches techniques'),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='pending'?'var(--accent)':'transparent'};color:${S.ofSubTab==='pending'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
-      onClick:async()=>{set({ofSubTab:'pending'});await loadPendingOfMappings();render();}
-    },'Mappings à valider', pendingBadge),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='sansof'?'var(--accent)':'transparent'};color:${S.ofSubTab==='sansof'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
-      onClick:async()=>{set({ofSubTab:'sansof'});await loadDossiersSansOf();render();}
-    },'Dossiers sans OF', sansOfBadge),
+  const mkBadge = (n)=> n>0 ? h('span',{className:'nav-tab-badge'}, String(n)) : null;
+  const tabs = [
+    {key:'of',      label:'Ordres de fabrication', icon:'clipboard',      load:null},
+    {key:'fiche',   label:'Fiches techniques',     icon:'file-text',      load:async()=>{await loadFiches();}},
+    {key:'pending', label:'Mappings à valider',    icon:'alert-triangle', badge:mkBadge(ambigusN), load:async()=>{await loadPendingOfMappings();}},
+    {key:'sansof',  label:'Dossiers sans OF',      icon:'folder',         badge:mkBadge(sansOfN),  load:async()=>{await loadDossiersSansOf();}},
+  ];
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Ordres de fabrication'},
+    ...tabs.map(t=>h('button',{
+      type:'button',
+      role:'tab',
+      'aria-selected': cur===t.key ? 'true' : 'false',
+      className:'nav-tab'+(cur===t.key?' active':''),
+      onClick:async()=>{
+        set({ofSubTab:t.key});
+        if(t.load) await t.load();
+        render();
+      }
+    }, iconEl(t.icon,14), ' '+t.label, t.badge))
   );
   return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
-    S.ofSubTab==='fiche'   ? renderFichesTab()
-      : S.ofSubTab==='pending' ? renderPendingOfMappingsTab()
-      : S.ofSubTab==='sansof'  ? renderDossiersSansOfTab()
+    cur==='fiche'   ? renderFichesTab()
+      : cur==='pending' ? renderPendingOfMappingsTab()
+      : cur==='sansof'  ? renderDossiersSansOfTab()
       : renderOfTab()
   );
 }
@@ -5931,9 +5930,11 @@ function renderProdPage(){
     allTabs.push({key:'rapport', label:'Rapport hebdo', icon:'bar-chart-2'});
   }
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
-  const subNav = h('div',{className:'nav-tabs'},
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',
+      role:'tab',
+      'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
         S.subPage=t.key;

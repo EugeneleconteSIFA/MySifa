@@ -756,11 +756,16 @@ def preview_fiche_pdf_client(fiche_id: int, request: Request):
     if not row:
         raise HTTPException(status_code=404, detail="Fiche introuvable.")
     try:
-        from app.services.fiche_pdf_client import generate_fiche_client_pdf
+        from app.services.fiche_pdf_client import (
+            generate_fiche_client_pdf, _clean_reference,
+        )
         pdf_bytes = generate_fiche_client_pdf(dict(row))
+        # Nom de fichier basé sur la référence tronquée (ex. "748/0016 - COHESIO 1"
+        # → "748_0016") pour rester cohérent avec l'affichage.
+        ref_clean = _clean_reference(row["reference"] or fiche_id)
+        ref = re.sub(r"[^\w\-]+", "_", ref_clean)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erreur génération PDF client : {exc}") from exc
-    ref = re.sub(r"[^\w\-]+", "_", str(row["reference"] or fiche_id))
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
