@@ -3486,6 +3486,23 @@ def sifa_docs_pickers(request: Request):
     return {"audits": audits, "fournisseurs": fours}
 
 
+# ─── Récupérer la liste des sections d'un template (pour l'UI de personnalisation)
+@router.get("/api/qualite/sifa-docs/templates/{code}/sections")
+def sifa_docs_get_sections(code: str, request: Request):
+    """Renvoie la liste des sections du template avec leurs textes par défaut.
+    Utilisé par le modal génération pour permettre d'exclure ou éditer des sections."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        template = _fetch_template(conn, code)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+    try:
+        from app.services.sifa_doc_pdf import get_template_sections
+        return {"sections": get_template_sections(template["code"])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {e}")
+
+
 # ─── Créer une nouvelle version + générer le PDF ─────────────────────
 class SifaDocVersionCreateBody(BaseModel):
     template_code: str
@@ -3495,6 +3512,7 @@ class SifaDocVersionCreateBody(BaseModel):
     ref_document: Optional[str] = None
     date_emission: Optional[str] = None
     notes: Optional[str] = None
+    sections_overrides: Optional[dict] = None  # {sec_id: {"include": bool, "custom_body": str}}
 
 
 @router.post("/api/qualite/sifa-docs/versions")
@@ -3564,6 +3582,7 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
                 ref=ref,
                 date_emission_iso=date_emission,
                 validite_mois=validite_mois,
+                sections_overrides=body.sections_overrides or None,
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
@@ -3581,16 +3600,19 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
 
         import json as _json
         now = _now()
+        sec_ov_json = _json.dumps(body.sections_overrides or {})
         cur = conn.execute(
             """INSERT INTO qualite_sifa_doc_versions
                (template_id, audit_id, client_nom, client_slug, fournisseurs_ids_json,
                 ref_document, date_emission, validite_mois, pdf_path, notes,
+                sections_overrides_json,
                 created_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (template["id"], audit_id, client_nom, client_slug,
              _json.dumps(list(body.fournisseurs_ids)),
              ref, date_emission, validite_mois, pdf_path,
              (body.notes or "").strip() or None,
+             sec_ov_json,
              user["id"], now, now),
         )
         conn.commit()
@@ -3621,6 +3643,10 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
             f_ids = _json.loads(v["fournisseurs_ids_json"] or "[]")
         except Exception:
             f_ids = []
+        try:
+            sec_ov = _json.loads(v["sections_overrides_json"] or "{}")
+        except Exception:
+            sec_ov = {}
         fours = _fournisseurs_for_pdf(conn, f_ids)
         try:
             from app.services.sifa_doc_pdf import build_template_pdf
@@ -3631,6 +3657,7 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
                 ref=v["ref_document"],
                 date_emission_iso=v["date_emission"],
                 validite_mois=int(v["validite_mois"] or 12),
+                sections_overrides=sec_ov or None,
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération : {e}")
