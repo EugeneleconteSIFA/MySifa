@@ -3305,6 +3305,96 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
     return False
 
 
+@router.get("/api/maintenance/alerts/blocking-for-machine")
+def maintenance_alerts_blocking_for_machine(request: Request, machine: str = ""):
+    """v2.2.89 — Retourne la liste des alertes bloquantes actuellement dues
+    pour une machine donnée. Appelé par le front après réception d'un HTTP 423
+    sur /api/fabrication/saisie, pour afficher les alertes à l'écran.
+
+    Format identique à /alerts/active pour que le runtime les affiche via
+    la même fonction _renderAlert.
+    """
+    user = get_current_user(request)
+    machine = (machine or "").strip()
+    if not machine:
+        # Fallback : machine liée à l'user
+        with get_db() as conn:
+            machine = _machine_name_from_user(conn, user) or ""
+    items = []
+    if not machine:
+        return {"items": items}
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
+            ).fetchall()
+        except Exception:
+            return {"items": items}
+        user_role = user.get("role") if user else ""
+        for r in rows:
+            try:
+                params = _json_alerts.loads(r["params"] or "{}")
+            except (ValueError, TypeError):
+                continue
+            if not bool(params.get("block_production", False)):
+                continue
+            target = params.get("target") or {}
+            if user_role != ROLE_SUPERADMIN and not operator_should_see_alert(user_role, machine, target):
+                continue
+            trig = params.get("trigger") or {}
+            ttype = trig.get("type")
+            due = False
+            trigger_no_dossier = ""
+            if ttype == "periodic":
+                try:
+                    due = _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris)
+                except Exception:
+                    due = False
+            elif ttype == "event":
+                event = str(trig.get("event") or "").strip()
+                if event == "after_calage":
+                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
+                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                    _last_row = conn.execute(
+                        """SELECT no_dossier, operation_category, date_operation
+                           FROM production_data
+                           WHERE machine=? AND date_operation >= ?
+                           ORDER BY date_operation DESC LIMIT 1""",
+                        (machine, _window),
+                    ).fetchone()
+                    if (_last_row
+                        and (_last_row["operation_category"] or "").lower() == "calage"
+                        and _last_row["no_dossier"]
+                        and str(_last_row["no_dossier"]).strip()
+                        and _last_row["date_operation"] >= _calage_window):
+                        _dos = str(_last_row["no_dossier"]).strip()
+                        _ack_check = conn.execute(
+                            """SELECT 1 FROM maintenance_alert_acks
+                               WHERE alert_id=? AND no_dossier=? LIMIT 1""",
+                            (int(r["id"]), _dos),
+                        ).fetchone()
+                        if not _ack_check:
+                            _last_89 = conn.execute(
+                                """SELECT MAX(date_operation) AS m FROM production_data
+                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
+                                (_dos, machine),
+                            ).fetchone()
+                            _last_89_at = _last_89["m"] if _last_89 else None
+                            if not _last_89_at or _last_row["date_operation"] > _last_89_at:
+                                due = True
+                                trigger_no_dossier = _dos
+            if due:
+                items.append({
+                    "id": int(r["id"]),
+                    "nom": r["nom"] or "",
+                    "params": params,
+                    "linked_maint_code": r["linked_maint_code"] or "",
+                    "no_dossier": trigger_no_dossier,
+                })
+    return {"items": items}
+
+
 def _require_alerts_admin(request: Request) -> dict:
     """v2.2.18 — Élargi aux rôles direction et administration pour permettre
     la gestion des alertes maintenance depuis MyMaintenance (l'admin métier
@@ -3967,11 +4057,13 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                # v2.2.88 : cas after_calage — nouvelle logique. L'alerte doit
-                # s'afficher AVANT la saisie de production, donc quand la dernière
-                # saisie machine est un code CALAGE (pas un prod). Verrou dossier
-                # via ack. Contraintes conservées : fenêtre 4h, post-89.
-                if event == "after_calage" and effective_machine:
+                # v2.2.89 : after_calage ne remonte PLUS via le polling. L'alerte
+                # ne s'affiche qu'au moment où l'opérateur tente une saisie 03/88
+                # et que le garde-fou 423 est déclenché — c'est le front qui
+                # appelle alors /alerts/blocking-for-machine pour l'afficher.
+                if event == "after_calage":
+                    continue
+                if event == "after_calage_UNUSED" and effective_machine:
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                     _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                     _last_row = conn.execute(

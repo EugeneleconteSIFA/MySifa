@@ -677,6 +677,21 @@
     }
   }
 
+  // v2.2.89 : afficher des alertes bloquantes récupérées par le front (via /blocking-for-machine)
+  async function _showBlockingAlerts(items) {
+    if (!Array.isArray(items) || !items.length) return;
+    // S'assure que les settings sont chargés (backdrop, placement...)
+    if (!_started) {
+      try { await _loadSettings(); } catch(e){}
+    }
+    for (const raw of items) {
+      if (_displayed.has(raw.id)) continue;
+      const alert = _normalizeAlert(raw);
+      const wrap = _renderAlert(alert);
+      _displayed.set(raw.id, wrap);
+    }
+  }
+
   window.MysifaAlerts = {
     start: async function() {
       if (_started) return;
@@ -692,5 +707,6 @@
       _pollTimer = null;
     },
     refresh: function() { return _poll(); },
+    showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
   };
 })();

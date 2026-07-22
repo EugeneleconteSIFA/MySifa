@@ -1454,16 +1454,26 @@ function svgIcon(name,size=16){
 async function apiFetch(path, opts={}){
   const r = await fetch(path, {credentials:'include', ...opts});
   if(r.status===401){ window.location.href='/'; return null; }
-  // v2.2.88 : HTTP 423 = alerte maintenance bloquante due. Force le refresh
-  // du runtime des alertes pour afficher la modale bloquante à l'écran.
+  // v2.2.89 : HTTP 423 = alerte maintenance bloquante due sur code 03/88.
+  // Récupère les alertes bloquantes dues via /blocking-for-machine et les
+  // affiche via MysifaAlerts.showBlockingAlerts (elles ne sont plus dans le
+  // polling classique /alerts/active).
   if(r.status===423){
     try {
-      if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
-        window.MysifaAlerts.refresh();
+      const machine = (S && S.machine && S.machine.nom) ? S.machine.nom : '';
+      if(machine && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
+        const rb = await fetch('/api/maintenance/alerts/blocking-for-machine?machine=' + encodeURIComponent(machine),
+          { credentials:'same-origin', cache:'no-store' });
+        if(rb.ok){
+          const db = await rb.json().catch(()=>({items:[]}));
+          if(db && Array.isArray(db.items) && db.items.length){
+            await window.MysifaAlerts.showBlockingAlerts(db.items);
+          }
+        }
       }
     } catch(_){}
     const e = await r.json().catch(()=>({}));
-    throw new Error(e.detail || 'Alerte maintenance à valider avant toute saisie.');
+    throw new Error(e.detail || 'Alerte maintenance à valider avant la saisie de production.');
   }
   if(!r.ok){
     const e = await r.json().catch(()=>({}));

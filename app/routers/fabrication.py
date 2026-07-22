@@ -1252,16 +1252,18 @@ async def create_saisie(request: Request):
         machine_id_resolved = machine_obj["id"]
         dernier_metrage = machine_obj.get("dernier_metrage")  # peut être None
 
-        # v2.2.88 — Garde-fou : refuser la saisie si une alerte maintenance
-        # bloquante est due pour cette machine. Le front doit afficher
-        # l'alerte + attendre validation avant de retenter.
+        # v2.2.89 — Garde-fou : refuser UNIQUEMENT la saisie 03 (Production) ou
+        # 88 (Reprise) si une alerte maintenance bloquante est due. Les autres
+        # codes (calage, arrêt, pause…) passent normalement — l'opérateur doit
+        # pouvoir enchaîner des calages sans être bloqué à chaque saisie.
         try:
-            from app.routers.settings import _check_blocking_alert_due
-            if _check_blocking_alert_due(conn, user, machine_name):
-                raise HTTPException(
-                    status_code=423,
-                    detail="Une alerte maintenance bloquante est due sur cette machine. Valide-la avant de saisir.",
-                )
+            if cl["code"] in ("03", "88"):
+                from app.routers.settings import _check_blocking_alert_due
+                if _check_blocking_alert_due(conn, user, machine_name):
+                    raise HTTPException(
+                        status_code=423,
+                        detail="Une alerte maintenance bloquante est due sur cette machine. Valide-la avant de saisir Production.",
+                    )
         except HTTPException:
             raise
         except Exception:
