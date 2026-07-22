@@ -6019,7 +6019,6 @@ function _renderAlertFormFields(params, opts) {
     +       '<select id="af-placement" class="alert-field-input">'
     +         '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
     +         '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
-    +         
     +       '</select>'
     +     '</div>'
     +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
