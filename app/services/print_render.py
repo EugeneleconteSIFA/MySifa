@@ -175,31 +175,23 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
 #
 DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 ^CI28
-^PW792
-^LL984
-^LH64,64
-^FO0,0^A0N,45,45^FDSIFA^FS
-^FO0,55^A0N,18,18^FDIdentification bobine^FS
-^FO440,0^GB224,72,72^FS
-^FO460,20^A0N,32,32^FR^FD{{fsc_banner}}^FS
-^FO0,100^GB664,2,2^FS
-^FO0,125^A0N,18,18^FDREFERENCE PRODUIT^FS
-^FO0,155^A0N,40,40^FD{{ref_produit}}^FS
-^FO0,225^A0N,18,18^FDFOURNISSEUR^FS
-^FO0,255^A0N,32,32^FD{{fournisseur}}^FS
-^FO0,315^GB664,2,2^FS
-^FO0,340^A0N,18,18^FDNUMERO DE LOT^FS
-^FO0,370^A0N,58,58^FD{{lot_numero}}^FS
-^FO0,460^GB664,2,2^FS
-^FO0,485^A0N,16,16^FDCode-barres bobine^FS
-^FO0,515^BY3,3,110^BCN,110,Y,N,N^FD{{code_barre}}^FS
-^FO0,700^BQN,2,5^FDLA,{{lot_numero}}^FS
-^FO190,715^A0N,18,18^FDReception :^FS
-^FO190,740^A0N,22,22^FD{{date_reception}}^FS
-^FO190,775^A0N,18,18^FDOperateur :^FS
-^FO190,800^A0N,22,22^FD{{operateur_nom}}^FS
-^FO0,850^GB664,1,1^FS
-^FO0,858^A0N,14,14^FDSIFA - Loos - FSC C012345^FS
+^PW1188
+^LL1476
+^LH96,96
+^FO0,0^A0N,68,68^FDSIFA^FS
+^FO660,0^GB336,108,108^FS
+^FO690,30^A0N,48,48^FR^FD{{fsc_banner}}^FS
+^FO0,140^A0N,60,60^FD{{lot_numero}}^FS
+^BY4,3,240
+^FO0,220^BCN,240,N,N,N^FD{{lot_numero}}^FS
+^FO0,500^A0N,42,42^FDReference : {{ref_matiere}}^FS
+^FO0,560^A0N,38,38^FDFournisseur : {{fournisseur}}^FS
+^FO0,615^A0N,38,38^FDCertificat FSC : {{certificat_fsc}}^FS
+^FO0,670^A0N,38,38^FDReception : {{date_reception}}^FS
+^FO0,725^A0N,38,38^FDBobines : {{nb_bobines}} / {{nb_bobines_total}}^FS
+^FO0,800^GB1000,3,3^FS
+^FO0,820^A0N,42,42^FDCODES BOBINES^FS
+^FO0,880^A0N,32,32^FD{{codes_bobines}}^FS
 ^XZ
 """
 
@@ -207,16 +199,17 @@ DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 # 107mm x 8 = 856 dots, 50mm x 8 = 400 dots
 DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 ^CI28
-^PW856
-^LL400
-^LH8,8
-^FO0,0^A0N,45,45^FD{{lot_numero}}^FS
-^FO0,55^GB80,22,22^FS
-^FO4,58^A0N,18,18^FR^FD{{fsc_banner}}^FS
-^FO95,57^A0N,22,22^FD{{ref_produit}}^FS
-^FO0,95^BY3,3,120^BCN,120,Y,N,N^FD{{code_barre}}^FS
-^FO0,265^A0N,16,16^FD{{fournisseur}} - {{date_reception}}^FS
-^FO0,290^A0N,14,14^FDSIFA - Loos^FS
+^PW1284
+^LL600
+^LH24,24
+^FO0,0^A0N,68,68^FD{{lot_numero}}^FS
+^FO0,82^GB180,44,44^FS
+^FO8,90^A0N,32,32^FR^FD{{fsc_banner}}^FS
+^FO200,88^A0N,32,32^FD{{date_reception}}^FS
+^BY3,2.5,180
+^FO0,145^BCN,180,N,N,N^FD{{lot_numero}}^FS
+^FO0,345^A0N,32,32^FDMATIERE : {{ref_matiere}}^FS
+^FO0,390^A0N,28,28^FD{{fournisseur}} — {{site}}^FS
 ^XZ
 """
 
