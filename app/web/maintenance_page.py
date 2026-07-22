@@ -8063,6 +8063,25 @@ function _renderAlertFormFields(params, opts) {
     +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
     +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
     + '</div>'
+    // v2.3.21 : section Affichage — Placement + Taille par alerte
+    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
+    +   '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
+    +       '<select id="af-placement" class="alert-field-input">'
+    +         '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
+    +         '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
+    +       '</select>'
+    +     '</div>'
+    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
+    +       '<select id="af-size" class="alert-field-input">'
+    +         '<option value="small"' + (d.size === 'small' ? ' selected' : '') + '>Petite</option>'
+    +         '<option value="medium"' + (d.size === 'medium' ? ' selected' : '') + '>Moyenne</option>'
+    +         '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
+    +       '</select>'
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
     +     '<div>'
@@ -8420,6 +8439,9 @@ function _afReadParams() {
     validation: {
       button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
     },
+    // v2.3.21 : placement + size par alerte (dans maintenance_page.py aussi)
+    placement: (document.getElementById('af-placement')?.value || 'top-right'),
+    size: (document.getElementById('af-size')?.value || 'medium'),
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
