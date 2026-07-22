@@ -959,7 +959,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.10"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1454,15 +1454,14 @@ function svgIcon(name,size=16){
 async function apiFetch(path, opts={}){
   const r = await fetch(path, {credentials:'include', ...opts});
   if(r.status===401){ window.location.href='/'; return null; }
-  // v2.3.5 : HTTP 423 = alerte maintenance bloquante. Le backend inclut
-  // maintenant les alertes DIRECTEMENT dans le detail — plus besoin d'un
-  // second appel réseau vers /blocking-for-machine.
+  // v2.3.6 : HTTP 423 = alerte maintenance bloquante. Affiche l'alerte,
+  // attend l'ACK, puis RETENTE automatiquement la saisie (Production/Reprise).
   if(r.status===423){
     const e = await r.json().catch(()=>({}));
     console.log('[MysifaAlerts] 423 response :', e);
     let msg = 'Alerte maintenance à valider avant la saisie de production.';
+    let hasBlockingAlerts = false;
     try {
-      // detail peut être un string (ancien format) ou un objet {message, alerts}
       const detail = e.detail;
       if(typeof detail === 'string'){
         msg = detail;
@@ -1472,6 +1471,7 @@ async function apiFetch(path, opts={}){
         if(Array.isArray(alerts) && alerts.length && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
           console.log('[MysifaAlerts] 423 → afficher', alerts.length, 'alerte(s) bloquante(s)');
           await window.MysifaAlerts.showBlockingAlerts(alerts);
+          hasBlockingAlerts = true;
         } else {
           console.warn('[MysifaAlerts] 423 mais aucune alerte dans le detail — fallback refresh');
           if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
@@ -1481,6 +1481,20 @@ async function apiFetch(path, opts={}){
       }
     } catch(err){
       console.warn('[MysifaAlerts] error handling 423 :', err);
+    }
+    // v2.3.6 : attendre l'ACK de l'alerte puis retenter la saisie originale.
+    // Si dismiss ou erreur → throw normalement.
+    if(hasBlockingAlerts && window.MysifaAlerts && typeof window.MysifaAlerts.waitForBlockingAck === 'function'){
+      try {
+        console.log('[MysifaAlerts] 423 — waiting for ack before retry');
+        await window.MysifaAlerts.waitForBlockingAck();
+        console.log('[MysifaAlerts] alert acked — retrying saisie', path);
+        // Retenter la saisie originale — utilise le même path et opts
+        return apiFetch(path, opts);
+      } catch(waitErr){
+        console.log('[MysifaAlerts] alert dismissed or error :', waitErr);
+        // Fall through au throw
+      }
     }
     throw new Error(msg);
   }

@@ -4063,6 +4063,16 @@ def maintenance_alerts_active(request: Request):
             # Filtrage cible : superadmin voit tout ; sinon fabrication uniquement
             if not operator_should_see_alert(user_role, user_machine or "", target):
                 continue
+            # v2.3.10 : filtre machine strict — même pour superadmin, l'alerte
+            # ne doit se déclencher que si la machine actuelle est ciblée.
+            # Résout le bug : alerte Errepi (cible Cohésio 1) qui apparaissait
+            # sur Cohésio 2 pour un superadmin.
+            _machines_target = target.get("machines")
+            if not isinstance(_machines_target, list) or not _machines_target:
+                _legacy_m = target.get("machine")
+                _machines_target = [_legacy_m] if isinstance(_legacy_m, str) and _legacy_m else ["*"]
+            if "*" not in _machines_target and user_machine and user_machine not in _machines_target:
+                continue
             trig = params.get("trigger") or {}
             ttype = trig.get("type")
             should_show = False
