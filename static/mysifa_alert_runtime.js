@@ -59,6 +59,12 @@
 
   let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
   let _displayed = new Map();  // v2.2.66 : id → wrap DOM element (pour pouvoir fermer côté client si backend a ack en silence)
+  // v2.3.6 : file d'attente de resolvers pour waitForBlockingAck()
+  let _blockingAckResolvers = [];  // [{resolve, reject}]
+  // v2.3.9 : Set des IDs d'alertes affichées via showBlockingAlerts. Ces alertes
+  // ne sont PAS dans /alerts/active (retirées en v2.2.89 pour after_calage),
+  // donc le poll cleanup les supprimerait à chaque itération sans ce flag.
+  let _displayedBlocking = new Set();
   let _pollTimer = null;
   let _started = false;
 
@@ -600,9 +606,19 @@
       });
     }
 
-    const closeWithSuccess = () => {
+    const closeWithSuccess = (viaDismiss) => {
       wrap.remove();
       _displayed.delete(alert.id);
+      _displayedBlocking.delete(alert.id);  // v2.3.9
+      console.log('[MysifaAlerts] closeWithSuccess id=', alert.id, 'viaDismiss=', viaDismiss, 'waiters=', _blockingAckResolvers.length);
+      const cbs = _blockingAckResolvers.slice();
+      _blockingAckResolvers = [];
+      cbs.forEach(cb => {
+        try {
+          if (viaDismiss) cb.reject(new Error('dismissed'));
+          else cb.resolve();
+        } catch (e) {}
+      });
     };
 
     const onValidate = async () => {
@@ -638,7 +654,7 @@
             _toast('Fermeture refusée.', true);
             return;
           }
-          closeWithSuccess();
+          closeWithSuccess(true);  // v2.3.6 : dismiss → reject les waiters
         } catch (e) {
           _toast('Erreur réseau — réessaie', true);
         }
@@ -650,11 +666,16 @@
   async function _poll() {
     const r = await _fetchActive();
     const items = (r && Array.isArray(r.items)) ? r.items : [];
-    // v2.2.66 : ferme visuellement les alertes qui ne sont plus renvoyées
-    // par le serveur (ack automatique côté backend — arrêt machine, fin dossier).
+    // v2.2.66 + v2.3.8 : ferme visuellement les alertes qui ne sont plus
+    // renvoyées par le serveur, MAIS bypasse les alertes bloquantes affichées
+    // via 423 (elles ne sont pas dans /alerts/active — c'est normal).
     const activeIds = new Set(items.map(it => it.id));
     for (const [dispId, wrap] of Array.from(_displayed.entries())) {
       if (!activeIds.has(dispId)) {
+        // v2.3.9 : bypass si alerte bloquante (source: 423). Set JS + attribut
+        // DOM en double sécurité.
+        if (_displayedBlocking.has(dispId)) continue;
+        if (wrap && wrap.getAttribute && wrap.getAttribute('data-blocking-alert') === '1') continue;
         try { if (wrap && wrap.remove) wrap.remove(); } catch (e) {}
         _displayed.delete(dispId);
       }
@@ -677,10 +698,9 @@
     }
   }
 
-  // v2.2.89 : afficher des alertes bloquantes récupérées par le front (via /blocking-for-machine)
+  // v2.2.89 : afficher des alertes bloquantes récupérées par le front (via 423)
   async function _showBlockingAlerts(items) {
     if (!Array.isArray(items) || !items.length) return;
-    // S'assure que les settings sont chargés (backdrop, placement...)
     if (!_started) {
       try { await _loadSettings(); } catch(e){}
     }
@@ -688,7 +708,11 @@
       if (_displayed.has(raw.id)) continue;
       const alert = _normalizeAlert(raw);
       const wrap = _renderAlert(alert);
+      // v2.3.9 : marqueur DOM + Set JS pour double sécurité contre le cleanup.
+      wrap.setAttribute('data-blocking-alert', '1');
       _displayed.set(raw.id, wrap);
+      _displayedBlocking.add(raw.id);
+      console.log('[MysifaAlerts] showBlockingAlerts add id=', raw.id, 'blocking Set size=', _displayedBlocking.size);
     }
   }
 
@@ -708,5 +732,13 @@
     },
     refresh: function() { return _poll(); },
     showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
+    // v2.3.6 : retourne une Promise résolue quand toutes les alertes bloquantes
+    // à l'écran sont ACK (rejetée si dismiss). Permet à fabrication_page de
+    // retenter automatiquement la saisie 03/88 après validation.
+    waitForBlockingAck: function() {
+      return new Promise((resolve, reject) => {
+        _blockingAckResolvers.push({ resolve, reject });
+      });
+    },
   };
 })();

@@ -1259,10 +1259,16 @@ async def create_saisie(request: Request):
         try:
             if cl["code"] in ("03", "88"):
                 from app.routers.settings import _check_blocking_alert_due
-                if _check_blocking_alert_due(conn, user, machine_name):
+                _blocking = _check_blocking_alert_due(conn, user, machine_name)
+                if _blocking:
+                    # v2.3.5 : inclure les alertes dans le detail — le front les
+                    # affiche directement sans avoir à re-fetch un endpoint.
                     raise HTTPException(
                         status_code=423,
-                        detail="Une alerte maintenance bloquante est due sur cette machine. Valide-la avant de saisir Production.",
+                        detail={
+                            "message": "Une alerte maintenance bloquante est due sur cette machine. Valide-la avant de saisir Production.",
+                            "alerts": _blocking,
+                        },
                     )
         except HTTPException:
             raise

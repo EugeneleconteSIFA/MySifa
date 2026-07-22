@@ -959,7 +959,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.11"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -968,7 +968,26 @@ body.has-topbar .fab-main{padding-top:74px}
   // POST sur /api/maintenance/alerts/{id}/ack — l'historique est tracé en DB.
   if (window.MysifaAlerts) {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => MysifaAlerts.start());
+      document.addEventListener('DOMContentLoaded', () => {
+        MysifaAlerts.start();
+        // v2.3.11 : listener global pour cacher le loading pendant qu'une
+        // alerte bloquante est affichée. La fonction set(...) est globale
+        // dans fabrication_page — si loading était true, on le passe à false.
+        window.addEventListener('mysifa-saisie-awaiting-alert', () => {
+          try {
+            if(typeof set === 'function' && S && S.loading){
+              set({loading: false});
+            }
+          } catch(_){}
+        });
+        window.addEventListener('mysifa-saisie-retrying', () => {
+          try {
+            if(typeof set === 'function' && S && !S.loading){
+              set({loading: true});
+            }
+          } catch(_){}
+        });
+      });
     } else {
       MysifaAlerts.start();
     }
@@ -1454,34 +1473,53 @@ function svgIcon(name,size=16){
 async function apiFetch(path, opts={}){
   const r = await fetch(path, {credentials:'include', ...opts});
   if(r.status===401){ window.location.href='/'; return null; }
-  // v2.2.90 : HTTP 423 = alerte maintenance bloquante due sur code 03/88.
-  // Appel systématique de /blocking-for-machine (même sans machine locale — le
-  // backend fait un fallback via l'user). Logging verbose pour debug.
+  // v2.3.6 : HTTP 423 = alerte maintenance bloquante. Affiche l'alerte,
+  // attend l'ACK, puis RETENTE automatiquement la saisie (Production/Reprise).
   if(r.status===423){
+    const e = await r.json().catch(()=>({}));
+    console.log('[MysifaAlerts] 423 response :', e);
+    let msg = 'Alerte maintenance à valider avant la saisie de production.';
+    let hasBlockingAlerts = false;
     try {
-      const machine = (S && S.machine && S.machine.nom) ? S.machine.nom : '';
-      const url = '/api/maintenance/alerts/blocking-for-machine' + (machine ? ('?machine=' + encodeURIComponent(machine)) : '');
-      const rb = await fetch(url, { credentials:'same-origin', cache:'no-store' });
-      if(rb.ok){
-        const db = await rb.json().catch(()=>({items:[]}));
-        console.log('[MysifaAlerts] 423 → blocking-for-machine :', db);
-        if(db && Array.isArray(db.items) && db.items.length && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
-          await window.MysifaAlerts.showBlockingAlerts(db.items);
+      const detail = e.detail;
+      if(typeof detail === 'string'){
+        msg = detail;
+      } else if(detail && typeof detail === 'object'){
+        msg = detail.message || msg;
+        const alerts = detail.alerts;
+        if(Array.isArray(alerts) && alerts.length && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
+          console.log('[MysifaAlerts] 423 → afficher', alerts.length, 'alerte(s) bloquante(s)');
+          await window.MysifaAlerts.showBlockingAlerts(alerts);
+          hasBlockingAlerts = true;
         } else {
-          // Fallback : force un refresh classique au cas où /alerts/active retourne l'alerte
-          console.warn('[MysifaAlerts] 423 mais 0 alertes bloquantes retournées — fallback refresh');
+          console.warn('[MysifaAlerts] 423 mais aucune alerte dans le detail — fallback refresh');
           if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
             window.MysifaAlerts.refresh();
           }
         }
-      } else {
-        console.warn('[MysifaAlerts] /blocking-for-machine HTTP', rb.status);
       }
     } catch(err){
       console.warn('[MysifaAlerts] error handling 423 :', err);
     }
-    const e = await r.json().catch(()=>({}));
-    throw new Error(e.detail || 'Alerte maintenance à valider avant la saisie de production.');
+    // v2.3.6 : attendre l'ACK de l'alerte puis retenter la saisie originale.
+    // Si dismiss ou erreur → throw normalement.
+    if(hasBlockingAlerts && window.MysifaAlerts && typeof window.MysifaAlerts.waitForBlockingAck === 'function'){
+      // v2.3.11 : signaler à l'UI que la saisie attend une action de l'user
+      // (le code appelant cache son spinner "Enregistrement...")
+      window.dispatchEvent(new CustomEvent('mysifa-saisie-awaiting-alert'));
+      try {
+        console.log('[MysifaAlerts] 423 — waiting for ack before retry');
+        await window.MysifaAlerts.waitForBlockingAck();
+        console.log('[MysifaAlerts] alert acked — retrying saisie', path);
+        // v2.3.11 : signaler à l'UI qu'on va retenter (peut ré-afficher spinner)
+        window.dispatchEvent(new CustomEvent('mysifa-saisie-retrying'));
+        return apiFetch(path, opts);
+      } catch(waitErr){
+        console.log('[MysifaAlerts] alert dismissed or error :', waitErr);
+        window.dispatchEvent(new CustomEvent('mysifa-saisie-dismissed'));
+      }
+    }
+    throw new Error(msg);
   }
   if(!r.ok){
     const e = await r.json().catch(()=>({}));
