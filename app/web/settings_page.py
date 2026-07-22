@@ -5849,6 +5849,7 @@ function _alertDefaults(existing) {
         unit: (it && it.unit) || '',
         min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+        required: !!(it && it.required),  // v2.2.86 : préserver required
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -5863,6 +5864,7 @@ function _alertDefaults(existing) {
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
+      required: !!(it && it.required),  // v2.2.86 : préserver required
     };
   });
   return {
