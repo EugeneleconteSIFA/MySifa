@@ -30,7 +30,7 @@ from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
 from reportlab.platypus import (
     BaseDocTemplate, PageTemplate, Frame,
-    Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak,
+    Paragraph, Spacer, Table, TableStyle, HRFlowable, PageBreak, KeepTogether,
 )
 
 # ─── Palette SIFA ─────────────────────────────────────────────────────────
@@ -179,13 +179,15 @@ def _page_decor(canvas_, doc, ref: str, header_date: str, total_pages_hint: int 
     canvas_.setStrokeColor(BORDER)
     canvas_.setLineWidth(0.4)
     canvas_.line(15 * mm, page_h - 25 * mm, page_w - 15 * mm, page_h - 25 * mm)
-    canvas_.line(15 * mm, 25 * mm, page_w - 15 * mm, 25 * mm)
+    canvas_.line(15 * mm, 26 * mm, page_w - 15 * mm, 26 * mm)
     canvas_.setFillColor(GREY)
     canvas_.setFont("Helvetica", 8.5)
     canvas_.drawCentredString(page_w / 2, 20 * mm,
                               "SIFA · 45 rue Rollin · 59100 Roubaix · France")
     canvas_.setFont("Helvetica", 8)
-    canvas_.drawCentredString(page_w / 2, 15 * mm, f"Page {doc.page}")
+    canvas_.drawCentredString(page_w / 2, 15.5 * mm,
+                              "+33 (0)3 20 69 01 01 · commandes@sifa.pro")
+    canvas_.drawCentredString(page_w / 2, 11 * mm, f"Page {doc.page}")
     canvas_.restoreState()
 
 
@@ -197,11 +199,9 @@ def _page_decor(canvas_, doc, ref: str, header_date: str, total_pages_hint: int 
 # fixes — on ne surcharge que le paragraphe descriptif principal.
 
 SEC_2_BODY = (
-    "SIFA fabrique des étiquettes adhésives industrielles, avec ou sans "
-    "enduction, destinées à l'identification produit, au marquage logistique "
-    "et à la traçabilité. La présente Déclaration couvre l'ensemble des "
-    "références conçues et produites au sein de nos ateliers de Roubaix, "
-    "sur la base des matières premières listées en section 3."
+    "SIFA fabrique les étiquettes adhésives, avec ou sans enduction, "
+    "à partir de matières déjà complexées ou à partir de glassines, adhésifs "
+    "et frontaux assemblés en interne."
 )
 
 SEC_4_INTRO = (
@@ -379,24 +379,24 @@ def _sec_4_intro(ctx, body):
     return out
 
 
-def _sec_4_1(ctx, body):
+def _sec_4_1(ctx, body, num=1):
     S = ctx["styles"]
-    return [Paragraph("4.1 REACH — Substances extrêmement préoccupantes (SVHC)",
+    return [Paragraph(f"4.{num} REACH — Substances extrêmement préoccupantes (SVHC)",
                       S["h3"]),
             Paragraph(body or SEC_4_1_BODY, S["body"])]
 
 
-def _sec_4_2(ctx, body):
+def _sec_4_2(ctx, body, num=2):
     S = ctx["styles"]
-    return [Paragraph("4.2 California Proposition 65", S["h3"]),
+    return [Paragraph(f"4.{num} California Proposition 65", S["h3"]),
             Paragraph(body or SEC_4_2_BODY, S["body"])]
 
 
-def _sec_4_3(ctx, body):
+def _sec_4_3(ctx, body, num=3):
     S = ctx["styles"]
-    out = [Paragraph("4.3 Métaux lourds — traces techniquement inévitables",
-                     S["h3"]),
-           Paragraph(body or SEC_4_3_BODY, S["body"])]
+    inner = [Paragraph(f"4.{num} Métaux lourds — traces techniquement inévitables",
+                       S["h3"]),
+             Paragraph(body or SEC_4_3_BODY, S["body"])]
     metaux_data = [
         [Paragraph("<b>Élément</b>", S["body"]),
          Paragraph("<b>Seuil individuel</b>", S["body"]),
@@ -427,13 +427,14 @@ def _sec_4_3(ctx, body):
         ("TOPPADDING", (0, 0), (-1, -1), 5),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
-    out.append(m_tbl)
-    return out
+    inner.append(m_tbl)
+    # KeepTogether garantit que titre + paragraphe + tableau tiennent sur une page
+    return [KeepTogether(inner)]
 
 
-def _sec_4_4(ctx, body):
+def _sec_4_4(ctx, body, num=4):
     S = ctx["styles"]
-    out = [Paragraph("4.4 Certification FSC", S["h3"]),
+    out = [Paragraph(f"4.{num} Certification FSC", S["h3"]),
            Paragraph(body or SEC_4_4_BODY, S["body"])]
     note_para = Paragraph(SEC_4_4_NOTE, S["note_frame"])
     note_tbl = Table([[note_para]], colWidths=[180 * mm])
@@ -451,33 +452,33 @@ def _sec_4_4(ctx, body):
     return out
 
 
-def _sec_4_5(ctx, body):
+def _sec_4_5(ctx, body, num=5):
     S = ctx["styles"]
-    return [Paragraph("4.5 Absence de PFAS", S["h3"]),
+    return [Paragraph(f"4.{num} Absence de PFAS", S["h3"]),
             Paragraph(body or SEC_4_5_BODY, S["body"])]
 
 
-def _sec_4_6(ctx, body):
+def _sec_4_6(ctx, body, num=6):
     S = ctx["styles"]
-    return [Paragraph("4.6 Absence de bisphénols (BPA, BPS, BPF)", S["h3"]),
+    return [Paragraph(f"4.{num} Absence de bisphénols (BPA, BPS, BPF)", S["h3"]),
             Paragraph(body or SEC_4_6_BODY, S["body"])]
 
 
-def _sec_4_7(ctx, body):
+def _sec_4_7(ctx, body, num=7):
     S = ctx["styles"]
-    return [Paragraph("4.7 Certificats d'analyse laboratoire (CoA)", S["h3"]),
+    return [Paragraph(f"4.{num} Certificats d'analyse laboratoire (CoA)", S["h3"]),
             Paragraph(body or SEC_4_7_BODY, S["body"])]
 
 
-def _sec_4_8(ctx, body):
+def _sec_4_8(ctx, body, num=8):
     S = ctx["styles"]
-    return [Paragraph("4.8 Cadre général — PPWR", S["h3"]),
+    return [Paragraph(f"4.{num} Cadre général — PPWR", S["h3"]),
             Paragraph(body or SEC_4_8_BODY, S["body"])]
 
 
-def _sec_4_9(ctx, body):
+def _sec_4_9(ctx, body, num=9):
     S = ctx["styles"]
-    return [Paragraph("4.9 Recyclabilité", S["h3"]),
+    return [Paragraph(f"4.{num} Recyclabilité", S["h3"]),
             Paragraph(body or SEC_4_9_BODY, S["body"])]
 
 
@@ -582,31 +583,31 @@ SECTIONS_META = [
     {"id": "sec_4_intro", "title": "4. Conformités attestées (intro)",
      "removable": False, "editable": True, "default_body": SEC_4_INTRO,
      "builder": _sec_4_intro},
-    {"id": "sec_4_1", "title": "4.1 REACH — SVHC",
+    {"id": "sec_4_1", "sub_group": "4", "title": "4.1 REACH — SVHC",
      "removable": True, "editable": True, "default_body": SEC_4_1_BODY,
      "builder": _sec_4_1},
-    {"id": "sec_4_2", "title": "4.2 California Proposition 65",
+    {"id": "sec_4_2", "sub_group": "4", "title": "4.2 California Proposition 65",
      "removable": True, "editable": True, "default_body": SEC_4_2_BODY,
      "builder": _sec_4_2},
-    {"id": "sec_4_3", "title": "4.3 Métaux lourds",
+    {"id": "sec_4_3", "sub_group": "4", "title": "4.3 Métaux lourds",
      "removable": True, "editable": True, "default_body": SEC_4_3_BODY,
      "builder": _sec_4_3},
-    {"id": "sec_4_4", "title": "4.4 Certification FSC",
+    {"id": "sec_4_4", "sub_group": "4", "title": "4.4 Certification FSC",
      "removable": True, "editable": True, "default_body": SEC_4_4_BODY,
      "builder": _sec_4_4},
-    {"id": "sec_4_5", "title": "4.5 Absence de PFAS",
+    {"id": "sec_4_5", "sub_group": "4", "title": "4.5 Absence de PFAS",
      "removable": True, "editable": True, "default_body": SEC_4_5_BODY,
      "builder": _sec_4_5},
-    {"id": "sec_4_6", "title": "4.6 Absence de bisphénols",
+    {"id": "sec_4_6", "sub_group": "4", "title": "4.6 Absence de bisphénols",
      "removable": True, "editable": True, "default_body": SEC_4_6_BODY,
      "builder": _sec_4_6},
-    {"id": "sec_4_7", "title": "4.7 Certificats d'analyse laboratoire (CoA)",
+    {"id": "sec_4_7", "sub_group": "4", "title": "4.7 Certificats d'analyse laboratoire (CoA)",
      "removable": True, "editable": True, "default_body": SEC_4_7_BODY,
      "builder": _sec_4_7},
-    {"id": "sec_4_8", "title": "4.8 Cadre général — PPWR",
+    {"id": "sec_4_8", "sub_group": "4", "title": "4.8 Cadre général — PPWR",
      "removable": True, "editable": True, "default_body": SEC_4_8_BODY,
      "builder": _sec_4_8},
-    {"id": "sec_4_9", "title": "4.9 Recyclabilité",
+    {"id": "sec_4_9", "sub_group": "4", "title": "4.9 Recyclabilité",
      "removable": True, "editable": True, "default_body": SEC_4_9_BODY,
      "builder": _sec_4_9},
     {"id": "sec_5", "title": "5. Contenu recyclé",
@@ -664,8 +665,24 @@ def _title_block(ctx):
 
 def _build_flowables(ctx, sections_overrides):
     story = _title_block(ctx)
+    ov_all = sections_overrides or {}
+
+    # Pré-calcul : renumérotation dynamique des sous-sections du groupe "4"
+    # (si l'utilisateur exclut 4.2 par ex., 4.3 devient 4.2, etc.)
+    sub_counters = {}
+    sub_num_by_id = {}
     for sec in SECTIONS_META:
-        ov = (sections_overrides or {}).get(sec["id"], {})
+        group = sec.get("sub_group")
+        if not group:
+            continue
+        ov = ov_all.get(sec["id"], {})
+        if sec["removable"] and ov.get("include") is False:
+            continue
+        sub_counters[group] = sub_counters.get(group, 0) + 1
+        sub_num_by_id[sec["id"]] = sub_counters[group]
+
+    for sec in SECTIONS_META:
+        ov = ov_all.get(sec["id"], {})
         # include=False → skip cette section (uniquement si removable)
         if sec["removable"] and ov.get("include") is False:
             continue
@@ -673,7 +690,11 @@ def _build_flowables(ctx, sections_overrides):
         body = None
         if sec["editable"] and ov.get("custom_body"):
             body = str(ov["custom_body"]).strip() or None
-        story.extend(sec["builder"](ctx, body))
+        # Si la section fait partie d'un sous-groupe, passer le numéro renuméroté
+        if sec["id"] in sub_num_by_id:
+            story.extend(sec["builder"](ctx, body, num=sub_num_by_id[sec["id"]]))
+        else:
+            story.extend(sec["builder"](ctx, body))
     return story
 
 
@@ -715,7 +736,7 @@ def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
     doc = BaseDocTemplate(
         buf, pagesize=A4,
         leftMargin=15 * mm, rightMargin=15 * mm,
-        topMargin=30 * mm, bottomMargin=28 * mm,
+        topMargin=30 * mm, bottomMargin=32 * mm,
         title=f"SIFA - Déclaration UE - {client_nom}",
         author="SIFA",
         subject="Déclaration UE de Conformité",
