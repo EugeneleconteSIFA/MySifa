@@ -3243,22 +3243,24 @@ def maintenance_doc_delete(doc_id: int, request: Request):
 import json as _json_alerts
 
 
-def _check_blocking_alert_due(conn, user, machine: str) -> bool:
-    """v2.2.88 — Retourne True si au moins une alerte bloquante (block_production=True)
-    est actuellement due pour cette machine. Utilisé par /api/fabrication/saisie
-    comme garde-fou pour refuser une saisie tant qu'une alerte non-ack existe.
+def _check_blocking_alert_due(conn, user, machine: str) -> list:
+    """v2.3.5 — Retourne la LISTE des alertes bloquantes (block_production=True)
+    actuellement dues pour cette machine (peut être vide). Utilisé par
+    /api/fabrication/saisie comme garde-fou ET pour inclure directement l'alerte
+    dans la réponse HTTP 423 → le front n'a plus besoin d'un endpoint séparé.
 
-    Réutilise la même logique de détection que /api/maintenance/alerts/active
-    en la simplifiant : on veut juste savoir s'il existe UNE alerte due bloquante.
+    Format des items identique à /alerts/active :
+        {id, nom, params, linked_maint_code, no_dossier}
     """
+    result = []
     if not machine:
-        return False
+        return result
     try:
         rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
+            "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
         ).fetchall()
     except Exception:
-        return False
+        return result
     now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
     # Pas de gap : le garde-fou doit être strict, pas soumis à min_gap.
     user_role = user.get("role") if user else ""
@@ -3286,7 +3288,13 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
         if ttype == "periodic":
             try:
                 if _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris):
-                    return True
+                    result.append({
+                        "id": int(r["id"]),
+                        "nom": r["nom"] if "nom" in r.keys() else "",
+                        "params": params,
+                        "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
+                        "no_dossier": "",
+                    })
             except Exception:
                 continue
         elif ttype == "event":
@@ -3327,10 +3335,16 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
                 _last_89_at = _last_89["m"] if _last_89 else None
                 if _last_89_at and _last_row["date_operation"] <= _last_89_at:
                     continue
-                return True
+                result.append({
+                    "id": int(r["id"]),
+                    "nom": r["nom"] if "nom" in r.keys() else "",
+                    "params": params,
+                    "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
+                    "no_dossier": _dos,
+                })
             # Autres events (dossier_start / dossier_end) : pas implémentés
             # comme bloquants pour l'instant. Reste ouvert pour extension.
-    return False
+    return result
 
 
 @router.get("/api/maintenance/alerts/blocking-for-machine")
