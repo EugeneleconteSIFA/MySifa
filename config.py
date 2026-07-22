@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.2.83"
+APP_VERSION = "2.2.84"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -156,7 +156,7 @@ PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "ye
 # entrer. Passer à 1 dans le .env pour laisser les opérateurs tester leur
 # vue « Mes tâches » sur v1 avant la promotion en prod. Les endpoints API
 # vérifient ce flag côté serveur — inutile de patcher la sidebar seule.
-MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
+MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "1") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (email) ───────────────────────────────────────────────
 # Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
