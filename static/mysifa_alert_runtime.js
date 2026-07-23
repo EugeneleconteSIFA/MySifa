@@ -629,12 +629,18 @@
     document.body.appendChild(wrap);
 
     const alertEl = wrap.querySelector('.ta-sim-alert');
-    if (alertEl) _applyAlertPos(alertEl);
+    // v2.3.24 : les alertes bloquantes NE sont PAS déplaçables — elles
+    // restent à leur placement configuré (centre ou coin haut droit).
+    const _isBlocking = !!alert.block_production;
+    if (alertEl && !_isBlocking) _applyAlertPos(alertEl);
 
     const titleEl = wrap.querySelector('.ta-sim-title');
-    if (titleEl && alertEl) {
+    if (titleEl && alertEl && !_isBlocking) {
       titleEl.addEventListener('mousedown', (ev) => _startDrag(ev, alertEl));
       titleEl.addEventListener('touchstart', (ev) => _startDrag(ev, alertEl), { passive: false });
+    } else if (titleEl && _isBlocking) {
+      // Curseur par défaut (pas de grab) pour indiquer que le titre n'est pas cliquable-glissable
+      titleEl.style.cursor = 'default';
     }
 
     const minBtn = wrap.querySelector('.ta-sim-min');
