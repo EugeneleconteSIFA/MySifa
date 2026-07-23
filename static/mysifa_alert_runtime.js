@@ -432,12 +432,15 @@
     const maxTop = Math.max(0, h - Math.min(rect.height, 100));
     const left = Math.max(0, Math.min(pos.left, maxLeft));
     const top = Math.max(0, Math.min(pos.top, maxTop));
-    alertEl.style.position = 'fixed';
-    alertEl.style.left = left + 'px';
-    alertEl.style.top = top + 'px';
-    alertEl.style.right = 'auto';
-    alertEl.style.bottom = 'auto';
-    alertEl.style.margin = '0';
+    // v2.3.23 : setProperty(..., 'important') pour restaurer la position
+    // sauvegardée malgré les !important du placement (v2.3.20).
+    alertEl.style.setProperty('position', 'fixed', 'important');
+    alertEl.style.setProperty('left', left + 'px', 'important');
+    alertEl.style.setProperty('top', top + 'px', 'important');
+    alertEl.style.setProperty('right', 'auto', 'important');
+    alertEl.style.setProperty('bottom', 'auto', 'important');
+    alertEl.style.setProperty('transform', 'none', 'important');
+    alertEl.style.setProperty('margin', '0', 'important');
   }
 
   let _dragState = null;
@@ -471,12 +474,15 @@
     const newLeft = clientX - _dragState.offsetX;
     const newTop = clientY - _dragState.offsetY;
     const el = _dragState.alertEl;
-    el.style.position = 'fixed';
-    el.style.left = newLeft + 'px';
-    el.style.top = newTop + 'px';
-    el.style.right = 'auto';
-    el.style.bottom = 'auto';
-    el.style.margin = '0';
+    // v2.3.23 : setProperty(..., 'important') pour override le CSS !important
+    // du placement (v2.3.20). Sans ça le drag n'a aucun effet visuel.
+    el.style.setProperty('position', 'fixed', 'important');
+    el.style.setProperty('left', newLeft + 'px', 'important');
+    el.style.setProperty('top', newTop + 'px', 'important');
+    el.style.setProperty('right', 'auto', 'important');
+    el.style.setProperty('bottom', 'auto', 'important');
+    el.style.setProperty('transform', 'none', 'important');
+    el.style.setProperty('margin', '0', 'important');
   }
 
   function _endDrag() {
