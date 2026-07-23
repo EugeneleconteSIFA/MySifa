@@ -7579,11 +7579,21 @@ function openAddModal(templateRow) {
 }
  
 function openEditModal(row) {
+  // v2.3.41 : redirige vers le viewer d'ack quand on tombe sur une alerte
+  // validée (via clic, navigation ‹/› ou Ctrl+←/→). L'édition classique
+  // n'a aucun sens pour un ack : id non numérique, opération non éditable,
+  // pas de compteur/métrage. On préserve la lecture seule voulue.
+  if(row && row.kind === 'alert_ack'){
+    // Ferme la modal courante si elle est ouverte
+    try{ const m = document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
+    openAlertAckDetail(row);
+    return;
+  }
   try{
     const m = document.querySelector('.add-row-modal');
     if(m) m.remove();
   }catch(e){}
- 
+
   const list = getVisibleSaisiesRowsForNav();
   const total = list.length || 0;
   const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
@@ -7836,6 +7846,150 @@ async function openFictifReassignModal(){
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
 }
  
+// v2.3.42 : le viewer d'ack a été extrait dans un module JS partagé
+// (static/mysifa_ack_viewer.js) chargé sur /prod. On garde ici un
+// wrapper `openAlertAckDetail(row)` qui transforme la row renvoyée par
+// /api/saisies en objet ack normalisé puis appelle MysifaAckViewer.open.
+// Cela garantit un rendu strictement identique au modal utilisé sur
+// /maintenance. Le vieux code d'injection CSS + rendu HTML custom a été
+// retiré pour ne pas diverger.
+function openAlertAckDetail(row){
+  if(!row || row.kind !== 'alert_ack') return;
+  if(!window.MysifaAckViewer || typeof window.MysifaAckViewer.open !== 'function'){
+    if(window.console) window.console.warn('[openAlertAckDetail] MysifaAckViewer non chargé — assure-toi que mysifa_ack_viewer.js est inclus.');
+    return;
+  }
+  let params = {}, responses = {};
+  try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
+  try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
+  const items = (params && params.checklist && Array.isArray(params.checklist.items))
+    ? params.checklist.items : [];
+  window.MysifaAckViewer.open({
+    alert_nom      : row._alert_nom || row.operation || 'Alerte',
+    responses      : responses,
+    checklist_items: items,
+    comment        : row._alert_comment || '',
+    machine        : row.machine || '',
+    date           : row.date_operation || '',
+    operateur      : row.operateur || row.operateur_nom || '',
+    no_dossier     : row.no_dossier || '',
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// v2.3.39/40 (remplacé par v2.3.42) : ancien viewer inline non utilisé,
+// gardé désactivé pour rétro-compat éventuelle. La fonction publique
+// openAlertAckDetail ci-dessus est celle utilisée par renderSaisies.
+// ─────────────────────────────────────────────────────────────────────
+function _injectAckViewerCss_UNUSED(){
+  if(document.getElementById('ack-viewer-css')) return;
+  const s = document.createElement('style');
+  s.id = 'ack-viewer-css';
+  s.textContent = [
+    ".ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}",
+    ".ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto}",
+    ".ta-sim.ta-pl-center .ta-sim-alert{position:fixed;top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%)}",
+    ".ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;pointer-events:auto;box-sizing:border-box;width:440px;max-width:calc(100vw - 40px)}",
+    ".ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}",
+    ".ta-sim-sub{font-size:12px;color:var(--text2);margin-bottom:14px;letter-spacing:.2px}",
+    ".ta-sim-actions{display:flex;gap:6px;margin-top:14px}",
+    ".ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}",
+    ".ta-sim-btn:hover{filter:brightness(1.05)}",
+    ".ta-cl-item{display:flex;flex-direction:column;gap:6px}",
+    ".ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;user-select:none;font-family:inherit;line-height:1.2}",
+    ".ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}",
+    ".ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}",
+    ".ta-chip span{white-space:nowrap}",
+    ".ack-di-badge{display:inline-flex;align-items:center;padding:5px 11px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600}",
+    ".ack-di-badge-sub{display:inline-flex;align-items:center;padding:5px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:500;margin-left:6px}",
+    "@media(max-width:600px){.ta-sim-alert{width:calc(100vw - 24px) !important;max-width:calc(100vw - 24px) !important;padding:14px}}",
+  ].join('\n');
+  document.head.appendChild(s);
+}
+
+function _openAlertAckDetail_OLD(row){
+  if(!row || row.kind !== 'alert_ack') return;
+  _injectAckViewerCss_UNUSED();
+  let params = {}, responses = {};
+  try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
+  try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
+  const items = Array.isArray(params && params.checklist && params.checklist.items)
+    ? params.checklist.items : [];
+  const esc = (s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Rendu de la checklist en lecture seule — identique à maintenance_page.py
+  let checklistHtml = '';
+  if(items.length){
+    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
+      + items.map((it, idx)=>{
+          const r = responses[String(idx)];
+          if(it.type === 'value'){
+            const val = (r != null && r !== '') ? String(r) : '';
+            const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">'+esc(it.unit)+'</span>' : '';
+            return '<div class="ta-cl-item" data-type="value">'
+              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">'+esc(it.label||'')+'</div>'
+              + '<div style="display:flex;align-items:center;gap:8px">'
+              +   '<input type="text" disabled value="'+esc(val)+'" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;opacity:.85">'
+              +   unit
+              + '</div>'
+              + '</div>';
+          }
+          // choice : les valeurs cochées apparaissent en chips (styling .ta-chip identique au runtime)
+          const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
+          const respHtml = selected.length
+            ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>'+esc(s)+'</span></label>').join(' ')
+            : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
+          const otherTxt = responses[String(idx)+'_other'];
+          const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
+            ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">'+esc(String(otherTxt))+'</div>'
+            : '';
+          return '<div class="ta-cl-item" data-type="choice">'
+            + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">'+esc(it.label||'')+'</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:5px">'+respHtml+'</div>'
+            + otherHtml
+            + '</div>';
+        }).join('')
+      + '</div>';
+  }
+
+  // Contexte : machine · date · opérateur (identique à maintenance)
+  const dtStr = fDSecs(row.date_operation);
+  const contextLine = esc(row.machine||'—') + ' · ' + esc(dtStr) + ' · ' + esc(row.operateur||'—');
+
+  // v2.3.40 : uniquement le badge Dossier, pas de fiche technique
+  const noDos = (row.no_dossier || '').trim();
+  const dossierHtml = noDos
+    ? '<div style="margin:12px 0 6px 0"><span class="ack-di-badge">Dossier '+esc(noDos)+'</span></div>'
+    : '';
+
+  const commentText = (row._alert_comment || '').trim();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'ta-sim ta-pl-center ta-blocking';
+  overlay.id = 'ack-detail-overlay';
+  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:560px">'
+    + '<div class="ta-sim-title">'+esc(row._alert_nom||row.operation||'Alerte')+'</div>'
+    + '<div class="ta-sim-sub">'+contextLine+'</div>'
+    + checklistHtml
+    + dossierHtml
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire</label>'
+    + '<textarea disabled rows="2" placeholder="(aucun commentaire)" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;opacity:.85">'+esc(commentText)+'</textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" class="ta-sim-btn" id="ack-viewer-close">Fermer</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  const close = ()=>{ try{overlay.remove();}catch(_){}
+    document.removeEventListener('keydown', escHandler);
+  };
+  const escHandler = (e)=>{ if(e.key==='Escape') close(); };
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) close(); });
+  const closeBtn = overlay.querySelector('#ack-viewer-close');
+  if(closeBtn) closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', escHandler);
+}
+
 function renderSaisies(){
   const d=S.saisies;
   if(!d) return h('div',{className:'card-empty'},'Chargement...');
@@ -7858,8 +8012,11 @@ function renderSaisies(){
   function addDurations(baseRows){
     const rows = (baseRows||[]).slice();
     // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+    // v2.3.39 : les acks d'alertes n'ont pas de durée (colonne vide dans le tableau)
+    //           et ne rentrent pas dans le calcul de la saisie précédente.
     const byOp = new Map();
     rows.forEach(r=>{
+      if(r.kind === 'alert_ack') return;
       const k = String(r.operateur||'').trim();
       if(!byOp.has(k)) byOp.set(k, []);
       byOp.get(k).push(r);
@@ -7947,7 +8104,9 @@ function renderSaisies(){
   });
  
   // ── Checkbox "tout sélectionner" ─────────────────────────────
-  const allIds=rows.map(r=>r.id);
+  // v2.3.39 : les acks d'alertes sont lecture seule — jamais dans allIds,
+  // jamais dans les actions groupées Annuler/Rétablir.
+  const allIds=rows.filter(r=>r.kind!=='alert_ack').map(r=>r.id);
   const allChecked=allIds.length>0&&allIds.every(id=>S.selectedRows.has(id));
   const chkAll=h('input',{type:'checkbox'});
   chkAll.checked=allChecked;
@@ -7962,14 +8121,18 @@ function renderSaisies(){
   const tbody=h('tbody',null);
  
   rows.forEach(row=>{
+    // v2.3.39 : lignes "alerte validée" — bandeau cyan discret + click = modal détail (lecture seule)
+    const isAlertAck = row.kind === 'alert_ack';
     const fictifRow = isFictifSaisieRow(row);
-    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':''),style:{cursor:readOnly?'default':'pointer'}});
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(isAlertAck?' saisie-row-alert-ack':''),style:{cursor:(isAlertAck||!readOnly)?'pointer':'default'}});
     // PAR — contrastes plus forts + catégorie production en vert
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
 
     let rowBg = '';
-    if (fictifRow) {
+    if (isAlertAck) {
+      rowBg = 'rgba(34,211,238,.10)';           // v2.3.39 : cyan discret pour les alertes validées
+    } else if (fictifRow) {
       rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
     } else if (row.operation_severity === 'critique') {
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
@@ -7984,21 +8147,31 @@ function renderSaisies(){
     }
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
- 
-    if(!readOnly) tr.addEventListener('click',()=>openEditModal(row));
- 
-    // Checkbox ligne
-    const chk=h('input',{type:'checkbox'});
-    chk.checked=S.selectedRows.has(row.id);
-    chk.addEventListener('click',e=>e.stopPropagation());
-    chk.addEventListener('change',()=>{
-      if(chk.checked) S.selectedRows.add(row.id);
-      else S.selectedRows.delete(row.id);
-      render();
-    });
-    const tdChk=h('td',null,chk);
-    tdChk.addEventListener('click',e=>e.stopPropagation());
-    tr.appendChild(tdChk);
+
+    if(isAlertAck){
+      // v2.3.39 : click ouvre le viewer du détail d'alerte (embarqué dans MyProd)
+      tr.addEventListener('click',()=>openAlertAckDetail(row));
+    } else if(!readOnly){
+      tr.addEventListener('click',()=>openEditModal(row));
+    }
+
+    // Checkbox ligne — désactivée pour les alertes (lecture seule)
+    if(isAlertAck){
+      const tdChk=h('td',null); // cellule vide pour aligner les colonnes
+      tr.appendChild(tdChk);
+    } else {
+      const chk=h('input',{type:'checkbox'});
+      chk.checked=S.selectedRows.has(row.id);
+      chk.addEventListener('click',e=>e.stopPropagation());
+      chk.addEventListener('change',()=>{
+        if(chk.checked) S.selectedRows.add(row.id);
+        else S.selectedRows.delete(row.id);
+        render();
+      });
+      const tdChk=h('td',null,chk);
+      tdChk.addEventListener('click',e=>e.stopPropagation());
+      tr.appendChild(tdChk);
+    }
  
     let badge=null;
     if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
@@ -8028,14 +8201,24 @@ function renderSaisies(){
         : row.metrage_total_debut!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_total_debut)+' m (déb.)')
         : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
         : '-'));
-    if(readOnly){
+    // v2.3.39 : commentaire toujours en lecture seule pour les acks d'alertes
+    if(readOnly || isAlertAck){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
     }
-    tr.appendChild(h('td',null,badge));
- 
-    if(!readOnly){
+    // v2.3.39 : badge dédié pour les acks d'alertes
+    if(isAlertAck){
+      const alertBadge=h('span',{className:'badge-alert-ack',title:'Alerte validée par un opérateur — lecture seule',
+        style:{background:'var(--accent-bg)',color:'var(--accent)',border:'1px solid var(--accent)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
+      },'ALERTE');
+      tr.appendChild(h('td',null,alertBadge));
+    } else {
+      tr.appendChild(h('td',null,badge));
+    }
+
+    // v2.3.39 : pas de boutons +/- sur une ligne d'ack d'alerte (lecture seule + id non numérique)
+    if(!readOnly && !isAlertAck){
       const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
       const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
         style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},

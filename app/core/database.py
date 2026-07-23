@@ -7381,6 +7381,30 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 205, "sifa_doc_versions_sections_overrides")
 
+    # Migration 206 : representant sur qualite_sifa_doc_versions.
+    # Nom du représentant SIFA qui signe la Déclaration UE — utilisé dans la
+    # section 8 (Signature). Champ optionnel : si absent, la section 8 affiche
+    # des lignes vierges pour saisie manuscrite.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=206 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_versions)").fetchall()}
+        if "representant" not in cols:
+            conn.execute("ALTER TABLE qualite_sifa_doc_versions ADD COLUMN representant TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 206, "sifa_doc_versions_representant")
+
+    # Migration 207 : default_body_overrides_json sur qualite_sifa_doc_templates.
+    # Permet aux admins Qualité d'éditer les textes par défaut d'un template
+    # (les SEC_*_BODY hardcodés du service PDF). Priorité à la génération :
+    #   1. version.sections_overrides_json.<sec_id>.custom_body (par client)
+    #   2. template.default_body_overrides_json.<sec_id>          (par template)
+    #   3. SEC_*_BODY hardcodé dans le service PDF                (défaut usine)
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=207 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_templates)").fetchall()}
+        if "default_body_overrides_json" not in cols:
+            conn.execute("ALTER TABLE qualite_sifa_doc_templates ADD COLUMN default_body_overrides_json TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 207, "sifa_doc_templates_default_body_overrides")
+
 
 
 

@@ -3012,6 +3012,10 @@ function renderSifaDocDetail(){
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           PDF
         </a>
+        <a class="sd-version-btn" href="/api/qualite/sifa-docs/versions/${v.id}/docx" title="Télécharger la version éditable Word">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+          DOCX
+        </a>
         <button class="sd-version-btn" onclick="duplicateSifaDocVersion(${v.id})" title="Créer une nouvelle version en repartant de celle-ci">Dupliquer</button>
         ${S.isQualiteAdmin?`<button class="sd-version-btn danger" onclick="deleteSifaDocVersion(${v.id})" title="Supprimer">×</button>`:''}
       </div>
@@ -3028,6 +3032,7 @@ function renderSifaDocDetail(){
       </div>
       <div class="sd-detail-head-actions">
         <a class="btn btn-ghost" href="/api/qualite/sifa-docs/templates/${encodeURIComponent(t.code)}/preview" target="_blank" style="padding:10px 14px;font-size:12px">Aperçu template vierge</a>
+        ${S.isQualiteAdmin?`<button class="btn btn-ghost" onclick="openTemplateEditor('${escAttr(t.code)}')" style="padding:10px 14px;font-size:12px" title="Éditer les textes par défaut du template (visible par tous les clients)">Modifier le template</button>`:''}
         <button class="btn btn-accent" onclick="openSifaDocGenerate('${escAttr(t.code)}')" style="padding:10px 16px;font-size:13px">
           + Nouvelle version
         </button>
@@ -3486,6 +3491,144 @@ function _sdSecReset(secId){
     if(Object.keys(ov[secId]).length === 0) delete ov[secId];
   }
   _sdRenderSections();
+}
+
+// ─── Modal admin : éditer les textes par défaut du template ─────────
+// L'admin qualité peut modifier les SEC_*_BODY par défaut au niveau du
+// template. Ces textes s'appliquent à toutes les prochaines versions,
+// sauf si un client override plus prioritaire est défini côté version.
+// Priorité : version.custom_body > template.default_override > défaut usine.
+async function openTemplateEditor(code){
+  if(!S.isQualiteAdmin){showToast('Réservé aux admins qualité','danger'); return;}
+  const wrap = document.getElementById('mroot') || (function(){
+    const d = document.createElement('div'); d.id='mroot'; document.body.appendChild(d); return d;
+  })();
+  try{
+    const r = await api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(code)+'/default-overrides');
+    if(!r.ok){showToast('Erreur chargement template','danger'); return;}
+    const data = await r.json();
+    S._tplEdit = {
+      code: data.template_code,
+      titre: data.template_titre || 'Template',
+      sections: (data.sections || []).filter(s => s.editable),
+      overrides: Object.assign({}, data.overrides || {}),
+    };
+    wrap.innerHTML = `
+    <div class="modal-ov" id="tpl-edit-ov" style="display:flex" onclick="if(event.target===this)closeTemplateEditor()">
+      <div class="modal lg" onclick="event.stopPropagation()" style="max-width:840px">
+        <button type="button" class="modal-close" onclick="closeTemplateEditor()">×</button>
+        <h3 style="margin:0 0 4px;font-size:16px;color:var(--text)">Modifier le template</h3>
+        <div style="margin:0 0 4px;color:var(--text2);font-size:13px;font-weight:600">${escHtml(S._tplEdit.titre)}</div>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.55">
+          Les textes édités ici deviennent le <b>nouveau défaut</b> pour toutes les prochaines versions.
+          Une version peut toujours surcharger localement un texte par client (via « Personnaliser les sections »
+          dans le modal de génération). Laisser vide pour revenir au texte d'usine.
+        </p>
+        <div id="tpl-edit-list" class="sd-sec-list"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <button type="button" class="btn btn-ghost" onclick="closeTemplateEditor()">Annuler</button>
+          <button type="button" class="btn btn-accent" onclick="submitTemplateEditor()">Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+    _renderTemplateEditor();
+  }catch(e){
+    if(e.message!=='unauth') showToast('Erreur réseau','danger');
+  }
+}
+
+function _renderTemplateEditor(){
+  if(!S._tplEdit) return;
+  const list = document.getElementById('tpl-edit-list');
+  if(!list) return;
+  const sections = S._tplEdit.sections || [];
+  const overrides = S._tplEdit.overrides || {};
+  if(!sections.length){
+    list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">Aucune section éditable</div>';
+    return;
+  }
+  list.innerHTML = sections.map(s => {
+    const currentOv = overrides[s.id];
+    const hasOv = !!(currentOv && String(currentOv).trim());
+    const defaultTxt = s.default_body || '';
+    const displayed = hasOv ? currentOv : defaultTxt;
+    return `<div class="sd-sec-item editing" id="tpl-sec-${escAttr(s.id)}">
+      <div class="sd-sec-hd">
+        <span class="sd-sec-title">${escHtml(s.title)}</span>
+        <div class="sd-sec-flags">
+          ${hasOv ? '<span class="sd-sec-flag" style="background:var(--accent-bg);color:var(--accent);border-color:var(--accent)">personnalisé</span>' : '<span class="sd-sec-flag">défaut usine</span>'}
+        </div>
+      </div>
+      <div class="sd-sec-editor" style="display:block">
+        <textarea class="sd-sec-textarea" placeholder="Texte par défaut de la section (HTML basique : &lt;b&gt;, &lt;i&gt; autorisés)" oninput="_tplBody('${escAttr(s.id)}', this.value)">${escHtml(displayed)}</textarea>
+        <div class="sd-sec-actions-row">
+          <button type="button" class="sd-sec-reset" onclick="_tplReset('${escAttr(s.id)}')">Réinitialiser au texte d'usine</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _tplBody(secId, txt){
+  if(!S._tplEdit) return;
+  const sec = (S._tplEdit.sections||[]).find(s => s.id === secId);
+  const defaultTxt = sec ? (sec.default_body || '') : '';
+  if(!txt || !txt.trim() || txt.trim() === (defaultTxt||'').trim()){
+    delete S._tplEdit.overrides[secId];
+  } else {
+    S._tplEdit.overrides[secId] = txt;
+  }
+  // Rafraîchir juste le flag du groupe concerné (sans re-rendre le textarea)
+  const item = document.getElementById('tpl-sec-'+secId);
+  if(item){
+    const flag = item.querySelector('.sd-sec-flags');
+    const hasOv = !!S._tplEdit.overrides[secId];
+    if(flag){
+      flag.innerHTML = hasOv
+        ? '<span class="sd-sec-flag" style="background:var(--accent-bg);color:var(--accent);border-color:var(--accent)">personnalisé</span>'
+        : '<span class="sd-sec-flag">défaut usine</span>';
+    }
+  }
+}
+
+function _tplReset(secId){
+  if(!S._tplEdit) return;
+  delete S._tplEdit.overrides[secId];
+  _renderTemplateEditor();
+}
+
+function closeTemplateEditor(){
+  const ov = document.getElementById('tpl-edit-ov');
+  if(ov) ov.remove();
+  S._tplEdit = null;
+}
+
+async function submitTemplateEditor(){
+  if(!S._tplEdit) return;
+  const overrides = {};
+  Object.keys(S._tplEdit.overrides || {}).forEach(k => {
+    const v = S._tplEdit.overrides[k];
+    if(v && String(v).trim()) overrides[k] = String(v);
+  });
+  try{
+    const r = await api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(S._tplEdit.code)+'/default-overrides', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({overrides})
+    });
+    if(!r.ok){
+      let msg = 'Erreur enregistrement';
+      try{const j = await r.json(); if(j && j.detail) msg = j.detail;}catch(e){}
+      showToast(msg,'danger'); return;
+    }
+    showToast('Template mis à jour','success');
+    const code = S._tplEdit.code;
+    closeTemplateEditor();
+    // Rafraîchir la vue du template pour que le prochain aperçu utilise les nouveaux textes
+    openSifaDoc(code);
+  }catch(e){
+    if(e.message!=='unauth') showToast('Erreur réseau','danger');
+  }
 }
 
 // ─── Modal : renseigner l'origine géographique manquante ────────────

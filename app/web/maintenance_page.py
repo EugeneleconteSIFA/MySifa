@@ -6978,17 +6978,32 @@ function openAckDetail(prefixedId){
       sections = dosSec + bobSec + matSec + etiSec + impSec;
     }
     const dosHeader = '<div class="ack-di-head"><span class="ack-di-badge">Dossier ' + escHtml(noDos) + '</span>' + (dosInfo && dosInfo.client ? '<span class="ack-di-badge-sub">' + escHtml(dosInfo.client) + '</span>' : '') + '</div>';
+    // v2.3.44 : le bloc "Contexte dossier & fiche technique" est maintenant
+    // dans un <details> fermé par défaut. Le badge Dossier reste visible
+    // au-dessus du details pour garder l'info essentielle à l'œil.
     if(sections){
-      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier &amp; fiche technique</label>' + dosHeader + sections + '</div>';
+      dossierHtml = '<div class="ack-di-wrap" style="margin-top:12px">'
+        + dosHeader
+        + '<details style="margin-top:8px">'
+        +   '<summary style="cursor:pointer;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding:6px 0;user-select:none;list-style:revert">Contexte dossier &amp; fiche technique</summary>'
+        +   '<div style="margin-top:8px">' + sections + '</div>'
+        + '</details>'
+        + '</div>';
     } else {
-      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier</label>' + dosHeader + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">Aucune fiche technique associée à ce dossier.</div></div>';
+      dossierHtml = '<div class="ack-di-wrap" style="margin-top:12px">'
+        + dosHeader
+        + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">Aucune fiche technique associée à ce dossier.</div>'
+        + '</div>';
     }
   }
 
   const overlay = document.createElement('div');
   overlay.className = 'ta-sim ta-pl-center ta-blocking';
   overlay.id = 'ack-detail-overlay';
-  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:640px">'
+  // v2.3.44 : hauteur limitée + scroll interne pour ne pas déborder de l'écran
+  // quand la fiche technique est développée. Largeur ramenée à 480 pour rester
+  // cohérent avec le viewer partagé (mysifa_ack_viewer.js).
+  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:480px;width:480px;max-height:85vh;overflow-y:auto">'
     + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
     + '<div class="ta-sim-sub">' + contextLine + '</div>'
     + checklistHtml
@@ -7200,7 +7215,7 @@ function renderCtrl(){
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
         '</button>';
       } else {
-        actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+        actionHtml = '<button type="button" class="ops-row-btn del" onclick="event.stopPropagation();deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
         '</button>';
       }
@@ -7208,8 +7223,11 @@ function renderCtrl(){
       const isNc = _ackHasNonConformite(c);
       const trClass = isNc ? ' class="ctrl-row-nc"' : '';
       const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
+      // v2.3.44 : simple clic (au lieu du double-clic) pour ouvrir le détail
+      // d'une ack. La ligne reste sélectionnable via les cellules qui ont
+      // event.stopPropagation() ailleurs (pill dossier, réponse cliquable).
       const dblAttr = (c._source === 'alert')
-        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le détail"')
+        ? ' onclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Cliquer pour voir le détail"')
         : '';
       return '<tr' + trClass + dblAttr + ncTitle + '>' + cells + '</tr>';
     });
