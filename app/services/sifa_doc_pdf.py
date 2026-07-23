@@ -117,6 +117,7 @@ def _make_styles():
 
 # ─── Header / Footer ──────────────────────────────────────────────────────
 _LOGO_PATH_CACHE = None
+_CACHET_PATH_CACHE = None
 
 
 def _locate_logo():
@@ -134,6 +135,27 @@ def _locate_logo():
             _LOGO_PATH_CACHE = path
             return path
     _LOGO_PATH_CACHE = ""
+    return None
+
+
+def _locate_cachet():
+    """Localise le PNG du cachet SIFA (fichier `static/sifa_cachet.png`).
+    Retourne le chemin absolu si trouvé, None sinon. Le cachet est apposé
+    dans la section 8 (Signature) de la Déclaration UE de Conformité."""
+    global _CACHET_PATH_CACHE
+    if _CACHET_PATH_CACHE is not None:
+        return _CACHET_PATH_CACHE or None
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    candidates = [
+        _os.path.abspath(_os.path.join(here, "..", "..", "static", "sifa_cachet.png")),
+        _os.path.abspath(_os.path.join(here, "..", "static", "sifa_cachet.png")),
+        _os.path.abspath(_os.path.join(here, "..", "..", "app", "static", "sifa_cachet.png")),
+    ]
+    for path in candidates:
+        if _os.path.exists(path):
+            _CACHET_PATH_CACHE = path
+            return path
+    _CACHET_PATH_CACHE = ""
     return None
 
 
@@ -515,30 +537,59 @@ def _sec_8(ctx, body, num=8):
         "de SIFA.", S["body"]))
     out.append(Spacer(1, 10))
     annee = ctx["annee"]
+    representant = (ctx.get("representant") or "").strip()
+    nom_line = (
+        f"Nom : <b>{_esc(representant)}</b>"
+        if representant
+        else "Nom : ______________________________"
+    )
     sig_left = [
         Paragraph("<b>Représentant SIFA</b>", S["signature_hd"]),
-        Paragraph("Nom : ______________________________", S["signature_lbl"]),
+        Paragraph(nom_line, S["signature_lbl"]),
         Paragraph("Fonction : __________________________", S["signature_lbl"]),
         Paragraph(f"Date : ____ / ____ / {annee}", S["signature_lbl"]),
         Paragraph("Signature :", S["signature_lbl"]),
         Spacer(1, 40),
         Paragraph("______________________________________", S["signature_lbl"]),
     ]
-    cachet_style = ParagraphStyle("cachet", parent=S["body_it"],
-                                  alignment=TA_CENTER, textColor=MUTED)
-    cachet_frame = Table(
-        [[Paragraph("<i>[Emplacement réservé au cachet]</i>", cachet_style)]],
-        colWidths=[75 * mm], rowHeights=[55 * mm])
-    cachet_frame.setStyle(TableStyle([
-        ("BOX", (0, 0), (-1, -1), 0.8, BORDER),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 12),
-        ("DASHED", (0, 0), (-1, -1), 2),
-    ]))
+    # Cachet : si le PNG statique est présent, on l'affiche ; sinon on garde
+    # le cadre pointillé « Emplacement réservé au cachet » qui laisse la place
+    # à un tampon manuel après impression.
+    cachet_path = _locate_cachet()
+    cachet_flow = None
+    if cachet_path:
+        try:
+            from reportlab.platypus import Image as _RLImage
+            from reportlab.lib.utils import ImageReader as _RLReader
+            _img = _RLReader(cachet_path)
+            _iw, _ih = _img.getSize()
+            target_w = 55 * mm
+            target_h = target_w * (_ih / _iw) if _iw else 55 * mm
+            # On borne la hauteur pour ne pas déborder du bloc signature
+            if target_h > 55 * mm:
+                target_h = 55 * mm
+                target_w = target_h * (_iw / _ih) if _ih else target_w
+            cachet_flow = _RLImage(cachet_path, width=target_w, height=target_h)
+            cachet_flow.hAlign = "CENTER"
+        except Exception:
+            cachet_flow = None
+    if cachet_flow is None:
+        cachet_style = ParagraphStyle("cachet", parent=S["body_it"],
+                                      alignment=TA_CENTER, textColor=MUTED)
+        cachet_frame = Table(
+            [[Paragraph("<i>[Emplacement réservé au cachet]</i>", cachet_style)]],
+            colWidths=[75 * mm], rowHeights=[55 * mm])
+        cachet_frame.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 0.8, BORDER),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 12),
+            ("DASHED", (0, 0), (-1, -1), 2),
+        ]))
+        cachet_flow = cachet_frame
     sig_right = [
         Paragraph("<b>Cachet SIFA</b>", S["signature_hd"]),
         Spacer(1, 6),
-        cachet_frame,
+        cachet_flow,
     ]
     sig_tbl = Table([[sig_left, sig_right]], colWidths=[95 * mm, 85 * mm])
     sig_tbl.setStyle(TableStyle([
@@ -666,6 +717,12 @@ def _title_block(ctx):
 def _build_flowables(ctx, sections_overrides):
     story = _title_block(ctx)
     ov_all = sections_overrides or {}
+    # Overrides « par défaut du template » édités par les admins qualité.
+    # Priorité de résolution du body d'une section :
+    #   1. version.sections_overrides[sec_id].custom_body  (par client)
+    #   2. template.default_body_overrides[sec_id]         (par template)
+    #   3. SEC_*_BODY hardcodé (via `body or SEC_X_BODY` dans les builders)
+    tpl_ov_all = ctx.get("template_default_overrides") or {}
 
     def _skipped(sec):
         ov = ov_all.get(sec["id"], {})
@@ -713,10 +770,17 @@ def _build_flowables(ctx, sections_overrides):
         if parent_id and parent_id not in main_num_by_id:
             continue
 
-        # custom_body → remplace le body par défaut (uniquement si editable)
+        # Résolution du body : priorité version.custom_body → template default
+        # override → SEC_*_BODY hardcodé (fallback dans le builder).
         body = None
-        if sec["editable"] and ov_all.get(sec["id"], {}).get("custom_body"):
-            body = str(ov_all[sec["id"]]["custom_body"]).strip() or None
+        if sec["editable"]:
+            v_custom = ov_all.get(sec["id"], {}).get("custom_body")
+            if v_custom and str(v_custom).strip():
+                body = str(v_custom).strip()
+            else:
+                t_default = tpl_ov_all.get(sec["id"])
+                if t_default and str(t_default).strip():
+                    body = str(t_default).strip()
 
         # Appeler le builder avec les bons kwargs de numérotation
         if sec.get("is_main"):
@@ -734,7 +798,9 @@ def _build_flowables(ctx, sections_overrides):
 def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
                              ref: str, date_emission_iso: str,
                              validite_mois: int = 12,
-                             sections_overrides: dict = None) -> bytes:
+                             sections_overrides: dict = None,
+                             template_default_overrides: dict = None,
+                             representant: str = None) -> bytes:
     """
     Génère un PDF de Déclaration UE de Conformité.
 
@@ -747,6 +813,12 @@ def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
         sections_overrides: {section_id: {"include": bool, "custom_body": str}}
             - include=False → la section est retirée du PDF (si removable)
             - custom_body → remplace le paragraphe principal (si editable)
+        template_default_overrides: {section_id: str} — textes par défaut
+            édités par les admins qualité au niveau du template. Priorité
+            inférieure aux overrides de version, supérieure aux SEC_*_BODY
+            hardcodés.
+        representant: Nom du représentant SIFA qui signe (section 8). Si
+            fourni, remplace la ligne « Nom : ____ » par le nom en gras.
 
     Returns:
         bytes: contenu binaire du PDF
@@ -764,6 +836,8 @@ def build_declaration_ue_pdf(*, client_nom: str, fournisseurs: list,
         "date_emission_iso": date_emission_iso,
         "validite_mois": validite_mois,
         "annee": annee,
+        "template_default_overrides": template_default_overrides or {},
+        "representant": representant or "",
     }
 
     doc = BaseDocTemplate(

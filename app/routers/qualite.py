@@ -3518,6 +3518,7 @@ class SifaDocVersionCreateBody(BaseModel):
     date_emission: Optional[str] = None
     notes: Optional[str] = None
     sections_overrides: Optional[dict] = None  # {sec_id: {"include": bool, "custom_body": str}}
+    representant: Optional[str] = None  # nom du signataire SIFA (section 8)
 
 
 @router.post("/api/qualite/sifa-docs/versions")
@@ -3578,6 +3579,19 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
 
         # Charger les fournisseurs et générer le PDF
         fours = _fournisseurs_for_pdf(conn, body.fournisseurs_ids)
+        # Overrides « par défaut du template » édités par les admins qualité.
+        # Priorité : version.sections_overrides > template.default_body_overrides
+        # > SEC_*_BODY hardcodés. Voir sifa_doc_pdf._build_flowables.
+        import json as _json_tpl
+        try:
+            tpl_defaults = _json_tpl.loads(
+                template["default_body_overrides_json"] or "{}"
+            )
+            if not isinstance(tpl_defaults, dict):
+                tpl_defaults = {}
+        except Exception:
+            tpl_defaults = {}
+        representant = (body.representant or "").strip() or None
         try:
             from app.services.sifa_doc_pdf import build_template_pdf
             pdf_bytes = build_template_pdf(
@@ -3588,6 +3602,8 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
                 date_emission_iso=date_emission,
                 validite_mois=validite_mois,
                 sections_overrides=body.sections_overrides or None,
+                template_default_overrides=tpl_defaults or None,
+                representant=representant,
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
@@ -3610,14 +3626,14 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
             """INSERT INTO qualite_sifa_doc_versions
                (template_id, audit_id, client_nom, client_slug, fournisseurs_ids_json,
                 ref_document, date_emission, validite_mois, pdf_path, notes,
-                sections_overrides_json,
+                sections_overrides_json, representant,
                 created_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (template["id"], audit_id, client_nom, client_slug,
              _json.dumps(list(body.fournisseurs_ids)),
              ref, date_emission, validite_mois, pdf_path,
              (body.notes or "").strip() or None,
-             sec_ov_json,
+             sec_ov_json, representant,
              user["id"], now, now),
         )
         conn.commit()
@@ -3652,8 +3668,19 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
             sec_ov = _json.loads(v["sections_overrides_json"] or "{}")
         except Exception:
             sec_ov = {}
+        try:
+            tpl_defaults = _json.loads(template["default_body_overrides_json"] or "{}")
+            if not isinstance(tpl_defaults, dict):
+                tpl_defaults = {}
+        except Exception:
+            tpl_defaults = {}
         fours = _fournisseurs_for_pdf(conn, f_ids)
         try:
+            representant_val = None
+            try:
+                representant_val = v["representant"]
+            except Exception:
+                representant_val = None
             from app.services.sifa_doc_pdf import build_template_pdf
             pdf_bytes = build_template_pdf(
                 template["code"],
@@ -3663,6 +3690,8 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
                 date_emission_iso=v["date_emission"],
                 validite_mois=int(v["validite_mois"] or 12),
                 sections_overrides=sec_ov or None,
+                template_default_overrides=tpl_defaults or None,
+                representant=(representant_val or None),
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Erreur génération : {e}")
@@ -3710,6 +3739,17 @@ def sifa_docs_preview_template(code: str, request: Request):
         template = _fetch_template(conn, code)
         if not template:
             raise HTTPException(status_code=404, detail="Template introuvable")
+    # Overrides par défaut du template pour que l'aperçu reflète
+    # les modifs éditées par l'admin qualité.
+    import json as _json_preview
+    try:
+        tpl_defaults = _json_preview.loads(
+            template["default_body_overrides_json"] or "{}"
+        )
+        if not isinstance(tpl_defaults, dict):
+            tpl_defaults = {}
+    except Exception:
+        tpl_defaults = {}
     try:
         from app.services.sifa_doc_pdf import build_template_pdf
         pdf_bytes = build_template_pdf(
@@ -3722,12 +3762,159 @@ def sifa_docs_preview_template(code: str, request: Request):
             ref=f"{template['ref_prefix']}-APERCU",
             date_emission_iso=_today(),
             validite_mois=int(template["validite_mois"] or 12),
+            template_default_overrides=tpl_defaults or None,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur preview : {e}")
     from fastapi.responses import Response
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": "inline; filename=preview.pdf"})
+
+
+# ─── Overrides « par défaut » du template (édition par admin qualité) ──
+@router.get("/api/qualite/sifa-docs/templates/{code}/default-overrides")
+def sifa_docs_get_default_overrides(code: str, request: Request):
+    """Renvoie la liste des sections + les overrides par défaut enregistrés
+    sur le template. Utilisé par le modal « Modifier le template »."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        template = _fetch_template(conn, code)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+    import json as _json_do
+    try:
+        overrides = _json_do.loads(template["default_body_overrides_json"] or "{}")
+        if not isinstance(overrides, dict):
+            overrides = {}
+    except Exception:
+        overrides = {}
+    try:
+        from app.services.sifa_doc_pdf import get_template_sections
+        sections = get_template_sections(template["code"])
+    except Exception:
+        sections = []
+    return {
+        "template_code": template["code"],
+        "template_titre": template["titre"],
+        "sections": sections,   # inclut default_body (SEC_*_BODY hardcodé)
+        "overrides": overrides, # {sec_id: str} édité par l'admin
+    }
+
+
+class SifaDocDefaultOverridesBody(BaseModel):
+    overrides: dict  # {sec_id: str} — vide/None supprime l'override
+
+
+@router.put("/api/qualite/sifa-docs/templates/{code}/default-overrides")
+def sifa_docs_put_default_overrides(code: str, body: SifaDocDefaultOverridesBody,
+                                    request: Request):
+    """Enregistre les overrides par défaut sur le template.
+    Réservé aux admins qualité (ROLES_QUALITE, hors commercial)."""
+    _require_qualite_access(request)
+    with get_db() as conn:
+        template = _fetch_template(conn, code)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+        # Filtre : ne garder que les sec_id valides et editable=True
+        try:
+            from app.services.sifa_doc_pdf import get_template_sections
+            meta = get_template_sections(template["code"])
+        except Exception:
+            meta = []
+        editable_ids = {s["id"] for s in meta if s.get("editable")}
+        clean = {}
+        for sid, txt in (body.overrides or {}).items():
+            if sid not in editable_ids:
+                continue
+            if txt is None:
+                continue
+            s = str(txt).strip()
+            if not s:
+                continue
+            clean[sid] = s
+        import json as _json_up
+        conn.execute(
+            "UPDATE qualite_sifa_doc_templates SET default_body_overrides_json=? "
+            "WHERE id=?",
+            (_json_up.dumps(clean, ensure_ascii=False), template["id"]),
+        )
+        conn.commit()
+    return {"ok": True, "count": len(clean)}
+
+
+# ─── Export DOCX (miroir éditable du PDF) ────────────────────────────
+@router.get("/api/qualite/sifa-docs/versions/{vid}/docx")
+def sifa_docs_download_version_docx(vid: int, request: Request):
+    """Génère à la volée un .docx éditable pour la version demandée.
+    Utilise les mêmes overrides que le PDF (priorité version > template > défaut)."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        v = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_versions "
+            "WHERE id=? AND deleted_at IS NULL",
+            (vid,),
+        ).fetchone()
+        if not v:
+            raise HTTPException(status_code=404, detail="Version introuvable")
+        template = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_templates WHERE id=?",
+            (v["template_id"],),
+        ).fetchone()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+
+        import json as _json_docx
+        try:
+            f_ids = _json_docx.loads(v["fournisseurs_ids_json"] or "[]")
+        except Exception:
+            f_ids = []
+        try:
+            sec_ov = _json_docx.loads(v["sections_overrides_json"] or "{}")
+        except Exception:
+            sec_ov = {}
+        try:
+            tpl_defaults = _json_docx.loads(
+                template["default_body_overrides_json"] or "{}"
+            )
+            if not isinstance(tpl_defaults, dict):
+                tpl_defaults = {}
+        except Exception:
+            tpl_defaults = {}
+        fours = _fournisseurs_for_pdf(conn, f_ids)
+        representant_val = None
+        try:
+            representant_val = v["representant"]
+        except Exception:
+            representant_val = None
+
+    try:
+        from app.services.sifa_doc_docx import build_template_docx
+        docx_bytes = build_template_docx(
+            template["code"],
+            client_nom=v["client_nom"],
+            fournisseurs=fours,
+            ref=v["ref_document"],
+            date_emission_iso=v["date_emission"],
+            validite_mois=int(v["validite_mois"] or 12),
+            sections_overrides=sec_ov or None,
+            template_default_overrides=tpl_defaults or None,
+            representant=(representant_val or None),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur génération DOCX : {e}")
+
+    from fastapi.responses import Response
+    safe_ref = re.sub(r"[^A-Za-z0-9._-]+", "-", v["ref_document"] or "declaration")
+    return Response(
+        content=docx_bytes,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+        headers={
+            "Content-Disposition": f"attachment; filename={safe_ref}.docx",
+        },
+    )
 
 
 # ─── Supprimer (soft delete) une version ─────────────────────────────
