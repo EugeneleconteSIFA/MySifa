@@ -7953,6 +7953,7 @@ function _alertDefaults(existing) {
     checklist: cl,
     placement: (p && ['top-right','center'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
     size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
+    block_production: !!(p && p.block_production),  // v2.3.22 : persistance à la ré-ouverture
   };
 }
 
@@ -8080,6 +8081,13 @@ function _renderAlertFormFields(params, opts) {
     +         '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
     +       '</select>'
     +     '</div>'
+    +   '</div>'
+    +   '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-top:14px">'
+    +     '<div>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+    +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
+    +     '</div>'
+    +     '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
     +   '</div>'
     + '</div>'
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
@@ -8442,6 +8450,8 @@ function _afReadParams() {
     // v2.3.21 : placement + size par alerte (dans maintenance_page.py aussi)
     placement: (document.getElementById('af-placement')?.value || 'top-right'),
     size: (document.getElementById('af-size')?.value || 'medium'),
+    // v2.3.22 : block_production par alerte — sinon la valeur en base est écrasée à False à chaque save via /maintenance
+    block_production: !!document.getElementById('af-block-production')?.checked,
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
