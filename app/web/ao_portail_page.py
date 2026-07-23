@@ -218,13 +218,28 @@ label.lbl{{
 .btn:hover{{filter:brightness(1.05)}}
 .btn:disabled{{opacity:.5;cursor:not-allowed;filter:none}}
 .btn-ghost{{
-  background:var(--card);border:1px solid var(--border);color:var(--text);
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
   font-weight:600;font-size:13px;padding:8px 14px;text-decoration:none;
   display:inline-flex;align-items:center;gap:6px;
 }}
-.btn-ghost:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent);filter:none}}
+.btn-ghost:hover{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);filter:none}}
 body.light .btn-ghost{{color:var(--text)}}
 body.light .btn-ghost:hover{{color:var(--accent)}}
+.pj-item .btn-ghost{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.pj-item .btn-ghost:hover{{background:var(--accent);color:var(--card);border-color:var(--accent)}}
+/* File input aux couleurs du thème */
+input[type=file]{{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:0;font-family:inherit;color:var(--text2);cursor:pointer;
+  font-size:13px;overflow:hidden;max-width:100%;
+}}
+input[type=file]::file-selector-button{{
+  background:var(--accent-bg);color:var(--accent);border:0;
+  border-right:1px solid var(--border);padding:10px 16px;font-weight:600;
+  font-size:13px;font-family:inherit;cursor:pointer;margin-right:12px;
+  transition:background .15s,color .15s;
+}}
+input[type=file]::file-selector-button:hover{{background:var(--accent);color:var(--card)}}
 .section-title{{
   font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
   letter-spacing:.5px;margin:0 0 12px;
@@ -964,13 +979,28 @@ body{{
 .btn:hover{{filter:brightness(1.05)}}
 body.light .btn{{color:#fff}}
 .btn-ghost{{
-  background:var(--card);border:1px solid var(--border);color:var(--text);
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
   font-weight:600;font-size:13px;padding:8px 14px;text-decoration:none;
   display:inline-flex;align-items:center;gap:6px;
 }}
-.btn-ghost:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent);filter:none}}
+.btn-ghost:hover{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);filter:none}}
 body.light .btn-ghost{{color:var(--text)}}
 body.light .btn-ghost:hover{{color:var(--accent)}}
+.pj-item .btn-ghost{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.pj-item .btn-ghost:hover{{background:var(--accent);color:var(--card);border-color:var(--accent)}}
+/* File input aux couleurs du thème */
+input[type=file]{{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:0;font-family:inherit;color:var(--text2);cursor:pointer;
+  font-size:13px;overflow:hidden;max-width:100%;
+}}
+input[type=file]::file-selector-button{{
+  background:var(--accent-bg);color:var(--accent);border:0;
+  border-right:1px solid var(--border);padding:10px 16px;font-weight:600;
+  font-size:13px;font-family:inherit;cursor:pointer;margin-right:12px;
+  transition:background .15s,color .15s;
+}}
+input[type=file]::file-selector-button:hover{{background:var(--accent);color:var(--card)}}
 .btn-sm{{font-size:13px;padding:8px 14px}}
 .empty{{
   font-size:13px;color:var(--muted);padding:24px;text-align:center;

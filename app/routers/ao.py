@@ -2696,11 +2696,15 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
 
 @router.get("/{ao_id}/non-lus")
 def non_lus(request: Request, ao_id: int):
-    """Retourne le nombre de messages fournisseur non lus, par fournisseur."""
+    """Retourne pour chaque fournisseur de l'AO le nombre de messages non lus
+    et le nombre total de messages. Format : {fourni_id: {"unread": n, "total": m}}
+    Rétrocompatible : pour l'ancien front qui lit `S.nonLus[id]` comme un int,
+    on renvoie ce format enrichi avec les deux vues au niveau top-level.
+    """
     _require_ao(request)
     with get_db() as conn:
         _get_ao_or_404(conn, ao_id)
-        rows = conn.execute(
+        unread_rows = conn.execute(
             """SELECT ao_fournisseur_id, COUNT(*) AS n
                FROM ao_messages
                WHERE ao_fournisseur_id IN (
@@ -2709,4 +2713,21 @@ def non_lus(request: Request, ao_id: int):
                GROUP BY ao_fournisseur_id""",
             (ao_id,),
         ).fetchall()
-    return {str(r["ao_fournisseur_id"]): int(r["n"]) for r in rows}
+        total_rows = conn.execute(
+            """SELECT ao_fournisseur_id, COUNT(*) AS n
+               FROM ao_messages
+               WHERE ao_fournisseur_id IN (
+                 SELECT id FROM ao_fournisseurs WHERE ao_id=?
+               )
+               GROUP BY ao_fournisseur_id""",
+            (ao_id,),
+        ).fetchall()
+    unread = {str(r["ao_fournisseur_id"]): int(r["n"]) for r in unread_rows}
+    totals = {str(r["ao_fournisseur_id"]): int(r["n"]) for r in total_rows}
+    return {
+        # Rétrocompatibilité : premier niveau = compte non lus par fournisseur
+        **unread,
+        # Nouvelles clés dédiées
+        "_unread": unread,
+        "_totals": totals,
+    }
