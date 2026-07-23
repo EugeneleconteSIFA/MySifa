@@ -2166,6 +2166,28 @@ ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
 _ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login", "after_calage"}
+
+# v2.3.2 : codes considérés comme "calage" pour l'alerte after_calage.
+# Liste synchronisée avec la sidebar CALAGE de /prod. On préfère matcher
+# par code exact (operation_code IN ...) plutôt que par operation_category
+# car les codes 82/83/84/85/91 n'ont pas de category dans operations.json.
+_ALERT_CALAGE_CODES = frozenset({
+    "02",  # Calage
+    "10",  # Calage Errepi
+    "11",  # Calage Bunsch
+    "12",  # Changement de couleur
+    "58",  # Changement bobines
+    "59",  # Changement Contre-Partie
+    "60",  # Changement Plaque
+    "74",  # Changement Magnétique
+    "75",  # Changement Cliché
+    "82",  # Changement couteaux bande
+    "83",  # Changement couteaux rive
+    "84",  # Changement contre couteaux bande
+    "85",  # Changement contre couteaux rive
+    "91",  # Changement Anilox
+})
+_ALERT_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_CALAGE_CODES)) + ")"
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
@@ -2363,6 +2385,16 @@ def _validate_alert_params(params: dict) -> dict:
     # la modale s'affiche avec backdrop bloquant et le backend refuse toute
     # saisie de production tant que l'alerte n'est pas ack.
     out["block_production"] = bool(params.get("block_production", False))
+
+    # v2.3.12 : placement et size par alerte (au lieu du singleton global).
+    _valid_placements = {"top-right", "center"}  # v2.3.17 : bottom-right retiré
+    _valid_sizes = {"small", "medium", "large"}
+    _p = str(params.get("placement", "") or "").strip()
+    if _p in _valid_placements:
+        out["placement"] = _p
+    _s = str(params.get("size", "") or "").strip()
+    if _s in _valid_sizes:
+        out["size"] = _s
 
     # v164+ : bouton "Fermer l'alerte" configurable. Permet à l'opérateur
     # d'esquiver une alerte non pertinente sans polluer l'historique. Aucune
@@ -3221,22 +3253,24 @@ def maintenance_doc_delete(doc_id: int, request: Request):
 import json as _json_alerts
 
 
-def _check_blocking_alert_due(conn, user, machine: str) -> bool:
-    """v2.2.88 — Retourne True si au moins une alerte bloquante (block_production=True)
-    est actuellement due pour cette machine. Utilisé par /api/fabrication/saisie
-    comme garde-fou pour refuser une saisie tant qu'une alerte non-ack existe.
+def _check_blocking_alert_due(conn, user, machine: str) -> list:
+    """v2.3.5 — Retourne la LISTE des alertes bloquantes (block_production=True)
+    actuellement dues pour cette machine (peut être vide). Utilisé par
+    /api/fabrication/saisie comme garde-fou ET pour inclure directement l'alerte
+    dans la réponse HTTP 423 → le front n'a plus besoin d'un endpoint séparé.
 
-    Réutilise la même logique de détection que /api/maintenance/alerts/active
-    en la simplifiant : on veut juste savoir s'il existe UNE alerte due bloquante.
+    Format des items identique à /alerts/active :
+        {id, nom, params, linked_maint_code, no_dossier}
     """
+    result = []
     if not machine:
-        return False
+        return result
     try:
         rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
+            "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
         ).fetchall()
     except Exception:
-        return False
+        return result
     now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
     # Pas de gap : le garde-fou doit être strict, pas soumis à min_gap.
     user_role = user.get("role") if user else ""
@@ -3250,16 +3284,27 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
         if not bool(params.get("block_production", False)):
             continue
         target = params.get("target") or {}
-        if not operator_should_see_alert(user_role, user_machine, target):
-            # Superadmin voit tout ; sinon on skippe si machine hors cible
-            if user_role != ROLE_SUPERADMIN:
-                continue
+        # v2.3.4 : filtre machine strict (aligné avec /blocking-for-machine).
+        # Le superadmin ne bypass plus — il faut que la machine soit dans la
+        # cible sinon l'alerte n'a pas à se déclencher pour lui non plus.
+        machines_target = target.get("machines")
+        if not isinstance(machines_target, list) or not machines_target:
+            legacy = target.get("machine")
+            machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+        if "*" not in machines_target and user_machine not in machines_target:
+            continue
         trig = params.get("trigger") or {}
         ttype = trig.get("type")
         if ttype == "periodic":
             try:
                 if _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris):
-                    return True
+                    result.append({
+                        "id": int(r["id"]),
+                        "nom": r["nom"] if "nom" in r.keys() else "",
+                        "params": params,
+                        "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
+                        "no_dossier": "",
+                    })
             except Exception:
                 continue
         elif ttype == "event":
@@ -3269,7 +3314,7 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
                 _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                 _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                 _last_row = conn.execute(
-                    """SELECT no_dossier, operation_category, date_operation
+                    """SELECT no_dossier, operation_code, operation_category, date_operation
                        FROM production_data
                        WHERE machine=? AND date_operation >= ?
                        ORDER BY date_operation DESC LIMIT 1""",
@@ -3277,7 +3322,8 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
                 ).fetchone()
                 if not _last_row:
                     continue
-                if (_last_row["operation_category"] or "").lower() != "calage":
+                # v2.3.2 : match par code exact (voir _ALERT_CALAGE_CODES)
+                if str(_last_row["operation_code"] or "") not in _ALERT_CALAGE_CODES:
                     continue
                 if not _last_row["no_dossier"] or not str(_last_row["no_dossier"]).strip():
                     continue
@@ -3299,10 +3345,127 @@ def _check_blocking_alert_due(conn, user, machine: str) -> bool:
                 _last_89_at = _last_89["m"] if _last_89 else None
                 if _last_89_at and _last_row["date_operation"] <= _last_89_at:
                     continue
-                return True
+                result.append({
+                    "id": int(r["id"]),
+                    "nom": r["nom"] if "nom" in r.keys() else "",
+                    "params": params,
+                    "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
+                    "no_dossier": _dos,
+                })
             # Autres events (dossier_start / dossier_end) : pas implémentés
             # comme bloquants pour l'instant. Reste ouvert pour extension.
-    return False
+    return result
+
+
+@router.get("/api/maintenance/alerts/blocking-for-machine")
+def maintenance_alerts_blocking_for_machine(request: Request, machine: str = ""):
+    """v2.2.89 — Retourne la liste des alertes bloquantes actuellement dues
+    pour une machine donnée. Appelé par le front après réception d'un HTTP 423
+    sur /api/fabrication/saisie, pour afficher les alertes à l'écran.
+
+    Format identique à /alerts/active pour que le runtime les affiche via
+    la même fonction _renderAlert.
+    """
+    try:
+        return _blocking_for_machine_impl(request, machine)
+    except Exception as _err:
+        import traceback
+        print(f"[blocking-for-machine] FATAL: {_err}", flush=True)
+        traceback.print_exc()
+        # v2.3.3 : ne jamais renvoyer 500 — retourner liste vide pour ne pas
+        # casser le flow front. L'erreur est loggée pour debug.
+        return {"items": [], "_error": str(_err)}
+
+
+def _blocking_for_machine_impl(request: Request, machine: str = ""):
+    user = get_current_user(request)
+    machine = (machine or "").strip()
+    if not machine:
+        # Fallback : machine liée à l'user
+        with get_db() as conn:
+            machine = _machine_name_from_user(conn, user) or ""
+    items = []
+    if not machine:
+        return {"items": items}
+    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
+            ).fetchall()
+        except Exception:
+            return {"items": items}
+        user_role = user.get("role") if user else ""
+        for r in rows:
+            try:
+                params = _json_alerts.loads(r["params"] or "{}")
+            except (ValueError, TypeError):
+                continue
+            if not bool(params.get("block_production", False)):
+                continue
+            target = params.get("target") or {}
+            # v2.2.90 : PAS de filtre operator_should_see_alert ici. Si l'user
+            # est bloqué de saisir 03/88 côté serveur (423), il DOIT voir
+            # l'alerte peu importe son rôle métier. Le filtre reste dans le
+            # polling classique /alerts/active. On check seulement que la
+            # machine cible correspond.
+            machines_target = target.get("machines")
+            if not isinstance(machines_target, list) or not machines_target:
+                legacy = target.get("machine")
+                machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
+            if "*" not in machines_target and machine not in machines_target:
+                continue
+            trig = params.get("trigger") or {}
+            ttype = trig.get("type")
+            due = False
+            trigger_no_dossier = ""
+            if ttype == "periodic":
+                try:
+                    due = _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris)
+                except Exception:
+                    due = False
+            elif ttype == "event":
+                event = str(trig.get("event") or "").strip()
+                if event == "after_calage":
+                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
+                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                    _last_row = conn.execute(
+                        """SELECT no_dossier, operation_code, operation_category, date_operation
+                           FROM production_data
+                           WHERE machine=? AND date_operation >= ?
+                           ORDER BY date_operation DESC LIMIT 1""",
+                        (machine, _window),
+                    ).fetchone()
+                    if (_last_row
+                        and str(_last_row["operation_code"] or "") in _ALERT_CALAGE_CODES
+                        and _last_row["no_dossier"]
+                        and str(_last_row["no_dossier"]).strip()
+                        and _last_row["date_operation"] >= _calage_window):
+                        _dos = str(_last_row["no_dossier"]).strip()
+                        _ack_check = conn.execute(
+                            """SELECT 1 FROM maintenance_alert_acks
+                               WHERE alert_id=? AND no_dossier=? LIMIT 1""",
+                            (int(r["id"]), _dos),
+                        ).fetchone()
+                        if not _ack_check:
+                            _last_89 = conn.execute(
+                                """SELECT MAX(date_operation) AS m FROM production_data
+                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
+                                (_dos, machine),
+                            ).fetchone()
+                            _last_89_at = _last_89["m"] if _last_89 else None
+                            if not _last_89_at or _last_row["date_operation"] > _last_89_at:
+                                due = True
+                                trigger_no_dossier = _dos
+            if due:
+                items.append({
+                    "id": int(r["id"]),
+                    "nom": r["nom"] or "",
+                    "params": params,
+                    "linked_maint_code": r["linked_maint_code"] or "",
+                    "no_dossier": trigger_no_dossier,
+                })
+    return {"items": items}
 
 
 def _require_alerts_admin(request: Request) -> dict:
@@ -3910,6 +4073,16 @@ def maintenance_alerts_active(request: Request):
             # Filtrage cible : superadmin voit tout ; sinon fabrication uniquement
             if not operator_should_see_alert(user_role, user_machine or "", target):
                 continue
+            # v2.3.10 : filtre machine strict — même pour superadmin, l'alerte
+            # ne doit se déclencher que si la machine actuelle est ciblée.
+            # Résout le bug : alerte Errepi (cible Cohésio 1) qui apparaissait
+            # sur Cohésio 2 pour un superadmin.
+            _machines_target = target.get("machines")
+            if not isinstance(_machines_target, list) or not _machines_target:
+                _legacy_m = target.get("machine")
+                _machines_target = [_legacy_m] if isinstance(_legacy_m, str) and _legacy_m else ["*"]
+            if "*" not in _machines_target and user_machine and user_machine not in _machines_target:
+                continue
             trig = params.get("trigger") or {}
             ttype = trig.get("type")
             should_show = False
@@ -3967,11 +4140,13 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                # v2.2.88 : cas after_calage — nouvelle logique. L'alerte doit
-                # s'afficher AVANT la saisie de production, donc quand la dernière
-                # saisie machine est un code CALAGE (pas un prod). Verrou dossier
-                # via ack. Contraintes conservées : fenêtre 4h, post-89.
-                if event == "after_calage" and effective_machine:
+                # v2.2.89 : after_calage ne remonte PLUS via le polling. L'alerte
+                # ne s'affiche qu'au moment où l'opérateur tente une saisie 03/88
+                # et que le garde-fou 423 est déclenché — c'est le front qui
+                # appelle alors /alerts/blocking-for-machine pour l'afficher.
+                if event == "after_calage":
+                    continue
+                if event == "after_calage_UNUSED" and effective_machine:
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                     _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                     _last_row = conn.execute(

@@ -2503,7 +2503,7 @@ def ressources_list_fournisseurs(request: Request):
     with get_db() as conn:
         # Charger fournisseurs + certifs en 2 requetes puis agreger
         fours = [dict(r) for r in conn.execute(
-            """SELECT id, nom, licence, certificat, groupe, branche
+            """SELECT id, nom, licence, certificat, groupe, branche, pays_origine
                FROM fournisseurs_fsc
                ORDER BY groupe COLLATE NOCASE ASC, nom COLLATE NOCASE ASC"""
         ).fetchall()]
@@ -2547,6 +2547,7 @@ def ressources_list_fournisseurs(request: Request):
             groupes_map[g]["branches"].append({
                 "id": f["id"], "nom": f["nom"], "branche": f.get("branche"),
                 "licence": f.get("licence"), "certificat": f.get("certificat"),
+                "pays_origine": f.get("pays_origine"),
                 "cert_stats": f_stats,
             })
             for k in ("total", "valide", "soon", "exp", "nod"):
@@ -2555,6 +2556,7 @@ def ressources_list_fournisseurs(request: Request):
             fournisseurs_indep.append({
                 "id": f["id"], "nom": f["nom"],
                 "licence": f.get("licence"), "certificat": f.get("certificat"),
+                "pays_origine": f.get("pays_origine"),
                 "cert_stats": f_stats,
             })
 
@@ -2577,6 +2579,7 @@ class FournisseurPatchBody(BaseModel):
     has_fsc: Optional[bool] = None
     groupe: Optional[str] = None
     branche: Optional[str] = None
+    pays_origine: Optional[str] = None
 
 
 @router.patch("/api/qualite/ressources/fournisseurs/{four_id}")
@@ -2609,6 +2612,9 @@ def ressources_patch_fournisseur(four_id: int, body: FournisseurPatchBody, reque
         if "branche" in d:
             v = (d["branche"] or "").strip() or None
             sets.append("branche=?"); vals.append(v)
+        if "pays_origine" in d:
+            v = (d["pays_origine"] or "").strip() or None
+            sets.append("pays_origine=?"); vals.append(v)
         if sets:
             vals.append(four_id)
             try:
@@ -2688,7 +2694,7 @@ def ressources_get_fournisseur(four_id: int, request: Request):
     _require_qualite_view(request)
     with get_db() as conn:
         four = conn.execute(
-            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc WHERE id=?",
+            "SELECT id, nom, licence, certificat, groupe, branche, pays_origine FROM fournisseurs_fsc WHERE id=?",
             (four_id,),
         ).fetchone()
         if not four:
@@ -3298,3 +3304,510 @@ def audit_matrice_pickers(audit_id: int, request: Request):
         "fiches": [dict(r) for r in fiches],
         "selection": {"fournisseurs": sel_four, "fiches": sel_fiche},
     }
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+# SIFA — Certifications & Documents officiels (Déclarations UE, etc.)
+# ══════════════════════════════════════════════════════════════════════
+#
+# Structure :
+# - qualite_sifa_doc_templates : catalogue des templates disponibles
+#   (aujourd'hui : declaration_ue). Un template = code + titre + validité.
+# - qualite_sifa_doc_versions : une ligne par version générée pour un client.
+#   Rattachée à un audit_dossiers si le client a un audit ouvert, sinon nom libre.
+# - PDF stocké sur disque dans QUALITE_UPLOAD_DIR/sifa-docs/, chemin dans pdf_path.
+# - Génération via app.services.sifa_doc_pdf.build_template_pdf(code, ...).
+# - Numéro auto par client : ref_prefix + slug(client) + séquence 001, 002, ...
+#
+# Rôles :
+# - Lecture (list templates, list versions, télécharger un PDF) : ROLES_QUALITE_VIEW
+#   → superadmin, direction, administration, commercial (les commerciaux envoient au client)
+# - Génération d'une version : ROLES_QUALITE_VIEW aussi (commercial autorisé — c'est leur job)
+# - Suppression / modification pays_origine fournisseur : _require_qualite_access (admin qualité)
+
+SIFA_DOCS_DIR = os.path.join(QUALITE_UPLOAD_DIR, "sifa-docs")
+os.makedirs(SIFA_DOCS_DIR, exist_ok=True)
+
+
+def _slug(txt: str) -> str:
+    """Slug simple pour intégrer dans une référence de document.
+    « Hermès Paris » → « HERMES-PARIS »."""
+    if not txt:
+        return "CLIENT"
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(txt))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r"[^A-Za-z0-9]+", "-", s).strip("-").upper()
+    return s[:40] or "CLIENT"
+
+
+def _next_ref_for_client(conn, template, client_slug: str) -> str:
+    """Calcule la prochaine référence pour ce client : SIFA-DoC-HERMES-001, 002, …"""
+    prefix = (template["ref_prefix"] or "SIFA-DoC").rstrip("-")
+    base = f"{prefix}-{client_slug}-"
+    rows = conn.execute(
+        "SELECT ref_document FROM qualite_sifa_doc_versions "
+        "WHERE template_id=? AND client_slug=? AND deleted_at IS NULL",
+        (template["id"], client_slug),
+    ).fetchall()
+    max_n = 0
+    for r in rows:
+        ref = (r["ref_document"] or "").upper()
+        if ref.startswith(base.upper()):
+            tail = ref[len(base):]
+            try:
+                n = int(re.match(r"^(\d+)", tail).group(1))
+                if n > max_n:
+                    max_n = n
+            except Exception:
+                pass
+    return f"{base}{max_n + 1:03d}"
+
+
+def _fetch_template(conn, code_or_id):
+    """Récupère un template par code ou id."""
+    if isinstance(code_or_id, int) or (isinstance(code_or_id, str) and code_or_id.isdigit()):
+        row = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_templates WHERE id=?",
+            (int(code_or_id),),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_templates WHERE code=?",
+            (code_or_id,),
+        ).fetchone()
+    return row
+
+
+def _fournisseurs_for_pdf(conn, ids: list) -> list:
+    """Charge nom + pays_origine + certificat pour la liste d'ids."""
+    if not ids:
+        return []
+    qm = ",".join(["?"] * len(ids))
+    rows = conn.execute(
+        f"SELECT id, nom, pays_origine, licence, certificat "
+        f"FROM fournisseurs_fsc WHERE id IN ({qm}) "
+        f"ORDER BY nom COLLATE NOCASE ASC",
+        ids,
+    ).fetchall()
+    # Respecter l'ordre demandé si possible
+    by_id = {r["id"]: dict(r) for r in rows}
+    ordered = [by_id[i] for i in ids if i in by_id]
+    return ordered
+
+
+# ─── Liste des templates disponibles ─────────────────────────────────
+@router.get("/api/qualite/sifa-docs/templates")
+def sifa_docs_list_templates(request: Request):
+    """Renvoie tous les templates actifs + le nombre de versions générées."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT t.*, (
+                   SELECT COUNT(*) FROM qualite_sifa_doc_versions v
+                   WHERE v.template_id = t.id AND v.deleted_at IS NULL
+               ) AS versions_count
+               FROM qualite_sifa_doc_templates t
+               WHERE t.actif = 1
+               ORDER BY t.titre COLLATE NOCASE ASC"""
+        ).fetchall()
+    return {"templates": [dict(r) for r in rows]}
+
+
+# ─── Détail d'un template ────────────────────────────────────────────
+@router.get("/api/qualite/sifa-docs/templates/{code}")
+def sifa_docs_get_template(code: str, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        row = _fetch_template(conn, code)
+        if not row:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+        # Charger les versions rattachées
+        versions = conn.execute(
+            """SELECT v.*, u.nom AS created_by_nom, a.numero AS audit_numero
+               FROM qualite_sifa_doc_versions v
+               LEFT JOIN users u ON u.id = v.created_by
+               LEFT JOIN audit_dossiers a ON a.id = v.audit_id
+               WHERE v.template_id = ? AND v.deleted_at IS NULL
+               ORDER BY v.created_at DESC""",
+            (row["id"],),
+        ).fetchall()
+        # Décoder fournisseurs_ids_json pour chaque version + charger noms
+        vs = []
+        for v in versions:
+            d = dict(v)
+            try:
+                import json
+                d["fournisseurs_ids"] = json.loads(v["fournisseurs_ids_json"] or "[]")
+            except Exception:
+                d["fournisseurs_ids"] = []
+            try:
+                import json
+                d["sections_overrides"] = json.loads(v["sections_overrides_json"] or "{}")
+            except Exception:
+                d["sections_overrides"] = {}
+            if d["fournisseurs_ids"]:
+                fours = _fournisseurs_for_pdf(conn, d["fournisseurs_ids"])
+                d["fournisseurs"] = [
+                    {"id": f["id"], "nom": f["nom"], "pays_origine": f["pays_origine"]}
+                    for f in fours
+                ]
+            else:
+                d["fournisseurs"] = []
+            vs.append(d)
+    return {"template": dict(row), "versions": vs}
+
+
+# ─── Pickers : audits + fournisseurs disponibles ─────────────────────
+@router.get("/api/qualite/sifa-docs/pickers")
+def sifa_docs_pickers(request: Request):
+    """Renvoie ce qu'il faut au modal de génération :
+       - audits ouverts + fournisseurs de chaque audit (pré-cochés)
+       - liste complète des fournisseurs (avec pays_origine)"""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        audits = [dict(r) for r in conn.execute(
+            """SELECT a.id, a.numero, a.client_nom, a.date_audit, a.statut, a.client_id
+               FROM audit_dossiers a
+               WHERE a.statut = 'ouvert'
+               ORDER BY a.date_audit DESC, a.id DESC"""
+        ).fetchall()]
+        # Charger les fournisseurs de chaque audit
+        af_rows = conn.execute(
+            "SELECT audit_id, fournisseur_id FROM audit_fournisseurs"
+        ).fetchall()
+        by_audit = {}
+        for r in af_rows:
+            by_audit.setdefault(r["audit_id"], []).append(r["fournisseur_id"])
+        for a in audits:
+            a["fournisseur_ids"] = by_audit.get(a["id"], [])
+        # Liste complète fournisseurs
+        fours = [dict(r) for r in conn.execute(
+            """SELECT id, nom, pays_origine, groupe, branche, licence, certificat
+               FROM fournisseurs_fsc
+               ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()]
+    return {"audits": audits, "fournisseurs": fours}
+
+
+# ─── Récupérer la liste des sections d'un template (pour l'UI de personnalisation)
+@router.get("/api/qualite/sifa-docs/templates/{code}/sections")
+def sifa_docs_get_sections(code: str, request: Request):
+    """Renvoie la liste des sections du template avec leurs textes par défaut.
+    Utilisé par le modal génération pour permettre d'exclure ou éditer des sections."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        template = _fetch_template(conn, code)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+    try:
+        from app.services.sifa_doc_pdf import get_template_sections
+        return {"sections": get_template_sections(template["code"])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur: {e}")
+
+
+# ─── Créer une nouvelle version + générer le PDF ─────────────────────
+class SifaDocVersionCreateBody(BaseModel):
+    template_code: str
+    audit_id: Optional[int] = None
+    client_nom: str
+    fournisseurs_ids: List[int]
+    ref_document: Optional[str] = None
+    date_emission: Optional[str] = None
+    notes: Optional[str] = None
+    sections_overrides: Optional[dict] = None  # {sec_id: {"include": bool, "custom_body": str}}
+
+
+@router.post("/api/qualite/sifa-docs/versions")
+def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
+    user = _require_qualite_view(request)
+    client_nom = (body.client_nom or "").strip()
+    if not client_nom:
+        raise HTTPException(status_code=400, detail="Nom de client obligatoire")
+    if not body.fournisseurs_ids:
+        raise HTTPException(status_code=400, detail="Au moins un fournisseur obligatoire")
+
+    with get_db() as conn:
+        template = _fetch_template(conn, body.template_code)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+
+        # Vérifier que tous les fournisseurs ont un pays_origine renseigné
+        missing = conn.execute(
+            f"SELECT id, nom FROM fournisseurs_fsc "
+            f"WHERE id IN ({','.join(['?']*len(body.fournisseurs_ids))}) "
+            f"AND (pays_origine IS NULL OR TRIM(pays_origine) = '')",
+            body.fournisseurs_ids,
+        ).fetchall()
+        if missing:
+            # Le front doit d'abord passer par /missing-countries
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "MISSING_COUNTRIES",
+                    "message": "Origine géographique manquante pour certains fournisseurs",
+                    "fournisseurs": [{"id": r["id"], "nom": r["nom"]} for r in missing],
+                },
+            )
+
+        # Vérifier audit_id si fourni
+        audit_id = body.audit_id
+        if audit_id:
+            arow = conn.execute(
+                "SELECT id, client_nom FROM audit_dossiers WHERE id=?", (audit_id,)
+            ).fetchone()
+            if not arow:
+                audit_id = None  # Audit supprimé entre-temps, on continue quand même
+
+        # Générer la ref si absente
+        client_slug = _slug(client_nom)
+        ref = (body.ref_document or "").strip() or _next_ref_for_client(conn, template, client_slug)
+        # Éviter doublon de ref
+        dup = conn.execute(
+            "SELECT id FROM qualite_sifa_doc_versions "
+            "WHERE ref_document=? AND deleted_at IS NULL",
+            (ref,),
+        ).fetchone()
+        if dup:
+            raise HTTPException(status_code=409, detail=f"Référence {ref} déjà utilisée")
+
+        date_emission = (body.date_emission or "").strip() or _today()
+        validite_mois = int(template["validite_mois"] or 12)
+
+        # Charger les fournisseurs et générer le PDF
+        fours = _fournisseurs_for_pdf(conn, body.fournisseurs_ids)
+        try:
+            from app.services.sifa_doc_pdf import build_template_pdf
+            pdf_bytes = build_template_pdf(
+                template["code"],
+                client_nom=client_nom,
+                fournisseurs=fours,
+                ref=ref,
+                date_emission_iso=date_emission,
+                validite_mois=validite_mois,
+                sections_overrides=body.sections_overrides or None,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
+
+        # Enregistrer sur disque
+        safe_ref = re.sub(r"[^A-Za-z0-9._-]+", "-", ref)
+        rel_dir = os.path.join(SIFA_DOCS_DIR, template["code"])
+        os.makedirs(rel_dir, exist_ok=True)
+        pdf_path = os.path.join(rel_dir, f"{safe_ref}.pdf")
+        try:
+            with open(pdf_path, "wb") as fh:
+                fh.write(pdf_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur écriture disque : {e}")
+
+        import json as _json
+        now = _now()
+        sec_ov_json = _json.dumps(body.sections_overrides or {})
+        cur = conn.execute(
+            """INSERT INTO qualite_sifa_doc_versions
+               (template_id, audit_id, client_nom, client_slug, fournisseurs_ids_json,
+                ref_document, date_emission, validite_mois, pdf_path, notes,
+                sections_overrides_json,
+                created_by, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (template["id"], audit_id, client_nom, client_slug,
+             _json.dumps(list(body.fournisseurs_ids)),
+             ref, date_emission, validite_mois, pdf_path,
+             (body.notes or "").strip() or None,
+             sec_ov_json,
+             user["id"], now, now),
+        )
+        conn.commit()
+        vid = cur.lastrowid
+
+    return {"id": vid, "ref_document": ref, "pdf_path": pdf_path}
+
+
+# ─── Régénérer le PDF d'une version existante ────────────────────────
+@router.post("/api/qualite/sifa-docs/versions/{vid}/regenerate")
+def sifa_docs_regenerate_version(vid: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        v = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_versions WHERE id=? AND deleted_at IS NULL",
+            (vid,),
+        ).fetchone()
+        if not v:
+            raise HTTPException(status_code=404, detail="Version introuvable")
+        template = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_templates WHERE id=?", (v["template_id"],)
+        ).fetchone()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+
+        import json as _json
+        try:
+            f_ids = _json.loads(v["fournisseurs_ids_json"] or "[]")
+        except Exception:
+            f_ids = []
+        try:
+            sec_ov = _json.loads(v["sections_overrides_json"] or "{}")
+        except Exception:
+            sec_ov = {}
+        fours = _fournisseurs_for_pdf(conn, f_ids)
+        try:
+            from app.services.sifa_doc_pdf import build_template_pdf
+            pdf_bytes = build_template_pdf(
+                template["code"],
+                client_nom=v["client_nom"],
+                fournisseurs=fours,
+                ref=v["ref_document"],
+                date_emission_iso=v["date_emission"],
+                validite_mois=int(v["validite_mois"] or 12),
+                sections_overrides=sec_ov or None,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur génération : {e}")
+
+        try:
+            with open(v["pdf_path"], "wb") as fh:
+                fh.write(pdf_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur écriture : {e}")
+
+        conn.execute(
+            "UPDATE qualite_sifa_doc_versions SET updated_at=? WHERE id=?",
+            (_now(), vid),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Télécharger le PDF d'une version ────────────────────────────────
+@router.get("/api/qualite/sifa-docs/versions/{vid}/pdf")
+def sifa_docs_download_version(vid: int, request: Request):
+    _require_qualite_view(request)
+    with get_db() as conn:
+        v = conn.execute(
+            "SELECT ref_document, pdf_path FROM qualite_sifa_doc_versions "
+            "WHERE id=? AND deleted_at IS NULL",
+            (vid,),
+        ).fetchone()
+    if not v:
+        raise HTTPException(status_code=404, detail="Version introuvable")
+    if not v["pdf_path"] or not os.path.exists(v["pdf_path"]):
+        raise HTTPException(status_code=410, detail="PDF absent — régénérer la version")
+    return FileResponse(
+        v["pdf_path"], media_type="application/pdf",
+        filename=f"{v['ref_document']}.pdf",
+    )
+
+
+# ─── Aperçu : PDF vierge du template (avec placeholders) ─────────────
+@router.get("/api/qualite/sifa-docs/templates/{code}/preview")
+def sifa_docs_preview_template(code: str, request: Request):
+    """Génère un PDF « vierge » avec placeholders pour prévisualisation dans l'UI."""
+    _require_qualite_view(request)
+    with get_db() as conn:
+        template = _fetch_template(conn, code)
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+    try:
+        from app.services.sifa_doc_pdf import build_template_pdf
+        pdf_bytes = build_template_pdf(
+            template["code"],
+            client_nom="[NOM DU CLIENT]",
+            fournisseurs=[
+                {"id": 0, "nom": "[Fournisseur 1]", "pays_origine": "[Pays]", "certificat": None},
+                {"id": 0, "nom": "[Fournisseur 2]", "pays_origine": "[Pays]", "certificat": None},
+            ],
+            ref=f"{template['ref_prefix']}-APERCU",
+            date_emission_iso=_today(),
+            validite_mois=int(template["validite_mois"] or 12),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur preview : {e}")
+    from fastapi.responses import Response
+    return Response(content=pdf_bytes, media_type="application/pdf",
+                    headers={"Content-Disposition": "inline; filename=preview.pdf"})
+
+
+# ─── Supprimer (soft delete) une version ─────────────────────────────
+@router.delete("/api/qualite/sifa-docs/versions/{vid}")
+def sifa_docs_delete_version(vid: int, request: Request):
+    _require_qualite_access(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM qualite_sifa_doc_versions WHERE id=? AND deleted_at IS NULL",
+            (vid,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Version introuvable")
+        conn.execute(
+            "UPDATE qualite_sifa_doc_versions SET deleted_at=? WHERE id=?",
+            (_now(), vid),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Renseigner en masse les pays d'origine manquants ─────────────────
+class SifaDocCountriesBody(BaseModel):
+    updates: List[dict]  # [{"id": 1, "pays_origine": "Allemagne"}, ...]
+
+
+@router.put("/api/qualite/sifa-docs/fournisseurs-countries")
+def sifa_docs_update_countries(body: SifaDocCountriesBody, request: Request):
+    """Renseigne en une seule requête le pays_origine de plusieurs fournisseurs.
+    Utilisé par le modal « Origine géographique » avant génération d'une version."""
+    _require_qualite_view(request)
+    if not body.updates:
+        return {"updated": 0}
+    updated = 0
+    with get_db() as conn:
+        for u in body.updates:
+            fid = u.get("id")
+            pays = (u.get("pays_origine") or "").strip()
+            if not fid or not pays:
+                continue
+            conn.execute(
+                "UPDATE fournisseurs_fsc SET pays_origine=? WHERE id=?",
+                (pays, int(fid)),
+            )
+            updated += 1
+        conn.commit()
+    return {"updated": updated}
+
+
+# ─── Créer une nouvelle version PLUS mettre à jour audit_fournisseurs ───
+# (Pour le raccourci « Générer Déclaration UE » depuis un audit client, on veut
+#  que les fournisseurs cochés dans le modal soient aussi ajoutés à l'audit s'ils
+#  n'y sont pas déjà. Simple sync additive, sans retrait.)
+class SifaDocSyncAuditBody(BaseModel):
+    audit_id: int
+    fournisseur_ids: List[int]
+
+
+@router.post("/api/qualite/sifa-docs/sync-audit-fournisseurs")
+def sifa_docs_sync_audit_fournisseurs(body: SifaDocSyncAuditBody, request: Request):
+    """Ajoute des fournisseurs à un audit (sans en retirer)."""
+    user = _require_qualite_access(request)
+    with get_db() as conn:
+        a = conn.execute(
+            "SELECT id FROM audit_dossiers WHERE id=?", (body.audit_id,)
+        ).fetchone()
+        if not a:
+            raise HTTPException(status_code=404, detail="Audit introuvable")
+        now = _now()
+        added = 0
+        for fid in (body.fournisseur_ids or []):
+            try:
+                conn.execute(
+                    "INSERT OR IGNORE INTO audit_fournisseurs "
+                    "(audit_id, fournisseur_id, added_at, added_by) VALUES (?, ?, ?, ?)",
+                    (body.audit_id, int(fid), now, user["id"]),
+                )
+                added += 1
+            except Exception:
+                pass
+        conn.commit()
+    return {"added": added}
+

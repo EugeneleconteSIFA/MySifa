@@ -7300,6 +7300,131 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 203, "stock_reception_items_matiere_laize")
 
+    # Migration 204 : MyQualité — Certifications SIFA (Déclarations UE, etc.)
+    #   - fournisseurs_fsc.pays_origine : origine géographique de la fabrication
+    #     (utilisé dans la section 3 de la Déclaration UE de Conformité)
+    #   - qualite_sifa_doc_templates : catalogue des templates de documents officiels
+    #     SIFA (aujourd'hui : Déclaration UE de Conformité). Extensible.
+    #   - qualite_sifa_doc_versions : une ligne par version générée pour un client.
+    #     Reliée à un audit_dossiers si le client a un audit ouvert, sinon nom libre.
+    #     Le PDF est stocké sur disque, chemin dans pdf_path.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=204 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "pays_origine" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN pays_origine TEXT")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_sifa_doc_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                titre TEXT NOT NULL,
+                sous_titre TEXT,
+                description TEXT,
+                ref_prefix TEXT NOT NULL DEFAULT 'SIFA-DoC',
+                validite_mois INTEGER NOT NULL DEFAULT 12,
+                actif INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS qualite_sifa_doc_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_id INTEGER NOT NULL REFERENCES qualite_sifa_doc_templates(id) ON DELETE CASCADE,
+                audit_id INTEGER REFERENCES audit_dossiers(id) ON DELETE SET NULL,
+                client_nom TEXT NOT NULL,
+                client_slug TEXT NOT NULL,
+                fournisseurs_ids_json TEXT NOT NULL DEFAULT '[]',
+                ref_document TEXT NOT NULL,
+                date_emission TEXT NOT NULL,
+                validite_mois INTEGER NOT NULL DEFAULT 12,
+                pdf_path TEXT,
+                notes TEXT,
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sifa_doc_versions_template ON qualite_sifa_doc_versions(template_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sifa_doc_versions_audit ON qualite_sifa_doc_versions(audit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sifa_doc_versions_client_slug ON qualite_sifa_doc_versions(client_slug)")
+
+        from datetime import datetime as _dt204
+        _now204 = _dt204.now().isoformat()
+        conn.execute(
+            "INSERT OR IGNORE INTO qualite_sifa_doc_templates "
+            "(code, titre, sous_titre, description, ref_prefix, validite_mois, actif, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ('declaration_ue',
+             'Déclaration UE de Conformité',
+             'EU Declaration of Conformity (DoC)',
+             "Déclaration de conformité aux règlements REACH, Proposition 65, métaux lourds "
+             "(94/62/CE), PFAS, bisphénols, PPWR. Une version est établie par client, listant "
+             "les fournisseurs de matière retenus pour ce client et leur origine géographique.",
+             'SIFA-DoC',
+             12,
+             1,
+             _now204)
+        )
+
+        conn.commit()
+        _record_schema_migration(conn, 204, "sifa_certifications_declaration_ue")
+
+    # Migration 205 : sections_overrides_json sur qualite_sifa_doc_versions.
+    # Permet de personnaliser à la génération : exclure ou éditer certaines
+    # sections du template pour un client donné (JSON: {sec_id: {include, custom_body}}).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=205 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_versions)").fetchall()}
+        if "sections_overrides_json" not in cols:
+            conn.execute("ALTER TABLE qualite_sifa_doc_versions ADD COLUMN sections_overrides_json TEXT")
+        conn.commit()
+        _record_schema_migration(conn, 205, "sifa_doc_versions_sections_overrides")
+
+
+
+
+    # v2.3.12 — Migration placement et size des réglages globaux vers chaque
+    # alerte existante. Après cette migration, chaque alerte porte ses propres
+    # valeurs (défaut top-right + medium si le singleton n'existe pas).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=205 LIMIT 1").fetchone():
+        try:
+            import json as _json_mig
+            # Lire le singleton actuel
+            row = conn.execute(
+                "SELECT placement, size FROM maintenance_alert_settings WHERE id=1 LIMIT 1"
+            ).fetchone()
+            _default_placement = "top-right"
+            _default_size = "medium"
+            if row:
+                _default_placement = row["placement"] or "top-right"
+                _default_size = row["size"] or "medium"
+            # Parcourir toutes les alertes et injecter les valeurs si absentes
+            alerts = conn.execute(
+                "SELECT id, params FROM maintenance_alerts"
+            ).fetchall()
+            for a in alerts:
+                try:
+                    p = _json_mig.loads(a["params"] or "{}")
+                except Exception:
+                    p = {}
+                changed = False
+                if not p.get("placement"):
+                    p["placement"] = _default_placement
+                    changed = True
+                if not p.get("size"):
+                    p["size"] = _default_size
+                    changed = True
+                if changed:
+                    conn.execute(
+                        "UPDATE maintenance_alerts SET params=?, updated_at=datetime('now') WHERE id=?",
+                        (_json_mig.dumps(p, ensure_ascii=False), a["id"]),
+                    )
+            conn.commit()
+        except Exception:
+            pass
+        _record_schema_migration(conn, 205, "alerts_placement_size_per_alert")
+
 
 
 def create_default_admin():
