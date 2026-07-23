@@ -1745,19 +1745,19 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="filters">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="filter-input" onchange="ctrlResetPage(); resetPointFilters(); renderCtrl()">
+              <select id="filt-controles-type" class="filter-input" onchange="ctrlAutoFilter({resetPoints:true})">
                 <option value="">Tous les types</option>
               </select>
             </div>
             <div class="filter-group">
               <label for="filt-controles-operateur">Opérateur</label>
-              <select id="filt-controles-operateur" class="filter-input">
+              <select id="filt-controles-operateur" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Tous les opérateurs</option>
               </select>
             </div>
             <div class="filter-group">
               <label for="filt-controles-machine">Machine</label>
-              <select id="filt-controles-machine" class="filter-input">
+              <select id="filt-controles-machine" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Toutes les machines</option>
                 <option value="Cohésio 1">Cohésio 1</option>
                 <option value="Cohésio 2">Cohésio 2</option>
@@ -1767,22 +1767,21 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </div>
             <div class="filter-group">
               <label for="filt-controles-conformite">Conformité</label>
-              <select id="filt-controles-conformite" class="filter-input" onchange="ctrlResetPage(); renderCtrl()">
+              <select id="filt-controles-conformite" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Toutes les réponses</option>
                 <option value="nc">Non-conformes uniquement</option>
                 <option value="ok">Conformes uniquement</option>
               </select>
             </div>
-            <!-- v2.3.36 : Du/Au fusionnés en un seul filter-group pour libérer de la place et garder Filtrer sur la même ligne -->
+            <!-- v2.3.36 : Du/Au fusionnés — v2.3.37 : bouton Filtrer retiré, filtrage auto sur onchange -->
             <div class="filter-group" style="flex:1 1 220px">
               <label>Période</label>
               <div style="display:flex;gap:6px;align-items:center">
-                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" style="min-width:0;flex:1">
+                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
                 <span style="color:var(--muted);font-size:14px">→</span>
-                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" style="min-width:0;flex:1">
+                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
               </div>
             </div>
-            <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
             <span class="filters-date-presets-label">Période :</span>
@@ -6663,6 +6662,27 @@ function ctrlIsAutoClose(c){
   return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
 }
 
+// v2.3.37 : filtrage auto — plus de bouton Filtrer. Chaque champ appelle
+// ctrlAutoFilter() à onchange. Le toast est debouncé (300 ms) pour éviter
+// la pluie si l'utilisateur enchaîne plusieurs modifications rapidement.
+let _ctrlFilterToastTimer = null;
+function ctrlAutoFilter(opts){
+  opts = opts || {};
+  ctrlResetPage();
+  if(opts.resetPoints) resetPointFilters();
+  if(typeof renderCtrl === 'function') renderCtrl();
+  if(_ctrlFilterToastTimer) clearTimeout(_ctrlFilterToastTimer);
+  _ctrlFilterToastTimer = setTimeout(() => {
+    _ctrlFilterToastTimer = null;
+    try {
+      const cnt = document.getElementById('ctrl-count')?.textContent || '';
+      const msg = cnt ? ('Sélection refiltrée · ' + cnt) : 'Sélection refiltrée';
+      if(typeof window.showToast === 'function') window.showToast(msg, 'success');
+      else if(typeof window.toast === 'function') window.toast(msg);
+    } catch(_) {}
+  }, 300);
+}
+
 function getCtrlFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
   return {
@@ -6681,7 +6701,8 @@ function resetCtrlFilters(){
     const el = document.getElementById('filt-controles-' + k);
     if(el) el.value = '';
   });
-  renderCtrl();
+  // v2.3.37 : passe par ctrlAutoFilter pour toast + reset page
+  ctrlAutoFilter({resetPoints:true});
 }
 function applyCtrlDatePreset(key){
   const p = maintDatePresets()[key];
@@ -6690,7 +6711,8 @@ function applyCtrlDatePreset(key){
   const to   = document.getElementById('filt-controles-date-to');
   if(from) from.value = p.from;
   if(to)   to.value   = p.to;
-  renderCtrl();
+  // v2.3.37 : les chips preset déclenchent aussi le toast
+  ctrlAutoFilter();
 }
 function updateCtrlDatePresetChips(){
   const presets = maintDatePresets();
