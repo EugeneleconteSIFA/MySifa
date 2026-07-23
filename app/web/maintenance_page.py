@@ -1773,13 +1773,14 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="ok">Conformes uniquement</option>
               </select>
             </div>
-            <div class="filter-group">
-              <label for="filt-controles-date-from">Du</label>
-              <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du">
-            </div>
-            <div class="filter-group">
-              <label for="filt-controles-date-to">Au</label>
-              <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
+            <!-- v2.3.36 : Du/Au fusionnés en un seul filter-group pour libérer de la place et garder Filtrer sur la même ligne -->
+            <div class="filter-group" style="flex:1 1 220px">
+              <label>Période</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" style="min-width:0;flex:1">
+                <span style="color:var(--muted);font-size:14px">→</span>
+                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" style="min-width:0;flex:1">
+              </div>
             </div>
             <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
