@@ -7,7 +7,16 @@ justify-content:space-between;padding:10px 14px;margin-bottom:16px;
 background:linear-gradient(135deg, var(--card) 0%, var(--accent-bg) 100%);
 border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
 box-shadow:0 2px 8px rgba(15,23,42,.04)}
-.pf-sticky-bar .pf-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pf-sticky-bar .pf-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* Boutons sticky-bar produit : contraste net sur fond gradient clair */
+.pf-sticky-bar .btn-ghost.btn-sm{background:var(--card);border:1px solid var(--border);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06);transition:background .15s,border-color .15s,color .15s}
+.pf-sticky-bar .btn-ghost.btn-sm:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.pf-sticky-bar .btn-ghost.btn-sm[disabled]{opacity:.5;cursor:not-allowed}
+/* Pager 1/N : encart carte pour bien se détacher */
+.pf-sticky-bar .nav-pager{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px 4px;box-shadow:0 1px 2px rgba(0,0,0,.06);gap:2px}
+.pf-sticky-bar .nav-pager .nav-pos{color:var(--text);font-weight:700;font-size:13px;padding:0 10px}
+.pf-sticky-bar .nav-pager .btn-icon{width:28px;height:28px;border-radius:8px;color:var(--text2)}
+.pf-sticky-bar .nav-pager .btn-icon:hover{background:var(--accent-bg);color:var(--accent)}
 /* Titre de page renforcé : accent coloré + micro-badge de statut */
 .pf-page-hdr{display:flex;align-items:center;gap:14px;margin:4px 0 18px;padding:14px 18px;
 background:linear-gradient(135deg, var(--accent-bg) 0%, transparent 60%);
