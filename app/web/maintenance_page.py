@@ -7886,6 +7886,10 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
+  // v2.3.28 : after_calage manquait — le select forcait tout return à
+  // 'dossier_start' au save via /maintenance (les alertes réglées sur
+  // 'après calage' basculaient silencieusement à 'début de dossier').
+  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -8191,6 +8195,11 @@ function _afOnOtherToggle(cb){
 function _afChecklistCard(item) {
   const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
   const type = (item && item.type) || 'choice';
+  // v2.3.28 : case "Obligatoire" — manquait dans maintenance_page.py, la
+  // valeur ne pouvait donc jamais être true côté /maintenance. Elle
+  // s'affiche à la lecture (checked selon item.required) et son état
+  // est envoyé au backend par _afReadParams.
+  const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
   return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
@@ -8199,6 +8208,10 @@ function _afChecklistCard(item) {
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
+    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
+    + '</label>'
     + _afChecklistCardBody(item)
     + '</div>';
 }
@@ -8407,6 +8420,9 @@ function _afReadParams() {
         if (unit) item.unit = unit;
         if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
         if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        // v2.3.28 : required manquait — les items marqués obligatoires
+        // repassaient optionnels à chaque save via /maintenance.
+        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         items.push(item);
         return;
       }
@@ -8423,7 +8439,12 @@ function _afReadParams() {
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
+      // v2.3.28 : required manquait — les items requis repassaient
+      // optionnels à chaque save via /maintenance.
+      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
+      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
+      if (_reqCk) _choiceItem.required = true;
+      items.push(_choiceItem);
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -8611,18 +8632,22 @@ const placementOpts = placements.map(p =>
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      // v2.3.27 : fix — depuis v2.3.12 le modal n'a plus qu'un champ (le
+      // délai). L'ancien code référençait ags-block qui n'est jamais rendu
+      // → getElementById(...).checked throw → toast d'erreur silencieux.
+      // On lit maintenant depuis _alertGlobalSettings (déjà chargé au boot).
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        placement: document.getElementById('ags-placement').value,
-        size: document.getElementById('ags-size').value,
-        block_production: document.getElementById('ags-block').checked,
+        placement: _alertGlobalSettings.placement || 'top-right',
+        size: _alertGlobalSettings.size || 'medium',
+        block_production: !!_alertGlobalSettings.block_production,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings = payload;
-        toast('Réglages enregistrés');
+        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
+        toast('Délai enregistré');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });

@@ -172,8 +172,22 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-table td.txt-left{text-align:left}
 .comp-cell-best{background:var(--accent-bg);color:var(--accent);font-weight:700}
 .comp-table input[type=number],.comp-table select{font-size:12px;padding:6px 8px;min-width:0}
-.comp-table .inp-coef{max-width:72px}
+.comp-table .inp-coef{width:88px;max-width:88px;text-align:right}
 .comp-table .inp-dev-devis{max-width:80px}
+.comp-table th.comp-th-coef{min-width:96px}
+.comp-table td.comp-td-coef{min-width:96px}
+.ao-hdr-btn{background:var(--card);border:1px solid var(--border);color:var(--text);transition:background .15s,border-color .15s}
+.ao-hdr-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.ao-series-toggle{padding:3px 6px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-bg);border-radius:6px;vertical-align:middle;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
+.ao-series-toggle:hover{background:var(--accent);color:var(--card);border-color:var(--accent);transform:translateY(-1px)}
+.ao-series-toggle:active{transform:translateY(0)}
+.ao-series-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-weight:600;margin-left:6px}
+.ao-series-badge.warn{background:rgba(251,191,36,.15);color:var(--warn,#a16207)}
+.ao-lignes-table tr.ao-serie-sub td{background:var(--bg);border-top:1px dashed var(--border);font-size:12px;padding:6px 8px}
+.ao-lignes-table tr.ao-serie-sub td:first-child{border-top:none;background:transparent}
+.comp-table tr.comp-serie-sub td{background:var(--bg);font-size:11px;padding:6px 8px;color:var(--text2)}
+.comp-table tr.comp-serie-sub td.serie-label{text-align:left;padding-left:24px}
+.comp-table tr.comp-total-serie td{background:var(--accent-bg);font-weight:700;color:var(--accent)}
 .msg-list{display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto;margin-bottom:16px}
 .bubble{max-width:85%;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.5}
 .bubble.interne{align-self:flex-end;margin-left:auto;background:var(--accent-bg);border:1px solid var(--accent)}
@@ -236,7 +250,8 @@ const S = {
   produitView: 'list',
   produitForm: null,
   matieres: {},
-  nonLus: {}
+  nonLus: {},
+  openSeriesLignes: new Set()
 };
 
 const ROLE_LABELS = {direction:'Direction',administration:'Administration',commercial:'Commercial',superadmin:'Super admin'};
@@ -273,7 +288,10 @@ function icon(name, size) {
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>',
     grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
     user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-    'building-2': '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>'
+    'building-2': '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
+    'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+    'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+    'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">'+(p[name]||'')+'</svg>';
 }
@@ -780,6 +798,13 @@ function openModalLigne(edit) {
   S.modalData = edit ? {...edit} : {ref_produit:'',designation:'',quantite:'',unite:'étiquettes',notes:''};
   renderModal();
 }
+function openModalSerie(ligneId, edit) {
+  S.modal = 'serie';
+  S.modalData = edit
+    ? {ligne_id: ligneId, id: edit.id, libelle: edit.libelle||'', quantite: edit.quantite||0, notes: edit.notes||''}
+    : {ligne_id: ligneId, id: null, libelle: '', quantite: '', notes: ''};
+  renderModal();
+}
 function openModalFourni() {
   S.modal = 'fourni';
   S.modalData = {nom_fournisseur:'',email_contact:''};
@@ -805,22 +830,12 @@ function openModalConfirmDelete(id, ref, statut) {
   S.modalData = {id, ref, statut};
   renderModal();
 }
-async function openModalDuplicate(id, ref, titre) {
+function openModalDuplicate(id, ref, titre) {
   S.modal = 'duplicate-ao';
-  S.modalData = {id, ref, titre, with_fournisseurs: true, with_pieces_jointes: false, fournisseurs: [], _loading: true};
+  // Les fournisseurs ne sont plus jamais dupliques (choix produit) : pas de chargement,
+  // pas de section liste, la modal reste synchrone.
+  S.modalData = {id, ref, titre, with_pieces_jointes: false};
   renderModal();
-  try {
-    const det = await api('/api/ao/' + id);
-    S.modalData.fournisseurs = (det && det.fournisseurs) || [];
-    // Par defaut : tous coches
-    S.modalData.selectedFourniIds = new Set(S.modalData.fournisseurs.map(f => f.id));
-    S.modalData._loading = false;
-    renderModal();
-  } catch (e) {
-    S.modalData._loading = false;
-    S.modalData.fournisseurs = [];
-    renderModal();
-  }
 }
 function openModalPickClient(onPick) {
   S.modal = 'pick-client';
@@ -984,6 +999,42 @@ function renderModal() {
           await loadProduits();
         }
         closeModal(); showToast('Ligne enregistrée.', 'success');
+        await loadDetail(S.ao.id); render();
+      } catch(e) { showToast(e.message, 'danger'); }
+    };
+  } else if (S.modal === 'serie') {
+    const md = S.modalData;
+    const editing = md.id != null;
+    // Récupère la ligne mère pour rappeler la quantité cible et la somme des autres séries
+    const ligne = (S.detail.lignes||[]).find(x => x.id === md.ligne_id);
+    const otherSum = ligne ? (ligne.series||[]).filter(s => s.id !== md.id).reduce((a,s)=>a+Number(s.quantite||0),0) : 0;
+    const qteTarget = ligne ? Number(ligne.quantite||0) : 0;
+    const remaining = Math.max(0, qteTarget - otherSum);
+    const helper = ligne
+      ? '<p style="font-size:11px;color:var(--muted);line-height:1.4;margin:0 0 10px">Ligne : <strong style="color:var(--text2)">'+escHtml(ligne.ref_produit)+'</strong> — quantité totale <strong>'+formatInt(qteTarget)+'</strong> · reste à répartir <strong>'+formatInt(remaining)+'</strong></p>'
+      : '';
+    box.innerHTML = '<h3>'+(editing?'Modifier':'Ajouter')+' une série</h3>'+
+      helper+
+      '<div class="field"><label>Libellé de la série</label><input id="m-s-libelle" placeholder="Ex. Vert · Rouge · Impression A" value="'+escAttr(md.libelle||'')+'"></div>'+
+      '<div class="field"><label>Quantité d\'étiquettes</label><input type="number" step="1" min="0" id="m-s-qte" value="'+escAttr(md.quantite!=null?md.quantite:'')+'"></div>'+
+      '<div class="field"><label>Notes (optionnel — visible côté fournisseur)</label><textarea id="m-s-notes" rows="2" placeholder="Ex. Impression spécifique, marquage, code-barres…">'+escHtml(md.notes||'')+'</textarea></div>'+
+      '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer</button></div>';
+    ov.appendChild(box); m.appendChild(ov);
+    document.getElementById('m-cancel').onclick = closeModal;
+    document.getElementById('m-ok').onclick = async () => {
+      const libelle = document.getElementById('m-s-libelle').value.trim();
+      const qte = parseFloat(document.getElementById('m-s-qte').value);
+      const notes = document.getElementById('m-s-notes').value.trim();
+      if (!libelle) { showToast('Libellé obligatoire.', 'danger'); return; }
+      if (isNaN(qte) || qte < 0) { showToast('Quantité invalide.', 'danger'); return; }
+      const body = {libelle, quantite: qte, notes: notes || null};
+      try {
+        const base = '/api/ao/'+S.ao.id+'/lignes/'+md.ligne_id+'/series';
+        const path = editing ? (base+'/'+md.id) : base;
+        await api(path, {method: editing?'PUT':'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+        closeModal(); showToast('Série enregistrée.', 'success');
+        if (!S.openSeriesLignes) S.openSeriesLignes = new Set();
+        S.openSeriesLignes.add(md.ligne_id);
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
@@ -1157,43 +1208,23 @@ function renderModal() {
   } else if (S.modal === 'duplicate-ao') {
     const md = S.modalData;
     const defaultTitre = (md.titre || '') + ' (copie)';
-    const fournis = md.fournisseurs || [];
-    const selected = md.selectedFourniIds || new Set();
-    let fourniSection = '';
-    if (md._loading) {
-      fourniSection = '<p class="sub" style="color:var(--muted);font-size:12px">Chargement des fournisseurs…</p>';
-    } else if (fournis.length === 0) {
-      fourniSection = '<p class="sub" style="color:var(--muted);font-size:12px">Aucun fournisseur invite sur l\'AO source.</p>';
-    } else {
-      fourniSection = '<label style="font-size:12px;color:var(--text2);font-weight:600;margin-bottom:6px;display:block">Fournisseurs a recopier</label>' +
-        '<div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:14px">' +
-        fournis.map(f => 
-          '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer;font-size:12px">' +
-          '<input type="checkbox" class="m-dup-fid" value="' + f.id + '"' + (selected.has(f.id) ? ' checked' : '') + '>' +
-          escHtml(f.nom_fournisseur) + ' <span style="color:var(--muted)">· ' + escHtml(f.email_contact || '') + '</span>' +
-          '</label>'
-        ).join('') +
-        '</div>';
-    }
     box.innerHTML = '<h3>Dupliquer l\'appel d\'offre</h3>'+
       '<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px">Source : <strong style="color:var(--text2)">'+escHtml(md.ref)+'</strong></p>'+
       '<div class="field"><label>Titre du nouvel appel d\'offre</label>'+
       '<input id="m-dup-titre" value="'+escAttr(defaultTitre)+'"></div>'+
-      fourniSection +
       '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:14px">'+
       '<input type="checkbox" id="m-dup-pj"> Recopier les documents joints</label>'+
-      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera cree en <strong style="color:var(--text2)">brouillon</strong>. Les reponses fournisseurs ne sont jamais recopiees.</p>'+
+      '<p style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:14px">Le nouvel appel d\'offre sera cree en <strong style="color:var(--text2)">brouillon</strong>. Les fournisseurs et les reponses ne sont pas recopies — ajoutez les fournisseurs a la main sur le nouvel AO.</p>'+
       '<div class="modal-actions"><button class="btn btn-ghost" type="button" id="m-cancel">Annuler</button><button class="btn btn-accent" type="button" id="m-ok">Dupliquer et ouvrir</button></div>';
     ov.appendChild(box); m.appendChild(ov);
     document.getElementById('m-cancel').onclick = closeModal;
     document.getElementById('m-ok').onclick = async () => {
       const titre = document.getElementById('m-dup-titre').value.trim();
       if (!titre) { showToast('Titre obligatoire.', 'danger'); return; }
-      const selected_ids = Array.from(document.querySelectorAll('.m-dup-fid:checked')).map(cb => parseInt(cb.value, 10));
       const body = {
         titre,
-        with_fournisseurs: selected_ids.length > 0,
-        fournisseur_ids: fournis.length ? selected_ids : null,
+        with_fournisseurs: false,
+        fournisseur_ids: [],
         with_pieces_jointes: document.getElementById('m-dup-pj').checked,
       };
       try {
@@ -1472,8 +1503,8 @@ function renderDetailHeader() {
   const st = ao.statut;
   const lignes = (d.lignes||[]).length;
   const fournis = (d.fournisseurs||[]).length;
-  let actions = '<button class="btn btn-ghost" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
-    ' <a class="btn btn-ghost" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
+  let actions = '<button class="btn ao-hdr-btn" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
+    ' <a class="btn ao-hdr-btn" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
   if (st === 'brouillon') {
     const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
     actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
@@ -1520,14 +1551,51 @@ function renderDetailHeader() {
 
 function renderLignes() {
   const st = S.ao.statut;
+  const canEditSeries = (st === 'brouillon' || st === 'envoyee');
   const lignes = S.detail.lignes || [];
-  let rows = lignes.map(l => '<tr><td>'+escHtml(l.position)+'</td><td>'+escHtml(l.ref_produit)+'</td>'+
-    '<td>'+escHtml(l.client_nom||'—')+'</td><td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
-    '<td>'+escHtml(l.quantite)+' '+escHtml(l.unite)+'</td><td>'+escHtml(l.notes||'')+'</td><td>'+
-    (st==='brouillon'?'<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button>':'')+
-    '</td></tr>').join('');
-  return '<div class="card">'+(st==='brouillon'?'<button class="btn btn-accent btn-sm" type="button" id="btn-add-ligne" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter une ligne</button>':'')+
-    '<table class="data-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
+  const rows = lignes.map(l => {
+    const series = Array.isArray(l.series) ? l.series : [];
+    const nbS = series.length;
+    const isOpen = S.openSeriesLignes && S.openSeriesLignes.has(l.id);
+    const chev = nbS > 0
+      ? '<button class="ao-series-toggle btn-icon" data-id="'+l.id+'" title="'+(isOpen?'Masquer les séries':'Afficher les séries')+'" aria-expanded="'+(isOpen?'true':'false')+'">'+icon(isOpen?'chevron-down':'chevron-right',14)+'</button> '
+      : (canEditSeries ? '<button class="ao-series-toggle btn-icon" data-id="'+l.id+'" title="Ajouter une série" aria-expanded="false">'+icon('chevron-right',14)+'</button> ' : '');
+    const qtyTxt = escHtml(formatInt(l.quantite))+' '+escHtml(l.unite||'');
+    let seriesBadge = '';
+    if (nbS > 0) {
+      const sum = Number(l.series_qty_sum||0);
+      const q = Number(l.quantite||0);
+      const ok = Math.abs(sum - q) < 0.5;
+      seriesBadge = ' <span class="ao-series-badge'+(ok?'':' warn')+'" title="'+(ok?'Séries cohérentes':'Somme séries ≠ quantité ligne')+'">'+nbS+' série'+(nbS>1?'s':'')+(ok?'':' · Δ '+formatInt(sum-q))+'</span>';
+    }
+    const acts = canEditSeries
+      ? '<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button>'
+      : '';
+    let mainRow = '<tr class="ao-ligne-row" data-lid="'+l.id+'"><td>'+escHtml(l.position)+'</td>'+
+      '<td>'+chev+escHtml(l.ref_produit)+seriesBadge+'</td>'+
+      '<td>'+escHtml(l.client_nom||'—')+'</td>'+
+      '<td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
+      '<td>'+qtyTxt+'</td>'+
+      '<td>'+escHtml(l.notes||'')+'</td>'+
+      '<td>'+acts+'</td></tr>';
+    if (isOpen) {
+      let sBody = '';
+      series.forEach((s, i) => {
+        const editBtn = canEditSeries ? '<button class="btn btn-ghost btn-sm btn-edit-serie" data-lid="'+l.id+'" data-sid="'+s.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-serie" data-lid="'+l.id+'" data-sid="'+s.id+'">Supprimer</button>' : '';
+        sBody += '<tr class="ao-serie-sub"><td></td><td style="padding-left:32px;color:var(--text2)">'+icon('corner-down-right',12)+' <strong>'+escHtml(s.libelle||'—')+'</strong>'+(s.notes?' <span style="color:var(--muted);font-size:11px">· '+escHtml(s.notes)+'</span>':'')+'</td><td></td><td></td><td>'+escHtml(formatInt(s.quantite))+'</td><td></td><td>'+editBtn+'</td></tr>';
+      });
+      if (canEditSeries) {
+        sBody += '<tr class="ao-serie-sub"><td></td><td colspan="6" style="padding-left:32px"><button class="btn btn-ghost btn-sm btn-add-serie" data-lid="'+l.id+'">'+icon('plus',12)+' Ajouter une série</button></td></tr>';
+      }
+      mainRow += sBody;
+    }
+    return mainRow;
+  }).join('');
+  const addBtn = (st==='brouillon')
+    ? '<button class="btn btn-accent btn-sm" type="button" id="btn-add-ligne" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter une ligne</button>'
+    : '';
+  return '<div class="card">'+addBtn+
+    '<table class="data-table ao-lignes-table"><thead><tr><th>#</th><th>Réf.</th><th>Client</th><th>Étiq. / bobine</th><th>Qté</th><th>Notes</th><th></th></tr></thead><tbody>'+
     (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
 }
 
@@ -1750,6 +1818,7 @@ async function openCreateAoWizard(initialState) {
     selectedContactKeys: new Set(),
     manualFourni: { nom: '', email: '', langue: 'fr' },
     _autoP: false,
+    showFournisAll: false,  // par défaut : masquer les fournisseurs sans contact enregistré
     };
   }
 
@@ -1844,12 +1913,31 @@ async function openCreateAoWizard(initialState) {
   }
 
   function renderStep3() {
-    const fours = state.availableFournisseurs;
+    const allFours = state.availableFournisseurs;
+    const withContacts = allFours.filter(f => (f.contacts || []).length > 0);
+    const withoutContacts = allFours.filter(f => !((f.contacts || []).length));
+    const showAll = !!state.showFournisAll;
+    const fours = showAll ? allFours : withContacts;
     const nManualAdded = state.fournisseurs.filter(f => !f.fournisseur_id).length;
-    let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Selectionne au moins un contact fournisseur.</p>' +
+    let filterBar = '';
+    if (withoutContacts.length > 0) {
+      const label = showAll
+        ? 'Masquer les ' + withoutContacts.length + ' fournisseur' + (withoutContacts.length > 1 ? 's' : '') + ' sans contact'
+        : 'Afficher les ' + withoutContacts.length + ' fournisseur' + (withoutContacts.length > 1 ? 's' : '') + ' sans contact';
+      filterBar = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">' +
+        '<p style="font-size:13px;color:var(--muted);margin:0">Selectionne au moins un contact fournisseur.</p>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="w-toggle-empty" style="font-size:11px;padding:4px 10px">' + escHtml(label) + '</button>' +
+        '</div>';
+    } else {
+      filterBar = '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Selectionne au moins un contact fournisseur.</p>';
+    }
+    let html = filterBar +
       '<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px">';
     if (!fours.length) {
-      html += '<div style="padding:20px;color:var(--muted);text-align:center">Aucun fournisseur enregistre en base. Utilise la saisie manuelle ci-dessous.</div>';
+      const msg = allFours.length
+        ? 'Aucun fournisseur avec contact enregistre. Ajoute un contact depuis le carnet fournisseurs ou utilise la saisie manuelle ci-dessous.'
+        : 'Aucun fournisseur enregistre en base. Utilise la saisie manuelle ci-dessous.';
+      html += '<div style="padding:20px;color:var(--muted);text-align:center;font-size:12px;line-height:1.5">' + escHtml(msg) + '</div>';
     } else {
       fours.forEach(f => {
         const contacts = f.contacts || [];
@@ -2085,6 +2173,11 @@ async function openCreateAoWizard(initialState) {
 
     // Step 3 : contact checkboxes + manual add
     if (state.step === 3) {
+      const toggleBtn = document.getElementById('w-toggle-empty');
+      if (toggleBtn) toggleBtn.onclick = () => {
+        state.showFournisAll = !state.showFournisAll;
+        render();
+      };
       box.querySelectorAll('.w-fc').forEach(cb => {
         cb.onchange = () => {
           const k = cb.dataset.key;
@@ -2495,10 +2588,14 @@ async function saveReponsePricing(reponseId, patch) {
         devise_prix_devis: updated.devise_prix_devis,
         prix_vente: updated.prix_vente,
         prix_au_mille: updated.prix_au_mille,
-        prix_calcule: updated.prix_calcule
+        prix_calcule: updated.prix_calcule,
+        transport_amount: updated.transport_amount
       });
+      const devF = (updated.devise || row.devise || 'EUR').toUpperCase();
       const pvCell = document.querySelector('[data-pv="'+reponseId+'"]');
       if (pvCell) pvCell.textContent = formatMoney(updated.prix_vente, updated.devise_prix_devis);
+      const trCell = document.querySelector('[data-tr="'+reponseId+'"]');
+      if (trCell) trCell.textContent = formatMoney(updated.transport_amount, devF);
     }
   }
   return updated;
@@ -2521,10 +2618,10 @@ function renderComparaison() {
     if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
   });
   const head = '<tr>'+
-    '<th>Client</th><th>Réf. produit</th><th>Frontal</th><th>Adhésif</th>'+
+    '<th>Réf. produit</th><th>Frontal</th><th>Adhésif</th>'+
     '<th>Étiq. / bobine</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
     '<th>Quotation</th><th>Devise</th><th>Unité quot.</th>'+
-    '<th>Prix calculé</th><th>Prix / mille</th><th>Coef</th>'+
+    '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th><th class="comp-th-coef">Coef</th>'+
     '<th>Devise devis</th><th>Prix de vente</th></tr>';
   let body = '';
   rows.forEach(r => {
@@ -2536,7 +2633,6 @@ function renderComparaison() {
     const noRep = rid == null || rid === '';
     const dis = noRep ? ' disabled' : '';
     body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
-      '<td class="txt-left">'+escHtml(r.client_nom||'—')+'</td>'+
       '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
       '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
       '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
@@ -2547,14 +2643,30 @@ function renderComparaison() {
       '<td>'+escHtml(devF)+'</td>'+
       '<td>'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+' style="font-size:11px;padding:2px 4px">'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 5px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">manuel</span>' : '')+'</td>'+
       '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
+      '<td style="color:var(--text2);font-size:11px" data-tr="'+escAttr(rid||'')+'">'+formatMoney(r.transport_amount, devF)+'</td>'+
       '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
-      '<td><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
+      '<td class="comp-td-coef"><input type="number" step="0.01" min="0.01" class="inp-coef" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.coef != null ? r.coef : 1)+'"'+dis+'></td>'+
       '<td><select class="inp-dev-devis" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+
         '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
         '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
       '</select></td>'+
       '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_vente, devD)+'</td>'+
       '</tr>';
+    // Détail par série sous la ligne (si la ligne a des séries)
+    const sb = Array.isArray(r.series_breakdown) ? r.series_breakdown : [];
+    if (sb.length > 0) {
+      sb.forEach(s => {
+        body += '<tr class="comp-serie-sub">'+
+          '<td class="serie-label" colspan="5">'+icon('corner-down-right',11)+' <strong style="color:var(--text2)">'+escHtml(s.libelle||'—')+'</strong>'+(s.notes?' <span style="color:var(--muted)">· '+escHtml(s.notes)+'</span>':'')+' — '+formatInt(s.quantite)+' étiq.</td>'+
+          '<td></td>'+
+          '<td></td><td></td><td></td>'+
+          '<td>'+formatMoney(s.prix_calcule, devF)+'</td>'+
+          '<td>'+formatMoney(s.transport_amount, devF)+'</td>'+
+          '<td></td><td></td><td></td>'+
+          '<td>'+formatMoney(s.prix_vente, devD)+'</td>'+
+          '</tr>';
+      });
+    }
   });
   const fxNote = c.eur_usd_rate
     ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' — conversion appliquée sur le prix de vente si les devises diffèrent.</p>'
@@ -2599,7 +2711,11 @@ function renderDocuments() {
 
 function bindListEvents() {
   document.getElementById('btn-new-ao')?.addEventListener('click', openCreateAoWizard);
-  document.querySelectorAll('.filter-tab').forEach(b => b.addEventListener('click', () => { S.filtre = b.dataset.f; render(); }));
+  document.querySelectorAll('.filter-tab').forEach(b => b.addEventListener('click', async () => {
+    S.filtre = b.dataset.f;
+    try { await loadList(); } catch(e) { showToast(e.message || 'Erreur de chargement.', 'danger'); }
+    render();
+  }));
   document.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(parseInt(b.dataset.id,10))));
   document.querySelectorAll('.btn-restore-ao').forEach(b => b.addEventListener('click', async () => {
     const id = parseInt(b.dataset.id, 10);
@@ -2682,6 +2798,35 @@ function bindDetailEvents() {
     try {
       await api('/api/ao/'+S.ao.id+'/lignes/'+b.dataset.id, {method:'DELETE'});
       showToast('Ligne supprimée.', 'success');
+      await loadDetail(S.ao.id); render();
+    } catch(e) { showToast(e.message, 'danger'); }
+  }));
+  // Séries — déplier / plier
+  document.querySelectorAll('.ao-series-toggle').forEach(b => b.addEventListener('click', () => {
+    const id = parseInt(b.dataset.id, 10);
+    if (!S.openSeriesLignes) S.openSeriesLignes = new Set();
+    if (S.openSeriesLignes.has(id)) S.openSeriesLignes.delete(id);
+    else S.openSeriesLignes.add(id);
+    render();
+  }));
+  document.querySelectorAll('.btn-add-serie').forEach(b => b.addEventListener('click', () => {
+    const lid = parseInt(b.dataset.lid, 10);
+    openModalSerie(lid, null);
+  }));
+  document.querySelectorAll('.btn-edit-serie').forEach(b => b.addEventListener('click', () => {
+    const lid = parseInt(b.dataset.lid, 10);
+    const sid = parseInt(b.dataset.sid, 10);
+    const ligne = (S.detail.lignes||[]).find(x => x.id === lid);
+    const serie = ligne && (ligne.series||[]).find(x => x.id === sid);
+    if (serie) openModalSerie(lid, serie);
+  }));
+  document.querySelectorAll('.btn-del-serie').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Supprimer cette série ?')) return;
+    const lid = parseInt(b.dataset.lid, 10);
+    const sid = parseInt(b.dataset.sid, 10);
+    try {
+      await api('/api/ao/'+S.ao.id+'/lignes/'+lid+'/series/'+sid, {method:'DELETE'});
+      showToast('Série supprimée.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
   }));

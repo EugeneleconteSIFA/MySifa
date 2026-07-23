@@ -1660,6 +1660,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
               sr.id AS reception_id_found,
               COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
               COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+              sr.fsc_type_claim AS fsc_type_claim,
               ff.licence AS fournisseur_licence,
               CASE
                 WHEN sr.id IS NOT NULL THEN 'reception'
@@ -3649,11 +3650,54 @@ async def create_saisie_stock(request: Request):
 
 _PATCH_SAFE_FIELDS_PF = {"note", "no_dossier"}
 _PATCH_SAFE_FIELDS_MP = {"note", "ref_bl", "no_dossier"}
+# Champs admin-only : necessitent une resolution particuliere (voir _resolve_operateur_patch)
+_PATCH_ADMIN_FIELDS = {"operateur"}
 _PATCH_LOCKED_FIELDS = {
     "quantite", "matiere_id", "produit_id", "laize_id",
     "emplacement", "emplacement_source", "emplacement_dest",
     "type_mouvement",
 }
+
+
+def _resolve_operateur_patch(conn, kind: str, operateur: Optional[str]) -> dict:
+    """Resout un nom d'operateur (operateur_lie ou nom d'utilisateur) vers les
+    colonnes a mettre a jour sur la ligne stock : created_by + created_by_name.
+
+    - stock_pf : created_by est l'email (TEXT), created_by_name le nom.
+    - stock_mp : created_by est l'id utilisateur (INTEGER), created_by_name le nom.
+
+    Renvoie un dict pret a merger dans `updates`. Si operateur est None ou vide,
+    on efface simplement created_by* (rarement souhaite, mais on l'autorise pour
+    admin).
+    """
+    name = (operateur or "").strip() if operateur else ""
+    if not name:
+        if kind == "stock_pf":
+            return {"created_by": None, "created_by_name": None}
+        return {"created_by": None, "created_by_name": None}
+    # Cherche l'utilisateur qui matche par operateur_lie OU par nom (case-insensitive)
+    urow = conn.execute(
+        """SELECT id, email, nom, operateur_lie FROM users
+           WHERE LOWER(TRIM(COALESCE(operateur_lie,''))) = LOWER(TRIM(?))
+              OR LOWER(TRIM(COALESCE(nom,''))) = LOWER(TRIM(?))
+           LIMIT 1""",
+        (name, name),
+    ).fetchone()
+    if not urow:
+        # Pas d'utilisateur correspondant : on garde le nom mais on ne casse pas
+        # la reference created_by (peut etre un operateur externe / libre-saisie).
+        if kind == "stock_pf":
+            return {"created_by_name": name}
+        return {"created_by_name": name}
+    urow = dict(urow)
+    if kind == "stock_pf":
+        return {"created_by": urow.get("email") or None, "created_by_name": name}
+    # stock_mp : created_by est un INTEGER (users.id)
+    try:
+        uid = int(urow.get("id"))
+    except (TypeError, ValueError):
+        uid = None
+    return {"created_by": uid, "created_by_name": name}
 
 
 def _can_edit_saisie_stock(user: dict, row: dict, *, kind: str) -> bool:
@@ -3747,6 +3791,16 @@ async def patch_saisie_stock(kind: str, mvt_id: int, request: Request):
                 if k in body:
                     v = body[k]
                     updates[k] = (str(v).strip() or None) if v is not None else None
+
+        # Reassignation d'operateur (admin uniquement) : resout le nom vers
+        # created_by (+ created_by_name) sur la ligne stock.
+        if "operateur" in body:
+            if not is_admin(user):
+                raise HTTPException(
+                    403,
+                    "Reassignation d'operateur reservee aux administrateurs",
+                )
+            updates.update(_resolve_operateur_patch(conn, kind, body.get("operateur")))
 
         if not updates:
             return {"ok": True, "updated_fields": [], "id": mvt_id, "kind": kind}
