@@ -4296,6 +4296,31 @@ function openAddModal(templateRow) {
 // /api/fabrication/saisie-stock/{kind}/{id}, ou supprime via DELETE.
 // Les champs verrouilles (quantite, produit/matiere, emplacement, laize)
 // necessitent supprimer + recreer.
+// v2.3.43 : ouvre le viewer partagé pour une ligne kind='alert_ack'
+// (module externe static/mysifa_ack_viewer.js déjà chargé par prod_page.py).
+function _openAlertAckViewer(row){
+  if(!row || row.kind !== 'alert_ack') return;
+  if(!window.MysifaAckViewer || typeof window.MysifaAckViewer.open !== 'function'){
+    if(window.console) window.console.warn('[alert-ack] MysifaAckViewer non chargé — vérifier prod_page.py.');
+    return;
+  }
+  let params = {}, responses = {};
+  try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
+  try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
+  const items = (params && params.checklist && Array.isArray(params.checklist.items))
+    ? params.checklist.items : [];
+  window.MysifaAckViewer.open({
+    alert_nom      : row._alert_nom || row.operation || 'Alerte',
+    responses      : responses,
+    checklist_items: items,
+    comment        : row._alert_comment || '',
+    machine        : row.machine || '',
+    date           : row.date_operation || '',
+    operateur      : row.operateur || row.operateur_nom || '',
+    no_dossier     : row.no_dossier || '',
+  });
+}
+
 function openEditStockModal(row){
   try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(e){}
   const kind = row.kind; // stock_pf | stock_mp
@@ -4409,11 +4434,20 @@ function openEditStockModal(row){
 }
 
 function openEditModal(row) {
+  // v2.3.43 : redirige vers le viewer d'ack quand on tombe sur une alerte
+  // validée (via clic direct, navigation ‹/› ou Ctrl+←/→). L'édition
+  // classique n'a aucun sens sur un ack — id non numérique, opération
+  // non éditable, pas de compteur/métrage. Lecture seule.
+  if(row && row.kind === 'alert_ack'){
+    try{ const m = document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
+    _openAlertAckViewer(row);
+    return;
+  }
   try{
     const m = document.querySelector('.add-row-modal');
     if(m) m.remove();
   }catch(e){}
- 
+
   const list = getVisibleSaisiesRowsForNav();
   const total = list.length || 0;
   const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
@@ -4688,8 +4722,11 @@ function renderSaisies(){
   function addDurations(baseRows){
     const rows = (baseRows||[]).slice();
     // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+    // v2.3.43 : les acks d'alertes n'ont pas de durée et ne rentrent pas
+    // dans le calcul de la saisie précédente/suivante.
     const byOp = new Map();
     rows.forEach(r=>{
+      if(r.kind === 'alert_ack') return;
       const k = String(r.operateur||'').trim();
       if(!byOp.has(k)) byOp.set(k, []);
       byOp.get(k).push(r);
@@ -4777,7 +4814,9 @@ function renderSaisies(){
   });
  
   // ── Checkbox "tout sélectionner" ─────────────────────────────
-  const allIds=rows.map(r=>r.id);
+  // v2.3.43 : les acks d'alertes sont lecture seule — jamais dans le
+  // bulk-select ni dans les actions groupées Annuler / Rétablir.
+  const allIds=rows.filter(r=>r.kind!=='alert_ack').map(r=>r.id);
   const allChecked=allIds.length>0&&allIds.every(id=>S.selectedRows.has(id));
   const chkAll=h('input',{type:'checkbox'});
   chkAll.checked=allChecked;
@@ -4798,8 +4837,13 @@ function renderSaisies(){
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
 
+    // v2.3.43 : nouveau kind 'alert_ack' — alertes maintenance validées
+    const isAlertAck = row.kind === 'alert_ack';
+
     let rowBg = '';
-    if (fictifRow) {
+    if (isAlertAck) {
+      rowBg = 'rgba(34,211,238,.10)';           // v2.3.43 : cyan discret alertes validées
+    } else if (fictifRow) {
       rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
     } else if (row.operation_severity === 'critique') {
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
@@ -4816,24 +4860,38 @@ function renderSaisies(){
     }
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
+
+    // v2.3.43 : les acks d'alertes sont TOUJOURS cliquables (même en readOnly)
+    // et ouvrent le viewer partagé MysifaAckViewer.open.
+    if(isAlertAck){
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click',()=>_openAlertAckViewer(row));
+    } else if(!readOnly){
+      tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
+    }
  
-    if(!readOnly) tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
- 
-    // Checkbox ligne
-    const chk=h('input',{type:'checkbox'});
-    chk.checked=S.selectedRows.has(row.id);
-    chk.addEventListener('click',e=>e.stopPropagation());
-    chk.addEventListener('change',()=>{
-      if(chk.checked) S.selectedRows.add(row.id);
-      else S.selectedRows.delete(row.id);
-      render();
-    });
-    const tdChk=h('td',null,chk);
-    tdChk.addEventListener('click',e=>e.stopPropagation());
-    tr.appendChild(tdChk);
- 
+    // Checkbox ligne — désactivée pour les acks d'alertes (lecture seule)
+    if(isAlertAck){
+      tr.appendChild(h('td',null));
+    } else {
+      const chk=h('input',{type:'checkbox'});
+      chk.checked=S.selectedRows.has(row.id);
+      chk.addEventListener('click',e=>e.stopPropagation());
+      chk.addEventListener('change',()=>{
+        if(chk.checked) S.selectedRows.add(row.id);
+        else S.selectedRows.delete(row.id);
+        render();
+      });
+      const tdChk=h('td',null,chk);
+      tdChk.addEventListener('click',e=>e.stopPropagation());
+      tr.appendChild(tdChk);
+    }
+
     let badge=null;
-    if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
+    if(isAlertAck) badge=h('span',{className:'badge-alert-ack',title:"Alerte validée par un opérateur — lecture seule",
+      style:{background:'var(--accent-bg)',color:'var(--accent)',border:'1px solid var(--accent)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
+    },'ALERTE');
+    else if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
     else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
@@ -4860,14 +4918,17 @@ function renderSaisies(){
         : row.metrage_total_debut!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_total_debut)+' m (déb.)')
         : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
         : '-'));
-    if(readOnly){
+    // v2.3.43 : commentaire toujours lecture seule pour un ack (id string non éditable)
+    if(readOnly || isAlertAck){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
     }
     tr.appendChild(h('td',null,badge));
- 
-    if(!readOnly){
+
+    // v2.3.43 : pas de boutons +/- pour un ack — id "ack-<n>" n'est pas
+    // un vrai row de production_data (DELETE /api/saisies/ack-42 renverrait 404).
+    if(!readOnly && !isAlertAck){
       const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
       const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
         style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},
