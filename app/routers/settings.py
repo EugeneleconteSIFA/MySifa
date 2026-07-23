@@ -3912,13 +3912,26 @@ def _machine_name_from_user(conn, user: dict) -> Optional[str]:
     return None
 
 
-def _is_machine_in_production(conn, machine: str) -> bool:
-    """True si la dernière saisie pour cette machine est code 01, 03 ou 88."""
-    row = conn.execute(
-        "SELECT operation_code FROM production_data "
-        "WHERE machine=? ORDER BY date_operation DESC, id DESC LIMIT 1",
-        (machine,)
-    ).fetchone()
+def _is_machine_in_production(conn, machine: str, exclude_saisie_id: int = None) -> bool:
+    """True si la dernière saisie pour cette machine est code 01, 03 ou 88.
+
+    v2.3.31 : exclude_saisie_id permet à _auto_ack_periodic_alerts_on_arret
+    d'évaluer l'état de la machine *juste avant* la saisie qu'il traite,
+    plutôt qu'après (la saisie non-productive vient d'être insérée et
+    fausserait le calcul, faisant croire que la machine est déjà arrêtée).
+    """
+    if exclude_saisie_id is None:
+        row = conn.execute(
+            "SELECT operation_code FROM production_data "
+            "WHERE machine=? ORDER BY date_operation DESC, id DESC LIMIT 1",
+            (machine,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT operation_code FROM production_data "
+            "WHERE machine=? AND id<>? ORDER BY date_operation DESC, id DESC LIMIT 1",
+            (machine, int(exclude_saisie_id))
+        ).fetchone()
     if not row:
         return False
     code = str(row["operation_code"] or "").strip()
@@ -3926,8 +3939,14 @@ def _is_machine_in_production(conn, machine: str) -> bool:
     return code in ("03", "88")
 
 
-def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
+def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime, exclude_saisie_id: int = None) -> bool:
     """Décide si une alerte périodique doit s'afficher maintenant pour cette machine.
+
+    v2.3.31 : `exclude_saisie_id` (optionnel) exclut une ligne production_data
+    de tous les calculs. Utilisé par _auto_ack_periodic_alerts_on_arret pour
+    évaluer si l'alerte était due *avant* la saisie qu'il vient de traiter
+    (sinon la saisie non-productive fausse le calcul et l'alerte apparaît
+    toujours non-due, ce qui n'est pas la question posée).
 
     Logique :
       1. Trouver le dernier code d'arrêt pour cette machine (87, 89, ou 50-85)
@@ -3949,8 +3968,12 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
         interval_min = 0
     if interval_min <= 0:
         return False
-    if not _is_machine_in_production(conn, machine):
+    if not _is_machine_in_production(conn, machine, exclude_saisie_id=exclude_saisie_id):
         return False
+
+    # v2.3.31 : morceau de SQL/params à ajouter pour exclure la saisie courante
+    _excl_sql = " AND id<>?" if exclude_saisie_id is not None else ""
+    _excl_params = (int(exclude_saisie_id),) if exclude_saisie_id is not None else ()
 
     # 1. Dernier événement "non-production" pour cette machine.
     # Définition symétrique de _is_machine_in_production : tout code qui n'est
@@ -3962,8 +3985,8 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
            WHERE machine=? AND operation_code NOT IN ('03', '88')
-           AND operation_code IS NOT NULL AND operation_code != ''""",
-        (machine,),
+           AND operation_code IS NOT NULL AND operation_code != ''""" + _excl_sql,
+        (machine,) + _excl_params,
     ).fetchone()
     last_stop_iso = last_stop_row["m"] if last_stop_row else None
     last_stop_dt = _parse_paris_dt(last_stop_iso)
@@ -3973,14 +3996,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
                WHERE machine=? AND operation_code IN ('03', '88')
-               AND date_operation > ?""",
-            (machine, last_stop_iso),
+               AND date_operation > ?""" + _excl_sql,
+            (machine, last_stop_iso) + _excl_params,
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('03', '88')""",
-            (machine,),
+               WHERE machine=? AND operation_code IN ('03', '88')""" + _excl_sql,
+            (machine,) + _excl_params,
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
     if not session_start_dt:
@@ -4564,7 +4587,7 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
     return {"ok": True}
 
 
-def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str):
+def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str, exclude_saisie_id: int = None):
     """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
     target couvre cette machine, quand l'opérateur saisit un code non-productif
     (arrêt, pause, calage, technique, fin dossier — tout sauf 01 et 03).
@@ -4572,6 +4595,13 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
     Une ligne est insérée dans maintenance_alert_acks pour chaque alerte avec le
     motif dans le champ comment. Effet : compteur périodique reset, plus de lignes
     vierges dans l'historique, modales à l'écran se ferment au prochain polling.
+
+    v2.3.31 : la ligne « Fermée auto » n'est plus inscrite que si l'alerte
+    était **effectivement due** juste avant la saisie (i.e. affichée à
+    l'écran de l'opérateur ou sur le point de l'être). Sinon on ne trace
+    rien — évite les lignes fantômes dans l'historique pour des alertes
+    dont l'intervalle n'était pas écoulé. `exclude_saisie_id` = id de la
+    saisie qu'on vient d'insérer, à exclure des calculs.
     """
     if not machine:
         return
@@ -4624,6 +4654,19 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
                 continue
         except Exception:
             pass
+        # v2.3.31 : ne trace que si l'alerte était réellement due juste
+        # avant cette saisie. Autrement dit : l'alerte était bien à l'écran
+        # (ou aurait dû l'être) au moment où l'op a saisi son code. Sinon
+        # on ne crée pas de ligne fantôme "Fermée auto : XX – …".
+        try:
+            was_due = _is_periodic_alert_due(
+                conn, int(r["id"]), params, machine, _now_dt,
+                exclude_saisie_id=exclude_saisie_id,
+            )
+        except Exception:
+            was_due = False
+        if not was_due:
+            continue
         try:
             conn.execute(
                 """INSERT INTO maintenance_alert_acks
