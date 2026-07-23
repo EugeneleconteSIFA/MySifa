@@ -6031,7 +6031,7 @@ function _renderAlertFormFields(params, opts) {
     +     '</div>'
     +     '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
     +   '</div>'
-    +   // v2.3.33 : section Affichage — Placement + Taille uniquement
+    // v2.3.33 : section Affichage — Placement + Taille uniquement
     +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +     '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
     +     '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
@@ -6050,7 +6050,7 @@ function _renderAlertFormFields(params, opts) {
     +       '</div>'
     +     '</div>'
     +   '</div>'
-    +   // v2.3.33 : Bloquer la production — section séparée d'Affichage
+    // v2.3.33 : Bloquer la production — section séparée d'Affichage
     +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +     '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
     +       '<div>'
