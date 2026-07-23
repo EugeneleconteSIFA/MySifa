@@ -192,6 +192,7 @@ th{{
   font-weight:600;background:var(--bg);
 }}
 .td-muted{{color:var(--muted);font-size:12px}}
+.portail-serie-sub td{{background:var(--bg);border-top:1px dashed var(--border) !important;padding:6px 8px !important}}
 .notice-danger{{border-color:var(--danger);color:var(--danger)}}
 td input[type="number"],td input[type="text"]{{min-width:88px}}
 input,textarea,select{{
@@ -572,13 +573,18 @@ function renderOffre() {{
         '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + code + "</option>";
       const uniteSel = (code, label, sel) =>
         '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + label + "</option>";
+      const nbSeries = Array.isArray(ln.series) ? ln.series.length : 0;
+      const qtyCell = nbSeries > 0
+        ? "<td><strong>" + escHtml(formatFrInt(ln.quantite)) + "</strong>" +
+          '<div style="font-size:10px;color:var(--muted);margin-top:2px;font-weight:600;letter-spacing:.3px;text-transform:uppercase">' + escHtml(nbSeries + " " + t("seriesShort")) + "</div></td>"
+        : "<td>" + escHtml(formatFrInt(ln.quantite)) + "</td>";
       html += "<tr>" +
         "<td>" + escHtml(ln.client_nom || t("dash")) + "</td>" +
         "<td>" + escHtml(ln.ref_produit) + "</td>" +
         '<td class="td-muted">' + escHtml(ln.frontal || t("dash")) + "</td>" +
         '<td class="td-muted">' + escHtml(ln.adhesif || t("dash")) + "</td>" +
         "<td>" + escHtml(ln.etiquettes_par_bobine != null ? formatFrInt(ln.etiquettes_par_bobine) : t("dash")) + "</td>" +
-        "<td>" + escHtml(formatFrInt(ln.quantite)) + "</td>" +
+        qtyCell +
         '<td><input type="number" step="0.0001" min="0" class="inp-quotation" data-lid="' + ln.id + '" value="' + escHtml(qVal) + '"' + dis + "></td>" +
         '<td><select class="inp-devise" data-lid="' + ln.id + '"' + dis + ">" +
           devSel("EUR", dev) + devSel("USD", dev) +
@@ -590,6 +596,15 @@ function renderOffre() {{
         '<td><input type="number" step="1" min="0" class="inp-delai" data-lid="' + ln.id + '" value="' + escHtml(delaiVal) + '"' + dis + "></td>" +
         '<td><input type="text" class="inp-com" data-lid="' + ln.id + '" value="' + escAttr(r.commentaire || "") + '"' + dis + "></td>" +
         "</tr>";
+      // Séries — sous-lignes descriptives, cotation reste sur la ligne parent
+      if (nbSeries > 0) {{
+        ln.series.forEach(s => {{
+          const notesTxt = s.notes ? ' <span style="color:var(--muted)">· ' + escHtml(s.notes) + "</span>" : "";
+          html += '<tr class="portail-serie-sub"><td></td><td colspan="4" style="padding-left:20px;font-size:12px;color:var(--text2)">↳ <strong>' + escHtml(t("serieLabel")) + " : " + escHtml(s.libelle || "—") + "</strong>" + notesTxt + "</td>" +
+            '<td style="font-size:12px;color:var(--text2)">' + escHtml(formatFrInt(s.quantite)) + "</td>" +
+            '<td colspan="5" style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(t("seriesInfo")) + "</td></tr>";
+        }});
+      }}
     }});
   }}
   html += "</tbody></table></div>";

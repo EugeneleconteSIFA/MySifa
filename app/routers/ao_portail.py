@@ -247,15 +247,32 @@ def _portail_payload(conn, ao: dict, fourni: dict) -> dict[str, Any]:
         (ao_id,),
     ).fetchall()
     lignes = []
+    ligne_ids: list[int] = []
     for r in lignes_raw:
         ln = _row_dict(r)
         ctx = _produit_ctx_for_ligne(conn, ln.get("ref_produit") or "")
         ln.update(ctx)
+        ligne_ids.append(int(ln["id"]))
         lignes.append(ln)
+    # Séries par ligne (portail fournisseur : lecture seule)
+    series_by_ligne: dict[int, list[dict]] = {}
+    if ligne_ids:
+        qmarks = ",".join("?" * len(ligne_ids))
+        for r in conn.execute(
+            f"""SELECT id, ligne_id, position, libelle, quantite, notes
+                FROM ao_lignes_series
+                WHERE ligne_id IN ({qmarks})
+                ORDER BY ligne_id, position, id""",
+            tuple(ligne_ids),
+        ).fetchall():
+            d = _row_dict(r)
+            series_by_ligne.setdefault(int(d["ligne_id"]), []).append(d)
+    for ln in lignes:
+        ln["series"] = series_by_ligne.get(int(ln["id"]), [])
     reponses = [
         _row_dict(r)
         for r in conn.execute(
-            """SELECT ligne_id, quotation, prix_unitaire, devise, unite_quotation,
+            """SELECT ligne_id, serie_id, quotation, prix_unitaire, devise, unite_quotation,
                       delai_jours, commentaire
                FROM ao_reponses WHERE ao_fournisseur_id=?""",
             (fourni_id,),
