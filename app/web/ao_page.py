@@ -148,9 +148,10 @@ body.sb-open .sidebar-overlay{display:block}
 .breadcrumb a{color:var(--accent);cursor:pointer;text-decoration:none}
 .detail-hdr{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:8px}
 .detail-hdr h2{font-size:18px;font-weight:800}
-.detail-hdr .nav-pager{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.detail-hdr .nav-pager .nav-pos{padding:0 6px;font-weight:600;color:var(--text2);white-space:nowrap}
-.nav-pager .btn-icon{width:32px;height:32px}
+.detail-hdr .nav-pager{margin-left:auto;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px 4px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.detail-hdr .nav-pager .nav-pos{padding:0 10px;font-weight:700;color:var(--text);white-space:nowrap;font-size:13px}
+.nav-pager .btn-icon{width:30px;height:30px;border-radius:8px;color:var(--text2);transition:background .15s,color .15s}
+.nav-pager .btn-icon:hover{background:var(--accent-bg);color:var(--accent)}
 .nav-pager .btn-icon[disabled]{opacity:.35;cursor:not-allowed;pointer-events:none}
 .detail-meta{font-size:13px;color:var(--text2);line-height:1.6}
 .detail-actions{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
@@ -180,6 +181,9 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .ao-hdr-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .prod-ref-link,.ao-ligne-ref-link{color:var(--accent);text-decoration:none;font-weight:600;border-bottom:1px dashed transparent;transition:border-color .15s}
 .prod-ref-link:hover,.ao-ligne-ref-link:hover{border-bottom-color:var(--accent)}
+input[type=file]{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:0;font-family:inherit;color:var(--text2);cursor:pointer;font-size:13px;overflow:hidden;max-width:100%}
+input[type=file]::file-selector-button{background:var(--accent-bg);color:var(--accent);border:0;border-right:1px solid var(--border);padding:10px 16px;font-weight:600;font-size:13px;font-family:inherit;cursor:pointer;margin-right:12px;transition:background .15s,color .15s}
+input[type=file]::file-selector-button:hover{background:var(--accent);color:var(--card)}
 .ao-series-toggle{padding:3px 6px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-bg);border-radius:6px;vertical-align:middle;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
 .ao-series-toggle:hover{background:var(--accent);color:var(--card);border-color:var(--accent);transform:translateY(-1px)}
 .ao-series-toggle:active{transform:translateY(0)}
@@ -730,9 +734,26 @@ async function loadDetail(id) {
   S.detail = await api('/api/ao/' + id);
   S.ao = S.detail.ao;
   try {
-    S.nonLus = await api('/api/ao/' + id + '/non-lus');
+    const nl = await api('/api/ao/' + id + '/non-lus');
+    // Format enrichi (backend récent) : {_unread, _totals, ...clés fournisseurs}
+    S.nonLus = nl._unread || {};
+    S.msgTotals = nl._totals || {};
+    // Rétrocompat : recopier les clés fournisseurs à la racine pour anciens lecteurs
+    if (!nl._unread) {
+      const cleaned = {};
+      for (const k of Object.keys(nl)) if (k[0] !== '_') cleaned[k] = nl[k];
+      S.nonLus = cleaned;
+      S.msgTotals = {};
+    }
   } catch(e) {
     S.nonLus = {};
+    S.msgTotals = {};
+  }
+  // Charger les pièces jointes pour compter dans l'onglet Documents
+  try {
+    S.detail.pieces_jointes = await api('/api/ao/' + id + '/pieces-jointes');
+  } catch(e) {
+    S.detail.pieces_jointes = [];
   }
   if (S.tab === 'comparaison') await loadComparaison(id);
   if (S.tab === 'messages' && S.messages_fourni) await loadMessages(id, S.messages_fourni);
@@ -1551,12 +1572,21 @@ function renderDetailHeader() {
     '<div class="detail-tabs">'+
     (() => {
       const totalNonLus = Object.values(S.nonLus || {}).reduce((a, b) => a + b, 0);
+      // Totaux : messages tous fournisseurs + documents (PJ AO)
+      const msgTotal = Object.values(S.msgTotals || {}).reduce((a, b) => a + b, 0);
+      const docTotal = (d.pieces_jointes || []).length;
+      const mkBadge = (total, unread) => {
+        if (!total && !unread) return '';
+        const bg = unread > 0 ? 'var(--danger)' : 'var(--accent-bg)';
+        const col = unread > 0 ? '#fff' : 'var(--accent)';
+        const brd = unread > 0 ? 'transparent' : 'var(--accent)';
+        const txt = unread > 0 ? escHtml(unread + '/' + total) : escHtml(total);
+        return ' <span class="tab-count" style="background:'+bg+';color:'+col+';border:1px solid '+brd+';font-size:10px;padding:1px 7px;border-radius:999px;font-weight:700;margin-left:4px">'+txt+'</span>';
+      };
       const labels = {
         lignes:'Lignes',fournisseurs:'Fournisseurs',comparaison:'Demandes de prix',
-        messages:'Messagerie'+(totalNonLus > 0
-          ? ' <span class="nav-badge" style="background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:700">'+escHtml(totalNonLus)+'</span>'
-          : ''),
-        documents:'Documents'
+        messages:'Messagerie'+mkBadge(msgTotal, totalNonLus),
+        documents:'Documents'+mkBadge(docTotal, 0)
       };
       return ['lignes','fournisseurs','comparaison','messages','documents'].map(t =>
         '<button class="detail-tab'+(S.tab===t?' active':'')+'" data-tab="'+t+'">'+labels[t]+'</button>'
