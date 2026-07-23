@@ -178,6 +178,8 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-table td.comp-td-coef{min-width:96px}
 .ao-hdr-btn{background:var(--card);border:1px solid var(--border);color:var(--text);transition:background .15s,border-color .15s}
 .ao-hdr-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.prod-ref-link,.ao-ligne-ref-link{color:var(--accent);text-decoration:none;font-weight:600;border-bottom:1px dashed transparent;transition:border-color .15s}
+.prod-ref-link:hover,.ao-ligne-ref-link:hover{border-bottom-color:var(--accent)}
 .ao-series-toggle{padding:3px 6px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-bg);border-radius:6px;vertical-align:middle;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
 .ao-series-toggle:hover{background:var(--accent);color:var(--card);border-color:var(--accent);transform:translateY(-1px)}
 .ao-series-toggle:active{transform:translateY(0)}
@@ -384,6 +386,30 @@ function goToAoSection(section) {
   render();
 }
 
+// Ouvre la fiche produit à partir d'une référence, depuis n'importe quelle
+// section. Si returnCtx est fourni, on note le contexte pour proposer un
+// retour à l'AO source depuis le bouton "Retour catalogue" (closeProduitForm).
+async function openProduitByRef(ref, returnCtx) {
+  const key = String(ref || '').trim().toLowerCase();
+  if (!key) return;
+  // S'assurer que S.produits est chargé
+  if (!S.produits || S.produits.length === 0) {
+    try { await loadProduits(); } catch(e) { /* ignoré */ }
+  }
+  const p = (S.produits || []).find(x => String(x.ref || '').trim().toLowerCase() === key);
+  if (!p) {
+    showToast('Fiche produit introuvable pour la référence « ' + ref + ' ».', 'danger');
+    return;
+  }
+  if (returnCtx) {
+    S._returnFromProduit = returnCtx;
+  } else {
+    S._returnFromProduit = null;
+  }
+  S.section = 'produits';
+  await openProduitForm(p);
+}
+
 function openSupport() {
   if (window.MySifaSupport && typeof window.MySifaSupport.open === 'function') {
     window.MySifaSupport.open({
@@ -541,7 +567,7 @@ function renderProduitsRows() {
       const frontalTxt = matiereNameById('frontal', mat.frontal_id);
       const adhesifTxt = matiereNameById('adhesif', mat.adhesif_id);
       rows += '<tr>'+
-        '<td class="prod-ref-cell">'+escHtml(p.ref)+'</td>'+
+        '<td class="prod-ref-cell"><a href="#" class="prod-ref-link" data-id="'+p.id+'">'+escHtml(p.ref)+'</a></td>'+
         '<td>'+clientTxt+'</td>'+
         '<td>'+frontalTxt+'</td>'+
         '<td>'+adhesifTxt+'</td>'+
@@ -563,8 +589,9 @@ function renderProduitsRows() {
       '<th>Conditionnement bobine</th>'+
       '<th></th>'+
       '</tr></thead><tbody>'+rows+'</tbody></table>';
-    el.querySelectorAll('.btn-edit-produit').forEach(b => {
-      b.addEventListener('click', () => {
+    el.querySelectorAll('.btn-edit-produit, .prod-ref-link').forEach(b => {
+      b.addEventListener('click', (e) => {
+        e.preventDefault();
         const p = (S.produits||[]).find(x => String(x.id) === String(b.dataset.id));
         if (p) openProduitForm(p);
       });
@@ -1571,8 +1598,9 @@ function renderLignes() {
     const acts = canEditSeries
       ? '<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button>'
       : '';
+    const refLink = '<a href="#" class="ao-ligne-ref-link" data-ref="'+escAttr(l.ref_produit||'')+'">'+escHtml(l.ref_produit)+'</a>';
     let mainRow = '<tr class="ao-ligne-row" data-lid="'+l.id+'"><td>'+escHtml(l.position)+'</td>'+
-      '<td>'+chev+escHtml(l.ref_produit)+seriesBadge+'</td>'+
+      '<td>'+chev+refLink+seriesBadge+'</td>'+
       '<td>'+escHtml(l.client_nom||'—')+'</td>'+
       '<td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
       '<td>'+qtyTxt+'</td>'+
@@ -2800,6 +2828,13 @@ function bindDetailEvents() {
       showToast('Ligne supprimée.', 'success');
       await loadDetail(S.ao.id); render();
     } catch(e) { showToast(e.message, 'danger'); }
+  }));
+  // Ref produit cliquable dans la liste des lignes d'un AO → ouvre la fiche produit
+  document.querySelectorAll('.ao-ligne-ref-link').forEach(a => a.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const ref = a.dataset.ref || '';
+    const aoId = S.ao?.id;
+    await openProduitByRef(ref, aoId ? {section: 'ao', ao_id: aoId} : null);
   }));
   // Séries — déplier / plier
   document.querySelectorAll('.ao-series-toggle').forEach(b => b.addEventListener('click', () => {

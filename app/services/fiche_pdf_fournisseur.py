@@ -261,7 +261,7 @@ def _section_title(c: canvas.Canvas, x: float, y: float,
 def _draw_row(c: canvas.Canvas, x: float, y: float,
               label_fr: str, label_en: str, value_fr: str, value_en: str,
               striped: bool = False, width: float | None = None) -> float:
-    """Ligne compacte — FR uniquement pour label, EN sous FR si valeur diffère."""
+    """Ligne bilingue compacte — label FR bold + EN italique dessous, valeur idem."""
     inner_w = width if width is not None else (W - x - 15 * mm)
     row_h = _SECTION_ROW_H
     col_lbl = inner_w * 0.42
@@ -279,14 +279,20 @@ def _draw_row(c: canvas.Canvas, x: float, y: float,
     c.setLineWidth(0.3)
     c.line(x, y_bottom, x + inner_w, y_bottom)
 
-    y_txt = y - 4.4 * mm
+    # Deux mini-lignes dans les 6.8mm : FR bold + EN italique en dessous
+    y_fr = y - 3.1 * mm
+    y_en = y - 5.6 * mm
 
-    # Label FR uniquement (EN est signalé dans le titre de section)
+    # Label FR (bold) + EN (italique gris)
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 8.5)
-    c.drawString(x + 2.5 * mm, y_txt, label_fr)
+    c.setFont("Helvetica-Bold", 8.2)
+    c.drawString(x + 2.5 * mm, y_fr, label_fr)
+    if label_en and label_en != label_fr:
+        c.setFillColor(_MUTED)
+        c.setFont("Helvetica-Oblique", 6.8)
+        c.drawString(x + 2.5 * mm, y_en, label_en)
 
-    # Value FR (bold). Ajout EN en muted si différent.
+    # Value FR (bold) + EN (italique gris) si différent
     x_val = x + col_lbl + 2.5 * mm
     max_val_w = col_val - 5 * mm
 
@@ -297,23 +303,15 @@ def _draw_row(c: canvas.Canvas, x: float, y: float,
                 return s
         return base - 2
 
-    show_en = bool(value_en) and value_en != value_fr
-    if show_en:
-        y_fr = y - 3.2 * mm
-        y_en = y - 5.6 * mm
-        size_fr = _fit(value_fr, 8.5, bold=True)
-        c.setFillColor(_BLACK)
-        c.setFont("Helvetica-Bold", size_fr)
-        c.drawString(x_val, y_fr, value_fr)
-        size_en = _fit(value_en, 7, bold=False)
+    size_fr = _fit(value_fr, 8.5, bold=True)
+    c.setFillColor(_BLACK)
+    c.setFont("Helvetica-Bold", size_fr)
+    c.drawString(x_val, y_fr, value_fr)
+    if value_en and value_en != value_fr:
+        size_en = _fit(value_en, 6.8, bold=False)
         c.setFillColor(_MUTED)
         c.setFont("Helvetica-Oblique", size_en)
         c.drawString(x_val, y_en, value_en)
-    else:
-        size_fr = _fit(value_fr, 9, bold=True)
-        c.setFillColor(_BLACK)
-        c.setFont("Helvetica-Bold", size_fr)
-        c.drawString(x_val, y_txt, value_fr)
 
     c.setFillColor(_BLACK)
     return y_bottom

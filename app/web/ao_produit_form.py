@@ -496,6 +496,17 @@ function closeProduitForm() {
     hook.onCanceled();
     return;
   }
+  // Retour vers l'AO qu'on a quitté (si la fiche a été ouverte depuis une ligne d'AO)
+  const ret = S._returnFromProduit;
+  if (ret && ret.section === 'ao' && ret.ao_id != null) {
+    S._returnFromProduit = null;
+    S.produitView = 'list';
+    S.produitForm = null;
+    S.section = 'ao';
+    openDetail(ret.ao_id);
+    return;
+  }
+  S._returnFromProduit = null;
   S.produitView = 'list';
   S.produitForm = null;
   render();

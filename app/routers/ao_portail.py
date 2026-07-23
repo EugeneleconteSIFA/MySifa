@@ -124,6 +124,55 @@ def _fourni_upload_dir(ao_id: int, fourni_id: int) -> str:
     return path
 
 
+def _ensure_auto_attached_fiches(conn, ao_id: int, ao_reference: str | None) -> None:
+    """Rattrapage idempotent : génère les fiches PDF fournisseur manquantes.
+
+    Appelé au premier accès au portail sur un AO envoyé. Skip complet si
+    toutes les fiches sont déjà présentes.
+    """
+    import re
+    # Références produit distinctes de l'AO
+    refs = [
+        (r["ref_produit"] or "").strip()
+        for r in conn.execute(
+            "SELECT DISTINCT ref_produit FROM ao_lignes WHERE ao_id=?",
+            (ao_id,),
+        ).fetchall()
+    ]
+    refs = [r for r in refs if r]
+    if not refs:
+        return
+    # PJ déjà présentes
+    existing = {
+        r["filename"]
+        for r in conn.execute(
+            "SELECT filename FROM ao_pieces_jointes WHERE ao_id=?", (ao_id,)
+        ).fetchall()
+    }
+    # Rien à faire si toutes les fiches sont là
+    missing = []
+    for ref in refs:
+        ref_clean = re.sub(r"[^\w\-]+", "_", ref.split(" - ")[0])
+        fname = f"fiche_fournisseur_{ref_clean}.pdf"
+        if fname not in existing:
+            missing.append(ref)
+    if not missing:
+        return
+    # Import tardif pour éviter la dépendance circulaire
+    from app.routers.ao import (
+        _auto_attach_fournisseur_pdfs,
+        _produits_by_ref_map,
+    )
+    produits_map = _produits_by_ref_map(conn)
+    lignes_raw = [
+        {"ref_produit": ref, "designation": "", "quantite": None, "unite": None}
+        for ref in missing
+    ]
+    now = _now_paris_iso()
+    _auto_attach_fournisseur_pdfs(conn, ao_id, ao_reference, lignes_raw, produits_map, now)
+    conn.commit()
+
+
 def _ao_pj_path(ao_id: int, stored_name: str, fourni_id: int | None = None) -> str:
     if fourni_id is not None:
         return os.path.join(_fourni_upload_dir(ao_id, fourni_id), stored_name)
@@ -481,6 +530,14 @@ def get_portail_data(request: Request, token: str):
             conn.commit()
             fourni["statut"] = "ouvert"
             fourni["date_ouverture"] = now
+        # Rattrapage : si l'AO est envoyée et qu'il manque des fiches PDF
+        # (AO envoyé avant l'auto-attach, ou produit ajouté au catalogue plus
+        # tard), on les génère maintenant — idempotent.
+        try:
+            if ao.get("statut") == "envoyee":
+                _ensure_auto_attached_fiches(conn, int(ao["id"]), ao.get("reference"))
+        except Exception:
+            logger.exception("Rattrapage fiches PDF portail échoué (AO %s)", ao.get("id"))
         payload = _portail_payload(conn, ao, fourni)
         # Traduction auto selon langue fournisseur
         try:
