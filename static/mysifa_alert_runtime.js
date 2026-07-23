@@ -406,9 +406,16 @@
     }
   }
 
-  function _loadAlertPos() {
+  // v2.3.25 : position par ID d'alerte — chaque alerte garde sa propre
+  // position sauvegardée. Deux alertes différentes ne s'influencent plus
+  // (avant : une clé unique 'mysifa_alert_position' partagée pour toutes).
+  function _posKey(alertId) {
+    return 'mysifa_alert_position_' + String(alertId || '_default');
+  }
+
+  function _loadAlertPos(alertId) {
     try {
-      const raw = localStorage.getItem('mysifa_alert_position');
+      const raw = localStorage.getItem(_posKey(alertId));
       if (!raw) return null;
       const p = JSON.parse(raw);
       if (p && typeof p.left === 'number' && typeof p.top === 'number') return p;
@@ -416,14 +423,14 @@
     return null;
   }
 
-  function _saveAlertPos(left, top) {
+  function _saveAlertPos(alertId, left, top) {
     try {
-      localStorage.setItem('mysifa_alert_position', JSON.stringify({ left: left, top: top }));
+      localStorage.setItem(_posKey(alertId), JSON.stringify({ left: left, top: top }));
     } catch (e) {}
   }
 
-  function _applyAlertPos(alertEl) {
-    const pos = _loadAlertPos();
+  function _applyAlertPos(alertEl, alertId) {
+    const pos = _loadAlertPos(alertId);
     if (!pos) return;
     const w = window.innerWidth || document.documentElement.clientWidth;
     const h = window.innerHeight || document.documentElement.clientHeight;
@@ -445,6 +452,15 @@
 
   let _dragState = null;
 
+  // v2.3.25 : récupère l'ID d'alerte depuis le wrapper parent (data-attr posé
+  // dans _renderAlert). Utilisé pour sauvegarder la position par alerte.
+  function _alertIdFromEl(alertEl) {
+    if (!alertEl) return null;
+    const wrap = alertEl.closest('.ta-sim');
+    if (!wrap) return null;
+    return wrap.getAttribute('data-alert-runtime-id') || null;
+  }
+
   function _startDrag(ev, alertEl) {
     if (ev.target.closest('button, input, textarea, label, select')) return;
     const isTouch = !!(ev.touches && ev.touches.length);
@@ -455,6 +471,7 @@
       offsetX: clientX - rect.left,
       offsetY: clientY - rect.top,
       alertEl: alertEl,
+      alertId: _alertIdFromEl(alertEl),
     };
     const title = alertEl.querySelector('.ta-sim-title');
     if (title) title.classList.add('ta-dragging');
@@ -489,7 +506,7 @@
     if (!_dragState) return;
     const el = _dragState.alertEl;
     const rect = el.getBoundingClientRect();
-    _saveAlertPos(rect.left, rect.top);
+    _saveAlertPos(_dragState.alertId, rect.left, rect.top);
     const title = el.querySelector('.ta-sim-title');
     if (title) title.classList.remove('ta-dragging');
     document.removeEventListener('mousemove', _doDrag);
@@ -579,7 +596,7 @@
         _restoreAlert(alertEl);
       } else {
         const r = alertEl.getBoundingClientRect();
-        _saveAlertPos(r.left, r.top);
+        _saveAlertPos(_alertIdFromEl(alertEl), r.left, r.top);
       }
     }
 
@@ -631,8 +648,10 @@
     const alertEl = wrap.querySelector('.ta-sim-alert');
     // v2.3.24 : les alertes bloquantes NE sont PAS déplaçables — elles
     // restent à leur placement configuré (centre ou coin haut droit).
+    // v2.3.25 : position sauvegardée par ID d'alerte (pas de position
+    // globale partagée entre toutes les alertes).
     const _isBlocking = !!alert.block_production;
-    if (alertEl && !_isBlocking) _applyAlertPos(alertEl);
+    if (alertEl && !_isBlocking) _applyAlertPos(alertEl, alert.id);
 
     const titleEl = wrap.querySelector('.ta-sim-title');
     if (titleEl && alertEl && !_isBlocking) {
