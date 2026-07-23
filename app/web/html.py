@@ -7831,15 +7831,42 @@ async function openFictifReassignModal(){
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
 }
  
-// v2.3.39 : viewer embarqué pour une alerte validée. Reprend fidèlement
-// le rendu utilisé dans l'appli Maintenance (openAckDetail) : mêmes
-// classes CSS que le runtime des alertes (.ta-sim, .ta-sim-alert,
-// .ta-sim-title, .ta-chip, etc.). MyProd ne charge pas le runtime, donc
-// on injecte le CSS nécessaire une seule fois via _injectAckViewerCss.
-// v2.3.40 : simplifié — plus de section "Contexte dossier & fiche
-// technique" ni de cartes DOSSIER/BOBINE. On garde uniquement un badge
-// "Dossier <ref> · <client>" au-dessus du commentaire.
-function _injectAckViewerCss(){
+// v2.3.42 : le viewer d'ack a été extrait dans un module JS partagé
+// (static/mysifa_ack_viewer.js) chargé sur /prod. On garde ici un
+// wrapper `openAlertAckDetail(row)` qui transforme la row renvoyée par
+// /api/saisies en objet ack normalisé puis appelle MysifaAckViewer.open.
+// Cela garantit un rendu strictement identique au modal utilisé sur
+// /maintenance. Le vieux code d'injection CSS + rendu HTML custom a été
+// retiré pour ne pas diverger.
+function openAlertAckDetail(row){
+  if(!row || row.kind !== 'alert_ack') return;
+  if(!window.MysifaAckViewer || typeof window.MysifaAckViewer.open !== 'function'){
+    if(window.console) window.console.warn('[openAlertAckDetail] MysifaAckViewer non chargé — assure-toi que mysifa_ack_viewer.js est inclus.');
+    return;
+  }
+  let params = {}, responses = {};
+  try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
+  try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
+  const items = (params && params.checklist && Array.isArray(params.checklist.items))
+    ? params.checklist.items : [];
+  window.MysifaAckViewer.open({
+    alert_nom      : row._alert_nom || row.operation || 'Alerte',
+    responses      : responses,
+    checklist_items: items,
+    comment        : row._alert_comment || '',
+    machine        : row.machine || '',
+    date           : row.date_operation || '',
+    operateur      : row.operateur || row.operateur_nom || '',
+    no_dossier     : row.no_dossier || '',
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// v2.3.39/40 (remplacé par v2.3.42) : ancien viewer inline non utilisé,
+// gardé désactivé pour rétro-compat éventuelle. La fonction publique
+// openAlertAckDetail ci-dessus est celle utilisée par renderSaisies.
+// ─────────────────────────────────────────────────────────────────────
+function _injectAckViewerCss_UNUSED(){
   if(document.getElementById('ack-viewer-css')) return;
   const s = document.createElement('style');
   s.id = 'ack-viewer-css';
@@ -7865,9 +7892,9 @@ function _injectAckViewerCss(){
   document.head.appendChild(s);
 }
 
-function openAlertAckDetail(row){
+function _openAlertAckDetail_OLD(row){
   if(!row || row.kind !== 'alert_ack') return;
-  _injectAckViewerCss();
+  _injectAckViewerCss_UNUSED();
   let params = {}, responses = {};
   try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
   try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
