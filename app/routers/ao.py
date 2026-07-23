@@ -706,11 +706,12 @@ async def create_fournisseur_contact(request: Request, four_id: int):
                 "UPDATE fournisseur_contacts SET is_principal=0 WHERE fournisseur_id=?",
                 (four_id,),
             )
+        now_iso = _now_paris_iso()
         cur = conn.execute(
             """INSERT INTO fournisseur_contacts
-               (fournisseur_id, nom, fonction, emails, tels, langue, is_principal, actif)
-               VALUES (?,?,?,?,?,?,?,1)""",
-            (four_id, nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal),
+               (fournisseur_id, nom, fonction, emails, tels, langue, is_principal, actif, created_at)
+               VALUES (?,?,?,?,?,?,?,1,?)""",
+            (four_id, nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal, now_iso),
         )
         conn.commit()
         new_id = cur.lastrowid
@@ -760,9 +761,9 @@ async def update_fournisseur_contact(request: Request, four_id: int, contact_id:
             )
         conn.execute(
             """UPDATE fournisseur_contacts
-               SET nom=?, fonction=?, emails=?, tels=?, langue=?, is_principal=?
+               SET nom=?, fonction=?, emails=?, tels=?, langue=?, is_principal=?, updated_at=?
                WHERE id=?""",
-            (nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal, contact_id),
+            (nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal, _now_paris_iso(), contact_id),
         )
         conn.commit()
         row = conn.execute(
