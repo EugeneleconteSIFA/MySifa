@@ -534,10 +534,12 @@ def email_accuse_reception(
         unite_s = _unite_quotation_label(rep.get("unite_quotation") if rep else None)
         delai_s = str(delai) if delai is not None else "—"
         fiche_s = _fiche_technique_link(ln.get("ref_produit"), produits_map)
+        qty_s = _format_number(ln.get("quantite"), "fr")
+        unite_ligne = _localize_unite(ln.get("unite"), "fr")
         rows_html += (
             f"<tr>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px\">{_esc(ln.get('ref_produit'))}</td>"
-            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(ln.get('quantite'))} {_esc(ln.get('unite') or '')}</td>"
+            f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right;white-space:nowrap\">{_esc(qty_s)} {_esc(unite_ligne)}</td>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(quotation_s)}</td>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px\">{_esc(unite_s)}</td>"
             f"<td style=\"padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right\">{_esc(delai_s)}</td>"
