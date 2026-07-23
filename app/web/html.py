@@ -7821,83 +7821,121 @@ async function openFictifReassignModal(){
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
 }
  
-// v2.3.39 : viewer embarqué pour une alerte validée. Reconstruit la
-// checklist en lecture seule à partir de row._alert_params (JSON stocké
-// côté backend maintenance_alerts.params) et row._alert_responses (JSON
-// de l'ack). Fidèle au viewer de l'appli Maintenance (openAckDetail)
-// mais autonome — MyProd ne charge pas maintenance_page.js.
+// v2.3.39 : viewer embarqué pour une alerte validée. Reprend fidèlement
+// le rendu utilisé dans l'appli Maintenance (openAckDetail) : mêmes
+// classes CSS que le runtime des alertes (.ta-sim, .ta-sim-alert,
+// .ta-sim-title, .ta-chip, etc.). MyProd ne charge pas le runtime, donc
+// on injecte le CSS nécessaire une seule fois via _injectAckViewerCss.
+// v2.3.40 : simplifié — plus de section "Contexte dossier & fiche
+// technique" ni de cartes DOSSIER/BOBINE. On garde uniquement un badge
+// "Dossier <ref> · <client>" au-dessus du commentaire.
+function _injectAckViewerCss(){
+  if(document.getElementById('ack-viewer-css')) return;
+  const s = document.createElement('style');
+  s.id = 'ack-viewer-css';
+  s.textContent = [
+    ".ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}",
+    ".ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto}",
+    ".ta-sim.ta-pl-center .ta-sim-alert{position:fixed;top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%)}",
+    ".ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;pointer-events:auto;box-sizing:border-box;width:440px;max-width:calc(100vw - 40px)}",
+    ".ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}",
+    ".ta-sim-sub{font-size:12px;color:var(--text2);margin-bottom:14px;letter-spacing:.2px}",
+    ".ta-sim-actions{display:flex;gap:6px;margin-top:14px}",
+    ".ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}",
+    ".ta-sim-btn:hover{filter:brightness(1.05)}",
+    ".ta-cl-item{display:flex;flex-direction:column;gap:6px}",
+    ".ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;user-select:none;font-family:inherit;line-height:1.2}",
+    ".ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}",
+    ".ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}",
+    ".ta-chip span{white-space:nowrap}",
+    ".ack-di-badge{display:inline-flex;align-items:center;padding:5px 11px;border-radius:8px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:600}",
+    ".ack-di-badge-sub{display:inline-flex;align-items:center;padding:5px 11px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:500;margin-left:6px}",
+    "@media(max-width:600px){.ta-sim-alert{width:calc(100vw - 24px) !important;max-width:calc(100vw - 24px) !important;padding:14px}}",
+  ].join('\n');
+  document.head.appendChild(s);
+}
+
 function openAlertAckDetail(row){
   if(!row || row.kind !== 'alert_ack') return;
+  _injectAckViewerCss();
   let params = {}, responses = {};
   try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
   try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
   const items = Array.isArray(params && params.checklist && params.checklist.items)
     ? params.checklist.items : [];
-  const desc = (params && typeof params.description === 'string') ? params.description.trim() : '';
   const esc = (s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-  // Overlay + shell modal
-  const overlay = document.createElement('div');
-  overlay.className = 'alert-modal-overlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px';
-  const close = ()=>{ try{overlay.remove();}catch(_){}}
-
-  // Checklist rendu lecture seule
+  // Rendu de la checklist en lecture seule — identique à maintenance_page.py
   let checklistHtml = '';
   if(items.length){
-    checklistHtml = '<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle</div>'
-      + '<div style="display:flex;flex-direction:column;gap:10px">'
+    checklistHtml = '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">'
       + items.map((it, idx)=>{
           const r = responses[String(idx)];
           if(it.type === 'value'){
             const val = (r != null && r !== '') ? String(r) : '';
-            const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500">'+esc(it.unit)+'</span>' : '';
-            return '<div><div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">'+esc(it.label||'')+'</div>'
-              + '<div style="display:flex;align-items:center;gap:8px"><input type="text" disabled value="'+esc(val)+'" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;opacity:.85">'+unit+'</div></div>';
+            const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">'+esc(it.unit)+'</span>' : '';
+            return '<div class="ta-cl-item" data-type="value">'
+              + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">'+esc(it.label||'')+'</div>'
+              + '<div style="display:flex;align-items:center;gap:8px">'
+              +   '<input type="text" disabled value="'+esc(val)+'" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box;opacity:.85">'
+              +   unit
+              + '</div>'
+              + '</div>';
           }
+          // choice : les valeurs cochées apparaissent en chips (styling .ta-chip identique au runtime)
           const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
-          const chips = selected.length
-            ? selected.map(s=>'<span style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:14px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);font-size:12px;font-weight:600">'+esc(s)+'</span>').join(' ')
+          const respHtml = selected.length
+            ? selected.map(s => '<label class="ta-chip"><input type="checkbox" disabled checked><span>'+esc(s)+'</span></label>').join(' ')
             : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
           const otherTxt = responses[String(idx)+'_other'];
           const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
             ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">'+esc(String(otherTxt))+'</div>'
             : '';
-          return '<div><div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">'+esc(it.label||'')+'</div>'
-            + '<div style="display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div>'+otherHtml+'</div>';
+          return '<div class="ta-cl-item" data-type="choice">'
+            + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">'+esc(it.label||'')+'</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:5px">'+respHtml+'</div>'
+            + otherHtml
+            + '</div>';
         }).join('')
-      + '</div></div>';
+      + '</div>';
   }
 
-  const commentTxt = (row._alert_comment || '').trim();
-  const commentHtml = commentTxt
-    ? '<div style="margin-top:10px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:13px;color:var(--text);white-space:pre-wrap">'+esc(commentTxt)+'</div>'
+  // Contexte : machine · date · opérateur (identique à maintenance)
+  const dtStr = fDSecs(row.date_operation);
+  const contextLine = esc(row.machine||'—') + ' · ' + esc(dtStr) + ' · ' + esc(row.operateur||'—');
+
+  // v2.3.40 : uniquement le badge Dossier, pas de fiche technique
+  const noDos = (row.no_dossier || '').trim();
+  const dossierHtml = noDos
+    ? '<div style="margin:12px 0 6px 0"><span class="ack-di-badge">Dossier '+esc(noDos)+'</span></div>'
     : '';
 
-  const dtStr = fDSecs(row.date_operation);
-  const context = esc(row.machine||'—') + ' · ' + esc(dtStr) + ' · ' + esc(row.operateur||'—') + (row.no_dossier ? ' · Dossier ' + esc(row.no_dossier) : '');
-  const descHtml = desc ? '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:14px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">'+esc(desc)+'</div>' : '';
+  const commentText = (row._alert_comment || '').trim();
 
-  overlay.innerHTML = '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">'
-    +   '<h3 style="margin:0;font-size:15px;color:var(--text)">Alerte : '+esc(row._alert_nom||row.operation||'')+'</h3>'
-    +   '<button type="button" data-close style="background:transparent;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;padding:4px 8px">×</button>'
-    + '</div>'
-    + '<div style="padding:18px 20px">'
-    +   '<div style="font-size:11px;color:var(--muted);margin-bottom:14px;letter-spacing:.3px">'+context+'</div>'
-    +   descHtml
-    +   checklistHtml
-    +   (commentTxt ? '<div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:14px;margin-bottom:6px">Commentaire opérateur</div>'+commentHtml : '')
-    + '</div>'
-    + '<div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)">'
-    +   '<button type="button" data-close style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:10px;font-weight:600;cursor:pointer">Fermer</button>'
+  const overlay = document.createElement('div');
+  overlay.className = 'ta-sim ta-pl-center ta-blocking';
+  overlay.id = 'ack-detail-overlay';
+  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:560px">'
+    + '<div class="ta-sim-title">'+esc(row._alert_nom||row.operation||'Alerte')+'</div>'
+    + '<div class="ta-sim-sub">'+contextLine+'</div>'
+    + checklistHtml
+    + dossierHtml
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire</label>'
+    + '<textarea disabled rows="2" placeholder="(aucun commentaire)" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit;opacity:.85">'+esc(commentText)+'</textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" class="ta-sim-btn" id="ack-viewer-close">Fermer</button>'
     + '</div>'
     + '</div>';
   document.body.appendChild(overlay);
-  overlay.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click',close));
-  overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
-  const escHandler = (e)=>{ if(e.key==='Escape'){ close(); document.removeEventListener('keydown',escHandler); }};
-  document.addEventListener('keydown',escHandler);
+  const close = ()=>{ try{overlay.remove();}catch(_){}
+    document.removeEventListener('keydown', escHandler);
+  };
+  const escHandler = (e)=>{ if(e.key==='Escape') close(); };
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) close(); });
+  const closeBtn = overlay.querySelector('#ack-viewer-close');
+  if(closeBtn) closeBtn.addEventListener('click', close);
+  document.addEventListener('keydown', escHandler);
 }
 
 function renderSaisies(){
