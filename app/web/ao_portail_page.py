@@ -170,11 +170,12 @@ body{{
 .tabs{{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}}
 .tab{{
   padding:10px 16px;border-radius:10px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);font-size:13px;font-weight:600;
+  background:var(--card);color:var(--text);font-size:13px;font-weight:600;
   cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
 }}
-.tab:hover{{border-color:var(--accent);color:var(--accent)}}
-.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.tab:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent)}}
+.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 6px rgba(8,145,178,.15)}}
 .panel{{
   background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;
 }}
@@ -217,10 +218,13 @@ label.lbl{{
 .btn:hover{{filter:brightness(1.05)}}
 .btn:disabled{{opacity:.5;cursor:not-allowed;filter:none}}
 .btn-ghost{{
-  background:transparent;border:1px solid var(--border);color:var(--text2);
-  font-weight:600;font-size:13px;padding:8px 14px;
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  font-weight:600;font-size:13px;padding:8px 14px;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;
 }}
-.btn-ghost:hover{{border-color:var(--accent);color:var(--accent);filter:none}}
+.btn-ghost:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent);filter:none}}
+body.light .btn-ghost{{color:var(--text)}}
+body.light .btn-ghost:hover{{color:var(--accent)}}
 .section-title{{
   font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
   letter-spacing:.5px;margin:0 0 12px;
@@ -472,24 +476,25 @@ function setTab(tab, opts) {{
 async function loadPortailCounts() {{
   try {{
     const c = await fetch("/api/portail/ao/" + TOKEN + "/counts").then(r => r.json());
-    updateTabBadge("tab-messages", c.messages_non_lus || 0);
-    updateTabBadge("tab-documents", c.documents_nouveaux || 0);
+    updateTabBadge("tab-messages", c.messages_total || 0, c.messages_non_lus || 0);
+    updateTabBadge("tab-documents", c.documents_total || 0, c.documents_nouveaux || 0);
   }} catch(e) {{ /* silencieux */ }}
 }}
 
-function updateTabBadge(tabId, count) {{
+function updateTabBadge(tabId, total, unread) {{
   const el = document.getElementById(tabId);
   if (!el) return;
   // Reset : retire ancien badge si existe
   const oldBadge = el.querySelector(".tab-badge");
   if (oldBadge) oldBadge.remove();
-  if (count > 0) {{
-    const badge = document.createElement("span");
-    badge.className = "tab-badge";
-    badge.style.cssText = "display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#dc2626;color:#fff;font-size:10px;font-weight:700;min-width:16px;text-align:center";
-    badge.textContent = String(count);
-    el.appendChild(badge);
-  }}
+  // Toujours afficher le total (même 0) — accent, et badge rouge si non-lus
+  const badge = document.createElement("span");
+  badge.className = "tab-badge";
+  const bg = (unread > 0) ? "var(--danger,#dc2626)" : "var(--accent-bg)";
+  const col = (unread > 0) ? "#fff" : "var(--accent)";
+  badge.style.cssText = "display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:" + bg + ";color:" + col + ";font-size:10px;font-weight:700;min-width:16px;text-align:center;border:1px solid " + ((unread>0)?"transparent":"var(--accent)");
+  badge.textContent = (unread > 0) ? String(unread) + "/" + String(total) : String(total);
+  el.appendChild(badge);
 }}
 
 function startMsgPolling() {{
@@ -959,10 +964,13 @@ body{{
 .btn:hover{{filter:brightness(1.05)}}
 body.light .btn{{color:#fff}}
 .btn-ghost{{
-  background:transparent;border:1px solid var(--border);color:var(--text2);
-  font-weight:600;font-size:13px;padding:8px 14px;
+  background:var(--card);border:1px solid var(--border);color:var(--text);
+  font-weight:600;font-size:13px;padding:8px 14px;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;
 }}
-.btn-ghost:hover{{border-color:var(--accent);color:var(--accent);filter:none}}
+.btn-ghost:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent);filter:none}}
+body.light .btn-ghost{{color:var(--text)}}
+body.light .btn-ghost:hover{{color:var(--accent)}}
 .btn-sm{{font-size:13px;padding:8px 14px}}
 .empty{{
   font-size:13px;color:var(--muted);padding:24px;text-align:center;

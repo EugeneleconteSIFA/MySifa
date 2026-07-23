@@ -215,14 +215,9 @@ def _draw_ref_block(c: canvas.Canvas, ml: float, mr: float, y: float,
     ref = _clean_reference(produit.get("ref"))
     c.drawString(ml + 4 * mm, y - 11 * mm, ref)
 
-    client = produit.get("client_nom")
-    if client and str(client).strip():
-        c.setFont("Helvetica-Bold", 8)
-        c.setFillColor(_MUTED)
-        c.drawRightString(W - mr - 4 * mm, y - 5 * mm, "Client final  /  End customer")
-        c.setFillColor(_BLACK)
-        c.setFont("Helvetica-Bold", 11)
-        c.drawRightString(W - mr - 4 * mm, y - 11 * mm, str(client).strip())
+    # Nom du client final volontairement omis dans le PDF destiné au
+    # fournisseur (confidentialité — le fournisseur consulté n'a pas à
+    # connaître le client final SIFA).
 
     return y_bottom - 4 * mm
 
