@@ -56,7 +56,8 @@
       '.ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}',
       '.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:mysifaAckFade .15s ease-out}',
       '.ta-sim.ta-pl-center .ta-sim-alert{position:fixed;top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%)}',
-      '.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;pointer-events:auto;box-sizing:border-box;width:560px;max-width:calc(100vw - 40px);animation:mysifaAckSlide .2s ease-out}',
+      // v2.3.44 : largeur réduite (560 → 460) et max-height plus contrainte (85vh) pour un modal plus compact et scrollable.
+      '.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:85vh;overflow-y:auto;pointer-events:auto;box-sizing:border-box;width:460px;max-width:calc(100vw - 40px);animation:mysifaAckSlide .2s ease-out}',
       '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}',
       '.ta-sim-sub{font-size:12px;color:var(--text2);margin-bottom:14px;letter-spacing:.2px}',
       '.ta-sim-actions{display:flex;gap:6px;margin-top:14px}',
