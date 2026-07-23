@@ -2888,6 +2888,112 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
         return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct2)
 
 
+@router.post("/{ao_id}/lignes/{ligne_id}/reponses-manuelles")
+async def create_reponse_manuelle(request: Request, ao_id: int, ligne_id: int):
+    """Crée une réponse fournisseur saisie manuellement en interne.
+
+    Utilisé quand un fournisseur donne son prix par email/téléphone plutôt
+    que via le portail. La ligne côté comparateur affiche l'offre comme
+    n'importe quelle autre réponse. Le fournisseur est marqué "repondu".
+
+    Body : {ao_fournisseur_id, quotation, devise, unite_quotation,
+             delai_jours?, commentaire?, coef?, devise_prix_devis?}
+    """
+    user = _require_ao(request)
+    body = await request.json()
+    try:
+        ao_fournisseur_id = int(body.get("ao_fournisseur_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Fournisseur invalide.")
+    quotation = body.get("quotation")
+    if quotation is None or str(quotation).strip() == "":
+        raise HTTPException(status_code=400, detail="Quotation obligatoire.")
+    try:
+        quotation = float(quotation)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quotation invalide.")
+    devise = (body.get("devise") or "EUR").strip().upper()
+    if devise not in DEVISES:
+        devise = "EUR"
+    unite = (body.get("unite_quotation") or "mille").strip().lower()
+    if unite not in UNITES_QUOTATION:
+        raise HTTPException(status_code=400, detail="Unité invalide.")
+    delai = body.get("delai_jours")
+    if delai is not None and str(delai).strip() != "":
+        try:
+            delai = int(delai)
+        except (TypeError, ValueError):
+            delai = None
+    else:
+        delai = None
+    commentaire = (body.get("commentaire") or "").strip() or None
+    coef = body.get("coef")
+    if coef is not None:
+        try:
+            coef = float(coef)
+        except (TypeError, ValueError):
+            coef = 1.0
+        if coef <= 0:
+            coef = 1.0
+    else:
+        coef = 1.0
+    devise_prix_devis = (body.get("devise_prix_devis") or "EUR").strip().upper()
+    if devise_prix_devis not in DEVISES:
+        devise_prix_devis = "EUR"
+    now = _now_paris_iso()
+    with get_db() as conn:
+        _get_ao_or_404(conn, ao_id)
+        # Vérifier que la ligne appartient à l'AO
+        ln = conn.execute(
+            "SELECT * FROM ao_lignes WHERE id=? AND ao_id=?",
+            (ligne_id, ao_id),
+        ).fetchone()
+        if not ln:
+            raise HTTPException(status_code=404, detail="Ligne introuvable.")
+        # Vérifier que le fournisseur appartient à l'AO
+        fourni = conn.execute(
+            "SELECT * FROM ao_fournisseurs WHERE id=? AND ao_id=?",
+            (ao_fournisseur_id, ao_id),
+        ).fetchone()
+        if not fourni:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        # Existe déjà une réponse pour ce couple (fournisseur, ligne, sans série) ?
+        existing = conn.execute(
+            """SELECT id FROM ao_reponses
+               WHERE ao_fournisseur_id=? AND ligne_id=? AND serie_id IS NULL""",
+            (ao_fournisseur_id, ligne_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Une réponse existe déjà pour ce fournisseur — modifiez-la à la place.")
+        conn.execute(
+            """INSERT INTO ao_reponses
+               (ao_fournisseur_id, ligne_id, quotation, prix_unitaire,
+                devise, unite_quotation, unite_quotation_original, unite_manuel,
+                coef, devise_prix_devis, delai_jours, commentaire)
+               VALUES (?,?,?,?,?,?,?,1,?,?,?,?)""",
+            (
+                ao_fournisseur_id, ligne_id, quotation, quotation,
+                devise, unite, unite,
+                coef, devise_prix_devis, delai, commentaire,
+            ),
+        )
+        # Marquer le fournisseur "repondu" (comportement analogue au portail)
+        conn.execute(
+            """UPDATE ao_fournisseurs
+               SET statut='repondu', date_reponse=COALESCE(date_reponse, ?)
+               WHERE id=?""",
+            (now, ao_fournisseur_id),
+        )
+        conn.commit()
+    log_action(
+        user=user, action="CREATE", module="ao",
+        objet=f"Réponse manuelle · AO {ao_id} · fournisseur {ao_fournisseur_id}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "ao_id": ao_id, "ligne_id": ligne_id,
+            "ao_fournisseur_id": ao_fournisseur_id}
+
+
 @router.get("/{ao_id}/non-lus")
 def non_lus(request: Request, ao_id: int):
     """Retourne pour chaque fournisseur de l'AO le nombre de messages non lus

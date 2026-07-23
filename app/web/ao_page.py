@@ -1267,6 +1267,72 @@ function renderModal() {
         await loadDetail(S.ao.id); render();
       } catch(e) { showToast(e.message, 'danger'); }
     };
+  } else if (S.modal === 'saisie-manuelle') {
+    const md = S.modalData;
+    const ctx = md.ctx || {};
+    if (md.step === 'warn') {
+      box.innerHTML = '<h3 style="color:var(--warn,#a16207);display:flex;align-items:center;gap:8px">'+
+        icon('wrench',18)+' Saisie manuelle</h3>'+
+        '<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:13px;line-height:1.6;color:var(--text)">'+
+          '<strong>Attention</strong> — vous allez saisir <strong>manuellement</strong> le prix communiqué par <strong>'+escHtml(ctx.nom_fournisseur||'')+'</strong> pour la référence <strong>'+escHtml(ctx.ref_produit||'')+'</strong> (email, téléphone…).<br><br>'+
+          'Cette saisie sera enregistrée comme une réponse fournisseur classique. Le statut du fournisseur passera à <em>« Répondu »</em> et il ne pourra plus soumettre d\'offre via son portail sans écraser la vôtre.'+
+        '</div>'+
+        '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">J\'ai compris — continuer</button></div>';
+      ov.appendChild(box); m.appendChild(ov);
+      document.getElementById('m-cancel').onclick = closeModal;
+      document.getElementById('m-ok').onclick = () => { md.step = 'form'; renderModal(); };
+    } else {
+      // Étape 2 : formulaire de saisie
+      box.innerHTML = '<h3>Saisir le prix — '+escHtml(ctx.nom_fournisseur||'')+'</h3>'+
+        '<p style="font-size:12px;color:var(--muted);margin:0 0 14px">Référence : <strong style="color:var(--text2)">'+escHtml(ctx.ref_produit||'')+'</strong></p>'+
+        '<div class="form-row">'+
+        '<div class="field"><label>Quotation</label><input type="number" step="0.0001" min="0" id="m-sm-quotation" value="'+escAttr(md.quotation||'')+'" placeholder="Ex. 0.196"></div>'+
+        '<div class="field"><label>Devise</label><select id="m-sm-devise">'+
+          '<option value="EUR"'+(md.devise==='EUR'?' selected':'')+'>EUR</option>'+
+          '<option value="USD"'+(md.devise==='USD'?' selected':'')+'>USD</option>'+
+        '</select></div>'+
+        '</div>'+
+        '<div class="field"><label>Unité</label>'+
+          '<div style="display:flex;gap:16px;padding:6px 0">'+
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="radio" name="m-sm-unite" value="mille"'+(md.unite_quotation==='mille'?' checked':'')+'> Au mille</label>'+
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px"><input type="radio" name="m-sm-unite" value="bobine"'+(md.unite_quotation==='bobine'?' checked':'')+'> Par bobine</label>'+
+          '</div>'+
+        '</div>'+
+        '<div class="form-row">'+
+        '<div class="field"><label>Délai (jours, optionnel)</label><input type="number" step="1" min="0" id="m-sm-delai" value="'+escAttr(md.delai_jours||'')+'"></div>'+
+        '<div class="field"><label>Commentaire (optionnel)</label><input id="m-sm-com" value="'+escAttr(md.commentaire||'')+'"></div>'+
+        '</div>'+
+        '<div class="modal-actions"><button class="btn btn-ghost" id="m-cancel">Annuler</button><button class="btn btn-accent" id="m-ok">Enregistrer la quotation</button></div>';
+      ov.appendChild(box); m.appendChild(ov);
+      document.getElementById('m-cancel').onclick = closeModal;
+      document.getElementById('m-ok').onclick = async () => {
+        const q = parseFloat(document.getElementById('m-sm-quotation').value);
+        if (isNaN(q) || q <= 0) { showToast('Quotation invalide.', 'danger'); return; }
+        const dev = document.getElementById('m-sm-devise').value;
+        const uEl = document.querySelector('input[name="m-sm-unite"]:checked');
+        const unite = uEl ? uEl.value : 'mille';
+        const delaiRaw = document.getElementById('m-sm-delai').value.trim();
+        const delai = delaiRaw ? parseInt(delaiRaw, 10) : null;
+        const com = document.getElementById('m-sm-com').value.trim();
+        const body = {
+          ao_fournisseur_id: ctx.ao_fournisseur_id,
+          quotation: q,
+          devise: dev,
+          unite_quotation: unite,
+          delai_jours: (delai !== null && !isNaN(delai)) ? delai : null,
+          commentaire: com || null
+        };
+        try {
+          await api('/api/ao/'+S.ao.id+'/lignes/'+ctx.ligne_id+'/reponses-manuelles',
+            {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+          closeModal();
+          showToast('Quotation manuelle enregistrée.', 'success');
+          await loadComparaison(S.ao.id);
+          await loadDetail(S.ao.id);
+          render();
+        } catch(e) { showToast(e.message || 'Erreur enregistrement.', 'danger'); }
+      };
+    }
   } else if (S.modal === 'fourni-ref') {
     const md = S.modalData;
     const editing = md.id != null;
@@ -2955,6 +3021,10 @@ function renderComparaison() {
     const rid = r.reponse_id;
     const noRep = rid == null || rid === '';
     const dis = noRep ? ' disabled' : '';
+    // Quotation cell : bouton "Saisir prix" si pas de réponse enregistrée
+    const quotationCell = noRep
+      ? '<td><button type="button" class="btn btn-ghost btn-sm btn-saisir-prix" data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'" style="font-size:11px;padding:4px 8px;color:var(--accent);border:1px dashed var(--accent);background:var(--accent-bg)">'+icon('edit',12)+' Saisir</button></td>'
+      : '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>';
     body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
       '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
       '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
@@ -2962,7 +3032,7 @@ function renderComparaison() {
       '<td>'+formatInt(r.etiquettes_par_bobine)+'</td>'+
       '<td>'+formatInt(r.quantite_etiquettes)+'</td>'+
       '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
-      '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>'+
+      quotationCell+
       '<td>'+escHtml(devF)+'</td>'+
       '<td>'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+' style="font-size:11px;padding:2px 4px">'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 5px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">manuel</span>' : '')+'</td>'+
       '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
@@ -3260,6 +3330,22 @@ function bindDetailEvents() {
       } catch(e) { showToast(e.message, 'danger'); }
     });
   });
+  // Bouton "Saisir" — saisie manuelle d'une quotation reçue hors portail (email/tel)
+  document.querySelectorAll('.btn-saisir-prix').forEach(b => b.addEventListener('click', () => {
+    openModalSaisieManuelle({
+      ligne_id: parseInt(b.dataset.lid, 10),
+      ao_fournisseur_id: parseInt(b.dataset.fid, 10),
+      nom_fournisseur: b.dataset.fournisseur || '',
+      ref_produit: b.dataset.ref || ''
+    });
+  }));
+}
+
+function openModalSaisieManuelle(ctx) {
+  S.modal = 'saisie-manuelle';
+  // Étape 1 : avertissement, puis étape 2 : formulaire
+  S.modalData = {step: 'warn', ctx: ctx, quotation: '', devise: 'EUR', unite_quotation: 'mille', delai_jours: '', commentaire: ''};
+  renderModal();
 }
 
 function render() {
