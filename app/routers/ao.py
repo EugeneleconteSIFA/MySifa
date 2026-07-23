@@ -504,17 +504,29 @@ async def picker_create_fournisseur(request: Request):
     licence = (body.get("licence") or "").strip() or None
     certificat = (body.get("certificat") or "").strip() or None
     with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        # Colonnes disponibles + valeurs supplémentaires (ville, langue_default)
+        insert_cols = ["nom", "licence", "certificat"]
+        insert_vals: list = [nom, licence, certificat]
+        for extra in ("ville", "langue_default"):
+            if extra in cols and body.get(extra) is not None:
+                v = body.get(extra)
+                if isinstance(v, str):
+                    v = v.strip() or None
+                insert_cols.append(extra)
+                insert_vals.append(v)
+        placeholders = ",".join("?" * len(insert_cols))
         try:
             cur = conn.execute(
-                "INSERT INTO fournisseurs_fsc (nom, licence, certificat) VALUES (?,?,?)",
-                (nom, licence, certificat),
+                f"INSERT INTO fournisseurs_fsc ({', '.join(insert_cols)}) VALUES ({placeholders})",
+                tuple(insert_vals),
             )
             conn.commit()
             new_id = cur.lastrowid
         except Exception:
             raise HTTPException(409, "Ce fournisseur existe déjà.")
         row = conn.execute(
-            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc WHERE id=?",
+            "SELECT * FROM fournisseurs_fsc WHERE id=?",
             (new_id,),
         ).fetchone()
     log_action(
@@ -597,6 +609,188 @@ def picker_fournisseurs_with_contacts(request: Request, search: str = ""):
         fd["contacts"] = contacts_by_four.get(fd["id"], [])
         out.append(fd)
     return out
+
+
+# ─── CRUD Fournisseurs (onglet Fournisseurs MyAO) ─────────────────
+# Ces endpoints permettent d'éditer directement les fournisseurs et
+# leurs contacts depuis MyAO, sans devoir passer par Paramètres.
+# La table fournisseurs_fsc est partagée avec Qualité / Fabrication,
+# donc la suppression est un soft-delete via actif=0 (protégeant les
+# références historiques dans les autres modules).
+
+@router.put("/picker/fournisseurs/{four_id}")
+async def update_fournisseur(request: Request, four_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du fournisseur obligatoire.")
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        # Champs autorisés à l'édition
+        allowed = ("nom", "licence", "certificat", "ville", "langue_default")
+        sets = []
+        vals: list = []
+        for k in allowed:
+            if k in cols and k in body:
+                v = body.get(k)
+                if isinstance(v, str):
+                    v = v.strip() or None
+                sets.append(f"{k}=?")
+                vals.append(v)
+        if not sets:
+            raise HTTPException(status_code=400, detail="Rien à modifier.")
+        vals.append(four_id)
+        try:
+            cur = conn.execute(
+                f"UPDATE fournisseurs_fsc SET {', '.join(sets)} WHERE id=?", vals
+            )
+        except Exception:
+            raise HTTPException(status_code=409, detail="Nom déjà utilisé.")
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+    return _row_dict(row)
+
+
+@router.delete("/picker/fournisseurs/{four_id}")
+def delete_fournisseur(request: Request, four_id: int):
+    """Soft-delete (actif=0) — la table est partagée avec d'autres modules
+    et supprimer physiquement casserait l'historique."""
+    _require_ao(request)
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "actif" in cols:
+            cur = conn.execute(
+                "UPDATE fournisseurs_fsc SET actif=0 WHERE id=?", (four_id,)
+            )
+        else:
+            cur = conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (four_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        conn.commit()
+    return {"ok": True, "fournisseur_id": four_id}
+
+
+@router.post("/picker/fournisseurs/{four_id}/contacts")
+async def create_fournisseur_contact(request: Request, four_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du contact obligatoire.")
+    import json as _json
+    fonction = (body.get("fonction") or "").strip() or None
+    langue = (body.get("langue") or "fr").strip().lower()
+    if langue not in ("fr", "en", "it", "es", "de"):
+        langue = "fr"
+    emails = body.get("emails") or []
+    if isinstance(emails, str):
+        emails = [e.strip() for e in emails.split(",") if e.strip()]
+    tels = body.get("tels") or []
+    if isinstance(tels, str):
+        tels = [t.strip() for t in tels.split(",") if t.strip()]
+    is_principal = 1 if body.get("is_principal") else 0
+    with get_db() as conn:
+        exists = conn.execute(
+            "SELECT id FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        # Si is_principal, remettre les autres à 0
+        if is_principal:
+            conn.execute(
+                "UPDATE fournisseur_contacts SET is_principal=0 WHERE fournisseur_id=?",
+                (four_id,),
+            )
+        cur = conn.execute(
+            """INSERT INTO fournisseur_contacts
+               (fournisseur_id, nom, fonction, emails, tels, langue, is_principal, actif)
+               VALUES (?,?,?,?,?,?,?,1)""",
+            (four_id, nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+        row = conn.execute(
+            "SELECT * FROM fournisseur_contacts WHERE id=?", (new_id,)
+        ).fetchone()
+    d = _row_dict(row)
+    for k in ("emails", "tels"):
+        try:
+            d[k] = _json.loads(d.get(k) or "[]")
+        except (_json.JSONDecodeError, TypeError):
+            d[k] = []
+    d["is_principal"] = bool(d.get("is_principal"))
+    return d
+
+
+@router.put("/picker/fournisseurs/{four_id}/contacts/{contact_id}")
+async def update_fournisseur_contact(request: Request, four_id: int, contact_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du contact obligatoire.")
+    import json as _json
+    fonction = (body.get("fonction") or "").strip() or None
+    langue = (body.get("langue") or "fr").strip().lower()
+    if langue not in ("fr", "en", "it", "es", "de"):
+        langue = "fr"
+    emails = body.get("emails") or []
+    if isinstance(emails, str):
+        emails = [e.strip() for e in emails.split(",") if e.strip()]
+    tels = body.get("tels") or []
+    if isinstance(tels, str):
+        tels = [t.strip() for t in tels.split(",") if t.strip()]
+    is_principal = 1 if body.get("is_principal") else 0
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM fournisseur_contacts WHERE id=? AND fournisseur_id=?",
+            (contact_id, four_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Contact introuvable.")
+        if is_principal:
+            conn.execute(
+                "UPDATE fournisseur_contacts SET is_principal=0 WHERE fournisseur_id=? AND id!=?",
+                (four_id, contact_id),
+            )
+        conn.execute(
+            """UPDATE fournisseur_contacts
+               SET nom=?, fonction=?, emails=?, tels=?, langue=?, is_principal=?
+               WHERE id=?""",
+            (nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal, contact_id),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM fournisseur_contacts WHERE id=?", (contact_id,)
+        ).fetchone()
+    d = _row_dict(row)
+    for k in ("emails", "tels"):
+        try:
+            d[k] = _json.loads(d.get(k) or "[]")
+        except (_json.JSONDecodeError, TypeError):
+            d[k] = []
+    d["is_principal"] = bool(d.get("is_principal"))
+    return d
+
+
+@router.delete("/picker/fournisseurs/{four_id}/contacts/{contact_id}")
+def delete_fournisseur_contact(request: Request, four_id: int, contact_id: int):
+    """Soft-delete (actif=0)."""
+    _require_ao(request)
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE fournisseur_contacts SET actif=0 WHERE id=? AND fournisseur_id=?",
+            (contact_id, four_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Contact introuvable.")
+        conn.commit()
+    return {"ok": True, "contact_id": contact_id}
 
 
 # ─── Matières premières (lecture pour fiches produit) ─────────────
