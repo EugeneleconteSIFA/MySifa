@@ -4591,6 +4591,12 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
     user_id = user.get("id") if user else None
     user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
     responses_json = "{}"
+    # v2.3.30 : seuil anti-doublon. Si l'alerte a déjà un ack sur cette
+    # machine dans les 60 dernières secondes (validation opérateur ou flush
+    # côté client déclenché par v2.3.29), on saute — l'auto-close n'a rien
+    # à faire, la ligne serait juste un doublon "Fermée auto : 89 – …".
+    _now_dt = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+    _skip_threshold = (_now_dt - timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%S")
     for r in rows:
         try:
             params = _json_alerts.loads(r["params"] or "{}")
@@ -4606,6 +4612,18 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
             machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
         if "*" not in machines_target and machine not in machines_target:
             continue
+        # v2.3.30 : anti-doublon (voir commentaire ci-dessus).
+        try:
+            recent = conn.execute(
+                """SELECT 1 FROM maintenance_alert_acks
+                   WHERE alert_id=? AND machine=? AND ack_at >= ?
+                   LIMIT 1""",
+                (int(r["id"]), machine, _skip_threshold),
+            ).fetchone()
+            if recent:
+                continue
+        except Exception:
+            pass
         try:
             conn.execute(
                 """INSERT INTO maintenance_alert_acks
@@ -4696,16 +4714,20 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
 
 @router.post("/api/maintenance/alerts/{alert_id}/dismiss")
 async def maintenance_alerts_dismiss(alert_id: int, request: Request):
-    """Fermeture silencieuse d'une alerte par l'opérateur.
+    """Fermeture explicite d'une alerte via son bouton d'esquive.
 
-    v164 : contrairement à /ack, cet endpoint :
-    - N'insère rien de visible dans l'historique des contrôles (dismissed=1)
-    - N'est pas tracé dans les audit_logs
-    - Ne stocke aucune réponse/commentaire
-    - Mais bloque quand même l'alerte jusqu'au prochain trigger (89) via la
-      colonne dismissed qui reste comptée dans MAX(ack_at) côté logique event.
+    v164 (originel) : esquive totalement silencieuse — aucun comment,
+      aucun audit log.
+    v2.3.30 : on garde `dismissed=1` (utile pour la logique event et pour
+      exclure ces lignes des stats de conformité) mais on inscrit
+      « Fermée auto (esquive) : <label du bouton> » dans le comment.
+      Résultat :
+        - trace visible dans l'historique /maintenance ;
+        - matche le regex `^Fermée auto` donc masquée par défaut par le
+          toggle « Afficher fermetures auto » ;
+        - le libellé du bouton dit *pourquoi* l'op a esquivé
+          (ex. « Pas d'Errepi »).
 
-    L'opérateur peut esquiver une alerte non pertinente sans polluer la qualité.
     Le bouton n'apparaît que si params.dismiss_button.enabled=True.
     """
     user = get_current_user(request)
@@ -4725,6 +4747,9 @@ async def maintenance_alerts_dismiss(alert_id: int, request: Request):
         dismiss = params.get("dismiss_button") or {}
         if not (isinstance(dismiss, dict) and dismiss.get("enabled")):
             raise HTTPException(403, "Fermeture non autorisée pour cette alerte.")
+        # v2.3.30 : trace le libellé du bouton d'esquive dans le comment.
+        _dismiss_label = str(dismiss.get("label") or "").strip() or "esquive"
+        _dismiss_comment = f"Fermée auto (esquive) : {_dismiss_label}"[:2000]
         machine = _machine_name_from_user(conn, user) or ""
         conn.execute(
             """INSERT INTO maintenance_alert_acks
@@ -4732,14 +4757,13 @@ async def maintenance_alerts_dismiss(alert_id: int, request: Request):
                 ack_at, responses, comment, dismissed)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
             (alert_id, user.get("id"), user.get("nom") or user.get("email") or "",
-             machine, "", now_paris, "{}", ""),
+             machine, "", now_paris, "{}", _dismiss_comment),
         )
         conn.execute(
             "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
             (now_paris, now_paris, alert_id),
         )
         conn.commit()
-    # Pas de log_action volontairement — l'esquive doit être invisible.
     return {"ok": True, "dismissed": True}
 
 
