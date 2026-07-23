@@ -959,6 +959,8 @@ body{{
   padding:16px 18px;display:flex;flex-direction:column;gap:10px;
 }}
 .d-item.current{{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-bg)}}
+.d-item.d-item-closed{{opacity:.55;background:var(--bg)}}
+.d-item.d-item-closed .d-title,.d-item.d-item-closed .d-ref{{color:var(--muted)}}
 .d-top{{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}}
 .d-ref{{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);font-weight:600}}
 .d-title{{font-size:15px;font-weight:700;color:var(--text);margin-top:4px}}
@@ -1180,11 +1182,14 @@ function renderList(data) {{
       meta += "<span>" + escHtml(t("repliedOn")) + " " + escHtml(formatDateShort(d.date_reponse)) + "</span>";
     }}
     const btnLabel = d.fournisseur_statut === "repondu" ? t("viewEdit") : t("reply");
-    return '<article class="d-item' + cur + '">' +
+    const isClosed = d.ao_statut === "cloturee";
+    const closedCls = isClosed ? " d-item-closed" : "";
+    const btnCls = isClosed ? "btn btn-sm btn-ghost" : "btn btn-sm";
+    return '<article class="d-item' + cur + closedCls + '">' +
       '<div class="d-top">' +
         '<div><div class="d-ref">' + escHtml(d.reference || "") + "</div>" +
         '<div class="d-title">' + escHtml(d.titre || t("defaultRequestTitle")) + "</div></div>" +
-        '<a class="btn btn-sm" href="' + href + '">' + escHtml(btnLabel) + "</a>" +
+        '<a class="' + btnCls + '" href="' + href + '">' + escHtml(isClosed ? t("viewEdit") : btnLabel) + "</a>" +
       "</div>" +
       '<div class="d-meta">' + meta + "</div>" +
       "</article>";
