@@ -104,6 +104,12 @@
   function _attr(s) { return _esc(s); }
 
   function _toast(msg, isErr) {
+    // v2.3.32 : préfère le showToast de la page (fabrication_page.py) qui
+    // utilise le style vert "Saisie enregistrée" en bas au centre. Fallback
+    // vers le toast global html.py (bottom-right) si le page-level manque.
+    if (typeof window.showToast === 'function') {
+      try { return window.showToast(msg, isErr ? 'danger' : 'success'); } catch(_) {}
+    }
     if (typeof window.toast === 'function') return window.toast(msg, !!isErr);
     if (window.console) window.console.log('[alerts]', msg);
   }
@@ -702,7 +708,12 @@
       // questions non-required peuvent rester vides sans souci.
       if (!_isComplete(wrap, alert)) return;  // sécurité (bouton disabled)
       const ok = await _submitAck(alert.id, wrap, alert);
-      if (ok) { _toast('Contrôle validé.'); closeWithSuccess(); }
+      if (ok) {
+        // v2.3.32 : remerciement à l'opérateur (style toast vert
+        // "Saisie enregistrée" de fabrication_page.py via showToast).
+        _toast('Merci pour votre réponse au questionnaire.');
+        closeWithSuccess();
+      }
     };
     wrap.querySelector('.ta-validate').addEventListener('click', onValidate);
     // v2.2.85 : brancher les listeners d'inputs pour mettre à jour l'état disabled
