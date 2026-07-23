@@ -176,8 +176,11 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-table .inp-dev-devis{max-width:80px}
 .comp-table th.comp-th-coef{min-width:96px}
 .comp-table td.comp-td-coef{min-width:96px}
-.ao-series-toggle{padding:2px 4px;color:var(--muted);vertical-align:middle}
-.ao-series-toggle:hover{color:var(--accent);background:var(--accent-bg)}
+.ao-hdr-btn{background:var(--card);border:1px solid var(--border);color:var(--text);transition:background .15s,border-color .15s}
+.ao-hdr-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.ao-series-toggle{padding:3px 6px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-bg);border-radius:6px;vertical-align:middle;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
+.ao-series-toggle:hover{background:var(--accent);color:var(--card);border-color:var(--accent);transform:translateY(-1px)}
+.ao-series-toggle:active{transform:translateY(0)}
 .ao-series-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-weight:600;margin-left:6px}
 .ao-series-badge.warn{background:rgba(251,191,36,.15);color:var(--warn,#a16207)}
 .ao-lignes-table tr.ao-serie-sub td{background:var(--bg);border-top:1px dashed var(--border);font-size:12px;padding:6px 8px}
@@ -1500,8 +1503,8 @@ function renderDetailHeader() {
   const st = ao.statut;
   const lignes = (d.lignes||[]).length;
   const fournis = (d.fournisseurs||[]).length;
-  let actions = '<button class="btn btn-ghost" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
-    ' <a class="btn btn-ghost" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
+  let actions = '<button class="btn ao-hdr-btn" type="button" id="btn-back">'+icon('arrow-left',14)+' Retour liste</button>' +
+    ' <a class="btn ao-hdr-btn" href="/api/ao/'+ao.id+'/export.pdf" target="_blank" title="Exporter en PDF">'+icon('file-text',14)+' Export PDF</a>';
   if (st === 'brouillon') {
     const dis = (lignes < 1 || fournis < 1) ? ' disabled' : '';
     actions += '<button class="btn btn-accent" type="button" id="btn-envoyer"'+dis+'>Envoyer aux fournisseurs</button>';
@@ -1815,6 +1818,7 @@ async function openCreateAoWizard(initialState) {
     selectedContactKeys: new Set(),
     manualFourni: { nom: '', email: '', langue: 'fr' },
     _autoP: false,
+    showFournisAll: false,  // par défaut : masquer les fournisseurs sans contact enregistré
     };
   }
 
@@ -1909,12 +1913,31 @@ async function openCreateAoWizard(initialState) {
   }
 
   function renderStep3() {
-    const fours = state.availableFournisseurs;
+    const allFours = state.availableFournisseurs;
+    const withContacts = allFours.filter(f => (f.contacts || []).length > 0);
+    const withoutContacts = allFours.filter(f => !((f.contacts || []).length));
+    const showAll = !!state.showFournisAll;
+    const fours = showAll ? allFours : withContacts;
     const nManualAdded = state.fournisseurs.filter(f => !f.fournisseur_id).length;
-    let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Selectionne au moins un contact fournisseur.</p>' +
+    let filterBar = '';
+    if (withoutContacts.length > 0) {
+      const label = showAll
+        ? 'Masquer les ' + withoutContacts.length + ' fournisseur' + (withoutContacts.length > 1 ? 's' : '') + ' sans contact'
+        : 'Afficher les ' + withoutContacts.length + ' fournisseur' + (withoutContacts.length > 1 ? 's' : '') + ' sans contact';
+      filterBar = '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">' +
+        '<p style="font-size:13px;color:var(--muted);margin:0">Selectionne au moins un contact fournisseur.</p>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="w-toggle-empty" style="font-size:11px;padding:4px 10px">' + escHtml(label) + '</button>' +
+        '</div>';
+    } else {
+      filterBar = '<p style="font-size:13px;color:var(--muted);margin-bottom:10px">Selectionne au moins un contact fournisseur.</p>';
+    }
+    let html = filterBar +
       '<div style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px">';
     if (!fours.length) {
-      html += '<div style="padding:20px;color:var(--muted);text-align:center">Aucun fournisseur enregistre en base. Utilise la saisie manuelle ci-dessous.</div>';
+      const msg = allFours.length
+        ? 'Aucun fournisseur avec contact enregistre. Ajoute un contact depuis le carnet fournisseurs ou utilise la saisie manuelle ci-dessous.'
+        : 'Aucun fournisseur enregistre en base. Utilise la saisie manuelle ci-dessous.';
+      html += '<div style="padding:20px;color:var(--muted);text-align:center;font-size:12px;line-height:1.5">' + escHtml(msg) + '</div>';
     } else {
       fours.forEach(f => {
         const contacts = f.contacts || [];
@@ -2150,6 +2173,11 @@ async function openCreateAoWizard(initialState) {
 
     // Step 3 : contact checkboxes + manual add
     if (state.step === 3) {
+      const toggleBtn = document.getElementById('w-toggle-empty');
+      if (toggleBtn) toggleBtn.onclick = () => {
+        state.showFournisAll = !state.showFournisAll;
+        render();
+      };
       box.querySelectorAll('.w-fc').forEach(cb => {
         cb.onchange = () => {
           const k = cb.dataset.key;

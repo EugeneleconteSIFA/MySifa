@@ -227,37 +227,43 @@ def _draw_ref_block(c: canvas.Canvas, ml: float, mr: float, y: float,
     return y_bottom - 4 * mm
 
 
-def _section_title(c: canvas.Canvas, ml: float, mr: float, y: float,
-                   fr: str, en: str, width: float | None = None) -> float:
-    """Bandeau de section compact : titre FR + sous-titre EN italique."""
-    inner_w = width if width is not None else (W - ml - mr)
-    h_band = 5.5 * mm
+_SECTION_TITLE_H = 6.5 * mm
+_SECTION_ROW_H = 6.8 * mm
+_SECTION_GAP = 5 * mm  # espace vertical entre deux sections empilées
+
+
+def _section_title(c: canvas.Canvas, x: float, y: float,
+                   fr: str, en: str, width: float) -> float:
+    """Bandeau de section : accent + titre FR + sous-titre EN italique."""
+    h_band = _SECTION_TITLE_H
     y_bottom = y - h_band
 
-    c.setFillColor(_ACCENT)
-    c.rect(ml, y_bottom, 2 * mm, h_band, fill=1, stroke=0)
+    # Bandeau clair de fond
     c.setFillColor(_LIGHT_GRAY)
-    c.rect(ml + 2 * mm, y_bottom, inner_w - 2 * mm, h_band, fill=1, stroke=0)
+    c.rect(x, y_bottom, width, h_band, fill=1, stroke=0)
+    # Accent gauche (encart plus visible)
+    c.setFillColor(_ACCENT)
+    c.rect(x, y_bottom, 3 * mm, h_band, fill=1, stroke=0)
 
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 8.5)
-    c.drawString(ml + 4 * mm, y_bottom + h_band / 2 - 1, fr)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(x + 5 * mm, y_bottom + h_band / 2 - 1, fr)
 
     c.setFillColor(_MUTED)
-    c.setFont("Helvetica-Oblique", 7)
-    c.drawString(ml + 4 * mm + c.stringWidth(fr, "Helvetica-Bold", 8.5) + 2 * mm,
+    c.setFont("Helvetica-Oblique", 7.5)
+    c.drawString(x + 5 * mm + c.stringWidth(fr, "Helvetica-Bold", 9) + 2 * mm,
                  y_bottom + h_band / 2 - 1, "/ " + en)
 
     c.setFillColor(_BLACK)
-    return y_bottom - 0.5 * mm
+    return y_bottom
 
 
-def _draw_row(c: canvas.Canvas, ml: float, mr: float, y: float,
+def _draw_row(c: canvas.Canvas, x: float, y: float,
               label_fr: str, label_en: str, value_fr: str, value_en: str,
               striped: bool = False, width: float | None = None) -> float:
-    """Ligne compacte — FR uniquement pour label, EN en parenthèse si valeur diffère."""
-    inner_w = width if width is not None else (W - ml - mr)
-    row_h = 6 * mm
+    """Ligne compacte — FR uniquement pour label, EN sous FR si valeur diffère."""
+    inner_w = width if width is not None else (W - x - 15 * mm)
+    row_h = _SECTION_ROW_H
     col_lbl = inner_w * 0.42
     col_val = inner_w - col_lbl
 
@@ -265,24 +271,24 @@ def _draw_row(c: canvas.Canvas, ml: float, mr: float, y: float,
 
     if striped:
         c.setFillColor(_LIGHT_GRAY)
-        c.rect(ml, y_bottom, inner_w, row_h, fill=1, stroke=0)
+        c.rect(x, y_bottom, inner_w, row_h, fill=1, stroke=0)
 
     c.setStrokeColor(_BORDER)
     c.setLineWidth(0.25)
-    c.line(ml + col_lbl, y_bottom, ml + col_lbl, y)
+    c.line(x + col_lbl, y_bottom, x + col_lbl, y)
     c.setLineWidth(0.3)
-    c.line(ml, y_bottom, ml + inner_w, y_bottom)
+    c.line(x, y_bottom, x + inner_w, y_bottom)
 
-    y_txt = y - 4 * mm
+    y_txt = y - 4.4 * mm
 
     # Label FR uniquement (EN est signalé dans le titre de section)
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawString(ml + 2 * mm, y_txt, label_fr)
+    c.setFont("Helvetica-Bold", 8.5)
+    c.drawString(x + 2.5 * mm, y_txt, label_fr)
 
-    # Value FR (bold). Ajout EN en muted si différent (rare — ex. traductions type produit).
-    x_val = ml + col_lbl + 2 * mm
-    max_val_w = col_val - 4 * mm
+    # Value FR (bold). Ajout EN en muted si différent.
+    x_val = x + col_lbl + 2.5 * mm
+    max_val_w = col_val - 5 * mm
 
     def _fit(txt: str, base: float, bold: bool) -> float:
         font = "Helvetica-Bold" if bold else "Helvetica-Oblique"
@@ -293,9 +299,8 @@ def _draw_row(c: canvas.Canvas, ml: float, mr: float, y: float,
 
     show_en = bool(value_en) and value_en != value_fr
     if show_en:
-        # FR au dessus, EN en dessous — deux mini-lignes dans les 6mm
-        y_fr = y - 3 * mm
-        y_en = y - 5 * mm
+        y_fr = y - 3.2 * mm
+        y_en = y - 5.6 * mm
         size_fr = _fit(value_fr, 8.5, bold=True)
         c.setFillColor(_BLACK)
         c.setFont("Helvetica-Bold", size_fr)
@@ -314,6 +319,33 @@ def _draw_row(c: canvas.Canvas, ml: float, mr: float, y: float,
     return y_bottom
 
 
+def _section_box(c: canvas.Canvas, x: float, y: float, width: float, height: float) -> None:
+    """Bordure autour d'une section (titre + rows) — trace après remplissage."""
+    c.setStrokeColor(_BORDER)
+    c.setLineWidth(0.5)
+    c.rect(x, y - height, width, height, fill=0, stroke=1)
+
+
+def _draw_full_section(c: canvas.Canvas, ml: float, mr: float, y: float,
+                       fr: str, en: str, rows: list[tuple],
+                       ao_reference: str | None = None) -> float:
+    """Rend une section pleine largeur avec bordure autour."""
+    rows = _filter_meaningful(rows)
+    if not rows:
+        return y
+    inner_w = W - ml - mr
+    need = _SECTION_TITLE_H + len(rows) * _SECTION_ROW_H + _SECTION_GAP
+    y = _need_page(c, y, need, ml, mr, ao_reference)
+    y_start = y
+    y = _section_title(c, ml, y, fr, en, width=inner_w)
+    for i, (lfr, len_, vf, ve) in enumerate(rows):
+        y = _draw_row(c, ml, y, lfr, len_, vf, ve, striped=(i % 2 == 0), width=inner_w)
+    # Bordure autour de la section
+    total_h = y_start - y
+    _section_box(c, ml, y_start, inner_w, total_h)
+    return y - _SECTION_GAP
+
+
 def _filter_meaningful(rows: list[tuple]) -> list[tuple]:
     """Retire les lignes dont la valeur FR ET EN sont vides ou '—'."""
     def is_empty(v):
@@ -327,34 +359,35 @@ def _draw_two_col_sections(
     right_title: tuple[str, str], right_rows: list[tuple],
     ao_reference: str | None = None,
 ) -> float:
-    """Rend deux sections côte à côte, chacune sur ~50% de la largeur."""
+    """Rend deux sections côte à côte, chacune sur ~50% de la largeur, avec bordure."""
     left_rows = _filter_meaningful(left_rows)
     right_rows = _filter_meaningful(right_rows)
     if not left_rows and not right_rows:
         return y
-    gap = 4 * mm
+    gap = 6 * mm
     inner_w = W - ml - mr
     col_w = (inner_w - gap) / 2
     x_left = ml
     x_right = ml + col_w + gap
-    # Hauteur nécessaire : max des deux colonnes
-    need = 5.5 * mm + max(len(left_rows), len(right_rows)) * 6 * mm + 3 * mm
+    need = _SECTION_TITLE_H + max(len(left_rows), len(right_rows)) * _SECTION_ROW_H + _SECTION_GAP
     y = _need_page(c, y, need, ml, mr, ao_reference)
 
     y_start = y
     y_left = y_start
     y_right = y_start
     if left_rows:
-        y_left = _section_title(c, x_left, mr, y_start, left_title[0], left_title[1], width=col_w)
+        y_left = _section_title(c, x_left, y_start, left_title[0], left_title[1], width=col_w)
         for i, row in enumerate(left_rows):
             fr, en, vf, ve = row
-            y_left = _draw_row(c, x_left, mr, y_left, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
+            y_left = _draw_row(c, x_left, y_left, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
+        _section_box(c, x_left, y_start, col_w, y_start - y_left)
     if right_rows:
-        y_right = _section_title(c, x_right, mr, y_start, right_title[0], right_title[1], width=col_w)
+        y_right = _section_title(c, x_right, y_start, right_title[0], right_title[1], width=col_w)
         for i, row in enumerate(right_rows):
             fr, en, vf, ve = row
-            y_right = _draw_row(c, x_right, mr, y_right, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
-    return min(y_left, y_right) - 2 * mm
+            y_right = _draw_row(c, x_right, y_right, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
+        _section_box(c, x_right, y_start, col_w, y_start - y_right)
+    return min(y_left, y_right) - _SECTION_GAP
 
 
 def _draw_footer(c: canvas.Canvas, ml: float, mr: float,
@@ -491,13 +524,8 @@ def generate_fiche_fournisseur_pdf(
             pass
     if fmt_eti:
         rows_1.append(("Format étiquette", "Label format", fmt_eti, fmt_eti))
-    rows_1 = _filter_meaningful(rows_1)
-    if rows_1:
-        y = _need_page(c, y, 5.5 * mm + len(rows_1) * 6 * mm + 3 * mm, ml, mr, ao_reference)
-        y = _section_title(c, ml, mr, y - 2 * mm, "Infos générales", "General information")
-        for i, (fr, en, vf, ve) in enumerate(rows_1):
-            y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
-        y -= 2 * mm
+    y = _draw_full_section(c, ml, mr, y - 2 * mm, "Infos générales", "General information",
+                           rows_1, ao_reference=ao_reference)
 
     # ── Sections 2 & 3 : Étiquette + Échenillage (côte à côte) ────
     rows_2 = [
@@ -568,13 +596,8 @@ def generate_fiche_fournisseur_pdf(
         for i, d in enumerate(details_verso, 1):
             val = f"{d.get('couleur','')} — {d.get('printing_area','')}".strip(" —")
             rows_6.append((f"Verso {i}", f"Back {i}", val or "—", val or "—"))
-        rows_6 = _filter_meaningful(rows_6)
-        if rows_6:
-            y = _need_page(c, y, 5.5 * mm + len(rows_6) * 6 * mm + 3 * mm, ml, mr, ao_reference)
-            y = _section_title(c, ml, mr, y - 1 * mm, "Impressions", "Printing details")
-            for i, (fr, en, vf, ve) in enumerate(rows_6):
-                y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
-            y -= 2 * mm
+        y = _draw_full_section(c, ml, mr, y - 1 * mm, "Impressions", "Printing details",
+                               rows_6, ao_reference=ao_reference)
 
     # ── Sections 7 & 8 : Cartons + Palettes (côte à côte) ─────────
     cart_lbl = _mp_label(matieres_map.get(int(cart["matiere_id"])) if cart.get("matiere_id") else None)
@@ -601,10 +624,12 @@ def generate_fiche_fournisseur_pdf(
     # ── Section 9 : Particularités (si renseignées) ───────────────
     part = fiche.get("particularites")
     if part and str(part).strip():
-        y = _need_page(c, y, 40 * mm, ml, mr, ao_reference)
-        y = _section_title(c, ml, mr, y - 4 * mm, "Particularités", "Special requirements")
         inner_w = W - ml - mr
         box_h = 22 * mm
+        need = _SECTION_TITLE_H + box_h + _SECTION_GAP
+        y = _need_page(c, y, need, ml, mr, ao_reference)
+        y_start = y
+        y = _section_title(c, ml, y, "Particularités", "Special requirements", width=inner_w)
         y_box = y - box_h
         c.setStrokeColor(_BORDER)
         c.setLineWidth(0.4)
@@ -614,7 +639,8 @@ def generate_fiche_fournisseur_pdf(
         p = Paragraph(str(part).replace("\n", "<br/>"), style)
         p.wrapOn(c, inner_w - 4 * mm, box_h - 2 * mm)
         p.drawOn(c, ml + 2 * mm, y_box + 2 * mm)
-        y = y_box - 2 * mm
+        _section_box(c, ml, y_start, inner_w, y_start - y_box)
+        y = y_box - _SECTION_GAP
 
     _draw_footer(c, ml, mr, ao_reference)
     c.showPage()
