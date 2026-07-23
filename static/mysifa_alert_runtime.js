@@ -24,6 +24,8 @@
       /* CONTAINER : plein viewport transparent, capture les clics uniquement en mode bloquant */
       '.ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}',
       '.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}',
+      /* v2.3.26 : les alertes bloquantes ne peuvent pas être réduites — bouton "-" masqué */
+      '.ta-sim.ta-blocking .ta-sim-min{display:none !important}',
 
       /* ALERTE : positionnée dans le viewport (fixed), indépendante du container */
       '.ta-sim-alert{position:fixed !important;background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto;box-sizing:border-box;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
@@ -663,7 +665,9 @@
     }
 
     const minBtn = wrap.querySelector('.ta-sim-min');
-    if (minBtn && alertEl) {
+    // v2.3.26 : pas de bouton "réduire" pour les alertes bloquantes (masqué par
+    // CSS + handler non attaché — l'utilisateur doit valider ou fermer).
+    if (minBtn && alertEl && !_isBlocking) {
       minBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const btnRect = minBtn.getBoundingClientRect();
