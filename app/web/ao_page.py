@@ -184,6 +184,13 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 input[type=file]{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:0;font-family:inherit;color:var(--text2);cursor:pointer;font-size:13px;overflow:hidden;max-width:100%}
 input[type=file]::file-selector-button{background:var(--accent-bg);color:var(--accent);border:0;border-right:1px solid var(--border);padding:10px 16px;font-weight:600;font-size:13px;font-family:inherit;cursor:pointer;margin-right:12px;transition:background .15s,color .15s}
 input[type=file]::file-selector-button:hover{background:var(--accent);color:var(--card)}
+/* Boutons carte fournisseur : contraste net (fond var(--card) qui contraste avec le fond var(--bg) de la carte) */
+.fourni-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.fourni-card .btn-ghost.btn-sm{background:var(--card);border:1px solid var(--border);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.04);transition:background .15s,border-color .15s,color .15s,box-shadow .15s}
+.fourni-card .btn-ghost.btn-sm:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.fourni-card .btn-add-contact{background:var(--accent-bg)!important;border-color:var(--accent)!important;color:var(--accent)!important;font-weight:700}
+.fourni-card .btn-add-contact:hover{background:var(--accent)!important;color:var(--card)!important}
+.fourni-card .btn-del-fourni:hover{background:rgba(248,113,113,.12)!important;border-color:var(--danger)!important;color:var(--danger)!important}
 .ao-series-toggle{padding:3px 6px;color:var(--accent);background:var(--accent-bg);border:1px solid var(--accent-bg);border-radius:6px;vertical-align:middle;cursor:pointer;transition:background .15s,border-color .15s,transform .1s}
 .ao-series-toggle:hover{background:var(--accent);color:var(--card);border-color:var(--accent);transform:translateY(-1px)}
 .ao-series-toggle:active{transform:translateY(0)}
@@ -686,13 +693,22 @@ function bindProduitsEvents() {
 function renderFournisseursSection() {
   const q = (S.fournisseursSearch || '').trim().toLowerCase();
   const all = S.fournisseurs || [];
-  const list = q
+  const filtered = q
     ? all.filter(f =>
         (f.nom||'').toLowerCase().includes(q) ||
         (f.ville||'').toLowerCase().includes(q) ||
         (f.contacts||[]).some(c => (c.nom||'').toLowerCase().includes(q) ||
                                     (c.emails||[]).join(' ').toLowerCase().includes(q)))
     : all;
+  // Tri : nombre de contacts décroissant, puis nom alphabétique (accent-insensible)
+  const list = filtered.slice().sort((a, b) => {
+    const na = (a.contacts || []).length;
+    const nb = (b.contacts || []).length;
+    if (na !== nb) return nb - na;
+    const an = (a.nom || '').toLocaleLowerCase('fr');
+    const bn = (b.nom || '').toLocaleLowerCase('fr');
+    return an.localeCompare(bn, 'fr');
+  });
   return '<div class="page-hdr"><h1>Fournisseurs</h1>'+
     '<button class="btn btn-accent" type="button" id="btn-add-fourni-ref">'+icon('plus',14)+' Ajouter un fournisseur</button></div>'+
     '<div class="card">'+
@@ -741,7 +757,7 @@ function renderFourniCard(f) {
         }).join('')+'</tbody></table>';
     }
   }
-  return '<div class="card" style="padding:12px 14px;margin-bottom:10px;background:var(--bg)">'+
+  return '<div class="fourni-card">'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
       chev+
       '<strong style="font-size:14px">'+escHtml(f.nom)+'</strong>'+
