@@ -1787,6 +1787,14 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               <label for="filt-controles-date-to">Au</label>
               <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
             </div>
+            <!-- v2.3.29 : toggle "Afficher les fermetures automatiques" -->
+            <div class="filter-group" style="justify-content:flex-end">
+              <label for="filt-controles-show-auto" style="visibility:hidden">.</label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2);height:38px;padding:0 6px" title="Les fermetures auto sont créées quand une saisie non-productive (arrêt, fin de production, calage…) clôt une alerte périodique.">
+                <input type="checkbox" id="filt-controles-show-auto" onchange="ctrlSaveShowAutoClose(this.checked); ctrlResetPage(); renderCtrl()" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
+                <span>Afficher fermetures auto</span>
+              </label>
+            </div>
             <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
@@ -6631,8 +6639,25 @@ function sortCtrl(field){
   }
   renderCtrl();
 }
+// v2.3.29 : mémorise la préférence "afficher les fermetures auto"
+// (par défaut masquées — elles polluent l'historique quotidien).
+const CTRL_SHOW_AUTO_KEY = 'mysifa_ctrl_show_auto_close';
+function ctrlLoadShowAutoClose(){
+  try { return localStorage.getItem(CTRL_SHOW_AUTO_KEY) === '1'; }
+  catch(_) { return false; }
+}
+function ctrlSaveShowAutoClose(v){
+  try { localStorage.setItem(CTRL_SHOW_AUTO_KEY, v ? '1' : '0'); } catch(_) {}
+}
+function ctrlIsAutoClose(c){
+  const raw = (c && c._raw_comment) || '';
+  // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
+  return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
+}
+
 function getCtrlFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
+  const cb = id => !!document.getElementById(id)?.checked;
   return {
     type:      v('filt-controles-type'),
     operateur: v('filt-controles-operateur'),
@@ -6640,6 +6665,7 @@ function getCtrlFilters(){
     dateFrom:  v('filt-controles-date-from'),
     dateTo:    v('filt-controles-date-to'),
     conformite:v('filt-controles-conformite'),
+    showAuto:  cb('filt-controles-show-auto'),
   };
 }
 function resetCtrlFilters(){
@@ -7022,6 +7048,8 @@ function renderCtrl(){
       if(f.conformite === 'nc' && !isNc) return false;
       if(f.conformite === 'ok' && isNc)  return false;
     }
+    // v2.3.29 : masque les fermetures automatiques par défaut
+    if(!f.showAuto && ctrlIsAutoClose(c)) return false;
     if(!_matchPointFilters(c)) return false;
     return true;
   });
@@ -7489,6 +7517,11 @@ async function loadMe(){
   });
   loadCtrl();
   updateExtraToggleUI();
+  // v2.3.29 : restaure l'état sauvegardé du toggle "Afficher fermetures auto"
+  try {
+    const _cbShowAuto = document.getElementById('filt-controles-show-auto');
+    if(_cbShowAuto) _cbShowAuto.checked = ctrlLoadShowAutoClose();
+  } catch(_) {}
   loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
@@ -8763,7 +8796,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.3.26"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.29"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 

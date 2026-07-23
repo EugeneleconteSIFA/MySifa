@@ -646,6 +646,10 @@
       + '</div>';
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
+    // v2.3.29 : garde une référence à l'objet alerte sur le wrap pour que
+    // flushOpenAcks() puisse resoumettre les données saisies sans dépendre
+    // du closure du bouton Valider.
+    wrap._alert = alert;
 
     const alertEl = wrap.querySelector('.ta-sim-alert');
     // v2.3.24 : les alertes bloquantes NE sont PAS déplaçables — elles
@@ -787,6 +791,45 @@
     }
   }
 
+  // v2.3.29 : détecte si l'opérateur a déjà commencé à remplir une alerte
+  // (au moins une case cochée, une valeur saisie ou un commentaire écrit).
+  // Sert de garde-fou avant flushOpenAcks : on ne soumet pas un ack vide.
+  function _hasUserInput(wrap) {
+    if (!wrap) return false;
+    const cmt = (wrap.querySelector('.ta-comment')?.value || '').trim();
+    if (cmt) return true;
+    const responses = _readResponses(wrap);
+    return responses && Object.keys(responses).length > 0;
+  }
+
+  // v2.3.29 : soumet toutes les alertes non-bloquantes qui ont déjà des
+  // données saisies par l'opérateur, puis retire leur DOM. Appelé avant
+  // toute saisie non-productive (code != 01 et != 03) pour éviter que
+  // _auto_ack_periodic_alerts_on_arret côté serveur écrase la saisie
+  // avec un ack vide "Fermée auto : XX – <label>".
+  async function _flushOpenAcks() {
+    const wraps = Array.from(document.querySelectorAll('.ta-sim'));
+    const results = [];
+    for (const wrap of wraps) {
+      // Ignore : mode simulation (bouton "Tester sur moi") + alertes bloquantes
+      // (elles exigent une interaction explicite, pas de flush silencieux)
+      if (wrap.getAttribute('data-simulate') === '1') continue;
+      if (wrap.classList.contains('ta-blocking')) continue;
+      const alert = wrap._alert;
+      if (!alert || alert.__simulate) continue;
+      if (!_hasUserInput(wrap)) continue;
+      // Soumission — reprend la même logique que le bouton Valider.
+      const ok = await _submitAck(alert.id, wrap, alert);
+      results.push({ id: alert.id, ok });
+      if (ok) {
+        try { wrap.remove(); } catch(_) {}
+        _displayed.delete(alert.id);
+        _displayedBlocking.delete(alert.id);
+      }
+    }
+    return results;
+  }
+
   window.MysifaAlerts = {
     start: async function() {
       if (_started) return;
@@ -803,6 +846,10 @@
     },
     refresh: function() { return _poll(); },
     showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
+    // v2.3.29 : à appeler côté client avant toute saisie non-productive
+    // pour préserver les données que l'op a déjà saisies dans une alerte
+    // (sinon l'auto-close backend écrit un ack vide "Fermée auto : XX").
+    flushOpenAcks: function() { return _flushOpenAcks(); },
     // v2.3.6 : retourne une Promise résolue quand toutes les alertes bloquantes
     // à l'écran sont ACK (rejetée si dismiss). Permet à fabrication_page de
     // retenter automatiquement la saisie 03/88 après validation.

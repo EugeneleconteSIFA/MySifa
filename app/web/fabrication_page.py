@@ -963,7 +963,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.3.26"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.3.29"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1691,6 +1691,18 @@ async function triggerOp(opCode, opLabel, extra={}){
   const opStr = opCode+' - '+opLabel;
   set({loading:true});
   try{
+    // v2.3.29 : préserve les données de l'alerte si l'op a commencé à
+    // la remplir mais n'a pas cliqué Valider. Sinon le backend
+    // _auto_ack_periodic_alerts_on_arret écrase l'ack avec un message
+    // vide "Fermée auto : XX – …". Bypass pour 03 (reprise = productif,
+    // pas d'auto-close) mais garde-fou sur tous les autres codes.
+    if(opCode !== '03'){
+      try {
+        if(window.MysifaAlerts && typeof window.MysifaAlerts.flushOpenAcks === 'function'){
+          await window.MysifaAlerts.flushOpenAcks();
+        }
+      } catch(_) {}
+    }
     const body = {operation: opStr, date_operation: nowIsoLocal(), ...extra};
     if(S.dossier) body.no_dossier = S.dossier.reference;
     if(S.machine) body.machine = S.machine.nom;
@@ -4849,6 +4861,15 @@ function renderFinModal(){
 
     set({showFinModal:false, loading:true});
     try{
+      // v2.3.29 : préserve les données de l'alerte que l'op aurait
+      // commencée à remplir avant de cliquer Fin de production. Sans
+      // ça, l'auto-close backend écrit "Fermée auto : 89 – …" à la
+      // place des réponses saisies (bug qualité produits finis).
+      try {
+        if(window.MysifaAlerts && typeof window.MysifaAlerts.flushOpenAcks === 'function'){
+          await window.MysifaAlerts.flushOpenAcks();
+        }
+      } catch(_) {}
       const body = {
         operation:'89 - Fin de production',
         date_operation: nowIsoLocal(),
