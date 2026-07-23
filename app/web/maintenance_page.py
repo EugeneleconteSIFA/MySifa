@@ -6663,24 +6663,14 @@ function ctrlIsAutoClose(c){
 }
 
 // v2.3.37 : filtrage auto — plus de bouton Filtrer. Chaque champ appelle
-// ctrlAutoFilter() à onchange. Le toast est debouncé (300 ms) pour éviter
-// la pluie si l'utilisateur enchaîne plusieurs modifications rapidement.
-let _ctrlFilterToastTimer = null;
+// ctrlAutoFilter() à onchange.
+// v2.3.38 : toast retiré à la demande de l'utilisateur (le re-render
+// de la table est déjà un feedback suffisant).
 function ctrlAutoFilter(opts){
   opts = opts || {};
   ctrlResetPage();
   if(opts.resetPoints) resetPointFilters();
   if(typeof renderCtrl === 'function') renderCtrl();
-  if(_ctrlFilterToastTimer) clearTimeout(_ctrlFilterToastTimer);
-  _ctrlFilterToastTimer = setTimeout(() => {
-    _ctrlFilterToastTimer = null;
-    try {
-      const cnt = document.getElementById('ctrl-count')?.textContent || '';
-      const msg = cnt ? ('Sélection refiltrée · ' + cnt) : 'Sélection refiltrée';
-      if(typeof window.showToast === 'function') window.showToast(msg, 'success');
-      else if(typeof window.toast === 'function') window.toast(msg);
-    } catch(_) {}
-  }, 300);
 }
 
 function getCtrlFilters(){
