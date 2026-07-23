@@ -4334,6 +4334,31 @@ function openEditStockModal(row){
   }
   addField('Note','note','');
 
+  // Operateur (admin uniquement) - reassigner la saisie a un autre operateur
+  let operateurSel = null;
+  if(isAdmin(S.user)){
+    const wrap = h('div',{style:{marginBottom:'12px'}});
+    wrap.appendChild(h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}}, 'Opérateur'));
+    const opsList = (S.filters && S.filters.operators) || [];
+    const currentOp = String(row.operateur || row.operateur_nom || '');
+    operateurSel = h('select',{style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontSize:'13px'}},
+      h('option',{value:''}, '— Choisir —'),
+      ...opsList.map(o => {
+        const opt = h('option',{value:o}, opName(o));
+        if(o === currentOp) opt.selected = true;
+        return opt;
+      })
+    );
+    // Si l'operateur actuel n'est pas dans la liste, l'ajouter pour ne pas le perdre
+    if(currentOp && !opsList.includes(currentOp)){
+      const opt = h('option',{value:currentOp}, opName(currentOp) + ' (actuel)');
+      opt.selected = true;
+      operateurSel.appendChild(opt);
+    }
+    wrap.appendChild(operateurSel);
+    box.appendChild(wrap);
+  }
+
   // Info fields non editables
   const lockedInfo = h('div',{style:{marginTop:'8px',padding:'10px 12px',background:'rgba(148,163,184,.06)',border:'1px solid var(--border)',borderRadius:'8px',fontSize:'12px',color:'var(--muted)',lineHeight:'1.6'}},
     'Quantite, ' + (isMP?'matiere, laize':'produit fini, emplacement') + ' non modifiables ici. Pour les changer : supprimer puis recreer.'
@@ -4359,6 +4384,11 @@ function openEditStockModal(row){
   saveBtn.addEventListener('click', async ()=>{
     const body = {};
     fields.forEach(f=>{ const v=(f.inp.value||'').trim(); if(v!==String(row[f.key]||'')) body[f.key]=v||null; });
+    if(operateurSel){
+      const cur = String(row.operateur || row.operateur_nom || '');
+      const v = (operateurSel.value||'').trim();
+      if(v !== cur) body.operateur = v || null;
+    }
     if(Object.keys(body).length===0){ overlay.remove(); return; }
     try{
       await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

@@ -658,6 +658,10 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-del{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
   border-radius:4px;transition:color .12s}
 .fab-traca-del:hover{color:var(--danger)}
+.fab-traca-print{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
+  border-radius:4px;transition:color .12s;margin-right:2px}
+.fab-traca-print:hover{color:var(--accent)}
+.fab-traca-print:disabled{opacity:.5;cursor:not-allowed}
 .fab-traca-fsc-warn{
   display:inline-flex;align-items:center;justify-content:center;
   margin-left:6px;color:var(--warn);font-weight:800;font-size:13px;
@@ -3297,6 +3301,127 @@ async function tracaDeleteMatiere(id){
   }catch(e){ showToast(e.message,'danger'); }
 }
 
+// Réimprime l'étiquette d'identification d'une bobine scannée (format compact
+// 107x50mm) pour la recoller sur une bobine remise en stock. Reuse le même
+// endpoint /api/print/label + usage_key='reception_matiere' que la page Stock.
+function _tracaBuildLabelData(m){
+  const FSC_CLAIM_LABELS = {
+    non_fsc: 'Non FSC', fsc_100: 'FSC 100%', fsc_mix_credit: 'FSC Mix Credit',
+    fsc_mix: 'FSC Mix', fsc_recycled: 'FSC Recycled'
+  };
+  const claim = (m.fsc_type_claim || 'non_fsc');
+  const fscBanner = claim === 'non_fsc' ? 'MATIERE NON FSC' : 'MATIERE FSC';
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = pad(now.getDate())+'/'+pad(now.getMonth()+1)+'/'+now.getFullYear();
+  const operateurNom = (S && S.user && S.user.nom) || 'Opérateur';
+  const code = (m.code_barre || '').toString();
+  const fournisseur = (m.fournisseur || m.fournisseur_manual || '').toString();
+  return {
+    lot_numero: code,
+    fournisseur: fournisseur,
+    fsc_label: FSC_CLAIM_LABELS[claim] || 'Non FSC',
+    fsc_banner: fscBanner,
+    ref_produit: '',
+    ref_matiere: '',
+    site: 'SIFA',
+    code_barre: code,
+    operateur_nom: operateurNom,
+    date_reception: dateStr,
+  };
+}
+
+async function tracaReprintEtiquette(m){
+  if(!m || !m.code_barre){ showToast('Code barre manquant','danger'); return; }
+  const data = _tracaBuildLabelData(m);
+  set({tracaAutoSaving:true});
+  try{
+    const r = await apiFetch('/api/print/label',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({usage_key:'reception_matiere', copies:1, data, variante:'compact'}),
+    });
+    showToast('Étiquette envoyée à '+(r.imprimante||'imprimante'),'success');
+  }catch(e){
+    const msg = e && e.message ? e.message : String(e);
+    if(msg && (msg.includes('Aucune imprimante') || msg.includes('template'))){
+      // Pas de défaut utilisateur : afficher le picker
+      await _tracaShowPrinterPicker(m, data, msg);
+    } else {
+      showToast('Impression : '+msg,'danger');
+    }
+  } finally {
+    set({tracaAutoSaving:false});
+  }
+}
+
+async function _tracaShowPrinterPicker(m, data, warnMsg){
+  let imprimantes = [];
+  try{
+    imprimantes = await apiFetch('/api/print/my-imprimantes');
+  } catch(e){
+    showToast('Impossible de charger la liste des imprimantes : '+e.message,'danger');
+    return;
+  }
+  if(!imprimantes || !imprimantes.length){
+    showToast('Aucune imprimante configurée dans MySifa. Contacte l\'admin.','danger');
+    return;
+  }
+  return new Promise((resolve)=>{
+    document.getElementById('traca-printer-picker')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'traca-printer-picker';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.addEventListener('click', e=>{ if(e.target===overlay){ overlay.remove(); resolve(); } });
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:440px;width:100%;max-height:90vh;overflow:auto';
+    card.innerHTML = `
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">Choisir une imprimante</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${warnMsg ? String(warnMsg).replace(/</g,'&lt;') : 'Sélectionne l\'imprimante pour l\'étiquette de la bobine.'}</div>
+      <select id="_tp-picker" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;margin-bottom:12px">
+        ${imprimantes.map(i=>`<option value="${i.id}">${(i.poste?i.poste+' — ':'')}${String(i.nom).replace(/</g,'&lt;')}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-bottom:16px;cursor:pointer">
+        <input type="checkbox" id="_tp-remember" checked style="width:16px;height:16px;cursor:pointer">
+        Retenir comme imprimante par défaut pour la réception matière
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="_tp-cancel" style="padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:13px;font-family:inherit;font-weight:600;cursor:pointer">Annuler</button>
+        <button id="_tp-go" style="padding:9px 16px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:13px;font-family:inherit;font-weight:700;cursor:pointer">Imprimer</button>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    card.querySelector('#_tp-cancel').onclick = ()=>{ overlay.remove(); resolve(); };
+    card.querySelector('#_tp-go').onclick = async ()=>{
+      const impId = parseInt(card.querySelector('#_tp-picker').value,10);
+      const remember = card.querySelector('#_tp-remember').checked;
+      if(!impId){ resolve(); return; }
+      try{
+        const r = await apiFetch('/api/print/label',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({usage_key:'reception_matiere', copies:1, imprimante_id:impId, data, variante:'compact'}),
+        });
+        if(remember){
+          try{
+            await apiFetch('/api/print/my-defaults',{
+              method:'PUT',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({defaults:{reception_matiere:impId}}),
+            });
+          }catch(e){}
+        }
+        showToast('Étiquette envoyée à '+(r.imprimante||'imprimante'),'success');
+        overlay.remove();
+        resolve();
+      }catch(e){
+        showToast('Erreur : '+(e&&e.message?e.message:String(e)),'danger');
+      }
+    };
+  });
+}
+
 async function tracaStartCamera(){
   if(!navigator.mediaDevices?.getUserMedia){
     showToast('Caméra non disponible (page non HTTPS ?)','danger'); return;
@@ -3434,8 +3559,12 @@ function renderTracaPanel(){
           h('td',null,linkBadge),
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,timeStr),
-          h('td',null,h('button',{className:'fab-traca-del',title:'Supprimer',
-            onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',12)))
+          h('td',{style:{whiteSpace:'nowrap',textAlign:'right'}},
+            h('button',{className:'fab-traca-print',title:'Réimprimer étiquette (bobine à remettre en stock)',
+              onClick:()=>tracaReprintEtiquette(m)},svgIcon('printer',12)),
+            h('button',{className:'fab-traca-del',title:'Supprimer',
+              onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',12))
+          )
         );
       })
     : [h('tr',null,h('td',{colSpan:'7',className:'fab-traca-empty'},
