@@ -707,11 +707,16 @@ function renderFourniCard(f) {
   const isOpen = S.openFourniIds && S.openFourniIds.has(f.id);
   const contacts = f.contacts || [];
   const nb = contacts.length;
-  const meta = [];
-  if (f.ville) meta.push(escHtml(f.ville));
-  if (f.licence) meta.push('<span style="font-family:ui-monospace,monospace;font-size:11px">'+escHtml(f.licence)+'</span>');
-  meta.push(nb+' contact'+(nb>1?'s':''));
   const chev = '<button class="ao-series-toggle btn-icon btn-fourni-toggle" data-id="'+f.id+'" title="'+(isOpen?'Masquer contacts':'Afficher contacts')+'">'+icon(isOpen?'chevron-down':'chevron-right',14)+'</button>';
+  // Meta : ville + licence FSC (compteur de contacts affiché séparément)
+  const metaBits = [];
+  if (f.ville) metaBits.push(escHtml(f.ville));
+  if (f.licence) metaBits.push('<span style="font-family:ui-monospace,monospace;font-size:11px">'+escHtml(f.licence)+'</span>');
+  const metaHtml = metaBits.length ? '<span style="color:var(--muted);font-size:12px">'+metaBits.join(' · ')+'</span>' : '';
+  // Compteur de contacts : accent bold quand > 0, muted quand 0
+  const contactCount = nb > 0
+    ? '<span style="font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-bg);padding:2px 8px;border-radius:999px">'+nb+' contact'+(nb>1?'s':'')+'</span>'
+    : '<span style="font-size:12px;color:var(--muted)">0 contact</span>';
   let contactsHtml = '';
   if (isOpen) {
     if (!nb) {
@@ -733,16 +738,17 @@ function renderFourniCard(f) {
               '<button class="btn btn-ghost btn-sm btn-edit-contact" data-fid="'+f.id+'" data-cid="'+c.id+'">Modifier</button> '+
               '<button class="btn btn-ghost btn-sm btn-del-contact" data-fid="'+f.id+'" data-cid="'+c.id+'">Supprimer</button>'+
             '</td></tr>';
-        }).join('')+'</tbody></table>'+
-        '<div style="padding:8px 0 4px"><button class="btn btn-ghost btn-sm btn-add-contact" data-fid="'+f.id+'">'+icon('plus',12)+' Ajouter un contact</button></div>';
+        }).join('')+'</tbody></table>';
     }
   }
   return '<div class="card" style="padding:12px 14px;margin-bottom:10px;background:var(--bg)">'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
       chev+
       '<strong style="font-size:14px">'+escHtml(f.nom)+'</strong>'+
-      '<span style="color:var(--muted);font-size:12px">'+meta.join(' · ')+'</span>'+
-      '<span style="margin-left:auto;display:flex;gap:6px">'+
+      metaHtml+
+      contactCount+
+      '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">'+
+        '<button class="btn btn-ghost btn-sm btn-add-contact" data-fid="'+f.id+'" title="Ajouter un contact">'+icon('plus',12)+' Contact</button>'+
         '<button class="btn btn-ghost btn-sm btn-edit-fourni" data-id="'+f.id+'">Modifier</button>'+
         '<button class="btn btn-ghost btn-sm btn-del-fourni" data-id="'+f.id+'" data-nom="'+escAttr(f.nom||'')+'">Supprimer</button>'+
       '</span>'+
