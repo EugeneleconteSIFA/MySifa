@@ -2373,13 +2373,12 @@ def _validate_alert_params(params: dict) -> dict:
     out["target"] = {"machines": clean_machines}
 
     # validation
-    val_in = params.get("validation") or {}
-    if not isinstance(val_in, dict):
-        raise HTTPException(422, "validation doit être un objet.")
-    btn = (val_in.get("button_label") or "Valider").strip() or "Valider"
-    if len(btn) > 40:
-        btn = btn[:40]
-    out["validation"] = {"button_label": btn}
+    # v2.3.33 : le libellé du bouton Valider n'est plus paramétrable côté
+    # admin — figé à « Valider » pour toutes les alertes. Ancien
+    # `validation.button_label` custom (ex. « OK ») est écrasé au prochain
+    # save. On accepte encore l'objet en entrée pour rétro-compat mais on
+    # ignore son contenu.
+    out["validation"] = {"button_label": "Valider"}
 
     # v2.2.88 : block_production par alerte (défaut False). Quand True,
     # la modale s'affiche avec backdrop bloquant et le backend refuse toute

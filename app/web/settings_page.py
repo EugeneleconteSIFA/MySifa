@@ -5954,102 +5954,8 @@ function _renderAlertFormFields(params, opts) {
     + '</div>';
   return nomBlock
     + descBlock
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
-    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
-    +   '<div id="af-trigger-sub" class="alert-field-sub">'
-    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
-    +     '<div data-trigger-for="periodic">'
-    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
-    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +         '</div>'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
-    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
-    +         '</div>'
-    +       '</div>'
-    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="calendar">'
-    +       '<div class="alert-field-row">'
-    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
-    +         '<div></div>'
-    +       '</div>'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
-    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="event">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
-    +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
-    +       '<!-- v2.2.88 : Délai retiré pour after_calage. L\'alerte se déclenche à la saisie du calage. -->'
-    +     '</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +   '<div class="af-md-wrap">'
-    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
-    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
-    +       '<span class="af-md-trigger-caret">▼</span>'
-    +     '</button>'
-    +     '<div id="af-md-panel" class="af-md-panel">'
-    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
-    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
-    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
-    +       '</div>'
-    +       '<div class="af-md-sep"></div>'
-    +       machineCheckboxes
-    +     '</div>'
-    +   '</div>'
-    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
-    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
-    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
-    + '</div>'
-    // v2.3.12 : Section Affichage regroupant Placement + Taille + Bloque prod
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
-    +   '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
-    +       '<select id="af-placement" class="alert-field-input">'
-    +         '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
-    +         '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
-    +       '</select>'
-    +     '</div>'
-    +     '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
-    +       '<select id="af-size" class="alert-field-input">'
-    +         '<option value="small"' + (d.size === 'small' ? ' selected' : '') + '>Petite</option>'
-    +         '<option value="medium"' + (d.size === 'medium' ? ' selected' : '') + '>Moyenne</option>'
-    +         '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
-    +       '</select>'
-    +     '</div>'
-    +   '</div>'
-    +   '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-top:14px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Aucune trace nulle part.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
-    +     '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
-    +     '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider).</div>'
-    +   '</div>'
-    + '</div>'
+    // v2.3.33 : questionnaire remonté juste après la description (l'admin
+    // pense d'abord au contenu, ensuite au paramétrage technique)
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
     +     '<div>'
@@ -6065,7 +5971,135 @@ function _renderAlertFormFields(params, opts) {
     + '</div>'
     + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
     +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
+    + '</div>'
+    // v2.3.33 : bouton de bascule pour la section Paramètres (repliable in-place)
+    + '<button type="button" id="af-settings-toggle" class="btn btn-sec" onclick="_afToggleSettings()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;padding:12px 16px;text-align:left;background:var(--bg);border:1px solid var(--border)">'
+    +   '<span style="display:flex;flex-direction:column;gap:2px">'
+    +     '<span style="font-weight:700;font-size:14px">Paramètres</span>'
+    +     '<span style="font-size:11px;color:var(--muted);font-weight:400">Déclencheur · Machines · Affichage · Blocage · Esquive</span>'
+    +   '</span>'
+    +   '<span id="af-settings-caret" style="transition:transform .18s ease;font-size:12px;color:var(--muted)">▼</span>'
+    + '</button>'
+    + '<div id="af-settings-wrap" style="display:none;margin-top:12px">'
+    +   '<div class="alert-field">'
+    +     '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
+    +     '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
+    +     '<div id="af-trigger-sub" class="alert-field-sub">'
+    +       '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
+    +       '<div data-trigger-for="periodic">'
+    +         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +           '<div>'
+    +             '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
+    +             '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +           '</div>'
+    +           '<div>'
+    +             '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
+    +             '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
+    +           '</div>'
+    +         '</div>'
+    +         '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
+    +       '</div>'
+    +       '<div data-trigger-for="calendar">'
+    +         '<div class="alert-field-row">'
+    +           '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
+    +           '<div></div>'
+    +         '</div>'
+    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
+    +         '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
+    +       '</div>'
+    +       '<div data-trigger-for="event">'
+    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
+    +         '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert-field">'
+    +     '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
+    +     '<div class="af-md-wrap">'
+    +       '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
+    +         '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
+    +         '<span class="af-md-trigger-caret">▼</span>'
+    +       '</button>'
+    +       '<div id="af-md-panel" class="af-md-panel">'
+    +         '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
+    +           '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
+    +           '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
+    +         '</div>'
+    +         '<div class="af-md-sep"></div>'
+    +         machineCheckboxes
+    +       '</div>'
+    +     '</div>'
+    +     '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
+    +   '</div>'
+    +   // v2.3.33 : section Affichage — Placement + Taille uniquement
+    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +     '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
+    +     '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
+    +         '<select id="af-placement" class="alert-field-input">'
+    +           '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
+    +           '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
+    +         '</select>'
+    +       '</div>'
+    +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
+    +         '<select id="af-size" class="alert-field-input">'
+    +           '<option value="small"' + (d.size === 'small' ? ' selected' : '') + '>Petite</option>'
+    +           '<option value="medium"' + (d.size === 'medium' ? ' selected' : '') + '>Moyenne</option>'
+    +           '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
+    +         '</select>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
+    +   // v2.3.33 : Bloquer la production — section séparée d'Affichage
+    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +     '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+    +       '<div>'
+    +         '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+    +         '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
+    +       '</div>'
+    +       '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
+    +       '<div>'
+    +         '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
+    +         '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Une trace est conservée dans l\'historique sous "Fermetures auto".</span>'
+    +       '</div>'
+    +       '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +     '</div>'
+    +     '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
+    +       '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
+    +       '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider). Ce libellé apparaît aussi dans l\'historique (ex. « Fermée auto (esquive) : Pas d\'Errepi »).</div>'
+    +     '</div>'
+    +   '</div>'
     + '</div>';
+}
+
+
+// v2.3.33 : bascule la section Paramètres (déclencheur / machines / affichage / …)
+function _afToggleSettings(){
+  const w = document.getElementById('af-settings-wrap');
+  const c = document.getElementById('af-settings-caret');
+  if(!w) return;
+  const open = w.style.display !== 'none';
+  if(open){
+    w.style.display = 'none';
+    if(c) c.style.transform = 'rotate(0deg)';
+  } else {
+    w.style.display = 'block';
+    if(c) c.style.transform = 'rotate(180deg)';
+  }
+}
+// Force l'ouverture de la section Paramètres — appelé par _afReadParams pour
+// que les erreurs de validation portant sur des champs planqués soient visibles.
+function _afOpenSettings(){
+  const w = document.getElementById('af-settings-wrap');
+  const c = document.getElementById('af-settings-caret');
+  if(w && w.style.display === 'none'){
+    w.style.display = 'block';
+    if(c) c.style.transform = 'rotate(180deg)';
+  }
 }
 
 function _afResponseRow(value, isNc) {
@@ -6323,6 +6357,9 @@ function _afOnTriggerChange() {
 }
 
 function _afReadParams() {
+  // v2.3.33 : force l'ouverture de la section Paramètres pour que les
+  // erreurs de validation portant sur des champs cachés soient visibles.
+  try { _afOpenSettings(); } catch(_) {}
   const t = document.getElementById('af-trigger-type').value || 'manual';
   const trig = { type: t };
   if (t === 'periodic') {
@@ -6409,9 +6446,9 @@ function _afReadParams() {
     description: descVal.slice(0, 800),
     trigger: trig,
     target: _tgt,
-    validation: {
-      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
-    },
+    // v2.3.33 : validation.button_label figée à 'Valider' côté backend,
+    // plus de champ front. On garde l'objet pour éviter un 422 sur rétro-compat.
+    validation: {},
     // v2.2.88 : block_production par alerte
     block_production: !!document.getElementById('af-block-production')?.checked,
     // v2.3.12 : placement et size par alerte
