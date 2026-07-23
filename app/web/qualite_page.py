@@ -3008,6 +3008,10 @@ function renderSifaDocDetail(){
         <div class="sd-version-fours">${four_chips}</div>
       </div>
       <div class="sd-version-actions">
+        <a class="sd-version-btn" href="/api/qualite/sifa-docs/versions/${v.id}/pdf?inline=1" target="_blank" title="Prévisualiser le PDF dans un nouvel onglet">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Prévisualiser
+        </a>
         <a class="sd-version-btn primary" href="/api/qualite/sifa-docs/versions/${v.id}/pdf" target="_blank" title="Télécharger le PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           PDF
@@ -3016,6 +3020,10 @@ function renderSifaDocDetail(){
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
           DOCX
         </a>
+        <button class="sd-version-btn" onclick="openSifaDocEdit(${v.id})" title="Modifier cette version (client, fournisseurs, sections, régénère le PDF)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Modifier
+        </button>
         <button class="sd-version-btn" onclick="duplicateSifaDocVersion(${v.id})" title="Créer une nouvelle version en repartant de celle-ci">Dupliquer</button>
         ${S.isQualiteAdmin?`<button class="sd-version-btn danger" onclick="deleteSifaDocVersion(${v.id})" title="Supprimer">×</button>`:''}
       </div>
@@ -3081,6 +3089,26 @@ async function duplicateSifaDocVersion(id){
   });
 }
 
+async function openSifaDocEdit(id){
+  // Édition en place : réutilise le modal de génération avec un flag editVersionId.
+  // Sur enregistrement, submitSifaDocGenerate détecte le mode et PUT au lieu de POST.
+  const versions = (S.currentSifaDoc && S.currentSifaDoc.versions) || [];
+  const v = versions.find(x => x.id === id);
+  if(!v){showToast('Version introuvable','danger'); return;}
+  const code = S.currentSifaDoc.template.code;
+  await openSifaDocGenerate(code, {
+    editVersionId: id,
+    client_nom: v.client_nom,
+    audit_id: v.audit_id,
+    fournisseurs_ids: v.fournisseurs_ids || [],
+    sections_overrides: v.sections_overrides || {},
+    ref_manual: v.ref_document || '',
+    date_emission: v.date_emission || null,
+    notes: v.notes || '',
+    representant: v.representant || '',
+  });
+}
+
 // ─── Modal : génération d'une nouvelle version ─────────────────────
 async function openSifaDocGenerate(code, prefill){
   prefill = prefill || {};
@@ -3105,11 +3133,14 @@ async function openSifaDocGenerate(code, prefill){
   S._sifaGen = {
     templateCode: code,
     templateTitre: template.titre || 'Certification SIFA',
+    editVersionId: prefill.editVersionId || null,
     audit_id: prefill.audit_id || null,
     client_nom: prefill.client_nom || '',
     fournisseurs_ids: new Set(prefill.fournisseurs_ids || []),
-    date_emission: (new Date()).toISOString().slice(0,10),
-    ref_manual: '',
+    date_emission: prefill.date_emission || (new Date()).toISOString().slice(0,10),
+    ref_manual: prefill.ref_manual || '',
+    notes: prefill.notes || '',
+    representant: prefill.representant || '',
     fourSearch: '',
     sections: [],           // meta chargée depuis l'API
     sections_overrides: JSON.parse(JSON.stringify(prefill.sections_overrides || {})), // clone profond
@@ -3138,8 +3169,8 @@ async function openSifaDocGenerate(code, prefill){
   <div class="modal-ov" id="sd-gen-ov" style="display:flex" onclick="if(event.target===this)closeSifaDocGenerate()">
     <div class="modal lg" onclick="event.stopPropagation()" style="max-width:820px">
       <button type="button" class="modal-close" onclick="closeSifaDocGenerate()">×</button>
-      <h3 style="margin:0 0 6px;font-size:20px;color:var(--text);font-weight:800;letter-spacing:-.2px">Nouvelle version — ${escHtml(S._sifaGen.templateTitre)}</h3>
-      <p style="margin:0 0 20px;color:var(--text2);font-size:12.5px;line-height:1.5">La référence sera calculée automatiquement (<b style="color:var(--text)">${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…</b>). La date d'émission est celle du jour.</p>
+      <h3 style="margin:0 0 6px;font-size:20px;color:var(--text);font-weight:800;letter-spacing:-.2px">${S._sifaGen.editVersionId ? 'Modifier la version' : 'Nouvelle version'} — ${escHtml(S._sifaGen.templateTitre)}</h3>
+      <p style="margin:0 0 20px;color:var(--text2);font-size:12.5px;line-height:1.5">${S._sifaGen.editVersionId ? `Édition en place — la référence <b style="color:var(--text)">${escHtml(S._sifaGen.ref_manual||'')}</b> est conservée (modifiable ci-dessous). Le PDF sera régénéré.` : `La référence sera calculée automatiquement (<b style="color:var(--text)">${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…</b>). La date d'émission est celle du jour.`}</p>
 
       <div style="display:grid;gap:16px">
         <div class="sd-gen-section">
@@ -3182,8 +3213,9 @@ async function openSifaDocGenerate(code, prefill){
           <label class="sd-gen-label"><span class="sd-gen-num">4</span>Référence du document</label>
           <input type="text" id="sd-gen-ref" class="sd-gen-input"
                  placeholder="Générée automatiquement"
+                 value="${escAttr(S._sifaGen.ref_manual||'')}"
                  oninput="S._sifaGen.ref_manual=this.value" style="font-family:ui-monospace,'Menlo',monospace;font-size:13px">
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Laisser vide pour utiliser la référence auto par client (recommandé)</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">${S._sifaGen.editVersionId ? 'Modifiable : renomme la référence de la version existante (unicité vérifiée).' : 'Laisser vide pour utiliser la référence auto par client (recommandé)'}</div>
         </div>
       </div>
 
@@ -3191,7 +3223,7 @@ async function openSifaDocGenerate(code, prefill){
         <div style="font-size:11px;color:var(--muted)">Validité <b style="color:var(--text)">${template.validite_mois||12} mois</b> à compter de la date d'émission</div>
         <div style="display:flex;gap:8px">
           <button type="button" class="btn btn-ghost" onclick="closeSifaDocGenerate()">Annuler</button>
-          <button type="button" class="btn btn-accent" id="sd-gen-submit" onclick="submitSifaDocGenerate()">Générer le PDF</button>
+          <button type="button" class="btn btn-accent" id="sd-gen-submit" onclick="submitSifaDocGenerate()">${S._sifaGen.editVersionId ? 'Enregistrer les modifications' : 'Générer le PDF'}</button>
         </div>
       </div>
     </div>
@@ -3300,20 +3332,28 @@ async function submitSifaDocGenerate(){
   if(!client){showToast('Nom de client obligatoire','danger'); return;}
   const four_ids = Array.from(st.fournisseurs_ids);
   if(!four_ids.length){showToast('Au moins un fournisseur','danger'); return;}
+  const isEdit = !!st.editVersionId;
+  const defaultBtnLabel = isEdit ? 'Enregistrer les modifications' : 'Générer le PDF';
   const btn = document.getElementById('sd-gen-submit');
-  if(btn){btn.disabled=true; btn.textContent='Génération…';}
+  if(btn){btn.disabled=true; btn.textContent=isEdit?'Enregistrement…':'Génération…';}
   const body = {
-    template_code: st.templateCode,
     audit_id: st.audit_id || null,
     client_nom: client,
     fournisseurs_ids: four_ids,
     date_emission: st.date_emission,
     ref_document: (st.ref_manual||'').trim() || null,
     sections_overrides: st.sections_overrides && Object.keys(st.sections_overrides).length ? st.sections_overrides : null,
+    representant: (st.representant||'').trim() || null,
+    notes: (st.notes||'').trim() || null,
   };
+  if(!isEdit) body.template_code = st.templateCode;
+  const url = isEdit
+    ? '/api/qualite/sifa-docs/versions/'+st.editVersionId
+    : '/api/qualite/sifa-docs/versions';
+  const method = isEdit ? 'PUT' : 'POST';
   try{
-    const r = await api('/api/qualite/sifa-docs/versions',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await api(url,{
+      method, headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
     if(!r.ok){
@@ -3321,16 +3361,16 @@ async function submitSifaDocGenerate(){
       try{d = await r.json();}catch(e){}
       // Cas : origines manquantes → ouvrir le modal dédié
       if(d.detail && d.detail.code === 'MISSING_COUNTRIES'){
-        if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
+        if(btn){btn.disabled=false; btn.textContent=defaultBtnLabel;}
         openSifaDocMissingCountries(d.detail.fournisseurs, () => submitSifaDocGenerate());
         return;
       }
-      const msg = (d.detail && (d.detail.message || d.detail)) || 'Erreur génération';
-      showToast(typeof msg === 'string' ? msg : 'Erreur génération','danger');
-      if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
+      const msg = (d.detail && (d.detail.message || d.detail)) || (isEdit?'Erreur modification':'Erreur génération');
+      showToast(typeof msg === 'string' ? msg : (isEdit?'Erreur modification':'Erreur génération'),'danger');
+      if(btn){btn.disabled=false; btn.textContent=defaultBtnLabel;}
       return;
     }
-    const created = await r.json();
+    const saved = await r.json();
     // Si audit lié → sync des fournisseurs vers l'audit
     if(st.audit_id){
       try{
@@ -3341,16 +3381,16 @@ async function submitSifaDocGenerate(){
       }catch(e){}
     }
     closeSifaDocGenerate();
-    showToast('PDF généré : '+created.ref_document,'success');
+    showToast(isEdit ? ('Version mise à jour : '+saved.ref_document) : ('PDF généré : '+saved.ref_document),'success');
     // Recharger le détail du template
     openSifaDoc(st.templateCode);
-    // Ouvrir le PDF dans un nouvel onglet
-    window.open('/api/qualite/sifa-docs/versions/'+created.id+'/pdf','_blank');
+    // Ouvrir le PDF dans un nouvel onglet (inline en édition pour éviter le download automatique)
+    window.open('/api/qualite/sifa-docs/versions/'+saved.id+'/pdf'+(isEdit?'?inline=1':''),'_blank');
     // Vider le cache pickers (fournisseurs peuvent avoir été modifiés)
     S.sifaDocsPickers = null;
   }catch(e){
     if(e.message!=='unauth')showToast('Erreur réseau','danger');
-    if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
+    if(btn){btn.disabled=false; btn.textContent=defaultBtnLabel;}
   }
 }
 

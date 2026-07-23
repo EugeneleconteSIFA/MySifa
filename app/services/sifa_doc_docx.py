@@ -31,7 +31,7 @@ from app.services.sifa_doc_pdf import (
     SEC_4_1_BODY, SEC_4_2_BODY, SEC_4_3_BODY, SEC_4_4_BODY, SEC_4_4_NOTE,
     SEC_4_5_BODY, SEC_4_6_BODY, SEC_4_7_BODY, SEC_4_8_BODY, SEC_4_9_BODY,
     SEC_5_BODY, SEC_6_BODY, SEC_7_BODY, SEC_8_BODY,
-    _locate_logo, _locate_cachet,
+    _locate_logo, _locate_cachet, _locate_signature,
 )
 
 # ─── Palette (miroir du PDF) ─────────────────────────────────────────────
@@ -462,8 +462,23 @@ def _sec_7_docx(doc, body, ctx, num=7):
 def _sec_8_docx(doc, body, ctx, num=8):
     _add_heading_h2(doc, f"{num}. Signature et cachet")
     _add_body(doc, body or SEC_8_BODY)
+
+    # Priorité pour le Nom : version.representant → ctx.sig_nom → blanc.
     representant = (ctx.get("representant") or "").strip()
+    sig_nom = representant or (ctx.get("sig_nom") or "").strip()
+    sig_fonction = (ctx.get("sig_fonction") or "").strip()
+    sig_date_raw = (ctx.get("sig_date") or "").strip()
     annee = ctx["annee"]
+
+    # Date : vide → jour/mois/année d'émission ; sinon texte libre.
+    date_line_txt = sig_date_raw or None
+    if not date_line_txt:
+        try:
+            from datetime import datetime as _dt_sig
+            d = _dt_sig.fromisoformat(ctx.get("date_emission_iso") or "")
+            date_line_txt = f"{d.day:02d} / {d.month:02d} / {d.year}"
+        except Exception:
+            date_line_txt = f"____ / ____ / {annee}"
 
     # Tableau à 2 colonnes : signature à gauche, cachet à droite
     tbl = doc.add_table(rows=1, cols=2)
@@ -482,29 +497,50 @@ def _sec_8_docx(doc, body, ctx, num=8):
     r0.font.size = Pt(11)
     r0.font.color.rgb = NAVY
 
-    p_nom = left.add_paragraph()
-    if representant:
-        r_lbl = p_nom.add_run("Nom : ")
-        r_lbl.font.size = Pt(10)
-        r_lbl.font.color.rgb = NAVY
-        r_nom = p_nom.add_run(representant)
-        r_nom.bold = True
-        r_nom.font.size = Pt(10)
-        r_nom.font.color.rgb = NAVY
-    else:
-        r_nom = p_nom.add_run("Nom : ______________________________")
-        r_nom.font.size = Pt(10)
-        r_nom.font.color.rgb = NAVY
+    def _add_kv_line(cell, label, value, bold_value):
+        pp = cell.add_paragraph()
+        rl = pp.add_run(label)
+        rl.font.size = Pt(10)
+        rl.font.color.rgb = NAVY
+        rv = pp.add_run(value)
+        rv.bold = bold_value
+        rv.font.size = Pt(10)
+        rv.font.color.rgb = NAVY
 
-    for line in [
-        "Fonction : __________________________",
-        f"Date : ____ / ____ / {annee}",
-        "Signature :",
-        "",
-        "______________________________________",
-    ]:
+    if sig_nom:
+        _add_kv_line(left, "Nom : ", sig_nom, True)
+    else:
+        _add_kv_line(left, "", "Nom : ______________________________", False)
+
+    if sig_fonction:
+        _add_kv_line(left, "Fonction : ", sig_fonction, True)
+    else:
+        _add_kv_line(left, "", "Fonction : __________________________", False)
+
+    _add_kv_line(left, "Date : ", date_line_txt, bool(sig_date_raw))
+
+    # Signature manuscrite : PNG si présent, sinon ligne vide pour signer
+    p_sig_lbl = left.add_paragraph()
+    r_sig_lbl = p_sig_lbl.add_run("Signature :")
+    r_sig_lbl.font.size = Pt(10)
+    r_sig_lbl.font.color.rgb = NAVY
+
+    signature_path = _locate_signature()
+    if signature_path:
+        try:
+            p_sig_img = left.add_paragraph()
+            p_sig_img.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            run_s = p_sig_img.add_run()
+            run_s.add_picture(signature_path, width=Mm(55))
+        except Exception:
+            pp = left.add_paragraph()
+            rr = pp.add_run("______________________________________")
+            rr.font.size = Pt(10)
+            rr.font.color.rgb = NAVY
+    else:
+        left.add_paragraph()  # espace vertical
         pp = left.add_paragraph()
-        rr = pp.add_run(line)
+        rr = pp.add_run("______________________________________")
         rr.font.size = Pt(10)
         rr.font.color.rgb = NAVY
 
@@ -570,6 +606,25 @@ def _build_docx(ctx, sections_overrides: dict,
     ov_all = sections_overrides or {}
     tpl_ov_all = template_default_overrides or {}
 
+    # Pré-résolution des champs de signature (sig_nom, sig_fonction, sig_date).
+    # Même priorité que les body overrides : version > template > default_body.
+    for sec in SECTIONS_META:
+        if not sec.get("is_signature_field"):
+            continue
+        sid = sec["id"]
+        resolved = ""
+        v_ov = ov_all.get(sid, {})
+        v_custom = v_ov.get("custom_body") if isinstance(v_ov, dict) else None
+        if v_custom and str(v_custom).strip():
+            resolved = str(v_custom).strip()
+        else:
+            t_default = tpl_ov_all.get(sid)
+            if t_default and str(t_default).strip():
+                resolved = str(t_default).strip()
+            else:
+                resolved = sec.get("default_body") or ""
+        ctx[sid] = resolved
+
     # Renumérotation dynamique — miroir de sifa_doc_pdf._build_flowables
     main_counter = 0
     main_num_by_id = {}
@@ -592,6 +647,9 @@ def _build_docx(ctx, sections_overrides: dict,
         # Notes inline (encadrés) : rendues sous leur parent sans numéro propre.
         if sec.get("is_note"):
             continue
+        # Champs signature : pré-résolus dans ctx, non rendus comme sections.
+        if sec.get("is_signature_field"):
+            continue
         parent_num = main_num_by_id.get(parent_id)
         if parent_num is None:
             continue
@@ -604,6 +662,9 @@ def _build_docx(ctx, sections_overrides: dict,
     # Rendu
     for sec in SECTIONS_META:
         if not _section_included(sec, ov_all):
+            continue
+        # Champs signature : pas de rendu, injectés dans _sec_8_docx via ctx.
+        if sec.get("is_signature_field"):
             continue
         parent_id = sec.get("parent")
         if parent_id and parent_id not in main_num_by_id:
