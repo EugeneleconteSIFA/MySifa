@@ -686,25 +686,39 @@ def list_portail_messages(request: Request, token: str):
 
 @router_api.get("/ao/{token}/counts")
 def get_portail_counts(request: Request, token: str):
-    """Retourne le nombre de messages interne non lus + documents non vus."""
+    """Retourne totaux + non-lus pour messages et documents."""
     ip = _client_ip(request)
     with get_db() as conn:
         ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
-        msg = conn.execute(
+        msg_unread = conn.execute(
             """SELECT COUNT(*) FROM ao_messages
                WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
             (fourni["id"],),
         ).fetchone()[0]
+        msg_total = conn.execute(
+            "SELECT COUNT(*) FROM ao_messages WHERE ao_fournisseur_id=?",
+            (fourni["id"],),
+        ).fetchone()[0]
         try:
-            docs = conn.execute(
+            docs_new = conn.execute(
                 """SELECT COUNT(*) FROM ao_pieces_jointes
                    WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
                      AND COALESCE(vu_par_fournisseur, 0)=0""",
                 (ao["id"], fourni["id"]),
             ).fetchone()[0]
         except Exception:
-            docs = 0
-    return {"messages_non_lus": int(msg or 0), "documents_nouveaux": int(docs or 0)}
+            docs_new = 0
+        docs_total = conn.execute(
+            """SELECT COUNT(*) FROM ao_pieces_jointes
+               WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)""",
+            (ao["id"], fourni["id"]),
+        ).fetchone()[0]
+    return {
+        "messages_non_lus": int(msg_unread or 0),
+        "messages_total": int(msg_total or 0),
+        "documents_nouveaux": int(docs_new or 0),
+        "documents_total": int(docs_total or 0),
+    }
 
 
 @router_api.post("/ao/{token}/documents/mark-viewed")
