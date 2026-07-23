@@ -7564,11 +7564,21 @@ function openAddModal(templateRow) {
 }
  
 function openEditModal(row) {
+  // v2.3.41 : redirige vers le viewer d'ack quand on tombe sur une alerte
+  // validée (via clic, navigation ‹/› ou Ctrl+←/→). L'édition classique
+  // n'a aucun sens pour un ack : id non numérique, opération non éditable,
+  // pas de compteur/métrage. On préserve la lecture seule voulue.
+  if(row && row.kind === 'alert_ack'){
+    // Ferme la modal courante si elle est ouverte
+    try{ const m = document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
+    openAlertAckDetail(row);
+    return;
+  }
   try{
     const m = document.querySelector('.add-row-modal');
     if(m) m.remove();
   }catch(e){}
- 
+
   const list = getVisibleSaisiesRowsForNav();
   const total = list.length || 0;
   const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
