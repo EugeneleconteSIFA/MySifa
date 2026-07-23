@@ -1540,9 +1540,14 @@ async def create_saisie(request: Request):
         try:
             if cl["code"] not in ("03", "88") or fin_dossier_flag:
                 from app.routers.settings import _auto_ack_periodic_alerts_on_arret
+                # v2.3.31 : on passe l'id de la saisie qu'on vient d'insérer
+                # pour que _is_periodic_alert_due puisse évaluer l'état de
+                # la machine "avant" cette saisie (sinon la saisie non-prod
+                # fausse le calcul et l'alerte est vue comme non-due).
                 _auto_ack_periodic_alerts_on_arret(
                     conn, user, machine_name, no_dossier or "",
                     cl["code"], cl.get("label") or "", op_str,
+                    exclude_saisie_id=new_id,
                 )
         except Exception:
             pass  # ne jamais bloquer la saisie opérateur

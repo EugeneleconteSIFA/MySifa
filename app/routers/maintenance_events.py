@@ -11,8 +11,7 @@ Modèle : voir migration v158 dans app/core/database.py, complétée v162
 
 Contrôle d'accès :
 - Admin (superadmin, direction, administration) : CRUD complet.
-- Opérateur (fabrication) : accès uniquement si le flag global
-  `MAINTENANCE_OPEN_BETA` est actif dans .env. Peut :
+- Opérateur (fabrication) : peut :
   - Lire les events où il est dans le groupe (endpoint `/my-tasks`).
   - Mettre à jour statut/saisie d'une op **si** il est dans le groupe.
   - Créer un event `source=non_planifie` avec lui-même comme seul opérateur.
@@ -33,7 +32,6 @@ from config import (
     ROLE_ADMINISTRATION_VENTES,
     ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
-    MAINTENANCE_OPEN_BETA,
 )
 
 
@@ -115,7 +113,7 @@ def _get_maintenance_role(user: dict) -> Optional[str]:
     role = effective_role(user)
     if role in _ADMIN_ROLES:
         return "admin"
-    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
+    if role == ROLE_FABRICATION:
         return "operator"
     return None
 
