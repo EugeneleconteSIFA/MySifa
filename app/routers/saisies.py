@@ -100,6 +100,126 @@ def normalize_date_operation(val):
     return dt.strftime('%Y-%m-%dT%H:%M:%S') if dt else val
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# v2.3.39 : les alertes de maintenance validées par les opérateurs (via le
+# bouton Valider de MysifaAlerts) apparaissent aussi dans l'historique des
+# Saisies de MyProd. Exclusions : les auto-close (comment "Fermée auto…")
+# et les esquives (dismissed=1). Seules les vraies validations manuelles
+# remontent — cohérent avec l'onglet "Historique des alertes" côté
+# Maintenance quand le toggle "Fermetures auto" est OFF.
+# ─────────────────────────────────────────────────────────────────────────
+def _fetch_alert_acks_as_saisies(
+    conn,
+    date_from: Optional[str],
+    date_to: Optional[str],
+    operateurs: List[str],
+    dossiers: List[str],
+    machines: List[str],
+):
+    """Retourne les acks d'alertes validées formatés comme des saisies pour la
+    timeline unifiée. Ne renvoie que les acks non-dismissed et non-auto-close.
+    Chaque ligne porte `kind='alert_ack'` + un id string `ack-<n>` (les vraies
+    saisies gardent leur id numérique)."""
+    where = ["1=1"]
+    params: list = []
+    # Exclusions : auto-close (backend) + esquive (bouton dismiss)
+    where.append("COALESCE(a.dismissed, 0) = 0")
+    where.append("COALESCE(a.comment, '') NOT LIKE 'Fermée auto%'")
+    if date_from:
+        where.append("a.ack_at >= ?"); params.append(date_from)
+    if date_to:
+        where.append("a.ack_at <= ?"); params.append(date_to + 'T23:59:59')
+    if operateurs:
+        where.append(f"a.user_nom IN ({','.join('?'*len(operateurs))})")
+        params.extend(operateurs)
+    if dossiers:
+        where.append(f"a.no_dossier IN ({','.join('?'*len(dossiers))})")
+        params.extend(dossiers)
+    if machines:
+        where.append(f"a.machine IN ({','.join('?'*len(machines))})")
+        params.extend(machines)
+    wc = " AND ".join(where)
+    rows = conn.execute(
+        f"""SELECT
+              a.id AS ack_id,
+              a.alert_id,
+              a.user_id,
+              a.user_nom,
+              a.machine,
+              a.no_dossier,
+              a.ack_at,
+              a.responses,
+              a.comment,
+              m.nom AS alert_nom,
+              m.params AS alert_params
+            FROM maintenance_alert_acks a
+            LEFT JOIN maintenance_alerts m ON m.id = a.alert_id
+            WHERE {wc}
+            ORDER BY a.ack_at ASC, a.id ASC""",
+        params,
+    ).fetchall()
+
+    out: list = []
+    for r in rows:
+        d = dict(r)
+        # Format commentaire : réponses concaténées + comment libre entre « »
+        cmt_pieces: list = []
+        try:
+            resp = json.loads(d.get("responses") or "{}")
+        except (TypeError, ValueError):
+            resp = {}
+        if isinstance(resp, dict):
+            for _, v in resp.items():
+                if isinstance(v, list):
+                    if v:
+                        cmt_pieces.append(", ".join(str(x) for x in v))
+                elif v is not None and str(v).strip() != "":
+                    cmt_pieces.append(str(v))
+        base_cmt = " · ".join(cmt_pieces)
+        raw_cmt = (d.get("comment") or "").strip()
+        if raw_cmt:
+            base_cmt = (base_cmt + " ") if base_cmt else ""
+            base_cmt += f"« {raw_cmt} »"
+        # Label opération = "Alerte : <nom>" pour rester factuel dans la colonne Opération
+        nom_alerte = (d.get("alert_nom") or "").strip() or "Alerte"
+        out.append({
+            "id": f"ack-{d['ack_id']}",
+            "ack_id": int(d["ack_id"]),
+            "alert_id": d.get("alert_id"),
+            "kind": "alert_ack",
+            "date_operation": d.get("ack_at") or "",
+            "operation": f"Alerte : {nom_alerte}",
+            "operation_code": "",
+            "operation_severity": None,
+            "operation_category": "alert",
+            "operateur": d.get("user_nom") or "",
+            "operateur_nom": d.get("user_nom") or "",
+            "machine": d.get("machine") or "",
+            "no_dossier": d.get("no_dossier") or "",
+            "client": "",
+            "designation": "",
+            "commentaire": base_cmt,
+            "quantite_a_traiter": None,
+            "quantite_traitee": None,
+            "metrage_prevu": None,
+            "metrage_reel": None,
+            "metrage_total_debut": None,
+            "metrage_total_fin": None,
+            "duree_min": None,
+            "service": "maintenance",
+            "est_manuel": False,
+            "modifie_par": None,
+            "modifie_le": None,
+            "modifie_note": None,
+            # Payload nécessaire au modal détail côté client
+            "_alert_nom": nom_alerte,
+            "_alert_params": d.get("alert_params") or "{}",
+            "_alert_responses": d.get("responses") or "{}",
+            "_alert_comment": raw_cmt,
+        })
+    return out
+
+
 @router.get("/api/saisies")
 def list_saisies(
     request: Request,
@@ -174,10 +294,50 @@ def list_saisies(
     for r in rows_out:
         r["kind"] = "prod"
     rows_out.extend(stock_rows)
-    # Retri : date_operation ASC, id ASC
-    rows_out.sort(key=lambda r: ((r.get("date_operation") or ""), str(r.get("kind") or ""), int(r.get("id") or 0)))
+    # v2.3.39 : merge des alertes validées comme des saisies. Mêmes filtres
+    # (operateur = user_nom, machine, no_dossier, dates). Non-admin ne voit
+    # que ses propres validations (user_nom = son operateur/nom).
+    alert_acks: list = []
+    try:
+        with get_db() as conn3:
+            if can_view_all_prod(user):
+                ack_operateurs = operateurs
+                ack_dossiers = dossiers
+                ack_machines = machines
+            else:
+                # Fabrication : uniquement mes propres validations. La colonne
+                # user_nom stocke soit le nom d'affichage soit l'email — on
+                # essaie les deux pour être robuste.
+                ack_operateurs = [x for x in [
+                    (user.get("nom") or "").strip(),
+                    (user.get("email") or "").strip(),
+                ] if x]
+                if not ack_operateurs:
+                    ack_operateurs = ["__none__"]  # force zero result
+                ack_dossiers = []
+                ack_machines = []
+            alert_acks = _fetch_alert_acks_as_saisies(
+                conn3,
+                date_from=date_from,
+                date_to=date_to,
+                operateurs=ack_operateurs,
+                dossiers=ack_dossiers,
+                machines=ack_machines,
+            )
+    except Exception:
+        # Ne jamais casser /api/saisies si le join alertes échoue.
+        alert_acks = []
+    rows_out.extend(alert_acks)
+    # Retri final : date_operation ASC. On ne caste plus id en int car les
+    # acks portent un id string ("ack-42").
+    def _id_key(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 10**12  # les strings passent après les numériques à date égale
+    rows_out.sort(key=lambda r: ((r.get("date_operation") or ""), str(r.get("kind") or ""), _id_key(r.get("id"))))
 
-    return {"total": total + len(stock_rows), "rows": rows_out}
+    return {"total": total + len(stock_rows) + len(alert_acks), "rows": rows_out}
 
 
 # ----------------------------------------------------------------------------

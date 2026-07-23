@@ -7821,6 +7821,85 @@ async function openFictifReassignModal(){
   if(sources.length===1) fromSel.value=sources[0].no_dossier;
 }
  
+// v2.3.39 : viewer embarqué pour une alerte validée. Reconstruit la
+// checklist en lecture seule à partir de row._alert_params (JSON stocké
+// côté backend maintenance_alerts.params) et row._alert_responses (JSON
+// de l'ack). Fidèle au viewer de l'appli Maintenance (openAckDetail)
+// mais autonome — MyProd ne charge pas maintenance_page.js.
+function openAlertAckDetail(row){
+  if(!row || row.kind !== 'alert_ack') return;
+  let params = {}, responses = {};
+  try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
+  try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
+  const items = Array.isArray(params && params.checklist && params.checklist.items)
+    ? params.checklist.items : [];
+  const desc = (params && typeof params.description === 'string') ? params.description.trim() : '';
+  const esc = (s)=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Overlay + shell modal
+  const overlay = document.createElement('div');
+  overlay.className = 'alert-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px';
+  const close = ()=>{ try{overlay.remove();}catch(_){}}
+
+  // Checklist rendu lecture seule
+  let checklistHtml = '';
+  if(items.length){
+    checklistHtml = '<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Points de contrôle</div>'
+      + '<div style="display:flex;flex-direction:column;gap:10px">'
+      + items.map((it, idx)=>{
+          const r = responses[String(idx)];
+          if(it.type === 'value'){
+            const val = (r != null && r !== '') ? String(r) : '';
+            const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500">'+esc(it.unit)+'</span>' : '';
+            return '<div><div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">'+esc(it.label||'')+'</div>'
+              + '<div style="display:flex;align-items:center;gap:8px"><input type="text" disabled value="'+esc(val)+'" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;box-sizing:border-box;opacity:.85">'+unit+'</div></div>';
+          }
+          const selected = Array.isArray(r) ? r : (r != null ? [String(r)] : []);
+          const chips = selected.length
+            ? selected.map(s=>'<span style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:14px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);font-size:12px;font-weight:600">'+esc(s)+'</span>').join(' ')
+            : '<span style="font-size:12px;color:var(--muted);font-style:italic">Aucune réponse cochée</span>';
+          const otherTxt = responses[String(idx)+'_other'];
+          const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
+            ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">'+esc(String(otherTxt))+'</div>'
+            : '';
+          return '<div><div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px">'+esc(it.label||'')+'</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:6px">'+chips+'</div>'+otherHtml+'</div>';
+        }).join('')
+      + '</div></div>';
+  }
+
+  const commentTxt = (row._alert_comment || '').trim();
+  const commentHtml = commentTxt
+    ? '<div style="margin-top:10px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:13px;color:var(--text);white-space:pre-wrap">'+esc(commentTxt)+'</div>'
+    : '';
+
+  const dtStr = fDSecs(row.date_operation);
+  const context = esc(row.machine||'—') + ' · ' + esc(dtStr) + ' · ' + esc(row.operateur||'—') + (row.no_dossier ? ' · Dossier ' + esc(row.no_dossier) : '');
+  const descHtml = desc ? '<div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:14px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">'+esc(desc)+'</div>' : '';
+
+  overlay.innerHTML = '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 24px 64px rgba(0,0,0,.5)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)">'
+    +   '<h3 style="margin:0;font-size:15px;color:var(--text)">Alerte : '+esc(row._alert_nom||row.operation||'')+'</h3>'
+    +   '<button type="button" data-close style="background:transparent;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;padding:4px 8px">×</button>'
+    + '</div>'
+    + '<div style="padding:18px 20px">'
+    +   '<div style="font-size:11px;color:var(--muted);margin-bottom:14px;letter-spacing:.3px">'+context+'</div>'
+    +   descHtml
+    +   checklistHtml
+    +   (commentTxt ? '<div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-top:14px;margin-bottom:6px">Commentaire opérateur</div>'+commentHtml : '')
+    + '</div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)">'
+    +   '<button type="button" data-close style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:10px;font-weight:600;cursor:pointer">Fermer</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click',close));
+  overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
+  const escHandler = (e)=>{ if(e.key==='Escape'){ close(); document.removeEventListener('keydown',escHandler); }};
+  document.addEventListener('keydown',escHandler);
+}
+
 function renderSaisies(){
   const d=S.saisies;
   if(!d) return h('div',{className:'card-empty'},'Chargement...');
@@ -7843,8 +7922,11 @@ function renderSaisies(){
   function addDurations(baseRows){
     const rows = (baseRows||[]).slice();
     // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+    // v2.3.39 : les acks d'alertes n'ont pas de durée (colonne vide dans le tableau)
+    //           et ne rentrent pas dans le calcul de la saisie précédente.
     const byOp = new Map();
     rows.forEach(r=>{
+      if(r.kind === 'alert_ack') return;
       const k = String(r.operateur||'').trim();
       if(!byOp.has(k)) byOp.set(k, []);
       byOp.get(k).push(r);
@@ -7932,7 +8014,9 @@ function renderSaisies(){
   });
  
   // ── Checkbox "tout sélectionner" ─────────────────────────────
-  const allIds=rows.map(r=>r.id);
+  // v2.3.39 : les acks d'alertes sont lecture seule — jamais dans allIds,
+  // jamais dans les actions groupées Annuler/Rétablir.
+  const allIds=rows.filter(r=>r.kind!=='alert_ack').map(r=>r.id);
   const allChecked=allIds.length>0&&allIds.every(id=>S.selectedRows.has(id));
   const chkAll=h('input',{type:'checkbox'});
   chkAll.checked=allChecked;
@@ -7947,14 +8031,18 @@ function renderSaisies(){
   const tbody=h('tbody',null);
  
   rows.forEach(row=>{
+    // v2.3.39 : lignes "alerte validée" — bandeau cyan discret + click = modal détail (lecture seule)
+    const isAlertAck = row.kind === 'alert_ack';
     const fictifRow = isFictifSaisieRow(row);
-    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':''),style:{cursor:readOnly?'default':'pointer'}});
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(isAlertAck?' saisie-row-alert-ack':''),style:{cursor:(isAlertAck||!readOnly)?'pointer':'default'}});
     // PAR — contrastes plus forts + catégorie production en vert
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
 
     let rowBg = '';
-    if (fictifRow) {
+    if (isAlertAck) {
+      rowBg = 'rgba(34,211,238,.10)';           // v2.3.39 : cyan discret pour les alertes validées
+    } else if (fictifRow) {
       rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
     } else if (row.operation_severity === 'critique') {
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
@@ -7969,21 +8057,31 @@ function renderSaisies(){
     }
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
- 
-    if(!readOnly) tr.addEventListener('click',()=>openEditModal(row));
- 
-    // Checkbox ligne
-    const chk=h('input',{type:'checkbox'});
-    chk.checked=S.selectedRows.has(row.id);
-    chk.addEventListener('click',e=>e.stopPropagation());
-    chk.addEventListener('change',()=>{
-      if(chk.checked) S.selectedRows.add(row.id);
-      else S.selectedRows.delete(row.id);
-      render();
-    });
-    const tdChk=h('td',null,chk);
-    tdChk.addEventListener('click',e=>e.stopPropagation());
-    tr.appendChild(tdChk);
+
+    if(isAlertAck){
+      // v2.3.39 : click ouvre le viewer du détail d'alerte (embarqué dans MyProd)
+      tr.addEventListener('click',()=>openAlertAckDetail(row));
+    } else if(!readOnly){
+      tr.addEventListener('click',()=>openEditModal(row));
+    }
+
+    // Checkbox ligne — désactivée pour les alertes (lecture seule)
+    if(isAlertAck){
+      const tdChk=h('td',null); // cellule vide pour aligner les colonnes
+      tr.appendChild(tdChk);
+    } else {
+      const chk=h('input',{type:'checkbox'});
+      chk.checked=S.selectedRows.has(row.id);
+      chk.addEventListener('click',e=>e.stopPropagation());
+      chk.addEventListener('change',()=>{
+        if(chk.checked) S.selectedRows.add(row.id);
+        else S.selectedRows.delete(row.id);
+        render();
+      });
+      const tdChk=h('td',null,chk);
+      tdChk.addEventListener('click',e=>e.stopPropagation());
+      tr.appendChild(tdChk);
+    }
  
     let badge=null;
     if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
@@ -8013,14 +8111,24 @@ function renderSaisies(){
         : row.metrage_total_debut!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_total_debut)+' m (déb.)')
         : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
         : '-'));
-    if(readOnly){
+    // v2.3.39 : commentaire toujours en lecture seule pour les acks d'alertes
+    if(readOnly || isAlertAck){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
     }
-    tr.appendChild(h('td',null,badge));
- 
-    if(!readOnly){
+    // v2.3.39 : badge dédié pour les acks d'alertes
+    if(isAlertAck){
+      const alertBadge=h('span',{className:'badge-alert-ack',title:'Alerte validée par un opérateur — lecture seule',
+        style:{background:'var(--accent-bg)',color:'var(--accent)',border:'1px solid var(--accent)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
+      },'ALERTE');
+      tr.appendChild(h('td',null,alertBadge));
+    } else {
+      tr.appendChild(h('td',null,badge));
+    }
+
+    // v2.3.39 : pas de boutons +/- sur une ligne d'ack d'alerte (lecture seule + id non numérique)
+    if(!readOnly && !isAlertAck){
       const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
       const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
         style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},
