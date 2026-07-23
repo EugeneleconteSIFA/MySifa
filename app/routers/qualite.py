@@ -3642,6 +3642,145 @@ def sifa_docs_create_version(body: SifaDocVersionCreateBody, request: Request):
     return {"id": vid, "ref_document": ref, "pdf_path": pdf_path}
 
 
+# ─── Éditer une version existante (client, fournisseurs, overrides, …) ─
+class SifaDocVersionEditBody(BaseModel):
+    audit_id: Optional[int] = None
+    client_nom: str
+    fournisseurs_ids: List[int]
+    ref_document: Optional[str] = None
+    date_emission: Optional[str] = None
+    notes: Optional[str] = None
+    sections_overrides: Optional[dict] = None
+    representant: Optional[str] = None
+
+
+@router.put("/api/qualite/sifa-docs/versions/{vid}")
+def sifa_docs_edit_version(vid: int, body: SifaDocVersionEditBody, request: Request):
+    """Édite une version existante et régénère son PDF. Conserve id + slug,
+    autorise le changement de ref_document (avec check unicité)."""
+    _require_qualite_view(request)
+    client_nom = (body.client_nom or "").strip()
+    if not client_nom:
+        raise HTTPException(status_code=400, detail="Nom de client obligatoire")
+    if not body.fournisseurs_ids:
+        raise HTTPException(status_code=400, detail="Au moins un fournisseur obligatoire")
+
+    with get_db() as conn:
+        v = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_versions "
+            "WHERE id=? AND deleted_at IS NULL", (vid,)
+        ).fetchone()
+        if not v:
+            raise HTTPException(status_code=404, detail="Version introuvable")
+        template = conn.execute(
+            "SELECT * FROM qualite_sifa_doc_templates WHERE id=?", (v["template_id"],)
+        ).fetchone()
+        if not template:
+            raise HTTPException(status_code=404, detail="Template introuvable")
+
+        # Fournisseurs — check pays_origine renseigné
+        missing = conn.execute(
+            f"SELECT id, nom FROM fournisseurs_fsc "
+            f"WHERE id IN ({','.join(['?']*len(body.fournisseurs_ids))}) "
+            f"AND (pays_origine IS NULL OR TRIM(pays_origine) = '')",
+            body.fournisseurs_ids,
+        ).fetchall()
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "MISSING_COUNTRIES",
+                    "message": "Origine géographique manquante pour certains fournisseurs",
+                    "fournisseurs": [{"id": r["id"], "nom": r["nom"]} for r in missing],
+                },
+            )
+
+        # Audit
+        audit_id = body.audit_id
+        if audit_id:
+            arow = conn.execute(
+                "SELECT id FROM audit_dossiers WHERE id=?", (audit_id,)
+            ).fetchone()
+            if not arow:
+                audit_id = None
+
+        # Ref : conserve la ref d'origine par défaut, sauf si l'utilisateur en fournit une nouvelle
+        ref = (body.ref_document or "").strip() or v["ref_document"]
+        if ref != v["ref_document"]:
+            dup = conn.execute(
+                "SELECT id FROM qualite_sifa_doc_versions "
+                "WHERE ref_document=? AND id<>? AND deleted_at IS NULL",
+                (ref, vid),
+            ).fetchone()
+            if dup:
+                raise HTTPException(status_code=409, detail=f"Référence {ref} déjà utilisée")
+
+        date_emission = (body.date_emission or "").strip() or v["date_emission"]
+        validite_mois = int(template["validite_mois"] or 12)
+
+        # Overrides template
+        import json as _json_edit
+        try:
+            tpl_defaults = _json_edit.loads(template["default_body_overrides_json"] or "{}")
+            if not isinstance(tpl_defaults, dict):
+                tpl_defaults = {}
+        except Exception:
+            tpl_defaults = {}
+        representant = (body.representant or "").strip() or None
+
+        fours = _fournisseurs_for_pdf(conn, body.fournisseurs_ids)
+        try:
+            from app.services.sifa_doc_pdf import build_template_pdf
+            pdf_bytes = build_template_pdf(
+                template["code"],
+                client_nom=client_nom,
+                fournisseurs=fours,
+                ref=ref,
+                date_emission_iso=date_emission,
+                validite_mois=validite_mois,
+                sections_overrides=body.sections_overrides or None,
+                template_default_overrides=tpl_defaults or None,
+                representant=representant,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {e}")
+
+        # Écriture disque : si ref a changé, nouveau chemin ; sinon on écrase.
+        safe_ref = re.sub(r"[^A-Za-z0-9._-]+", "-", ref)
+        rel_dir = os.path.join(SIFA_DOCS_DIR, template["code"])
+        os.makedirs(rel_dir, exist_ok=True)
+        pdf_path = os.path.join(rel_dir, f"{safe_ref}.pdf")
+        try:
+            with open(pdf_path, "wb") as fh:
+                fh.write(pdf_bytes)
+            # Cleanup ancien fichier si ref a changé
+            if v["pdf_path"] and v["pdf_path"] != pdf_path and os.path.exists(v["pdf_path"]):
+                try:
+                    os.remove(v["pdf_path"])
+                except Exception:
+                    pass
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Erreur écriture disque : {e}")
+
+        client_slug = _slug(client_nom)
+        sec_ov_json = _json_edit.dumps(body.sections_overrides or {})
+        conn.execute(
+            """UPDATE qualite_sifa_doc_versions SET
+                   audit_id=?, client_nom=?, client_slug=?, fournisseurs_ids_json=?,
+                   ref_document=?, date_emission=?, pdf_path=?, notes=?,
+                   sections_overrides_json=?, representant=?, updated_at=?
+               WHERE id=?""",
+            (audit_id, client_nom, client_slug,
+             _json_edit.dumps(list(body.fournisseurs_ids)),
+             ref, date_emission, pdf_path,
+             (body.notes or "").strip() or None,
+             sec_ov_json, representant, _now(), vid),
+        )
+        conn.commit()
+
+    return {"id": vid, "ref_document": ref, "pdf_path": pdf_path}
+
+
 # ─── Régénérer le PDF d'une version existante ────────────────────────
 @router.post("/api/qualite/sifa-docs/versions/{vid}/regenerate")
 def sifa_docs_regenerate_version(vid: int, request: Request):
@@ -3710,9 +3849,11 @@ def sifa_docs_regenerate_version(vid: int, request: Request):
     return {"ok": True}
 
 
-# ─── Télécharger le PDF d'une version ────────────────────────────────
+# ─── Télécharger / prévisualiser le PDF d'une version ─────────────────
 @router.get("/api/qualite/sifa-docs/versions/{vid}/pdf")
-def sifa_docs_download_version(vid: int, request: Request):
+def sifa_docs_download_version(vid: int, request: Request, inline: int = 0):
+    """Renvoie le PDF de la version. Par défaut : téléchargement (attachment).
+    `?inline=1` : disposition inline pour prévisualisation dans le navigateur."""
     _require_qualite_view(request)
     with get_db() as conn:
         v = conn.execute(
@@ -3724,9 +3865,21 @@ def sifa_docs_download_version(vid: int, request: Request):
         raise HTTPException(status_code=404, detail="Version introuvable")
     if not v["pdf_path"] or not os.path.exists(v["pdf_path"]):
         raise HTTPException(status_code=410, detail="PDF absent — régénérer la version")
+    filename = f"{v['ref_document']}.pdf"
+    if inline:
+        try:
+            with open(v["pdf_path"], "rb") as fh:
+                pdf_bytes = fh.read()
+        except Exception:
+            raise HTTPException(status_code=500, detail="Erreur lecture PDF")
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes, media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename={filename}"},
+        )
     return FileResponse(
         v["pdf_path"], media_type="application/pdf",
-        filename=f"{v['ref_document']}.pdf",
+        filename=filename,
     )
 
 
