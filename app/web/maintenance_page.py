@@ -8611,18 +8611,22 @@ const placementOpts = placements.map(p =>
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      // v2.3.27 : fix — depuis v2.3.12 le modal n'a plus qu'un champ (le
+      // délai). L'ancien code référençait ags-block qui n'est jamais rendu
+      // → getElementById(...).checked throw → toast d'erreur silencieux.
+      // On lit maintenant depuis _alertGlobalSettings (déjà chargé au boot).
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        placement: document.getElementById('ags-placement').value,
-        size: document.getElementById('ags-size').value,
-        block_production: document.getElementById('ags-block').checked,
+        placement: _alertGlobalSettings.placement || 'top-right',
+        size: _alertGlobalSettings.size || 'medium',
+        block_production: !!_alertGlobalSettings.block_production,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings = payload;
-        toast('Réglages enregistrés');
+        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
+        toast('Délai enregistré');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
