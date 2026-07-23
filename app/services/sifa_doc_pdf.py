@@ -159,6 +159,31 @@ def _locate_cachet():
     return None
 
 
+_SIGNATURE_PATH_CACHE = None
+
+
+def _locate_signature():
+    """Localise le PNG de la signature manuscrite du représentant SIFA
+    (fichier `static/signature_granger.png`). Retourne le chemin absolu si
+    trouvé, None sinon. Rendu à la place de la ligne vide « Signature : »
+    dans la section 8."""
+    global _SIGNATURE_PATH_CACHE
+    if _SIGNATURE_PATH_CACHE is not None:
+        return _SIGNATURE_PATH_CACHE or None
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    candidates = [
+        _os.path.abspath(_os.path.join(here, "..", "..", "static", "signature_granger.png")),
+        _os.path.abspath(_os.path.join(here, "..", "static", "signature_granger.png")),
+        _os.path.abspath(_os.path.join(here, "..", "..", "app", "static", "signature_granger.png")),
+    ]
+    for path in candidates:
+        if _os.path.exists(path):
+            _SIGNATURE_PATH_CACHE = path
+            return path
+    _SIGNATURE_PATH_CACHE = ""
+    return None
+
+
 def _draw_logo(canvas_, x, y_top):
     """Place le logo dans le coin supérieur gauche. y_top = bord haut du logo."""
     logo_path = _locate_logo()
@@ -545,22 +570,73 @@ def _sec_8(ctx, body, num=8):
     out = _h2(f"{num}. Signature et cachet", S)
     out.append(Paragraph(body or SEC_8_BODY, S["body"]))
     out.append(Spacer(1, 10))
-    annee = ctx["annee"]
+
+    # Priorité pour le Nom :
+    #   1. version.representant (colonne DB, quick override)
+    #   2. ctx.sig_nom (résolu par _build_flowables depuis les overrides)
+    #   3. blanc
     representant = (ctx.get("representant") or "").strip()
+    sig_nom = representant or (ctx.get("sig_nom") or "").strip()
+    sig_fonction = (ctx.get("sig_fonction") or "").strip()
+    sig_date_raw = (ctx.get("sig_date") or "").strip()
+
+    jour, mois, annee = _fr_date_parts(ctx["date_emission_iso"])
+
+    # Nom
     nom_line = (
-        f"Nom : <b>{_esc(representant)}</b>"
-        if representant
+        f"Nom : <b>{_esc(sig_nom)}</b>"
+        if sig_nom
         else "Nom : ______________________________"
     )
+    # Fonction
+    fonction_line = (
+        f"Fonction : <b>{_esc(sig_fonction)}</b>"
+        if sig_fonction
+        else "Fonction : __________________________"
+    )
+    # Date : si vide → date d'émission auto (jour / mois / année) ;
+    #        sinon texte libre tel que saisi par l'admin.
+    if sig_date_raw:
+        date_line = f"Date : {_esc(sig_date_raw)}"
+    else:
+        date_line = f"Date : {jour} / {mois} / {annee}"
+
     sig_left = [
         Paragraph("<b>Représentant SIFA</b>", S["signature_hd"]),
         Paragraph(nom_line, S["signature_lbl"]),
-        Paragraph("Fonction : __________________________", S["signature_lbl"]),
-        Paragraph(f"Date : ____ / ____ / {annee}", S["signature_lbl"]),
+        Paragraph(fonction_line, S["signature_lbl"]),
+        Paragraph(date_line, S["signature_lbl"]),
         Paragraph("Signature :", S["signature_lbl"]),
-        Spacer(1, 40),
-        Paragraph("______________________________________", S["signature_lbl"]),
     ]
+
+    # Signature manuscrite : si le PNG statique est présent, on l'affiche ;
+    # sinon on laisse un espace + une ligne pour signer à la main.
+    signature_path = _locate_signature()
+    if signature_path:
+        try:
+            from reportlab.platypus import Image as _RLImageSig
+            from reportlab.lib.utils import ImageReader as _RLReaderSig
+            _img = _RLReaderSig(signature_path)
+            _iw, _ih = _img.getSize()
+            target_w = 55 * mm
+            target_h = target_w * (_ih / _iw) if _iw else 20 * mm
+            if target_h > 25 * mm:
+                target_h = 25 * mm
+                target_w = target_h * (_iw / _ih) if _ih else target_w
+            sig_img = _RLImageSig(signature_path, width=target_w, height=target_h)
+            sig_img.hAlign = "LEFT"
+            sig_left.append(Spacer(1, 4))
+            sig_left.append(sig_img)
+        except Exception:
+            sig_left.append(Spacer(1, 40))
+            sig_left.append(Paragraph(
+                "______________________________________",
+                S["signature_lbl"]))
+    else:
+        sig_left.append(Spacer(1, 40))
+        sig_left.append(Paragraph(
+            "______________________________________",
+            S["signature_lbl"]))
     # Cachet : si le PNG statique est présent, on l'affiche ; sinon on garde
     # le cadre pointillé « Emplacement réservé au cachet » qui laisse la place
     # à un tampon manuel après impression.
@@ -686,6 +762,22 @@ SECTIONS_META = [
     {"id": "sec_8", "is_main": True, "title": "8. Signature et cachet",
      "removable": False, "editable": True, "default_body": SEC_8_BODY,
      "builder": _sec_8},
+    # Champs de signature — pseudo-sections éditables au niveau du template
+    # (« Modifier le template »). Non rendues comme des sections numérotées :
+    # elles sont pré-résolues dans ctx et injectées dans _sec_8. Convention
+    # de titrage explicite pour que l'admin les repère dans la liste.
+    {"id": "sig_nom", "is_signature_field": True, "parent": "sec_8",
+     "title": "Signature — Nom du représentant",
+     "removable": False, "editable": True, "default_body": "Patrice Granger",
+     "builder": None},
+    {"id": "sig_fonction", "is_signature_field": True, "parent": "sec_8",
+     "title": "Signature — Fonction",
+     "removable": False, "editable": True, "default_body": "Directeur Commercial",
+     "builder": None},
+    {"id": "sig_date", "is_signature_field": True, "parent": "sec_8",
+     "title": "Signature — Date (vide = date d'émission auto)",
+     "removable": False, "editable": True, "default_body": "",
+     "builder": None},
 ]
 
 
@@ -737,6 +829,25 @@ def _build_flowables(ctx, sections_overrides):
     #   3. SEC_*_BODY hardcodé (via `body or SEC_X_BODY` dans les builders)
     tpl_ov_all = ctx.get("template_default_overrides") or {}
 
+    # Pré-résolution des champs de signature (sig_nom, sig_fonction, sig_date)
+    # injectés dans ctx pour être lus par _sec_8. Même priorité que ci-dessus.
+    for sec in SECTIONS_META:
+        if not sec.get("is_signature_field"):
+            continue
+        sid = sec["id"]
+        resolved = ""
+        v_ov = ov_all.get(sid, {})
+        v_custom = v_ov.get("custom_body") if isinstance(v_ov, dict) else None
+        if v_custom and str(v_custom).strip():
+            resolved = str(v_custom).strip()
+        else:
+            t_default = tpl_ov_all.get(sid)
+            if t_default and str(t_default).strip():
+                resolved = str(t_default).strip()
+            else:
+                resolved = sec.get("default_body") or ""
+        ctx[sid] = resolved
+
     def _skipped(sec):
         ov = ov_all.get(sec["id"], {})
         return sec["removable"] and ov.get("include") is False
@@ -768,6 +879,9 @@ def _build_flowables(ctx, sections_overrides):
         # (ex. sec_4_4_note s'affiche sous 4.4 sans devenir 4.5).
         if sec.get("is_note"):
             continue
+        # Champs de signature : pré-résolus dans ctx, non rendus comme sections.
+        if sec.get("is_signature_field"):
+            continue
         parent_num = main_num_by_id.get(parent_id)
         if parent_num is None:
             # Le parent a été retiré : on skip la sous-section aussi
@@ -781,6 +895,9 @@ def _build_flowables(ctx, sections_overrides):
     # Étape 3 : rendu
     for sec in SECTIONS_META:
         if _skipped(sec):
+            continue
+        # Champs signature : pas de rendu direct, injectés dans _sec_8 via ctx.
+        if sec.get("is_signature_field"):
             continue
         # Si sous-section dont le parent a été retiré : skip
         parent_id = sec.get("parent")
