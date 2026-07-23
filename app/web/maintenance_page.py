@@ -1781,14 +1781,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               <label for="filt-controles-date-to">Au</label>
               <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
             </div>
-            <!-- v2.3.29 : toggle "Afficher les fermetures automatiques" -->
-            <div class="filter-group" style="justify-content:flex-end">
-              <label for="filt-controles-show-auto" style="visibility:hidden">.</label>
-              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text2);height:38px;padding:0 6px" title="Les fermetures auto sont créées quand une saisie non-productive (arrêt, fin de production, calage…) clôt une alerte périodique.">
-                <input type="checkbox" id="filt-controles-show-auto" onchange="ctrlSaveShowAutoClose(this.checked); ctrlResetPage(); renderCtrl()" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">
-                <span>Afficher fermetures auto</span>
-              </label>
-            </div>
             <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
@@ -1812,6 +1804,12 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="ops-list-head">
             <div class="ops-list-title">Historique des alertes</div>
             <div class="ops-list-head-right">
+              <!-- v2.3.35 : toggle "Fermetures auto" relocalisé du panneau filtres vers ce header, style identique à "Colonnes produit" -->
+              <button type="button" class="ctrl-extra-toggle" id="ctrl-autoclose-toggle" onclick="toggleAutoClose()" title="Afficher ou masquer les lignes 'Fermée auto' générées automatiquement quand une saisie non-productive (arrêt, fin de production…) clôt une alerte périodique.">
+                <span class="ctrl-extra-toggle-label">Fermetures auto</span>
+                <span class="ctrl-extra-toggle-dot" id="ctrl-autoclose-toggle-dot"></span>
+                <span class="ctrl-extra-toggle-state" id="ctrl-autoclose-toggle-state">OFF</span>
+              </button>
               <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
                 <span class="ctrl-extra-toggle-label">Colonnes produit</span>
                 <span class="ctrl-extra-toggle-dot" id="ctrl-extra-toggle-dot"></span>
@@ -6635,6 +6633,8 @@ function sortCtrl(field){
 }
 // v2.3.29 : mémorise la préférence "afficher les fermetures auto"
 // (par défaut masquées — elles polluent l'historique quotidien).
+// v2.3.35 : localStorage = source de vérité (plus de checkbox DOM), et un
+// toggle stylé dans le header "Historique des alertes" gère l'état.
 const CTRL_SHOW_AUTO_KEY = 'mysifa_ctrl_show_auto_close';
 function ctrlLoadShowAutoClose(){
   try { return localStorage.getItem(CTRL_SHOW_AUTO_KEY) === '1'; }
@@ -6642,6 +6642,19 @@ function ctrlLoadShowAutoClose(){
 }
 function ctrlSaveShowAutoClose(v){
   try { localStorage.setItem(CTRL_SHOW_AUTO_KEY, v ? '1' : '0'); } catch(_) {}
+}
+function updateAutoCloseToggleUI(){
+  const on = ctrlLoadShowAutoClose();
+  const state = document.getElementById('ctrl-autoclose-toggle-state');
+  const btn = document.getElementById('ctrl-autoclose-toggle');
+  if(state) state.textContent = on ? 'ON' : 'OFF';
+  if(btn) btn.classList.toggle('ctrl-extra-toggle-on', on);
+}
+function toggleAutoClose(){
+  ctrlSaveShowAutoClose(!ctrlLoadShowAutoClose());
+  updateAutoCloseToggleUI();
+  ctrlResetPage();
+  if(typeof renderCtrl === 'function') renderCtrl();
 }
 function ctrlIsAutoClose(c){
   const raw = (c && c._raw_comment) || '';
@@ -6651,7 +6664,6 @@ function ctrlIsAutoClose(c){
 
 function getCtrlFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
-  const cb = id => !!document.getElementById(id)?.checked;
   return {
     type:      v('filt-controles-type'),
     operateur: v('filt-controles-operateur'),
@@ -6659,7 +6671,8 @@ function getCtrlFilters(){
     dateFrom:  v('filt-controles-date-from'),
     dateTo:    v('filt-controles-date-to'),
     conformite:v('filt-controles-conformite'),
-    showAuto:  cb('filt-controles-show-auto'),
+    // v2.3.35 : lu directement depuis localStorage (plus de checkbox DOM)
+    showAuto:  ctrlLoadShowAutoClose(),
   };
 }
 function resetCtrlFilters(){
@@ -7511,11 +7524,8 @@ async function loadMe(){
   });
   loadCtrl();
   updateExtraToggleUI();
-  // v2.3.29 : restaure l'état sauvegardé du toggle "Afficher fermetures auto"
-  try {
-    const _cbShowAuto = document.getElementById('filt-controles-show-auto');
-    if(_cbShowAuto) _cbShowAuto.checked = ctrlLoadShowAutoClose();
-  } catch(_) {}
+  // v2.3.35 : init du toggle "Fermetures auto" (relocalisé dans le header historique)
+  updateAutoCloseToggleUI();
   loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
