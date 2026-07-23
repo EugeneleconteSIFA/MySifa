@@ -228,37 +228,37 @@ def _draw_ref_block(c: canvas.Canvas, ml: float, mr: float, y: float,
 
 
 def _section_title(c: canvas.Canvas, ml: float, mr: float, y: float,
-                   fr: str, en: str) -> float:
-    """Bandeau de section : titre FR + sous-titre EN italique."""
-    inner_w = W - ml - mr
-    h_band = 8 * mm
+                   fr: str, en: str, width: float | None = None) -> float:
+    """Bandeau de section compact : titre FR + sous-titre EN italique."""
+    inner_w = width if width is not None else (W - ml - mr)
+    h_band = 5.5 * mm
     y_bottom = y - h_band
 
     c.setFillColor(_ACCENT)
-    c.rect(ml, y_bottom, 3 * mm, h_band, fill=1, stroke=0)
+    c.rect(ml, y_bottom, 2 * mm, h_band, fill=1, stroke=0)
     c.setFillColor(_LIGHT_GRAY)
-    c.rect(ml + 3 * mm, y_bottom, inner_w - 3 * mm, h_band, fill=1, stroke=0)
+    c.rect(ml + 2 * mm, y_bottom, inner_w - 2 * mm, h_band, fill=1, stroke=0)
 
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(ml + 6 * mm, y_bottom + h_band / 2 + 0.5, fr)
+    c.setFont("Helvetica-Bold", 8.5)
+    c.drawString(ml + 4 * mm, y_bottom + h_band / 2 - 1, fr)
 
     c.setFillColor(_MUTED)
-    c.setFont("Helvetica-Oblique", 8.5)
-    c.drawString(ml + 6 * mm + c.stringWidth(fr, "Helvetica-Bold", 10) + 3 * mm,
-                 y_bottom + h_band / 2 + 0.5, "/ " + en)
+    c.setFont("Helvetica-Oblique", 7)
+    c.drawString(ml + 4 * mm + c.stringWidth(fr, "Helvetica-Bold", 8.5) + 2 * mm,
+                 y_bottom + h_band / 2 - 1, "/ " + en)
 
     c.setFillColor(_BLACK)
-    return y_bottom - 1 * mm
+    return y_bottom - 0.5 * mm
 
 
 def _draw_row(c: canvas.Canvas, ml: float, mr: float, y: float,
               label_fr: str, label_en: str, value_fr: str, value_en: str,
-              striped: bool = False) -> float:
-    """Ligne bilingue : libellé FR / EN à gauche, valeur FR / EN à droite."""
-    inner_w = W - ml - mr
-    row_h = 12 * mm
-    col_lbl = inner_w * 0.36
+              striped: bool = False, width: float | None = None) -> float:
+    """Ligne compacte — FR uniquement pour label, EN en parenthèse si valeur diffère."""
+    inner_w = width if width is not None else (W - ml - mr)
+    row_h = 6 * mm
+    col_lbl = inner_w * 0.42
     col_val = inner_w - col_lbl
 
     y_bottom = y - row_h
@@ -268,46 +268,93 @@ def _draw_row(c: canvas.Canvas, ml: float, mr: float, y: float,
         c.rect(ml, y_bottom, inner_w, row_h, fill=1, stroke=0)
 
     c.setStrokeColor(_BORDER)
-    c.setLineWidth(0.3)
+    c.setLineWidth(0.25)
     c.line(ml + col_lbl, y_bottom, ml + col_lbl, y)
-    c.setLineWidth(0.4)
+    c.setLineWidth(0.3)
     c.line(ml, y_bottom, ml + inner_w, y_bottom)
 
-    y_l1 = y - 4.5 * mm
-    y_l2 = y - 9 * mm
+    y_txt = y - 4 * mm
 
-    # Label FR
+    # Label FR uniquement (EN est signalé dans le titre de section)
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 9.5)
-    c.drawString(ml + 3 * mm, y_l1, label_fr)
-    # Label EN
-    c.setFillColor(_MUTED)
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(ml + 3 * mm, y_l2, label_en)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(ml + 2 * mm, y_txt, label_fr)
 
-    # Value FR
-    x_val = ml + col_lbl + 3 * mm
-    max_val_w = col_val - 6 * mm
+    # Value FR (bold). Ajout EN en muted si différent (rare — ex. traductions type produit).
+    x_val = ml + col_lbl + 2 * mm
+    max_val_w = col_val - 4 * mm
 
     def _fit(txt: str, base: float, bold: bool) -> float:
         font = "Helvetica-Bold" if bold else "Helvetica-Oblique"
-        for s in (base, base - 0.5, base - 1, base - 1.5, base - 2, base - 2.5):
+        for s in (base, base - 0.5, base - 1, base - 1.5, base - 2):
             if c.stringWidth(txt, font, s) <= max_val_w:
                 return s
-        return base - 2.5
+        return base - 2
 
-    size_fr = _fit(value_fr, 10.5, bold=True)
-    c.setFillColor(_BLACK)
-    c.setFont("Helvetica-Bold", size_fr)
-    c.drawString(x_val, y_l1, value_fr)
-
-    if value_en and value_en != value_fr:
-        size_en = _fit(value_en, 8.5, bold=False)
+    show_en = bool(value_en) and value_en != value_fr
+    if show_en:
+        # FR au dessus, EN en dessous — deux mini-lignes dans les 6mm
+        y_fr = y - 3 * mm
+        y_en = y - 5 * mm
+        size_fr = _fit(value_fr, 8.5, bold=True)
+        c.setFillColor(_BLACK)
+        c.setFont("Helvetica-Bold", size_fr)
+        c.drawString(x_val, y_fr, value_fr)
+        size_en = _fit(value_en, 7, bold=False)
         c.setFillColor(_MUTED)
         c.setFont("Helvetica-Oblique", size_en)
-        c.drawString(x_val, y_l2, value_en)
+        c.drawString(x_val, y_en, value_en)
+    else:
+        size_fr = _fit(value_fr, 9, bold=True)
+        c.setFillColor(_BLACK)
+        c.setFont("Helvetica-Bold", size_fr)
+        c.drawString(x_val, y_txt, value_fr)
 
+    c.setFillColor(_BLACK)
     return y_bottom
+
+
+def _filter_meaningful(rows: list[tuple]) -> list[tuple]:
+    """Retire les lignes dont la valeur FR ET EN sont vides ou '—'."""
+    def is_empty(v):
+        return v is None or str(v).strip() in ("", "—")
+    return [r for r in rows if not (is_empty(r[2]) and is_empty(r[3]))]
+
+
+def _draw_two_col_sections(
+    c: canvas.Canvas, ml: float, mr: float, y: float,
+    left_title: tuple[str, str], left_rows: list[tuple],
+    right_title: tuple[str, str], right_rows: list[tuple],
+    ao_reference: str | None = None,
+) -> float:
+    """Rend deux sections côte à côte, chacune sur ~50% de la largeur."""
+    left_rows = _filter_meaningful(left_rows)
+    right_rows = _filter_meaningful(right_rows)
+    if not left_rows and not right_rows:
+        return y
+    gap = 4 * mm
+    inner_w = W - ml - mr
+    col_w = (inner_w - gap) / 2
+    x_left = ml
+    x_right = ml + col_w + gap
+    # Hauteur nécessaire : max des deux colonnes
+    need = 5.5 * mm + max(len(left_rows), len(right_rows)) * 6 * mm + 3 * mm
+    y = _need_page(c, y, need, ml, mr, ao_reference)
+
+    y_start = y
+    y_left = y_start
+    y_right = y_start
+    if left_rows:
+        y_left = _section_title(c, x_left, mr, y_start, left_title[0], left_title[1], width=col_w)
+        for i, row in enumerate(left_rows):
+            fr, en, vf, ve = row
+            y_left = _draw_row(c, x_left, mr, y_left, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
+    if right_rows:
+        y_right = _section_title(c, x_right, mr, y_start, right_title[0], right_title[1], width=col_w)
+        for i, row in enumerate(right_rows):
+            fr, en, vf, ve = row
+            y_right = _draw_row(c, x_right, mr, y_right, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
+    return min(y_left, y_right) - 2 * mm
 
 
 def _draw_footer(c: canvas.Canvas, ml: float, mr: float,
@@ -430,9 +477,7 @@ def generate_fiche_fournisseur_pdf(
     type_fr, type_en = _tr_type_produit(fiche.get("type_produit"))
     imp_fr, imp_en = _tr_bool(fiche.get("impressions"))
 
-    # ── Section 1 : Infos générales ───────────────────────────────
-    y = _need_page(c, y, 60 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Infos générales", "General information")
+    # ── Section 1 : Infos générales (pleine largeur, courte) ──────
     rows_1 = [
         ("Type de produit",       "Product type",        type_fr, type_en),
         ("Impressions",           "Printing",            imp_fr, imp_en),
@@ -446,35 +491,34 @@ def generate_fiche_fournisseur_pdf(
             pass
     if fmt_eti:
         rows_1.append(("Format étiquette", "Label format", fmt_eti, fmt_eti))
-    for i, (fr, en, vf, ve) in enumerate(rows_1):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
+    rows_1 = _filter_meaningful(rows_1)
+    if rows_1:
+        y = _need_page(c, y, 5.5 * mm + len(rows_1) * 6 * mm + 3 * mm, ml, mr, ao_reference)
+        y = _section_title(c, ml, mr, y - 2 * mm, "Infos générales", "General information")
+        for i, (fr, en, vf, ve) in enumerate(rows_1):
+            y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
+        y -= 2 * mm
 
-    # ── Section 2 : Étiquette ─────────────────────────────────────
-    y = _need_page(c, y, 60 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Étiquette", "Label")
+    # ── Sections 2 & 3 : Étiquette + Échenillage (côte à côte) ────
     rows_2 = [
         ("Laize",         "Width",        _num(et.get("laize"),    " mm"), _num(et.get("laize"),    " mm")),
         ("Longueur",      "Length",       _num(et.get("longueur"), " mm"), _num(et.get("longueur"), " mm")),
         ("Rayon",         "Corner radius",_num(et.get("rayon"),    " mm"), _num(et.get("rayon"),    " mm")),
         ("Perforation",   "Perforation",  _v(et.get("perforation")),        _v(et.get("perforation"))),
     ]
-    for i, (fr, en, vf, ve) in enumerate(rows_2):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
-
-    # ── Section 3 : Échenillage ───────────────────────────────────
-    y = _need_page(c, y, 50 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Échenillage", "Matrix stripping")
     rows_3 = [
         ("Espace à droite", "Right gap",   _num(ech.get("droite"), " mm"), _num(ech.get("droite"), " mm")),
         ("Espace à gauche", "Left gap",    _num(ech.get("gauche"), " mm"), _num(ech.get("gauche"), " mm")),
         ("En avance",       "Down gap",    _num(ech.get("avance"), " mm"), _num(ech.get("avance"), " mm")),
     ]
-    for i, (fr, en, vf, ve) in enumerate(rows_3):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
+    y = _draw_two_col_sections(
+        c, ml, mr, y - 2 * mm,
+        ("Étiquette", "Label"), rows_2,
+        ("Échenillage", "Matrix stripping"), rows_3,
+        ao_reference=ao_reference,
+    )
 
-    # ── Section 4 : Matière ───────────────────────────────────────
-    y = _need_page(c, y, 70 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Matière", "Material")
+    # ── Sections 4 & 5 : Matière + Bobines (côte à côte) ──────────
     frontal_lbl  = _mp_label(matieres_map.get(int(mat["frontal_id"])) if mat.get("frontal_id") else None)
     adhesif_lbl  = _mp_label(matieres_map.get(int(mat["adhesif_id"])) if mat.get("adhesif_id") else None)
     glassine_lbl = _mp_label(matieres_map.get(int(mat["glassine_id"])) if mat.get("glassine_id") else None)
@@ -486,12 +530,6 @@ def generate_fiche_fournisseur_pdf(
         ("Glassine",          "Release liner",          glassine_lbl, glassine_lbl),
         ("Couleur glassine",  "Liner colour",           _v(mat.get("couleur_glassine")), _v(mat.get("couleur_glassine"))),
     ]
-    for i, (fr, en, vf, ve) in enumerate(rows_4):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
-
-    # ── Section 5 : Bobines ───────────────────────────────────────
-    y = _need_page(c, y, 60 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Bobines", "Rolls")
     enr_fr, enr_en = _tr_enroulement(bob.get("enroulement"))
     rows_5 = [
         ("Diamètre mandrin",   "Core diameter",     _num(bob.get("diametre_mandrin"), " mm"),
@@ -502,13 +540,15 @@ def generate_fiche_fournisseur_pdf(
         ("Étiquettes / bobine","Labels / roll",     _num(bob.get("nb_etiquettes")),
                                                     _num(bob.get("nb_etiquettes"))),
     ]
-    for i, (fr, en, vf, ve) in enumerate(rows_5):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
+    y = _draw_two_col_sections(
+        c, ml, mr, y - 1 * mm,
+        ("Matière", "Material"), rows_4,
+        ("Bobines", "Rolls"), rows_5,
+        ao_reference=ao_reference,
+    )
 
     # ── Section 6 : Impressions (si activées) ─────────────────────
     if fiche.get("impressions"):
-        y = _need_page(c, y, 60 * mm, ml, mr, ao_reference)
-        y = _section_title(c, ml, mr, y - 4 * mm, "Impressions", "Printing details")
         aplat_txt_fr = "Non"
         aplat_txt_en = "No"
         if imp.get("aplat"):
@@ -520,24 +560,23 @@ def generate_fiche_fournisseur_pdf(
             ("Recto",  "Front (colours)",    _num(imp.get("recto")), _num(imp.get("recto"))),
             ("Verso",  "Back (colours)",     _num(imp.get("verso")), _num(imp.get("verso"))),
         ]
-        for i, (fr, en, vf, ve) in enumerate(rows_6):
-            y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
-        # Détails recto / verso
         details_recto = imp.get("recto_details") or []
         details_verso = imp.get("verso_details") or []
         for i, d in enumerate(details_recto, 1):
             val = f"{d.get('couleur','')} — {d.get('printing_area','')}".strip(" —")
-            y = _need_page(c, y, 14 * mm, ml, mr, ao_reference)
-            y = _draw_row(c, ml, mr, y, f"Recto {i}", f"Front {i}", val or "—", val or "—")
+            rows_6.append((f"Recto {i}", f"Front {i}", val or "—", val or "—"))
         for i, d in enumerate(details_verso, 1):
             val = f"{d.get('couleur','')} — {d.get('printing_area','')}".strip(" —")
-            y = _need_page(c, y, 14 * mm, ml, mr, ao_reference)
-            y = _draw_row(c, ml, mr, y, f"Verso {i}", f"Back {i}", val or "—", val or "—")
+            rows_6.append((f"Verso {i}", f"Back {i}", val or "—", val or "—"))
+        rows_6 = _filter_meaningful(rows_6)
+        if rows_6:
+            y = _need_page(c, y, 5.5 * mm + len(rows_6) * 6 * mm + 3 * mm, ml, mr, ao_reference)
+            y = _section_title(c, ml, mr, y - 1 * mm, "Impressions", "Printing details")
+            for i, (fr, en, vf, ve) in enumerate(rows_6):
+                y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
+            y -= 2 * mm
 
-    # ── Section 7 : Conditionnement cartons ───────────────────────
-    y = _need_page(c, y, 60 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Conditionnement — Cartons",
-                       "Packaging — Boxes")
+    # ── Sections 7 & 8 : Cartons + Palettes (côte à côte) ─────────
     cart_lbl = _mp_label(matieres_map.get(int(cart["matiere_id"])) if cart.get("matiere_id") else None)
     rows_7 = [
         ("Type de carton",   "Box type",           cart_lbl, cart_lbl),
@@ -545,13 +584,6 @@ def generate_fiche_fournisseur_pdf(
         ("Nombre d'étages",  "Number of layers",   _num(cart.get("nb_etages")),   _num(cart.get("nb_etages"))),
         ("Bobines / carton", "Rolls / box",        _num(cart.get("bobines_carton")), _num(cart.get("bobines_carton"))),
     ]
-    for i, (fr, en, vf, ve) in enumerate(rows_7):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
-
-    # ── Section 8 : Conditionnement palettes ──────────────────────
-    y = _need_page(c, y, 60 * mm, ml, mr, ao_reference)
-    y = _section_title(c, ml, mr, y - 4 * mm, "Conditionnement — Palettes",
-                       "Packaging — Pallets")
     pal_lbl = _mp_label(matieres_map.get(int(pal["matiere_id"])) if pal.get("matiere_id") else None)
     rows_8 = [
         ("Type de palette",   "Pallet type",         pal_lbl, pal_lbl),
@@ -559,8 +591,12 @@ def generate_fiche_fournisseur_pdf(
         ("Étages de cartons", "Number of layers",    _num(pal.get("nb_etages")),       _num(pal.get("nb_etages"))),
         ("Cartons / palette", "Boxes / pallet",      _num(pal.get("cartons_palette")), _num(pal.get("cartons_palette"))),
     ]
-    for i, (fr, en, vf, ve) in enumerate(rows_8):
-        y = _draw_row(c, ml, mr, y, fr, en, vf, ve, striped=(i % 2 == 0))
+    y = _draw_two_col_sections(
+        c, ml, mr, y - 1 * mm,
+        ("Cartons", "Boxes"), rows_7,
+        ("Palettes", "Pallets"), rows_8,
+        ao_reference=ao_reference,
+    )
 
     # ── Section 9 : Particularités (si renseignées) ───────────────
     part = fiche.get("particularites")

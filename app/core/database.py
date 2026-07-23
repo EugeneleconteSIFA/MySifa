@@ -7426,6 +7426,37 @@ Ressources :
         _record_schema_migration(conn, 205, "alerts_placement_size_per_alert")
 
 
+    # Migration 206 — Séries pour lignes d'AO.
+    # Un produit d'un AO peut être décliné en plusieurs séries (même produit, légère
+    # différence — souvent une variation d'impression). La somme des quantités des
+    # séries d'une ligne doit égaler la quantité de la ligne mère (contrainte
+    # applicative, pas de trigger SQL pour rester simple).
+    #
+    # ao_reponses.serie_id (nullable) : permet à un fournisseur de coter une série
+    # spécifiquement. NULL = cotation au niveau ligne (comportement historique).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=206 LIMIT 1").fetchone():
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS ao_lignes_series (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ligne_id    INTEGER NOT NULL,
+                position    INTEGER NOT NULL DEFAULT 0,
+                libelle     TEXT NOT NULL,
+                quantite    REAL NOT NULL DEFAULT 0,
+                notes       TEXT,
+                created_at  TEXT NOT NULL,
+                FOREIGN KEY (ligne_id) REFERENCES ao_lignes(id) ON DELETE CASCADE
+            )"""
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ao_lignes_series_ligne ON ao_lignes_series(ligne_id)"
+        )
+        # Ajout colonne serie_id sur ao_reponses (nullable — cotation par ligne par défaut)
+        ar_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
+        if "serie_id" not in ar_cols:
+            conn.execute("ALTER TABLE ao_reponses ADD COLUMN serie_id INTEGER")
+        conn.commit()
+        _record_schema_migration(conn, 206, "ao_lignes_series")
+
 
 def create_default_admin():
     import bcrypt

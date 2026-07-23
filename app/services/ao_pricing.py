@@ -96,6 +96,14 @@ def calc_prix_calcule(
     return quotation * (qte / nb)
 
 
+def _clean_transport_pct(transport_pct: float | None) -> float:
+    try:
+        pct = float(transport_pct or 0)
+    except (TypeError, ValueError):
+        pct = 0.0
+    return pct if pct > 0 else 0.0
+
+
 def calc_prix_vente(
     prix_au_mille: float | None,
     devise_fournisseur: str | None,
@@ -104,27 +112,35 @@ def calc_prix_vente(
     eur_usd_rate: float,
     transport_pct: float = 0.0,
 ) -> float | None:
+    """Prix de vente au mille (devise devis).
+
+    Pipeline : prix_au_mille → +transport (devise fournisseur) → ×coef → conversion devise.
+    Le transport s'ajoute AVANT coef et AVANT conversion devise.
+    """
     if prix_au_mille is None:
         return None
     c = _float_or_none(coef)
     if c is None or c <= 0:
         c = 1.0
-    base = prix_au_mille * c
-    converted = convert_amount(
-        base,
+    pct = _clean_transport_pct(transport_pct)
+    # +transport en devise fournisseur, puis ×coef
+    base_fournisseur = prix_au_mille * (1.0 + pct / 100.0) * c
+    return convert_amount(
+        base_fournisseur,
         _norm_devise(devise_fournisseur),
         _norm_devise(devise_prix_devis),
         eur_usd_rate,
     )
-    if converted is None:
+
+
+def calc_transport_amount(
+    prix_calcule: float | None,
+    transport_pct: float = 0.0,
+) -> float | None:
+    """Montant transport en devise fournisseur (pour affichage colonne dédiée)."""
+    if prix_calcule is None:
         return None
-    try:
-        pct = float(transport_pct or 0)
-    except (TypeError, ValueError):
-        pct = 0.0
-    if pct < 0:
-        pct = 0.0
-    return converted * (1.0 + pct / 100.0)
+    return prix_calcule * (_clean_transport_pct(transport_pct) / 100.0)
 
 
 def enrich_reponse_pricing(
@@ -154,6 +170,7 @@ def enrich_reponse_pricing(
 
     prix_au_mille = calc_prix_au_mille(quotation, unite, nb_bob)
     prix_calcule = calc_prix_calcule(quotation, unite, qte, nb_bob)
+    transport_amount = calc_transport_amount(prix_calcule, transport_pct)
     prix_vente = calc_prix_vente(
         prix_au_mille, devise, coef, devise_devis, eur_usd_rate, transport_pct
     )
@@ -166,6 +183,7 @@ def enrich_reponse_pricing(
     out["devise_prix_devis"] = devise_devis
     out["prix_au_mille"] = prix_au_mille
     out["prix_calcule"] = prix_calcule
+    out["transport_amount"] = transport_amount
     out["prix_vente"] = prix_vente
     return out
 

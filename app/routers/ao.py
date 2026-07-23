@@ -1185,8 +1185,9 @@ def _enrich_ligne_display(
     ln: dict,
     produits_map: dict[str, dict],
     matieres_map: dict[int, dict],
+    series_by_ligne: dict[int, list[dict]] | None = None,
 ) -> dict:
-    """Ajoute client et étiq./bobine depuis le catalogue produit (fiche)."""
+    """Ajoute client, étiq./bobine, séries depuis le catalogue et la DB."""
     ref_key = (ln.get("ref_produit") or "").strip().lower()
     produit = produits_map.get(ref_key)
     ctx = ligne_context_from_produit(
@@ -1197,7 +1198,31 @@ def _enrich_ligne_display(
     )
     ln["client_nom"] = ctx.get("client_nom")
     ln["etiquettes_par_bobine"] = ctx.get("etiquettes_par_bobine")
+    # Séries — la somme des quantités séries doit égaler la quantité ligne (contrôle applicatif)
+    series = (series_by_ligne or {}).get(int(ln.get("id") or 0), [])
+    ln["series"] = series
+    try:
+        ln["series_qty_sum"] = sum(float(s.get("quantite") or 0) for s in series)
+    except Exception:
+        ln["series_qty_sum"] = 0.0
     return ln
+
+
+def _load_series_by_ligne(conn, ligne_ids: list[int]) -> dict[int, list[dict]]:
+    if not ligne_ids:
+        return {}
+    qmarks = ",".join("?" * len(ligne_ids))
+    rows = conn.execute(
+        f"""SELECT * FROM ao_lignes_series
+            WHERE ligne_id IN ({qmarks})
+            ORDER BY ligne_id, position, id""",
+        tuple(ligne_ids),
+    ).fetchall()
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        d = _row_dict(r)
+        out.setdefault(int(d["ligne_id"]), []).append(d)
+    return out
 
 
 @router.get("/{ao_id}/voisins")
@@ -1248,8 +1273,10 @@ def get_ao(request: Request, ao_id: int):
         produits_map = _produits_by_ref_map(conn)
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
+        ligne_ids = [int(r["id"]) for r in lignes_rows]
+        series_by_ligne = _load_series_by_ligne(conn, ligne_ids)
         lignes = [
-            _enrich_ligne_display(_row_dict(r), produits_map, matieres_map)
+            _enrich_ligne_display(_row_dict(r), produits_map, matieres_map, series_by_ligne)
             for r in lignes_rows
         ]
     return {
@@ -1857,6 +1884,126 @@ def delete_ligne(request: Request, ao_id: int, ligne_id: int):
     return {"ok": True}
 
 
+# ─── Séries ────────────────────────────────────────────────────────
+# Une ligne d'AO peut être déclinée en plusieurs séries (même produit,
+# légère variation — souvent d'impression). La somme des quantités des
+# séries doit égaler la quantité de la ligne mère (contrôle applicatif :
+# on renvoie series_qty_sum et le front peut avertir).
+
+def _get_ligne_or_404(conn, ao_id: int, ligne_id: int) -> dict:
+    row = conn.execute(
+        "SELECT * FROM ao_lignes WHERE id=? AND ao_id=?",
+        (ligne_id, ao_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Ligne introuvable")
+    return _row_dict(row)
+
+
+def _load_series_for_ligne(conn, ligne_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM ao_lignes_series WHERE ligne_id=? ORDER BY position, id",
+        (ligne_id,),
+    ).fetchall()
+    return [_row_dict(r) for r in rows]
+
+
+@router.post("/{ao_id}/lignes/{ligne_id}/series")
+async def create_serie(request: Request, ao_id: int, ligne_id: int):
+    _require_ao(request)
+    body = await request.json()
+    libelle = (body.get("libelle") or "").strip()
+    if not libelle:
+        raise HTTPException(status_code=400, detail="Libellé obligatoire.")
+    try:
+        quantite = float(body.get("quantite") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    if quantite < 0:
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    notes = (body.get("notes") or "").strip() or None
+    now = _now_paris_iso()
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        # AO envoyée : bloqué (les fournisseurs ont déjà répondu peut-être)
+        if ao.get("statut") not in ("brouillon", "envoyee"):
+            raise HTTPException(status_code=400, detail="AO clôturé — impossible d'ajouter une série.")
+        pos_row = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) AS m FROM ao_lignes_series WHERE ligne_id=?",
+            (ligne_id,),
+        ).fetchone()
+        position = int(pos_row["m"]) + 1
+        cur = conn.execute(
+            """INSERT INTO ao_lignes_series
+               (ligne_id, position, libelle, quantite, notes, created_at)
+               VALUES (?,?,?,?,?,?)""",
+            (ligne_id, position, libelle, quantite, notes, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM ao_lignes_series WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    return _row_dict(row)
+
+
+@router.put("/{ao_id}/lignes/{ligne_id}/series/{serie_id}")
+async def update_serie(request: Request, ao_id: int, ligne_id: int, serie_id: int):
+    _require_ao(request)
+    body = await request.json()
+    libelle = (body.get("libelle") or "").strip()
+    if not libelle:
+        raise HTTPException(status_code=400, detail="Libellé obligatoire.")
+    try:
+        quantite = float(body.get("quantite") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    if quantite < 0:
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    notes = (body.get("notes") or "").strip() or None
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        if ao.get("statut") == "cloturee":
+            raise HTTPException(status_code=400, detail="AO clôturé — édition impossible.")
+        cur = conn.execute(
+            """UPDATE ao_lignes_series
+               SET libelle=?, quantite=?, notes=?
+               WHERE id=? AND ligne_id=?""",
+            (libelle, quantite, notes, serie_id, ligne_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Série introuvable")
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM ao_lignes_series WHERE id=?", (serie_id,)
+        ).fetchone()
+    return _row_dict(row)
+
+
+@router.delete("/{ao_id}/lignes/{ligne_id}/series/{serie_id}")
+def delete_serie(request: Request, ao_id: int, ligne_id: int, serie_id: int):
+    _require_ao(request)
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        if ao.get("statut") == "cloturee":
+            raise HTTPException(status_code=400, detail="AO clôturé — suppression impossible.")
+        # Les réponses fournisseur liées à cette série sont détachées (serie_id → NULL)
+        conn.execute(
+            "UPDATE ao_reponses SET serie_id=NULL WHERE serie_id=?",
+            (serie_id,),
+        )
+        cur = conn.execute(
+            "DELETE FROM ao_lignes_series WHERE id=? AND ligne_id=?",
+            (serie_id, ligne_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Série introuvable")
+        conn.commit()
+    return {"ok": True}
+
+
 # ─── Fournisseurs ──────────────────────────────────────────────────
 
 @router.post("/{ao_id}/fournisseurs")
@@ -2325,6 +2472,8 @@ def comparaison_ao(request: Request, ao_id: int):
         ).fetchone()
         transport_pct = float(_ao_pct_row[0]) if _ao_pct_row else 0.0
 
+        ligne_ids_all = [int(r["id"]) for r in lignes_rows]
+        series_by_ligne = _load_series_by_ligne(conn, ligne_ids_all)
         lignes_out: list[dict[str, Any]] = []
         rows_flat: list[dict[str, Any]] = []
         for ln_row in lignes_rows:
@@ -2372,6 +2521,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 prix_moyen = sum(prices_mille) / len(prices_mille)
             else:
                 prix_min = prix_max = prix_moyen = None
+            series_list = series_by_ligne.get(int(ln["id"]), [])
             ligne_out = {
                 "id": ln["id"],
                 "ref_produit": ln["ref_produit"],
@@ -2383,6 +2533,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 "prix_min": prix_min,
                 "prix_max": prix_max,
                 "prix_moyen": prix_moyen,
+                "series": series_list,
             }
             lignes_out.append(ligne_out)
             for f in fournisseurs:
@@ -2406,6 +2557,34 @@ def comparaison_ao(request: Request, ao_id: int):
                         eur_usd_rate=eur_usd,
                         transport_pct=transport_pct,
                     )
+                # Détail par série — prix calculé + prix vente pour chaque série
+                # (utile pour l'affichage sous-ligne dans le comparateur)
+                series_breakdown: list[dict[str, Any]] = []
+                for s in series_list:
+                    s_ctx = dict(ctx)
+                    s_ctx["quantite_etiquettes"] = float(s.get("quantite") or 0)
+                    s_rep = enrich_reponse_pricing(
+                        dict(raw) if raw else {
+                            "reponse_id": None,
+                            "quotation": None,
+                            "devise": rep.get("devise"),
+                            "unite_quotation": rep.get("unite_quotation"),
+                            "coef": rep.get("coef", 1.0),
+                            "devise_prix_devis": rep.get("devise_prix_devis"),
+                        },
+                        s_ctx,
+                        eur_usd_rate=eur_usd,
+                        transport_pct=transport_pct,
+                    )
+                    series_breakdown.append({
+                        "id": s.get("id"),
+                        "libelle": s.get("libelle"),
+                        "quantite": s.get("quantite"),
+                        "notes": s.get("notes"),
+                        "prix_calcule": s_rep.get("prix_calcule"),
+                        "transport_amount": s_rep.get("transport_amount"),
+                        "prix_vente": s_rep.get("prix_vente"),
+                    })
                 rows_flat.append({
                     "ligne_id": ln["id"],
                     "reponse_id": rep.get("reponse_id"),
@@ -2414,10 +2593,11 @@ def comparaison_ao(request: Request, ao_id: int):
                     **ctx,
                     **{k: rep.get(k) for k in (
                         "quotation", "devise", "unite_quotation", "unite_quotation_original", "unite_manuel",
-                        "prix_calcule", "prix_au_mille", "coef",
+                        "prix_calcule", "transport_amount", "prix_au_mille", "coef",
                         "devise_prix_devis", "prix_vente",
                         "delai_jours", "commentaire",
                     )},
+                    "series_breakdown": series_breakdown,
                 })
 
     return {
