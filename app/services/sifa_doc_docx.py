@@ -30,7 +30,7 @@ from app.services.sifa_doc_pdf import (
     SEC_2_BODY, SEC_4_INTRO,
     SEC_4_1_BODY, SEC_4_2_BODY, SEC_4_3_BODY, SEC_4_4_BODY, SEC_4_4_NOTE,
     SEC_4_5_BODY, SEC_4_6_BODY, SEC_4_7_BODY, SEC_4_8_BODY, SEC_4_9_BODY,
-    SEC_5_BODY, SEC_6_BODY, SEC_7_BODY,
+    SEC_5_BODY, SEC_6_BODY, SEC_7_BODY, SEC_8_BODY,
     _locate_logo, _locate_cachet,
 )
 
@@ -389,14 +389,20 @@ def _sec_4_3_docx(doc, body, parent_num=4, sub_num=3):
 def _sec_4_4_docx(doc, body, parent_num=4, sub_num=4):
     _add_heading_h3(doc, f"{parent_num}.{sub_num} Certification FSC")
     _add_body(doc, body or SEC_4_4_BODY)
-    # Encadré jaune "Note — Certification FSC SIFA en cours."
+    # Note : l'encadré jaune FSC est rendu par _sec_4_4_note_docx, section
+    # pseudo « sec_4_4_note » (editable + removable indépendamment).
+
+
+def _sec_4_4_note_docx(doc, body):
+    """Encadré jaune « FSC en cours » — miroir DOCX de _sec_4_4_note (PDF)."""
     tbl = doc.add_table(rows=1, cols=1)
     c = tbl.rows[0].cells[0]
     _set_cell_bg(c, YELLOW_BG_HEX)
     _set_cell_border(c, color_hex=YELLOW_HEX, size="8")
     c.text = ""
-    # Convertir la note (HTML simplifié) en run brut
-    note_text = SEC_4_4_NOTE.replace("<b>", "").replace("</b>", "")
+    note_text = (body or SEC_4_4_NOTE)
+    # Convertir HTML simplifié (SEC_4_4_NOTE contient <b>...</b>) en texte brut
+    note_text = note_text.replace("<b>", "").replace("</b>", "")
     p = c.paragraphs[0]
     r = p.add_run(note_text)
     r.font.size = Pt(9.5)
@@ -453,11 +459,9 @@ def _sec_7_docx(doc, body, ctx, num=7):
     _add_body(doc, body or SEC_7_BODY)
 
 
-def _sec_8_docx(doc, ctx, num=8):
+def _sec_8_docx(doc, body, ctx, num=8):
     _add_heading_h2(doc, f"{num}. Signature et cachet")
-    _add_body(doc,
-              "Fait à Roubaix, la présente Déclaration engage la "
-              "responsabilité de SIFA.")
+    _add_body(doc, body or SEC_8_BODY)
     representant = (ctx.get("representant") or "").strip()
     annee = ctx["annee"]
 
@@ -585,6 +589,9 @@ def _build_docx(ctx, sections_overrides: dict,
             continue
         if not _section_included(sec, ov_all):
             continue
+        # Notes inline (encadrés) : rendues sous leur parent sans numéro propre.
+        if sec.get("is_note"):
+            continue
         parent_num = main_num_by_id.get(parent_id)
         if parent_num is None:
             continue
@@ -626,7 +633,7 @@ def _build_docx(ctx, sections_overrides: dict,
             elif sid == "sec_7":
                 _sec_7_docx(doc, body, ctx, num=num)
             elif sid == "sec_8":
-                _sec_8_docx(doc, ctx, num=num)
+                _sec_8_docx(doc, body, ctx, num=num)
         elif sid in sub_info_by_id:
             info = sub_info_by_id[sid]
             args = (doc, body)
@@ -649,6 +656,11 @@ def _build_docx(ctx, sections_overrides: dict,
                 _sec_4_8_docx(*args, **kw)
             elif sid == "sec_4_9":
                 _sec_4_9_docx(*args, **kw)
+        elif sec.get("is_note"):
+            # Notes inline (encadrés) — rendues sans numéro propre, juste
+            # après leur sous-section parente dans l'ordre de SECTIONS_META.
+            if sid == "sec_4_4_note":
+                _sec_4_4_note_docx(doc, body)
 
     buf = BytesIO()
     doc.save(buf)

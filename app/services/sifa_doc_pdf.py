@@ -326,6 +326,11 @@ SEC_7_BODY = (
     "des transformations ultérieures effectuées par le client."
 )
 
+SEC_8_BODY = (
+    "Fait à Roubaix, la présente Déclaration engage la responsabilité "
+    "de SIFA."
+)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # BUILDERS PAR SECTION — chacun retourne List[Flowable]
@@ -456,9 +461,18 @@ def _sec_4_3(ctx, body, parent_num=4, sub_num=3):
 
 def _sec_4_4(ctx, body, parent_num=4, sub_num=4):
     S = ctx["styles"]
-    out = [Paragraph(f"{parent_num}.{sub_num} Certification FSC", S["h3"]),
-           Paragraph(body or SEC_4_4_BODY, S["body"])]
-    note_para = Paragraph(SEC_4_4_NOTE, S["note_frame"])
+    # Note : l'encadré jaune FSC en cours est rendu séparément par le builder
+    # _sec_4_4_note (section pseudo « sec_4_4_note »). Cela permet à l'admin
+    # de retirer/éditer la note indépendamment du corps de la sous-section 4.4.
+    return [Paragraph(f"{parent_num}.{sub_num} Certification FSC", S["h3"]),
+            Paragraph(body or SEC_4_4_BODY, S["body"])]
+
+
+def _sec_4_4_note(ctx, body):
+    """Encadré jaune « FSC en cours » — rendu inline sous 4.4 sans numéro
+    propre. Editable + removable via SECTIONS_META (flag is_note=True)."""
+    S = ctx["styles"]
+    note_para = Paragraph(body or SEC_4_4_NOTE, S["note_frame"])
     note_tbl = Table([[note_para]], colWidths=[180 * mm])
     note_tbl.setStyle(TableStyle([
         ("BOX", (0, 0), (-1, -1), 0.8, YELLOW),
@@ -468,10 +482,7 @@ def _sec_4_4(ctx, body, parent_num=4, sub_num=4):
         ("TOPPADDING", (0, 0), (-1, -1), 8),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
     ]))
-    out.append(Spacer(1, 4))
-    out.append(note_tbl)
-    out.append(Spacer(1, 4))
-    return out
+    return [Spacer(1, 4), note_tbl, Spacer(1, 4)]
 
 
 def _sec_4_5(ctx, body, parent_num=4, sub_num=5):
@@ -532,9 +543,7 @@ def _sec_7(ctx, body, num=7):
 def _sec_8(ctx, body, num=8):
     S = ctx["styles"]
     out = _h2(f"{num}. Signature et cachet", S)
-    out.append(Paragraph(
-        "Fait à Roubaix, la présente Déclaration engage la responsabilité "
-        "de SIFA.", S["body"]))
+    out.append(Paragraph(body or SEC_8_BODY, S["body"]))
     out.append(Spacer(1, 10))
     annee = ctx["annee"]
     representant = (ctx.get("representant") or "").strip()
@@ -646,6 +655,10 @@ SECTIONS_META = [
     {"id": "sec_4_4", "sub_group": "4", "parent": "sec_4_intro", "title": "4.4 Certification FSC",
      "removable": True, "editable": True, "default_body": SEC_4_4_BODY,
      "builder": _sec_4_4},
+    {"id": "sec_4_4_note", "sub_group": "4", "parent": "sec_4_intro", "is_note": True,
+     "title": "4.4 (encadré) — Note FSC en cours",
+     "removable": True, "editable": True, "default_body": SEC_4_4_NOTE,
+     "builder": _sec_4_4_note},
     {"id": "sec_4_5", "sub_group": "4", "parent": "sec_4_intro", "title": "4.5 Absence de PFAS",
      "removable": True, "editable": True, "default_body": SEC_4_5_BODY,
      "builder": _sec_4_5},
@@ -671,7 +684,7 @@ SECTIONS_META = [
      "removable": False, "editable": True, "default_body": SEC_7_BODY,
      "builder": _sec_7},
     {"id": "sec_8", "is_main": True, "title": "8. Signature et cachet",
-     "removable": False, "editable": False, "default_body": "",
+     "removable": False, "editable": True, "default_body": SEC_8_BODY,
      "builder": _sec_8},
 ]
 
@@ -750,6 +763,10 @@ def _build_flowables(ctx, sections_overrides):
         if not parent_id:
             continue
         if _skipped(sec):
+            continue
+        # Notes inline (encadrés) : rendues sous leur parent sans numéro propre
+        # (ex. sec_4_4_note s'affiche sous 4.4 sans devenir 4.5).
+        if sec.get("is_note"):
             continue
         parent_num = main_num_by_id.get(parent_id)
         if parent_num is None:
