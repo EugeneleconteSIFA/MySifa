@@ -16,39 +16,66 @@
     const style = document.createElement('style');
     style.id = 'mysifa-alert-runtime-css';
     style.textContent = [
-      '.ta-sim{position:fixed;inset:0;display:flex;z-index:2000;pointer-events:none;padding:20px;box-sizing:border-box}',
+      /* v2.3.20 — CSS de positionnement réécrit depuis zéro. Approche simple :
+         .ta-sim-alert est en position:fixed (dans le viewport), pas dans un
+         parent flex/absolute. Toutes les propriétés critiques ont !important
+         pour bloquer tout override futur. */
+
+      /* CONTAINER : plein viewport transparent, capture les clics uniquement en mode bloquant */
+      '.ta-sim{position:fixed;inset:0;z-index:2000;pointer-events:none;box-sizing:border-box}',
       '.ta-sim.ta-blocking{background:rgba(0,0,0,.45);pointer-events:auto;animation:taSimFade .15s ease-out}',
-      '.ta-sim.ta-pl-center{align-items:center;justify-content:center}',
-      '.ta-sim.ta-pl-top-right{align-items:flex-start;justify-content:flex-end}',
-      '.ta-sim.ta-pl-bottom-right{align-items:flex-end;justify-content:flex-end}',
-      '.ta-sim-alert{background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto}',
-      '.ta-sz-small .ta-sim-alert{max-width:260px;width:100%}',
-      '.ta-sz-medium .ta-sim-alert{max-width:340px;width:100%}',
-      '.ta-sz-large .ta-sim-alert{max-width:440px;width:100%}',
-      '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em}',
+      /* v2.3.26 : les alertes bloquantes ne peuvent pas être réduites — bouton "-" masqué */
+      '.ta-sim.ta-blocking .ta-sim-min{display:none !important}',
+
+      /* ALERTE : positionnée dans le viewport (fixed), indépendante du container */
+      '.ta-sim-alert{position:fixed !important;background:var(--card);border:2px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.5);padding:16px 18px;max-height:calc(100vh - 40px);overflow-y:auto;animation:taSimSlide .2s ease-out;pointer-events:auto;box-sizing:border-box;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
+
+      /* TAILLES : largeur fixe avec fallback viewport */
+      '.ta-sz-small .ta-sim-alert{width:260px !important;max-width:calc(100vw - 40px) !important}',
+      '.ta-sz-medium .ta-sim-alert{width:340px !important;max-width:calc(100vw - 40px) !important}',
+      '.ta-sz-large .ta-sim-alert{width:440px !important;max-width:calc(100vw - 40px) !important}',
+
+      /* PLACEMENTS : ancrage direct dans le viewport avec reset explicite des autres axes */
+      '.ta-sim.ta-pl-top-right .ta-sim-alert{top:20px !important;right:20px !important;left:auto !important;bottom:auto !important;transform:none !important}',
+      '.ta-sim.ta-pl-center .ta-sim-alert{top:50% !important;left:50% !important;right:auto !important;bottom:auto !important;transform:translate(-50%,-50%) !important}',
+
+      /* Titre et boutons */
+      '.ta-sim-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--accent);line-height:1.3;letter-spacing:-0.01em;cursor:grab;user-select:none}',
+      '.ta-sim-title.ta-dragging{cursor:grabbing}',
       '.ta-sim-actions{display:flex;gap:6px;margin-top:10px}',
       '.ta-sim-btn{flex:1;padding:9px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff}',
       '.ta-sim-btn:hover{filter:brightness(1.05)}',
+
+      /* Bouton minimize (en haut-droite de l'alerte) */
+      '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s;z-index:1}',
+      '.ta-sim-min:hover{background:var(--bg);color:var(--text)}',
+      '.ta-sim-restore-icon{display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#fff}',
+
+      /* État minimize : bulle 56x56 (override le placement/taille via ta-minimized qui est plus spécifique) */
+      '.ta-sim-alert.ta-minimized{width:56px !important;height:56px !important;min-width:0;max-width:56px !important;padding:0 !important;border-radius:50% !important;cursor:pointer;background:var(--accent);border-color:var(--accent);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:taMinPulse 1.8s ease-in-out infinite}',
+      '.ta-sim-alert.ta-minimized>*:not(.ta-sim-restore-icon){display:none !important}',
+      '.ta-sim-alert.ta-minimized .ta-sim-restore-icon{display:flex}',
+      '.ta-sim-alert.ta-minimized:hover{filter:brightness(1.08);animation:none}',
+
+      /* Chips (réponses) */
       '.ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}',
       '.ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}',
       '.ta-chip:hover{border-color:var(--accent)}',
       '.ta-chip:has(input:checked){background:var(--accent);color:#fff;border-color:var(--accent)}',
       '.ta-chip span{white-space:nowrap}',
       '.ta-chip-other{border-style:dashed}',
+
+      /* Animations */
       '@keyframes taSimFade{from{opacity:0}to{opacity:1}}',
       '@keyframes taSimSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}',
-      '@media(max-width:600px){.ta-sim{padding:12px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{max-width:calc(100vw - 24px)}}',
-      '.ta-sim-alert{position:relative;transition:width .18s ease,height .18s ease,padding .18s ease,border-radius .18s ease}',
-      '.ta-sim-title{cursor:grab;user-select:none}',
-      '.ta-sim-title.ta-dragging{cursor:grabbing}',
-      '.ta-sim-min{position:absolute;top:10px;right:12px;background:transparent;border:none;padding:6px;cursor:pointer;color:var(--muted);border-radius:6px;line-height:0;transition:background .12s,color .12s;z-index:1}',
-      '.ta-sim-min:hover{background:var(--bg);color:var(--text)}',
-      '.ta-sim-restore-icon{display:none;align-items:center;justify-content:center;width:100%;height:100%;color:#fff}',
-      '.ta-sim-alert.ta-minimized{width:56px;height:56px;min-width:0;max-width:56px!important;padding:0;border-radius:50%;cursor:pointer;background:var(--accent);border-color:var(--accent);overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(0,0,0,.4);animation:taMinPulse 1.8s ease-in-out infinite}',
-      '.ta-sim-alert.ta-minimized>*:not(.ta-sim-restore-icon){display:none!important}',
-      '.ta-sim-alert.ta-minimized .ta-sim-restore-icon{display:flex}',
-      '.ta-sim-alert.ta-minimized:hover{filter:brightness(1.08);animation:none}',
-      '@keyframes taMinPulse{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.4)}50%{box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 10px rgba(34,211,238,.28)}}'
+      '@keyframes taMinPulse{0%,100%{box-shadow:0 6px 20px rgba(0,0,0,.4)}50%{box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 10px rgba(34,211,238,.28)}}',
+
+      /* Mobile : marges réduites, largeur presque pleine */
+      '@media(max-width:600px){.ta-sim-alert{padding:14px}.ta-sz-small .ta-sim-alert,.ta-sz-medium .ta-sim-alert,.ta-sz-large .ta-sim-alert{width:calc(100vw - 24px) !important;max-width:calc(100vw - 24px) !important}.ta-sim.ta-pl-top-right .ta-sim-alert{top:12px !important;right:12px !important}}',
+
+      /* Bouton "Quitter le test" du simulateur — fixed indépendant */
+      '.ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}',
+      '.ta-sim-exit:hover{background:rgba(0,0,0,.9)}'
     ].join('\n');
     document.head.appendChild(style);
   })();
@@ -59,6 +86,12 @@
 
   let _settings = { placement: 'top-right', size: 'medium', block_production: false, stack_mode: 'queue', min_gap_minutes: 5 };
   let _displayed = new Map();  // v2.2.66 : id → wrap DOM element (pour pouvoir fermer côté client si backend a ack en silence)
+  // v2.3.6 : file d'attente de resolvers pour waitForBlockingAck()
+  let _blockingAckResolvers = [];  // [{resolve, reject}]
+  // v2.3.9 : Set des IDs d'alertes affichées via showBlockingAlerts. Ces alertes
+  // ne sont PAS dans /alerts/active (retirées en v2.2.89 pour after_calage),
+  // donc le poll cleanup les supprimerait à chaque itération sans ce flag.
+  let _displayedBlocking = new Set();
   let _pollTimer = null;
   let _started = false;
 
@@ -71,6 +104,12 @@
   function _attr(s) { return _esc(s); }
 
   function _toast(msg, isErr) {
+    // v2.3.32 : préfère le showToast de la page (fabrication_page.py) qui
+    // utilise le style vert "Saisie enregistrée" en bas au centre. Fallback
+    // vers le toast global html.py (bottom-right) si le page-level manque.
+    if (typeof window.showToast === 'function') {
+      try { return window.showToast(msg, isErr ? 'danger' : 'success'); } catch(_) {}
+    }
     if (typeof window.toast === 'function') return window.toast(msg, !!isErr);
     if (window.console) window.console.log('[alerts]', msg);
   }
@@ -160,11 +199,15 @@
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
+    // v2.3.12 : placement + size par alerte (fallback sur les défauts si absent)
+    const _pl = ['top-right','center'].indexOf(p && p.placement) >= 0 ? p.placement : null;  // v2.3.17
+    const _sz = ['small','medium','large'].indexOf(p && p.size) >= 0 ? p.size : null;
     return { id: a.id, nom: a.nom, linked_maint_code: a.linked_maint_code || '',
              description: description,
              trigger: trig, target: { machines }, validation: val, checklist: cl,
              dismiss_button: dismiss,
-             block_production: !!(p && p.block_production) };  // v2.2.88
+             block_production: !!(p && p.block_production),
+             placement: _pl, size: _sz };  // v2.3.12
   }
 
   function _onValueInput(inp) {
@@ -336,6 +379,10 @@
   }
 
   async function _submitAck(alertId, wrap, alert) {
+    // v2.3.13 : mode simulation — ne fait rien côté serveur, retourne true.
+    if (alert && alert.__simulate) {
+      return true;
+    }
     const responses = _readResponses(wrap);
     const comment = wrap.querySelector('.ta-comment')?.value || '';
     // v163+ : priorité au no_dossier fourni par le backend dans /alerts/active
@@ -367,9 +414,16 @@
     }
   }
 
-  function _loadAlertPos() {
+  // v2.3.25 : position par ID d'alerte — chaque alerte garde sa propre
+  // position sauvegardée. Deux alertes différentes ne s'influencent plus
+  // (avant : une clé unique 'mysifa_alert_position' partagée pour toutes).
+  function _posKey(alertId) {
+    return 'mysifa_alert_position_' + String(alertId || '_default');
+  }
+
+  function _loadAlertPos(alertId) {
     try {
-      const raw = localStorage.getItem('mysifa_alert_position');
+      const raw = localStorage.getItem(_posKey(alertId));
       if (!raw) return null;
       const p = JSON.parse(raw);
       if (p && typeof p.left === 'number' && typeof p.top === 'number') return p;
@@ -377,14 +431,14 @@
     return null;
   }
 
-  function _saveAlertPos(left, top) {
+  function _saveAlertPos(alertId, left, top) {
     try {
-      localStorage.setItem('mysifa_alert_position', JSON.stringify({ left: left, top: top }));
+      localStorage.setItem(_posKey(alertId), JSON.stringify({ left: left, top: top }));
     } catch (e) {}
   }
 
-  function _applyAlertPos(alertEl) {
-    const pos = _loadAlertPos();
+  function _applyAlertPos(alertEl, alertId) {
+    const pos = _loadAlertPos(alertId);
     if (!pos) return;
     const w = window.innerWidth || document.documentElement.clientWidth;
     const h = window.innerHeight || document.documentElement.clientHeight;
@@ -393,15 +447,27 @@
     const maxTop = Math.max(0, h - Math.min(rect.height, 100));
     const left = Math.max(0, Math.min(pos.left, maxLeft));
     const top = Math.max(0, Math.min(pos.top, maxTop));
-    alertEl.style.position = 'fixed';
-    alertEl.style.left = left + 'px';
-    alertEl.style.top = top + 'px';
-    alertEl.style.right = 'auto';
-    alertEl.style.bottom = 'auto';
-    alertEl.style.margin = '0';
+    // v2.3.23 : setProperty(..., 'important') pour restaurer la position
+    // sauvegardée malgré les !important du placement (v2.3.20).
+    alertEl.style.setProperty('position', 'fixed', 'important');
+    alertEl.style.setProperty('left', left + 'px', 'important');
+    alertEl.style.setProperty('top', top + 'px', 'important');
+    alertEl.style.setProperty('right', 'auto', 'important');
+    alertEl.style.setProperty('bottom', 'auto', 'important');
+    alertEl.style.setProperty('transform', 'none', 'important');
+    alertEl.style.setProperty('margin', '0', 'important');
   }
 
   let _dragState = null;
+
+  // v2.3.25 : récupère l'ID d'alerte depuis le wrapper parent (data-attr posé
+  // dans _renderAlert). Utilisé pour sauvegarder la position par alerte.
+  function _alertIdFromEl(alertEl) {
+    if (!alertEl) return null;
+    const wrap = alertEl.closest('.ta-sim');
+    if (!wrap) return null;
+    return wrap.getAttribute('data-alert-runtime-id') || null;
+  }
 
   function _startDrag(ev, alertEl) {
     if (ev.target.closest('button, input, textarea, label, select')) return;
@@ -413,6 +479,7 @@
       offsetX: clientX - rect.left,
       offsetY: clientY - rect.top,
       alertEl: alertEl,
+      alertId: _alertIdFromEl(alertEl),
     };
     const title = alertEl.querySelector('.ta-sim-title');
     if (title) title.classList.add('ta-dragging');
@@ -432,19 +499,22 @@
     const newLeft = clientX - _dragState.offsetX;
     const newTop = clientY - _dragState.offsetY;
     const el = _dragState.alertEl;
-    el.style.position = 'fixed';
-    el.style.left = newLeft + 'px';
-    el.style.top = newTop + 'px';
-    el.style.right = 'auto';
-    el.style.bottom = 'auto';
-    el.style.margin = '0';
+    // v2.3.23 : setProperty(..., 'important') pour override le CSS !important
+    // du placement (v2.3.20). Sans ça le drag n'a aucun effet visuel.
+    el.style.setProperty('position', 'fixed', 'important');
+    el.style.setProperty('left', newLeft + 'px', 'important');
+    el.style.setProperty('top', newTop + 'px', 'important');
+    el.style.setProperty('right', 'auto', 'important');
+    el.style.setProperty('bottom', 'auto', 'important');
+    el.style.setProperty('transform', 'none', 'important');
+    el.style.setProperty('margin', '0', 'important');
   }
 
   function _endDrag() {
     if (!_dragState) return;
     const el = _dragState.alertEl;
     const rect = el.getBoundingClientRect();
-    _saveAlertPos(rect.left, rect.top);
+    _saveAlertPos(_dragState.alertId, rect.left, rect.top);
     const title = el.querySelector('.ta-sim-title');
     if (title) title.classList.remove('ta-dragging');
     document.removeEventListener('mousemove', _doDrag);
@@ -534,7 +604,7 @@
         _restoreAlert(alertEl);
       } else {
         const r = alertEl.getBoundingClientRect();
-        _saveAlertPos(r.left, r.top);
+        _saveAlertPos(_alertIdFromEl(alertEl), r.left, r.top);
       }
     }
 
@@ -547,7 +617,10 @@
 
   function _renderAlert(alert) {
     const wrap = document.createElement('div');
-    wrap.className = 'ta-sim ta-pl-' + _settings.placement + ' ta-sz-' + _settings.size;
+    // v2.3.12 : priorité aux valeurs par alerte, fallback aux réglages globaux
+    const _p = alert.placement || _settings.placement || 'top-right';
+    const _s = alert.size || _settings.size || 'medium';
+    wrap.className = 'ta-sim ta-pl-' + _p + ' ta-sz-' + _s;
     wrap.setAttribute('data-alert-runtime-id', String(alert.id));
     // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
     if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');
@@ -579,18 +652,32 @@
       + '</div>';
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
+    // v2.3.29 : garde une référence à l'objet alerte sur le wrap pour que
+    // flushOpenAcks() puisse resoumettre les données saisies sans dépendre
+    // du closure du bouton Valider.
+    wrap._alert = alert;
 
     const alertEl = wrap.querySelector('.ta-sim-alert');
-    if (alertEl) _applyAlertPos(alertEl);
+    // v2.3.24 : les alertes bloquantes NE sont PAS déplaçables — elles
+    // restent à leur placement configuré (centre ou coin haut droit).
+    // v2.3.25 : position sauvegardée par ID d'alerte (pas de position
+    // globale partagée entre toutes les alertes).
+    const _isBlocking = !!alert.block_production;
+    if (alertEl && !_isBlocking) _applyAlertPos(alertEl, alert.id);
 
     const titleEl = wrap.querySelector('.ta-sim-title');
-    if (titleEl && alertEl) {
+    if (titleEl && alertEl && !_isBlocking) {
       titleEl.addEventListener('mousedown', (ev) => _startDrag(ev, alertEl));
       titleEl.addEventListener('touchstart', (ev) => _startDrag(ev, alertEl), { passive: false });
+    } else if (titleEl && _isBlocking) {
+      // Curseur par défaut (pas de grab) pour indiquer que le titre n'est pas cliquable-glissable
+      titleEl.style.cursor = 'default';
     }
 
     const minBtn = wrap.querySelector('.ta-sim-min');
-    if (minBtn && alertEl) {
+    // v2.3.26 : pas de bouton "réduire" pour les alertes bloquantes (masqué par
+    // CSS + handler non attaché — l'utilisateur doit valider ou fermer).
+    if (minBtn && alertEl && !_isBlocking) {
       minBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         const btnRect = minBtn.getBoundingClientRect();
@@ -600,9 +687,19 @@
       });
     }
 
-    const closeWithSuccess = () => {
+    const closeWithSuccess = (viaDismiss) => {
       wrap.remove();
       _displayed.delete(alert.id);
+      _displayedBlocking.delete(alert.id);  // v2.3.9
+      console.log('[MysifaAlerts] closeWithSuccess id=', alert.id, 'viaDismiss=', viaDismiss, 'waiters=', _blockingAckResolvers.length);
+      const cbs = _blockingAckResolvers.slice();
+      _blockingAckResolvers = [];
+      cbs.forEach(cb => {
+        try {
+          if (viaDismiss) cb.reject(new Error('dismissed'));
+          else cb.resolve();
+        } catch (e) {}
+      });
     };
 
     const onValidate = async () => {
@@ -610,8 +707,8 @@
       // ici, tout est valide. Plus de warning "valider quand même" — les
       // questions non-required peuvent rester vides sans souci.
       if (!_isComplete(wrap, alert)) return;  // sécurité (bouton disabled)
-      // v2.4.3 : garde-fou double-submit — si l'op clique en rafale, on ne
-      // lance qu'UN seul POST /ack. Sans ça chaque clic crée une ligne
+      // v2.4.3 : garde-fou anti double-submit — si l'op clique en rafale, on
+      // ne lance qu'UN seul POST /ack. Sans ça chaque clic crée une ligne
       // d'historique (bug observé : 20 acks identiques à la même seconde).
       if (wrap._ackSubmitting) return;
       wrap._ackSubmitting = true;
@@ -621,7 +718,6 @@
       try {
         ok = await _submitAck(alert.id, wrap, alert);
       } finally {
-        // En cas d'échec on relâche le bouton pour permettre un retry manuel.
         if (!ok && btnEl) { btnEl.disabled = false; btnEl.style.opacity = ''; btnEl.style.cursor = ''; }
         if (!ok) wrap._ackSubmitting = false;
       }
@@ -657,7 +753,7 @@
             _toast('Fermeture refusée.', true);
             return;
           }
-          closeWithSuccess();
+          closeWithSuccess(true);  // v2.3.6 : dismiss → reject les waiters
         } catch (e) {
           _toast('Erreur réseau — réessaie', true);
         }
@@ -669,11 +765,16 @@
   async function _poll() {
     const r = await _fetchActive();
     const items = (r && Array.isArray(r.items)) ? r.items : [];
-    // v2.2.66 : ferme visuellement les alertes qui ne sont plus renvoyées
-    // par le serveur (ack automatique côté backend — arrêt machine, fin dossier).
+    // v2.2.66 + v2.3.8 : ferme visuellement les alertes qui ne sont plus
+    // renvoyées par le serveur, MAIS bypasse les alertes bloquantes affichées
+    // via 423 (elles ne sont pas dans /alerts/active — c'est normal).
     const activeIds = new Set(items.map(it => it.id));
     for (const [dispId, wrap] of Array.from(_displayed.entries())) {
       if (!activeIds.has(dispId)) {
+        // v2.3.9 : bypass si alerte bloquante (source: 423). Set JS + attribut
+        // DOM en double sécurité.
+        if (_displayedBlocking.has(dispId)) continue;
+        if (wrap && wrap.getAttribute && wrap.getAttribute('data-blocking-alert') === '1') continue;
         try { if (wrap && wrap.remove) wrap.remove(); } catch (e) {}
         _displayed.delete(dispId);
       }
@@ -696,6 +797,63 @@
     }
   }
 
+  // v2.2.89 : afficher des alertes bloquantes récupérées par le front (via 423)
+  async function _showBlockingAlerts(items) {
+    if (!Array.isArray(items) || !items.length) return;
+    if (!_started) {
+      try { await _loadSettings(); } catch(e){}
+    }
+    for (const raw of items) {
+      if (_displayed.has(raw.id)) continue;
+      const alert = _normalizeAlert(raw);
+      const wrap = _renderAlert(alert);
+      // v2.3.9 : marqueur DOM + Set JS pour double sécurité contre le cleanup.
+      wrap.setAttribute('data-blocking-alert', '1');
+      _displayed.set(raw.id, wrap);
+      _displayedBlocking.add(raw.id);
+      console.log('[MysifaAlerts] showBlockingAlerts add id=', raw.id, 'blocking Set size=', _displayedBlocking.size);
+    }
+  }
+
+  // v2.3.29 : détecte si l'opérateur a déjà commencé à remplir une alerte
+  // (au moins une case cochée, une valeur saisie ou un commentaire écrit).
+  // Sert de garde-fou avant flushOpenAcks : on ne soumet pas un ack vide.
+  function _hasUserInput(wrap) {
+    if (!wrap) return false;
+    const cmt = (wrap.querySelector('.ta-comment')?.value || '').trim();
+    if (cmt) return true;
+    const responses = _readResponses(wrap);
+    return responses && Object.keys(responses).length > 0;
+  }
+
+  // v2.3.29 : soumet toutes les alertes non-bloquantes qui ont déjà des
+  // données saisies par l'opérateur, puis retire leur DOM. Appelé avant
+  // toute saisie non-productive (code != 01 et != 03) pour éviter que
+  // _auto_ack_periodic_alerts_on_arret côté serveur écrase la saisie
+  // avec un ack vide "Fermée auto : XX – <label>".
+  async function _flushOpenAcks() {
+    const wraps = Array.from(document.querySelectorAll('.ta-sim'));
+    const results = [];
+    for (const wrap of wraps) {
+      // Ignore : mode simulation (bouton "Tester sur moi") + alertes bloquantes
+      // (elles exigent une interaction explicite, pas de flush silencieux)
+      if (wrap.getAttribute('data-simulate') === '1') continue;
+      if (wrap.classList.contains('ta-blocking')) continue;
+      const alert = wrap._alert;
+      if (!alert || alert.__simulate) continue;
+      if (!_hasUserInput(wrap)) continue;
+      // Soumission — reprend la même logique que le bouton Valider.
+      const ok = await _submitAck(alert.id, wrap, alert);
+      results.push({ id: alert.id, ok });
+      if (ok) {
+        try { wrap.remove(); } catch(_) {}
+        _displayed.delete(alert.id);
+        _displayedBlocking.delete(alert.id);
+      }
+    }
+    return results;
+  }
+
   window.MysifaAlerts = {
     start: async function() {
       if (_started) return;
@@ -711,5 +869,48 @@
       _pollTimer = null;
     },
     refresh: function() { return _poll(); },
+    showBlockingAlerts: function(items) { return _showBlockingAlerts(items); },
+    // v2.3.29 : à appeler côté client avant toute saisie non-productive
+    // pour préserver les données que l'op a déjà saisies dans une alerte
+    // (sinon l'auto-close backend écrit un ack vide "Fermée auto : XX").
+    flushOpenAcks: function() { return _flushOpenAcks(); },
+    // v2.3.6 : retourne une Promise résolue quand toutes les alertes bloquantes
+    // à l'écran sont ACK (rejetée si dismiss). Permet à fabrication_page de
+    // retenter automatiquement la saisie 03/88 après validation.
+    waitForBlockingAck: function() {
+      return new Promise((resolve, reject) => {
+        _blockingAckResolvers.push({ resolve, reject });
+      });
+    },
+    // v2.3.13 : mode simulation. Prend un objet alerte au format DB
+    // ({id, nom, params, ...}) et l'affiche en réutilisant la vraie fonction
+    // _renderAlert. Aucune trace en base : le submit d'ack est court-circuité.
+    // Utilisé par le bouton "Tester sur moi" de l'admin, garantit que tout
+    // changement du runtime bénéficie automatiquement au simulateur.
+    simulate: async function(rawAlert, opts) {
+      opts = opts || {};
+      if (!_started) {
+        try { await _loadSettings(); } catch(e){}
+      }
+      const alert = _normalizeAlert(rawAlert);
+      alert.__simulate = true;  // flag inspecté par _submitAck
+      const wrap = _renderAlert(alert);
+      wrap.setAttribute('data-simulate', '1');
+      _displayed.set(alert.id, wrap);
+      _displayedBlocking.add(alert.id);  // ne pas cleanup par le poll
+      // Ajouter un bouton "Quitter le test" si demandé
+      if (opts.exitButton !== false) {
+        const exitBtn = document.createElement('button');
+        exitBtn.className = 'ta-sim-exit';
+        exitBtn.textContent = '× Quitter le test';
+        exitBtn.addEventListener('click', () => {
+          try { wrap.remove(); } catch(e) {}
+          _displayed.delete(alert.id);
+          _displayedBlocking.delete(alert.id);
+        });
+        wrap.appendChild(exitBtn);
+      }
+      return wrap;
+    },
   };
 })();
