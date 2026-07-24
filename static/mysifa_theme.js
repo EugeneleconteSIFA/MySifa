@@ -108,6 +108,12 @@
     prefs.mode = prefs.mode === 'light' ? 'dark' : 'light';
     savePrefs(prefs);
     applyPrefs(prefs);
+    // v2.4.10 : persiste aussi côté serveur — sinon le prochain reload
+    // appelle mergeFromUser(user) qui écrase le localStorage avec la
+    // valeur DB, faisant "sauter" le changement. Le fetch est fire-and-forget
+    // (catch silencieux) — si le serveur est down, le mode reste appliqué
+    // localement et sera resync au prochain toggle réussi.
+    syncToServer(prefs);
     return prefs;
   }
 
