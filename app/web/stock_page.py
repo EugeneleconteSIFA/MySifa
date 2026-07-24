@@ -368,6 +368,9 @@ body.light .btn:not(.btn-ghost):not(.btn-soft){color:#fff}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 body.light .btn.btn-ghost{color:var(--text2)}
 body.light .btn.btn-ghost:hover{color:var(--accent)}
+.btn-ghost.mp-back-btn{background:var(--accent-bg);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:700}
+.btn-ghost.mp-back-btn:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);border-color:var(--accent);color:var(--accent)}
+body.light .btn-ghost.mp-back-btn{color:var(--accent)}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 body.light .btn-sm{color:#fff}
@@ -713,9 +716,11 @@ body.light .mp-search-wrap:focus-within{
 .mp-card-stock-mini{font-size:12px;font-weight:600;color:var(--muted);margin-top:4px;line-height:1.3}
 .mp-card-stock-mini.alert{color:var(--warn)}
 .mp-act-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;
-  border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;
-  flex-shrink:0;transition:border-color .15s,color .15s,background .15s;font-family:inherit}
-.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+  border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:8px;
+  background:var(--accent-bg);color:var(--accent);cursor:pointer;
+  flex-shrink:0;transition:border-color .15s,color .15s,background .15s,filter .15s;font-family:inherit}
+.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);filter:brightness(1.05)}
+.action-bar .mp-act-icon{height:auto;min-height:44px;width:44px}
 .mp-card-des{font-size:13px;color:var(--text2);line-height:1.4}
 .mp-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
 .mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
@@ -5454,7 +5459,7 @@ function buildMatiereDetail() {
   const seuil = parseFloat(m.seuil_alerte) || 0;
 
   const back = el('button', {
-    cls: 'btn-ghost',
+    cls: 'btn-ghost mp-back-btn',
     style: { marginBottom: '14px' },
     type: 'button',
     on: { click: clearMatiereSel },

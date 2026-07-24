@@ -1,6 +1,7 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
 import hashlib
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -34,7 +35,20 @@ from config import (
     is_known_app_module,
 )
 from app.services.audit_service import log_action
-from services.auth_service import get_current_user, require_settings, merged_app_access, parse_access_overrides_raw
+from services.auth_service import (
+    get_current_user,
+    require_settings_access,
+    require_settings_communication,
+    require_settings_audit,
+    require_settings_print,
+    require_settings_fabrication,
+    require_settings_logistique,
+    require_settings_contacts,
+    require_settings_printers,
+    require_settings_fsc,
+    merged_app_access,
+    parse_access_overrides_raw,
+)
 
 router = APIRouter(tags=["settings"])
 
@@ -150,7 +164,7 @@ def access_matrix(request: Request):
         module_id, level}] }.
     Le super admin apparaît en lecture seule côté UI.
     """
-    require_settings(request)
+    require_settings_access(request)
     from database import get_db
 
     with get_db() as conn:
@@ -203,7 +217,7 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
     défaut de son rôle. Refuse d'éditer le rôle super admin (intouchable) et
     l'app `settings` (super admin uniquement, non surchargeable).
     """
-    admin_user = require_settings(request)
+    admin_user = require_settings_access(request)
     if body.app_id == "settings":
         raise HTTPException(status_code=400, detail="Paramètres non surchargeable (super admin uniquement).")
     if not is_known_app_module(body.app_id, body.module_id):
@@ -254,7 +268,7 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
 @router.get("/api/settings/role-defaults")
 def role_defaults_endpoint(request: Request):
     """Référentiel rôles éditable — écran /settings → Référentiel rôles."""
-    require_settings(request)
+    require_settings_access(request)
     from database import get_db
     with get_db() as conn:
         role_defaults, _ = _load_all_access(conn)
@@ -297,7 +311,7 @@ class SetRoleDefaultBody(BaseModel):
 @router.put("/api/settings/role-defaults/{role}")
 def set_role_default(role: str, body: SetRoleDefaultBody, request: Request):
     """Édite le référentiel rôle. Refuse le super admin (intouchable) et l'app settings."""
-    admin_user = require_settings(request)
+    admin_user = require_settings_access(request)
     if role == ROLE_SUPERADMIN:
         raise HTTPException(status_code=400, detail="Le super admin a tous les accès (non modifiable).")
     if role not in ASSIGNABLE_ROLES:
@@ -352,7 +366,7 @@ def get_audit_logs(
     action: str = "",
     search: str = "",
 ):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
 
     with get_db() as conn:
@@ -401,7 +415,7 @@ _FSC_CLAIM_LABELS = {
 
 @router.get("/api/fsc/stats")
 def get_fsc_stats(request: Request):
-    require_settings(request)
+    require_settings_fsc(request)
     from database import get_db
 
     with get_db() as conn:
@@ -435,7 +449,7 @@ def get_fsc_registre(
     au: str = "",
     format: str = "json",
 ):
-    require_settings(request)
+    require_settings_fsc(request)
     import csv
     import datetime as dt
     import io
@@ -551,7 +565,7 @@ def get_fsc_registre(
 
 @router.get("/api/fournisseurs")
 def list_fournisseurs(request: Request):
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     import json
     with get_db() as conn:
@@ -561,6 +575,8 @@ def list_fournisseurs(request: Request):
                       ff.groupe, ff.branche,
                       ff.adresse, ff.code_postal, ff.ville, ff.pays,
                       ff.langue_default, ff.tags, ff.notes, ff.actif, ff.updated_at,
+                      ff.categories, ff.sous_traitant,
+                      ff.siret, ff.tva_intracom, ff.fsc_date_expiration,
                       (SELECT COUNT(*) FROM fournisseur_contacts fc
                        WHERE fc.fournisseur_id = ff.id AND fc.actif=1) AS nb_contacts
                FROM fournisseurs_fsc ff
@@ -578,14 +594,82 @@ def list_fournisseurs(request: Request):
                 d["tags"] = []
         else:
             d["tags"] = []
+        raw_cats = d.get("categories")
+        if raw_cats:
+            try:
+                parsed = json.loads(raw_cats)
+                d["categories"] = [c for c in parsed if c in FOURNISSEUR_CATEGORIES] if isinstance(parsed, list) else []
+            except (json.JSONDecodeError, TypeError):
+                d["categories"] = []
+        else:
+            d["categories"] = []
         out.append(d)
     return out
+
+
+# Codes autorisés pour la catégorie fournisseur.
+# Doit rester synchronisé avec _MP_CATEGORIES (app/routers/stock.py:113) +
+# 'negoce' (produits.type='negoce') + 'sous_traitant' (flag existant v209).
+FOURNISSEUR_CATEGORIES = (
+    "mandrin", "palette", "adhesif", "carton",
+    "frontal", "glassine", "complexe", "autre",
+    "negoce", "sous_traitant",
+)
+
+FOURNISSEUR_CATEGORY_LABELS = {
+    "mandrin": "Mandrin",
+    "palette": "Palette",
+    "adhesif": "Adhésif",
+    "carton": "Carton",
+    "frontal": "Frontal",
+    "glassine": "Glassine",
+    "complexe": "Complexe",
+    "autre": "Autre",
+    "negoce": "Négoce",
+    "sous_traitant": "Sous-traitant",
+}
+
+
+def _parse_fournisseur_categories(raw):
+    """Parse categories : accepte list JSON ou str CSV. Filtre l'enum autorisé, déduplique en préservant l'ordre."""
+    import json as _json
+    if raw is None:
+        return []
+    items = []
+    if isinstance(raw, list):
+        items = [str(x).strip().lower() for x in raw]
+    elif isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return []
+        try:
+            parsed = _json.loads(s)
+            if isinstance(parsed, list):
+                items = [str(x).strip().lower() for x in parsed]
+            else:
+                items = [str(parsed).strip().lower()]
+        except (_json.JSONDecodeError, ValueError):
+            items = [t.strip().lower() for t in s.split(",") if t.strip()]
+    seen = set()
+    out = []
+    for c in items:
+        if c in FOURNISSEUR_CATEGORIES and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+@router.get("/api/fournisseurs/categories")
+def list_fournisseur_categories(request: Request):
+    """Retourne la liste des catégories disponibles (code + label FR) pour l'UI."""
+    require_settings_contacts(request)
+    return [{"code": c, "label": FOURNISSEUR_CATEGORY_LABELS[c]} for c in FOURNISSEUR_CATEGORIES]
 
 
 @router.get("/api/fournisseurs/groupes")
 def list_fournisseurs_groupes(request: Request):
     """Liste des groupes distincts existants (pour autocomplete)."""
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -623,9 +707,45 @@ def _normalize_langue_fournisseur(raw):
     return v if v in ("fr", "en") else "fr"
 
 
+def _normalize_siret(raw):
+    """SIRET : accepte espaces/points, retourne 14 chiffres ou None. Ne valide PAS la clé Luhn (fournisseurs étrangers)."""
+    if raw is None:
+        return None
+    s = "".join(ch for ch in str(raw) if ch.isdigit())
+    if not s:
+        return None
+    if len(s) != 14:
+        raise HTTPException(status_code=400, detail="SIRET invalide : 14 chiffres attendus")
+    return s
+
+
+def _normalize_tva_intracom(raw):
+    """TVA intracom : nettoyage espaces/points, uppercase. Pas de contrainte format (multi-pays)."""
+    if raw is None:
+        return None
+    s = str(raw).replace(" ", "").replace(".", "").strip().upper()
+    return s or None
+
+
+def _normalize_iso_date(raw, field_label="date"):
+    """Retourne YYYY-MM-DD ou None. Lève 400 si format invalide."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        # Accepte YYYY-MM-DD et YYYY-MM-DDTHH:MM:SS
+        from datetime import date as _d
+        d = _d.fromisoformat(s[:10])
+        return d.isoformat()
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{field_label} invalide (format attendu YYYY-MM-DD)")
+
+
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -645,6 +765,14 @@ async def create_fournisseur(request: Request):
     langue_default = _normalize_langue_fournisseur(body.get("langue_default"))
     tags_list = _parse_fournisseur_tags(body.get("tags"))
     tags_json = json.dumps(tags_list, ensure_ascii=False) if tags_list else None
+    categories_list = _parse_fournisseur_categories(body.get("categories"))
+    categories_json = json.dumps(categories_list, ensure_ascii=False) if categories_list else None
+    sous_traitant = 1 if "sous_traitant" in categories_list else 0
+    siret = _normalize_siret(body.get("siret"))
+    tva_intracom = _normalize_tva_intracom(body.get("tva_intracom"))
+    fsc_date_expiration = _normalize_iso_date(body.get("fsc_date_expiration"), "Date d'expiration FSC")
+    if not has_fsc:
+        fsc_date_expiration = None
     notes = (body.get("notes") or "").strip() or None
     actif = 1 if bool(body.get("actif", True)) else 0
     if not nom:
@@ -656,11 +784,13 @@ async def create_fournisseur(request: Request):
                 """INSERT INTO fournisseurs_fsc
                    (nom, licence, certificat, has_fsc, groupe, branche,
                     adresse, code_postal, ville, pays, langue_default, tags,
-                    notes, actif, updated_at)
-                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)""",
+                    notes, actif, updated_at, categories, sous_traitant,
+                    siret, tva_intracom, fsc_date_expiration)
+                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?, ?,?,?)""",
                 (nom, licence, certificat, has_fsc, groupe, branche,
                  adresse, code_postal, ville, pays, langue_default, tags_json,
-                 notes, actif, now),
+                 notes, actif, now, categories_json, sous_traitant,
+                 siret, tva_intracom, fsc_date_expiration),
             )
             conn.commit()
             log_action(
@@ -669,8 +799,10 @@ async def create_fournisseur(request: Request):
                 module="settings",
                 objet=f"Fournisseur {nom}",
                 detail={"has_fsc": bool(has_fsc), "langue_default": langue_default,
-                        "tags": tags_list, "ville": ville, "pays": pays,
-                        "actif": bool(actif)},
+                        "tags": tags_list, "categories": categories_list,
+                        "ville": ville, "pays": pays, "actif": bool(actif),
+                        "siret": siret, "tva_intracom": tva_intracom,
+                        "fsc_date_expiration": fsc_date_expiration},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True, "id": cur.lastrowid}
@@ -680,7 +812,7 @@ async def create_fournisseur(request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}")
 async def update_fournisseur(fournisseur_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -738,6 +870,37 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                 tags_list = json.loads(tags_json) if tags_json else []
             except (json.JSONDecodeError, TypeError):
                 tags_list = []
+        if "categories" in body:
+            categories_list = _parse_fournisseur_categories(body.get("categories"))
+            categories_json = json.dumps(categories_list, ensure_ascii=False) if categories_list else None
+        else:
+            _raw_cats = ex["categories"] if "categories" in ex_cols else None
+            categories_json = _raw_cats
+            try:
+                _parsed = json.loads(_raw_cats) if _raw_cats else []
+                categories_list = [c for c in _parsed if c in FOURNISSEUR_CATEGORIES] if isinstance(_parsed, list) else []
+            except (json.JSONDecodeError, TypeError):
+                categories_list = []
+        sous_traitant = 1 if "sous_traitant" in categories_list else 0
+        # Nouveaux champs identité fiscale + expiration FSC (v214). Fallback à
+        # la valeur existante quand le body ne contient pas la clé (PATCH-like).
+        if "siret" in body:
+            siret = _normalize_siret(body.get("siret"))
+        else:
+            siret = ex["siret"] if "siret" in ex_cols else None
+        if "tva_intracom" in body:
+            tva_intracom = _normalize_tva_intracom(body.get("tva_intracom"))
+        else:
+            tva_intracom = ex["tva_intracom"] if "tva_intracom" in ex_cols else None
+        if "fsc_date_expiration" in body:
+            fsc_date_expiration = _normalize_iso_date(
+                body.get("fsc_date_expiration"), "Date d'expiration FSC"
+            )
+        else:
+            fsc_date_expiration = ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None
+        # Si le fournisseur n'a plus de certif FSC, on efface la date d'expiration
+        if not has_fsc:
+            fsc_date_expiration = None
         notes = _pick("notes")
         if isinstance(notes, str): notes = notes.strip() or None
         actif_prev = int(ex["actif"] if "actif" in ex_cols and ex["actif"] is not None else 1)
@@ -763,12 +926,16 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                        nom=?, licence=?, certificat=?, has_fsc=?,
                        traca_explication=?, traca_exemple_code=?, groupe=?, branche=?,
                        adresse=?, code_postal=?, ville=?, pays=?,
-                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?
+                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?,
+                       categories=?, sous_traitant=?,
+                       siret=?, tva_intracom=?, fsc_date_expiration=?
                    WHERE id=?""",
                 (nom, licence, certificat, has_fsc,
                  traca_explication, traca_exemple_code, groupe, branche,
                  adresse, code_postal, ville, pays,
                  langue_default, tags_json, notes, actif, now,
+                 categories_json, sous_traitant,
+                 siret, tva_intracom, fsc_date_expiration,
                  fournisseur_id),
             )
             conn.commit()
@@ -777,7 +944,10 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                 action="UPDATE",
                 module="settings",
                 objet=f"Fournisseur {nom}",
-                detail={"changed": changed, "tags": tags_list},
+                detail={"changed": changed, "tags": tags_list,
+                        "categories": categories_list,
+                        "siret": siret, "tva_intracom": tva_intracom,
+                        "fsc_date_expiration": fsc_date_expiration},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True}
@@ -886,7 +1056,7 @@ def delete_traca_photo(fournisseur_id: int, request: Request):
 
 @router.delete("/api/fournisseurs/{fournisseur_id}")
 async def delete_fournisseur(fournisseur_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     four_nom = ""
     with get_db() as conn:
@@ -906,10 +1076,315 @@ async def delete_fournisseur(fournisseur_id: int, request: Request):
     return {"success": True}
 
 
+@router.post("/api/fournisseurs/{source_id}/merge/{target_id}")
+async def merge_fournisseurs(source_id: int, target_id: int, request: Request):
+    """Fusionne le fournisseur source dans le fournisseur target :
+
+    - Réassigne toutes les FK (matiere_laize_fournisseurs, qualite_*, audit_*,
+      fournisseur_contacts, pf_receptions, ao_fournisseurs, ao_demandes).
+    - Sur les tables à PK composite qui incluent fournisseur_id, supprime
+      d'abord les rangées source qui créeraient un conflit avec le target
+      (déduplication naturelle), puis réassigne les rangées restantes.
+    - Réécrit qualite_sifa_doc_versions.fournisseurs_ids_json (source → target).
+    - Renomme les colonnes texte (stock_receptions.fournisseur, matiere_params.
+      fournisseur, fab_matieres_utilisees.fournisseur_manual, ao_fournisseurs.
+      nom_fournisseur) du nom source vers le nom target.
+    - Fusionne les catégories du source dans le target (union, sous_traitant
+      resynchronisé).
+    - Supprime enfin le fournisseur source.
+
+    Le tout dans une seule transaction : rollback complet en cas d'erreur.
+    """
+    user = require_settings_contacts(request)
+    from database import get_db
+    import json as _json
+
+    if source_id == target_id:
+        raise HTTPException(status_code=400, detail="Source et cible identiques")
+
+    with get_db() as conn:
+        src = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (source_id,)).fetchone()
+        tgt = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (target_id,)).fetchone()
+        if not src:
+            raise HTTPException(status_code=404, detail="Fournisseur source introuvable")
+        if not tgt:
+            raise HTTPException(status_code=404, detail="Fournisseur cible introuvable")
+
+        src_nom = src["nom"] or ""
+        tgt_nom = tgt["nom"] or ""
+        src_cols = src.keys()
+        tgt_cols = tgt.keys()
+
+        # ─── Union des catégories ───────────────────────────────────────
+        def _cats(row, cols):
+            if "categories" not in cols:
+                return []
+            raw = row["categories"]
+            if not raw:
+                return []
+            try:
+                parsed = _json.loads(raw)
+                return [c for c in parsed if c in FOURNISSEUR_CATEGORIES] if isinstance(parsed, list) else []
+            except (_json.JSONDecodeError, TypeError):
+                return []
+        merged_cats = list(_cats(tgt, tgt_cols))
+        for c in _cats(src, src_cols):
+            if c not in merged_cats:
+                merged_cats.append(c)
+        merged_cats_json = _json.dumps(merged_cats, ensure_ascii=False) if merged_cats else None
+        merged_st = 1 if "sous_traitant" in merged_cats else 0
+
+        # Journal des changements pour l'audit log
+        moved_counts = {}
+        renamed_counts = {}
+        json_rewrites = 0
+
+        def _tbl_exists(name):
+            r = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (name,),
+            ).fetchone()
+            return r is not None
+
+        def _col_exists(table, col):
+            if not _tbl_exists(table):
+                return False
+            rows_ = conn.execute(f"PRAGMA table_info({table})").fetchall()
+            return any(r["name"] == col for r in rows_)
+
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+
+            # ─── 1. Tables à PK composite : dédup puis reassign ────────
+            # Modèle : DELETE des lignes source qui entreraient en conflit
+            # avec target sur la clé unique restante, puis UPDATE reassign.
+            composite_pk_tables = [
+                # (table, discriminant column of the composite key)
+                ("matiere_laize_fournisseurs", "matiere_laize_id"),
+                ("audit_fournisseurs", "audit_id"),
+                ("audit_matrice_overrides", None),  # (audit_id, fiche_id, fournisseur_id)
+            ]
+            # audit_matrice_overrides discriminant = (audit_id, fiche_id) — cas spécial
+            for table, disc in composite_pk_tables:
+                if not _tbl_exists(table) or not _col_exists(table, "fournisseur_id"):
+                    continue
+                if table == "audit_matrice_overrides":
+                    conn.execute(
+                        f"""DELETE FROM {table}
+                            WHERE fournisseur_id=?
+                              AND (audit_id, fiche_id) IN (
+                                  SELECT audit_id, fiche_id FROM {table} WHERE fournisseur_id=?
+                              )""",
+                        (source_id, target_id),
+                    )
+                else:
+                    conn.execute(
+                        f"""DELETE FROM {table}
+                            WHERE fournisseur_id=?
+                              AND {disc} IN (
+                                  SELECT {disc} FROM {table} WHERE fournisseur_id=?
+                              )""",
+                        (source_id, target_id),
+                    )
+                cur = conn.execute(
+                    f"UPDATE {table} SET fournisseur_id=? WHERE fournisseur_id=?",
+                    (target_id, source_id),
+                )
+                moved_counts[table] = cur.rowcount
+
+            # ─── 2. Tables à FK simple sur fournisseurs_fsc(id) ────────
+            simple_fk_tables = [
+                ("qualite_fournisseur_certificats", "fournisseur_id"),
+                ("fournisseur_contacts", "fournisseur_id"),
+                ("pf_receptions", "fournisseur_id"),
+            ]
+            for table, col in simple_fk_tables:
+                if not _tbl_exists(table) or not _col_exists(table, col):
+                    continue
+                cur = conn.execute(
+                    f"UPDATE {table} SET {col}=? WHERE {col}=?",
+                    (target_id, source_id),
+                )
+                moved_counts[table] = cur.rowcount
+
+            # ─── 3. Colonnes INTEGER sans FK (ao_*) ─────────────────────
+            raw_int_tables = [
+                ("ao_fournisseurs", "fournisseur_id"),
+                ("ao_demandes", "fournisseur_retenu_id"),
+            ]
+            for table, col in raw_int_tables:
+                if not _tbl_exists(table) or not _col_exists(table, col):
+                    continue
+                cur = conn.execute(
+                    f"UPDATE {table} SET {col}=? WHERE {col}=?",
+                    (target_id, source_id),
+                )
+                moved_counts[table] = cur.rowcount
+
+            # ─── 4. Réécriture JSON qualite_sifa_doc_versions.fournisseurs_ids_json
+            if _tbl_exists("qualite_sifa_doc_versions") and _col_exists(
+                "qualite_sifa_doc_versions", "fournisseurs_ids_json"
+            ):
+                for r in conn.execute(
+                    "SELECT id, fournisseurs_ids_json FROM qualite_sifa_doc_versions "
+                    "WHERE fournisseurs_ids_json IS NOT NULL AND fournisseurs_ids_json <> ''"
+                ).fetchall():
+                    try:
+                        ids = _json.loads(r["fournisseurs_ids_json"])
+                        if not isinstance(ids, list):
+                            continue
+                    except (_json.JSONDecodeError, TypeError):
+                        continue
+                    if source_id not in ids:
+                        continue
+                    new_ids = []
+                    seen = set()
+                    for x in ids:
+                        v = target_id if x == source_id else x
+                        if v not in seen:
+                            seen.add(v)
+                            new_ids.append(v)
+                    conn.execute(
+                        "UPDATE qualite_sifa_doc_versions SET fournisseurs_ids_json=? WHERE id=?",
+                        (_json.dumps(new_ids), r["id"]),
+                    )
+                    json_rewrites += 1
+
+            # ─── 5. Colonnes TEXT contenant le nom fournisseur ─────────
+            # Ne renomme que si les noms diffèrent (sinon no-op).
+            if src_nom and tgt_nom and src_nom != tgt_nom:
+                text_name_tables = [
+                    ("stock_receptions", "fournisseur"),
+                    ("matiere_params", "fournisseur"),
+                    ("matiere_params_new", "fournisseur"),
+                    ("fab_matieres_utilisees", "fournisseur_manual"),
+                    ("ao_fournisseurs", "nom_fournisseur"),
+                ]
+                for table, col in text_name_tables:
+                    if not _tbl_exists(table) or not _col_exists(table, col):
+                        continue
+                    cur = conn.execute(
+                        f"UPDATE {table} SET {col}=? WHERE {col}=?",
+                        (tgt_nom, src_nom),
+                    )
+                    if cur.rowcount:
+                        renamed_counts[f"{table}.{col}"] = cur.rowcount
+
+            # ─── 6. Merge des catégories sur le target ─────────────────
+            conn.execute(
+                "UPDATE fournisseurs_fsc SET categories=?, sous_traitant=?, updated_at=? WHERE id=?",
+                (merged_cats_json, merged_st, datetime.now().isoformat(), target_id),
+            )
+
+            # ─── 7. Suppression du fournisseur source ──────────────────
+            conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (source_id,))
+
+            conn.commit()
+        except HTTPException:
+            conn.rollback()
+            raise
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(status_code=500, detail=f"Erreur pendant la fusion : {e}")
+
+    log_action(
+        user=user,
+        action="MERGE",
+        module="settings",
+        objet=f"Fusion fournisseur '{src_nom}' → '{tgt_nom}'",
+        detail={
+            "source_id": source_id, "target_id": target_id,
+            "moved": moved_counts, "renamed": renamed_counts,
+            "json_rewrites": json_rewrites, "merged_categories": merged_cats,
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "source_id": source_id, "target_id": target_id,
+        "moved": moved_counts, "renamed": renamed_counts,
+        "json_rewrites": json_rewrites,
+        "merged_categories": merged_cats,
+    }
+
+
+@router.get("/api/fournisseurs/doublons")
+def list_fournisseurs_doublons(request: Request):
+    """Détecte les groupes de fournisseurs susceptibles d'être des doublons :
+
+    - Regroupement par nom normalisé (lowercase, accents supprimés, suffixes
+      juridiques FR retirés : SAS, SARL, SASU, EURL, SA, SNC).
+    - OU regroupement par SIRET identique (14 chiffres).
+    Retourne uniquement les groupes de 2+ fournisseurs.
+    """
+    require_settings_contacts(request)
+    from database import get_db
+    import unicodedata
+
+    _JURIDIC_SUFFIXES = re.compile(
+        r"\b(SASU|SARL|EURL|SAS|SNC|SA|SCOP|SCP|GIE)\b", re.IGNORECASE
+    )
+
+    def _norm_name(nom):
+        if not nom:
+            return ""
+        s = unicodedata.normalize("NFKD", nom)
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        s = _JURIDIC_SUFFIXES.sub("", s)
+        s = re.sub(r"[^a-zA-Z0-9]+", "", s).lower()
+        return s
+
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, siret, groupe, branche, ville, has_fsc, actif,
+                      (SELECT COUNT(*) FROM fournisseur_contacts fc
+                       WHERE fc.fournisseur_id=fournisseurs_fsc.id) AS nb_contacts
+               FROM fournisseurs_fsc
+               ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()
+
+    by_name = {}
+    by_siret = {}
+    for r in rows:
+        d = dict(r)
+        norm = _norm_name(d["nom"])
+        if norm:
+            by_name.setdefault(norm, []).append(d)
+        siret = (d.get("siret") or "").strip()
+        if siret and len(siret) == 14:
+            by_siret.setdefault(siret, []).append(d)
+
+    groups = []
+    seen_pairs = set()
+
+    def _add_group(items, reason):
+        ids = tuple(sorted(x["id"] for x in items))
+        key = (reason, ids)
+        if key in seen_pairs:
+            return
+        seen_pairs.add(key)
+        groups.append({
+            "reason": reason,
+            "key": items[0].get(reason) if reason in ("siret",) else _norm_name(items[0]["nom"]),
+            "count": len(items),
+            "fournisseurs": items,
+        })
+
+    for norm, items in by_name.items():
+        if len(items) >= 2:
+            _add_group(items, "nom")
+    for siret, items in by_siret.items():
+        if len(items) >= 2:
+            _add_group(items, "siret")
+
+    groups.sort(key=lambda g: (-g["count"], g["reason"]))
+    return {"groups": groups, "total_groups": len(groups)}
+
+
 @router.get("/api/fournisseurs/{fournisseur_id}/receptions")
 def fournisseur_receptions(fournisseur_id: int, request: Request):
     """Historique des réceptions pour un fournisseur donné."""
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -939,7 +1414,7 @@ def fournisseur_receptions(fournisseur_id: int, request: Request):
 @router.patch("/api/fournisseurs/{fournisseur_id}/actif")
 async def toggle_fournisseur_actif(fournisseur_id: int, request: Request):
     """Bascule / force le flag actif d'un fournisseur (soft archive)."""
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
     with get_db() as conn:
@@ -974,11 +1449,13 @@ def export_fournisseurs_csv(request: Request):
     """Export CSV de la liste fournisseurs (colonnes principales + tags)."""
     from fastapi.responses import Response
     import csv, io, json as _json
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
             """SELECT ff.id, ff.nom, ff.groupe, ff.branche, ff.has_fsc, ff.licence, ff.certificat,
+                      ff.fsc_date_expiration, ff.siret, ff.tva_intracom,
+                      ff.categories, ff.sous_traitant,
                       ff.adresse, ff.code_postal, ff.ville, ff.pays,
                       ff.langue_default, ff.tags, ff.actif, ff.notes,
                       (SELECT COUNT(*) FROM fournisseur_contacts fc
@@ -988,7 +1465,9 @@ def export_fournisseurs_csv(request: Request):
         ).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
-    w.writerow(["id", "nom", "groupe", "branche", "fsc", "licence", "certificat",
+    w.writerow(["id", "nom", "groupe", "branche",
+                "fsc", "licence", "certificat", "fsc_date_expiration",
+                "siret", "tva_intracom", "categories", "sous_traitant",
                 "adresse", "code_postal", "ville", "pays",
                 "langue", "tags", "actif", "notes", "nb_contacts"])
     for r in rows:
@@ -998,17 +1477,25 @@ def export_fournisseurs_csv(request: Request):
             tags_str = ", ".join(str(t) for t in tags_parsed) if isinstance(tags_parsed, list) else ""
         except (_json.JSONDecodeError, TypeError):
             tags_str = ""
+        cats_raw = r["categories"] or ""
+        try:
+            cats_parsed = _json.loads(cats_raw) if cats_raw else []
+            cats_str = ", ".join(FOURNISSEUR_CATEGORY_LABELS.get(c, c) for c in cats_parsed) if isinstance(cats_parsed, list) else ""
+        except (_json.JSONDecodeError, TypeError):
+            cats_str = ""
         w.writerow([
             r["id"], r["nom"] or "", r["groupe"] or "", r["branche"] or "",
             "oui" if r["has_fsc"] else "non",
-            r["licence"] or "", r["certificat"] or "",
+            r["licence"] or "", r["certificat"] or "", r["fsc_date_expiration"] or "",
+            r["siret"] or "", r["tva_intracom"] or "",
+            cats_str, "oui" if r["sous_traitant"] else "non",
             r["adresse"] or "", r["code_postal"] or "", r["ville"] or "", r["pays"] or "",
             (r["langue_default"] or "fr").upper(),
             tags_str, "oui" if (r["actif"] is None or r["actif"]) else "non",
             (r["notes"] or "").replace("\n", " "), r["nb_contacts"],
         ])
     log_action(
-        user=require_settings(request),
+        user=require_settings_contacts(request),
         action="SEARCH",
         module="settings",
         objet=f"Export CSV fournisseurs ({len(rows)} lignes)",
@@ -1080,7 +1567,7 @@ def _unset_other_principal(conn, fournisseur_id: int, keep_contact_id: Optional[
 
 @router.get("/api/fournisseurs/{fournisseur_id}/contacts")
 def list_fournisseur_contacts(fournisseur_id: int, request: Request):
-    require_settings(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         ex = conn.execute("SELECT id, nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -1097,7 +1584,7 @@ def list_fournisseur_contacts(fournisseur_id: int, request: Request):
 
 @router.post("/api/fournisseurs/{fournisseur_id}/contacts")
 async def create_fournisseur_contact(fournisseur_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -1145,7 +1632,7 @@ async def create_fournisseur_contact(fournisseur_id: int, request: Request):
 
 @router.put("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
 async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     import json
     body = await request.json()
@@ -1225,7 +1712,7 @@ async def update_fournisseur_contact(fournisseur_id: int, contact_id: int, reque
 
 @router.delete("/api/fournisseurs/{fournisseur_id}/contacts/{contact_id}")
 def delete_fournisseur_contact(fournisseur_id: int, contact_id: int, request: Request):
-    user = require_settings(request)
+    user = require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         ex_four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
@@ -1311,7 +1798,7 @@ async def acknowledge_update(announcement_id: int, request: Request):
 @router.get("/api/updates")
 def list_updates(request: Request):
     """Liste toutes les annonces avec compteur d'acquittements (super admin)."""
-    require_settings(request)
+    require_settings_communication(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1327,7 +1814,7 @@ def list_updates(request: Request):
 @router.get("/api/updates/{announcement_id}/acknowledgements")
 def list_acknowledgements(announcement_id: int, request: Request):
     """Détail des acquittements pour une annonce (super admin)."""
-    require_settings(request)
+    require_settings_communication(request)
     from database import get_db
     with get_db() as conn:
         ann = conn.execute(
@@ -1349,7 +1836,7 @@ def list_acknowledgements(announcement_id: int, request: Request):
 @router.post("/api/updates")
 async def create_update(request: Request):
     """Créer une nouvelle annonce (super admin)."""
-    user = require_settings(request)
+    user = require_settings_communication(request)
     from database import get_db
     body = await request.json()
     scope   = (body.get("scope")   or "").strip()
@@ -1380,7 +1867,7 @@ async def create_update(request: Request):
 @router.patch("/api/updates/{announcement_id}")
 async def patch_update(announcement_id: int, request: Request):
     """Modifier une annonce — ex: activer/désactiver (super admin)."""
-    require_settings(request)
+    require_settings_communication(request)
     from database import get_db
     body = await request.json()
     with get_db() as conn:
@@ -1410,7 +1897,7 @@ async def patch_update(announcement_id: int, request: Request):
 @router.delete("/api/updates/{announcement_id}")
 def delete_update(announcement_id: int, request: Request):
     """Supprimer une annonce (uniquement si elle n'a pas encore été lue)."""
-    user = require_settings(request)
+    user = require_settings_communication(request)
     from database import get_db
     titre_ann = ""
     with get_db() as conn:
@@ -1444,7 +1931,7 @@ def delete_update(announcement_id: int, request: Request):
 
 @router.get("/api/settings/operation-codes")
 def list_operation_codes(request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import categories_for_ui, list_operation_codes as _list
 
@@ -1455,7 +1942,7 @@ def list_operation_codes(request: Request):
 
 @router.post("/api/settings/operation-codes")
 async def create_operation_code(request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import TABLE, validate_operation_payload
     from config import refresh_operations_cache
@@ -1490,7 +1977,7 @@ async def create_operation_code(request: Request):
 
 @router.put("/api/settings/operation-codes/{code}")
 async def update_operation_code(code: str, request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import TABLE, normalize_code, validate_operation_payload
     from config import refresh_operations_cache
@@ -1533,7 +2020,7 @@ async def update_operation_code(code: str, request: Request):
 
 @router.delete("/api/settings/operation-codes/{code}")
 def delete_operation_code(code: str, request: Request):
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import TABLE, normalize_code
     from config import refresh_operations_cache
@@ -1556,7 +2043,7 @@ def delete_operation_code(code: str, request: Request):
 @router.post("/api/settings/operation-codes/import-json")
 def import_operation_codes_json(request: Request):
     """Réimporte depuis operations.json (upsert tous les codes du fichier)."""
-    require_settings(request)
+    require_settings_fabrication(request)
     from database import get_db
     from app.services.operations_config import upsert_operation_codes_from_json
     from config import refresh_operations_cache
@@ -1574,7 +2061,7 @@ def import_operation_codes_json(request: Request):
 @router.put("/api/settings/machines/{machine_id}/dernier-metrage")
 async def set_machine_dernier_metrage(machine_id: int, request: Request):
     """Correction manuelle du compteur machine (dernier_metrage) — super admin."""
-    user = require_settings(request)
+    user = require_settings_fabrication(request)
     body = await request.json()
     if not isinstance(body, dict) or "dernier_metrage" not in body:
         raise HTTPException(status_code=400, detail="dernier_metrage requis")
@@ -1621,7 +2108,7 @@ async def set_machine_dernier_metrage(machine_id: int, request: Request):
 @router.put("/api/settings/machines/{machine_id}/nom")
 async def rename_machine(machine_id: int, request: Request):
     """Renommage du nom affiché d'une machine — super admin uniquement."""
-    user = require_settings(request)
+    user = require_settings_fabrication(request)
     body = await request.json()
     if not isinstance(body, dict) or "nom" not in body:
         raise HTTPException(status_code=400, detail="Champ nom requis")
@@ -1679,7 +2166,7 @@ class ApiKeyCreateIn(BaseModel):
 
 @router.get("/api/settings/api-keys")
 def list_api_keys(request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
     with get_db() as conn:
         rows = conn.execute(
@@ -1692,7 +2179,7 @@ def list_api_keys(request: Request):
 
 @router.post("/api/settings/api-keys")
 def create_api_key(body: ApiKeyCreateIn, request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     user = get_current_user(request)
     from database import get_db
 
@@ -1714,7 +2201,7 @@ def create_api_key(body: ApiKeyCreateIn, request: Request):
 
 @router.patch("/api/settings/api-keys/{key_id}/revoke")
 def revoke_api_key(key_id: int, request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
     from datetime import datetime
     with get_db() as conn:
@@ -1731,7 +2218,7 @@ def revoke_api_key(key_id: int, request: Request):
 
 @router.delete("/api/settings/api-keys/{key_id}")
 def delete_api_key(key_id: int, request: Request):
-    require_settings(request)
+    require_settings_audit(request)
     from database import get_db
     with get_db() as conn:
         conn.execute("DELETE FROM api_keys WHERE id=?", (key_id,))
@@ -1749,7 +2236,7 @@ class EmplacementCreate(BaseModel):
 
 @router.get("/api/settings/emplacements")
 def get_emplacements(request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     from database import get_db
     with get_db() as conn:
         # Créer la table si elle n'existe pas encore
@@ -1767,7 +2254,7 @@ def get_emplacements(request: Request):
 
 @router.post("/api/settings/emplacements")
 def create_emplacement(payload: EmplacementCreate, request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     code = payload.code.strip().upper()
     if not code:
         raise HTTPException(400, "Code emplacement vide.")
@@ -1797,7 +2284,7 @@ def create_emplacement(payload: EmplacementCreate, request: Request):
 
 @router.delete("/api/settings/emplacements/{code}")
 def delete_emplacement(code: str, request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     from database import get_db
     with get_db() as conn:
         result = conn.execute(
@@ -1811,7 +2298,7 @@ def delete_emplacement(code: str, request: Request):
 
 @router.post("/api/settings/emplacements/reload-csv")
 def reload_emplacements_csv(request: Request):
-    require_settings(request)
+    require_settings_logistique(request)
     from app.core.database import sync_emplacements_plan_from_csv
     try:
         n = sync_emplacements_plan_from_csv()
@@ -1824,7 +2311,7 @@ def reload_emplacements_csv(request: Request):
 
 @router.post("/api/settings/emplacements/import-csv")
 async def import_emplacements_csv(request: Request, file: UploadFile = File(...)):
-    require_settings(request)
+    require_settings_logistique(request)
     if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(400, "Le fichier doit être au format CSV (.csv).")
     contents = await file.read()
@@ -1897,7 +2384,7 @@ def _read_origin_app_version() -> Optional[str]:
 
 @router.get("/api/promote/status")
 def promote_status(request: Request):
-    require_settings(request)
+    require_settings_print(request)
 
     # 1. Fetch silencieux pour avoir l'état à jour d'origin/main
     try:
@@ -1971,7 +2458,7 @@ def promote_status(request: Request):
 
 @router.post("/api/promote")
 async def promote_run(request: Request):
-    require_settings(request)
+    require_settings_print(request)
     if ENV_NAME != "v1":
         raise HTTPException(400, "Promotion uniquement disponible depuis v1.")
 
@@ -2029,7 +2516,7 @@ _SYSTEMD_RUN_BIN = _shutil.which("systemd-run", path="/usr/bin:/bin:/usr/local/b
 
 @router.post("/api/sync-db-v1")
 async def sync_db_v1(request: Request):
-    require_settings(request)
+    require_settings_print(request)
     try:
         # systemd-run --no-block lance le script dans une unite transitoire
         # detachee qui survit a l'arret de mysifa-v1. Retour quasi-instantane.
@@ -2165,29 +2652,7 @@ _ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
 ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
-_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login", "after_calage"}
-
-# v2.3.2 : codes considérés comme "calage" pour l'alerte after_calage.
-# Liste synchronisée avec la sidebar CALAGE de /prod. On préfère matcher
-# par code exact (operation_code IN ...) plutôt que par operation_category
-# car les codes 82/83/84/85/91 n'ont pas de category dans operations.json.
-_ALERT_CALAGE_CODES = frozenset({
-    "02",  # Calage
-    "10",  # Calage Errepi
-    "11",  # Calage Bunsch
-    "12",  # Changement de couleur
-    "58",  # Changement bobines
-    "59",  # Changement Contre-Partie
-    "60",  # Changement Plaque
-    "74",  # Changement Magnétique
-    "75",  # Changement Cliché
-    "82",  # Changement couteaux bande
-    "83",  # Changement couteaux rive
-    "84",  # Changement contre couteaux bande
-    "85",  # Changement contre couteaux rive
-    "91",  # Changement Anilox
-})
-_ALERT_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_CALAGE_CODES)) + ")"
+_ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login"}
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 
 
@@ -2326,18 +2791,6 @@ def _validate_alert_params(params: dict) -> dict:
             if fc in ("bobine_only", "plis_only"):
                 trig["filter_conditionnement"] = fc
             # 'any' ou absent : on n'écrit rien (comportement par défaut).
-        # v2.2.79 : délai en minutes pour after_calage (temps en prod cumulé)
-        if ev == "after_calage":
-            _delay_raw = trig_in.get("delay_minutes", 0)
-            try:
-                _delay = int(_delay_raw) if _delay_raw not in (None, "") else 0
-            except (TypeError, ValueError):
-                _delay = 0
-            if _delay < 0:
-                _delay = 0
-            if _delay > 999:
-                _delay = 999
-            trig["delay_minutes"] = _delay
     # type=manual : pas de params supplémentaires
     out["trigger"] = trig
 
@@ -2380,21 +2833,6 @@ def _validate_alert_params(params: dict) -> dict:
     if len(btn) > 40:
         btn = btn[:40]
     out["validation"] = {"button_label": btn}
-
-    # v2.2.88 : block_production par alerte (défaut False). Quand True,
-    # la modale s'affiche avec backdrop bloquant et le backend refuse toute
-    # saisie de production tant que l'alerte n'est pas ack.
-    out["block_production"] = bool(params.get("block_production", False))
-
-    # v2.3.12 : placement et size par alerte (au lieu du singleton global).
-    _valid_placements = {"top-right", "center"}  # v2.3.17 : bottom-right retiré
-    _valid_sizes = {"small", "medium", "large"}
-    _p = str(params.get("placement", "") or "").strip()
-    if _p in _valid_placements:
-        out["placement"] = _p
-    _s = str(params.get("size", "") or "").strip()
-    if _s in _valid_sizes:
-        out["size"] = _s
 
     # v164+ : bouton "Fermer l'alerte" configurable. Permet à l'opérateur
     # d'esquiver une alerte non pertinente sans polluer l'historique. Aucune
@@ -2458,9 +2896,6 @@ def _validate_alert_params(params: dict) -> dict:
                 item_out["min"] = vmin
             if vmax is not None:
                 item_out["max"] = vmax
-            # v2.2.85 : required (bool). Défaut false (optionnel = rétro-compat).
-            if bool(it.get("required", False)):
-                item_out["required"] = True
             clean_items.append(item_out)
             continue
         # type "choice" (cases à cocher)
@@ -2509,16 +2944,11 @@ def _validate_alert_params(params: dict) -> dict:
                 if rs and rs in seen_r_set and rs not in seen_nc:
                     clean_nc.append(rs)
                     seen_nc.add(rs)
-        # v2.2.85 : required (bool). Défaut false.
-        required_choice = bool(it.get("required", False))
-        _choice_item = {"type": "choice", "label": label,
-                        "responses": clean_responses, "multi": multi,
-                        "allow_other": allow_other,
-                        "other_is_nc": other_is_nc,
-                        "nc_responses": clean_nc}
-        if required_choice:
-            _choice_item["required"] = True
-        clean_items.append(_choice_item)
+        clean_items.append({"type": "choice", "label": label,
+                            "responses": clean_responses, "multi": multi,
+                            "allow_other": allow_other,
+                            "other_is_nc": other_is_nc,
+                            "nc_responses": clean_nc})
     if len(clean_items) > 30:
         raise HTTPException(422, "checklist.items : 30 points maximum.")
     if cl_enabled and not clean_items:
@@ -3253,237 +3683,13 @@ def maintenance_doc_delete(doc_id: int, request: Request):
 import json as _json_alerts
 
 
-def _check_blocking_alert_due(conn, user, machine: str) -> list:
-    """v2.3.5 — Retourne la LISTE des alertes bloquantes (block_production=True)
-    actuellement dues pour cette machine (peut être vide). Utilisé par
-    /api/fabrication/saisie comme garde-fou ET pour inclure directement l'alerte
-    dans la réponse HTTP 423 → le front n'a plus besoin d'un endpoint séparé.
-
-    Format des items identique à /alerts/active :
-        {id, nom, params, linked_maint_code, no_dossier}
-    """
-    result = []
-    if not machine:
-        return result
-    try:
-        rows = conn.execute(
-            "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
-        ).fetchall()
-    except Exception:
-        return result
-    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
-    # Pas de gap : le garde-fou doit être strict, pas soumis à min_gap.
-    user_role = user.get("role") if user else ""
-    user_machine = machine
-    for r in rows:
-        try:
-            params = _json_alerts.loads(r["params"] or "{}")
-        except (ValueError, TypeError):
-            continue
-        # Ne considère que les alertes bloquantes
-        if not bool(params.get("block_production", False)):
-            continue
-        target = params.get("target") or {}
-        # v2.3.4 : filtre machine strict (aligné avec /blocking-for-machine).
-        # Le superadmin ne bypass plus — il faut que la machine soit dans la
-        # cible sinon l'alerte n'a pas à se déclencher pour lui non plus.
-        machines_target = target.get("machines")
-        if not isinstance(machines_target, list) or not machines_target:
-            legacy = target.get("machine")
-            machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
-        if "*" not in machines_target and user_machine not in machines_target:
-            continue
-        trig = params.get("trigger") or {}
-        ttype = trig.get("type")
-        if ttype == "periodic":
-            try:
-                if _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris):
-                    result.append({
-                        "id": int(r["id"]),
-                        "nom": r["nom"] if "nom" in r.keys() else "",
-                        "params": params,
-                        "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
-                        "no_dossier": "",
-                    })
-            except Exception:
-                continue
-        elif ttype == "event":
-            event = str(trig.get("event") or "").strip()
-            if event == "after_calage":
-                # Réutilise la logique after_calage : dernière saisie machine = calage
-                _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-                _last_row = conn.execute(
-                    """SELECT no_dossier, operation_code, operation_category, date_operation
-                       FROM production_data
-                       WHERE machine=? AND date_operation >= ?
-                       ORDER BY date_operation DESC LIMIT 1""",
-                    (machine, _window),
-                ).fetchone()
-                if not _last_row:
-                    continue
-                # v2.3.2 : match par code exact (voir _ALERT_CALAGE_CODES)
-                if str(_last_row["operation_code"] or "") not in _ALERT_CALAGE_CODES:
-                    continue
-                if not _last_row["no_dossier"] or not str(_last_row["no_dossier"]).strip():
-                    continue
-                if _last_row["date_operation"] < _calage_window:
-                    continue
-                _dos = str(_last_row["no_dossier"]).strip()
-                _ack_check = conn.execute(
-                    """SELECT 1 FROM maintenance_alert_acks
-                       WHERE alert_id=? AND no_dossier=? LIMIT 1""",
-                    (int(r["id"]), _dos),
-                ).fetchone()
-                if _ack_check:
-                    continue
-                _last_89 = conn.execute(
-                    """SELECT MAX(date_operation) AS m FROM production_data
-                       WHERE no_dossier=? AND machine=? AND operation_code='89'""",
-                    (_dos, machine),
-                ).fetchone()
-                _last_89_at = _last_89["m"] if _last_89 else None
-                if _last_89_at and _last_row["date_operation"] <= _last_89_at:
-                    continue
-                result.append({
-                    "id": int(r["id"]),
-                    "nom": r["nom"] if "nom" in r.keys() else "",
-                    "params": params,
-                    "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
-                    "no_dossier": _dos,
-                })
-            # Autres events (dossier_start / dossier_end) : pas implémentés
-            # comme bloquants pour l'instant. Reste ouvert pour extension.
-    return result
-
-
-@router.get("/api/maintenance/alerts/blocking-for-machine")
-def maintenance_alerts_blocking_for_machine(request: Request, machine: str = ""):
-    """v2.2.89 — Retourne la liste des alertes bloquantes actuellement dues
-    pour une machine donnée. Appelé par le front après réception d'un HTTP 423
-    sur /api/fabrication/saisie, pour afficher les alertes à l'écran.
-
-    Format identique à /alerts/active pour que le runtime les affiche via
-    la même fonction _renderAlert.
-    """
-    try:
-        return _blocking_for_machine_impl(request, machine)
-    except Exception as _err:
-        import traceback
-        print(f"[blocking-for-machine] FATAL: {_err}", flush=True)
-        traceback.print_exc()
-        # v2.3.3 : ne jamais renvoyer 500 — retourner liste vide pour ne pas
-        # casser le flow front. L'erreur est loggée pour debug.
-        return {"items": [], "_error": str(_err)}
-
-
-def _blocking_for_machine_impl(request: Request, machine: str = ""):
-    user = get_current_user(request)
-    machine = (machine or "").strip()
-    if not machine:
-        # Fallback : machine liée à l'user
-        with get_db() as conn:
-            machine = _machine_name_from_user(conn, user) or ""
-    items = []
-    if not machine:
-        return {"items": items}
-    now_paris = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
-    with get_db() as conn:
-        try:
-            rows = conn.execute(
-                "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
-            ).fetchall()
-        except Exception:
-            return {"items": items}
-        user_role = user.get("role") if user else ""
-        for r in rows:
-            try:
-                params = _json_alerts.loads(r["params"] or "{}")
-            except (ValueError, TypeError):
-                continue
-            if not bool(params.get("block_production", False)):
-                continue
-            target = params.get("target") or {}
-            # v2.2.90 : PAS de filtre operator_should_see_alert ici. Si l'user
-            # est bloqué de saisir 03/88 côté serveur (423), il DOIT voir
-            # l'alerte peu importe son rôle métier. Le filtre reste dans le
-            # polling classique /alerts/active. On check seulement que la
-            # machine cible correspond.
-            machines_target = target.get("machines")
-            if not isinstance(machines_target, list) or not machines_target:
-                legacy = target.get("machine")
-                machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
-            if "*" not in machines_target and machine not in machines_target:
-                continue
-            trig = params.get("trigger") or {}
-            ttype = trig.get("type")
-            due = False
-            trigger_no_dossier = ""
-            if ttype == "periodic":
-                try:
-                    due = _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris)
-                except Exception:
-                    due = False
-            elif ttype == "event":
-                event = str(trig.get("event") or "").strip()
-                if event == "after_calage":
-                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _last_row = conn.execute(
-                        """SELECT no_dossier, operation_code, operation_category, date_operation
-                           FROM production_data
-                           WHERE machine=? AND date_operation >= ?
-                           ORDER BY date_operation DESC LIMIT 1""",
-                        (machine, _window),
-                    ).fetchone()
-                    if (_last_row
-                        and str(_last_row["operation_code"] or "") in _ALERT_CALAGE_CODES
-                        and _last_row["no_dossier"]
-                        and str(_last_row["no_dossier"]).strip()
-                        and _last_row["date_operation"] >= _calage_window):
-                        _dos = str(_last_row["no_dossier"]).strip()
-                        _ack_check = conn.execute(
-                            """SELECT 1 FROM maintenance_alert_acks
-                               WHERE alert_id=? AND no_dossier=? LIMIT 1""",
-                            (int(r["id"]), _dos),
-                        ).fetchone()
-                        if not _ack_check:
-                            _last_89 = conn.execute(
-                                """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
-                                (_dos, machine),
-                            ).fetchone()
-                            _last_89_at = _last_89["m"] if _last_89 else None
-                            if not _last_89_at or _last_row["date_operation"] > _last_89_at:
-                                due = True
-                                trigger_no_dossier = _dos
-            if due:
-                items.append({
-                    "id": int(r["id"]),
-                    "nom": r["nom"] or "",
-                    "params": params,
-                    "linked_maint_code": r["linked_maint_code"] or "",
-                    "no_dossier": trigger_no_dossier,
-                })
-    return {"items": items}
-
-
 def _require_alerts_admin(request: Request) -> dict:
     """v2.2.18 — Élargi aux rôles direction et administration pour permettre
     la gestion des alertes maintenance depuis MyMaintenance (l'admin métier
     n'a pas accès à /settings mais peut gérer les alertes depuis sa vue).
-    v2.2.74 — Élargi aux nouveaux rôles administration_ventes et
-    administration_technique (cohérence avec l'accès à MyMaintenance côté
-    admin, gate déjà ouverte dans maintenance_events._ADMIN_ROLES v2.2.46).
     """
     user = get_current_user(request)
-    if user.get("role") not in (
-        ROLE_SUPERADMIN,
-        ROLE_DIRECTION,
-        ROLE_ADMINISTRATION,
-        ROLE_ADMINISTRATION_VENTES,
-        ROLE_ADMINISTRATION_TECHNIQUE,
-    ):
+    if user.get("role") not in (ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION):
         raise HTTPException(status_code=403, detail="Réservé aux administrateurs maintenance.")
     return user
 
@@ -3922,8 +4128,7 @@ def _is_machine_in_production(conn, machine: str) -> bool:
     if not row:
         return False
     code = str(row["operation_code"] or "").strip()
-    # v2.2.83 : 01 (Début prod) ne compte plus comme "en production"
-    return code in ("03", "88")
+    return code in ("01", "03", "88")
 
 
 def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_paris: datetime) -> bool:
@@ -3958,10 +4163,9 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     # explicites (89, 87, 50-85) mais AUSSI le Calage (02), les événements
     # personnel (86), les annulations (90), etc. Toute interruption remet le
     # compteur à zéro et déclenche la grâce de 5 min à la reprise.
-    # v2.2.83 : 01 (Début prod) devient un code "stop" (interrompt la session)
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-           WHERE machine=? AND operation_code NOT IN ('03', '88')
+           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
            AND operation_code IS NOT NULL AND operation_code != ''""",
         (machine,),
     ).fetchone()
@@ -3972,14 +4176,14 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if last_stop_iso:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('03', '88')
+               WHERE machine=? AND operation_code IN ('01', '03', '88')
                AND date_operation > ?""",
             (machine, last_stop_iso),
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('03', '88')""",
+               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
             (machine,),
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
@@ -4073,16 +4277,6 @@ def maintenance_alerts_active(request: Request):
             # Filtrage cible : superadmin voit tout ; sinon fabrication uniquement
             if not operator_should_see_alert(user_role, user_machine or "", target):
                 continue
-            # v2.3.10 : filtre machine strict — même pour superadmin, l'alerte
-            # ne doit se déclencher que si la machine actuelle est ciblée.
-            # Résout le bug : alerte Errepi (cible Cohésio 1) qui apparaissait
-            # sur Cohésio 2 pour un superadmin.
-            _machines_target = target.get("machines")
-            if not isinstance(_machines_target, list) or not _machines_target:
-                _legacy_m = target.get("machine")
-                _machines_target = [_legacy_m] if isinstance(_legacy_m, str) and _legacy_m else ["*"]
-            if "*" not in _machines_target and user_machine and user_machine not in _machines_target:
-                continue
             trig = params.get("trigger") or {}
             ttype = trig.get("type")
             should_show = False
@@ -4123,10 +4317,6 @@ def maintenance_alerts_active(request: Request):
                     op_code = "89"
                 elif event == "dossier_start":
                     op_code = "01"
-                elif event == "after_calage":
-                    # v2.2.76 : traité en bloc plus bas — nécessite une logique
-                    # spécifique (parcours de la séquence des saisies du dossier).
-                    pass
                 # v164 : fallback super admin (comme la branche periodic).
                 # Si Loic (superadmin) ouvre /prod ou /maintenance sans machine
                 # assignée dans son profil, on utilise la machine cible de
@@ -4140,53 +4330,7 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                # v2.2.89 : after_calage ne remonte PLUS via le polling. L'alerte
-                # ne s'affiche qu'au moment où l'opérateur tente une saisie 03/88
-                # et que le garde-fou 423 est déclenché — c'est le front qui
-                # appelle alors /alerts/blocking-for-machine pour l'afficher.
-                if event == "after_calage":
-                    continue
-                if event == "after_calage_UNUSED" and effective_machine:
-                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _last_row = conn.execute(
-                        """SELECT no_dossier, operation_code, operation_category, date_operation
-                           FROM production_data
-                           WHERE machine=? AND date_operation >= ?
-                           ORDER BY date_operation DESC LIMIT 1""",
-                        (effective_machine, _window),
-                    ).fetchone()
-                    # Nouvelle contrainte : dernière saisie = catégorie calage
-                    # avec no_dossier renseigné et dans la fenêtre 4h.
-                    _is_calage_last = (
-                        _last_row
-                        and (_last_row["operation_category"] or "").lower() == "calage"
-                        and _last_row["no_dossier"] is not None
-                        and str(_last_row["no_dossier"]).strip() != ""
-                        and _last_row["date_operation"] >= _calage_window
-                    )
-                    if _is_calage_last:
-                        _dos = str(_last_row["no_dossier"]).strip()
-                        _last_calage_at = _last_row["date_operation"]
-                        # Verrou par dossier
-                        _ack_check = conn.execute(
-                            """SELECT 1 FROM maintenance_alert_acks
-                               WHERE alert_id=? AND no_dossier=? LIMIT 1""",
-                            (int(r["id"]), _dos),
-                        ).fetchone()
-                        if not _ack_check:
-                            # Contrainte v2.2.82 conservée : calage doit être
-                            # postérieur au dernier code 89 du dossier.
-                            _last_89 = conn.execute(
-                                """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
-                                (_dos, effective_machine),
-                            ).fetchone()
-                            _last_89_at = _last_89["m"] if _last_89 else None
-                            if not _last_89_at or _last_calage_at > _last_89_at:
-                                should_show = True
-                                trigger_no_dossier = _dos
-                elif op_code and effective_machine and effective_operateur:
+                if op_code and effective_machine and effective_operateur:
                     last_ack = conn.execute(
                         "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
                         "WHERE alert_id=? AND machine=?",
@@ -4562,69 +4706,6 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
                objet="ack:" + str(ack_id),
                detail=f"alert_id={alert_id_val} machine={machine_val}")
     return {"ok": True}
-
-
-def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str):
-    """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
-    target couvre cette machine, quand l'opérateur saisit un code non-productif
-    (arrêt, pause, calage, technique, fin dossier — tout sauf 01 et 03).
-
-    Une ligne est insérée dans maintenance_alert_acks pour chaque alerte avec le
-    motif dans le champ comment. Effet : compteur périodique reset, plus de lignes
-    vierges dans l'historique, modales à l'écran se ferment au prochain polling.
-    """
-    if not machine:
-        return
-    from database import get_db  # noqa: F401 (import garde le style existant)
-    now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
-    try:
-        rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
-        ).fetchall()
-    except Exception:
-        return
-    if code_label:
-        reason = f"Fermée auto : {code} – {code_label}"
-    else:
-        reason = f"Fermée auto : code {code}"
-    reason = reason[:2000]
-    user_id = user.get("id") if user else None
-    user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
-    responses_json = "{}"
-    for r in rows:
-        try:
-            params = _json_alerts.loads(r["params"] or "{}")
-        except (ValueError, TypeError):
-            continue
-        trig = params.get("trigger") or {}
-        if trig.get("type") != "periodic":
-            continue
-        target = params.get("target") or {}
-        machines_target = target.get("machines")
-        if not isinstance(machines_target, list) or not machines_target:
-            legacy = target.get("machine")
-            machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
-        if "*" not in machines_target and machine not in machines_target:
-            continue
-        try:
-            conn.execute(
-                """INSERT INTO maintenance_alert_acks
-                   (alert_id, user_id, user_nom, machine, no_dossier,
-                    ack_at, responses, comment)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (int(r["id"]), user_id, user_nom, machine, no_dossier or "",
-                 now_paris, responses_json, reason),
-            )
-            conn.execute(
-                "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
-                (now_paris, now_paris, int(r["id"])),
-            )
-        except Exception:
-            continue
-    try:
-        conn.commit()
-    except Exception:
-        pass
 
 
 @router.post("/api/maintenance/alerts/{alert_id}/ack")

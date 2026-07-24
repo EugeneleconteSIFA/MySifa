@@ -7381,107 +7381,145 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 205, "sifa_doc_versions_sections_overrides")
 
-
-
-
-    # v2.3.12 — Migration placement et size des réglages globaux vers chaque
-    # alerte existante. Après cette migration, chaque alerte porte ses propres
-    # valeurs (défaut top-right + medium si le singleton n'existe pas).
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=205 LIMIT 1").fetchone():
-        try:
-            import json as _json_mig
-            # Lire le singleton actuel
-            row = conn.execute(
-                "SELECT placement, size FROM maintenance_alert_settings WHERE id=1 LIMIT 1"
-            ).fetchone()
-            _default_placement = "top-right"
-            _default_size = "medium"
-            if row:
-                _default_placement = row["placement"] or "top-right"
-                _default_size = row["size"] or "medium"
-            # Parcourir toutes les alertes et injecter les valeurs si absentes
-            alerts = conn.execute(
-                "SELECT id, params FROM maintenance_alerts"
-            ).fetchall()
-            for a in alerts:
-                try:
-                    p = _json_mig.loads(a["params"] or "{}")
-                except Exception:
-                    p = {}
-                changed = False
-                if not p.get("placement"):
-                    p["placement"] = _default_placement
-                    changed = True
-                if not p.get("size"):
-                    p["size"] = _default_size
-                    changed = True
-                if changed:
-                    conn.execute(
-                        "UPDATE maintenance_alerts SET params=?, updated_at=datetime('now') WHERE id=?",
-                        (_json_mig.dumps(p, ensure_ascii=False), a["id"]),
-                    )
-            conn.commit()
-        except Exception:
-            pass
-        _record_schema_migration(conn, 205, "alerts_placement_size_per_alert")
-
-
-    # Migration 206 — Séries pour lignes d'AO.
-    # Un produit d'un AO peut être décliné en plusieurs séries (même produit, légère
-    # différence — souvent une variation d'impression). La somme des quantités des
-    # séries d'une ligne doit égaler la quantité de la ligne mère (contrainte
-    # applicative, pas de trigger SQL pour rester simple).
-    #
-    # ao_reponses.serie_id (nullable) : permet à un fournisseur de coter une série
-    # spécifiquement. NULL = cotation au niveau ligne (comportement historique).
+    # Migration 206 : representant sur qualite_sifa_doc_versions.
+    # Nom du représentant SIFA qui signe la Déclaration UE — utilisé dans la
+    # section 8 (Signature). Champ optionnel : si absent, la section 8 affiche
+    # des lignes vierges pour saisie manuscrite.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=206 LIMIT 1").fetchone():
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS ao_lignes_series (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                ligne_id    INTEGER NOT NULL,
-                position    INTEGER NOT NULL DEFAULT 0,
-                libelle     TEXT NOT NULL,
-                quantite    REAL NOT NULL DEFAULT 0,
-                notes       TEXT,
-                created_at  TEXT NOT NULL,
-                FOREIGN KEY (ligne_id) REFERENCES ao_lignes(id) ON DELETE CASCADE
-            )"""
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ao_lignes_series_ligne ON ao_lignes_series(ligne_id)"
-        )
-        # Ajout colonne serie_id sur ao_reponses (nullable — cotation par ligne par défaut)
-        ar_cols = {row[1] for row in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
-        if "serie_id" not in ar_cols:
-            conn.execute("ALTER TABLE ao_reponses ADD COLUMN serie_id INTEGER")
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_versions)").fetchall()}
+        if "representant" not in cols:
+            conn.execute("ALTER TABLE qualite_sifa_doc_versions ADD COLUMN representant TEXT")
         conn.commit()
-        _record_schema_migration(conn, 206, "ao_lignes_series")
+        _record_schema_migration(conn, 206, "sifa_doc_versions_representant")
 
-    # v207 — Commentaire libre sur bobine scannée (traçabilité matières fabrication)
+    # Migration 207 : default_body_overrides_json sur qualite_sifa_doc_templates.
+    # Permet aux admins Qualité d'éditer les textes par défaut d'un template
+    # (les SEC_*_BODY hardcodés du service PDF). Priorité à la génération :
+    #   1. version.sections_overrides_json.<sec_id>.custom_body (par client)
+    #   2. template.default_body_overrides_json.<sec_id>          (par template)
+    #   3. SEC_*_BODY hardcodé dans le service PDF                (défaut usine)
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=207 LIMIT 1").fetchone():
-        fmu_cols = {
-            r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()
-        }
-        if "commentaire" not in fmu_cols:
-            conn.execute(
-                "ALTER TABLE fab_matieres_utilisees ADD COLUMN commentaire TEXT"
-            )
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_templates)").fetchall()}
+        if "default_body_overrides_json" not in cols:
+            conn.execute("ALTER TABLE qualite_sifa_doc_templates ADD COLUMN default_body_overrides_json TEXT")
         conn.commit()
-        _record_schema_migration(conn, 207, "fab_matieres_commentaire")
+        _record_schema_migration(conn, 207, "sifa_doc_templates_default_body_overrides")
 
-    # v208 — MyAO : conditionnement de vente sur chaque ligne d'AO
-    # (unité + quantité par condi, ex. 30 cartons). Sert au calcul du
-    # prix de vente à la palette/carton/bobine depuis l'onglet Comparaison.
+    # Migration 208 : origine sur produits (interne | sous_traite).
+    # Permet de distinguer les PF fabriqués en interne des PF reçus d'un sous-traitant.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=208 LIMIT 1").fetchone():
-        al_cols = {
-            r["name"] for r in conn.execute("PRAGMA table_info(ao_lignes)").fetchall()
-        }
-        if "condi_unite" not in al_cols:
-            conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_unite TEXT")
-        if "condi_qte" not in al_cols:
-            conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_qte REAL")
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(produits)").fetchall()}
+        if "origine" not in cols:
+            conn.execute("ALTER TABLE produits ADD COLUMN origine TEXT NOT NULL DEFAULT 'interne'")
         conn.commit()
-        _record_schema_migration(conn, 208, "ao_lignes_condi")
+        _record_schema_migration(conn, 208, "produits_origine")
+
+    # Migration 209 : flag sous_traitant sur fournisseurs_fsc.
+    # Alimente le dropdown fournisseurs de la réception PF sous-traitée.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=209 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "sous_traitant" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN sous_traitant INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+        _record_schema_migration(conn, 209, "fournisseurs_fsc_sous_traitant")
+
+    # Migration 210 : table pf_receptions (entête d'une réception de PF sous-traité).
+    # Un enregistrement par bon de livraison / lot reçu d'un sous-traitant.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=210 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS pf_receptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lot_numero TEXT NOT NULL,
+            fournisseur_id INTEGER NOT NULL,
+            date_reception TEXT NOT NULL,
+            bon_livraison TEXT,
+            certificat_fsc TEXT,
+            fsc_type_claim TEXT NOT NULL DEFAULT 'non_fsc',
+            note TEXT,
+            created_at TEXT NOT NULL,
+            created_by TEXT,
+            created_by_name TEXT,
+            FOREIGN KEY (fournisseur_id) REFERENCES fournisseurs_fsc(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pf_recep_fourn ON pf_receptions(fournisseur_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pf_recep_date ON pf_receptions(date_reception)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pf_recep_created ON pf_receptions(created_at)")
+        conn.commit()
+        _record_schema_migration(conn, 210, "pf_receptions")
+
+    # Migration 211 : table pf_reception_items (lignes d'une réception PF).
+    # Une ligne = un produit + emplacement + quantité. Chaque ligne crée un lot_stock.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=211 LIMIT 1").fetchone():
+        conn.execute("""CREATE TABLE IF NOT EXISTS pf_reception_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reception_id INTEGER NOT NULL,
+            produit_id INTEGER NOT NULL,
+            quantite REAL NOT NULL,
+            unite TEXT,
+            emplacement TEXT NOT NULL,
+            lot_fournisseur TEXT,
+            dluo TEXT,
+            lot_stock_id INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (reception_id) REFERENCES pf_receptions(id) ON DELETE CASCADE,
+            FOREIGN KEY (produit_id) REFERENCES produits(id),
+            FOREIGN KEY (lot_stock_id) REFERENCES lots_stock(id)
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pf_recep_items_recep ON pf_reception_items(reception_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pf_recep_items_prod ON pf_reception_items(produit_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pf_recep_items_empl ON pf_reception_items(emplacement)")
+        conn.commit()
+        _record_schema_migration(conn, 211, "pf_reception_items")
+
+    # Migration 212 : pf_reception_item_id sur lots_stock.
+    # Trace l'origine d'un lot (réception PF sous-traité) pour l'afficher côté stock.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=212 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(lots_stock)").fetchall()}
+        if "pf_reception_item_id" not in cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN pf_reception_item_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_lots_pf_recep ON lots_stock(pf_reception_item_id)")
+        conn.commit()
+        _record_schema_migration(conn, 212, "pf_receptions_infra")
+
+    # Migration 213 : categories sur fournisseurs_fsc (JSON list de codes).
+    # Codes autorisés : 8 catégories MP (mandrin/palette/adhesif/carton/frontal/
+    # glassine/complexe/autre) + 'negoce' + 'sous_traitant'.
+    # Un fournisseur peut appartenir à plusieurs catégories (multi-select UI).
+    # Le flag existant `sous_traitant` (v209) est conservé et resynchronisé par
+    # l'API : si 'sous_traitant' est dans categories → flag=1, sinon flag=0.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=213 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "categories" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN categories TEXT")
+        # Backfill : les fournisseurs marqués sous_traitant=1 héritent de la catégorie
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET categories='[\"sous_traitant\"]' "
+            "WHERE sous_traitant=1 AND (categories IS NULL OR categories='' OR categories='[]')"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 213, "fournisseurs_fsc_categories")
+
+    # Migration 214 : identité fiscale + expiration certification FSC.
+    # - siret (14 chiffres, informatif — pas de contrainte unique pour tolérer les
+    #   sous-établissements et les fournisseurs étrangers sans SIRET)
+    # - tva_intracom (format libre — les fournisseurs UE hors FR utilisent d'autres formats)
+    # - fsc_date_expiration (ISO date YYYY-MM-DD, texte, nullable). Utilisé pour
+    #   des alertes 60/30/0 jours avant expiration dans l'UI Paramètres.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=214 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "siret" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN siret TEXT")
+        if "tva_intracom" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN tva_intracom TEXT")
+        if "fsc_date_expiration" not in cols:
+            conn.execute("ALTER TABLE fournisseurs_fsc ADD COLUMN fsc_date_expiration TEXT")
+        # Index sur SIRET (recherche + détection doublons). NULL autorisés (index partiel).
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseurs_siret ON fournisseurs_fsc(siret) WHERE siret IS NOT NULL")
+        conn.commit()
+        _record_schema_migration(conn, 214, "fournisseurs_fsc_identite_fiscale")
+
+
+
+
 
 
 def create_default_admin():
