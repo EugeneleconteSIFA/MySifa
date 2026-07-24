@@ -1666,44 +1666,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </section>
 
-        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count">0 opération</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
-            </div>
-          </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody class="js-cat-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
         </div><!-- /plan-subview-calendrier -->
+      </div><!-- /view-planning -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
