@@ -4345,7 +4345,11 @@ def maintenance_alert_acks_list(request: Request):
     if machine_filter:
         where.append("a.machine = ?")
         params_sql.append(machine_filter)
-    where.append("a.dismissed = 0")
+    # v2.4.11 : on retire le filtre dismissed=0 pour que les esquives (bouton
+    # "Pas d'Errepi" & co, v2.3.30) remontent dans l'historique. Elles sont
+    # ensuite filtrées côté frontend par le toggle "Fermetures auto" — le champ
+    # dismissed est renvoyé au front pour la détection (double critère avec le
+    # comment "Fermée auto (esquive) : ...").
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     from database import get_db
     with get_db() as conn:
@@ -4353,7 +4357,7 @@ def maintenance_alert_acks_list(request: Request):
             f"""SELECT a.id, a.alert_id, al.nom AS alert_nom,
                        al.linked_maint_code, a.user_id, a.user_nom,
                        a.machine, a.no_dossier, a.ack_at,
-                       a.responses, a.comment
+                       a.responses, a.comment, a.dismissed
                 FROM maintenance_alert_acks a
                 LEFT JOIN maintenance_alerts al ON al.id = a.alert_id
                 {where_sql}
@@ -4382,6 +4386,10 @@ def maintenance_alert_acks_list(request: Request):
             "ack_at": r["ack_at"],
             "responses": responses,
             "comment": r["comment"] or "",
+            # v2.4.11 : remonté au front pour que ctrlIsAutoClose détecte
+            # aussi les anciennes esquives (dismissed=1 mais comment vide,
+            # antérieures à v2.3.30 qui inscrit "Fermée auto (esquive) : …").
+            "dismissed": 1 if (r["dismissed"] if "dismissed" in r.keys() else 0) else 0,
             "dossier_info": None,
         })
 

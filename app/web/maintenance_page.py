@@ -6527,6 +6527,9 @@ async function loadCtrlAcks(){
       _raw_comment: a.comment || '',
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
+      // v2.4.11 : remonte dismissed pour que ctrlIsAutoClose détecte aussi
+      // les anciennes esquives (comment vide, antérieures à v2.3.30).
+      _dismissed: a.dismissed === 1 || a.dismissed === true,
     }));
     CTRL_STATE.alerts_meta = data.alerts_meta || {};
     CTRL_STATE.known_alerts = Array.isArray(data.known_alerts) ? data.known_alerts : [];
@@ -6625,8 +6628,14 @@ function toggleAutoClose(){
   if(typeof renderCtrl === 'function') renderCtrl();
 }
 function ctrlIsAutoClose(c){
+  // v2.4.11 : double critère.
+  //   1) dismissed=1 → esquive quelle que soit l'époque (couvre les anciennes
+  //      esquives antérieures à v2.3.30 qui ont comment vide).
+  //   2) comment matche "Fermée auto" → auto-close serveur (backend
+  //      _auto_ack_periodic_alerts_on_arret v2.2.65) + esquives récentes
+  //      "Fermée auto (esquive) : <label>" (v2.3.30).
+  if(c && c._dismissed) return true;
   const raw = (c && c._raw_comment) || '';
-  // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
   return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
 }
 
