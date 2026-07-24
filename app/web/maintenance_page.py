@@ -846,7 +846,11 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .op-op-card-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
 .op-op-card-status{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
-.op-op-card-cta{margin-top:2px;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+/* v2.4.9 : margin-top:auto pousse le bouton en bas de la carte quand
+   celle-ci est stretchée par le grid parent (op-event-box-cards). Résultat :
+   tous les boutons "Marquer comme terminée" d'une même ligne sont alignés
+   même quand certaines cartes ont "Consignes de l'admin" et d'autres non. */
+.op-op-card-cta{margin-top:auto;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .op-op-card-cta:hover{filter:brightness(1.08)}
 .op-op-card-cta.is-done{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
 .op-op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
