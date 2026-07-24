@@ -1071,16 +1071,19 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-empty{text-align:center;color:var(--muted);font-size:13px;padding:48px 20px;background:var(--card);
   border:1px solid var(--border);border-radius:12px;line-height:1.5}
 .hist-results-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;
-  border-bottom:1px solid var(--border);background:var(--bg);color:var(--text);flex-wrap:wrap}
+.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;
+  border-bottom:1px solid var(--border);background:var(--card);color:var(--text);flex-wrap:wrap}
 .hist-results-head-left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
 .hist-results-head-nav{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
-.hist-results-head .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.hist-results-head .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
-.hist-results-head .hist-pagination-info{font-size:12px;color:var(--text2);font-weight:600;min-width:88px;text-align:center;white-space:nowrap}
-.hist-results-head-nav .btn{min-width:96px}
-.hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.hist-count{font-size:12px;font-weight:600;color:var(--text2)}
+.hist-results-head .hist-results-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.hist-results-head .hist-count{font-size:14px;font-weight:700;color:var(--text)}
+.hist-results-head .hist-pagination-info{font-size:13px;color:var(--text);font-weight:700;min-width:104px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-results-head-nav .btn{min-width:110px;padding:9px 16px;font-size:13px}
+.hist-results-head-nav .btn-ghost{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.hist-results-head-nav .btn-ghost:not(:disabled):hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.hist-results-head-nav .btn-ghost:disabled{opacity:1;color:var(--muted);border-color:var(--border);background:transparent;cursor:not-allowed}
+.hist-results-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.hist-count{font-size:14px;font-weight:700;color:var(--text)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .hist-table{width:100%;min-width:1200px;border-collapse:collapse;font-size:13px}
 .hist-unite{font-size:12px;color:var(--text2);white-space:nowrap}

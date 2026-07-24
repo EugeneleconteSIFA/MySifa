@@ -155,10 +155,14 @@ def enrich_reponse_pricing(
     if quotation is None:
         quotation = _float_or_none(reponse.get("prix_unitaire"))
 
-    # unite pour PRICING : toujours celle du fournisseur (unite_quotation_original)
-    # unite pour AFFICHAGE (unite_quotation) peut etre override par l'interne (badge "manuel")
-    unite_display = reponse.get("unite_quotation")
-    unite = _norm_unite(reponse.get("unite_quotation_original") or unite_display)
+    # Deux unités :
+    #  - unite_original : ce que le fournisseur a réellement saisi (base du prix_calculé
+    #    qu'il facturera). Ne change jamais après ré-interprétation manuelle.
+    #  - unite_display : ce que l'interne a corrigé si erreur de saisie fournisseur
+    #    (ex. il a coché « bobine » mais voulait dire « mille »). Sert de référence
+    #    pour prix_au_mille et prix_vente (notre logique interne).
+    unite_display = _norm_unite(reponse.get("unite_quotation"))
+    unite_original = _norm_unite(reponse.get("unite_quotation_original") or unite_display)
     devise = _norm_devise(reponse.get("devise"))
     devise_devis = _norm_devise(reponse.get("devise_prix_devis"))
     coef = _float_or_none(reponse.get("coef"))
@@ -168,8 +172,10 @@ def enrich_reponse_pricing(
     nb_bob = ligne_ctx.get("etiquettes_par_bobine")
     qte = ligne_ctx.get("quantite_etiquettes")
 
-    prix_au_mille = calc_prix_au_mille(quotation, unite, nb_bob)
-    prix_calcule = calc_prix_calcule(quotation, unite, qte, nb_bob)
+    # prix_calcule : basé sur l'unité ORIGINALE (facturation réelle fournisseur)
+    prix_calcule = calc_prix_calcule(quotation, unite_original, qte, nb_bob)
+    # prix_au_mille : basé sur l'unité AFFICHÉE (celle qu'on considère être la vraie)
+    prix_au_mille = calc_prix_au_mille(quotation, unite_display, nb_bob)
     transport_amount = calc_transport_amount(prix_calcule, transport_pct)
     prix_vente = calc_prix_vente(
         prix_au_mille, devise, coef, devise_devis, eur_usd_rate, transport_pct
@@ -178,7 +184,7 @@ def enrich_reponse_pricing(
     out = dict(reponse)
     out["quotation"] = quotation
     out["devise"] = devise
-    out["unite_quotation"] = _norm_unite(unite_display) if unite_display else unite
+    out["unite_quotation"] = unite_display
     out["coef"] = coef
     out["devise_prix_devis"] = devise_devis
     out["prix_au_mille"] = prix_au_mille
