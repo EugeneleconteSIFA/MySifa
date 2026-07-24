@@ -190,6 +190,12 @@ def enrich_reponse_pricing(
     out["prix_au_mille"] = prix_au_mille
     out["prix_calcule"] = prix_calcule
     out["transport_amount"] = transport_amount
+    # Prix d'achat au mille (devise fournisseur, transport inclus, sans coef).
+    # Sert de base pour calculer le prix de vente à la condi côté frontend.
+    if prix_au_mille is not None:
+        out["prix_achat_mille"] = prix_au_mille * (1.0 + _clean_transport_pct(transport_pct) / 100.0)
+    else:
+        out["prix_achat_mille"] = None
     out["prix_vente"] = prix_vente
     return out
 
