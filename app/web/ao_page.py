@@ -3045,7 +3045,20 @@ function renderComparaison() {
     '<th>Étiq. / bobine</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
     '<th>Quotation</th><th>Devise</th><th>Unité quot.</th>'+
     '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th><th class="comp-th-coef">Coef</th>'+
-    '<th>Devise devis</th><th>Prix de vente</th></tr>';
+    '<th>Devise devis</th><th>Prix d\'achat</th>'+
+    '<th style="min-width:150px">Condi.</th><th>Prix vente condi</th></tr>';
+  // Helper : étiquettes par unité de conditionnement à partir du ctx produit
+  function etiquettesParCondi(r, unite) {
+    if (!unite) return null;
+    const nbBob = Number(r.etiquettes_par_bobine||0) || null;
+    const bobCarton = Number(r.bobines_carton||0) || null;
+    const cartPal = Number(r.cartons_palette||0) || null;
+    if (unite === 'etiquette') return 1;
+    if (unite === 'bobine') return nbBob || null;
+    if (unite === 'carton') return (nbBob && bobCarton) ? nbBob*bobCarton : null;
+    if (unite === 'palette') return (nbBob && bobCarton && cartPal) ? nbBob*bobCarton*cartPal : null;
+    return null;
+  }
   let body = '';
   rows.forEach(r => {
     const best = bestMille != null && r.prix_au_mille === bestMille;
@@ -3059,6 +3072,34 @@ function renderComparaison() {
     const quotationCell = noRep
       ? '<td><button type="button" class="btn btn-ghost btn-sm btn-saisir-prix" data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'" style="font-size:11px;padding:4px 8px;color:var(--accent);border:1px dashed var(--accent);background:var(--accent-bg)">'+icon('edit',12)+' Saisir</button></td>'
       : '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>';
+    // Condi cell : select unité + input qté (persist par ligne)
+    const condiUnite = r.condi_unite || '';
+    const condiQte = r.condi_qte != null ? r.condi_qte : '';
+    const unites = ['bobine','carton','etiquette','palette']; // alpha
+    const uOpts = '<option value="">—</option>'+
+      unites.map(u => '<option value="'+u+'"'+(condiUnite===u?' selected':'')+'>'+u.charAt(0).toUpperCase()+u.slice(1)+'</option>').join('');
+    const condiCell = '<td>'+
+      '<select class="inp-condi-unite" data-lid="'+escAttr(r.ligne_id||'')+'" style="font-size:11px;padding:2px 4px;max-width:88px">'+uOpts+'</select> '+
+      '<input type="number" step="1" min="1" class="inp-condi-qte" data-lid="'+escAttr(r.ligne_id||'')+'" value="'+escAttr(condiQte)+'" placeholder="Qté" style="max-width:60px;font-size:11px;padding:2px 4px">'+
+      '</td>';
+    // Prix vente condi = prix_achat_mille (devise F) × nb_etiq_par_condi × qte / 1000 × coef × conversion devise
+    let pvCondi = null;
+    const nbCondi = etiquettesParCondi(r, condiUnite);
+    const qteC = Number(condiQte) || null;
+    const missing = condiUnite && nbCondi == null; // sélectionné mais fiche incomplète
+    if (r.prix_achat_mille != null && nbCondi && qteC && r.coef) {
+      // Prix en devise fournisseur (par condi) : prix_achat_mille × nbCondi × qteC / 1000 × coef
+      const totalF = r.prix_achat_mille * nbCondi * qteC / 1000 * (Number(r.coef)||1);
+      // Conversion vers devise devis (via même logique que prix_vente)
+      const fx = Number(c.eur_usd_rate) || 0.9;
+      let converted = totalF;
+      if (devF === 'USD' && devD === 'EUR') converted = totalF * fx;
+      else if (devF === 'EUR' && devD === 'USD') converted = totalF / (fx || 1);
+      pvCondi = converted;
+    }
+    const pvCondiCell = missing
+      ? '<td><span class="btn-fiche-alerte" data-ref="'+escAttr(r.ref_produit||'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--warn,#a16207);background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);padding:3px 8px;border-radius:6px;cursor:pointer" title="Info manquante dans la fiche produit — clique pour compléter">'+icon('wrench',11)+' Compléter fiche</span></td>'
+      : '<td>'+(pvCondi != null ? formatMoney(pvCondi, devD) : '—')+'</td>';
     body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
       '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
       '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
@@ -3077,7 +3118,9 @@ function renderComparaison() {
         '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
         '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
       '</select></td>'+
-      '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_vente, devD)+'</td>'+
+      '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_achat_mille || r.prix_au_mille, devF)+'</td>'+
+      condiCell+
+      pvCondiCell+
       '</tr>';
     // Détail par série sous la ligne (si la ligne a des séries)
     const sb = Array.isArray(r.series_breakdown) ? r.series_breakdown : [];
@@ -3091,6 +3134,7 @@ function renderComparaison() {
           '<td>'+formatMoney(s.transport_amount, devF)+'</td>'+
           '<td></td><td></td><td></td>'+
           '<td>'+formatMoney(s.prix_vente, devD)+'</td>'+
+          '<td></td><td></td>'+
           '</tr>';
       });
     }
@@ -3406,6 +3450,29 @@ function bindDetailEvents() {
       } catch(e) { showToast(e.message, 'danger'); }
     });
   });
+  // Condi : save unite + qté sur la ligne
+  async function saveCondi(lid) {
+    if (!lid) return;
+    const uEl = document.querySelector('.inp-condi-unite[data-lid="'+lid+'"]');
+    const qEl = document.querySelector('.inp-condi-qte[data-lid="'+lid+'"]');
+    const unite = uEl ? uEl.value : '';
+    const qteRaw = qEl ? qEl.value : '';
+    const qte = qteRaw !== '' ? parseFloat(qteRaw) : null;
+    try {
+      await api('/api/ao/'+S.ao.id+'/lignes/'+lid+'/condi', {
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({condi_unite: unite || null, condi_qte: qte})
+      });
+      if (S.ao) { await loadComparaison(S.ao.id); render(); }
+    } catch(e) { showToast(e.message || 'Erreur condi.', 'danger'); }
+  }
+  document.querySelectorAll('.inp-condi-unite').forEach(el => el.addEventListener('change', () => saveCondi(el.dataset.lid)));
+  document.querySelectorAll('.inp-condi-qte').forEach(el => el.addEventListener('change', () => saveCondi(el.dataset.lid)));
+  // Alerte "Compléter fiche" : ouvre le formulaire produit
+  document.querySelectorAll('.btn-fiche-alerte').forEach(b => b.addEventListener('click', async () => {
+    const ref = b.dataset.ref || '';
+    await openProduitByRef(ref, {section: 'ao', ao_id: S.ao ? S.ao.id : null});
+  }));
   // Bouton "Saisir" — saisie manuelle d'une quotation reçue hors portail (email/tel)
   document.querySelectorAll('.btn-saisir-prix').forEach(b => b.addEventListener('click', () => {
     openModalSaisieManuelle({

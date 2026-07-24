@@ -661,20 +661,29 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-print,.fab-traca-del,.fab-traca-comment{
   display:inline-flex;align-items:center;justify-content:center;
   width:30px;height:30px;padding:0;border-radius:8px;
-  background:var(--bg);border:1px solid var(--border);
+  background:rgba(148,163,184,.14);border:1px solid transparent;
   color:var(--text2);cursor:pointer;transition:all .12s;
 }
+.fab-traca-print{
+  background:rgba(20,184,166,.14);color:var(--accent,#14b8a6);
+}
 .fab-traca-print:hover{
-  background:var(--accent);border-color:var(--accent);color:#fff;
+  background:var(--accent,#14b8a6);border-color:var(--accent,#14b8a6);color:#fff;
+}
+.fab-traca-comment{
+  background:rgba(59,130,246,.14);color:#3b82f6;
 }
 .fab-traca-comment:hover{
   background:#3b82f6;border-color:#3b82f6;color:#fff;
 }
 .fab-traca-comment.has-comment{
-  background:rgba(59,130,246,.12);border-color:#3b82f6;color:#3b82f6;
+  background:rgba(59,130,246,.22);border-color:rgba(59,130,246,.35);color:#3b82f6;
+}
+.fab-traca-del{
+  background:rgba(239,68,68,.12);color:#ef4444;
 }
 .fab-traca-del:hover{
-  background:var(--danger);border-color:var(--danger);color:#fff;
+  background:var(--danger,#ef4444);border-color:var(--danger,#ef4444);color:#fff;
 }
 .fab-traca-print:disabled{opacity:.5;cursor:not-allowed}
 .fab-traca-fsc-warn{
