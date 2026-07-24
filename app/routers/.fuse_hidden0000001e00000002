@@ -114,7 +114,7 @@ def _require_not_cloture(ao: dict) -> None:
     if ao.get("statut") == "cloturee":
         raise HTTPException(
             status_code=403,
-            detail="Cet appel d'offres est clôturé.",
+            detail="Cet appel d'offre est clôturé.",
         )
 
 

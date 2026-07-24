@@ -377,11 +377,11 @@ function buildAoSidebarNavStructure() {
 
 function aoMobileTitle() {
   const m = {
-    ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offres', 'Appel d\'offre'],
+    ao: S.view === 'detail' && S.ao ? [S.ao.reference, 'Appel d\'offre'] : ['Appels d\'offre', 'Appel d\'offre'],
     produits: ['Produits', 'Référentiel'],
     fournisseurs: ['Fournisseurs', 'Référentiel'],
   };
-  const x = m[S.section] || ['MyAO', 'Appels d\'offres'];
+  const x = m[S.section] || ['MyAO', 'Appels d\'offre'];
   return {title: x[0], sub: x[1]};
 }
 
@@ -1797,30 +1797,21 @@ function renderList() {
         cloturerBtn+
         '<button class="btn-icon btn-dup-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-titre="'+titre+'" title="Dupliquer">'+icon('copy',14)+'</button> '+
         '<button class="btn-icon btn-del-ao" data-id="'+a.id+'" data-ref="'+ref+'" data-statut="'+escAttr(a.statut||'')+'" title="Supprimer">'+icon('trash',14)+'</button>';
-    // Titre auto : une ligne par ref (ref — qty formatée), sinon fallback sur a.titre
-    let titreHtml = '';
-    const lignes = a.lignes_summary || [];
-    if (lignes.length) {
-      titreHtml = '<div style="font-size:12px;line-height:1.4">'+
-        lignes.map(l => '<div>'+escHtml(l.ref||'—')+(l.qte != null ? ' <span style="color:var(--muted)">— '+formatInt(l.qte)+'</span>' : '')+'</div>').join('')+
-        '</div>';
-    } else {
-      titreHtml = '<span style="color:var(--muted)">'+escHtml(a.titre||'—')+'</span>';
-    }
     rows += '<tr><td><a href="#" class="ao-list-ref-link btn-view" data-id="'+a.id+'">'+escHtml(a.reference)+'</a></td>'+
-      '<td>'+titreHtml+'</td>'+
+      '<td>'+escHtml(a.titre)+'</td>'+
       '<td>'+cliTxt+'</td>'+
+      '<td>'+refsTxt+'</td>'+
       '<td>'+statutBadge(a.statut)+'</td>'+
       '<td>'+escHtml(a.date_limite||'—')+'</td>'+
       '<td>'+escHtml(a.nb_fournisseurs)+'</td>'+
       '<td>'+escHtml(a.nb_reponses)+'</td>'+
       '<td class="ao-actions-cell">'+actions+'</td></tr>';
   });
-  return '<div class="page-hdr"><h1>Appels d\'offres</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offres</button></div>'+
+  return '<div class="page-hdr"><h1>Appels d\'offre</h1><button class="btn btn-accent" type="button" id="btn-new-ao">'+icon('plus',14)+' Nouvel appel d\'offres</button></div>'+
     '<div class="filter-tabs">'+
     ['tous','brouillon','envoyee','cloturee','corbeille'].map(f=>'<button class="filter-tab'+(S.filtre===f?' active':'')+'" data-f="'+f+'">'+escHtml(f==='tous'?'Tous':f==='brouillon'?'Brouillon':f==='envoyee'?'Envoyée':f==='cloturee'?'Clôturée':'Corbeille')+'</button>').join('')+
     '</div>'+
-    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
+    (list.length ? '<div class="card"><table class="data-table"><thead><tr><th>Référence</th><th>Titre</th><th>Client</th><th>Références produits</th><th>Statut</th><th>Date limite</th><th>Fournisseurs</th><th>Réponses</th><th style="text-align:right">Actions</th></tr></thead><tbody>'+rows+'</tbody></table></div>' :
     '<div class="card empty-state"><strong>Aucun appel d\'offres</strong>Créez un premier appel d\'offres pour inviter vos fournisseurs.</div>');
 }
 
@@ -1905,7 +1896,7 @@ function renderDetailHeader() {
   }
   if (st === 'envoyee') actions += '<button class="btn btn-accent" type="button" id="btn-cloturer">Clôturer l\'AO</button>';
   const navPager = buildNavPagerHtml(filteredAos(), ao.id, 'appel d\'offres');
-  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offres</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
+  return '<div class="breadcrumb"><a href="#" id="bc-list">Appels d\'offre</a> &gt; '+escHtml(ao.reference)+' — '+escHtml(ao.titre)+'</div>'+
     '<div class="detail-hdr"><h2>'+escHtml(ao.reference)+'</h2>'+statutBadge(st)+navPager+'</div>'+
     '<div class="detail-meta">'+escHtml(ao.titre)+'<br>Date limite : '+escHtml(ao.date_limite||'—')+' · Responsable : '+escHtml(ao.responsable_email||'—')+' · Réponses : '+escHtml(d.nb_reponses)+'</div>'+
     '<div class="detail-actions">'+actions+'</div>'+
@@ -2267,7 +2258,8 @@ async function openCreateAoWizard(initialState) {
         '<input type="text" id="w-client-search" placeholder="Tape un nom de client (min 2 lettres)..." autocomplete="off" style="width:100%">' +
         '<div id="w-client-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:1px solid var(--border);border-radius:0 0 8px 8px;max-height:200px;overflow:auto;z-index:20"></div>' +
         '</div>';
-    return '<p style="font-size:12px;color:var(--muted);margin-bottom:14px;font-style:italic">Le titre est généré automatiquement à partir des produits sélectionnés à l\'étape suivante.</p>' +
+    return '<div class="field"><label>Titre de l\'appel d\'offres *</label>' +
+      '<input id="w-titre" value="' + escAttr(info.titre) + '" placeholder="Ex: RFQ etiquettes lot 12345"></div>' +
       '<div class="field"><label>Client (optionnel)</label>' + clientBtn + '</div>' +
       '<div class="field"><label>Description</label>' +
       '<textarea id="w-desc" rows="3" placeholder="Contexte, contraintes...">' + escHtml(info.description) + '</textarea></div>' +
@@ -2382,19 +2374,10 @@ async function openCreateAoWizard(initialState) {
   }
 
   function commitStep1FromDOM() {
-    // Titre auto-généré : plus de champ dans le wizard
+    state.info.titre = (document.getElementById('w-titre')?.value || '').trim();
     state.info.description = (document.getElementById('w-desc')?.value || '').trim();
     state.info.date_limite = document.getElementById('w-limite')?.value || '';
     state.info.responsable_email = (document.getElementById('w-email')?.value || '').trim();
-  }
-  function computeAutoTitre() {
-    // Titre = concaténation compacte des refs pour le fallback DB.
-    // L'affichage détaillé (une ligne par ref) se fait côté renderList via lignes_summary.
-    const refs = (state.lignes || [])
-      .map(l => (l.ref_produit || '').trim())
-      .filter(Boolean);
-    if (!refs.length) return 'Nouvel appel d\'offres';
-    return refs.join(' · ');
   }
   function commitStep2FromDOM() {
     const rows = box.querySelectorAll('.w-ligne-row');
@@ -2418,6 +2401,7 @@ async function openCreateAoWizard(initialState) {
 
   function validateStep(n) {
     if (n === 1) {
+      if (!state.info.titre) return 'Titre obligatoire.';
       if (!state.info.responsable_email) return 'Email responsable obligatoire.';
     }
     if (n === 2) {
@@ -2638,7 +2622,7 @@ async function openCreateAoWizard(initialState) {
         try {
           // 1. Create AO
           const aoBody = {
-            titre: computeAutoTitre(),
+            titre: state.info.titre,
             description: state.info.description || null,
             date_limite: state.info.date_limite || null,
             responsable_email: state.info.responsable_email,
@@ -2768,24 +2752,12 @@ async function openAddFournisseurModalV2() {
   await _reloadFournisseursCache(state);
 
   function render() {
-    // Set des (fournisseur_id + contact_id) déjà présents dans l'AO
-    // pour ne pas les auto-sélectionner + les afficher grisés / cochés désactivés.
-    const alreadyInAo = new Set(
-      (S.detail && S.detail.fournisseurs || []).map(af =>
-        (af.fournisseur_id || '') + ':' + (af.fournisseur_contact_id || '')
-      ).filter(k => k !== ':')
-    );
     if (!state._autoP && !state.selectedContacts.size) {
       state._autoP = true;
       state.fournisseurs.forEach(f => (f.contacts || []).forEach(c => {
-        const key = f.id + ':' + c.id;
-        // Auto-sélectionne le contact principal SAUF s'il est déjà dans l'AO
-        if (c.is_principal && !alreadyInAo.has(key)) {
-          state.selectedContacts.add(key);
-        }
+        if (c.is_principal) state.selectedContacts.add(f.id + ':' + c.id);
       }));
     }
-    state._alreadyInAo = alreadyInAo;
     let filtered = state.search
       ? state.fournisseurs.filter(f => {
           const q = state.search.toLowerCase();
@@ -2835,15 +2807,11 @@ async function openAddFournisseurModalV2() {
           } else {
             contacts.forEach(c => {
               const key = f.id + ':' + c.id;
-              const alreadyIn = state._alreadyInAo && state._alreadyInAo.has(key);
               const emails = (c.emails || []).join(', ');
               const principal = c.is_principal ? '<span style="font-size:10px;background:rgba(34,211,238,.15);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px">★</span>' : '';
-              const badgeIn = alreadyIn ? ' <span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:600">déjà dans l\'AO</span>' : '';
-              const cbAttrs = alreadyIn ? ' checked disabled' : (state.selectedContacts.has(key) ? ' checked' : '');
-              const lblStyle = alreadyIn ? 'opacity:.5;cursor:not-allowed' : 'cursor:pointer';
-              html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;' + lblStyle + '">' +
-                '<input type="checkbox" data-contact-key="' + escAttr(key) + '"' + cbAttrs + ' style="width:14px;height:14px">' +
-                '<span><strong>' + escHtml(c.nom || '—') + '</strong>' + principal + badgeIn +
+              html += '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:12px">' +
+                '<input type="checkbox" data-contact-key="' + escAttr(key) + '"' + (state.selectedContacts.has(key) ? ' checked' : '') + ' style="width:14px;height:14px">' +
+                '<span><strong>' + escHtml(c.nom || '—') + '</strong>' + principal +
                 (emails ? ' <span style="color:var(--muted)">· ' + escHtml(emails) + '</span>' : '') +
                 ' <span style="color:var(--muted)">· ' + (c.langue || 'fr').toUpperCase() + '</span></span></label>';
             });
@@ -2919,7 +2887,6 @@ async function openAddFournisseurModalV2() {
           });
           closeModal();
           await loadDetail(S.ao.id);
-          render();
           showToast('Fournisseur ajoute', 'success');
         } catch (e) { showToast(e.message || 'Erreur', 'danger'); }
       } else {
@@ -2946,7 +2913,6 @@ async function openAddFournisseurModalV2() {
         }
         closeModal();
         await loadDetail(S.ao.id);
-        render();
         showToast(ok + ' ajoute(s)' + (ko ? ', ' + ko + ' en echec' : ''), ok ? 'success' : 'danger');
       }
     };
@@ -3130,9 +3096,7 @@ function renderDocuments() {
       '<td><a class="btn btn-ghost btn-sm" href="/api/ao/'+aoId+'/pieces-jointes/'+pj.id+'/download">Télécharger</a> '+
       '<button class="btn btn-ghost btn-sm btn-del-pj" data-id="'+pj.id+'">Supprimer</button></td></tr>').join('');
     return '<div class="card"><p style="font-size:12px;color:var(--muted);margin-bottom:12px">Taille max. 10 Mo par fichier.</p>'+
-      '<input type="file" id="pj-file" style="display:none">'+
-      '<button class="btn btn-accent btn-sm" id="btn-pj-upload">'+icon('plus',14)+' <span id="btn-pj-upload-label">Choisir un document</span></button>'+
-      '<span id="pj-file-name" style="margin-left:12px;font-size:12px;color:var(--muted)"></span>'+
+      '<input type="file" id="pj-file" style="margin-bottom:10px"><button class="btn btn-accent btn-sm" id="btn-pj-upload">Ajouter un document</button>'+
       '<table class="data-table" style="margin-top:16px"><thead><tr><th>Fichier</th><th>Taille</th><th>Date</th><th></th></tr></thead><tbody>'+
       (rows||'<tr><td colspan="4" style="color:var(--muted)">Aucun document</td></tr>')+'</tbody></table></div>';
   });
@@ -3223,12 +3187,7 @@ function bindDetailEvents() {
     });
   });
   document.getElementById('btn-envoyer')?.addEventListener('click', () => {
-    // Nombre pertinent = ceux qui seront réellement contactés côté backend
-    // (POST /envoyer ne traite que statut='invite' AND date_envoi IS NULL).
-    const st = S.ao ? S.ao.statut : null;
-    const n = st === 'brouillon'
-      ? (S.detail.fournisseurs||[]).length
-      : (S.detail.fournisseurs||[]).filter(f => !f.date_envoi && f.statut === 'invite').length;
+    const n = (S.detail.fournisseurs||[]).length;
     openModalConfirmEnvoi(n);
   });
   document.getElementById('btn-cloturer')?.addEventListener('click', openCloturerAoModal);
@@ -3513,7 +3472,7 @@ function render() {
     window.MySifaDock.bootPageWidgets();
   }
   const loads = await Promise.allSettled([loadList(), loadCarnet(), loadProduits(), loadMatieresForProduit()]);
-  const labels = ['appels d\'offres', 'carnet fournisseurs', 'produits', 'matières'];
+  const labels = ['appels d\'offre', 'carnet fournisseurs', 'produits', 'matières'];
   const errors = [];
   loads.forEach((res, i) => {
     if (res.status === 'rejected') {

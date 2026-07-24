@@ -5335,7 +5335,7 @@ const QUALITE_TASKS_BY_SERVICE = {
     label: "Commercial",
     icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
     tasks: [
-      "Consulter les certifs pour répondre aux appels d'offres",
+      "Consulter les certifs pour répondre aux appels d'offre",
       "Documenter les capacités environnementales en propositions client",
     ]
   },
@@ -5468,7 +5468,7 @@ const QUALITE_TASKS_MODULES = {
       label: "Commercial",
       icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
       tasks: [
-        "Consulter les fiches pour répondre aux appels d'offres",
+        "Consulter les fiches pour répondre aux appels d'offre",
         "Copier les réponses type dans les propositions client",
       ]
     },
@@ -5522,7 +5522,7 @@ function _qualiteGuides(){
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
           title: "Ressources & Référentiel",
-          body: `L'onglet <span class="qguide-hl">Ressources fournisseurs</span> centralise <strong>un dossier par fournisseur</strong> avec ses certificats (ISO, FSC, REACH…) et le suivi des expirations. Les fournisseurs d'un même <strong>groupe</strong> (ex. Fedrigoni Italy/France/UK) sont regroupés sous une seule carte. L'onglet <span class="qguide-hl">Référentiel RSE</span> est la <strong>bibliothèque des normes</strong> avec définitions, statut SIFA et réponses type prêtes pour les appels d'offres.`,
+          body: `L'onglet <span class="qguide-hl">Ressources fournisseurs</span> centralise <strong>un dossier par fournisseur</strong> avec ses certificats (ISO, FSC, REACH…) et le suivi des expirations. Les fournisseurs d'un même <strong>groupe</strong> (ex. Fedrigoni Italy/France/UK) sont regroupés sous une seule carte. L'onglet <span class="qguide-hl">Référentiel RSE</span> est la <strong>bibliothèque des normes</strong> avec définitions, statut SIFA et réponses type prêtes pour les appels d'offre.`,
           illu: QUALITE_MOCKUPS.ovResRef
         },
       ]
