@@ -7147,6 +7147,14 @@ Ressources :
     # donnÃ©es antÃ©rieures ont un compteur Ã  0. Cette migration re-calcule
     # usage_count Ã  partir du vrai nombre d'ops enregistrÃ©es.
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
+        # Guard défensif : la migration 182 (maintenance_codes_libre_and_usage_count)
+        # a pu être perdue lors d'un merge foireux — on la recrée ici si les colonnes
+        # ne sont pas présentes, avant de tenter le backfill sinon l'UPDATE crashe.
+        _mc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "libre" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN libre INTEGER NOT NULL DEFAULT 0")
+        if "usage_count" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0")
         conn.execute(
             """UPDATE maintenance_codes
                SET usage_count = COALESCE((
@@ -7385,82 +7393,6 @@ Ressources :
     # Nom du représentant SIFA qui signe la Déclaration UE — utilisé dans la
     # section 8 (Signature). Champ optionnel : si absent, la section 8 affiche
     # des lignes vierges pour saisie manuscrite.
-<<<<<<< HEAD
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=206 LIMIT 1").fetchone():
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_versions)").fetchall()}
-        if "representant" not in cols:
-            conn.execute("ALTER TABLE qualite_sifa_doc_versions ADD COLUMN representant TEXT")
-        conn.commit()
-        _record_schema_migration(conn, 206, "sifa_doc_versions_representant")
-
-    # Migration 207 : default_body_overrides_json sur qualite_sifa_doc_templates.
-    # Permet aux admins Qualité d'éditer les textes par défaut d'un template
-    # (les SEC_*_BODY hardcodés du service PDF). Priorité à la génération :
-    #   1. version.sections_overrides_json.<sec_id>.custom_body (par client)
-    #   2. template.default_body_overrides_json.<sec_id>          (par template)
-    #   3. SEC_*_BODY hardcodé dans le service PDF                (défaut usine)
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=207 LIMIT 1").fetchone():
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_templates)").fetchall()}
-        if "default_body_overrides_json" not in cols:
-            conn.execute("ALTER TABLE qualite_sifa_doc_templates ADD COLUMN default_body_overrides_json TEXT")
-        conn.commit()
-        _record_schema_migration(conn, 207, "sifa_doc_templates_default_body_overrides")
-
-
-
-
-    # v2.3.12 — Migration placement et size des réglages globaux vers chaque
-    # alerte existante. Après cette migration, chaque alerte porte ses propres
-    # valeurs (défaut top-right + medium si le singleton n'existe pas).
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=205 LIMIT 1").fetchone():
-        try:
-            import json as _json_mig
-            # Lire le singleton actuel
-            row = conn.execute(
-                "SELECT placement, size FROM maintenance_alert_settings WHERE id=1 LIMIT 1"
-            ).fetchone()
-            _default_placement = "top-right"
-            _default_size = "medium"
-            if row:
-                _default_placement = row["placement"] or "top-right"
-                _default_size = row["size"] or "medium"
-            # Parcourir toutes les alertes et injecter les valeurs si absentes
-            alerts = conn.execute(
-                "SELECT id, params FROM maintenance_alerts"
-            ).fetchall()
-            for a in alerts:
-                try:
-                    p = _json_mig.loads(a["params"] or "{}")
-                except Exception:
-                    p = {}
-                changed = False
-                if not p.get("placement"):
-                    p["placement"] = _default_placement
-                    changed = True
-                if not p.get("size"):
-                    p["size"] = _default_size
-                    changed = True
-                if changed:
-                    conn.execute(
-                        "UPDATE maintenance_alerts SET params=?, updated_at=datetime('now') WHERE id=?",
-                        (_json_mig.dumps(p, ensure_ascii=False), a["id"]),
-                    )
-            conn.commit()
-        except Exception:
-            pass
-        _record_schema_migration(conn, 205, "alerts_placement_size_per_alert")
-
-
-    # Migration 206 — Séries pour lignes d'AO.
-    # Un produit d'un AO peut être décliné en plusieurs séries (même produit, légère
-    # différence — souvent une variation d'impression). La somme des quantités des
-    # séries d'une ligne doit égaler la quantité de la ligne mère (contrainte
-    # applicative, pas de trigger SQL pour rester simple).
-    #
-    # ao_reponses.serie_id (nullable) : permet à un fournisseur de coter une série
-    # spécifiquement. NULL = cotation au niveau ligne (comportement historique).
-=======
->>>>>>> feature/myao-improvements
     if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=206 LIMIT 1").fetchone():
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(qualite_sifa_doc_versions)").fetchall()}
         if "representant" not in cols:
@@ -7592,6 +7524,31 @@ Ressources :
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fournisseurs_siret ON fournisseurs_fsc(siret) WHERE siret IS NOT NULL")
         conn.commit()
         _record_schema_migration(conn, 214, "fournisseurs_fsc_identite_fiscale")
+
+    # Migration 215 : Besoins matières — table de mapping fiche technique → MP.
+    # Permet de calculer les besoins en matières premières à partir des dossiers
+    # de production en cours/attente (planning_entries), en associant les champs
+    # texte des fiches techniques (support, adhesif, mandrin_dia, cartons,
+    # palette_type) à des références concrètes de matieres_premieres.
+    # Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (superadmin, direction,
+    # administration, administration_ventes, administration_technique).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=215 LIMIT 1").fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS mp_fiche_mapping (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind         TEXT NOT NULL,
+                source_value TEXT NOT NULL,
+                matiere_id   INTEGER NOT NULL REFERENCES matieres_premieres(id) ON DELETE CASCADE,
+                notes        TEXT,
+                created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                UNIQUE(kind, source_value COLLATE NOCASE)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mpfm_kind ON mp_fiche_mapping(kind)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_mpfm_matiere ON mp_fiche_mapping(matiere_id)")
+        conn.commit()
+        _record_schema_migration(conn, 215, "mp_fiche_mapping")
 
 
 
