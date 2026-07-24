@@ -2170,6 +2170,48 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             return {"dossiers": [dict(r) for r in rows]}
 
 
+@router.put("/api/fabrication/matieres/{matiere_id}/commentaire")
+async def update_matiere_commentaire(matiere_id: int, request: Request):
+    """Ajoute ou modifie le commentaire libre d'une bobine scannée."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    commentaire = (body.get("commentaire") or "").strip() or None
+    from_tracabilite = bool(body.get("tracabilite"))
+
+    operateur = user.get("operateur_lie") or ""
+    if not operateur:
+        operateur = user.get("nom") or ""
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM fab_matieres_utilisees WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Scan non trouvé")
+        if not _can_edit_matiere_scan(
+            user, dict(ex), operateur, from_tracabilite=from_tracabilite
+        ):
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+        conn.execute(
+            "UPDATE fab_matieres_utilisees SET commentaire=? WHERE id=?",
+            (commentaire, matiere_id),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Commentaire bobine #{matiere_id}",
+        detail={"no_dossier": ex["no_dossier"], "code_barre": ex["code_barre"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
+
+
 @router.put("/api/fabrication/saisie/{saisie_id}/commentaire")
 async def update_commentaire(saisie_id: int, request: Request):
     """Ajoute ou modifie le commentaire d'une saisie existante."""

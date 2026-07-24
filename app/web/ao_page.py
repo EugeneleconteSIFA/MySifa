@@ -3319,18 +3319,53 @@ function bindDetailEvents() {
       await loadMessages(S.ao.id, S.messages_fourni); render();
     } catch(e) { showToast(e.message, 'danger'); }
   });
-  document.getElementById('btn-pj-upload')?.addEventListener('click', async () => {
-    const f = document.getElementById('pj-file').files[0];
-    if (!f) { showToast('Choisissez un fichier.', 'danger'); return; }
-    if (f.size > 10*1024*1024) { showToast('Fichier trop volumineux (max 10 Mo).', 'danger'); return; }
-    const fd = new FormData();
-    fd.append('file', f);
-    try {
-      await api('/api/ao/'+S.ao.id+'/pieces-jointes', {method:'POST', body: fd});
-      showToast('Document ajouté.', 'success');
-      render();
-    } catch(e) { showToast(e.message, 'danger'); }
-  });
+  // Bouton document tout-en-un : premier clic ouvre le file picker ; onchange déclenche l'upload direct.
+  const pjFile = document.getElementById('pj-file');
+  const pjBtnLabel = document.getElementById('btn-pj-upload-label');
+  const pjFileName = document.getElementById('pj-file-name');
+  const pjBtn = document.getElementById('btn-pj-upload');
+  if (pjBtn && pjFile) {
+    pjBtn.addEventListener('click', async () => {
+      const f = pjFile.files[0];
+      if (!f) {
+        // Pas de fichier : ouvre le picker
+        pjFile.click();
+        return;
+      }
+      // Sinon : upload direct
+      if (f.size > 10*1024*1024) { showToast('Fichier trop volumineux (max 10 Mo).', 'danger'); return; }
+      pjBtn.disabled = true;
+      const fd = new FormData();
+      fd.append('file', f);
+      try {
+        await api('/api/ao/'+S.ao.id+'/pieces-jointes', {method:'POST', body: fd});
+        showToast('Document ajouté.', 'success');
+        render();
+      } catch(e) {
+        showToast(e.message, 'danger');
+        pjBtn.disabled = false;
+      }
+    });
+    pjFile.addEventListener('change', async () => {
+      const f = pjFile.files[0];
+      if (!f) { if (pjBtnLabel) pjBtnLabel.textContent = 'Choisir un document'; if (pjFileName) pjFileName.textContent = ''; return; }
+      if (f.size > 10*1024*1024) { showToast('Fichier trop volumineux (max 10 Mo).', 'danger'); pjFile.value = ''; return; }
+      // Upload direct au moment où le fichier est sélectionné
+      if (pjFileName) pjFileName.textContent = f.name;
+      if (pjBtnLabel) pjBtnLabel.textContent = 'Ajouter le document';
+      pjBtn.disabled = true;
+      const fd = new FormData();
+      fd.append('file', f);
+      try {
+        await api('/api/ao/'+S.ao.id+'/pieces-jointes', {method:'POST', body: fd});
+        showToast('Document ajouté.', 'success');
+        render();
+      } catch(e) {
+        showToast(e.message, 'danger');
+        pjBtn.disabled = false;
+      }
+    });
+  }
   document.querySelectorAll('.btn-del-pj').forEach(b => b.addEventListener('click', async () => {
     if (!confirm('Supprimer ce document ?')) return;
     try {

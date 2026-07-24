@@ -1295,7 +1295,59 @@ async def update_produit(request: Request, produit_id: int):
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
+        # Regénère les fiches PDF attachées aux AO ouverts qui utilisent
+        # cette référence (brouillon ou envoyé, pas clôturé) — idempotent.
+        try:
+            _regen_fiches_for_ref(conn, ref)
+            conn.commit()
+        except Exception:
+            logger.exception("Regen fiches PDF sur update produit %s échoué", produit_id)
         return _serialize_produit_row(_row_dict(row), conn)
+
+
+def _regen_fiches_for_ref(conn, ref_produit: str) -> None:
+    """Regénère la fiche PDF fournisseur pour tous les AO ouverts utilisant
+    cette référence. Ne touche pas aux AO clôturés."""
+    if not ref_produit:
+        return
+    aos = conn.execute(
+        """SELECT DISTINCT d.id, d.reference
+           FROM ao_demandes d
+           JOIN ao_lignes l ON l.ao_id = d.id
+           WHERE l.ref_produit = ?
+             AND d.statut IN ('brouillon', 'envoyee')
+             AND d.deleted_at IS NULL""",
+        (ref_produit,),
+    ).fetchall()
+    if not aos:
+        return
+    produits_map = _produits_by_ref_map(conn)
+    now_iso = _now_paris_iso()
+    for ao in aos:
+        # Supprime les PJ auto existantes pour cette ref (nom idempotent)
+        ref_clean = re.sub(r"[^\w\-]+", "_", ref_produit.split(" - ")[0])
+        fname = f"fiche_fournisseur_{ref_clean}.pdf"
+        pjs_to_del = conn.execute(
+            "SELECT id, stored_name FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
+            (int(ao["id"]), fname),
+        ).fetchall()
+        for pj in pjs_to_del:
+            try:
+                path = os.path.join(_ao_upload_dir(int(ao["id"])), pj["stored_name"])
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+        if pjs_to_del:
+            conn.execute(
+                "DELETE FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
+                (int(ao["id"]), fname),
+            )
+        _auto_attach_fournisseur_pdfs(
+            conn, int(ao["id"]), ao["reference"],
+            [{"ref_produit": ref_produit}],
+            produits_map, now_iso,
+        )
 
 
 @router.delete("/produits/{produit_id}")
@@ -2053,6 +2105,19 @@ async def add_ligne(request: Request, ao_id: int):
         ligne = conn.execute(
             "SELECT * FROM ao_lignes WHERE id=?", (cur.lastrowid,)
         ).fetchone()
+        # Auto-attach : génère la fiche PDF fournisseur pour ce produit dès
+        # l'ajout de la ligne (pas seulement à l'envoi).
+        try:
+            now_iso = _now_paris_iso()
+            produits_map = _produits_by_ref_map(conn)
+            _auto_attach_fournisseur_pdfs(
+                conn, ao_id, ao.get("reference"),
+                [{"ref_produit": ref_produit}],
+                produits_map, now_iso,
+            )
+            conn.commit()
+        except Exception:
+            logger.exception("Auto-attach fiche PDF à l'ajout ligne échoué (AO %s)", ao_id)
     return _row_dict(ligne)
 
 
