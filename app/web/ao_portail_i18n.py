@@ -64,7 +64,7 @@ PORTAIL_I18N = {
         "noDocSifa": "Aucun document fourni.",
         "noDocYours": "Aucun document joint.",
         "download": "Télécharger",
-        "attachDoc": "Joindre un document",
+        "attachDoc": "Choisir un document",
         "listBannerTitle": "Mes demandes de prix",
         "listBannerText": (
             "Toutes les demandes envoyées à l'adresse <strong>__EMAIL__</strong>. "
@@ -141,7 +141,7 @@ PORTAIL_I18N = {
         "noDocSifa": "No document provided.",
         "noDocYours": "No attachment.",
         "download": "Download",
-        "attachDoc": "Attach a document",
+        "attachDoc": "Choose a document",
         "listBannerTitle": "My quote requests",
         "listBannerText": (
             "All requests sent to <strong>__EMAIL__</strong>. "

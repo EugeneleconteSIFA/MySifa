@@ -819,24 +819,21 @@ function renderDocuments() {{
 
   if (!cloture) {{
     html += '<div style="margin-top:16px">' +
-      '<input type="file" id="pj-file" style="margin-bottom:10px">' +
-      '<button type="button" class="btn" id="btn-pj">' + escHtml(t("attachDoc")) + '</button></div>';
+      '<input type="file" id="pj-file" style="display:none">' +
+      '<button type="button" class="btn" id="btn-pj">' + escHtml(t("attachDoc")) + '</button>' +
+      '<span id="pj-file-name" style="margin-left:12px;font-size:12px;color:var(--muted)"></span></div>';
   }}
 
   el.innerHTML = html;
-  document.getElementById("btn-pj")?.addEventListener("click", async () => {{
-    const input = document.getElementById("pj-file");
-    const f = input?.files?.[0];
-    if (!f) {{
-      showToast(t("toastChooseFile"), "danger");
-      return;
-    }}
+  const pjInput = document.getElementById("pj-file");
+  const pjBtn = document.getElementById("btn-pj");
+  const pjName = document.getElementById("pj-file-name");
+  async function uploadFile(f) {{
     if (f.size > 15 * 1024 * 1024) {{
       showToast(t("toastFileTooBig"), "danger");
       return;
     }}
-    const btn = document.getElementById("btn-pj");
-    if (btn) btn.disabled = true;
+    if (pjBtn) pjBtn.disabled = true;
     const fd = new FormData();
     fd.append("file", f);
     try {{
@@ -844,12 +841,24 @@ function renderDocuments() {{
       showToast(t("toastDocAttached"), "success");
       S.data = await api("/api/portail/ao/" + TOKEN);
       renderDocuments();
-      if (input) input.value = "";
+      if (pjInput) pjInput.value = "";
+      if (pjName) pjName.textContent = "";
     }} catch (e) {{
       showToast(e.message, "danger");
     }} finally {{
-      if (btn) btn.disabled = false;
+      if (pjBtn) pjBtn.disabled = false;
     }}
+  }}
+  pjBtn?.addEventListener("click", async () => {{
+    const f = pjInput?.files?.[0];
+    if (!f) {{ pjInput?.click(); return; }}
+    await uploadFile(f);
+  }});
+  pjInput?.addEventListener("change", async () => {{
+    const f = pjInput?.files?.[0];
+    if (!f) return;
+    if (pjName) pjName.textContent = f.name;
+    await uploadFile(f);
   }});
 }}
 

@@ -655,12 +655,27 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-link{font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
 .fab-traca-link.ok{color:var(--success)}
 .fab-traca-link.bad{color:var(--danger)}
-.fab-traca-del{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
-  border-radius:4px;transition:color .12s}
-.fab-traca-del:hover{color:var(--danger)}
-.fab-traca-print{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
-  border-radius:4px;transition:color .12s;margin-right:2px}
-.fab-traca-print:hover{color:var(--accent)}
+.fab-traca-actions{
+  display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;
+}
+.fab-traca-print,.fab-traca-del,.fab-traca-comment{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;padding:0;border-radius:8px;
+  background:var(--bg);border:1px solid var(--border);
+  color:var(--text2);cursor:pointer;transition:all .12s;
+}
+.fab-traca-print:hover{
+  background:var(--accent);border-color:var(--accent);color:#fff;
+}
+.fab-traca-comment:hover{
+  background:#3b82f6;border-color:#3b82f6;color:#fff;
+}
+.fab-traca-comment.has-comment{
+  background:rgba(59,130,246,.12);border-color:#3b82f6;color:#3b82f6;
+}
+.fab-traca-del:hover{
+  background:var(--danger);border-color:var(--danger);color:#fff;
+}
 .fab-traca-print:disabled{opacity:.5;cursor:not-allowed}
 .fab-traca-fsc-warn{
   display:inline-flex;align-items:center;justify-content:center;
@@ -1070,6 +1085,9 @@ let S = {
   showFinModal: false,
   showCommentModal: false,
   commentSaisieId: null,
+  showTracaCommentModal: false,
+  tracaCommentId: null,
+  tracaCommentText: '',
   showArret50Modal: false,
   arret50Comment: '',
 
@@ -1236,7 +1254,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showTracaCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1755,6 +1773,27 @@ async function saveComment(){
     Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, loading:false});
     render();
     _fabRestoreUiState(ui);
+  }catch(e){
+    showToast('Erreur : '+e.message,'danger');
+    set({loading:false});
+  }
+}
+
+async function saveTracaComment(){
+  const id = S.tracaCommentId;
+  if(!id) return;
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/matieres/'+id+'/commentaire',{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({commentaire: S.tracaCommentText||''}),
+    });
+    const cleaned = (S.tracaCommentText||'').trim();
+    const m = Array.isArray(S.tracaMatieres) ? S.tracaMatieres.find(x=>x.id===id) : null;
+    if(m) m.commentaire = cleaned || null;
+    showToast('Commentaire enregistré');
+    Object.assign(S, {showTracaCommentModal:false, tracaCommentText:'', tracaCommentId:null, loading:false});
+    render();
   }catch(e){
     showToast('Erreur : '+e.message,'danger');
     set({loading:false});
@@ -3165,8 +3204,9 @@ function tracaShowFicheManuelle(codeBarre){
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px';
 
+    const dlId = 'fiche-fournisseurs-dl-'+Math.random().toString(36).slice(2,8);
     const opts = list.map(f =>
-      `<option value="${escAttr(String(f.id))}">${escHtml(f.nom)}</option>`
+      `<option value="${escAttr(f.nom||'')}"></option>`
     ).join('');
 
     overlay.innerHTML = `
@@ -3181,14 +3221,13 @@ function tracaShowFicheManuelle(codeBarre){
 
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;
                       letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
-          Sélectionner le fournisseur
+          Rechercher le fournisseur
         </label>
-        <select id="fiche-fournisseur-select"
-                style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-                       background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit">
-          <option value="">— Choisir un fournisseur —</option>
-          ${opts}
-        </select>
+        <input id="fiche-fournisseur-input" type="text" list="${dlId}"
+               placeholder="Tapez pour rechercher…" autocomplete="off" spellcheck="false"
+               style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+                      background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit;box-sizing:border-box"/>
+        <datalist id="${dlId}">${opts}</datalist>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
@@ -3214,14 +3253,18 @@ function tracaShowFicheManuelle(codeBarre){
 
     document.body.appendChild(overlay);
 
-    const sel = overlay.querySelector('#fiche-fournisseur-select');
+    const inp = overlay.querySelector('#fiche-fournisseur-input');
     const nomEl = overlay.querySelector('#fiche-fournisseur-nom');
     const licEl = overlay.querySelector('#fiche-fournisseur-licence');
     const btn = overlay.querySelector('#fiche-manual-confirm');
 
+    function findFournisseur(){
+      const val = (inp?.value || '').trim().toLowerCase();
+      if(!val) return null;
+      return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
+    }
     function updateLicence(){
-      const fid = sel?.value;
-      const f = list.find(x => String(x.id) === fid);
+      const f = findFournisseur();
       if(f){
         if(nomEl){ nomEl.textContent = f.nom; nomEl.style.color = 'var(--text)'; }
         if(licEl){ licEl.textContent = f.licence || '—'; licEl.style.color = 'var(--text)'; }
@@ -3232,7 +3275,11 @@ function tracaShowFicheManuelle(codeBarre){
         if(btn){ btn.disabled = true; btn.style.opacity = '.5'; }
       }
     }
-    if(sel) sel.addEventListener('change', updateLicence);
+    if(inp){
+      inp.addEventListener('input', updateLicence);
+      inp.addEventListener('change', updateLicence);
+      setTimeout(()=>inp.focus(), 50);
+    }
 
     overlay.querySelector('#fiche-manual-cancel').onclick = () => {
       overlay.remove();
@@ -3240,8 +3287,9 @@ function tracaShowFicheManuelle(codeBarre){
     };
 
     overlay.querySelector('#fiche-manual-confirm').onclick = async () => {
-      const fid = sel?.value;
-      if(!fid) return;
+      const f = findFournisseur();
+      if(!f) return;
+      const fid = f.id;
       overlay.remove();
       set({tracaAutoSaving:true});
       try{
@@ -3270,8 +3318,9 @@ function tracaAskFournisseur(){
     backdrop.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;display:flex;align-items:center;justify-content:center;padding:16px';
     const box=document.createElement('div');
     box.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;max-width:420px;width:100%';
+    const dlId = 'tf-dl-'+Math.random().toString(36).slice(2,8);
     const opts = list
-      .map(x=>`<option value="${Number(x.id)}">${escHtml(x.nom||'')}</option>`)
+      .map(x=>`<option value="${escAttr(x.nom||'')}"></option>`)
       .join('');
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
@@ -3282,10 +3331,10 @@ function tracaAskFournisseur(){
         Ce code-barres n'est lié à aucune réception matière.
       </div>
       <label style="font-size:10px;color:var(--muted);font-weight:800;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px">Fournisseur</label>
-      <select id="tf-sel" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px">
-        <option value="">— Choisir —</option>
-        ${opts}
-      </select>
+      <input id="tf-inp" type="text" list="${dlId}" placeholder="Tapez pour rechercher…"
+             autocomplete="off" spellcheck="false"
+             style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box"/>
+      <datalist id="${dlId}">${opts}</datalist>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
         <button type="button" id="tf-cancel" class="fab-btn fab-btn-ghost fab-btn-sm">Annuler</button>
         <button type="button" id="tf-ok" class="fab-btn fab-btn-primary fab-btn-sm" disabled>Valider</button>
@@ -3296,12 +3345,18 @@ function tracaAskFournisseur(){
     backdrop.onclick=(e)=>{ if(e.target===backdrop) close(null); };
     box.querySelector('#tf-close').onclick=()=>close(null);
     box.querySelector('#tf-cancel').onclick=()=>close(null);
-    box.querySelector('#tf-cancel').onclick=()=>close(null);
-    const sel = box.querySelector('#tf-sel');
+    const inp = box.querySelector('#tf-inp');
     const ok = box.querySelector('#tf-ok');
-    sel.onchange=()=>{ ok.disabled = !sel.value; };
-    ok.onclick=()=>{ const v = sel.value ? Number(sel.value) : null; close(v||null); };
+    function pick(){
+      const val = (inp.value||'').trim().toLowerCase();
+      return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
+    }
+    function refresh(){ ok.disabled = !pick(); }
+    inp.addEventListener('input', refresh);
+    inp.addEventListener('change', refresh);
+    ok.onclick=()=>{ const f = pick(); close(f ? Number(f.id) : null); };
     document.body.appendChild(backdrop);
+    setTimeout(()=>inp.focus(), 50);
   });
 }
 
@@ -3572,10 +3627,17 @@ function renderTracaPanel(){
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,timeStr),
           h('td',{style:{whiteSpace:'nowrap',textAlign:'right'}},
-            h('button',{className:'fab-traca-print',title:'Réimprimer étiquette (bobine à remettre en stock)',
-              onClick:()=>tracaReprintEtiquette(m)},svgIcon('printer',12)),
-            h('button',{className:'fab-traca-del',title:'Supprimer',
-              onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',12))
+            h('div',{className:'fab-traca-actions'},
+              h('button',{className:'fab-traca-print',title:'Réimprimer étiquette (bobine à remettre en stock)',
+                onClick:()=>tracaReprintEtiquette(m)},svgIcon('printer',14)),
+              h('button',{
+                className:'fab-traca-comment'+(m.commentaire?' has-comment':''),
+                title: m.commentaire ? ('Commentaire : '+m.commentaire) : 'Ajouter un commentaire',
+                onClick:()=>set({showTracaCommentModal:true, tracaCommentId:m.id, tracaCommentText:m.commentaire||''})
+              }, svgIcon(m.commentaire?'edit':'message-square',14)),
+              h('button',{className:'fab-traca-del',title:'Supprimer',
+                onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',14))
+            )
           )
         );
       })
@@ -5017,6 +5079,37 @@ function renderCommentModal(){
           onClick:()=>set({showCommentModal:false})},'Annuler'),
         h('button',{className:'fab-btn fab-btn-primary',
           onClick:saveComment},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
+}
+
+function renderTracaCommentModal(){
+  const ta = h('textarea',{placeholder:'Note libre sur cette bobine (anomalie, remise en stock…)',rows:'3'});
+  ta.value = S.tracaCommentText||'';
+  ta.addEventListener('input',e=>{ S.tracaCommentText=e.target.value; });
+  setTimeout(()=>ta.focus(),50);
+
+  const m = Array.isArray(S.tracaMatieres) ? S.tracaMatieres.find(x=>x.id===S.tracaCommentId) : null;
+  const code = m ? (m.code_barre||'') : '';
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showTracaCommentModal:false});}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'},svgIcon('message-square',18),' Commenter la bobine'),
+      h('div',{className:'fab-modal-sub'},
+        code ? ('Bobine '+code+' — note libre visible sur la traçabilité matières.')
+             : 'Note libre visible sur la traçabilité matières.'
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Commentaire'),
+        ta
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:()=>set({showTracaCommentModal:false})},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',
+          onClick:saveTracaComment},
           svgIcon('check',15),' Enregistrer')
       )
     )
@@ -6653,6 +6746,7 @@ function render(){
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
+  if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());
   if(S.repiquageAttentionOpen) root.appendChild(renderRepiquageAttentionModal());
   if(S.repiquageEditParamOpen) root.appendChild(renderRepiquageEditParamModal());
   if(S.repiquageAdjustOpen) root.appendChild(renderRepiquageAdjustModal());
