@@ -108,13 +108,24 @@ def _ratio_dans_fenetre(pe: dict, today: date, borne: date) -> float:
 # ── Requête source : dossiers du planning + fiches techniques ──────────
 
 _SQL_DOSSIERS = """
-    SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
-           pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
-           pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
-           pe.position,
-           m.nom AS machine_nom,
-           oi.qte_etiquettes AS qte_etiquettes,
-           oi.qte_bobines    AS qte_bobines,
+    WITH pe_ext AS (
+        -- Étape 1 : on matérialise planning_entries + machine + of_imports.
+        -- Le CTE permet à la sous-requête corrélée sur fiches_techniques
+        -- (ci-dessous) d'accéder à `pe_ext.machine_nom` comme une colonne
+        -- normale, sans corrélation à 2 niveaux (que SQLite ne supporte pas).
+        SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
+               pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
+               pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
+               pe.position,
+               m.nom AS machine_nom,
+               oi.qte_etiquettes AS qte_etiquettes,
+               oi.qte_bobines    AS qte_bobines
+        FROM planning_entries pe
+        LEFT JOIN machines m ON m.id = pe.machine_id
+        LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
+        WHERE pe.statut IN ('attente', 'en_cours')
+    )
+    SELECT pe_ext.*,
            ft.id                         AS ft_id,
            ft.support                    AS ft_support,
            ft.adhesif                    AS ft_adhesif,
@@ -128,20 +139,15 @@ _SQL_DOSSIERS = """
            ft.palette_type               AS ft_palette_type,
            ft.palette_nb_cartons_sol     AS ft_palette_nb_cartons_sol,
            ft.palette_nb_cartons_hauteur AS ft_palette_nb_cartons_hauteur
-    FROM planning_entries pe
-    LEFT JOIN machines m ON m.id = pe.machine_id
-    LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
+    FROM pe_ext
     LEFT JOIN fiches_techniques ft ON ft.id = (
         SELECT ft2.id FROM fiches_techniques ft2
         WHERE COALESCE(NULLIF(TRIM(ft2.ref_produit_norm), ''), LOWER(TRIM(ft2.reference)))
-            = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''), LOWER(TRIM(pe.ref_produit)))
+            = COALESCE(NULLIF(TRIM(pe_ext.ref_produit_norm), ''), LOWER(TRIM(pe_ext.ref_produit)))
         ORDER BY
           CASE
-            -- Tie-breaker : préférer la fiche dont la machine correspond au dossier.
-            -- SQLite ne résout pas m.nom (alias JOIN outer) depuis cette sous-requête
-            -- corrélée : on refait le lookup via pe.machine_id.
-            WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(COALESCE(
-                  (SELECT nom FROM machines WHERE id = pe.machine_id), '')))
+            -- Tie-breaker machine : accès direct à pe_ext.machine_nom (résolu par le CTE).
+            WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(COALESCE(pe_ext.machine_nom,'')))
                  AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
             WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
             ELSE 2
@@ -149,8 +155,7 @@ _SQL_DOSSIERS = """
           ft2.id
         LIMIT 1
     )
-    WHERE pe.statut IN ('attente', 'en_cours')
-    ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position
+    ORDER BY COALESCE(pe_ext.planned_start, pe_ext.date_livraison, '9999'), pe_ext.position
 """
 
 
