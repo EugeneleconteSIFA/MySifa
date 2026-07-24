@@ -4187,15 +4187,9 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     # compteur à zéro et déclenche la grâce de 5 min à la reprise.
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
-<<<<<<< HEAD
            WHERE machine=? AND operation_code NOT IN ('03', '88')
            AND operation_code IS NOT NULL AND operation_code != ''""" + _excl_sql,
         (machine,) + _excl_params,
-=======
-           WHERE machine=? AND operation_code NOT IN ('01', '03', '88')
-           AND operation_code IS NOT NULL AND operation_code != ''""",
-        (machine,),
->>>>>>> feature/myao-improvements
     ).fetchone()
     last_stop_iso = last_stop_row["m"] if last_stop_row else None
     last_stop_dt = _parse_paris_dt(last_stop_iso)
@@ -4204,26 +4198,15 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     if last_stop_iso:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-<<<<<<< HEAD
                WHERE machine=? AND operation_code IN ('03', '88')
                AND date_operation > ?""" + _excl_sql,
             (machine, last_stop_iso) + _excl_params,
-=======
-               WHERE machine=? AND operation_code IN ('01', '03', '88')
-               AND date_operation > ?""",
-            (machine, last_stop_iso),
->>>>>>> feature/myao-improvements
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-<<<<<<< HEAD
                WHERE machine=? AND operation_code IN ('03', '88')""" + _excl_sql,
             (machine,) + _excl_params,
-=======
-               WHERE machine=? AND operation_code IN ('01', '03', '88')""",
-            (machine,),
->>>>>>> feature/myao-improvements
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
     if not session_start_dt:
@@ -4747,7 +4730,6 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
     return {"ok": True}
 
 
-<<<<<<< HEAD
 def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str, exclude_saisie_id: int = None):
     """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
     target couvre cette machine, quand l'opérateur saisit un code non-productif
@@ -4849,8 +4831,6 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
         pass
 
 
-=======
->>>>>>> feature/myao-improvements
 @router.post("/api/maintenance/alerts/{alert_id}/ack")
 async def maintenance_alerts_ack(alert_id: int, request: Request):
     """Acquittement opérateur d'une alerte. Enregistre l'historique et met
