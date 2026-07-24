@@ -234,6 +234,14 @@ def ligne_context_from_produit(
         frontal = mp_label(mat.get("frontal_id"))
         adhesif = mp_label(mat.get("adhesif_id"))
         etiquettes_par_bobine = _float_or_none(bob.get("nb_etiquettes"))
+        cond = fiche.get("conditionnement") or {}
+        cart = cond.get("carton") or {}
+        pal = cond.get("palette") or {}
+        bobines_carton = _float_or_none(cart.get("bobines_carton"))
+        cartons_palette = _float_or_none(pal.get("cartons_palette"))
+    else:
+        bobines_carton = None
+        cartons_palette = None
 
     qte = _float_or_none(quantite)
 
@@ -243,5 +251,7 @@ def ligne_context_from_produit(
         "frontal": frontal,
         "adhesif": adhesif,
         "etiquettes_par_bobine": etiquettes_par_bobine,
+        "bobines_carton": bobines_carton,
+        "cartons_palette": cartons_palette,
         "quantite_etiquettes": qte,
     }
