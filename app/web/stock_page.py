@@ -368,9 +368,9 @@ body.light .btn:not(.btn-ghost):not(.btn-soft){color:#fff}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 body.light .btn.btn-ghost{color:var(--text2)}
 body.light .btn.btn-ghost:hover{color:var(--accent)}
-.btn-ghost.mp-back-btn{background:var(--card);color:var(--text);border-color:var(--border);font-weight:700}
-.btn-ghost.mp-back-btn:hover{background:var(--card);border-color:var(--accent);color:var(--accent);filter:brightness(1.05)}
-body.light .btn-ghost.mp-back-btn{color:var(--text)}
+.btn-ghost.mp-back-btn{background:var(--accent-bg);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:700}
+.btn-ghost.mp-back-btn:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);border-color:var(--accent);color:var(--accent)}
+body.light .btn-ghost.mp-back-btn{color:var(--accent)}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 body.light .btn-sm{color:#fff}
@@ -602,16 +602,13 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   .dash-quick-btn-icon{width:36px;height:36px;border-radius:10px}
   .dash-quick-btn-label{font-size:11px}
 }
-.dash-section{border-top:1px solid var(--border);padding-top:26px;margin-top:26px}
-.dash-section-title{font-size:17px;font-weight:800;text-transform:none;letter-spacing:-.01em;
-  color:var(--text);margin:0 0 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;line-height:1.3}
-.dash-section-title > *:first-child{border-left:4px solid var(--accent);padding-left:12px;
-  flex:1;min-width:0;display:block}
-.dash-section-toggle{background:var(--card);border:1px solid var(--border);border-radius:8px;
-  color:var(--text);font-size:12px;font-weight:600;padding:6px 14px;cursor:pointer;
-  text-transform:none;letter-spacing:0;transition:border-color .15s,color .15s,filter .15s;line-height:1.4;
-  flex-shrink:0}
-.dash-section-toggle:hover{border-color:var(--accent);color:var(--accent);filter:brightness(1.05)}
+.dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
+.dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between}
+.dash-section-toggle{background:none;border:1px solid var(--border);border-radius:6px;
+  color:var(--muted);font-size:11px;font-weight:500;padding:3px 8px;cursor:pointer;
+  text-transform:none;letter-spacing:0;transition:border-color .15s,color .15s;line-height:1.4}
+.dash-section-toggle:hover{border-color:var(--accent);color:var(--accent)}
 .dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
   display:flex;flex-direction:column;min-height:100px}
 .dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
@@ -719,9 +716,10 @@ body.light .mp-search-wrap:focus-within{
 .mp-card-stock-mini{font-size:12px;font-weight:600;color:var(--muted);margin-top:4px;line-height:1.3}
 .mp-card-stock-mini.alert{color:var(--warn)}
 .mp-act-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;
-  border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);cursor:pointer;
+  border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:8px;
+  background:var(--accent-bg);color:var(--accent);cursor:pointer;
   flex-shrink:0;transition:border-color .15s,color .15s,background .15s,filter .15s;font-family:inherit}
-.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--card);filter:brightness(1.05)}
+.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);filter:brightness(1.05)}
 .action-bar .mp-act-icon{height:auto;min-height:44px;width:44px}
 .mp-card-des{font-size:13px;color:var(--text2);line-height:1.4}
 .mp-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
@@ -2578,6 +2576,48 @@ async function loadInventaireMatieres() {
   } finally {
     S.matInvLoading = false;
     renderContent();
+  }
+}
+
+// ── Besoins matières ─────────────────────────────────────────────
+async function loadBesoinsMatieres() {
+  S.besoinsLoading = true;
+  renderContent();
+  try {
+    const [parEch, parDos] = await Promise.all([
+      api('/api/stock/besoins-matieres/par-echeance'),
+      api('/api/stock/besoins-matieres/par-dossier'),
+    ]);
+    S.besoinsEcheance = parEch || { lignes: [] };
+    S.besoinsDossiers = parDos || { dossiers: [] };
+    if (!S.besoinsView) S.besoinsView = 'echeance';
+    if (!S.matList || !S.matList.length) {
+      try {
+        const m = await api('/api/stock/matieres');
+        S.matList = Array.isArray(m) ? m : (m && m.items) || [];
+      } catch(e) { /* silencieux */ }
+    }
+  } catch(e) {
+    S.besoinsEcheance = { lignes: [] };
+    S.besoinsDossiers = { dossiers: [] };
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.besoinsLoading = false;
+    renderContent();
+  }
+}
+
+async function saveBesoinMapping(kind, sourceValue, matiereId) {
+  try {
+    await api('/api/stock/besoins-matieres/mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, source_value: sourceValue, matiere_id: matiereId }),
+    });
+    showToast('Correspondance enregistrée', 'success');
+    await loadBesoinsMatieres();
+  } catch(e) {
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
   }
 }
 
@@ -12523,6 +12563,477 @@ function invV2BuildListItems(container, items) {
 }
 
 // ── Inventaire matière (par référence) — onglet dédié ──────────────
+// ══════════════════════════════════════════════════════════════════
+// ── Besoins matières (onglet MyStock) ────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+const BESOINS_KIND_LABELS = {
+  support: 'Support', adhesif: 'Adhésif', mandrin: 'Mandrin',
+  carton: 'Carton', palette: 'Palette',
+};
+const BESOINS_KIND_ORDER = ['support', 'adhesif', 'mandrin', 'carton', 'palette'];
+
+function _fmtQte(n, unite) {
+  if (n == null || isNaN(n)) return '—';
+  const rounded = n >= 100 ? Math.round(n) : (n >= 10 ? Math.round(n * 10) / 10 : Math.round(n * 100) / 100);
+  const s = String(rounded).replace('.', ',');
+  return s + (unite ? ' ' + unite : '');
+}
+
+function _fmtDate(iso) {
+  if (!iso) return '—';
+  const d = String(iso).slice(0, 10);
+  const parts = d.split('-');
+  if (parts.length !== 3) return d;
+  return parts[2] + '/' + parts[1] + '/' + parts[0].slice(2);
+}
+
+function buildBesoinsMatieres() {
+  const wrap = el('div', { cls: 'content bes-tab', style: { padding: '18px 20px 40px' } });
+
+  if (S.besoinsLoading) {
+    wrap.appendChild(el('div', { style: { padding: '40px', textAlign: 'center', color: 'var(--muted)' } }, 'Chargement…'));
+    return wrap;
+  }
+
+  const ech = S.besoinsEcheance || { lignes: [], today: '', borne_7j: '', borne_15j: '' };
+  const dos = S.besoinsDossiers || { dossiers: [] };
+  const view = S.besoinsView || 'echeance';
+
+  const nbDossiers = (dos.dossiers || []).length;
+  const nbNonMappes = (ech.lignes || []).filter(l => !l.mapped).length;
+
+  const header = el('div', { style: { marginBottom: '18px' } },
+    el('h2', { style: { margin: '0 0 6px', fontSize: '22px', fontWeight: '800', color: 'var(--text)' } }, 'Besoins matières'),
+    el('div', { style: { fontSize: '13px', color: 'var(--muted)', lineHeight: '1.5' } },
+      `${nbDossiers} dossier${nbDossiers > 1 ? 's' : ''} au planning (en cours ou en attente). `,
+      `Besoins calculés à partir des fiches techniques associées.`,
+      nbNonMappes > 0 ? el('span', { style: { color: 'var(--warning, #d97706)', fontWeight: '600', marginLeft: '6px' } },
+        `${nbNonMappes} valeur${nbNonMappes > 1 ? 's' : ''} sans correspondance MP.`) : null,
+    )
+  );
+  wrap.appendChild(header);
+
+  const btnStyle = (active) => ({
+    padding: '8px 14px', border: '1px solid var(--border)', background: active ? 'var(--accent)' : 'var(--surface)',
+    color: active ? '#fff' : 'var(--text)', fontWeight: '600', fontSize: '13px', cursor: 'pointer',
+    borderRadius: '0',
+  });
+  const toolbar = el('div', {
+    style: { display: 'flex', gap: '0', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }
+  },
+    el('div', { style: { display: 'flex', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' } },
+      el('button', {
+        style: { ...btnStyle(view === 'echeance'), borderRight: '1px solid var(--border)' },
+        on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
+      }, 'Par échéance (7j / 15j / total)'),
+      el('button', {
+        style: btnStyle(view === 'dossier'),
+        on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
+      }, 'Par dossier'),
+    ),
+    el('div', { style: { flex: '1' } }),
+    el('button', {
+      style: {
+        padding: '8px 14px', border: '1px solid var(--border)', background: 'var(--surface)',
+        color: 'var(--text)', fontWeight: '600', fontSize: '13px', cursor: 'pointer', borderRadius: '6px',
+      },
+      on: { click: () => openBesoinsMappingModal() }
+    }, 'Gérer les correspondances FT → MP'),
+    el('button', {
+      style: {
+        padding: '8px 14px', border: '1px solid var(--border)', background: 'var(--surface)',
+        color: 'var(--text)', fontWeight: '600', fontSize: '13px', cursor: 'pointer', borderRadius: '6px', marginLeft: '8px',
+      },
+      on: { click: () => loadBesoinsMatieres() }
+    }, '⟳ Actualiser'),
+  );
+  wrap.appendChild(toolbar);
+
+  if (view === 'echeance') {
+    wrap.appendChild(_buildBesoinsEcheanceTable(ech));
+  } else {
+    wrap.appendChild(_buildBesoinsDossierTable(dos));
+  }
+
+  return wrap;
+}
+
+function _buildBesoinsEcheanceTable(ech) {
+  const lignes = ech.lignes || [];
+  if (!lignes.length) {
+    return el('div', { style: { padding: '30px', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '8px' } },
+      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.'
+    );
+  }
+
+  const byKind = {};
+  lignes.forEach(l => { (byKind[l.kind] ||= []).push(l); });
+
+  const container = el('div', {});
+  BESOINS_KIND_ORDER.forEach(kind => {
+    const arr = byKind[kind];
+    if (!arr || !arr.length) return;
+    container.appendChild(_buildBesoinsKindSection(kind, arr));
+  });
+  Object.keys(byKind).forEach(k => {
+    if (BESOINS_KIND_ORDER.includes(k)) return;
+    container.appendChild(_buildBesoinsKindSection(k, byKind[k]));
+  });
+  return container;
+}
+
+function _buildBesoinsKindSection(kind, lignes) {
+  const label = BESOINS_KIND_LABELS[kind] || kind;
+  const section = el('div', { style: { marginBottom: '24px' } });
+  section.appendChild(el('h3', {
+    style: { margin: '0 0 10px', fontSize: '15px', fontWeight: '700', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.5px' }
+  }, label));
+
+  const table = el('table', {
+    style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'var(--surface)' }
+  });
+  const thStyle = 'padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);font-weight:700;color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.3px';
+  const thNumStyle = thStyle + ';text-align:right';
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', { style: thStyle, html: 'Valeur fiche technique' }),
+    el('th', { style: thStyle, html: 'Matière première' }),
+    el('th', { style: thNumStyle, html: 'Besoin 7j' }),
+    el('th', { style: thNumStyle, html: 'Besoin 15j' }),
+    el('th', { style: thNumStyle, html: 'Total' }),
+    el('th', { style: thNumStyle, html: 'Stock' }),
+    el('th', { style: thNumStyle, html: 'Manque 7j' }),
+    el('th', { style: thNumStyle, html: 'Dossiers' }),
+    el('th', { style: thStyle, html: '' }),
+  )));
+
+  const tbody = el('tbody', {});
+  let total7 = 0, total15 = 0, totalT = 0;
+  lignes.forEach(l => {
+    total7 += l.besoin_7j || 0;
+    total15 += l.besoin_15j || 0;
+    totalT += l.besoin_total || 0;
+
+    const tdStyle = 'padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle';
+    const tdNumStyle = tdStyle + ';text-align:right;font-variant-numeric:tabular-nums';
+    const rowStyle = !l.mapped
+      ? 'background:rgba(217,119,6,.08)'
+      : (l.manque_7j > 0 ? 'background:rgba(239,68,68,.06)' : '');
+
+    const matCell = l.mapped
+      ? el('td', { style: tdStyle },
+          el('div', { style: { fontWeight: '600' } }, l.matiere_ref || '—'),
+          l.matiere_designation ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, l.matiere_designation) : null,
+        )
+      : el('td', { style: tdStyle + ';color:var(--warning,#d97706);font-style:italic' }, 'Non associée');
+
+    const manqueCell = l.manque_7j != null && l.manque_7j > 0
+      ? el('td', { style: tdNumStyle + ';color:var(--danger,#dc2626);font-weight:700' }, _fmtQte(l.manque_7j, l.unite))
+      : el('td', { style: tdNumStyle + ';color:var(--muted)' }, l.mapped ? '0' : '—');
+
+    const actionCell = el('td', { style: tdStyle + ';text-align:right' },
+      el('button', {
+        style: {
+          padding: '4px 10px', border: '1px solid var(--border)', background: l.mapped ? 'var(--surface)' : 'var(--accent)',
+          color: l.mapped ? 'var(--text)' : '#fff', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', fontWeight: '600',
+        },
+        on: { click: () => openBesoinAssocierModal(l.kind, l.source_value) }
+      }, l.mapped ? 'Modifier' : 'Associer'),
+    );
+
+    tbody.appendChild(el('tr', { style: rowStyle },
+      el('td', { style: tdStyle },
+        el('div', { style: { fontWeight: '600' } }, l.source_value || '—'),
+      ),
+      matCell,
+      el('td', { style: tdNumStyle }, _fmtQte(l.besoin_7j, l.unite)),
+      el('td', { style: tdNumStyle }, _fmtQte(l.besoin_15j, l.unite)),
+      el('td', { style: tdNumStyle + ';font-weight:700' }, _fmtQte(l.besoin_total, l.unite)),
+      el('td', { style: tdNumStyle + ';color:var(--muted)' }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—'),
+      manqueCell,
+      el('td', { style: tdNumStyle + ';color:var(--muted)' }, String(l.nb_dossiers || 0)),
+      actionCell,
+    ));
+  });
+
+  const tdTotalStyle = 'padding:10px;background:var(--surface-alt,#f8f9fa);font-weight:700;border-top:2px solid var(--border)';
+  const tdTotalNumStyle = tdTotalStyle + ';text-align:right;font-variant-numeric:tabular-nums';
+  const uniteDefault = (lignes[0] && lignes[0].unite) || '';
+  tbody.appendChild(el('tr', {},
+    el('td', { style: tdTotalStyle, colspan: '2' }, `TOTAL ${label.toUpperCase()}`),
+    el('td', { style: tdTotalNumStyle }, _fmtQte(total7, uniteDefault)),
+    el('td', { style: tdTotalNumStyle }, _fmtQte(total15, uniteDefault)),
+    el('td', { style: tdTotalNumStyle }, _fmtQte(totalT, uniteDefault)),
+    el('td', { style: tdTotalStyle, colspan: '4' }, ''),
+  ));
+
+  table.appendChild(tbody);
+  section.appendChild(el('div', { style: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px' } }, table));
+  return section;
+}
+
+function _buildBesoinsDossierTable(dos) {
+  const dossiers = dos.dossiers || [];
+  if (!dossiers.length) {
+    return el('div', { style: { padding: '30px', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '8px' } },
+      'Aucun dossier de production en cours ou en attente.'
+    );
+  }
+
+  const container = el('div', {});
+  const table = el('table', {
+    style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'var(--surface)' }
+  });
+  const thStyle = 'padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);font-weight:700;color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.3px';
+  const thNumStyle = thStyle + ';text-align:right';
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', { style: thStyle, html: 'Dossier' }),
+    el('th', { style: thStyle, html: 'Client' }),
+    el('th', { style: thStyle, html: 'Machine' }),
+    el('th', { style: thStyle, html: 'Statut' }),
+    el('th', { style: thNumStyle, html: 'Étiq.' }),
+    el('th', { style: thStyle, html: 'Livraison' }),
+    el('th', { style: thStyle, html: 'Besoins' }),
+  )));
+
+  const tbody = el('tbody', {});
+  let totalEtiq = 0;
+  dossiers.forEach(d => {
+    totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
+    const tdStyle = 'padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top';
+    const tdNumStyle = tdStyle + ';text-align:right;font-variant-numeric:tabular-nums';
+    const statColor = d.statut === 'en_cours' ? 'var(--accent)' : 'var(--muted)';
+
+    const besoinsEls = (d.besoins || []).map(b => {
+      const style = !b.mapped
+        ? 'display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;background:rgba(217,119,6,.15);color:var(--warning,#d97706);border-radius:3px;font-size:11px;font-weight:600'
+        : 'display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;background:var(--accent-bg,rgba(59,130,246,.08));color:var(--text);border-radius:3px;font-size:11px';
+      const txt = `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${_fmtQte(b.quantite, b.unite)}` + (b.mapped ? '' : ' (à associer)');
+      return el('span', { style, title: b.formule || '' }, txt);
+    });
+
+    const besoinsCell = besoinsEls.length
+      ? el('td', { style: tdStyle }, ...besoinsEls)
+      : el('td', { style: tdStyle + ';color:var(--muted);font-style:italic' }, 'Aucun besoin calculé (fiche technique manquante ou incomplète)');
+
+    tbody.appendChild(el('tr', {},
+      el('td', { style: tdStyle },
+        el('div', { style: { fontWeight: '700' } }, d.reference || '—'),
+        d.numero_of ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, 'OF ' + d.numero_of) : null,
+        d.ref_produit ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, d.ref_produit) : null,
+      ),
+      el('td', { style: tdStyle }, d.client || '—'),
+      el('td', { style: tdStyle }, d.machine_nom || '—'),
+      el('td', { style: tdStyle },
+        el('span', { style: { color: statColor, fontWeight: '600', fontSize: '12px' } }, d.statut === 'en_cours' ? 'En cours' : 'En attente'),
+      ),
+      el('td', { style: tdNumStyle }, d.qte_etiquettes ? String(d.qte_etiquettes) : '—'),
+      el('td', { style: tdStyle }, _fmtDate(d.date_livraison || d.planned_end)),
+      besoinsCell,
+    ));
+  });
+
+  const tdTotalStyle = 'padding:10px;background:var(--surface-alt,#f8f9fa);font-weight:700;border-top:2px solid var(--border)';
+  tbody.appendChild(el('tr', {},
+    el('td', { style: tdTotalStyle, colspan: '4' }, `TOTAL — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
+    el('td', { style: tdTotalStyle + ';text-align:right;font-variant-numeric:tabular-nums' }, totalEtiq ? String(Math.round(totalEtiq)) : '—'),
+    el('td', { style: tdTotalStyle, colspan: '2' }, ''),
+  ));
+
+  table.appendChild(tbody);
+  container.appendChild(el('div', { style: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px' } }, table));
+  return container;
+}
+
+function openBesoinAssocierModal(kind, sourceValue) {
+  closeMroot();
+  const label = BESOINS_KIND_LABELS[kind] || kind;
+  const matList = S.matList || [];
+  const catFilter = { support: 'frontal', adhesif: 'adhesif', mandrin: 'mandrin', carton: 'carton', palette: 'palette' }[kind];
+  const filtered = catFilter
+    ? matList.filter(m => (m.categorie || '').toLowerCase() === catFilter)
+    : matList;
+  const suggested = filtered.length ? filtered : matList;
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '520px' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, `Associer ${label.toLowerCase()} → matière première`),
+    el('div', { cls: 'modal-sub' },
+      'Valeur détectée dans les fiches techniques : ',
+      el('strong', {}, sourceValue),
+    ),
+    el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text)' } }, 'Matière première'),
+    (function() {
+      const input = el('input', {
+        cls: 'field-input',
+        placeholder: 'Rechercher (référence ou désignation)…',
+        style: { width: '100%', marginBottom: '10px' }
+      });
+      const listWrap = el('div', {
+        style: { maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }
+      });
+      const render = () => {
+        const q = (input.value || '').trim().toLowerCase();
+        const items = suggested.filter(m => {
+          if (!q) return true;
+          const s = ((m.reference || '') + ' ' + (m.designation || '') + ' ' + (m.categorie || '')).toLowerCase();
+          return s.includes(q);
+        }).slice(0, 200);
+        listWrap.innerHTML = '';
+        if (!items.length) {
+          listWrap.appendChild(el('div', { style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' } }, 'Aucune matière trouvée'));
+          return;
+        }
+        items.forEach(m => {
+          const row = el('div', {
+            style: {
+              padding: '10px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '10px',
+            },
+            on: {
+              click: async () => {
+                closeMroot();
+                await saveBesoinMapping(kind, sourceValue, m.id);
+              },
+              mouseenter: e => { e.currentTarget.style.background = 'var(--accent-bg, rgba(59,130,246,.08))'; },
+              mouseleave: e => { e.currentTarget.style.background = ''; },
+            }
+          },
+            el('div', { style: { flex: '1' } },
+              el('div', { style: { fontWeight: '600' } }, m.reference || '—'),
+              el('div', { style: { fontSize: '12px', color: 'var(--muted)' } }, (m.designation || '') + (m.categorie ? ' · ' + m.categorie : '')),
+            ),
+          );
+          listWrap.appendChild(row);
+        });
+      };
+      input.addEventListener('input', render);
+      setTimeout(() => { input.focus(); render(); }, 50);
+      return el('div', {}, input, listWrap);
+    })(),
+    el('div', { cls: 'modal-actions', style: { marginTop: '16px' } },
+      el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
+    )
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+
+async function openBesoinsMappingModal() {
+  closeMroot();
+  let data;
+  try {
+    data = await api('/api/stock/besoins-matieres/mapping');
+  } catch(e) {
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+    return;
+  }
+  const mappings = (data && data.mapping) || [];
+  const nonMappes = (data && data.non_mappe) || [];
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '820px', maxHeight: '85vh', overflowY: 'auto' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Correspondances fiche technique → matière première'),
+    el('div', { cls: 'modal-sub' },
+      'Associe chaque valeur libre des fiches techniques (support, adhésif, mandrin, carton, palette) à une référence de matière première pour permettre le calcul des besoins.'
+    ),
+  );
+
+  if (nonMappes.length) {
+    sheet.appendChild(el('h3', {
+      style: { margin: '18px 0 8px', fontSize: '14px', fontWeight: '700', color: 'var(--warning,#d97706)' }
+    }, `⚠ ${nonMappes.length} valeur${nonMappes.length > 1 ? 's' : ''} à associer`));
+    const box = el('div', { style: { border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' } });
+    nonMappes.forEach(nm => {
+      box.appendChild(el('div', {
+        style: {
+          display: 'flex', padding: '8px 12px', borderBottom: '1px solid var(--border)',
+          alignItems: 'center', gap: '10px', fontSize: '13px',
+        }
+      },
+        el('span', {
+          style: {
+            padding: '2px 8px', background: 'var(--surface-alt,#f0f0f0)', borderRadius: '3px',
+            fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', minWidth: '70px', textAlign: 'center',
+          }
+        }, BESOINS_KIND_LABELS[nm.kind] || nm.kind),
+        el('span', { style: { flex: '1', fontWeight: '600' } }, nm.source_value),
+        el('span', { style: { color: 'var(--muted)', fontSize: '12px' } }, `${nm.count} dossier${nm.count > 1 ? 's' : ''}`),
+        el('button', {
+          style: {
+            padding: '4px 12px', border: 'none', background: 'var(--accent)', color: '#fff',
+            fontSize: '12px', cursor: 'pointer', borderRadius: '4px', fontWeight: '600',
+          },
+          on: { click: () => openBesoinAssocierModal(nm.kind, nm.source_value) }
+        }, 'Associer'),
+      ));
+    });
+    sheet.appendChild(box);
+  }
+
+  sheet.appendChild(el('h3', {
+    style: { margin: '20px 0 8px', fontSize: '14px', fontWeight: '700', color: 'var(--text)' }
+  }, `Correspondances enregistrées (${mappings.length})`));
+  if (!mappings.length) {
+    sheet.appendChild(el('div', {
+      style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px', border: '1px dashed var(--border)', borderRadius: '6px' }
+    }, 'Aucune correspondance enregistrée.'));
+  } else {
+    const box = el('div', { style: { border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' } });
+    BESOINS_KIND_ORDER.forEach(kind => {
+      const arr = mappings.filter(m => m.kind === kind);
+      if (!arr.length) return;
+      arr.forEach(m => {
+        box.appendChild(el('div', {
+          style: {
+            display: 'flex', padding: '8px 12px', borderBottom: '1px solid var(--border)',
+            alignItems: 'center', gap: '10px', fontSize: '13px',
+          }
+        },
+          el('span', {
+            style: {
+              padding: '2px 8px', background: 'var(--surface-alt,#f0f0f0)', borderRadius: '3px',
+              fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', minWidth: '70px', textAlign: 'center',
+            }
+          }, BESOINS_KIND_LABELS[kind] || kind),
+          el('span', { style: { flex: '1', fontWeight: '600' } }, m.source_value),
+          el('span', { style: { color: 'var(--muted)' } }, '→'),
+          el('span', { style: { flex: '1' } },
+            el('div', { style: { fontWeight: '600' } }, m.matiere_ref || '—'),
+            m.matiere_designation ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, m.matiere_designation) : null,
+          ),
+          el('button', {
+            style: {
+              padding: '4px 10px', border: '1px solid var(--border)', background: 'var(--surface)',
+              color: 'var(--danger,#dc2626)', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', fontWeight: '600',
+            },
+            on: { click: async () => {
+              if (!confirm(`Supprimer la correspondance "${m.source_value}" → ${m.matiere_ref} ?`)) return;
+              try {
+                await api('/api/stock/besoins-matieres/mapping/' + m.id, { method: 'DELETE' });
+                showToast('Correspondance supprimée', 'success');
+                closeMroot();
+                await loadBesoinsMatieres();
+              } catch(e) { showToast('Erreur : ' + (e.message || 'inconnue'), 'error'); }
+            }}
+          }, 'Supprimer'),
+        ));
+      });
+    });
+    sheet.appendChild(box);
+  }
+
+  sheet.appendChild(el('div', { cls: 'modal-actions', style: { marginTop: '18px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+  ));
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+// ══════════════════════════════════════════════════════════════════
+
 function buildMatieresInventaire() {
   const rows = S.matInvList || [];
   const q = (S.matInvQuery || '').trim().toLowerCase();
@@ -12953,6 +13464,7 @@ function renderContent() {
   }
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'matieres-inventaire') content = buildMatieresInventaire();
+  else if (S.tab === 'besoins-matieres') content = buildBesoinsMatieres();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
@@ -17895,11 +18407,13 @@ const STOCK_TAB_DOC_TITLES = {
   monitoring: 'Monitoring — MyStock — MySifa',
   valorisation: 'Valorisation — MyStock — MySifa',
   production: 'Production — MyStock — MySifa',
+  'besoins-matieres': 'Besoins matières — MyStock — MySifa',
 };
 
 const STOCK_TAB_MOBILE_TITLES = {
   dashboard: 'Tableau de bord',
   matieres: 'Matières premières',
+  'besoins-matieres': 'Besoins matières',
   'produits-finis': 'Produits finis',
   negoce: 'Produits de négoce',
   referentiel: 'Référentiel',
@@ -17943,6 +18457,7 @@ function buildSidebarNavStructure() {
   ];
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
+    items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'shopping-bag', label: 'Besoins matières' });
   }
   items.push(
     { kind: 'sep', label: 'Produits' },
@@ -18668,6 +19183,7 @@ async function init() {
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }
+  else if (S.tab === 'besoins-matieres') { await loadBesoinsMatieres(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
   else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'negoce') { await loadNegoce(); }
