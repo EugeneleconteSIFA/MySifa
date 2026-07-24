@@ -137,7 +137,11 @@ _SQL_DOSSIERS = """
             = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''), LOWER(TRIM(pe.ref_produit)))
         ORDER BY
           CASE
-            WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(COALESCE(m.nom,'')))
+            -- Tie-breaker : préférer la fiche dont la machine correspond au dossier.
+            -- SQLite ne résout pas m.nom (alias JOIN outer) depuis cette sous-requête
+            -- corrélée : on refait le lookup via pe.machine_id.
+            WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(COALESCE(
+                  (SELECT nom FROM machines WHERE id = pe.machine_id), '')))
                  AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
             WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
             ELSE 2
