@@ -2915,13 +2915,15 @@ def comparaison_ao(request: Request, ao_id: int):
                     })
                 rows_flat.append({
                     "ligne_id": ln["id"],
+                    "condi_unite": ln.get("condi_unite"),
+                    "condi_qte": ln.get("condi_qte"),
                     "reponse_id": rep.get("reponse_id"),
                     "fourni_id": rep.get("fourni_id"),
                     "nom_fournisseur": rep.get("nom_fournisseur"),
                     **ctx,
                     **{k: rep.get(k) for k in (
                         "quotation", "devise", "unite_quotation", "unite_quotation_original", "unite_manuel",
-                        "prix_calcule", "transport_amount", "prix_au_mille", "coef",
+                        "prix_calcule", "transport_amount", "prix_au_mille", "prix_achat_mille", "coef",
                         "devise_prix_devis", "prix_vente",
                         "delai_jours", "commentaire",
                     )},
