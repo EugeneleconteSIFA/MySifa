@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # â”€â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-APP_VERSION = "2.4.6"
+APP_VERSION = "2.4.7"
 
 # â”€â”€â”€ Branding paramÃ©trable â€” rÃ¨gle #1 CLAUDE.md (SIFA = dÃ©faut) â”€â”€â”€â”€
 # Ces variables permettent Ã  une instance client Kernse de rebrander toute
