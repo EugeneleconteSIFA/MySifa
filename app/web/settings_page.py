@@ -1,10 +1,16 @@
-"""Paramètres MySifa — accès piloté par ROLES_SETTINGS (config.py)."""
+"""Paramètres MySifa — accès par section (ROLES_SETTINGS_* dans config.py)."""
+
+import json as _json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import APP_VERSION
-from services.auth_service import get_current_user, can_access_settings
+from services.auth_service import (
+    get_current_user,
+    can_access_settings,
+    settings_sections_visibility,
+)
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
@@ -27,10 +33,12 @@ def settings_page(request: Request):
                 "Merci de contacter un administrateur en cas de besoin."
             ),
         )
+    visibility = settings_sections_visibility(user)
     return HTMLResponse(
-        content=SETTINGS_HTML.replace("__V_LABEL__", f"v{APP_VERSION}").replace(
-            "/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK
-        )
+        content=SETTINGS_HTML
+            .replace("__V_LABEL__", f"v{APP_VERSION}")
+            .replace("__SETTINGS_VISIBILITY_JSON__", _json.dumps(visibility))
+            .replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
     )
 
 
@@ -476,7 +484,8 @@ body.light .menu-item:hover{background:rgba(8,145,178,.06);border-color:rgba(8,1
 .four-head-info p{margin:0;font-size:12px;color:var(--muted)}
 .four-head-info .four-count{color:var(--accent);font-weight:700}
 .four-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.four-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.four-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:5;background:var(--card);padding:8px 0;box-shadow:0 6px 8px -8px rgba(0,0,0,.35)}
+body.light .four-toolbar{box-shadow:0 6px 8px -8px rgba(0,0,0,.12)}
 .four-toolbar input.four-search,.four-toolbar select.four-filter{padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .four-toolbar input.four-search{flex:1;min-width:240px}
 .four-toolbar input.four-search:focus,.four-toolbar select.four-filter:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
@@ -487,6 +496,10 @@ body.light .four-toolbar input.four-search:focus,body.light .four-toolbar select
 body.light .four-view-toggle button.active{background:rgba(8,145,178,.12)}
 .four-pill{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
 .four-pill.fsc{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid rgba(52,211,153,.28)}
+.four-pill.fsc-warn{background:rgba(250,204,21,.15);color:#eab308;border:1px solid rgba(250,204,21,.35)}
+.four-pill.fsc-crit{background:rgba(249,115,22,.15);color:#f97316;border:1px solid rgba(249,115,22,.4)}
+.four-pill.fsc-exp{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.4);animation:fscExpPulse 2s ease-in-out infinite}
+@keyframes fscExpPulse{0%,100%{opacity:1}50%{opacity:.65}}
 .four-pill.nofsc{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
 .four-pill.traca{background:rgba(34,211,238,.1);color:var(--accent);border:1px solid rgba(34,211,238,.28)}
 .four-pill.traca-no{background:transparent;color:var(--muted);border:1px dashed var(--border)}
@@ -510,8 +523,10 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 .four-table .four-nom-cell{font-weight:600;color:var(--text)}
 .four-table .four-nom-cell small{display:block;font-weight:500;color:var(--muted);font-size:10px;margin-top:2px}
 .four-table .four-code-cell code{font-family:ui-monospace,monospace;font-size:11px;color:var(--text2)}
-.four-table td.four-act{text-align:right;white-space:nowrap}
-.four-table td.four-act .btn-sm{margin-left:4px}
+.four-table td.four-act{text-align:right;white-space:nowrap;padding-right:14px}
+.four-table td.four-act .btn-sm{margin-left:4px;padding:4px 8px;font-size:11px}
+.four-table td.four-act > *{vertical-align:middle}
+.four-table td.four-act .four-actif-toggle{margin-right:8px}
 @media(max-width:900px){
   .four-toolbar input.four-search{min-width:0;width:100%;flex:1 1 100%}
   .four-head{flex-direction:column;align-items:stretch}
@@ -520,14 +535,152 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 .btn-danger-solid{background:var(--danger);color:#fff;border:1px solid var(--danger);cursor:pointer}
 .btn-danger-solid:hover{filter:brightness(1.08)}
 .btn-danger-solid:disabled{opacity:.6;cursor:wait}
+
+/* ── Sous-onglets fournisseurs : visibilité forte ─────────────── */
+.four-sub-btn.btn.btn-sec{
+  background:var(--bg);
+  border:1.5px solid var(--border);
+  color:var(--text);
+  font-weight:600;
+  padding:10px 18px;
+  font-size:13px;
+  letter-spacing:.1px;
+  position:relative;
+  transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .1s;
+}
+.four-sub-btn.btn.btn-sec:hover:not(.active){
+  background:rgba(34,211,238,.06);
+  border-color:rgba(34,211,238,.5);
+  color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.25);
+}
+body.light .four-sub-btn.btn.btn-sec:hover:not(.active){
+  background:rgba(8,145,178,.05);
+  border-color:rgba(8,145,178,.45);
+}
+.four-sub-btn.btn.btn-sec.active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#04202a;
+  box-shadow:0 4px 14px rgba(34,211,238,.35),0 0 0 1px rgba(34,211,238,.45);
+  font-weight:700;
+}
+body.light .four-sub-btn.btn.btn-sec.active{
+  color:#fff;
+  box-shadow:0 3px 12px rgba(8,145,178,.32),0 0 0 1px rgba(8,145,178,.4);
+}
+.four-sub-btn.btn.btn-sec.active svg{opacity:1}
+.four-sub-btn.btn.btn-sec:not(.active) svg{opacity:.6}
+.four-sub-btn.btn.btn-sec:active{transform:translateY(1px)}
+
+/* ── Catégories fournisseur : chips ──────────────────────────── */
+.four-cat-picker{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.four-cat-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 11px;border-radius:999px;
+  background:var(--bg);border:1.5px solid var(--border);
+  color:var(--text2);font-size:12px;font-weight:600;
+  cursor:pointer;user-select:none;
+  transition:background .12s,border-color .12s,color .12s,box-shadow .12s;
+}
+.four-cat-chip:hover{border-color:rgba(34,211,238,.5);color:var(--accent)}
+.four-cat-chip.selected{
+  background:rgba(34,211,238,.14);
+  border-color:var(--accent);
+  color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.35);
+}
+body.light .four-cat-chip.selected{background:rgba(8,145,178,.1);box-shadow:0 0 0 1px rgba(8,145,178,.35)}
+.four-cat-chip.selected::before{content:'✓ ';font-weight:800}
+.four-cat-chip.cat-neg{border-style:dashed}
+.four-cat-chip.cat-neg.selected{border-style:solid}
+.four-cat-chip.cat-st{border-style:dashed}
+.four-cat-chip.cat-st.selected{border-style:solid}
+
+/* Toggle actif (switch iOS-like) */
+.four-actif-toggle{display:inline-block;position:relative;width:34px;height:18px;cursor:pointer;flex-shrink:0}
+.four-actif-toggle input{opacity:0;width:0;height:0;position:absolute}
+.four-actif-toggle .fat-slider{position:absolute;inset:0;background:#374151;border-radius:9px;transition:background .2s}
+body.light .four-actif-toggle .fat-slider{background:#cbd5e1}
+.four-actif-toggle .fat-slider::before{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.four-actif-toggle input:checked ~ .fat-slider{background:var(--ok)}
+.four-actif-toggle input:checked ~ .fat-slider::before{transform:translateX(16px)}
+.four-actif-toggle input:disabled ~ .fat-slider{opacity:.5;cursor:wait}
+tr.four-row-inactif td{opacity:.55}
+tr.four-row-inactif td.four-nom-cell strong{text-decoration:line-through;color:var(--muted)}
+
+/* Drawer fiche fournisseur unifiée */
+.four-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;opacity:0;transition:opacity .2s;pointer-events:none}
+.four-drawer-backdrop.open{opacity:1;pointer-events:auto}
+.four-drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,95vw);background:var(--card);border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .25s ease;z-index:901;display:flex;flex-direction:column}
+.four-drawer.open{transform:translateX(0)}
+.four-drawer-head{padding:18px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.four-drawer-head h3{margin:0;font-size:16px;font-weight:700}
+.four-drawer-head .sub{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.four-drawer-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:22px;padding:0 4px;line-height:1;transition:color .12s}
+.four-drawer-close:hover{color:var(--text)}
+.four-drawer-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.four-drawer-tabs::-webkit-scrollbar{display:none}
+.four-drawer-tab{background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:12px 14px;cursor:pointer;font-family:inherit;position:relative;transition:color .12s;white-space:nowrap;border-bottom:2px solid transparent}
+.four-drawer-tab:hover{color:var(--text)}
+.four-drawer-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.four-drawer-body{flex:1;overflow-y:auto;padding:16px 20px}
+.four-drawer-body h4{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px;font-weight:700}
+.four-drawer-body .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;margin-bottom:14px}
+.four-drawer-body .kv dt{color:var(--muted);font-weight:600}
+.four-drawer-body .kv dd{margin:0;color:var(--text);word-break:break-word}
+.four-drawer-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:12px;background:var(--bg);border-radius:8px;border:1px dashed var(--border)}
+.four-drawer-list{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.four-drawer-list-item{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.four-drawer-list-item:last-child{border-bottom:none}
+
+/* Modale fusion / doublons */
+.four-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:850;display:flex;align-items:center;justify-content:center;padding:20px}
+.four-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:88vh;overflow:auto;padding:20px}
+.four-modal h3{margin:0 0 14px;font-size:16px}
+.four-modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+/* Chips affichés en lecture seule dans le tableau */
+.four-cats-cell{display:flex;flex-wrap:wrap;gap:4px;max-width:220px}
+.four-cat-pill{
+  display:inline-block;font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:6px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text2);
+  letter-spacing:.2px;text-transform:uppercase;line-height:1.5;
+}
+.four-cat-pill.cat-negoce{background:rgba(251,191,36,.14);color:#f59e0b;border-color:rgba(251,191,36,.35)}
+.four-cat-pill.cat-sous_traitant{background:rgba(167,139,250,.14);color:#a78bfa;border-color:rgba(167,139,250,.35)}
+body.light .four-cat-pill.cat-negoce{color:#b45309}
+body.light .four-cat-pill.cat-sous_traitant{color:#6d28d9}
 </style>
 </head>
 <body>
+<script>
+window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
+(function(){
+  var V = window.__SETTINGS_VISIBILITY__ || {};
+  function apply(){
+    document.querySelectorAll('[data-req-section]').forEach(function(el){
+      var sec = el.getAttribute('data-req-section');
+      if (sec && !V[sec]) el.style.display = 'none';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<<<<<<< HEAD
 <!-- v2.3.14 : runtime des alertes chargé aussi sur /settings pour le bouton "Tester sur moi" -->
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
+=======
+>>>>>>> feature/myao-improvements
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -538,65 +691,65 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         Menu général
       </button>
       <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <div class="nav-subgroup-label"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="operations">
+      <div class="nav-subgroup-label" data-req-section="fabrication"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
-      <button type="button" class="nav-btn" data-tab="maintenance">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="maintenance">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
       </button>
-      <button type="button" class="nav-btn" data-tab="machines">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="machines">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-subgroup-label"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="emplacements">
+      <div class="nav-subgroup-label" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
       </button>
-      <button type="button" class="nav-btn" data-tab="laizes">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="laizes">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
       </button>
-      <button type="button" class="nav-btn" data-tab="importations">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="importations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
       </button>
-      <button type="button" class="nav-btn" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
         Appairage matières
       </button>
-      <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="users">
+      <div class="nav-subgroup-label" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Utilisateurs
       </button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="fournisseurs">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Fournisseurs
       </button>
-      <button type="button" class="nav-btn" data-tab="clients">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="clients">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
         Clients
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="matrix">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="access"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
       </button>
-      <button type="button" class="nav-btn" data-tab="defaults">
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="defaults">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="updates">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="communication"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="communication" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="audit">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -606,30 +759,39 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         </svg>
         Log
       </button>
-      <button type="button" class="nav-btn" data-tab="dashboards">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="dashboards">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Tableaux de bord
       </button>
-      <button type="button" class="nav-btn" data-tab="fsc">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
       </button>
-      <button type="button" class="nav-btn" data-tab="api">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="api">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="printers">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Imprimantes
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="promote">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="promote">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
+      </button>
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimantes
+      </button>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="fsc">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg>
+        Registre FSC
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -681,7 +843,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       </div>
       <div class="menu-grid">
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="fabrication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
             <div><span class="mg-lbl">Fabrication</span><span class="mg-desc">Codes opérations, maintenance et parc machines.</span></div>
@@ -705,7 +867,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="logistique">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
             <div><span class="mg-lbl">Logistique</span><span class="mg-desc">Stock, emplacements et imports transporteurs.</span></div>
@@ -734,7 +896,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="contacts">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
             <div><span class="mg-lbl">Contacts</span><span class="mg-desc">Utilisateurs, fournisseurs et clients (ERP).</span></div>
@@ -758,7 +920,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="access">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
             <div><span class="mg-lbl">Accès &amp; permissions</span><span class="mg-desc">Matrice des accès et rôles par défaut.</span></div>
@@ -777,7 +939,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="communication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
             <div><span class="mg-lbl">Communication</span><span class="mg-desc">Annonces MAJ diffusées aux utilisateurs.</span></div>
@@ -791,7 +953,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="audit_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg></span>
             <div><span class="mg-lbl">Audit &amp; qualité</span><span class="mg-desc">Log d'activité, tableaux de bord, registre FSC.</span></div>
@@ -825,7 +987,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="print_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
             <div><span class="mg-lbl">Impression &amp; déploiement</span><span class="mg-desc">Imprimantes, templates et promotion v1 → v2.</span></div>
@@ -839,6 +1001,26 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <button type="button" class="menu-item" data-goto="promote">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Promouvoir v1 → v2</span><span class="mi-desc">Publier le staging en production après validation.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+
+        <div class="menu-group" data-req-section="tools_only">
+          <div class="menu-group-head">
+            <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+            <div><span class="mg-lbl">Outils</span><span class="mg-desc">Imprimantes et registre FSC.</span></div>
+          </div>
+          <div class="menu-items">
+            <button type="button" class="menu-item" data-goto="printers">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Imprimantes</span><span class="mi-desc">Configuration Zebra / Brother, templates étiquettes.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="fsc">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -962,6 +1144,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                 <button type="button" data-fourview="flat" class="active" title="Liste alphabétique">Liste</button>
                 <button type="button" data-fourview="groupe" title="Groupé par maison mère">Par groupe</button>
               </div>
+              <button type="button" class="btn btn-sec btn-sm" id="four-doublons" title="Détecter les fournisseurs en doublon">Doublons</button>
+              <button type="button" class="btn btn-sec btn-sm" id="four-export-csv" title="Exporter la liste en CSV">Export CSV</button>
               <button type="button" class="btn btn-sm" id="four-add-toggle">+ Nouveau fournisseur</button>
             </div>
           </div>
@@ -974,6 +1158,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <option value="0">Non certifiés</option>
             </select>
             <select id="four-filter-groupe" class="four-filter" title="Filtrer par groupe"><option value="">Tous les groupes</option></select>
+            <select id="four-filter-cat" class="four-filter" title="Filtrer par catégorie fournie"><option value="">Catégorie : toutes</option></select>
             <select id="four-filter-traca" class="four-filter" title="Filtrer par guide traçabilité">
               <option value="">Traçabilité : tous</option>
               <option value="1">Guide renseigné</option>
@@ -987,6 +1172,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <input type="text" id="cf-nom" placeholder="Nom du fournisseur *" autocomplete="off">
               <input type="text" id="cf-groupe" placeholder="Groupe (ex: Fedrigoni) — optionnel" autocomplete="off" list="four-groupes-dl">
               <input type="text" id="cf-branche" placeholder="Branche du groupe (ex: Italy) — optionnel" autocomplete="off">
+              <input type="text" id="cf-siret" placeholder="SIRET (14 chiffres) — optionnel" autocomplete="off" inputmode="numeric" maxlength="17">
+              <input type="text" id="cf-tva" placeholder="TVA intracom (ex: FR12345678901) — optionnel" autocomplete="off">
               <datalist id="four-groupes-dl"></datalist>
             </div>
             <label style="display:inline-flex;align-items:center;gap:8px;margin:12px 0 10px;font-size:13px;color:var(--text);cursor:pointer">
@@ -996,6 +1183,11 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <div id="cf-fsc-fields" class="form-grid">
               <input type="text" id="cf-licence" placeholder="Code Licence FSC (ex: FSC-C004451)" autocomplete="off">
               <input type="text" id="cf-certificat" placeholder="Code Certificat FSC (ex: CU-COC-807907)" autocomplete="off">
+              <input type="date" id="cf-fsc-exp" title="Date d'expiration du certificat FSC" autocomplete="off">
+            </div>
+            <div style="margin-top:14px">
+              <label class="sub" style="display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">Catégories fournies <span style="color:var(--muted);font-weight:400;font-size:11px">— plusieurs choix possibles</span></label>
+              <div id="cf-categories-picker" class="four-cat-picker"></div>
             </div>
             <p class="sub" style="margin:10px 0 0;font-size:11px">Le guide de traçabilité (photo, code exemple) se configure ensuite via « Modifier ».</p>
             <div class="four-add-actions">
@@ -1520,7 +1712,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             <h2 style="margin:0">Alertes maintenance</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Ajuster le délai minimum entre deux alertes affichées à l'opérateur.">Délai entre alertes</button>
+              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
               <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
               <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
             </div>
@@ -2140,7 +2332,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                     <div style="display:flex;gap:10px;align-items:flex-start">
                       <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
                       <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
-                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct depuis ce wizard sur le PC hôte). <strong>Il doit atterrir dans le dossier Téléchargements</strong> (comportement navigateur par défaut).
+                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct sur ce PC).
                       </div>
                     </div>
                   </div>
@@ -2278,29 +2470,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <h2 style="margin:0 0 4px">Formations &amp; guides in-app</h2>
             <p class="sub" style="margin:0;font-size:12px">Suivi des tutos lus dans MyQualité. Vous pouvez remettre à zéro un guide pour un utilisateur (il le reverra à sa prochaine visite).</p>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button type="button" class="btn btn-sec btn-sm" id="fmt-toggle-config" onclick="toggleGuidesConfigSection()">Activer / désactiver les guides</button>
-            <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
-          </div>
+          <button type="button" class="btn btn-sec btn-sm" id="fmt-refresh">Actualiser</button>
         </div>
-
-        <!-- Section activation / desactivation des guides -->
-        <div id="fmt-config-section" class="hidden" style="margin-bottom:18px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg)">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-            <div>
-              <h3 style="margin:0 0 2px;font-size:14px">Activation des guides</h3>
-              <p class="sub" style="margin:0;font-size:11.5px">Un guide désactivé disparaît de son onglet (bouton d'aide masqué) et ne s'ouvre plus automatiquement. La progression déjà enregistrée est conservée.</p>
-            </div>
-            <div style="display:flex;gap:8px">
-              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(true)">Tout activer</button>
-              <button type="button" class="btn btn-sec btn-sm" onclick="setAllGuidesEnabled(false)">Tout désactiver</button>
-            </div>
-          </div>
-          <div id="fmt-config-list" style="display:flex;flex-direction:column;gap:6px">
-            <div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>
-          </div>
-        </div>
-
         <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
           <input type="text" id="fmt-search" placeholder="Rechercher (nom, email, rôle, guide...)" autocomplete="off"
             style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s">
@@ -3731,15 +3902,79 @@ let fourSearchQuery = '';
 let fourFilterFsc = '';
 let fourFilterGroupe = '';
 let fourFilterTraca = '';
+let fourFilterCat = '';
+
+// Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
+let _cfCatsGetSelected = () => [];
+
+async function _loadFournisseurCategories(){
+  if (window.__FOURNISSEUR_CATS__) return window.__FOURNISSEUR_CATS__;
+  try {
+    const list = await api('/api/fournisseurs/categories');
+    window.__FOURNISSEUR_CATS__ = Array.isArray(list) ? list : [];
+  } catch(e){ window.__FOURNISSEUR_CATS__ = []; }
+  return window.__FOURNISSEUR_CATS__;
+}
+
+function _renderCategoryPicker(container, initialSelected){
+  const cats = window.__FOURNISSEUR_CATS__ || [];
+  const sel = new Set(initialSelected || []);
+  container.innerHTML = cats.map(c => {
+    const cls = ['four-cat-chip'];
+    if (c.code === 'negoce') cls.push('cat-neg');
+    if (c.code === 'sous_traitant') cls.push('cat-st');
+    if (sel.has(c.code)) cls.push('selected');
+    return '<span class="' + cls.join(' ') + '" data-catcode="' + esc(c.code) + '" role="checkbox" tabindex="0" aria-checked="' + (sel.has(c.code) ? 'true':'false') + '">' + esc(c.label) + '</span>';
+  }).join('');
+  function toggle(chip){
+    const code = chip.dataset.catcode;
+    if (sel.has(code)) { sel.delete(code); chip.classList.remove('selected'); chip.setAttribute('aria-checked','false'); }
+    else { sel.add(code); chip.classList.add('selected'); chip.setAttribute('aria-checked','true'); }
+  }
+  container.onclick = (e) => { const chip = e.target.closest('[data-catcode]'); if (chip) toggle(chip); };
+  container.onkeydown = (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    const chip = e.target.closest('[data-catcode]');
+    if (chip) { e.preventDefault(); toggle(chip); }
+  };
+  return () => Array.from(sel);
+}
+
+function _fourCatsCellHTML(cats){
+  if (!Array.isArray(cats) || !cats.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  const labels = window.__FOURNISSEUR_CATS__ || [];
+  const map = {}; labels.forEach(c => { map[c.code] = c.label; });
+  return '<div class="four-cats-cell">' + cats.map(c => {
+    const lbl = map[c] || c;
+    return '<span class="four-cat-pill cat-' + esc(c) + '">' + esc(lbl) + '</span>';
+  }).join('') + '</div>';
+}
 
 async function loadFournisseurs() {
   try {
+    await _loadFournisseurCategories();
     const data = await api('/api/fournisseurs');
     fournisseursAll = Array.isArray(data) ? data : [];
   } catch (e) { fournisseursAll = []; toast(e.message, true); }
   fillFourGroupeFilter();
+  fillFourCatFilter();
+  // Une fois les selects remplis, on applique les filtres depuis l'URL
+  _fourReadURL();
   renderFournisseursTable();
   fillFourHistSelect();
+  // Init/refresh du picker de catégories dans le panneau d'ajout
+  const cfCatBox = document.getElementById('cf-categories-picker');
+  if (cfCatBox) _cfCatsGetSelected = _renderCategoryPicker(cfCatBox, []);
+}
+
+function fillFourCatFilter(){
+  const sel = document.getElementById('four-filter-cat');
+  if (!sel) return;
+  const cur = sel.value;
+  const cats = window.__FOURNISSEUR_CATS__ || [];
+  sel.innerHTML = '<option value="">Catégorie : toutes</option>' +
+    cats.map(c => '<option value="' + esc(c.code) + '">' + esc(c.label) + '</option>').join('');
+  if (cats.some(c => c.code === cur)) sel.value = cur;
 }
 
 function fillFourGroupeFilter() {
@@ -3759,9 +3994,37 @@ function _fourNorm(s){
 }
 function _fourHay(f){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  return _fourNorm([f.nom, f.groupe, f.branche, hasFsc ? f.licence : '', hasFsc ? f.certificat : '', hasFsc ? 'fsc certifie' : 'non certifie'].filter(Boolean).join(' '));
+  const catLabels = (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
+  const catsStr = (Array.isArray(f.categories) ? f.categories : []).map(c => catLabels[c] || c).join(' ');
+  return _fourNorm([f.nom, f.groupe, f.branche, catsStr, hasFsc ? f.licence : '', hasFsc ? f.certificat : '', hasFsc ? 'fsc certifie' : 'non certifie'].filter(Boolean).join(' '));
 }
 function _fourHasTraca(f){ return !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code); }
+
+// Retourne { days, cls, label } pour l'affichage du badge FSC selon la date d'expiration.
+// null si pas de date. cls = classe CSS suffixe (fsc, fsc-warn, fsc-crit, fsc-exp).
+function _fscExpirationInfo(f){
+  if (!f || !f.fsc_date_expiration) return null;
+  try {
+    const d = new Date(f.fsc_date_expiration + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diffMs = d.getTime() - today.getTime();
+    const days = Math.round(diffMs / 86400000);
+    if (days < 0) return { days, cls: 'fsc-exp', label: 'Expiré ' + Math.abs(days) + 'j' };
+    if (days <= 30) return { days, cls: 'fsc-crit', label: days + 'j' };
+    if (days <= 60) return { days, cls: 'fsc-warn', label: days + 'j' };
+    return { days, cls: 'fsc', label: '' };
+  } catch(e) { return null; }
+}
+function _fscBadgeHTML(f){
+  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+  if (!hasFsc) return '<span class="four-pill nofsc">— Non</span>';
+  const info = _fscExpirationInfo(f);
+  if (!info) return '<span class="four-pill fsc">FSC</span>';
+  const title = 'Certificat FSC expire le ' + f.fsc_date_expiration + (info.days < 0 ? ' (expiré)' : ' (' + info.days + ' jours)');
+  const lbl = info.label ? ('FSC · ' + info.label) : 'FSC';
+  return '<span class="four-pill ' + info.cls + '" title="' + esc(title) + '">' + esc(lbl) + '</span>';
+}
 
 function _fourFiltered(){
   const q = _fourNorm(fourSearchQuery).trim();
@@ -3770,6 +4033,10 @@ function _fourFiltered(){
     if (fourFilterFsc === '1' && !hasFsc) return false;
     if (fourFilterFsc === '0' && hasFsc) return false;
     if (fourFilterGroupe && (f.groupe || '') !== fourFilterGroupe) return false;
+    if (fourFilterCat) {
+      const cats = Array.isArray(f.categories) ? f.categories : [];
+      if (!cats.includes(fourFilterCat)) return false;
+    }
     const hasT = _fourHasTraca(f);
     if (fourFilterTraca === '1' && !hasT) return false;
     if (fourFilterTraca === '0' && hasT) return false;
@@ -3780,26 +4047,37 @@ function _fourFiltered(){
 
 function _fourRowHTML(f){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  const fscBadge = hasFsc
-    ? '<span class="four-pill fsc">FSC</span>'
-    : '<span class="four-pill nofsc">— Non</span>';
+  const fscBadge = _fscBadgeHTML(f);
   const groupeCell = f.groupe
     ? '<span class="four-groupe-tag">' + esc(f.groupe) + (f.branche ? '<span class="fgt-branche">· ' + esc(f.branche) + '</span>' : '') + '</span>'
     : '<span style="color:var(--muted);font-size:11px">—</span>';
   const tracaCell = _fourHasTraca(f)
     ? '<span class="four-pill traca">✓ Guide</span>'
     : '<span class="four-pill traca-no">—</span>';
-  return '<tr>' +
-    '<td class="four-nom-cell"><strong>' + esc(f.nom) + '</strong>' +
-      (f.branche && !f.groupe ? '<small>Branche : ' + esc(f.branche) + '</small>' : '') + '</td>' +
+  const catsCell = _fourCatsCellHTML(f.categories);
+  const actif = (f.actif == null) ? true : !!f.actif;
+  const rowCls = actif ? '' : ' class="four-row-inactif"';
+  const smallBits = [];
+  if (f.branche && !f.groupe) smallBits.push('Branche : ' + esc(f.branche));
+  if (f.siret) smallBits.push('SIRET ' + esc(f.siret));
+  const smallHTML = smallBits.length ? '<small>' + smallBits.join(' · ') + '</small>' : '';
+  return '<tr' + rowCls + '>' +
+    '<td class="four-nom-cell"><strong>' + esc(f.nom) + '</strong>' + smallHTML + '</td>' +
     '<td>' + fscBadge + '</td>' +
     '<td class="four-code-cell"><code>' + esc(hasFsc ? (f.licence || '—') : '—') + '</code></td>' +
     '<td class="four-code-cell"><code>' + esc(hasFsc ? (f.certificat || '—') : '—') + '</code></td>' +
     '<td>' + groupeCell + '</td>' +
+    '<td>' + catsCell + '</td>' +
     '<td>' + tracaCell + '</td>' +
     '<td class="four-act">' +
+      '<label class="four-actif-toggle" title="' + (actif ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour réactiver') + '">' +
+        '<input type="checkbox" data-factif="' + f.id + '"' + (actif ? ' checked' : '') + '>' +
+        '<span class="fat-slider"></span>' +
+      '</label>' +
+      '<button type="button" class="btn btn-sec btn-sm" data-fopen="' + f.id + '" title="Ouvrir la fiche complète">Fiche</button>' +
       '<button type="button" class="btn btn-sec btn-sm" data-fedit="' + f.id + '">Modifier</button>' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fdel="' + f.id + '" style="color:var(--danger)">Supprimer</button>' +
+      '<button type="button" class="btn btn-sec btn-sm" data-fmerge="' + f.id + '" title="Fusionner dans un autre fournisseur">Fusionner</button>' +
+      '<button type="button" class="btn btn-sec btn-sm" data-fdel="' + f.id + '" style="color:var(--danger)">Suppr.</button>' +
     '</td></tr>';
 }
 
@@ -3822,17 +4100,19 @@ function renderFournisseursTable() {
     wrap.innerHTML = '<div class="four-empty">Aucun fournisseur ne correspond aux filtres.<br><button type="button" class="btn btn-sec btn-sm" style="margin-top:12px" id="four-reset-filters">Réinitialiser les filtres</button></div>';
     const btn = document.getElementById('four-reset-filters');
     if (btn) btn.onclick = () => {
-      fourSearchQuery=''; fourFilterFsc=''; fourFilterGroupe=''; fourFilterTraca='';
+      fourSearchQuery=''; fourFilterFsc=''; fourFilterGroupe=''; fourFilterTraca=''; fourFilterCat='';
       const s=document.getElementById('four-search'); if(s) s.value='';
       const f=document.getElementById('four-filter-fsc'); if(f) f.value='';
       const g=document.getElementById('four-filter-groupe'); if(g) g.value='';
+      const c=document.getElementById('four-filter-cat'); if(c) c.value='';
       const t=document.getElementById('four-filter-traca'); if(t) t.value='';
       renderFournisseursTable();
+      _fourSyncURL();
     };
     return;
   }
   const head = '<table class="four-table"><thead><tr>' +
-    '<th>Nom</th><th>FSC</th><th>Licence FSC</th><th>Certificat FSC</th><th>Groupe / branche</th><th>Traçabilité</th><th></th>' +
+    '<th>Nom</th><th>FSC</th><th>Licence FSC</th><th>Certificat FSC</th><th>Groupe / branche</th><th>Catégories</th><th>Traçabilité</th><th></th>' +
     '</tr></thead>';
   let body = '';
   if (fourViewMode === 'groupe') {
@@ -3850,7 +4130,7 @@ function renderFournisseursTable() {
     body = '<tbody>' + keys.map(k => {
       const label = k === '__none__' ? 'Sans groupe' : k;
       const items = grouped[k].sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
-      return '<tr class="four-groupe-row"><td colspan="7">' + esc(label) + '<span class="fgh-count">· ' + items.length + '</span></td></tr>' +
+      return '<tr class="four-groupe-row"><td colspan="8">' + esc(label) + '<span class="fgh-count">· ' + items.length + '</span></td></tr>' +
         items.map(_fourRowHTML).join('');
     }).join('') + '</tbody>';
   } else {
@@ -3860,7 +4140,80 @@ function renderFournisseursTable() {
   wrap.innerHTML = head + body + '</table>';
   wrap.querySelectorAll('[data-fedit]').forEach(b => b.onclick = () => openEditFournisseur(Number(b.dataset.fedit)));
   wrap.querySelectorAll('[data-fdel]').forEach(b => b.onclick = () => deleteFournisseur(Number(b.dataset.fdel)));
+  wrap.querySelectorAll('[data-fopen]').forEach(b => b.onclick = () => openFournisseurDrawer(Number(b.dataset.fopen)));
+  wrap.querySelectorAll('[data-fmerge]').forEach(b => b.onclick = () => openMergeFournisseurModal(Number(b.dataset.fmerge)));
+  wrap.querySelectorAll('[data-factif]').forEach(cb => cb.onchange = () => toggleFournisseurActif(Number(cb.dataset.factif), cb));
 }
+
+async function toggleFournisseurActif(id, cbEl){
+  const desired = !!cbEl.checked;
+  cbEl.disabled = true;
+  try {
+    const res = await api('/api/fournisseurs/' + id + '/actif', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actif: desired }),
+    });
+    const fi = fournisseursAll.find(x => x.id === id);
+    if (fi) fi.actif = desired ? 1 : 0;
+    toast(desired ? 'Fournisseur activé' : 'Fournisseur désactivé');
+    // Repeindre pour appliquer la classe four-row-inactif sans reload
+    renderFournisseursTable();
+  } catch(e) {
+    cbEl.checked = !desired;
+    toast(e.message || 'Erreur toggle actif', true);
+  } finally {
+    cbEl.disabled = false;
+  }
+}
+
+// URL persistence des filtres Répertoire fournisseurs
+function _fourSyncURL(){
+  try {
+    const url = new URL(window.location.href);
+    const p = url.searchParams;
+    const setOrDel = (k, v) => { if (v) p.set(k, v); else p.delete(k); };
+    setOrDel('fq', fourSearchQuery);
+    setOrDel('ffsc', fourFilterFsc);
+    setOrDel('fgrp', fourFilterGroupe);
+    setOrDel('fcat', fourFilterCat);
+    setOrDel('ftra', fourFilterTraca);
+    setOrDel('fview', fourViewMode !== 'flat' ? fourViewMode : '');
+    window.history.replaceState(null, '', url.toString());
+  } catch(e) {}
+}
+
+function _fourReadURL(){
+  try {
+    const p = new URL(window.location.href).searchParams;
+    fourSearchQuery = p.get('fq') || '';
+    fourFilterFsc = p.get('ffsc') || '';
+    fourFilterGroupe = p.get('fgrp') || '';
+    fourFilterCat = p.get('fcat') || '';
+    fourFilterTraca = p.get('ftra') || '';
+    const v = p.get('fview'); if (v === 'groupe') fourViewMode = 'groupe';
+    // Reflète dans les inputs
+    const s = document.getElementById('four-search'); if (s) s.value = fourSearchQuery;
+    const f = document.getElementById('four-filter-fsc'); if (f) f.value = fourFilterFsc;
+    const g = document.getElementById('four-filter-groupe'); if (g) g.value = fourFilterGroupe;
+    const c = document.getElementById('four-filter-cat'); if (c) c.value = fourFilterCat;
+    const t = document.getElementById('four-filter-traca'); if (t) t.value = fourFilterTraca;
+    document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x =>
+      x.classList.toggle('active', x.dataset.fourview === fourViewMode));
+  } catch(e) {}
+}
+
+// Raccourci "/" pour focus la recherche fournisseurs — actif uniquement quand
+// l'onglet Fournisseurs est affiché et qu'aucun input n'a le focus.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
+  const panel = document.getElementById('panel-fournisseurs');
+  if (!panel || panel.classList.contains('hidden')) return;
+  const s = document.getElementById('four-search');
+  if (s) { e.preventDefault(); s.focus(); s.select(); }
+});
 
 // Toolbar : recherche + filtres
 (function bindFourToolbar(){
@@ -3871,24 +4224,37 @@ function renderFournisseursTable() {
     const caret = isSearch ? [ae.selectionStart, ae.selectionEnd] : null;
     fourSearchQuery = s.value;
     renderFournisseursTable();
+    _fourSyncURL();
     if (isSearch) {
       const el = document.getElementById('four-search');
       if (el) { el.focus(); if (caret) try { el.setSelectionRange(caret[0], caret[1]); } catch(e){} }
     }
   });
   const fFsc = document.getElementById('four-filter-fsc');
-  if (fFsc) fFsc.addEventListener('change', () => { fourFilterFsc = fFsc.value; renderFournisseursTable(); });
+  if (fFsc) fFsc.addEventListener('change', () => { fourFilterFsc = fFsc.value; renderFournisseursTable(); _fourSyncURL(); });
   const fGrp = document.getElementById('four-filter-groupe');
-  if (fGrp) fGrp.addEventListener('change', () => { fourFilterGroupe = fGrp.value; renderFournisseursTable(); });
+  if (fGrp) fGrp.addEventListener('change', () => { fourFilterGroupe = fGrp.value; renderFournisseursTable(); _fourSyncURL(); });
+  const fCat = document.getElementById('four-filter-cat');
+  if (fCat) fCat.addEventListener('change', () => { fourFilterCat = fCat.value; renderFournisseursTable(); _fourSyncURL(); });
   const fTra = document.getElementById('four-filter-traca');
-  if (fTra) fTra.addEventListener('change', () => { fourFilterTraca = fTra.value; renderFournisseursTable(); });
+  if (fTra) fTra.addEventListener('change', () => { fourFilterTraca = fTra.value; renderFournisseursTable(); _fourSyncURL(); });
   document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(b => {
     b.addEventListener('click', () => {
       fourViewMode = b.dataset.fourview;
       document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x => x.classList.toggle('active', x.dataset.fourview === fourViewMode));
       renderFournisseursTable();
+      _fourSyncURL();
     });
   });
+  // Export CSV — appuie sur l'endpoint /api/fournisseurs/export.csv
+  const btnExport = document.getElementById('four-export-csv');
+  if (btnExport) btnExport.addEventListener('click', () => {
+    try { window.location.href = API + '/api/fournisseurs/export.csv'; }
+    catch(e) { toast('Erreur téléchargement', true); }
+  });
+  // Doublons — ouvre modale de détection
+  const btnDoublons = document.getElementById('four-doublons');
+  if (btnDoublons) btnDoublons.addEventListener('click', openDoublonsModal);
   // Panneau ajout collapsible
   const addToggle = document.getElementById('four-add-toggle');
   const addPanel = document.getElementById('four-add-panel');
@@ -3926,12 +4292,17 @@ document.getElementById('cf-go').onclick = async () => {
   const has_fsc = !!(document.getElementById('cf-has-fsc') || {}).checked;
   const groupe = (document.getElementById('cf-groupe')?.value || '').trim();
   const branche = (document.getElementById('cf-branche')?.value || '').trim();
+  const siret = (document.getElementById('cf-siret')?.value || '').trim();
+  const tva_intracom = (document.getElementById('cf-tva')?.value || '').trim();
+  const fsc_date_expiration = (document.getElementById('cf-fsc-exp')?.value || '').trim();
+  const categories = (typeof _cfCatsGetSelected === 'function') ? _cfCatsGetSelected() : [];
   if (!nom) return toast('Nom du fournisseur requis', true);
   try {
     await api('/api/fournisseurs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, licence, certificat, has_fsc, groupe, branche }),
+      body: JSON.stringify({ nom, licence, certificat, has_fsc, groupe, branche,
+                             siret, tva_intracom, fsc_date_expiration, categories }),
     });
     toast('Fournisseur ajouté');
     document.getElementById('cf-nom').value = '';
@@ -3940,6 +4311,11 @@ document.getElementById('cf-go').onclick = async () => {
     const cbo = document.getElementById('cf-has-fsc'); if (cbo) cbo.checked = true;
     const cg = document.getElementById('cf-groupe'); if(cg) cg.value = '';
     const cb = document.getElementById('cf-branche'); if(cb) cb.value = '';
+    const csi = document.getElementById('cf-siret'); if(csi) csi.value = '';
+    const cti = document.getElementById('cf-tva'); if(cti) cti.value = '';
+    const cfe = document.getElementById('cf-fsc-exp'); if(cfe) cfe.value = '';
+    const cpBox = document.getElementById('cf-categories-picker');
+    if (cpBox) _cfCatsGetSelected = _renderCategoryPicker(cpBox, []);
     await loadFournisseurs();
     await loadFournisseursGroupes();
     // Replier le panneau d'ajout après succès
@@ -3976,12 +4352,23 @@ async function openEditFournisseur(id) {
     '<div id="ef-fsc-fields" style="' + (hasFscInit ? '' : 'opacity:.4;pointer-events:none') + '">' +
     '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
     '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
+    '<label class="sub">Date d\'expiration du certificat FSC</label><input type="date" id="ef-fsc-exp" value="' + esc(f.fsc_date_expiration || '') + '" style="margin-bottom:10px">' +
+    '</div>' +
+    '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
+    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Identité fiscale</p>' +
+    '<label class="sub">SIRET (14 chiffres)</label><input id="ef-siret" value="' + esc(f.siret || '') + '" style="margin-bottom:10px" placeholder="ex: 12345678901234" inputmode="numeric" maxlength="17">' +
+    '<label class="sub">TVA intracommunautaire</label><input id="ef-tva" value="' + esc(f.tva_intracom || '') + '" style="margin-bottom:10px" placeholder="ex: FR12345678901">' +
     '</div>' +
     '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
     '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Rattachement à un groupe</p>' +
     '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Si ce fournisseur est une branche d\'un groupe (ex: Fedrigoni Italy → groupe Fedrigoni, branche Italy).</p>' +
     '<label class="sub">Groupe</label><input id="ef-groupe" value="' + esc(f.groupe || '') + '" style="margin-bottom:10px" placeholder="ex: Fedrigoni" list="four-groupes-dl">' +
     '<label class="sub">Branche</label><input id="ef-branche" value="' + esc(f.branche || '') + '" style="margin-bottom:10px" placeholder="ex: Italy">' +
+    '</div>' +
+    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
+    '<p style="margin:0 0 6px;font-size:13px;font-weight:600;color:var(--text)">Catégories fournies</p>' +
+    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Plusieurs choix possibles. « Sous-traitant » active automatiquement le fournisseur pour les réceptions de produits finis sous-traités.</p>' +
+    '<div id="ef-categories-picker" class="four-cat-picker"></div>' +
     '</div>' +
     '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
     '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Code-barre de traçabilité</p>' +
@@ -4009,6 +4396,9 @@ async function openEditFournisseur(id) {
   const photoPreview = dlg.querySelector('#ef-photo-preview');
   const photoInput = dlg.querySelector('#ef-photo-input');
   const photoDelBtn = dlg.querySelector('#ef-photo-del');
+  const catBox = dlg.querySelector('#ef-categories-picker');
+  await _loadFournisseurCategories();
+  const efCatsGetSelected = catBox ? _renderCategoryPicker(catBox, Array.isArray(f.categories) ? f.categories : []) : (() => Array.isArray(f.categories) ? f.categories : []);
   expEl.value = f.traca_explication || '';
   codeEl.value = f.traca_exemple_code || '';
 
@@ -4080,11 +4470,15 @@ async function openEditFournisseur(id) {
       nom: dlg.querySelector('#ef-nom').value.trim(),
       licence: has_fsc ? dlg.querySelector('#ef-licence').value.trim() : '',
       certificat: has_fsc ? dlg.querySelector('#ef-certificat').value.trim() : '',
+      fsc_date_expiration: has_fsc ? (dlg.querySelector('#ef-fsc-exp')?.value || '').trim() : '',
       has_fsc,
       traca_explication: expEl.value.trim(),
       traca_exemple_code: codeEl.value.trim(),
       groupe: (dlg.querySelector('#ef-groupe')?.value || '').trim(),
       branche: (dlg.querySelector('#ef-branche')?.value || '').trim(),
+      siret: (dlg.querySelector('#ef-siret')?.value || '').trim(),
+      tva_intracom: (dlg.querySelector('#ef-tva')?.value || '').trim(),
+      categories: efCatsGetSelected(),
     };
     if (!body.nom) return toast('Nom requis', true);
     try {
@@ -4103,6 +4497,11 @@ async function openEditFournisseur(id) {
         fi.has_fsc = body.has_fsc ? 1 : 0;
         fi.groupe = body.groupe || null;
         fi.branche = body.branche || null;
+        fi.categories = body.categories || [];
+        fi.sous_traitant = body.categories.includes('sous_traitant') ? 1 : 0;
+        fi.siret = body.siret || null;
+        fi.tva_intracom = body.tva_intracom || null;
+        fi.fsc_date_expiration = body.fsc_date_expiration || null;
       }
       await loadFournisseursGroupes();
       toast('Fournisseur mis à jour');
@@ -4124,6 +4523,339 @@ async function deleteFournisseur(id) {
     toast('Fournisseur supprimé');
     await loadFournisseurs();
   } catch (e) { toast(e.message, true); }
+}
+
+// ─── Fusion de fournisseurs ────────────────────────────────────────
+function openMergeFournisseurModal(sourceId){
+  const src = fournisseursAll.find(x => x.id === sourceId);
+  if (!src) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'four-modal-backdrop';
+  const dlg = document.createElement('div');
+  dlg.className = 'four-modal';
+  // Trie candidats par ressemblance (norm nom en commun)
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(sasu|sarl|eurl|sas|snc|sa|scop|scp|gie)\b/g,'').replace(/[^a-z0-9]/g,'');
+  const srcN = norm(src.nom);
+  const candidates = fournisseursAll
+    .filter(x => x.id !== sourceId)
+    .map(x => ({ ...x, _score: (norm(x.nom) === srcN ? 100 : (x.groupe && x.groupe === src.groupe ? 20 : 0)) }))
+    .sort((a,b) => (b._score - a._score) || a.nom.localeCompare(b.nom, 'fr', {sensitivity:'base'}));
+  const opts = candidates.map(x => {
+    const hint = x._score >= 100 ? ' — nom identique après normalisation' : (x._score >= 20 ? ' — même groupe' : '');
+    return '<option value="' + x.id + '">' + esc(x.nom) + (x.groupe ? ' · ' + esc(x.groupe) : '') + hint + '</option>';
+  }).join('');
+  dlg.innerHTML =
+    '<h3>Fusionner « ' + esc(src.nom) + ' »</h3>' +
+    '<p class="sub" style="margin-top:-8px;font-size:12px">Toutes les données rattachées à ce fournisseur (contacts, réceptions, certificats, audits, historiques matières, JSON déclarations UE, catégories) seront réassignées vers la <strong>cible</strong>. Le fournisseur source sera <strong>supprimé</strong>.</p>' +
+    '<label class="sub" style="margin-top:12px;display:block">Fusionner dans (cible) *</label>' +
+    '<select id="mf-target" style="width:100%">' +
+      '<option value="">— Choisir un fournisseur cible —</option>' + opts +
+    '</select>' +
+    '<label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px;cursor:pointer">' +
+      '<input type="checkbox" id="mf-confirm" style="width:16px;height:16px">' +
+      'Je confirme : cette opération est <strong style="color:var(--danger);margin-left:4px">irréversible</strong>' +
+    '</label>' +
+    '<div id="mf-report" style="margin-top:10px"></div>' +
+    '<div class="actions">' +
+      '<button type="button" class="btn btn-sec" id="mf-cancel">Annuler</button>' +
+      '<button type="button" class="btn btn-danger-solid" id="mf-go" disabled>Fusionner</button>' +
+    '</div>';
+  backdrop.appendChild(dlg);
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  dlg.querySelector('#mf-cancel').onclick = close;
+  const cbo = dlg.querySelector('#mf-confirm');
+  const btn = dlg.querySelector('#mf-go');
+  const upd = () => { btn.disabled = !(cbo.checked && dlg.querySelector('#mf-target').value); };
+  cbo.onchange = upd;
+  dlg.querySelector('#mf-target').onchange = upd;
+  btn.onclick = async () => {
+    const targetId = Number(dlg.querySelector('#mf-target').value);
+    if (!targetId) return;
+    const tgt = fournisseursAll.find(x => x.id === targetId);
+    if (!confirm('Fusionner « ' + src.nom + ' » DANS « ' + (tgt ? tgt.nom : '?') + ' » ?\n\nLe fournisseur source sera supprimé.')) return;
+    btn.disabled = true; btn.textContent = 'Fusion en cours…';
+    try {
+      const r = await api('/api/fournisseurs/' + sourceId + '/merge/' + targetId, { method: 'POST' });
+      const rep = dlg.querySelector('#mf-report');
+      const parts = [];
+      if (r.moved) Object.entries(r.moved).forEach(([k,v]) => { if (v) parts.push(v + ' ' + k); });
+      if (r.renamed) Object.entries(r.renamed).forEach(([k,v]) => { if (v) parts.push(v + ' × ' + k); });
+      if (r.json_rewrites) parts.push(r.json_rewrites + ' JSON réécritures');
+      if (rep) rep.innerHTML = '<div style="background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);padding:10px;border-radius:8px;font-size:12px;color:var(--ok)">Fusion réussie. Réassignations : ' + esc(parts.join(' · ') || 'aucune référence à réassigner') + '</div>';
+      toast('Fusion réussie');
+      await loadFournisseurs();
+      setTimeout(close, 1800);
+    } catch(e) {
+      const rep = dlg.querySelector('#mf-report');
+      if (rep) rep.innerHTML = '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);padding:10px;border-radius:8px;font-size:12px;color:var(--danger)">' + esc(e.message || 'Erreur') + '</div>';
+      btn.disabled = false; btn.textContent = 'Fusionner';
+    }
+  };
+}
+
+// ─── Doublons potentiels ──────────────────────────────────────────
+async function openDoublonsModal(){
+  const backdrop = document.createElement('div');
+  backdrop.className = 'four-modal-backdrop';
+  const dlg = document.createElement('div');
+  dlg.className = 'four-modal';
+  dlg.style.maxWidth = '760px';
+  dlg.innerHTML =
+    '<h3>Doublons potentiels</h3>' +
+    '<p class="sub" style="margin-top:-8px;font-size:12px">Regroupement par nom normalisé (accents, formes juridiques ignorées) et par SIRET identique.</p>' +
+    '<div id="fd-results" style="margin-top:12px"><div class="four-drawer-empty">Analyse en cours…</div></div>' +
+    '<div class="actions"><button type="button" class="btn btn-sec" id="fd-close">Fermer</button></div>';
+  backdrop.appendChild(dlg);
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  dlg.querySelector('#fd-close').onclick = close;
+  try {
+    const r = await api('/api/fournisseurs/doublons');
+    const box = dlg.querySelector('#fd-results');
+    if (!r || !r.groups || !r.groups.length) {
+      box.innerHTML = '<div class="four-drawer-empty">✓ Aucun doublon détecté.</div>';
+      return;
+    }
+    box.innerHTML = r.groups.map(g => {
+      const items = g.fournisseurs.map(f =>
+        '<div class="four-drawer-list-item" style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+          '<div><strong>' + esc(f.nom) + '</strong>' +
+            (f.siret ? '<span style="color:var(--muted);font-size:11px;margin-left:8px">SIRET ' + esc(f.siret) + '</span>' : '') +
+            (f.ville ? '<span style="color:var(--muted);font-size:11px;margin-left:8px">' + esc(f.ville) + '</span>' : '') +
+            (f.has_fsc ? '<span class="four-pill fsc" style="margin-left:8px">FSC</span>' : '') +
+            (f.actif ? '' : '<span class="four-pill nofsc" style="margin-left:8px">Inactif</span>') +
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + (f.nb_contacts || 0) + ' contact(s)</div>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sec btn-sm" data-fdmerge="' + f.id + '">Fusionner…</button>' +
+        '</div>'
+      ).join('');
+      return '<div style="margin-bottom:14px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' +
+          esc(g.reason === 'siret' ? 'SIRET commun : ' + g.key : 'Nom similaire') +
+          '<span style="color:var(--accent);margin-left:6px">· ' + g.count + '</span>' +
+        '</div>' +
+        '<div class="four-drawer-list">' + items + '</div>' +
+      '</div>';
+    }).join('');
+    box.querySelectorAll('[data-fdmerge]').forEach(b => b.onclick = () => {
+      close();
+      openMergeFournisseurModal(Number(b.dataset.fdmerge));
+    });
+  } catch(e) {
+    dlg.querySelector('#fd-results').innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+  }
+}
+
+// ─── Drawer : fiche fournisseur unifiée ───────────────────────────
+let _fourDrawerCurrentId = null;
+
+function _ensureFourDrawer(){
+  let bd = document.getElementById('four-drawer-backdrop');
+  if (bd) return { backdrop: bd, drawer: document.getElementById('four-drawer') };
+  bd = document.createElement('div');
+  bd.id = 'four-drawer-backdrop';
+  bd.className = 'four-drawer-backdrop';
+  const dr = document.createElement('div');
+  dr.id = 'four-drawer';
+  dr.className = 'four-drawer';
+  dr.innerHTML =
+    '<div class="four-drawer-head">' +
+      '<div><h3 id="fd-title">Fournisseur</h3><p class="sub" id="fd-sub"></p></div>' +
+      '<button type="button" class="four-drawer-close" id="fd-close-btn" title="Fermer">×</button>' +
+    '</div>' +
+    '<div class="four-drawer-tabs" role="tablist">' +
+      '<button type="button" class="four-drawer-tab active" data-fdtab="identite">Identité</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="fsc">FSC</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="contacts">Contacts</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="receptions">Réceptions</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="traca">Traçabilité</button>' +
+    '</div>' +
+    '<div class="four-drawer-body" id="fd-body"></div>';
+  document.body.appendChild(bd);
+  document.body.appendChild(dr);
+  const close = () => { bd.classList.remove('open'); dr.classList.remove('open'); _fourDrawerCurrentId = null; };
+  bd.addEventListener('click', close);
+  dr.querySelector('#fd-close-btn').addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dr.classList.contains('open')) close(); });
+  dr.querySelectorAll('[data-fdtab]').forEach(btn => btn.addEventListener('click', () => {
+    dr.querySelectorAll('[data-fdtab]').forEach(x => x.classList.toggle('active', x.dataset.fdtab === btn.dataset.fdtab));
+    _fourDrawerRenderTab(btn.dataset.fdtab);
+  }));
+  return { backdrop: bd, drawer: dr };
+}
+
+function openFournisseurDrawer(id){
+  const f = fournisseursAll.find(x => x.id === id);
+  if (!f) return;
+  _fourDrawerCurrentId = id;
+  const { backdrop, drawer } = _ensureFourDrawer();
+  drawer.querySelector('#fd-title').textContent = f.nom || '(sans nom)';
+  const bits = [];
+  if (f.groupe) bits.push('Groupe ' + f.groupe + (f.branche ? ' · ' + f.branche : ''));
+  if (f.ville) bits.push(f.ville + (f.pays && f.pays !== 'FR' ? ' (' + f.pays + ')' : ''));
+  if (!f.actif) bits.push('INACTIF');
+  drawer.querySelector('#fd-sub').textContent = bits.join(' — ');
+  // Reset onglet Identité par défaut
+  drawer.querySelectorAll('[data-fdtab]').forEach(x => x.classList.toggle('active', x.dataset.fdtab === 'identite'));
+  _fourDrawerRenderTab('identite');
+  backdrop.classList.add('open');
+  drawer.classList.add('open');
+}
+
+function _fdKV(label, value){
+  if (value === null || value === undefined || value === '') return '';
+  return '<dt>' + esc(label) + '</dt><dd>' + (typeof value === 'string' ? esc(value) : value) + '</dd>';
+}
+
+async function _fourDrawerRenderTab(tab){
+  const id = _fourDrawerCurrentId;
+  if (!id) return;
+  const f = fournisseursAll.find(x => x.id === id);
+  if (!f) return;
+  const body = document.getElementById('fd-body');
+  if (!body) return;
+
+  if (tab === 'identite') {
+    const catLbls = (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
+    const catsHTML = (Array.isArray(f.categories) && f.categories.length)
+      ? '<div class="four-cats-cell" style="max-width:none">' + f.categories.map(c => '<span class="four-cat-pill cat-' + esc(c) + '">' + esc(catLbls[c] || c) + '</span>').join('') + '</div>'
+      : '<span style="color:var(--muted)">—</span>';
+    const addr = [f.adresse, [f.code_postal, f.ville].filter(Boolean).join(' '), f.pays && f.pays !== 'FR' ? f.pays : ''].filter(Boolean).join(', ');
+    body.innerHTML =
+      '<h4>Identité</h4>' +
+      '<dl class="kv">' +
+        _fdKV('Nom', f.nom) +
+        _fdKV('Statut', f.actif ? '<span class="four-pill fsc">Actif</span>' : '<span class="four-pill nofsc">Inactif</span>') +
+        _fdKV('Groupe', f.groupe) +
+        _fdKV('Branche', f.branche) +
+        _fdKV('SIRET', f.siret) +
+        _fdKV('TVA intra.', f.tva_intracom) +
+        _fdKV('Langue', (f.langue_default || 'fr').toUpperCase()) +
+      '</dl>' +
+      '<h4>Adresse</h4>' +
+      '<dl class="kv">' + _fdKV('Adresse', addr || '—') + '</dl>' +
+      '<h4>Catégories</h4>' +
+      '<div style="margin-bottom:14px">' + catsHTML + '</div>' +
+      '<h4>Actions</h4>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-edit">Modifier</button>' +
+        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-merge">Fusionner…</button>' +
+        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-actif">' + (f.actif ? 'Désactiver' : 'Réactiver') + '</button>' +
+      '</div>';
+    body.querySelector('#fd-act-edit').onclick = () => openEditFournisseur(id);
+    body.querySelector('#fd-act-merge').onclick = () => openMergeFournisseurModal(id);
+    body.querySelector('#fd-act-actif').onclick = async () => {
+      try {
+        await api('/api/fournisseurs/' + id + '/actif', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actif: !f.actif }),
+        });
+        f.actif = f.actif ? 0 : 1;
+        toast(f.actif ? 'Fournisseur activé' : 'Fournisseur désactivé');
+        _fourDrawerRenderTab('identite');
+        renderFournisseursTable();
+      } catch(e) { toast(e.message || 'Erreur', true); }
+    };
+    return;
+  }
+
+  if (tab === 'fsc') {
+    const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+    body.innerHTML =
+      '<h4>Certification FSC</h4>' +
+      '<div style="margin-bottom:14px">' + _fscBadgeHTML(f) + '</div>' +
+      (hasFsc
+        ? '<dl class="kv">' +
+            _fdKV('Licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span style="color:var(--muted)">— manquant</span>') +
+            _fdKV('Certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span style="color:var(--muted)">— manquant</span>') +
+            _fdKV('Expiration', f.fsc_date_expiration || '<span style="color:var(--muted)">— non renseignée</span>') +
+          '</dl>'
+        : '<div class="four-drawer-empty">Ce fournisseur n\'est pas certifié FSC.</div>');
+    return;
+  }
+
+  if (tab === 'contacts') {
+    body.innerHTML = '<div class="four-drawer-empty">Chargement…</div>';
+    try {
+      const list = await api('/api/fournisseurs/' + id + '/contacts');
+      if (!Array.isArray(list) || !list.length) {
+        body.innerHTML = '<h4>Contacts (0)</h4><div class="four-drawer-empty">Aucun contact enregistré.<br><br>Utilisez l\'onglet « Contacts & infos » pour en ajouter.</div>';
+        return;
+      }
+      body.innerHTML =
+        '<h4>Contacts (' + list.length + ')</h4>' +
+        '<div class="four-drawer-list">' +
+        list.map(c => {
+          const emails = Array.isArray(c.emails) ? c.emails.join(', ') : '';
+          const tels = Array.isArray(c.tels) ? c.tels.join(', ') : '';
+          return '<div class="four-drawer-list-item">' +
+            '<div><strong>' + esc(c.nom || '(sans nom)') + '</strong>' +
+              (c.is_principal ? '<span class="four-pill fsc" style="margin-left:6px">Principal</span>' : '') +
+              (c.actif ? '' : '<span class="four-pill nofsc" style="margin-left:6px">Inactif</span>') +
+            '</div>' +
+            (c.role ? '<div style="color:var(--muted);font-size:11px;margin-top:2px">' + esc(c.role) + '</div>' : '') +
+            (emails ? '<div style="margin-top:4px">✉ ' + esc(emails) + '</div>' : '') +
+            (tels ? '<div>☎ ' + esc(tels) + '</div>' : '') +
+          '</div>';
+        }).join('') +
+        '</div>';
+    } catch(e) {
+      body.innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+    }
+    return;
+  }
+
+  if (tab === 'receptions') {
+    body.innerHTML = '<div class="four-drawer-empty">Chargement…</div>';
+    try {
+      const r = await api('/api/fournisseurs/' + id + '/receptions');
+      const recs = (r && r.receptions) || [];
+      if (!recs.length) {
+        body.innerHTML = '<h4>Historique réceptions</h4><div class="four-drawer-empty">Aucune réception enregistrée dans MyStock pour ce fournisseur.</div>';
+        return;
+      }
+      body.innerHTML =
+        '<h4>Historique réceptions (' + recs.length + (recs.length >= 50 ? ' — 50 dernières' : '') + ')</h4>' +
+        '<div class="four-drawer-list">' +
+        recs.map(rec => {
+          const d = rec.created_at ? new Date(rec.created_at).toLocaleString('fr-FR') : '—';
+          const codes = Array.isArray(rec.items) ? rec.items.filter(Boolean) : [];
+          return '<div class="four-drawer-list-item">' +
+            '<div style="display:flex;justify-content:space-between;gap:8px">' +
+              '<strong>' + esc(d) + '</strong>' +
+              '<span style="color:var(--muted);font-size:11px">' + (rec.nb_bobines || codes.length) + ' bobine(s)</span>' +
+            '</div>' +
+            (rec.created_by_name ? '<div style="color:var(--muted);font-size:11px">' + esc(rec.created_by_name) + '</div>' : '') +
+            (rec.certificat_fsc ? '<div style="margin-top:4px;font-size:11px">Cert. FSC : <code>' + esc(rec.certificat_fsc) + '</code></div>' : '') +
+            (rec.note ? '<div style="margin-top:4px;font-size:11px;font-style:italic">' + esc(rec.note) + '</div>' : '') +
+          '</div>';
+        }).join('') +
+        '</div>';
+    } catch(e) {
+      body.innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+    }
+    return;
+  }
+
+  if (tab === 'traca') {
+    const has = !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code);
+    if (!has) {
+      body.innerHTML = '<h4>Guide traçabilité</h4><div class="four-drawer-empty">Aucun guide de traçabilité configuré. Utilisez « Modifier » pour ajouter une photo et un exemple de code-barre.</div>';
+      return;
+    }
+    body.innerHTML =
+      '<h4>Guide traçabilité</h4>' +
+      (f.traca_photo_url ? '<div style="margin-bottom:14px"><img src="' + esc(f.traca_photo_url) + '" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--border)"></div>' : '') +
+      '<dl class="kv">' +
+        _fdKV('Explication', f.traca_explication || '<span style="color:var(--muted)">—</span>') +
+        _fdKV('Exemple de code', f.traca_exemple_code ? '<code>' + esc(f.traca_exemple_code) + '</code>' : '<span style="color:var(--muted)">—</span>') +
+      '</dl>';
+    return;
+  }
 }
 
 // Historique par fournisseur
@@ -5829,7 +6561,6 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
-  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -5872,7 +6603,6 @@ function _alertDefaults(existing) {
         unit: (it && it.unit) || '',
         min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
-        required: !!(it && it.required),  // v2.2.86 : préserver required
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -5887,7 +6617,6 @@ function _alertDefaults(existing) {
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
-      required: !!(it && it.required),  // v2.2.86 : préserver required
     };
   });
   return {
@@ -5897,9 +6626,6 @@ function _alertDefaults(existing) {
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
-    block_production: !!(p && p.block_production),  // v2.2.88
-    placement: (p && ['top-right','center'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
-    size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
   };
 }
 
@@ -5954,8 +6680,80 @@ function _renderAlertFormFields(params, opts) {
     + '</div>';
   return nomBlock
     + descBlock
+<<<<<<< HEAD
     // v2.3.33 : questionnaire remonté juste après la description (l'admin
     // pense d'abord au contenu, ensuite au paramétrage technique)
+=======
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
+    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
+    +   '<div id="af-trigger-sub" class="alert-field-sub">'
+    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
+    +     '<div data-trigger-for="periodic">'
+    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +         '<div>'
+    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
+    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +         '</div>'
+    +         '<div>'
+    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
+    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
+    +         '</div>'
+    +       '</div>'
+    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
+    +     '</div>'
+    +     '<div data-trigger-for="calendar">'
+    +       '<div class="alert-field-row">'
+    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
+    +         '<div></div>'
+    +       '</div>'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
+    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
+    +     '</div>'
+    +     '<div data-trigger-for="event">'
+    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
+    +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
+    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
+    +     '</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
+    +   '<div class="af-md-wrap">'
+    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
+    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
+    +       '<span class="af-md-trigger-caret">▼</span>'
+    +     '</button>'
+    +     '<div id="af-md-panel" class="af-md-panel">'
+    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
+    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
+    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
+    +       '</div>'
+    +       '<div class="af-md-sep"></div>'
+    +       machineCheckboxes
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
+    + '</div>'
+    + '<div class="alert-field">'
+    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
+    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
+    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
+    + '</div>'
+    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
+    +     '<div>'
+    +       '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
+    +       '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Aucune trace nulle part.</span>'
+    +     '</div>'
+    +     '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +   '</div>'
+    +   '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
+    +     '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
+    +     '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider).</div>'
+    +   '</div>'
+    + '</div>'
+>>>>>>> feature/myao-improvements
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
     +     '<div>'
@@ -6172,7 +6970,6 @@ function _afOnOtherToggle(cb){
 function _afChecklistCard(item) {
   const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
   const type = (item && item.type) || 'choice';
-  const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
   return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
@@ -6181,11 +6978,6 @@ function _afChecklistCard(item) {
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
-    // v2.2.85 : case à cocher Obligatoire (bloque la validation opérateur si vide)
-    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
-    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
-    + '</label>'
     + _afChecklistCardBody(item)
     + '</div>';
 }
@@ -6268,9 +7060,7 @@ function _afOnDismissToggle() {
 }
 
 // v2.2.42 : no-op depuis le retrait du filtre produit.
-function _afOnTriggerEventChange() {
-  // v2.2.88 : bloc délai retiré, plus rien à toggle.
-}
+function _afOnTriggerEventChange() { /* no-op */ }
 
 function _afRowClick(ev, inputId) {
   // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
@@ -6352,8 +7142,6 @@ function _afOnTriggerChange() {
   document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
     el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
   });
-  // v2.2.79 : après changement de type, sync l'état du bloc after_calage
-  if (typeof _afOnTriggerEventChange === 'function') _afOnTriggerEventChange();
 }
 
 function _afReadParams() {
@@ -6384,8 +7172,6 @@ function _afReadParams() {
     trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
     // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
     delete trig.filter_conditionnement;
-    // v2.2.88 : delay_minutes retiré (n'a plus de sens dans le nouveau mode)
-    delete trig.delay_minutes;
   }
   // Lecture du questionnaire (cartes : label + réponses possibles)
   const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
@@ -6403,8 +7189,6 @@ function _afReadParams() {
         if (unit) item.unit = unit;
         if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
         if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
-        // v2.2.85 : required
-        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         items.push(item);
         return;
       }
@@ -6421,11 +7205,7 @@ function _afReadParams() {
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      // v2.2.85 : required
-      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
-      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
-      if (_reqCk) _choiceItem.required = true;
-      items.push(_choiceItem);
+      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -6446,6 +7226,7 @@ function _afReadParams() {
     description: descVal.slice(0, 800),
     trigger: trig,
     target: _tgt,
+<<<<<<< HEAD
     // v2.3.33 : validation.button_label figée à 'Valider' côté backend,
     // plus de champ front. On garde l'objet pour éviter un 422 sur rétro-compat.
     validation: {},
@@ -6454,6 +7235,11 @@ function _afReadParams() {
     // v2.3.12 : placement et size par alerte
     placement: (document.getElementById('af-placement')?.value || 'top-right'),
     size: (document.getElementById('af-size')?.value || 'medium'),
+=======
+    validation: {
+      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
+    },
+>>>>>>> feature/myao-improvements
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
@@ -6584,14 +7370,29 @@ const placementOpts = placements.map(p =>
     const sizeOpts = sizes.map(s =>
       '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
     ).join('');
-    // v2.3.12 : modal simplifié — placement/size sont maintenant par alerte.
     overlay.innerHTML = '<div class="alert-modal">'
-      + '<div class="alert-modal-head"><h3>Délai entre alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
       + '<div class="alert-modal-body">'
+      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Placement à l\'écran</label>'
+      +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
+      +   '</div>'
+      +   '<div class="alert-field">'
+      +     '<label class="alert-field-label">Taille</label>'
+      +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
+      +   '</div>'
       +   '<div class="alert-field">'
       +     '<label class="alert-field-label">Délai minimum entre deux alertes (minutes)</label>'
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
+      +   '</div>'
+      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+      +     '<div>'
+      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
+      +     '</div>'
+      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
       +   '</div>'
       + '</div>'
       + '<div class="alert-modal-foot">'
@@ -6606,16 +7407,15 @@ const placementOpts = placements.map(p =>
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        // v2.3.12 : on garde placement/size en base pour rétrocompat runtime.
-        // Ils viennent maintenant des params de chaque alerte, pas de ce modal.
-        placement: _alertGlobalSettings.placement || 'top-right',
-        size: _alertGlobalSettings.size || 'medium',
+        placement: document.getElementById('ags-placement').value,
+        size: document.getElementById('ags-size').value,
+        block_production: document.getElementById('ags-block').checked,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
-        toast('Délai enregistré');
+        _alertGlobalSettings = payload;
+        toast('Réglages enregistrés');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
@@ -6644,31 +7444,182 @@ function _alertTriggerLabel(t) {
 }
 
 async function previewAlert(id) {
-  // v2.3.13 : refactor — appelle directement MysifaAlerts.simulate() du
-  // runtime officiel au lieu de dupliquer la logique de rendu. Toute future
-  // évolution du runtime bénéficie automatiquement au bouton "Tester sur moi".
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
-  // Charger les settings globaux (min_gap, placement/size fallback)
+  // Charger les réglages globaux : placement, taille, bloque-production
   await loadAlertSettings();
-  if (!window.MysifaAlerts || typeof window.MysifaAlerts.simulate !== 'function') {
-    toast('Runtime alertes non chargé — impossible de tester', true);
-    return;
-  }
-  // Assurer que le runtime est démarré (charge _settings depuis l'API)
-  if (typeof window.MysifaAlerts.start === 'function') {
-    try { await window.MysifaAlerts.start(); } catch(_){}
-  }
-  // Appel du simulateur — le rendu utilise le vrai _renderAlert avec les
-  // valeurs placement/size par alerte (v2.3.12), block_production, etc.
-  await window.MysifaAlerts.simulate({
-    id: a.id,
-    nom: a.nom,
-    linked_maint_code: a.linked_maint_code || '',
-    params: a.params || {},
-  });
-}
+  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
+  const d = _alertDefaults(a.params);
+  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
+  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
+  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
 
+  const checklistHtml = clEnabled
+    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
+      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
+      +   d.checklist.items.map((it, idx) => {
+            const itType = it.type || 'choice';
+            if (itType === 'value') {
+              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
+              let toleranceHint = '';
+              if (it.min != null || it.max != null) {
+                const minStr = (it.min != null) ? String(it.min) : '−∞';
+                const maxStr = (it.max != null) ? String(it.max) : '+∞';
+                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
+              }
+              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
+                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
+                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
+                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
+                + '<div style="display:flex;align-items:center;gap:8px">'
+                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
+                +   unit
+                + '</div>'
+                + toleranceHint
+                + '</div>';
+            }
+            const isMulti = it.multi !== false;
+            const inputType = isMulti ? 'checkbox' : 'radio';
+            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
+            const respHtml = it.responses.map((r) =>
+              '<label class="ta-chip">'
+              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
+              + '<span>' + esc(r) + '</span>'
+              + '</label>'
+            ).join('');
+            let otherHtml = '';
+            if (it.allow_other) {
+              otherHtml = '<label class="ta-chip ta-chip-other">'
+                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="_taOnOtherChange(this)">'
+                + '<span>Autre</span>'
+                + '</label>';
+            }
+            const otherArea = it.allow_other
+              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+              : '';
+            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
+              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
+              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
+              + otherArea
+              + '</div>';
+          }).join('')
+      + '</div>'
+    : '';
+
+  // Construction du wrapper de simulation (positionnement, taille, backdrop)
+  const wrap = document.createElement('div');
+  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
+  if (settings.block_production) wrap.classList.add('ta-blocking');
+
+  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
+  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
+
+  // Description eventuelle (contexte affiche a l'operateur)
+  const _descText = (a.params && typeof a.params.description === 'string') ? a.params.description.trim() : '';
+  const _descHtml = _descText
+    ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + esc(_descText) + '</div>'
+    : '';
+
+  // Contenu de l'alerte (sans aucune chrome admin)
+  const alertHtml = '<div class="ta-sim-alert">'
+    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
+    + _descHtml
+    + checklistHtml
+    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
+    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+    + '<div class="ta-sim-actions">'
+    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
+    +   (d.dismiss_button && d.dismiss_button.enabled
+        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
+        : '')
+    + '</div>'
+    + '</div>';
+
+  wrap.innerHTML = exitBtn + alertHtml;
+  document.body.appendChild(wrap);
+
+  const close = () => wrap.remove();
+
+  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
+  document.getElementById('ta-sim-exit').addEventListener('click', close);
+
+  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
+  const onKey = (ev) => {
+    if (ev.key === 'Escape' && !settings.block_production) {
+      close();
+      document.removeEventListener('keydown', onKey);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+
+  // Si non bloquant + placement coin : cliquer en dehors ferme
+  if (!settings.block_production) {
+    setTimeout(() => {
+      const outsideClick = (ev) => {
+        if (!wrap.contains(ev.target)) return;
+        if (ev.target.closest('.ta-sim-alert')) return;
+        if (ev.target.closest('.ta-sim-exit')) return;
+        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
+        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
+        close();
+        document.removeEventListener('keydown', onKey);
+      };
+      wrap.addEventListener('click', outsideClick);
+    }, 100);
+  }
+
+  // Valider
+  function _taIsComplete() {
+    if (!clEnabled) return true;
+    const items = wrap.querySelectorAll('.ta-cl-item');
+    for (const it of items) {
+      const t = it.getAttribute('data-type') || 'choice';
+      if (t === 'value') {
+        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
+        if (v === '') return false;
+      } else {
+        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
+      }
+    }
+    return true;
+  }
+  function _taFinalize() {
+    toast('Test terminé — aucune donnée enregistrée.');
+    close();
+    document.removeEventListener('keydown', onKey);
+  }
+  function _taRenderValidate(actions) {
+    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
+    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  }
+  function _taRenderConfirm(actions) {
+    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
+      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
+      + '<div style="display:flex;gap:6px">'
+      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
+      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
+      + '</div>'
+      + '</div>';
+    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
+    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
+  }
+  function _taOnValidate() {
+    if (_taIsComplete()) { _taFinalize(); return; }
+    const actions = wrap.querySelector('.ta-sim-actions');
+    if (!actions) { _taFinalize(); return; }
+    _taRenderConfirm(actions);
+  }
+  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
+  // v164 : bouton dismiss dans la preview
+  const taDismiss = document.getElementById('ta-dismiss');
+  if (taDismiss) {
+    taDismiss.addEventListener('click', () => {
+      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
+      close();
+      document.removeEventListener('keydown', onKey);
+    });
+  }
+}
 
 function openEditAlertModal(id) {
   const a = _alertsData.find(x => x.id === id);
@@ -8684,8 +9635,7 @@ async function prWizCreateAgent() {
     // Affiche le bloc token + installer
     document.getElementById('pr-wiz-token-display').value = r.token;
     // Génère la commande d'install pré-remplie avec le token
-    // v2 - chemin absolu vers Downloads : pas besoin de cd manuel avant
-    const cmd = `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\\Downloads\\install_agent_windows.ps1" -Token "${r.token}"`;
+    const cmd = `powershell -ExecutionPolicy Bypass -File .\\install_agent_windows.ps1 -Token "${r.token}"`;
     document.getElementById('pr-wiz-install-cmd').value = cmd;
     document.getElementById('pr-wiz-agent-created').style.display = '';
     // Cache le bloc install si c'est TCP/IP (l'agent tourne peut-être ailleurs, on ne force pas)
@@ -9248,111 +10198,6 @@ try {
   const rf = document.getElementById('fmt-refresh');
   if(rf) rf.onclick = () => loadFormationsAdmin();
 } catch(e){}
-
-
-// ─── Activation / désactivation des guides ────────────────────────
-let _fmtConfigData = null;   // { guides: [{guide_key, label, module, enabled, updated_at}, ...] }
-let _fmtConfigOpen = false;
-
-function toggleGuidesConfigSection(){
-  const sec = document.getElementById('fmt-config-section');
-  const btn = document.getElementById('fmt-toggle-config');
-  if(!sec) return;
-  _fmtConfigOpen = !_fmtConfigOpen;
-  sec.classList.toggle('hidden', !_fmtConfigOpen);
-  if(btn) btn.textContent = _fmtConfigOpen ? 'Fermer' : 'Activer / désactiver les guides';
-  if(_fmtConfigOpen && !_fmtConfigData) loadGuidesConfig();
-}
-
-async function loadGuidesConfig(){
-  const list = document.getElementById('fmt-config-list');
-  if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Chargement…</div>';
-  try {
-    _fmtConfigData = await api('/api/guides/admin/config');
-    renderGuidesConfig();
-  } catch(e){
-    if(list) list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--danger,#ef4444)">Erreur chargement : '+ (e.message||'') +'</div>';
-  }
-}
-
-function renderGuidesConfig(){
-  const list = document.getElementById('fmt-config-list');
-  if(!list || !_fmtConfigData) return;
-  const guides = _fmtConfigData.guides || [];
-  if(!guides.length){
-    list.innerHTML = '<div class="sub" style="font-size:12px;color:var(--muted)">Aucun guide.</div>';
-    return;
-  }
-  list.innerHTML = guides.map(g => {
-    const checked = g.enabled ? 'checked' : '';
-    const stateLabel = g.enabled ? 'Actif' : 'Désactivé';
-    const stateColor = g.enabled ? 'var(--ok)' : 'var(--muted)';
-    return `<label style="display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;user-select:none">
-      <input type="checkbox" ${checked} data-guide-toggle="${esc(g.guide_key)}" style="width:16px;height:16px;cursor:pointer;flex-shrink:0"
-        onchange="setGuideEnabled('${esc(g.guide_key).replace(/'/g,"\\'")}', this.checked)">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13px">${esc(g.label)}</div>
-        <div style="font-size:11px;color:var(--muted);font-family:ui-monospace,monospace">${esc(g.module||'')}${g.module?' · ':''}${esc(g.guide_key)}</div>
-      </div>
-      <span data-guide-state="${esc(g.guide_key)}" style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${stateColor};min-width:70px;text-align:right">${stateLabel}</span>
-    </label>`;
-  }).join('');
-}
-
-async function setGuideEnabled(guideKey, enabled){
-  // Optimistic UI : mettre a jour l'etat local + le pill
-  if(_fmtConfigData){
-    const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
-    if(g) g.enabled = !!enabled;
-  }
-  const stateEl = document.querySelector('[data-guide-state="'+guideKey.replace(/"/g,'\\"')+'"]');
-  if(stateEl){
-    stateEl.textContent = enabled ? 'Actif' : 'Désactivé';
-    stateEl.style.color = enabled ? 'var(--ok)' : 'var(--muted)';
-  }
-  try {
-    await api('/api/guides/admin/config', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({guide_key: guideKey, enabled: !!enabled})
-    });
-    toast(enabled ? 'Guide activé' : 'Guide désactivé');
-  } catch(e){
-    toast('Erreur enregistrement : ' + (e.message||''), true);
-    // Rollback
-    const cb = document.querySelector('[data-guide-toggle="'+guideKey.replace(/"/g,'\\"')+'"]');
-    if(cb) cb.checked = !enabled;
-    if(_fmtConfigData){
-      const g = (_fmtConfigData.guides||[]).find(x => x.guide_key === guideKey);
-      if(g) g.enabled = !enabled;
-    }
-    if(stateEl){
-      stateEl.textContent = !enabled ? 'Actif' : 'Désactivé';
-      stateEl.style.color = !enabled ? 'var(--ok)' : 'var(--muted)';
-    }
-  }
-}
-
-async function setAllGuidesEnabled(enabled){
-  if(!_fmtConfigData) return;
-  const guides = _fmtConfigData.guides || [];
-  const targets = guides.filter(g => !!g.enabled !== !!enabled);
-  if(!targets.length){
-    toast(enabled ? 'Tous les guides sont déjà actifs' : 'Tous les guides sont déjà désactivés');
-    return;
-  }
-  if(!confirm((enabled ? 'Activer' : 'Désactiver') + ' les ' + targets.length + ' guide(s) restant(s) ?')) return;
-  for(const g of targets){
-    try {
-      await api('/api/guides/admin/config', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({guide_key: g.guide_key, enabled: !!enabled})
-      });
-      g.enabled = !!enabled;
-    } catch(e){ /* on continue */ }
-  }
-  renderGuidesConfig();
-  toast(enabled ? 'Guides activés' : 'Guides désactivés');
-}
 
 
 // ─── Appairage matières (bridge MyStock <-> Coûts matières) ────────────
