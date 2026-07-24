@@ -4898,6 +4898,29 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
             responses_json = _json_alerts.dumps(responses, ensure_ascii=False)
         except (TypeError, ValueError):
             responses_json = "{}"
+        # v2.4.6 : anti-doublon serveur. Défense finale contre les rafales de
+        # clics (souris qui rebound, script buggy, retry réseau). Si un ack
+        # existe déjà pour (alert_id, user_id, machine) dans les 5 dernières
+        # secondes, on renvoie 200 avec le row existant SANS insérer — action
+        # traitée comme idempotente, aucune erreur remontée à l'op.
+        # Ce garde-fou complète le disable UI (v2.4.3) qui reste la ligne 1.
+        _dup_threshold = (datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
+                          - timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%S")
+        _dup = conn.execute(
+            """SELECT id, ack_at FROM maintenance_alert_acks
+               WHERE alert_id=? AND COALESCE(user_id,-1)=COALESCE(?,-1)
+                 AND COALESCE(machine,'')=COALESCE(?,'')
+                 AND ack_at >= ?
+               ORDER BY id DESC LIMIT 1""",
+            (alert_id, user.get("id"), machine or "", _dup_threshold),
+        ).fetchone()
+        if _dup:
+            # Traite comme succès idempotent — le client verra un OK et la modal
+            # se fermera normalement, mais aucune nouvelle ligne d'historique.
+            log_action(user=user, action="VALIDATE_DUP", module="maintenance_alerts",
+                       objet=str(alert_id),
+                       detail=f"skipped duplicate ack (existing id={_dup['id']})")
+            return {"ok": True, "ack_at": _dup["ack_at"], "duplicate": True}
         conn.execute(
             """INSERT INTO maintenance_alert_acks
                (alert_id, user_id, user_nom, machine, no_dossier,
