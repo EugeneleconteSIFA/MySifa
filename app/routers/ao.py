@@ -2194,6 +2194,40 @@ def _get_ligne_or_404(conn, ao_id: int, ligne_id: int) -> dict:
     return _row_dict(row)
 
 
+CONDI_UNITES = frozenset({"bobine", "carton", "etiquette", "palette"})
+
+
+@router.patch("/{ao_id}/lignes/{ligne_id}/condi")
+async def update_ligne_condi(request: Request, ao_id: int, ligne_id: int):
+    """Met à jour le conditionnement de vente (unité + quantité) sur une ligne."""
+    _require_ao(request)
+    body = await request.json()
+    unite = body.get("condi_unite")
+    qte = body.get("condi_qte")
+    if unite is not None:
+        unite = (unite or "").strip().lower() or None
+        if unite and unite not in CONDI_UNITES:
+            raise HTTPException(status_code=400, detail="Unité condi invalide.")
+    if qte is not None and qte != "":
+        try:
+            qte = float(qte)
+            if qte <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Quantité condi invalide.")
+    else:
+        qte = None
+    with get_db() as conn:
+        _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        conn.execute(
+            "UPDATE ao_lignes SET condi_unite=?, condi_qte=? WHERE id=? AND ao_id=?",
+            (unite, qte, ligne_id, ao_id),
+        )
+        conn.commit()
+    return {"ok": True, "ligne_id": ligne_id, "condi_unite": unite, "condi_qte": qte}
+
+
 def _load_series_for_ligne(conn, ligne_id: int) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM ao_lignes_series WHERE ligne_id=? ORDER BY position, id",

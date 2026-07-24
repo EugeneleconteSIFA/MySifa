@@ -362,10 +362,12 @@ body.light .field-input.empl-upper::placeholder{
   font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn:active{transform:translateY(1px)}
-body.light .btn{color:#fff}
+body.light .btn:not(.btn-ghost):not(.btn-soft){color:#fff}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:10px;
   padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+body.light .btn.btn-ghost{color:var(--text2)}
+body.light .btn.btn-ghost:hover{color:var(--accent)}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 body.light .btn-sm{color:#fff}
@@ -1079,9 +1081,9 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-results-head .hist-count{font-size:14px;font-weight:700;color:var(--text)}
 .hist-results-head .hist-pagination-info{font-size:13px;color:var(--text);font-weight:700;min-width:104px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
 .hist-results-head-nav .btn{min-width:110px;padding:9px 16px;font-size:13px}
-.hist-results-head-nav .btn-ghost{background:var(--card);color:var(--text);border:1px solid var(--border)}
-.hist-results-head-nav .btn-ghost:not(:disabled):hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.hist-results-head-nav .btn-ghost:disabled{opacity:1;color:var(--muted);border-color:var(--border);background:transparent;cursor:not-allowed}
+.hist-results-head-nav .btn.btn-ghost{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.hist-results-head-nav .btn.btn-ghost:not(:disabled):hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.hist-results-head-nav .btn.btn-ghost:disabled{opacity:1;color:var(--muted);border-color:var(--border);background:transparent;cursor:not-allowed}
 .hist-results-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
 .hist-count{font-size:14px;font-weight:700;color:var(--text)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}

@@ -7469,6 +7469,20 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 207, "fab_matieres_commentaire")
 
+    # v208 — MyAO : conditionnement de vente sur chaque ligne d'AO
+    # (unité + quantité par condi, ex. 30 cartons). Sert au calcul du
+    # prix de vente à la palette/carton/bobine depuis l'onglet Comparaison.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=208 LIMIT 1").fetchone():
+        al_cols = {
+            r["name"] for r in conn.execute("PRAGMA table_info(ao_lignes)").fetchall()
+        }
+        if "condi_unite" not in al_cols:
+            conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_unite TEXT")
+        if "condi_qte" not in al_cols:
+            conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_qte REAL")
+        conn.commit()
+        _record_schema_migration(conn, 208, "ao_lignes_condi")
+
 
 def create_default_admin():
     import bcrypt
