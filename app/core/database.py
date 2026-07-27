@@ -7573,6 +7573,38 @@ Ressources :
     _ao_reponses_cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
     if "marge" not in _ao_reponses_cols:
         conn.execute("ALTER TABLE ao_reponses ADD COLUMN marge REAL NOT NULL DEFAULT 1.0")
+
+    # ── Historique des promotions v1 → v2 ───────────────────────────────────
+    # Trace réelle de chaque déploiement en production, écrite par
+    # scripts/promote_v2.sh (succès ET rollback). Lue par
+    # GET /api/promote/history (Paramètres › Déploiement › Historique).
+    # Même choix délibéré que ci-dessus : CREATE TABLE IF NOT EXISTS hors
+    # schema_migrations — idempotent, insensible aux collisions de numéro
+    # entre branches parallèles.
+    #
+    # statut  : 'success' (promu, healthcheck OK) | 'rollback' (healthcheck KO,
+    #           état restauré) | 'failed' (échec avant restart).
+    # commits : JSON [{hash, author, date, subject}] — les commits réellement
+    #           embarqués dans cette release, figés au moment de la promotion.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS promotion_history (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at     TEXT NOT NULL,
+            finished_at    TEXT,
+            statut         TEXT NOT NULL DEFAULT 'success',
+            version_avant  TEXT,
+            version_apres  TEXT,
+            head_avant     TEXT,
+            head_apres     TEXT,
+            commits_count  INTEGER NOT NULL DEFAULT 0,
+            commits        TEXT,
+            notes          TEXT,
+            declencheur    TEXT DEFAULT 'promote-bot',
+            message        TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_promotion_history_date ON promotion_history(started_at DESC)")
+
     conn.commit()
 
 

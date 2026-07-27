@@ -9,6 +9,7 @@
 #  5. systemctl restart mysifa
 #  6. Healthcheck /healthz (15s timeout) → ROLLBACK auto si KO
 #  7. Annonce de release dans update_announcements (si NOTES fourni)
+#  8. Enregistrement dans promotion_history (toujours — succès, rollback, échec)
 #
 # Usage :
 #  sudo ./scripts/promote_v2.sh ["Notes de release en HTML"]
@@ -44,11 +45,97 @@ gits() {
         "$@"
 }
 
+# ─── Historique des promotions ───────────────────────────────────────
+# record_promotion <statut> <message>
+#   statut : success | rollback | failed
+#
+# Écrit une ligne dans promotion_history (DB v2) : c'est la trace réelle des
+# mises à jour, affichée dans Paramètres › Déploiement › Historique.
+# Best-effort — ne doit JAMAIS faire échouer une promotion par ailleurs réussie.
+# Les valeurs transitent par l'environnement et sont insérées en paramètres liés
+# (jamais d'interpolation SQL) : les sujets de commit et les notes HTML peuvent
+# contenir des apostrophes sans rien casser.
+# Le CREATE TABLE IF NOT EXISTS rend le script autonome : il fonctionne même si
+# la DB v2 n'a pas encore été bootée par un code contenant la migration
+# (typiquement sur le chemin de rollback, où l'ancien code est restauré).
+record_promotion() {
+    PH_DB="$DB_PATH" \
+    PH_STATUT="$1" \
+    PH_MESSAGE="$2" \
+    PH_STARTED="${STARTED_AT:-}" \
+    PH_VAVANT="${VERSION_AVANT:-}" \
+    PH_VAPRES="${NEW_VERSION:-}" \
+    PH_HAVANT="${PREV_HEAD:-}" \
+    PH_HAPRES="${NEW_HEAD:-}" \
+    PH_NOTES="${NOTES:-}" \
+    PH_COMMITS="${COMMITS_RAW:-}" \
+    python3 - <<'PYEOF' 2>/dev/null || log "    Historique non enregistre (python/sqlite KO)"
+import json, os, sqlite3
+from datetime import datetime
+
+commits = []
+for line in (os.environ.get("PH_COMMITS") or "").splitlines():
+    if not line.strip():
+        continue
+    parts = line.split("|", 3)
+    if len(parts) == 4:
+        commits.append({
+            "hash": parts[0], "author": parts[1],
+            "date": parts[2], "subject": parts[3],
+        })
+
+now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+con = sqlite3.connect(os.environ["PH_DB"], timeout=10)
+con.execute("""
+    CREATE TABLE IF NOT EXISTS promotion_history (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        started_at     TEXT NOT NULL,
+        finished_at    TEXT,
+        statut         TEXT NOT NULL DEFAULT 'success',
+        version_avant  TEXT,
+        version_apres  TEXT,
+        head_avant     TEXT,
+        head_apres     TEXT,
+        commits_count  INTEGER NOT NULL DEFAULT 0,
+        commits        TEXT,
+        notes          TEXT,
+        declencheur    TEXT DEFAULT 'promote-bot',
+        message        TEXT
+    )
+""")
+con.execute(
+    """INSERT INTO promotion_history
+       (started_at, finished_at, statut, version_avant, version_apres,
+        head_avant, head_apres, commits_count, commits, notes,
+        declencheur, message)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+    (
+        os.environ.get("PH_STARTED") or now,
+        now,
+        os.environ.get("PH_STATUT") or "success",
+        os.environ.get("PH_VAVANT") or None,
+        os.environ.get("PH_VAPRES") or None,
+        (os.environ.get("PH_HAVANT") or "")[:40] or None,
+        (os.environ.get("PH_HAPRES") or "")[:40] or None,
+        len(commits),
+        json.dumps(commits, ensure_ascii=False),
+        os.environ.get("PH_NOTES") or None,
+        "promote-bot",
+        os.environ.get("PH_MESSAGE") or None,
+    ),
+)
+con.commit()
+con.close()
+PYEOF
+}
+
 cd "$V2_PATH" || fail "V2_PATH introuvable : $V2_PATH"
 mkdir -p "$BACKUP_DIR"
 
 TIMESTAMP=$(date '+%Y%m%d_%H%M%S')
 BACKUP_FILE="${BACKUP_DIR}/promote_${TIMESTAMP}.db"
+STARTED_AT=$(date '+%Y-%m-%dT%H:%M:%S')
+COMMITS_RAW=""
 
 # ─── 1. Backup DB ────────────────────────────────────────────────────
 log "1/7 Backup DB"
@@ -61,7 +148,10 @@ log "    OK : $(basename "$BACKUP_FILE")"
 # ─── 2. Capture HEAD pour rollback ───────────────────────────────────
 log "2/7 Capture HEAD v2 actuel"
 PREV_HEAD=$(gits rev-parse HEAD) || fail "git rev-parse HEAD KO"
-log "    HEAD avant : ${PREV_HEAD:0:7}"
+# Version en place AVANT la promotion — lue ici, car config.py sera écrasé par
+# le reset de l'étape 3 (sert à afficher « v2.4.17 → v2.4.18 » dans l'historique).
+VERSION_AVANT=$(grep -E '^APP_VERSION\s*=' config.py | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "?")
+log "    HEAD avant : ${PREV_HEAD:0:7} (v${VERSION_AVANT})"
 
 # ─── 3. Merge staging → main puis reset v2 sur origin/main ───────────
 log "3/7 git fetch + merge staging→main + reset v2"
@@ -80,12 +170,14 @@ if [[ "$DIFF_COUNT" -gt 0 ]]; then
         log "    CONFLIT — git merge --abort"
         gits merge --abort 2>/dev/null
         gits reset --hard "$PREV_HEAD" --quiet
+        record_promotion "failed" "Conflit de merge staging -> main"
         fail "Conflit de merge staging → main. À résoudre en local."
     fi
 
     if ! gits push origin main --quiet; then
         log "    git push origin main KO — rollback"
         gits reset --hard origin/main --quiet
+        record_promotion "failed" "Push origin/main refuse"
         fail "Push origin/main refusé (droits ?)."
     fi
 
@@ -106,6 +198,12 @@ fi
 
 # Lire la version pour les logs (informative)
 NEW_VERSION=$(grep -E '^APP_VERSION\s*=' config.py | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || echo "?")
+
+# Figer la liste des commits réellement embarqués dans cette release.
+# --no-merges : on écarte le commit de merge « promote: merge staging into main »,
+# qui n'apporte aucune information pour un lecteur humain.
+COMMITS_RAW=$(gits log "${PREV_HEAD}..${NEW_HEAD}" --no-merges \
+    --pretty=format:'%h|%an|%ad|%s' --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || echo "")
 
 # ─── 4. chown au user applicatif ─────────────────────────────────────
 log "4/7 chown -R ${APP_USER}:${APP_USER}"
@@ -153,6 +251,7 @@ VALUES (
 );
 SQL_END
 
+    record_promotion "rollback" "Healthcheck KO apres ${HEALTHZ_TIMEOUT}s — etat restaure a ${PREV_HEAD:0:7} (v${PREV_VERSION})"
     fail "Promotion annulée — état restauré à ${PREV_HEAD:0:7} (v${PREV_VERSION})"
 fi
 
@@ -184,6 +283,10 @@ SQL_END
 else
     log "7/7 Pas de notes fournies — annonce ignorée"
 fi
+
+# ─── 8. Historique de la release ─────────────────────────────────────
+log "8/8 Enregistrement dans l'historique des mises à jour"
+record_promotion "success" ""
 
 log ""
 log "==> Promotion réussie : ${PREV_HEAD:0:7} → ${NEW_HEAD:0:7} (v${NEW_VERSION})"

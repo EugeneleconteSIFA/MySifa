@@ -1969,6 +1969,181 @@ def promote_status(request: Request):
     }
 
 
+# ─── Historique des promotions ─────────────────────────────────────────────────
+# Deux sources, fusionnées :
+#   1. La table promotion_history de la DB v2, écrite par promote_v2.sh à chaque
+#      déploiement (succès, rollback, échec). Source de vérité : dates de
+#      déploiement réelles, notes de release, statut, commits figés.
+#   2. Un backfill lu dans le dépôt git v2 : chaque merge « promote: merge
+#      staging into main » sur origin/main correspond à une promotion passée,
+#      antérieure à la mise en place de la table. Permet d'avoir un historique
+#      non vide dès le premier jour.
+#
+# La DB lue est TOUJOURS celle de v2 (c'est v2 qui est promue), même quand
+# l'endpoint est servi par v1 : les deux tournent sur la même machine. Ouverture
+# en lecture seule pour ne jamais interférer avec la production. Repli sur la DB
+# locale si le fichier v2 est absent (poste de dev).
+
+V2_DB_PATH = f"{V2_REPO_PATH}/app/data/production.db"
+
+# Sujet du commit de merge généré par promote_v2.sh — clé du backfill git.
+_PROMOTE_MERGE_SUBJECT = "promote: merge staging into main"
+
+
+def _promote_history_from_db() -> list:
+    """Lit promotion_history dans la DB v2 (lecture seule). [] si indisponible."""
+    import json as _json
+    import sqlite3 as _sqlite3
+
+    rows = []
+    try:
+        conn = _sqlite3.connect(f"file:{V2_DB_PATH}?mode=ro", uri=True, timeout=5)
+    except Exception:
+        try:
+            from database import get_db
+            with get_db() as local:
+                cur = local.execute(
+                    "SELECT * FROM promotion_history ORDER BY started_at DESC LIMIT 100"
+                )
+                raw = [dict(r) for r in cur.fetchall()]
+        except Exception:
+            return []
+    else:
+        try:
+            conn.row_factory = _sqlite3.Row
+            raw = [dict(r) for r in conn.execute(
+                "SELECT * FROM promotion_history ORDER BY started_at DESC LIMIT 100"
+            ).fetchall()]
+        except Exception:
+            return []
+        finally:
+            conn.close()
+
+    for r in raw:
+        try:
+            commits = _json.loads(r.get("commits") or "[]")
+        except Exception:
+            commits = []
+        rows.append({
+            "source": "db",
+            "date": r.get("started_at"),
+            "finished_at": r.get("finished_at"),
+            "statut": r.get("statut") or "success",
+            "version_avant": r.get("version_avant"),
+            "version": r.get("version_apres"),
+            "head_avant": (r.get("head_avant") or "")[:7],
+            "head": (r.get("head_apres") or "")[:7],
+            "head_full": r.get("head_apres") or "",
+            "commits_count": r.get("commits_count") or len(commits),
+            "commits": commits,
+            "notes": r.get("notes"),
+            "message": r.get("message"),
+            "auteur": r.get("declencheur") or "promote-bot",
+        })
+    return rows
+
+
+def _promote_history_from_git(limit: int = 30) -> list:
+    """Reconstruit l'historique des promotions passées depuis les merges git."""
+    def _git(*args, timeout=15):
+        return _subprocess.check_output(
+            [_GIT_BIN, "-C", V2_REPO_PATH, *args], text=True, timeout=timeout,
+        )
+
+    try:
+        merges_out = _git(
+            "log", "origin/main", "--merges", "--grep", _PROMOTE_MERGE_SUBJECT,
+            f"--max-count={limit}", "--pretty=format:%H|%h|%an|%ad",
+            "--date=format:%Y-%m-%dT%H:%M:%S",
+        )
+    except Exception:
+        return []
+
+    releases = []
+    for line in merges_out.strip().split("\n"):
+        if not line:
+            continue
+        parts = line.split("|", 3)
+        if len(parts) != 4:
+            continue
+        full, short, author, date = parts
+
+        # Les commits de la release = ceux apportés par staging (2e parent)
+        # et absents de main avant le merge (1er parent).
+        commits = []
+        try:
+            log_out = _git(
+                "log", f"{full}^1..{full}^2", "--no-merges",
+                "--pretty=format:%h|%an|%ad|%s", "--date=format:%Y-%m-%d %H:%M",
+            )
+            for cline in log_out.strip().split("\n"):
+                if not cline:
+                    continue
+                cparts = cline.split("|", 3)
+                if len(cparts) == 4:
+                    commits.append({
+                        "hash": cparts[0], "author": cparts[1],
+                        "date": cparts[2], "subject": cparts[3],
+                    })
+        except Exception:
+            pass
+
+        version = None
+        try:
+            version = _parse_version_from_text(_git("show", f"{full}:config.py", timeout=10))
+        except Exception:
+            pass
+
+        releases.append({
+            "source": "git",
+            "date": date,
+            "finished_at": None,
+            "statut": "success",
+            "version_avant": None,
+            "version": version,
+            "head_avant": "",
+            "head": short,
+            "head_full": full,
+            "commits_count": len(commits),
+            "commits": commits,
+            "notes": None,
+            "message": None,
+            "auteur": author,
+        })
+
+    # version_avant : la version de la release précédente (git est trié récent → ancien)
+    for i, rel in enumerate(releases):
+        if i + 1 < len(releases):
+            rel["version_avant"] = releases[i + 1]["version"]
+            rel["head_avant"] = releases[i + 1]["head"]
+    return releases
+
+
+@router.get("/api/promote/history")
+def promote_history(request: Request, limit: int = 30):
+    require_settings(request)
+
+    db_rows = _promote_history_from_db()
+    git_rows = _promote_history_from_git(limit=limit)
+
+    # Dédoublonnage : après une promotion, le HEAD de v2 est exactement le commit
+    # de merge « promote: … ». Une release déjà en base n'est donc pas reprise du git.
+    known = {r["head_full"] for r in db_rows if r.get("head_full")}
+    known |= {r["head"] for r in db_rows if r.get("head")}
+    merged = db_rows + [
+        g for g in git_rows
+        if g["head_full"] not in known and g["head"] not in known
+    ]
+    merged.sort(key=lambda r: (r.get("date") or ""), reverse=True)
+
+    return {
+        "env": ENV_NAME,
+        "count": len(merged),
+        "has_db_rows": bool(db_rows),
+        "releases": merged[:limit],
+    }
+
+
 @router.post("/api/promote")
 async def promote_run(request: Request):
     require_settings(request)

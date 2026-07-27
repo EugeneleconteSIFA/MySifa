@@ -104,6 +104,7 @@
       if (outEl) outEl.textContent += '\n[Erreur réseau : ' + (e && e.message ? e.message : String(e)) + ']\n';
     } finally {
       if (goBtn) goBtn.textContent = 'Promouvoir maintenant';
+      _phLoaded = false;  // la promotion vient d'ajouter une release : forcer le rechargement
       setTimeout(function () { loadPromoteStatus(); }, 500);
     }
   }
@@ -142,8 +143,132 @@
     }
   }
 
-  // Exposition globale pour les onclick inline du HTML (loadPromoteStatus(), runPromote(), syncDbV1()).
+  // ─── Sous-onglets Déployer / Historique ─────────────────────────────
+  function pmSetSub(which) {
+    document.querySelectorAll('.pm-sub').forEach(function (b) {
+      const on = b.dataset.pmsub === which;
+      b.classList.toggle('active', on);
+      b.style.color = on ? 'var(--text)' : 'var(--muted)';
+      b.style.borderBottom = '2px solid ' + (on ? 'var(--accent)' : 'transparent');
+    });
+    const dep = document.getElementById('pm-sub-deploy');
+    const his = document.getElementById('pm-sub-hist');
+    if (dep) dep.classList.toggle('hidden', which !== 'deploy');
+    if (his) his.classList.toggle('hidden', which !== 'hist');
+    if (which === 'hist') loadPromoteHistory();
+  }
+
+  // ─── Historique des mises à jour ────────────────────────────────────
+  // Timeline dépliable : une ligne par release (version, date, statut, nb de
+  // commits), le détail des commits + les notes de release au clic.
+  let _phLoaded = false;
+
+  const _PH_STATUTS = {
+    success:  { label: 'Promu',    color: 'var(--success, var(--ok, #16a34a))' },
+    rollback: { label: 'Rollback', color: 'var(--danger)' },
+    failed:   { label: 'Échec',    color: 'var(--danger)' },
+  };
+
+  // "2026-07-27T14:32:05" / "2026-07-27 14:32" → "27/07/2026 · 14:32"
+  function _phDate(raw) {
+    if (!raw) return '';
+    const m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (!m) return String(raw);
+    return m[3] + '/' + m[2] + '/' + m[1] + ' · ' + m[4] + ':' + m[5];
+  }
+
+  function _phCommitRows(commits) {
+    if (!commits || !commits.length) {
+      return '<div style="padding:14px;color:var(--muted);font-size:12px">Aucun commit listé pour cette release.</div>';
+    }
+    return commits.map(function (c) {
+      return '<div style="display:flex;gap:10px;padding:7px 10px;border-bottom:1px solid var(--border);align-items:flex-start">'
+        + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--accent);min-width:58px">' + _prEsc(c.hash) + '</span>'
+        + '<div style="flex:1;min-width:0">'
+          + '<div style="font-size:12.5px;color:var(--text)">' + _prEsc(c.subject) + '</div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + _prEsc(c.author) + ' · ' + _prEsc(c.date) + '</div>'
+        + '</div>'
+      + '</div>';
+    }).join('');
+  }
+
+  function _phReleaseCard(rel, idx) {
+    const st = _PH_STATUTS[rel.statut] || _PH_STATUTS.success;
+    const ver = rel.version ? 'v' + rel.version : '—';
+    const from = rel.version_avant ? 'v' + rel.version_avant + ' → ' : '';
+    const n = rel.commits_count || (rel.commits ? rel.commits.length : 0);
+
+    let head = '<div onclick="phToggle(' + idx + ')" style="display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer;flex-wrap:wrap">'
+      + '<svg id="ph-chev-' + idx + '" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);flex-shrink:0;transition:transform .15s"><polyline points="9 18 15 12 9 6"/></svg>'
+      + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:14px;font-weight:700;color:var(--text);min-width:70px">' + _prEsc(ver) + '</span>'
+      + '<span style="font-size:12px;color:var(--muted);min-width:130px">' + _prEsc(_phDate(rel.date)) + '</span>'
+      + '<span style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:' + st.color + ';border:1px solid ' + st.color + ';border-radius:20px;padding:2px 9px">' + _prEsc(st.label) + '</span>'
+      + '<span style="font-size:12px;color:var(--muted);flex:1;min-width:120px">' + _prEsc(from) + n + ' commit' + (n > 1 ? 's' : '') + '</span>'
+      + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--muted)">' + _prEsc(rel.head || '') + '</span>';
+    if (rel.source === 'git') {
+      head += '<span title="Reconstruit depuis git — antérieur au suivi en base" style="font-size:10px;color:var(--muted);border:1px dashed var(--border);border-radius:20px;padding:2px 8px">git</span>';
+    }
+    head += '</div>';
+
+    let body = '<div id="ph-body-' + idx + '" class="hidden" style="border-top:1px solid var(--border);background:var(--bg)">';
+    if (rel.message) {
+      body += '<div style="padding:10px 14px;font-size:12px;color:var(--danger)">' + _prEsc(rel.message) + '</div>';
+    }
+    if (rel.notes) {
+      body += '<div style="padding:12px 14px;border-bottom:1px solid var(--border)">'
+        + '<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Notes de release</div>'
+        + '<div style="font-size:12.5px;color:var(--text2);line-height:1.6">' + _prEsc(rel.notes) + '</div>'
+        + '</div>';
+    }
+    body += '<div style="max-height:320px;overflow:auto">' + _phCommitRows(rel.commits) + '</div>';
+    body += '</div>';
+
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">' + head + body + '</div>';
+  }
+
+  function phToggle(idx) {
+    const body = document.getElementById('ph-body-' + idx);
+    const chev = document.getElementById('ph-chev-' + idx);
+    if (!body) return;
+    const opening = body.classList.contains('hidden');
+    body.classList.toggle('hidden', !opening);
+    if (chev) chev.style.transform = opening ? 'rotate(90deg)' : 'rotate(0deg)';
+  }
+
+  async function loadPromoteHistory(force) {
+    const list = document.getElementById('ph-list');
+    const meta = document.getElementById('ph-meta');
+    if (!list) return;
+    if (_phLoaded && !force) return;   // déjà chargé : on ne re-fetch qu'au bouton Rafraîchir
+    list.innerHTML = '<div style="padding:28px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
+
+    let data;
+    try {
+      data = await _prGetJson('/api/promote/history');
+    } catch (e) {
+      list.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement : ' + _prEsc(e && e.message ? e.message : String(e)) + '</div>';
+      return;
+    }
+    _phLoaded = true;
+
+    const rel = data.releases || [];
+    if (!rel.length) {
+      list.innerHTML = '<div style="padding:28px;text-align:center;color:var(--muted);font-size:13px">Aucune mise en production enregistrée pour le moment.</div>';
+      if (meta) meta.textContent = '';
+      return;
+    }
+    list.innerHTML = rel.map(_phReleaseCard).join('');
+    if (meta) {
+      meta.textContent = rel.length + ' release' + (rel.length > 1 ? 's' : '')
+        + (data.has_db_rows ? '' : ' · historique reconstruit depuis git (le suivi en base démarre à la prochaine promotion)');
+    }
+  }
+
+  // Exposition globale pour les onclick inline du HTML.
   window.loadPromoteStatus = loadPromoteStatus;
   window.runPromote = runPromote;
   window.syncDbV1 = syncDbV1;
+  window.pmSetSub = pmSetSub;
+  window.loadPromoteHistory = loadPromoteHistory;
+  window.phToggle = phToggle;
 })();

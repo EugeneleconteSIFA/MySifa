@@ -5875,6 +5875,46 @@ const WEARPART_PIECES = [
   { id: 'cutters',          label: 'Cutters',           no_position: true },
   { id: 'couteaux_landberg',label: 'Couteaux Landberg', no_position: true },
 ];
+
+// --- v2.4.21 : filtrage pieces d'usure par statut ("Tous" / "Jamais saisi") -
+// Une position est "renseignee" si _lastInterventionFor renvoie une date non
+// nulle pour son code+machine. Une piece a 1 ou 2 positions (bande/rive ou
+// single). Le rendu doit :
+//   - En 'all'   : montrer seulement les pieces avec >=1 position renseignee,
+//                  et forcer la position affichee sur une renseignee.
+//   - En 'never' : montrer seulement les pieces avec >=1 position vide,
+//                  et forcer la position affichee sur une vide.
+function _wearPartPositionsOf(piece){
+  return piece.no_position ? ['single'] : ['bande', 'rive'];
+}
+function _wearPartHasData(pieceId, pos, machine){
+  const wpCode = _findWearPartCode(pieceId, pos);
+  if(!wpCode) return false;
+  const last = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  return last != null;
+}
+// Retourne pour chaque piece : positions renseignees / non renseignees.
+function _wearPartStatusFor(pieceId, machine){
+  const p = _wearPartDef(pieceId);
+  if(!p) return { hasData: [], noData: [] };
+  const hasData = [], noData = [];
+  _wearPartPositionsOf(p).forEach(pos => {
+    if(_wearPartHasData(pieceId, pos, machine)) hasData.push(pos);
+    else noData.push(pos);
+  });
+  return { hasData, noData };
+}
+// Compte les pieces qualifiantes pour les filtres 'all' et 'never', pour
+// alimenter les compteurs des chips statut de la sous-toolbar.
+function _wearPartsCounts(machine){
+  const c = { all: 0, never: 0 };
+  WEARPART_PIECES.forEach(p => {
+    const st = _wearPartStatusFor(p.id, machine);
+    if(st.hasData.length > 0) c.all++;
+    if(st.noData.length  > 0) c.never++;
+  });
+  return c;
+}
 // Retourne le descripteur d'une pièce d'usure par id (utile pour tester no_position)
 function _wearPartDef(pieceId){
   return WEARPART_PIECES.find(p => p.id === pieceId) || null;
@@ -5975,14 +6015,32 @@ function setWearPartRef(pieceId, kind, value){
   // de perdre le focus pendant que l'utilisateur tape.
 }
 
-function _renderWearPartsGroup(machine){
+function _renderWearPartsGroup(machine, statusFilter){
   // Déclenche le fetch des dernières dates si la machine a changé
   // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
   if(WEARPART_LAST_DATES_STATE.machine !== machine){
     loadWearPartLastDates(machine);
   }
-  const cards = WEARPART_PIECES.map(p => {
-    const pos = getWearPartPos(p.id, machine);
+  // v2.4.21 : filtre les pieces selon le statusFilter et force la position
+  // affichee sur une position qui matche le filtre (renseignee pour 'all',
+  // vide pour 'never'). Pour tout autre filtre, on ne montre pas les pieces
+  // d'usure (elles ont leur propre logique de retard, hors du systeme
+  // overdue/soon/ok des cartes periodiques).
+  const filter = (statusFilter === 'never') ? 'never' : 'all';
+  const eligible = [];
+  WEARPART_PIECES.forEach(p => {
+    const st = _wearPartStatusFor(p.id, machine);
+    const pool = (filter === 'never') ? st.noData : st.hasData;
+    if(pool.length === 0) return;  // pas de position matchant le filtre
+    // Garde la position courante si elle est dans le pool, sinon prend la premiere du pool
+    const currentPos = getWearPartPos(p.id, machine);
+    const forcedPos = (pool.indexOf(currentPos) !== -1) ? currentPos : pool[0];
+    // v2.4.22 : on transporte aussi le pool pour n'afficher que les onglets
+    // Bande/Rive qui matchent le filtre (l'autre est masqué, pas juste inerte).
+    eligible.push({ piece: p, pos: forcedPos, matchingPositions: pool });
+  });
+  if(eligible.length === 0) return '';  // section vide → caller n'affiche rien
+  const cards = eligible.map(({piece: p, pos, matchingPositions}) => {
     // Source des références : code Intervention en base, match par label
     // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
     const wpCode = _findWearPartCode(p.id, pos);
@@ -6042,11 +6100,16 @@ function _renderWearPartsGroup(machine){
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
     };
+    // v2.4.22 : ne montrer que les onglets des positions qui matchent le filtre.
+    // Cas typique : Couteaux avec seulement Rive renseigné en filtre "Tous" →
+    // le bouton Bande disparait (avant il était visible mais menait a une vue vide).
+    // Si les 2 positions matchent, on montre les 2 (choix reel entre bande/rive).
+    // Si une seule matche, seul son bouton apparait (agit comme un badge de position).
     const tabsHtml = p.no_position
       ? ''
       : ('<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
-           _b('Bande', 'bande') +
-           _b('Rive', 'rive') +
+           (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
+           (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
          '</div>');
     return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
@@ -6138,10 +6201,11 @@ function _renderWearPartsGroup(machine){
       '</section>';
       })();
   }).join('');
+  const nb = eligible.length;
   return '<div class="maint-group">' +
            '<div class="maint-group-head">' +
              '<h3 class="maint-group-title">Pièces d\'usure</h3>' +
-             '<span class="maint-group-count">' + WEARPART_PIECES.length + ' pièces</span>' +
+             '<span class="maint-group-count">' + nb + ' pièce' + (nb > 1 ? 's' : '') + '</span>' +
            '</div>' +
            '<div class="maint-wearparts-stack">' + cards + '</div>' +
          '</div>';
@@ -6194,11 +6258,16 @@ function renderMaintCards(){
   _refreshMaintChipState();
   _refreshMaintCounters();
   const showWearParts = (catFilter === 'remplacements');
-  // La section "Pièces d'usure" est rendue uniquement quand le toggle est
-  // sur "Remplacements", pour la machine active, et quand on n'a pas de filtre
-  // statut restrictif (les pièces d'usure ont leur propre logique de suivi).
-  const wearPartsHtml = (showWearParts && statusFilter === 'all' && grouping !== 'machine')
-    ? _renderWearPartsGroup(machine) : '';
+  // La section "Pièces d'usure" est rendue quand :
+  //   - le toggle catégorie est sur "Remplacements"
+  //   - ET le filtre statut est 'all' (pièces avec donnees) ou 'never' (pièces
+  //     sans donnees). Pour 'overdue' / 'soon' / 'ok', on n'affiche pas les
+  //     pièces d'usure (leur logique de retard est indépendante).
+  // v2.4.21 : _renderWearPartsGroup renvoie '' si aucune piece ne matche →
+  // la section entière (titre inclus) disparait automatiquement.
+  const wpFilterActive = (statusFilter === 'all' || statusFilter === 'never');
+  const wearPartsHtml = (showWearParts && wpFilterActive)
+    ? _renderWearPartsGroup(machine, statusFilter) : '';
   // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
   // exclure des sections par intervalle (sinon les changements couteaux/
   // contre-couteaux apparaîtraient deux fois). Utile seulement quand la
@@ -6271,11 +6340,20 @@ function renderMaintCards(){
   const neverAndUnknown = statusCounts.never + statusCounts.unknown;
   // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
   statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
+  // v2.4.21 : quand on est en catégorie "Remplacements", les pieces d'usure
+  // affichees s'ajoutent aux compteurs "Tous" et "Jamais saisi" pour rester
+  // coherent avec ce qui est reellement rendu a l'ecran.
+  if(showWearParts){
+    const wpc = _wearPartsCounts(machine);
+    statusCounts.all += wpc.all;
+    // neverAndUnknown est deja calcule, on ajoute directement pour l'affichage
+  }
+  const wpCountsForNever = showWearParts ? _wearPartsCounts(machine).never : 0;
   document.querySelectorAll('[data-status-count]').forEach(el => {
     const key = el.getAttribute('data-status-count');
     if(key === 'never'){
-      // Le chip "Jamais saisi" englobe unknown → compteur cumulé.
-      el.textContent = String(neverAndUnknown);
+      // Le chip "Jamais saisi" englobe unknown ET les pieces d'usure sans données.
+      el.textContent = String(neverAndUnknown + wpCountsForNever);
     } else {
       el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
     }
@@ -6289,6 +6367,13 @@ function renderMaintCards(){
   });
 
   if(!filtered.length){
+    // v2.4.21 : si les pieces d'usure remplissent la section (wearPartsHtml
+    // non vide), on renvoie juste wearPartsHtml sans message vide — sinon on
+    // afficherait "aucune op à afficher" avec des cartes visibles en dessous.
+    if(wearPartsHtml){
+      grid.innerHTML = wearPartsHtml;
+      return;
+    }
     let emptyMsg;
     if(statusFilter === 'all' && neverAndUnknown > 0){
       // Cas particulier : il y a des ops "jamais saisi" mais on les a masquées.
