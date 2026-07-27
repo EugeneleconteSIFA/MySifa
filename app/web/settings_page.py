@@ -1879,6 +1879,14 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
     </section>
 
     <section id="panel-promote" class="hidden">
+
+      <!-- Sous-onglets Déployer / Historique -->
+      <div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border)">
+        <button type="button" class="pm-sub active" data-pmsub="deploy" onclick="pmSetSub('deploy')" style="background:transparent;border:none;padding:10px 14px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid var(--accent);font-family:inherit">Déployer</button>
+        <button type="button" class="pm-sub" data-pmsub="hist" onclick="pmSetSub('hist')" style="background:transparent;border:none;padding:10px 14px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit">Historique des mises à jour</button>
+      </div>
+
+      <div id="pm-sub-deploy">
       <div class="card" style="margin-bottom:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
           <div>
@@ -1954,6 +1962,27 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <span style="font-size:12px;color:var(--muted)">Un backup pré-resync est conservé automatiquement · v1 redémarrera dans ~15s après le lancement</span>
         </div>
       </div>
+      </div><!-- /pm-sub-deploy -->
+
+      <!-- ── Historique des mises à jour ──────────────────────────────────── -->
+      <div id="pm-sub-hist" class="hidden">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+            <div>
+              <div style="font-size:17px;font-weight:700;color:var(--text)">Historique des mises à jour</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px">Chaque mise en production, avec les commits réellement embarqués. Clique sur une release pour la déplier.</div>
+            </div>
+            <button type="button" class="btn btn-sec" id="ph-refresh-btn" onclick="loadPromoteHistory(true)" style="font-size:12px">
+              Rafraîchir
+            </button>
+          </div>
+          <div id="ph-meta" style="font-size:11px;color:var(--muted);margin-bottom:14px"></div>
+          <div id="ph-list">
+            <div style="padding:28px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>
+          </div>
+        </div>
+      </div>
+
     </section>
 
     <section id="panel-printers" class="hidden">
@@ -6656,7 +6685,7 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=1"></script>
+<script src="/static/mysifa_promote.js?v=2"></script>
 </body>
 </html>
 """
