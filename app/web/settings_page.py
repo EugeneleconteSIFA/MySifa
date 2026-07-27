@@ -7196,6 +7196,9 @@ async function unlinkBridge(mp_id) {
 }
 
 </script>
+<!-- v2.4.16 : scripts alert_form + alert_runtime perdus lors du retrait du bloc orphelin en v2.4.15, remis ici. -->
+<script src="/static/mysifa_alert_form.js?v=2.4.16"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.16"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>
