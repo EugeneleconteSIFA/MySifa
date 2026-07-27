@@ -6261,32 +6261,54 @@ function renderMaintCards(){
     enriched = enrichFor(machine);
   }
 
-  // Compteurs par statut (avant application du filtre) pour la sous-toolbar.
-  const statusCounts = { all: enriched.length, overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
+  // Compteurs par statut, calculés sur l'ensemble non filtré.
+  // Règle produit (v2.4.20) : "Tous" exclut les jamais saisi + unknown pour
+  // dédensifier la vue ; ces opérations restent accessibles via le chip
+  // "Jamais saisi" (qui remonte à la fois never et unknown, sémantiquement
+  // proches — les deux = "pas de donnée exploitable").
+  const statusCounts = { overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
   enriched.forEach(e => { statusCounts[e.status] = (statusCounts[e.status] || 0) + 1; });
+  const neverAndUnknown = statusCounts.never + statusCounts.unknown;
+  // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
+  statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
   document.querySelectorAll('[data-status-count]').forEach(el => {
     const key = el.getAttribute('data-status-count');
-    el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
+    if(key === 'never'){
+      // Le chip "Jamais saisi" englobe unknown → compteur cumulé.
+      el.textContent = String(neverAndUnknown);
+    } else {
+      el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
+    }
   });
 
-  // Applique le filtre statut. 'all' => tout. Les statuts "unknown" sont
-  // remontés quand on demande "all" ou "never" (proche sémantiquement).
+  // Applique le filtre statut.
   const filtered = enriched.filter(e => {
-    if(statusFilter === 'all') return true;
+    if(statusFilter === 'all')   return (e.status !== 'never' && e.status !== 'unknown');
     if(statusFilter === 'never') return (e.status === 'never' || e.status === 'unknown');
     return e.status === statusFilter;
   });
 
   if(!filtered.length){
-    const msgs = {
-      overdue: 'Aucune opération en retard. 🎉',
-      soon:    'Aucune opération à faire dans les prochains jours.',
-      ok:      'Aucune opération à jour à afficher.',
-      never:   'Toutes les opérations ont déjà été saisies au moins une fois.',
-      all:     'Aucune opération à afficher.',
-    };
+    let emptyMsg;
+    if(statusFilter === 'all' && neverAndUnknown > 0){
+      // Cas particulier : il y a des ops "jamais saisi" mais on les a masquées.
+      // Explique le pourquoi + bouton implicite (le chip "Jamais saisi" est
+      // déjà là, il suffit de basculer).
+      const s = neverAndUnknown > 1 ? 's' : '';
+      emptyMsg = neverAndUnknown + ' opération' + s + ' jamais saisie' + s +
+                 ' masquée' + s + ' — bascule sur le filtre « Jamais saisi » pour les voir.';
+    } else {
+      const msgs = {
+        overdue: 'Aucune opération en retard. 🎉',
+        soon:    'Aucune opération à faire dans les prochains jours.',
+        ok:      'Aucune opération à jour à afficher.',
+        never:   'Toutes les opérations ont déjà été saisies au moins une fois.',
+        all:     'Aucune opération à afficher.',
+      };
+      emptyMsg = msgs[statusFilter] || msgs.all;
+    }
     grid.innerHTML = wearPartsHtml +
-      '<div class="maint-frames-empty" style="margin-top:24px">' + (msgs[statusFilter] || msgs.all) + '</div>';
+      '<div class="maint-frames-empty" style="margin-top:24px">' + emptyMsg + '</div>';
     return;
   }
 
