@@ -107,6 +107,10 @@ function defaultProduitFiche() {
       carton: { matiere_id: '', bobines_sol: '', nb_etages: '', bobines_carton: '' },
       palette: { matiere_id: '', cartons_sol: '', nb_etages: '', cartons_palette: '' }
     },
+    // Unité de vente du produit : type + quantité (ex. type 'carton' qté 1,
+    // ou type 'bobine' qté 100). Sert au calcul du prix conditionné dans MyAO.
+    // Défaut : au mille d'étiquettes.
+    unite_vente: { type: 'mille', quantite: 1 },
     particularites: ''
   };
 }
@@ -290,6 +294,23 @@ function renderProduitForm() {
   pfRow('Cartons / pal.', '<input type="number" step="1" min="0" id="pf-pal-cart" value="'+escAttr(f.conditionnement.palette.cartons_palette)+'">')+
     '</div></div></div>'+
 
+    '<div class="pf-section"><div class="pf-section-title">Unité de vente</div>'+
+    '<div class="pf-card">'+
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7">'+
+      'Rappel conditionnement — '+
+      'Étiq./bobine : <strong style="color:var(--text2)">'+(f.bobines.nb_etiquettes||'—')+'</strong> · '+
+      'Bobines/carton : <strong style="color:var(--text2)">'+(f.conditionnement.carton.bobines_carton||'—')+'</strong> · '+
+      'Cartons/palette : <strong style="color:var(--text2)">'+(f.conditionnement.palette.cartons_palette||'—')+'</strong>'+
+    '</div>'+
+    pfRow('Vendu par',
+      '<div style="display:flex;gap:8px;align-items:center">'+
+      '<input type="number" min="1" step="1" id="pf-uv-qte" value="'+escAttr((f.unite_vente&&f.unite_vente.quantite)||1)+'" style="max-width:88px">'+
+      '<select id="pf-uv-type">'+
+      ['mille','etiquette','bobine','carton','palette'].map(function(u){var lbl={mille:'Mille (1000 étiq.)',etiquette:'Étiquette',bobine:'Bobine',carton:'Carton',palette:'Palette'}[u];return '<option value="'+u+'"'+(((f.unite_vente&&f.unite_vente.type)||'mille')===u?' selected':'')+'>'+lbl+'</option>';}).join('')+
+      '</select></div>', 'pf-inline-wide')+
+    '<div style="font-size:11px;color:var(--muted);margin-top:8px">Ex. « 1 · Carton », « 100 · Bobine »… Cette unité pilote la colonne <strong>Condi.</strong> des demandes de prix (prix d\'achat conditionné puis prix de vente). Défaut : au mille d\'étiquettes.</div>'+
+    '</div></div>'+
+
     '<div class="pf-section"><div class="pf-section-title">Particularités</div>'+
     '<div class="pf-card">'+
     pfRow('Notes', '<textarea id="pf-part" rows="3" placeholder="Notes spécifiques…">'+escHtml(f.particularites)+'</textarea>', 'pf-inline-wide')+
@@ -370,6 +391,10 @@ function collectProduitForm() {
       nb_etages: pfInt(document.getElementById('pf-pal-etages')?.value),
       cartons_palette: pfInt(document.getElementById('pf-pal-cart')?.value)
     }
+  };
+  f.unite_vente = {
+    type: document.getElementById('pf-uv-type')?.value || 'mille',
+    quantite: pfInt(document.getElementById('pf-uv-qte')?.value) || 1
   };
   f.particularites = document.getElementById('pf-part')?.value.trim() || '';
   return {
