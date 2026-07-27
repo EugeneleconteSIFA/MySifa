@@ -5895,7 +5895,7 @@ function _wearPartHasData(pieceId, pos, machine){
 }
 // Retourne pour chaque piece : positions renseignees / non renseignees.
 function _wearPartStatusFor(pieceId, machine){
-  const p = _wearPartDescriptorById(pieceId);
+  const p = _wearPartDef(pieceId);
   if(!p) return { hasData: [], noData: [] };
   const hasData = [], noData = [];
   _wearPartPositionsOf(p).forEach(pos => {
