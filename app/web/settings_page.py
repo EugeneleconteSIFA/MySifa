@@ -6582,6 +6582,10 @@ const _ALERT_TRIGGER_TYPES = [
 const _ALERT_TRIGGER_EVENTS = [
   { v: 'dossier_start',  l: 'Début de dossier' },
   { v: 'dossier_end',    l: 'Fin de dossier' },
+  // v2.3.28 : after_calage manquait — le select forcait tout return à
+  // 'dossier_start' au save via /maintenance (les alertes réglées sur
+  // 'après calage' basculaient silencieusement à 'début de dossier').
+  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
 ];
 const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
@@ -6624,6 +6628,8 @@ function _alertDefaults(existing) {
         unit: (it && it.unit) || '',
         min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+        // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
+        required: !!(it && it.required),
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -6638,6 +6644,8 @@ function _alertDefaults(existing) {
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
+      // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
+      required: !!(it && it.required),
     };
   });
   return {
@@ -6647,6 +6655,9 @@ function _alertDefaults(existing) {
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
     checklist: cl,
+    placement: (p && ['top-right','center'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
+    size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
+    block_production: !!(p && p.block_production),  // v2.3.22 : persistance à la ré-ouverture
   };
 }
 
@@ -6701,75 +6712,8 @@ function _renderAlertFormFields(params, opts) {
     + '</div>';
   return nomBlock
     + descBlock
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
-    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
-    +   '<div id="af-trigger-sub" class="alert-field-sub">'
-    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
-    +     '<div data-trigger-for="periodic">'
-    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
-    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +         '</div>'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
-    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
-    +         '</div>'
-    +       '</div>'
-    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="calendar">'
-    +       '<div class="alert-field-row">'
-    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
-    +         '<div></div>'
-    +       '</div>'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
-    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="event">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
-    +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
-    +     '</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +   '<div class="af-md-wrap">'
-    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
-    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
-    +       '<span class="af-md-trigger-caret">▼</span>'
-    +     '</button>'
-    +     '<div id="af-md-panel" class="af-md-panel">'
-    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
-    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
-    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
-    +       '</div>'
-    +       '<div class="af-md-sep"></div>'
-    +       machineCheckboxes
-    +     '</div>'
-    +   '</div>'
-    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
-    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
-    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
-    + '</div>'
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Aucune trace nulle part.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
-    +     '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
-    +     '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider).</div>'
-    +   '</div>'
-    + '</div>'
+    // v2.3.33 : questionnaire remonté juste après la description (l'admin
+    // pense d'abord au contenu, ensuite au paramétrage technique)
     + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
     +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
     +     '<div>'
@@ -6785,8 +6729,134 @@ function _renderAlertFormFields(params, opts) {
     + '</div>'
     + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
     +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
+    + '</div>'
+    // v2.3.33 : bouton de bascule pour la section Paramètres (repliable in-place)
+    + '<button type="button" id="af-settings-toggle" class="btn btn-sec" onclick="_afToggleSettings()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;padding:12px 16px;text-align:left;background:var(--bg);border:1px solid var(--border)">'
+    +   '<span style="display:flex;flex-direction:column;gap:2px">'
+    +     '<span style="font-weight:700;font-size:14px">Paramètres</span>'
+    +     '<span style="font-size:11px;color:var(--muted);font-weight:400">Déclencheur · Machines · Affichage · Blocage · Esquive</span>'
+    +   '</span>'
+    +   '<span id="af-settings-caret" style="transition:transform .18s ease;font-size:12px;color:var(--muted)">▼</span>'
+    + '</button>'
+    + '<div id="af-settings-wrap" style="display:none;margin-top:12px">'
+    +   '<div class="alert-field">'
+    +     '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
+    +     '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
+    +     '<div id="af-trigger-sub" class="alert-field-sub">'
+    +       '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
+    +       '<div data-trigger-for="periodic">'
+    +         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +           '<div>'
+    +             '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
+    +             '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
+    +           '</div>'
+    +           '<div>'
+    +             '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
+    +             '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
+    +           '</div>'
+    +         '</div>'
+    +         '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
+    +       '</div>'
+    +       '<div data-trigger-for="calendar">'
+    +         '<div class="alert-field-row">'
+    +           '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
+    +           '<div></div>'
+    +         '</div>'
+    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
+    +         '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
+    +       '</div>'
+    +       '<div data-trigger-for="event">'
+    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
+    +         '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert-field">'
+    +     '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
+    +     '<div class="af-md-wrap">'
+    +       '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
+    +         '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
+    +         '<span class="af-md-trigger-caret">▼</span>'
+    +       '</button>'
+    +       '<div id="af-md-panel" class="af-md-panel">'
+    +         '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
+    +           '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
+    +           '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
+    +         '</div>'
+    +         '<div class="af-md-sep"></div>'
+    +         machineCheckboxes
+    +       '</div>'
+    +     '</div>'
+    +     '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
+    +   '</div>'
+    // v2.3.33 : section Affichage — Placement + Taille uniquement
+    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +     '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
+    +     '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+    +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
+    +         '<select id="af-placement" class="alert-field-input">'
+    +           '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
+    +           '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
+    +         '</select>'
+    +       '</div>'
+    +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
+    +         '<select id="af-size" class="alert-field-input">'
+    +           '<option value="small"' + (d.size === 'small' ? ' selected' : '') + '>Petite</option>'
+    +           '<option value="medium"' + (d.size === 'medium' ? ' selected' : '') + '>Moyenne</option>'
+    +           '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
+    +         '</select>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
+    // v2.3.33 : Bloquer la production — section séparée d'Affichage
+    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +     '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
+    +       '<div>'
+    +         '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
+    +         '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
+    +       '</div>'
+    +       '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
+    +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
+    +       '<div>'
+    +         '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
+    +         '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Une trace est conservée dans l\'historique sous "Fermetures auto".</span>'
+    +       '</div>'
+    +       '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
+    +     '</div>'
+    +     '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
+    +       '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
+    +       '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider). Ce libellé apparaît aussi dans l\'historique (ex. « Fermée auto (esquive) : Pas d\'Errepi »).</div>'
+    +     '</div>'
+    +   '</div>'
     + '</div>';
 }
+
+function _afToggleSettings(){
+  const w = document.getElementById('af-settings-wrap');
+  const c = document.getElementById('af-settings-caret');
+  if(!w) return;
+  const open = w.style.display !== 'none';
+  if(open){
+    w.style.display = 'none';
+    if(c) c.style.transform = 'rotate(0deg)';
+  } else {
+    w.style.display = 'block';
+    if(c) c.style.transform = 'rotate(180deg)';
+  }
+}
+
+function _afOpenSettings(){
+  const w = document.getElementById('af-settings-wrap');
+  const c = document.getElementById('af-settings-caret');
+  if(w && w.style.display === 'none'){
+    w.style.display = 'block';
+    if(c) c.style.transform = 'rotate(180deg)';
+  }
+}
+
 
 function _afResponseRow(value, isNc) {
   const safeVal = (value || '').replace(/"/g, '&quot;');
@@ -6858,6 +6928,11 @@ function _afOnOtherToggle(cb){
 function _afChecklistCard(item) {
   const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
   const type = (item && item.type) || 'choice';
+  // v2.3.28 : case "Obligatoire" — manquait dans maintenance_page.py, la
+  // valeur ne pouvait donc jamais être true côté /maintenance. Elle
+  // s'affiche à la lecture (checked selon item.required) et son état
+  // est envoyé au backend par _afReadParams.
+  const isRequired = !!(item && item.required);
   const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
                  + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
   return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
@@ -6866,6 +6941,10 @@ function _afChecklistCard(item) {
     +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
     +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
     + '</div>'
+    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
+    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
+    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
+    + '</label>'
     + _afChecklistCardBody(item)
     + '</div>';
 }
@@ -7033,6 +7112,9 @@ function _afOnTriggerChange() {
 }
 
 function _afReadParams() {
+  // v2.3.33 : force l'ouverture de la section Paramètres pour que les
+  // erreurs de validation portant sur des champs cachés soient visibles.
+  try { _afOpenSettings(); } catch(_) {}
   const t = document.getElementById('af-trigger-type').value || 'manual';
   const trig = { type: t };
   if (t === 'periodic') {
@@ -7074,6 +7156,9 @@ function _afReadParams() {
         if (unit) item.unit = unit;
         if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
         if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
+        // v2.3.28 : required manquait — les items marqués obligatoires
+        // repassaient optionnels à chaque save via /maintenance.
+        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
         items.push(item);
         return;
       }
@@ -7090,7 +7175,12 @@ function _afReadParams() {
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
+      // v2.3.28 : required manquait — les items requis repassaient
+      // optionnels à chaque save via /maintenance.
+      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
+      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
+      if (_reqCk) _choiceItem.required = true;
+      items.push(_choiceItem);
     });
   }
   // Cible (lue en premier — interrompt si rien sélectionné)
@@ -7111,9 +7201,14 @@ function _afReadParams() {
     description: descVal.slice(0, 800),
     trigger: trig,
     target: _tgt,
-    validation: {
-      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
-    },
+    // v2.3.33 : validation.button_label figée à 'Valider' côté backend,
+    // plus de champ front. On garde l'objet pour éviter un 422 sur rétro-compat.
+    validation: {},
+    // v2.3.21 : placement + size par alerte (dans maintenance_page.py aussi)
+    placement: (document.getElementById('af-placement')?.value || 'top-right'),
+    size: (document.getElementById('af-size')?.value || 'medium'),
+    // v2.3.22 : block_production par alerte — sinon la valeur en base est écrasée à False à chaque save via /maintenance
+    block_production: !!document.getElementById('af-block-production')?.checked,
     dismiss_button: (function(){
       const en = !!document.getElementById('af-dismiss-enabled')?.checked;
       if(!en) return { enabled: false, label: '' };
@@ -7244,15 +7339,16 @@ const placementOpts = placements.map(p =>
     const sizeOpts = sizes.map(s =>
       '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
     ).join('');
+    // v2.3.12 : modal simplifié — placement/size sont maintenant par alerte.
     overlay.innerHTML = '<div class="alert-modal">'
-      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-head"><h3>Délai entre alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
       + '<div class="alert-modal-body">'
-      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
-      +   '<div class="alert-field">'
+      +   '<!-- v2.3.12 : placement/size retirés (par alerte maintenant) -->'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Placement à l\'écran</label>'
       +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
       +   '</div>'
-      +   '<div class="alert-field">'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Taille</label>'
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
       +   '</div>'
@@ -7261,13 +7357,7 @@ const placementOpts = placements.map(p =>
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
-      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-      +     '<div>'
-      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
-      +     '</div>'
-      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-      +   '</div>'
+
       + '</div>'
       + '<div class="alert-modal-foot">'
       +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
@@ -7278,18 +7368,22 @@ const placementOpts = placements.map(p =>
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      // v2.3.27 : fix — depuis v2.3.12 le modal n'a plus qu'un champ (le
+      // délai). L'ancien code référençait ags-block qui n'est jamais rendu
+      // → getElementById(...).checked throw → toast d'erreur silencieux.
+      // On lit maintenant depuis _alertGlobalSettings (déjà chargé au boot).
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        placement: document.getElementById('ags-placement').value,
-        size: document.getElementById('ags-size').value,
-        block_production: document.getElementById('ags-block').checked,
+        placement: _alertGlobalSettings.placement || 'top-right',
+        size: _alertGlobalSettings.size || 'medium',
+        block_production: !!_alertGlobalSettings.block_production,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings = payload;
-        toast('Réglages enregistrés');
+        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
+        toast('Délai enregistré');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
@@ -7318,182 +7412,27 @@ function _alertTriggerLabel(t) {
 }
 
 async function previewAlert(id) {
+  // v2.3.13 : refactor — appelle directement MysifaAlerts.simulate() au lieu
+  // de dupliquer la logique de rendu. Toute évolution du runtime bénéficie
+  // automatiquement au bouton "Tester sur moi".
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
-  // Charger les réglages globaux : placement, taille, bloque-production
   await loadAlertSettings();
-  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
-  const d = _alertDefaults(a.params);
-  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
-  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
-
-  const checklistHtml = clEnabled
-    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
-      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
-      +   d.checklist.items.map((it, idx) => {
-            const itType = it.type || 'choice';
-            if (itType === 'value') {
-              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
-              let toleranceHint = '';
-              if (it.min != null || it.max != null) {
-                const minStr = (it.min != null) ? String(it.min) : '−∞';
-                const maxStr = (it.max != null) ? String(it.max) : '+∞';
-                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
-              }
-              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
-                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
-                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-                + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
-                +   unit
-                + '</div>'
-                + toleranceHint
-                + '</div>';
-            }
-            const isMulti = it.multi !== false;
-            const inputType = isMulti ? 'checkbox' : 'radio';
-            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
-            const respHtml = it.responses.map((r) =>
-              '<label class="ta-chip">'
-              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
-              + '<span>' + esc(r) + '</span>'
-              + '</label>'
-            ).join('');
-            let otherHtml = '';
-            if (it.allow_other) {
-              otherHtml = '<label class="ta-chip ta-chip-other">'
-                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="_taOnOtherChange(this)">'
-                + '<span>Autre</span>'
-                + '</label>';
-            }
-            const otherArea = it.allow_other
-              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-              : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
-              + otherArea
-              + '</div>';
-          }).join('')
-      + '</div>'
-    : '';
-
-  // Construction du wrapper de simulation (positionnement, taille, backdrop)
-  const wrap = document.createElement('div');
-  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
-  if (settings.block_production) wrap.classList.add('ta-blocking');
-
-  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
-  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
-
-  // Description eventuelle (contexte affiche a l'operateur)
-  const _descText = (a.params && typeof a.params.description === 'string') ? a.params.description.trim() : '';
-  const _descHtml = _descText
-    ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + esc(_descText) + '</div>'
-    : '';
-
-  // Contenu de l'alerte (sans aucune chrome admin)
-  const alertHtml = '<div class="ta-sim-alert">'
-    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
-    + _descHtml
-    + checklistHtml
-    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
-    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-    + '<div class="ta-sim-actions">'
-    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
-    +   (d.dismiss_button && d.dismiss_button.enabled
-        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
-        : '')
-    + '</div>'
-    + '</div>';
-
-  wrap.innerHTML = exitBtn + alertHtml;
-  document.body.appendChild(wrap);
-
-  const close = () => wrap.remove();
-
-  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
-  document.getElementById('ta-sim-exit').addEventListener('click', close);
-
-  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
-  const onKey = (ev) => {
-    if (ev.key === 'Escape' && !settings.block_production) {
-      close();
-      document.removeEventListener('keydown', onKey);
-    }
-  };
-  document.addEventListener('keydown', onKey);
-
-  // Si non bloquant + placement coin : cliquer en dehors ferme
-  if (!settings.block_production) {
-    setTimeout(() => {
-      const outsideClick = (ev) => {
-        if (!wrap.contains(ev.target)) return;
-        if (ev.target.closest('.ta-sim-alert')) return;
-        if (ev.target.closest('.ta-sim-exit')) return;
-        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
-        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
-        close();
-        document.removeEventListener('keydown', onKey);
-      };
-      wrap.addEventListener('click', outsideClick);
-    }, 100);
+  if (!window.MysifaAlerts || typeof window.MysifaAlerts.simulate !== 'function') {
+    toast('Runtime alertes non chargé — impossible de tester', true);
+    return;
   }
-
-  // Valider
-  function _taIsComplete() {
-    if (!clEnabled) return true;
-    const items = wrap.querySelectorAll('.ta-cl-item');
-    for (const it of items) {
-      const t = it.getAttribute('data-type') || 'choice';
-      if (t === 'value') {
-        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
-        if (v === '') return false;
-      } else {
-        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
-      }
-    }
-    return true;
+  if (typeof window.MysifaAlerts.start === 'function') {
+    try { await window.MysifaAlerts.start(); } catch(_){}
   }
-  function _taFinalize() {
-    toast('Test terminé — aucune donnée enregistrée.');
-    close();
-    document.removeEventListener('keydown', onKey);
-  }
-  function _taRenderValidate(actions) {
-    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
-    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  }
-  function _taRenderConfirm(actions) {
-    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
-      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
-      + '<div style="display:flex;gap:6px">'
-      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
-      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
-      + '</div>'
-      + '</div>';
-    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
-    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
-  }
-  function _taOnValidate() {
-    if (_taIsComplete()) { _taFinalize(); return; }
-    const actions = wrap.querySelector('.ta-sim-actions');
-    if (!actions) { _taFinalize(); return; }
-    _taRenderConfirm(actions);
-  }
-  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  // v164 : bouton dismiss dans la preview
-  const taDismiss = document.getElementById('ta-dismiss');
-  if (taDismiss) {
-    taDismiss.addEventListener('click', () => {
-      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
-      close();
-      document.removeEventListener('keydown', onKey);
-    });
-  }
+  await window.MysifaAlerts.simulate({
+    id: a.id,
+    nom: a.nom,
+    linked_maint_code: a.linked_maint_code || '',
+    params: a.params || {},
+  });
 }
+
 
 function openEditAlertModal(id) {
   const a = _alertsData.find(x => x.id === id);
@@ -7547,1594 +7486,243 @@ async function deleteUpdate(id) {
   } catch(e) { toast(e.message, true); }
 }
 
-// ── Audit log ─────────────────────────────────────────────
-let _auditOffset = 0;
-const _auditLimit = 50;
-let _auditSearchTimer = null;
 
-function debouncedAuditSearch() {
-  clearTimeout(_auditSearchTimer);
-  _auditSearchTimer = setTimeout(() => { _auditOffset = 0; loadAuditLogs(); }, 300);
+</script>
+<script>window.__MYSIFA_APP__='maintenance';</script>
+<script src="/static/mysifa_dock.js"></script>
+<script src="/static/mysifa_cmdk.js"></script>
+<script>
+if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPageWidgets === 'function'){
+  window.MySifaDock.bootPageWidgets();
 }
+</script>
+<script src="/static/chat_mentions.js"></script>
+<script src="/static/chat_widget.js?v=11"></script>
+<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.12"></script>
+<script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_impersonate.js"></script>
 
-const ACTION_COLORS = {
-  CREATE:   'var(--ok)',
-  UPDATE:   'var(--accent)',
-  DELETE:   'var(--danger)',
-  CLOSE:    'var(--muted)',
-  VALIDATE: 'var(--warn)',
-  REORDER:  'var(--text2)',
-  SEARCH:   'var(--accent)',
-  LOGIN:    'var(--text2)',
-  LOGOUT:   'var(--muted)',
-};
-const ACTION_LABELS = {
-  CREATE:'Création', UPDATE:'Modification', DELETE:'Suppression',
-  CLOSE:'Clôture', VALIDATE:'Validation', REORDER:'Réorganisation',
-  SEARCH:'Recherche', LOGIN:'Connexion', LOGOUT:'Déconnexion',
-};
-const MODULE_LABELS = {
-  planning:'Planning', fabrication:'Fabrication', stock:'Stock',
-  expe:'Expéditions', rh:'RH', settings:'Paramètres', auth:'Auth',
-  portal:'Portail',
-};
+<!-- Modal saisie créneau (opérateur : ouvre au clic sur une carte).
+     Liste toutes les ops du créneau, chacune avec son propre bouton
+     "Enregistrer cette opération" — le statut/saisie est partagé au groupe. -->
+<div class="op-modal-overlay" id="op-modal-saisie" onclick="if(event.target===this) opCloseSaisie()">
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:640px">
+    <div class="op-modal-title">Session de maintenance</div>
+    <div class="op-modal-sub">Renseigne durée et commentaire pour chaque opération réalisée, puis clique « Marquer comme terminée ».</div>
+    <div class="op-modal-context" id="op-modal-saisie-ctx"></div>
+    <div id="op-modal-saisie-ops"></div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseSaisie()">Fermer</button>
+    </div>
+  </div>
+</div>
 
-async function loadAuditLogs() {
-  const wrap = document.getElementById('audit-table-wrap');
-  const pag  = document.getElementById('audit-pagination');
-  const search = (document.getElementById('audit-search')?.value || '').trim();
-  const module = document.getElementById('audit-filter-module')?.value || '';
-  const action = document.getElementById('audit-filter-action')?.value || '';
+<!-- Modal single-op : marquer UNE opération d'un créneau comme terminée
+     (ou modifier / annuler une opération déjà validée) -->
+<div class="op-modal-overlay" id="op-modal-single" onclick="if(event.target===this) opCloseSingleModal()">
+  <div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;position:relative">
+    <button type="button" class="op-modal-close" aria-label="Fermer" onclick="opCloseSingleModal()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="op-modal-title" id="op-single-title">Marquer comme terminée</div>
+    <div class="op-modal-sub" id="op-single-sub">—</div>
+    <div class="op-single-op-title" id="op-single-code-line">—</div>
+    <div class="op-single-op-name" id="op-single-name">—</div>
+    <div id="op-single-consignes-block" style="display:none">
+      <div class="op-consignes-label">Consignes de l'admin</div>
+      <div class="op-consignes-panel" id="op-single-consignes-text">—</div>
+    </div>
+    <div class="op-form-row">
+      <label for="op-single-duree">Durée réelle (min)</label>
+      <input type="number" id="op-single-duree" min="0" step="1" placeholder="Optionnel">
+    </div>
+    <div class="op-form-row">
+      <label for="op-single-comment">Commentaires</label>
+      <textarea id="op-single-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
+    </div>
+    <div class="op-modal-actions op-single-actions">
+      <button type="button" class="btn btn-danger-outline" id="op-single-cancel-validation" onclick="opCancelValidation()" style="display:none">Annuler la validation</button>
+      <span class="op-single-actions-spacer"></span>
+      <button type="button" class="btn op-btn-accent" id="op-single-submit" onclick="opSubmitSingleOp()">Marquer comme terminée</button>
+    </div>
+  </div>
+</div>
 
-  wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Chargement…</div>';
-
-  const params = new URLSearchParams({
-    limit: _auditLimit,
-    offset: _auditOffset,
-    ...(module && { module }),
-    ...(action && { action }),
-    ...(search && { search }),
-  });
-
-  const res = await fetch('/api/settings/audit?' + params, { credentials: 'include' });
-  if (!res.ok) { wrap.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur de chargement.</div>'; return; }
-  const { total, logs } = await res.json();
-
-  if (!logs.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Aucune action enregistrée.</div>';
-    pag.innerHTML = '';
-    return;
-  }
-
-  const rows = logs.map(l => {
-    const color = ACTION_COLORS[l.action] || 'var(--text2)';
-    const actionLabel = ACTION_LABELS[l.action] || l.action;
-    const moduleLabel = MODULE_LABELS[l.module] || l.module;
-    const dt = l.created_at_display != null && l.created_at_display !== ''
-      ? l.created_at_display
-      : (l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '—');
-    const detailHtml = l.detail
-      ? `<span style="color:var(--muted);font-size:11px;display:block;margin-top:2px;
-                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px"
-               title="${escAttr(l.detail)}">${esc(l.detail)}</span>` : '';
-    return `<tr>
-      <td style="white-space:nowrap;font-family:monospace;font-size:11px;color:var(--muted)">${dt}</td>
-      <td style="font-size:13px;font-weight:600;color:var(--text)">${esc(l.user_nom||'—')}</td>
-      <td><span style="font-size:10px;font-weight:700;color:var(--bg);background:${color};
-                       padding:2px 7px;border-radius:20px;text-transform:uppercase">${actionLabel}</span></td>
-      <td><span style="font-size:11px;color:var(--text2);background:var(--accent-bg);
-                       padding:2px 6px;border-radius:6px">${moduleLabel}</span></td>
-      <td style="font-size:13px;color:var(--text);max-width:280px">
-        ${esc(l.objet||'—')}${detailHtml}
-      </td>
-    </tr>`;
-  }).join('');
-
-  wrap.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead>
-        <tr style="border-bottom:2px solid var(--border)">
-          <th style="text-align:left;padding:8px 12px 8px 0;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">Date</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Utilisateur</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Action</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Module</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Objet</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.replace(/<tr>/g, '<tr style="border-bottom:1px solid var(--border)">')}
-      </tbody>
-    </table>`;
-
-  const from = _auditOffset + 1;
-  const to   = Math.min(_auditOffset + logs.length, total);
-  pag.innerHTML = `
-    <span>${from}–${to} sur ${total} actions</span>
-    <div style="display:flex;gap:6px">
-      <button type="button" onclick="_auditOffset=Math.max(0,_auditOffset-_auditLimit);loadAuditLogs()"
-              ${_auditOffset === 0 ? 'disabled' : ''}
-              style="background:var(--card);border:1px solid var(--border);border-radius:6px;
-                     padding:4px 10px;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
-        ← Précédent
-      </button>
-      <button type="button" onclick="_auditOffset=Math.min(total-_auditLimit,_auditOffset+_auditLimit);loadAuditLogs()"
-              ${to >= total ? 'disabled' : ''}
-              style="background:var(--card);border:1px solid var(--border);border-radius:6px;
-                     padding:4px 10px;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
-        Suivant →
-      </button>
-    </div>`;
-}
-
-// ── Registre FSC ─────────────────────────────────────────────
-const FSC_CLAIM_LABELS = {
-  non_fsc: 'Non FSC',
-  fsc_100: 'FSC 100%',
-  fsc_mix_credit: 'FSC Mix Credit',
-  fsc_mix: 'FSC Mix',
-  fsc_recycled: 'FSC Recycled',
-};
-const FSC_STATUT_LABELS = {
-  attente: 'En attente',
-  en_cours: 'En cours',
-  termine: 'Terminé',
-};
-let _fscDatesInit = false;
-
-function initFscDates() {
-  const duEl = document.getElementById('fsc-du');
-  const auEl = document.getElementById('fsc-au');
-  if (!duEl || !auEl) return;
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  if (!duEl.value) duEl.value = `${y}-01-01`;
-  if (!auEl.value) auEl.value = `${y}-${m}-${d}`;
-}
-
-function initFscPanel() {
-  initFscDates();
-  if (!_fscDatesInit) {
-    _fscDatesInit = true;
-  }
-  loadFscStats();
-  loadFscRegistre();
-}
-
-async function renderSettingsDashboards() {
-  const root = document.getElementById('settings-tab-content');
-  if (!root) return;
-  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
-
-  let dashboards = [];
-  try {
-    const r = await fetch('/api/dashboards/admin', { credentials: 'include' });
-    if (r.ok) dashboards = await r.json();
-  } catch(e) {}
-
-  const WIDGET_TYPES = [
-    { value: 'stock_alerts',     label: 'Alertes stock matières premières' },
-    { value: 'planning_summary', label: 'Résumé planning production' },
-    { value: 'expe_today',       label: 'Départs expédition du jour' },
-  ];
-  const CATEGORIES_MP = ['mandrin','palette','adhesif','carton'];
-
-  function renderList() {
-    const listEl = document.createElement('div');
-    listEl.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:16px';
-
-    if (!dashboards.length) {
-      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Aucun tableau de bord créé.</div>';
-    } else {
-      dashboards.forEach(d => {
-        const card = document.createElement('div');
-        card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px';
-
-        const typeInfo = WIDGET_TYPES.find(t => t.value === d.widget_type) || { label: d.widget_type };
-        const statusBadge = d.actif
-          ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Actif</span>'
-          : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactif</span>';
-
-        card.innerHTML = `
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:14px;font-weight:700;color:var(--text)">${escHtml(d.titre)}</span>
-              ${statusBadge}
-            </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${escHtml(typeInfo.label)}</div>
-            ${d.description ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(d.description)}</div>` : ''}
-          </div>
-          <div style="display:flex;gap:8px;flex-shrink:0">
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" data-edit="${d.id}">Modifier</button>
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" data-del="${d.id}">Supprimer</button>
-          </div>`;
-
-        card.querySelector('[data-edit]').addEventListener('click', () => openDashboardModal(d));
-        card.querySelector('[data-del]').addEventListener('click', () => deleteDashboard(d.id, d.titre));
-        listEl.appendChild(card);
-      });
-    }
-    return listEl;
-  }
-
-  async function deleteDashboard(id, titre) {
-    if (!confirm(`Supprimer le tableau de bord "${titre}" ? Il sera retiré du portail de tous les utilisateurs.`)) return;
-    try {
-      const r = await fetch(`/api/dashboards/admin/${id}`, { method: 'DELETE', credentials: 'include' });
-      if (r.ok) {
-        dashboards = dashboards.filter(d => d.id !== id);
-        rebuildPage();
-        toast('Tableau de bord supprimé.', false);
-      } else {
-        toast('Erreur lors de la suppression.', true);
-      }
-    } catch(e) { toast('Erreur réseau.', true); }
-  }
-
-  function openDashboardModal(existing) {
-    const isEdit = !!existing;
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center';
-    overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;width:420px;max-width:92vw;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden';
-
-    const head = document.createElement('div');
-    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)';
-    head.innerHTML = `<span style="font-size:15px;font-weight:700;color:var(--text)">${isEdit ? 'Modifier' : 'Nouveau tableau de bord'}</span>`;
-    const btnX = document.createElement('button');
-    btnX.className = 'db-panel-btn';
-    btnX.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    btnX.addEventListener('click', () => overlay.remove());
-    head.appendChild(btnX);
-
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:14px';
-
-    // Champ titre
-    const fTitre = document.createElement('div');
-    fTitre.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Titre</label>
-      <input id="db-f-titre" type="text" placeholder="Ex: Stocks à réapprovisionner" value="${escAttr(existing?.titre||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
-
-    // Champ description
-    const fDesc = document.createElement('div');
-    fDesc.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Description <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
-      <input id="db-f-desc" type="text" placeholder="Ex: Mandrins, cartons, palettes et adhésif" value="${escAttr(existing?.description||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
-
-    // Champ type (désactivé en édition)
-    const fType = document.createElement('div');
-    const typeOpts = WIDGET_TYPES.map(t =>
-      `<option value="${t.value}" ${(existing?.widget_type===t.value||(!existing&&t.value==='stock_alerts'))?'selected':''}>${t.label}</option>` 
-    ).join('');
-    fType.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Type de widget</label>
-      <select id="db-f-type" ${isEdit?'disabled':''} style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">${typeOpts}</select>
-      ${isEdit?'<div style="font-size:11px;color:var(--muted);margin-top:4px">Le type ne peut pas être modifié après création.</div>':''}`;
-
-    // Config dynamique selon le type (stock_alerts → catégories)
-    const fConfig = document.createElement('div');
-    fConfig.id = 'db-f-config';
-
-    function renderConfigFields(type, currentConfig) {
-      fConfig.innerHTML = '';
-      if (type === 'stock_alerts') {
-        const cats = currentConfig?.categories || [];
-        fConfig.innerHTML = `<div>
-          <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Catégories affichées</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            ${CATEGORIES_MP.map(c => `
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg)">
-                <input type="checkbox" value="${c}" ${cats.includes(c)||!cats.length?'checked':''} style="accent-color:var(--accent)">
-                ${c.charAt(0).toUpperCase()+c.slice(1)}
-              </label>`).join('')}
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px">Si aucune sélectionnée, toutes les catégories sont affichées.</div>
-        </div>`;
-      }
-      // Pour planning_summary et expe_today : pas de config supplémentaire pour l'instant
-    }
-
-    const initType = existing?.widget_type || 'stock_alerts';
-    renderConfigFields(initType, existing?.config_json || {});
-
-    fType.querySelector('select')?.addEventListener('change', (e) => {
-      renderConfigFields(e.target.value, {});
-    });
-
-    // Champ actif
-    const fActif = document.createElement('div');
-    fActif.innerHTML = `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2)">
-      <input id="db-f-actif" type="checkbox" ${(existing?.actif!==false)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px">
-      Dashboard actif (visible par les utilisateurs)
-    </label>`;
-
-    // Bouton soumettre
-    const footer = document.createElement('div');
-    footer.style.cssText = 'padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px';
-    const btnCancel = document.createElement('button');
-    btnCancel.className = 'btn btn-ghost';
-    btnCancel.textContent = 'Annuler';
-    btnCancel.addEventListener('click', () => overlay.remove());
-
-    const btnSave = document.createElement('button');
-    btnSave.className = 'btn btn-accent';
-    btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-    btnSave.addEventListener('click', async () => {
-      const titre = document.getElementById('db-f-titre')?.value?.trim();
-      if (!titre) { toast('Le titre est requis.', true); return; }
-      const widget_type = document.getElementById('db-f-type')?.value || initType;
-      const desc = document.getElementById('db-f-desc')?.value?.trim() || '';
-      const actif = document.getElementById('db-f-actif')?.checked !== false;
-
-      // Collecter config
-      let config_json = {};
-      if (widget_type === 'stock_alerts') {
-        const checked = [...document.querySelectorAll('#db-f-config input[type=checkbox]:checked')].map(el => el.value);
-        if (checked.length && checked.length < CATEGORIES_MP.length) {
-          config_json.categories = checked;
-        }
-      }
-
-      btnSave.disabled = true;
-      btnSave.textContent = isEdit ? 'Enregistrement…' : 'Création…';
-
-      try {
-        let r;
-        if (isEdit) {
-          r = await fetch(`/api/dashboards/admin/${existing.id}`, {
-            method: 'PATCH', credentials: 'include',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ titre, description: desc, config_json, actif }),
-          });
-        } else {
-          r = await fetch('/api/dashboards/admin', {
-            method: 'POST', credentials: 'include',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ titre, description: desc, widget_type, config_json, actif }),
-          });
-        }
-        if (r.ok) {
-          overlay.remove();
-          // Recharger la liste
-          const r2 = await fetch('/api/dashboards/admin', { credentials: 'include' });
-          if (r2.ok) dashboards = await r2.json();
-          rebuildPage();
-          toast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', false);
-        } else {
-          const err = await r.json().catch(() => ({}));
-          toast(err.detail || 'Erreur lors de la sauvegarde.', true);
-          btnSave.disabled = false;
-          btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-        }
-      } catch(e) {
-        toast('Erreur réseau.', true);
-        btnSave.disabled = false;
-        btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-      }
-    });
-
-    body.appendChild(fTitre);
-    body.appendChild(fDesc);
-    body.appendChild(fType);
-    body.appendChild(fConfig);
-    body.appendChild(fActif);
-    footer.appendChild(btnCancel);
-    footer.appendChild(btnSave);
-    modal.appendChild(head);
-    modal.appendChild(body);
-    modal.appendChild(footer);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => document.getElementById('db-f-titre')?.focus());
-  }
-
-  function rebuildPage() {
-    root.innerHTML = '';
-    buildPage();
-  }
-
-  function buildPage() {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'max-width:760px;margin:0 auto;padding:0 0 40px';
-
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
-    const h = document.createElement('div');
-    h.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--text)">Tableaux de bord</div><div style="font-size:13px;color:var(--muted);margin-top:4px">Créez des tableaux de bord que les utilisateurs peuvent ajouter à leur portail.</div>';
-    const btnNew = document.createElement('button');
-    btnNew.className = 'btn btn-accent';
-    btnNew.innerHTML = '+ Nouveau';
-    btnNew.style.cssText = 'flex-shrink:0;padding:8px 16px;font-size:13px';
-    btnNew.addEventListener('click', () => openDashboardModal(null));
-    topRow.appendChild(h);
-    topRow.appendChild(btnNew);
-    wrap.appendChild(topRow);
-    wrap.appendChild(renderList());
-    root.appendChild(wrap);
-  }
-
-  buildPage();
-}
-
-function fscClaimBadgeHtml(claim) {
-  const c = (claim || 'non_fsc').trim();
-  const label = FSC_CLAIM_LABELS[c] || esc(c);
-  let bg = 'rgba(148,163,184,.12)';
-  let color = 'var(--muted)';
-  if (c === 'fsc_100') {
-    bg = 'rgba(52,211,153,.12)';
-    color = 'var(--ok)';
-  } else if (c === 'fsc_recycled' || c.startsWith('fsc_mix')) {
-    bg = 'rgba(34,211,238,.12)';
-    color = 'var(--accent)';
-  }
-  return `<span class="fsc-claim-badge" style="background:${bg};color:${color}">${esc(label)}</span>`;
-}
-
-async function loadFscStats() {
-  const grid = document.getElementById('fsc-kpi-grid');
-  if (!grid) return;
-  try {
-    const d = await api('/api/fsc/stats');
-    if (!d) return;
-    const alertBadge = (d.alertes_ecart_total || 0) > 0 ? 'danger' : 'muted';
-    grid.innerHTML = `
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Réceptions FSC ce mois</div>
-        <div class="fsc-kpi-val">${esc(String(d.recep_fsc_ce_mois ?? 0))}</div>
-        <span class="fsc-kpi-badge accent">Mois en cours</span>
-      </div>
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Dossiers FSC actifs</div>
-        <div class="fsc-kpi-val">${esc(String(d.dossiers_fsc_actifs ?? 0))}</div>
-        <span class="fsc-kpi-badge accent">Non terminés</span>
-      </div>
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Dossiers FSC terminés</div>
-        <div class="fsc-kpi-val">${esc(String(d.dossiers_termines_fsc ?? 0))}</div>
-        <span class="fsc-kpi-badge ok">Historique</span>
-      </div>
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Alertes écart total</div>
-        <div class="fsc-kpi-val">${esc(String(d.alertes_ecart_total ?? 0))}</div>
-        <span class="fsc-kpi-badge ${alertBadge}">Confirmées</span>
-      </div>`;
-  } catch (e) {
-    grid.innerHTML = `<p style="color:var(--danger);font-size:13px">${esc(e.message || 'Erreur chargement KPIs')}</p>`;
-  }
-}
-
-function renderFscReceptions(rows) {
-  const wrap = document.getElementById('fsc-recep-wrap');
-  if (!wrap) return;
-  if (!rows.length) {
-    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Aucune réception FSC sur la période.</p>';
-    return;
-  }
-  const trs = rows.map(r => {
-    const dt = (r.created_at || '').replace('T', ' ').slice(0, 10);
-    return `<tr>
-      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(dt)}</td>
-      <td>${esc(r.fournisseur || '—')}</td>
-      <td style="font-family:monospace;font-size:11px">${esc(r.fournisseur_licence || '—')}</td>
-      <td>${esc(r.certificat_fsc || '—')}</td>
-      <td>${fscClaimBadgeHtml(r.fsc_type_claim)}</td>
-      <td style="text-align:center">${esc(String(r.nb_bobines ?? 0))}</td>
-      <td>${esc(r.created_by_name || '—')}</td>
-    </tr>`;
-  }).join('');
-  wrap.innerHTML = `<table>
-    <thead><tr>
-      <th>Date</th><th>Fournisseur</th><th>Licence FSC</th><th>Certificat</th>
-      <th>Type claim</th><th>Nb bobines</th><th>Réceptionné par</th>
-    </tr></thead>
-    <tbody>${trs}</tbody>
-  </table>`;
-}
-
-function renderFscDossiers(rows) {
-  const wrap = document.getElementById('fsc-dossiers-wrap');
-  if (!wrap) return;
-  if (!rows.length) {
-    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Aucun dossier FSC sur la période.</p>';
-    return;
-  }
-  const trs = rows.map(d => {
-    const alertes = Number(d.nb_alertes) || 0;
-    const rowCls = alertes > 0 ? ' class="fsc-row-alert"' : '';
-    const statut = FSC_STATUT_LABELS[d.statut] || d.statut || '—';
-    return `<tr${rowCls}>
-      <td style="font-weight:700;color:var(--accent)">${esc(d.reference || '—')}</td>
-      <td>${esc(d.client || '—')}</td>
-      <td>${fscClaimBadgeHtml(d.fsc_type_requis)}</td>
-      <td>${esc(statut)}</td>
-      <td style="font-family:monospace;font-size:11px">${esc(d.date_livraison || '—')}</td>
-      <td style="text-align:center">${esc(String(d.nb_bobines_scannees ?? 0))}</td>
-      <td style="text-align:center;font-weight:700;color:${alertes > 0 ? 'var(--danger)' : 'var(--muted)'}">${esc(String(alertes))}</td>
-    </tr>`;
-  }).join('');
-  wrap.innerHTML = `<table>
-    <thead><tr>
-      <th>Référence</th><th>Client</th><th>Type FSC requis</th><th>Statut</th>
-      <th>Date livraison</th><th>Bobines scannées</th><th>Alertes</th>
-    </tr></thead>
-    <tbody>${trs}</tbody>
-  </table>`;
-}
-
-async function loadFscRegistre() {
-  const du = document.getElementById('fsc-du')?.value || '';
-  const au = document.getElementById('fsc-au')?.value || '';
-  const recepWrap = document.getElementById('fsc-recep-wrap');
-  const dossWrap = document.getElementById('fsc-dossiers-wrap');
-  if (recepWrap) recepWrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>';
-  if (dossWrap) dossWrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>';
-  try {
-    const params = new URLSearchParams();
-    if (du) params.set('du', du);
-    if (au) params.set('au', au);
-    const d = await api('/api/fsc/registre?' + params.toString());
-    if (!d) return;
-    renderFscReceptions(d.receptions || []);
-    renderFscDossiers(d.dossiers || []);
-  } catch (e) {
-    const msg = `<p style="color:var(--danger);font-size:13px;padding:12px 0">${esc(e.message || 'Erreur chargement')}</p>`;
-    if (recepWrap) recepWrap.innerHTML = msg;
-    if (dossWrap) dossWrap.innerHTML = msg;
-  }
-}
-
-function exportFscCsv() {
-  const du = document.getElementById('fsc-du')?.value || '';
-  const au = document.getElementById('fsc-au')?.value || '';
-  const params = new URLSearchParams({ format: 'csv' });
-  if (du) params.set('du', du);
-  if (au) params.set('au', au);
-  window.location.href = '/api/fsc/registre?' + params.toString();
-}
-
-// ── Clés API ──────────────────────────────────────────────────────
-async function loadApiKeys() {
-  const res = await fetch('/api/settings/api-keys', {credentials:'include'});
-  const data = await res.json();
-  const list = document.getElementById('ak-list');
-  if (!data.keys || data.keys.length === 0) {
-    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Aucune clé créée.</div>';
-    return;
-  }
-  list.innerHTML = data.keys.map(k => `
-    <div style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-      <div style="flex:1;min-width:160px">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(k.name)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">${escHtml(k.key_prefix)}…</div>
-      </div>
-      <div style="font-size:11px;color:var(--muted)">${escHtml(k.scopes||'')}</div>
-      <div style="font-size:11px;color:var(--muted)">${k.last_used_at ? 'Dernière utilisation : '+escHtml(k.last_used_at.replace('T',' ').slice(0,16)) : 'Jamais utilisée'}</div>
-      <div>
-        <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;${k.is_active ? 'background:rgba(52,211,153,.15);color:var(--ok)' : 'background:rgba(248,113,113,.15);color:var(--danger)'}">
-          ${k.is_active ? 'Active' : 'Révoquée'}
-        </span>
-      </div>
-      <div style="display:flex;gap:6px">
-        ${k.is_active ? `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid var(--border)" onclick="revokeApiKey(${k.id})">Révoquer</button>` : ''}
-        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid rgba(248,113,113,.4);color:var(--danger)" onclick="deleteApiKey(${k.id})">Supprimer</button>
+<!-- Modal Enregistrer une opération (opérateur : source=non_planifie, statut=termine) -->
+<div class="op-modal-overlay" id="op-modal-new" onclick="if(event.target===this) opCloseNewModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title" id="op-modal-new-title">Enregistrer une opération</div>
+    <div class="op-modal-sub" id="op-modal-new-sub">Enregistre une opération de maintenance déjà effectuée. Elle sera marquée « Terminée » et rattachée à la machine sélectionnée.</div>
+    <div class="op-form-row">
+      <label for="op-new-date">Date de l'intervention *</label>
+      <input type="date" id="op-new-date">
+    </div>
+    <div class="op-form-row" id="op-new-machine-mono-row">
+      <label for="op-new-machine">Machine *</label>
+      <select id="op-new-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <!-- v2.2.13 : mode admin — multi-machines (chips style "Nouveau créneau"). Une op créée par chip active. -->
+    <div class="op-form-row" id="op-new-machines-multi-row" style="display:none">
+      <label>Machines * <span style="font-weight:400;color:var(--muted);font-size:11px;text-transform:none;letter-spacing:0">(clique une ou plusieurs — une opération sera créée par machine)</span></label>
+      <div id="op-new-machines-chips" class="case-ops-machines" style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px">
+        <button type="button" class="case-mach-chip" data-mach="Cohésio 1" onclick="adminToggleMachChip(this)" aria-pressed="false">Cohésio 1</button>
+        <button type="button" class="case-mach-chip" data-mach="Cohésio 2" onclick="adminToggleMachChip(this)" aria-pressed="false">Cohésio 2</button>
+        <button type="button" class="case-mach-chip" data-mach="DSI" onclick="adminToggleMachChip(this)" aria-pressed="false">DSI</button>
+        <button type="button" class="case-mach-chip" data-mach="Repiquage" onclick="adminToggleMachChip(this)" aria-pressed="false">Repiquage</button>
       </div>
     </div>
-  `).join('');
-}
+    <div class="op-form-row" id="op-new-code-row">
+      <label for="op-new-code">Code opération *</label>
+      <select id="op-new-code"></select>
+      <a href="javascript:void(0)" id="op-new-switch-libre" class="op-new-mode-link" onclick="opSwitchMode('inhabituelle')">Pas dans la liste ? Décrire une intervention inhabituelle</a>
+    </div>
+    <div class="op-form-row libre-titre-wrap" id="op-new-titre-libre-row" style="display:none">
+      <label for="op-new-titre-libre">Titre de l'intervention *</label>
+      <input type="text" id="op-new-titre-libre" autocomplete="off" maxlength="200" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="opNewLibreOnInput()">
+      <div class="libre-autocomplete-panel" id="op-new-libre-autocomplete-panel" style="display:none"></div>
+      <a href="javascript:void(0)" id="op-new-switch-catalogue" class="op-new-mode-link" onclick="opSwitchMode('catalogue')">← Revenir au catalogue</a>
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-duree">Durée réelle (min)</label>
+      <input type="number" id="op-new-duree" min="0" step="1" placeholder="Optionnel">
+    </div>
+    <div class="op-form-row">
+      <label for="op-new-comment">Commentaires</label>
+      <textarea id="op-new-comment" rows="3" placeholder="Pièces changées, observations, remarques…"></textarea>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="opCloseNewModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" id="op-modal-new-submit" onclick="opSubmitNew()">Enregistrer</button>
+    </div>
+  </div>
+</div>
 
-async function createApiKey() {
-  const name = document.getElementById('ak-name').value.trim();
-  if (!name) { toast('Donnez un nom à cette clé.', true); return; }
-  const res = await fetch('/api/settings/api-keys', {
-    method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name})
-  });
-  if (!res.ok) { toast('Erreur lors de la création.', true); return; }
-  const data = await res.json();
-  document.getElementById('ak-name').value = '';
-  document.getElementById('ak-reveal-value').textContent = data.key;
-  document.getElementById('ak-reveal').style.display = 'block';
-  toast('Clé créée. Copiez-la maintenant.', false);
-  loadApiKeys();
-}
+<!-- v180 : Modal Intervention libre (creation rapide sans passer par le catalogue) -->
+<div class="op-modal-overlay" id="libre-modal" onclick="if(event.target===this) libreCloseModal()">
+  <div class="op-modal" role="dialog" aria-modal="true">
+    <div class="op-modal-title">Intervention libre</div>
+    <div class="op-modal-sub">Enregistre une intervention ponctuelle sans creer de code du catalogue.</div>
+    <div class="op-form-row">
+      <label for="libre-date">Date de l'intervention *</label>
+      <input type="date" id="libre-date">
+    </div>
+    <div class="op-form-row">
+      <label for="libre-machine">Machine *</label>
+      <select id="libre-machine">
+        <option value="Cohésio 1">Cohésio 1</option>
+        <option value="Cohésio 2">Cohésio 2</option>
+        <option value="DSI">DSI</option>
+        <option value="Repiquage">Repiquage</option>
+      </select>
+    </div>
+    <div class="op-form-row libre-titre-wrap">
+      <label for="libre-titre">Titre de l'intervention *</label>
+      <input type="text" id="libre-titre" autocomplete="off" placeholder="Ex : Remplacement joint pompe hydraulique" oninput="libreOnTitreInput()">
+      <div class="libre-autocomplete-panel" id="libre-autocomplete-panel" style="display:none"></div>
+    </div>
+    <div class="op-form-row">
+      <label for="libre-duree">Durée (min)</label>
+      <input type="number" id="libre-duree" min="0" step="1" placeholder="Optionnel — durée de l'intervention en minutes">
+    </div>
+    <div class="op-form-row">
+      <label for="libre-comment">Commentaires</label>
+      <textarea id="libre-comment" rows="3" placeholder="Optionnel — details, pieces changees, remarques..."></textarea>
+    </div>
+    <div class="op-modal-actions">
+      <button type="button" class="btn" onclick="libreCloseModal()">Annuler</button>
+      <button type="button" class="btn op-btn-accent" onclick="libreSubmit()">Enregistrer</button>
+    </div>
+  </div>
+</div>
 
-// ── Sidebar sections collapse ──
-(function initNavGroups() {
-  // Groupes principaux
-  document.querySelectorAll('.nav-group-label').forEach(function(label) {
-    label.addEventListener('click', function() {
-      const collapsed = label.classList.toggle('ngl-collapsed');
-      // Parcourir les frères jusqu'au prochain nav-group-label
-      let el = label.nextElementSibling;
-      while (el && !el.classList.contains('nav-group-label')) {
-        if (collapsed) {
-          el.style.display = 'none';
-        } else {
-          el.style.display = '';
-        }
-        el = el.nextElementSibling;
-      }
-      // Re-appliquer l'état des sous-groupes (qu'on aurait pu écraser en expandant)
-      if (!collapsed) {
-        let el2 = label.nextElementSibling;
-        let subCollapsed = null;
-        while (el2 && !el2.classList.contains('nav-group-label')) {
-          if (el2.classList.contains('nav-subgroup-label')) {
-            subCollapsed = el2.classList.contains('nsl-collapsed');
-          } else if (subCollapsed && el2.classList.contains('nav-btn')) {
-            el2.style.display = 'none';
-          }
-          el2 = el2.nextElementSibling;
-        }
-      }
-    });
-  });
-  // Sous-groupes (à l'intérieur d'un groupe principal)
-  document.querySelectorAll('.nav-subgroup-label').forEach(function(label) {
-    label.addEventListener('click', function(ev) {
-      ev.stopPropagation();
-      const collapsed = label.classList.toggle('nsl-collapsed');
-      let el = label.nextElementSibling;
-      while (el && !el.classList.contains('nav-subgroup-label') && !el.classList.contains('nav-group-label')) {
-        if (el.classList.contains('nav-btn')) {
-          el.style.display = collapsed ? 'none' : '';
-        }
-        el = el.nextElementSibling;
-      }
-    });
-  });
-})();
 
-function copyApiKey() {
-  const val = document.getElementById('ak-reveal-value').textContent;
-  navigator.clipboard.writeText(val).then(() => toast('Clé copiée.', false));
-}
+<script>
+/* ── JS multi-rôle : Mes tâches / Planning / Nouvelle intervention / Admin create ──
+   Chargé dans tous les cas, mais les fonctions ne sont utiles qu'au bon rôle.
+   L'état des tâches côté page est stocké dans MAINT_STATE. */
+'use strict';
 
-async function revokeApiKey(id) {
-  if (!confirm('Révoquer cette clé ? Le pont Access ne pourra plus s\'authentifier.')) return;
-  const res = await fetch(`/api/settings/api-keys/${id}/revoke`, {method:'PATCH', credentials:'include'});
-  if (!res.ok) { toast('Erreur lors de la révocation.', true); return; }
-  toast('Clé révoquée.', false);
-  loadApiKeys();
-}
-
-async function deleteApiKey(id) {
-  if (!confirm('Supprimer définitivement cette clé ?')) return;
-  const res = await fetch(`/api/settings/api-keys/${id}`, {method:'DELETE', credentials:'include'});
-  if (!res.ok) { toast('Erreur lors de la suppression.', true); return; }
-  toast('Clé supprimée.', false);
-  loadApiKeys();
-}
-
-// ──────────────────────────────────────────────────
-// Emplacements
-// ──────────────────────────────────────────────────
-let _emplData = [];
-let _emplReady = false;
-
-// ── Laizes matières ────────────────────────────────────────────
-let _laizesReady = false;
-let _laizesList = [];
-
-async function initLaizesPanel() {
-  if (!_laizesReady) {
-    _laizesReady = true;
-    const form = document.getElementById('laizes-add-form');
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const mm = parseFloat(document.getElementById('laizes-add-mm').value);
-        const label = document.getElementById('laizes-add-label').value.trim();
-        const ordre = parseInt(document.getElementById('laizes-add-ordre').value, 10) || 0;
-        if (!mm || mm <= 0) { alert('Valeur (mm) invalide.'); return; }
-        try {
-          const r = await fetch('/api/admin/mp_laizes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ valeur_mm: mm, label: label || null, ordre }),
-          });
-          if (!r.ok) {
-            const err = await r.json().catch(() => ({ detail: 'erreur' }));
-            alert('Erreur : ' + (err.detail || r.statusText));
-            return;
-          }
-          document.getElementById('laizes-add-mm').value = '';
-          document.getElementById('laizes-add-label').value = '';
-          document.getElementById('laizes-add-ordre').value = '0';
-          await loadLaizesList();
-        } catch (e) { alert('Erreur : ' + e.message); }
-      });
-    }
-  }
-  await loadLaizesList();
-}
-
-async function loadLaizesList() {
-  try {
-    const r = await fetch('/api/admin/mp_laizes?all=1', { credentials: 'include' });
-    if (!r.ok) throw new Error('chargement impossible');
-    _laizesList = await r.json();
-  } catch (e) {
-    _laizesList = [];
-  }
-  renderLaizesList();
-}
-
-function renderLaizesList() {
-  const wrap = document.getElementById('laizes-list');
-  const empty = document.getElementById('laizes-empty');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  if (!_laizesList.length) {
-    if (empty) empty.style.display = '';
-    return;
-  }
-  if (empty) empty.style.display = 'none';
-  _laizesList.forEach(l => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card)';
-    if (!l.actif) row.style.opacity = '0.5';
-    const main = document.createElement('div');
-    main.style.cssText = 'flex:1;display:flex;align-items:center;gap:10px';
-    const lab = document.createElement('div');
-    lab.style.cssText = 'font-size:14px;font-weight:700;color:var(--text);min-width:80px';
-    lab.textContent = l.label;
-    const val = document.createElement('div');
-    val.style.cssText = 'font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums';
-    val.textContent = l.valeur_mm + ' mm · ordre ' + l.ordre;
-    main.append(lab, val);
-    row.appendChild(main);
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:6px';
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className = 'btn btn-sec btn-sm';
-    toggleBtn.textContent = l.actif ? 'Désactiver' : 'Réactiver';
-    toggleBtn.addEventListener('click', async () => {
-      try {
-        const r = await fetch('/api/admin/mp_laizes/' + l.id, {
-          method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actif: l.actif ? false : true }),
-        });
-        if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err.detail || 'erreur'); return; }
-        await loadLaizesList();
-      } catch (e) { alert(e.message); }
-    });
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'btn btn-sec btn-sm';
-    delBtn.style.color = 'var(--danger)';
-    delBtn.textContent = 'Supprimer';
-    delBtn.addEventListener('click', async () => {
-      if (!confirm('Supprimer la laize ' + l.label + ' ?')) return;
-      try {
-        const r = await fetch('/api/admin/mp_laizes/' + l.id, { method: 'DELETE', credentials: 'include' });
-        if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err.detail || 'erreur'); return; }
-        await loadLaizesList();
-      } catch (e) { alert(e.message); }
-    });
-    actions.append(toggleBtn, delBtn);
-    row.appendChild(actions);
-    wrap.appendChild(row);
-  });
-}
-
-// ── Importations (Logistique) ─────────────────────────────────
-let _impReady = false;
-async function initImportationsPanel() {
-  const loading = document.getElementById('importations-loading');
-  const form = document.getElementById('importations-form');
-  const errBox = document.getElementById('importations-error');
-  const inpFull = document.getElementById('imp-qte-full');
-  const inpHalf = document.getElementById('imp-qte-half');
-  const saveBtn = document.getElementById('imp-save-btn');
-  const status = document.getElementById('imp-status');
-  if (!form || !inpFull || !inpHalf) return;
-
-  const showError = (msg) => {
-    if (loading) loading.style.display = 'none';
-    form.style.display = 'none';
-    if (errBox) { errBox.style.display = 'block'; errBox.textContent = msg; }
-  };
-
-  try {
-    const r = await fetch('/api/pricing/settings', { credentials: 'include' });
-    if (r.status === 403) { showError('Accès réservé à la Direction et au super admin.'); return; }
-    if (!r.ok) { showError('Erreur de chargement (' + r.status + ').'); return; }
-    const data = await r.json();
-    inpFull.value = String(Number(data.logistique_qte_m2_container_complet || 0));
-    inpHalf.value = String(Number(data.logistique_qte_m2_demi_container || 0));
-    if (loading) loading.style.display = 'none';
-    if (errBox) errBox.style.display = 'none';
-    form.style.display = 'flex';
-  } catch (e) {
-    showError('Erreur de chargement : ' + (e?.message || 'inconnue'));
-    return;
-  }
-
-  if (_impReady) return;
-  _impReady = true;
-
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const full = parseFloat(inpFull.value || '0');
-    const half = parseFloat(inpHalf.value || '0');
-    if (isNaN(full) || full < 0 || isNaN(half) || half < 0) {
-      status.textContent = 'Valeurs invalides.';
-      status.style.color = 'var(--danger)';
-      return;
-    }
-    saveBtn.disabled = true;
-    status.textContent = 'Enregistrement…';
-    status.style.color = 'var(--muted)';
-    try {
-      const r = await fetch('/api/pricing/settings', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          logistique_qte_m2_container_complet: full,
-          logistique_qte_m2_demi_container: half,
-        }),
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.detail || ('HTTP ' + r.status));
-      }
-      status.textContent = 'Enregistré.';
-      status.style.color = 'var(--ok, #34d399)';
-      setTimeout(() => { status.textContent = ''; }, 2500);
-    } catch (e) {
-      status.textContent = 'Erreur : ' + (e?.message || 'enregistrement impossible');
-      status.style.color = 'var(--danger)';
-    } finally {
-      saveBtn.disabled = false;
-    }
-  });
-}
-
-async function initEmplacementsPanel() {
-  if (!_emplReady) {
-    _emplReady = true;
-    const search = document.getElementById('empl-search');
-    if (search) {
-      search.addEventListener('input', () => renderEmplGrid());
-      search.addEventListener('keydown', e => { if (e.key === 'Escape') { search.value = ''; renderEmplGrid(); } });
-    }
-    const form = document.getElementById('empl-add-form');
-    if (form) form.addEventListener('submit', e => { e.preventDefault(); addEmplacement(); });
-    const reloadBtn = document.getElementById('empl-reload-csv');
-    if (reloadBtn) reloadBtn.addEventListener('click', reloadEmplacementsCsv);
-    const importBtn = document.getElementById('empl-import-btn');
-    const importInput = document.getElementById('empl-import-input');
-    if (importBtn && importInput) {
-      importBtn.addEventListener('click', () => importInput.click());
-      importInput.addEventListener('change', () => importEmplacementsCsv(importInput));
-    }
-    const exportBtn = document.getElementById('empl-export-csv');
-    if (exportBtn) exportBtn.addEventListener('click', exportEmplacementsCsv);
-    // focus style
-    ['empl-search', 'empl-new-code'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('focus', () => { el.style.borderColor = 'var(--accent)'; el.style.boxShadow = '0 0 0 3px rgba(34,211,238,.12)'; });
-      el.addEventListener('blur',  () => { el.style.borderColor = ''; el.style.boxShadow = ''; });
-    });
-    const codeInp = document.getElementById('empl-new-code');
-    if (codeInp) codeInp.addEventListener('input', () => { codeInp.value = codeInp.value.toUpperCase(); });
-  }
-  await loadEmplacements();
-}
-
-async function loadEmplacements() {
-  const grid = document.getElementById('empl-grid');
-  if (grid) grid.innerHTML = '<span style="color:var(--muted);font-size:13px">Chargement…</span>';
-  try {
-    const r = await fetch('/api/settings/emplacements', { credentials: 'include' });
-    if (!r.ok) throw new Error('err');
-    _emplData = await r.json();
-  } catch(e) {
-    _emplData = [];
-    toast('Erreur lors du chargement des emplacements.', true);
-  }
-  renderEmplGrid();
-}
-
-function renderEmplGrid() {
-  const grid = document.getElementById('empl-grid');
-  const empty = document.getElementById('empl-empty');
-  const count = document.getElementById('empl-count');
-  if (!grid) return;
-
-  const q = (document.getElementById('empl-search')?.value || '').trim().toLowerCase();
-
-  const filtered = q
-    ? _emplData.filter(e => e.code.toLowerCase().includes(q))
-    : _emplData.slice();
-
-  if (count) count.textContent = _emplData.length + ' emplacement' + (_emplData.length > 1 ? 's' : '');
-
-  if (!filtered.length) {
-    grid.innerHTML = '';
-    if (empty) { empty.style.display = ''; empty.textContent = q ? 'Aucun résultat pour « ' + escHtml(q) + ' ».' : 'Aucun emplacement. Ajoutez-en un ou rechargez depuis le CSV.'; }
-    return;
-  }
-  if (empty) empty.style.display = 'none';
-
-  // Grouper : allée = préfixe lettres, rangée = 2 premiers chiffres qui suivent
-  const byAllee = {};
-  for (const e of filtered) {
-    const code = e.code;
-    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
-    const allee  = m ? m[1].toUpperCase() : code[0].toUpperCase();
-    const rangee = m ? m[2].padStart(2, '0') : '??';
-    if (!byAllee[allee]) byAllee[allee] = {};
-    if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
-    byAllee[allee][rangee].push(code);
-  }
-
-  const EMPL_LABELS = { 'Z0': 'Z0 – au sol pour expédition', 'Z1': 'Z1 – sortie de production' };
-
-  function pillHtml(code) {
-    const c = escHtml(code);
-    const label = escHtml(EMPL_LABELS[code] || code);
-    const title = EMPL_LABELS[code] ? escHtml(EMPL_LABELS[code]) : c;
-    return `<span class="empl-pill" data-code="${c}" title="${title}">
-      <span class="empl-pill-code">${label}</span>
-      <button type="button" class="empl-pill-del" aria-label="Supprimer ${c}" onclick="deleteEmplacement('${c}')">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </span>`;
-  }
-
-  let html = '';
-  for (const allee of Object.keys(byAllee).sort()) {
-    const rangees = byAllee[allee];
-    html += `<div class="empl-allee">
-      <div class="empl-allee-hd">
-        <span class="empl-allee-letter">${escHtml(allee)}</span>
-        <span class="empl-allee-label">Allée ${escHtml(allee)}</span>
-      </div>
-      <div class="empl-allee-body">`;
-    for (const rangee of Object.keys(rangees).sort()) {
-      const codes = rangees[rangee].slice().sort();
-      html += `<div class="empl-rangee">
-        <div class="empl-rangee-pills">${codes.map(pillHtml).join('')}</div>
-      </div>`;
-    }
-    html += `</div></div>`;
-  }
-  grid.innerHTML = html;
-}
-
-async function addEmplacement() {
-  const inp = document.getElementById('empl-new-code');
-  const code = (inp?.value || '').trim().toUpperCase();
-  if (!code) { toast('Saisissez un code emplacement.', true); inp?.focus(); return; }
-  const r = await fetch('/api/settings/emplacements', {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code }),
-  });
-  if (r.status === 409) { toast(`L'emplacement ${code} existe déjà.`, true); return; }
-  if (!r.ok) {
-    let msg = 'Erreur lors de l\'ajout.';
-    try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(e) {}
-    toast(msg, true); return;
-  }
-  if (inp) inp.value = '';
-  toast(`Emplacement ${code} ajouté.`, false);
-  await loadEmplacements();
-}
-
-async function deleteEmplacement(code) {
-  if (!confirm(`Supprimer l'emplacement ${code} ?`)) return;
-  const r = await fetch('/api/settings/emplacements/' + encodeURIComponent(code), {
-    method: 'DELETE', credentials: 'include',
-  });
-  if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
-  toast(`Emplacement ${code} supprimé.`, false);
-  await loadEmplacements();
-}
-
-async function reloadEmplacementsCsv() {
-  const btn = document.getElementById('empl-reload-csv');
-  if (btn) { btn.disabled = true; btn.textContent = 'Rechargement…'; }
-  try {
-    const r = await fetch('/api/settings/emplacements/reload-csv', { method: 'POST', credentials: 'include' });
-    if (r.status === 422) {
-      toast('CSV introuvable ou vide — aucun emplacement importé.', true);
-    } else if (!r.ok) {
-      toast('Erreur lors du rechargement.', true);
-    } else {
-      const d = await r.json();
-      toast(d.imported + ' emplacement' + (d.imported > 1 ? 's' : '') + ' importé' + (d.imported > 1 ? 's' : '') + ' depuis le CSV.', false);
-      await loadEmplacements();
-    }
-  } catch(e) { toast('Erreur réseau.', true); }
-  finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Recharger depuis CSV'; }
-  }
-}
-
-async function importEmplacementsCsv(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  if (!confirm(`Remplacer le plan actuel par "${file.name}" ? Cette action écrasera tous les emplacements existants.`)) {
-    input.value = '';
-    return;
-  }
-  const btn = document.getElementById('empl-import-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await fetch('/api/settings/emplacements/import-csv', {
-      method: 'POST', credentials: 'include', body: fd,
-    });
-    const data = r.ok ? await r.json() : null;
-    if (!r.ok) {
-      let msg = 'Erreur lors de l\'import.';
-      try { const e = await r.clone().json(); if (e.detail) msg = e.detail; } catch(_) {}
-      toast(msg, true);
-    } else {
-      toast(data.imported + ' emplacement' + (data.imported > 1 ? 's' : '') + ' importé' + (data.imported > 1 ? 's' : '') + ' — nouveau plan enregistré.', false);
-      await loadEmplacements();
-    }
-  } catch(e) { toast('Erreur réseau.', true); }
-  finally {
-    input.value = '';
-    if (btn) { btn.disabled = false; btn.textContent = 'Importer nouveau CSV'; }
-  }
-}
-
-function exportEmplacementsCsv() {
-  if (!_emplData.length) { toast('Aucun emplacement à exporter.', true); return; }
-  const rows = [['code'], ..._emplData.map(e => [e.code])];
-  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'emplacements_' + new Date().toISOString().slice(0, 10) + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-}
-
-// ═══════════════════════════════════════════════════════════
-// Référentiel Clients (ERP)
-// ═══════════════════════════════════════════════════════════
-let _cliReady = false;
-let _cliData = [];
-let _cliEditing = null;        // id en cours d'édition, ou null pour création
-let _cliImportFile = null;
-let _cliSearchDebounce = null;
-
-async function initClientsPanel() {
-  if (!_cliReady) {
-    _cliReady = true;
-    const search = document.getElementById('cli-search');
-    if (search) {
-      search.addEventListener('input', () => {
-        clearTimeout(_cliSearchDebounce);
-        _cliSearchDebounce = setTimeout(loadClients, 220);
-      });
-      search.addEventListener('keydown', e => {
-        if (e.key === 'Escape') { search.value = ''; loadClients(); }
-      });
-    }
-    const etat = document.getElementById('cli-filter-etat');
-    if (etat) etat.addEventListener('change', loadClients);
-    const newBtn = document.getElementById('cli-new-btn');
-    if (newBtn) newBtn.addEventListener('click', () => openCliModal(null));
-    const importBtn = document.getElementById('cli-import-btn');
-    const importInput = document.getElementById('cli-import-input');
-    if (importBtn && importInput) {
-      importBtn.addEventListener('click', () => importInput.click());
-      importInput.addEventListener('change', () => onCliImportFile(importInput));
-    }
-    const exportBtn = document.getElementById('cli-export-csv');
-    if (exportBtn) exportBtn.addEventListener('click', exportClientsCsv);
-
-    // Sous-onglets du modal
-    document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(b => {
-      b.addEventListener('click', () => {
-        document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
-        const target = document.getElementById(b.dataset.clisub);
-        if (target) target.style.display = '';
-      });
-    });
-
-    // ESC ferme les modals
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        const m = document.getElementById('cli-modal-overlay');
-        const im = document.getElementById('cli-import-overlay');
-        if (m && m.style.display === 'flex') closeCliModal();
-        else if (im && im.style.display === 'flex') closeCliImportModal();
-      }
-    });
-  }
-  await loadClients();
-}
-
-async function loadClients() {
-  const tbody = document.getElementById('cli-tbody');
-  const search = (document.getElementById('cli-search')?.value || '').trim();
-  const etat = document.getElementById('cli-filter-etat')?.value || '';
-  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>';
-  try {
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (etat) params.set('etat', etat);
-    params.set('limit', '2000');
-    const r = await fetch('/api/clients?' + params.toString(), { credentials: 'include' });
-    if (!r.ok) throw new Error('err');
-    const data = await r.json();
-    _cliData = data.items || [];
-    // Mettre à jour le filtre état si on a la liste complète
-    const sel = document.getElementById('cli-filter-etat');
-    if (sel && data.etats) {
-      const cur = sel.value;
-      const opts = ['<option value="">Tous les états</option>'].concat(
-        data.etats.map(e => `<option value="${escAttr(e)}"${e === cur ? ' selected' : ''}>${escHtml(e)}</option>`)
-      );
-      sel.innerHTML = opts.join('');
-    }
-    const count = document.getElementById('cli-count');
-    if (count) {
-      const n = data.total || 0;
-      count.textContent = n + ' client' + (n > 1 ? 's' : '') + (search || etat ? ' filtré' + (n > 1 ? 's' : '') : '');
-    }
-  } catch(e) {
-    _cliData = [];
-    toast('Erreur lors du chargement des clients.', true);
-  }
-  renderCliTable();
-}
-
-function renderCliTable() {
-  const tbody = document.getElementById('cli-tbody');
-  const empty = document.getElementById('cli-empty');
-  if (!tbody) return;
-  if (!_cliData.length) {
-    tbody.innerHTML = '';
-    if (empty) {
-      empty.style.display = '';
-      const q = (document.getElementById('cli-search')?.value || '').trim();
-      empty.textContent = q
-        ? 'Aucun résultat pour « ' + q + ' ».'
-        : 'Aucun client. Cliquez sur « + Nouveau client » ou importez un fichier xlsx.';
-    }
-    return;
-  }
-  if (empty) empty.style.display = 'none';
-  const html = _cliData.map(c => {
-    const etat = c.etat || '';
-    const etatBg = etat === 'Bloqué' ? 'rgba(248,113,113,.15);color:#f87171;border-color:rgba(248,113,113,.35)'
-                : etat === 'Inactif' ? 'rgba(148,163,184,.18);color:var(--muted);border-color:rgba(148,163,184,.35)'
-                : 'rgba(52,211,153,.15);color:var(--success);border-color:rgba(52,211,153,.35)';
-    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openCliModal(${c.id})">
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);white-space:nowrap">${c.numero == null ? '' : escHtml(String(c.numero))}</td>
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.code || '')}</td>
-      <td style="padding:9px 12px;font-weight:600">${escHtml(c.raison_sociale || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.ville || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.pays || '')}</td>
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.telephone || '')}</td>
-      <td style="padding:9px 12px;font-size:12px">${escHtml(c.email || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap"><span style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${etatBg};border:1px solid">${escHtml(etat)}</span></td>
-      <td style="padding:9px 12px;white-space:nowrap"><button type="button" class="btn btn-sec btn-sm" onclick="event.stopPropagation();openCliModal(${c.id})">Modifier</button></td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = html;
-}
-
-function openCliModal(id) {
-  _cliEditing = id;
-  const overlay = document.getElementById('cli-modal-overlay');
-  if (!overlay) return;
-  overlay.style.display = 'flex';
-  overlay.classList.remove('hidden');
-  // Reset onglets sur Identité
-  document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
-  const firstTab = document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]');
-  if (firstTab) firstTab.classList.add('active');
-  document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
-  const t = document.getElementById('cli-tab-info');
-  if (t) t.style.display = '';
-  // Reset values
-  const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); };
-  setV('cli-numero', ''); setV('cli-code', ''); setV('cli-etat', 'Normal');
-  setV('cli-raison', ''); setV('cli-siret', ''); setV('cli-tva', '');
-  setV('cli-rcs', ''); setV('cli-ean', ''); setV('cli-nif', ''); setV('cli-groupe', '');
-  setV('cli-adresse1', ''); setV('cli-adresse2', ''); setV('cli-bp', '');
-  setV('cli-cp', ''); setV('cli-ville', ''); setV('cli-code-pays', ''); setV('cli-pays', '');
-  setV('cli-tel', ''); setV('cli-fax', ''); setV('cli-email', '');
-  setV('cli-contact-nom', ''); setV('cli-contact-fonction', '');
-  setV('cli-contact-email', ''); setV('cli-contact-tel', '');
-  setV('cli-rep', ''); setV('cli-adv', ''); setV('cli-mode-liv', ''); setV('cli-mode-reg', '');
-  setV('cli-devise', ''); setV('cli-encours', ''); setV('cli-codecpta', '');
-  setV('cli-cat1', ''); setV('cli-cat2', ''); setV('cli-cat3', '');
-  setV('cli-notes', '');
-  const delBtn = document.getElementById('cli-delete-btn');
-  const title = document.getElementById('cli-modal-title');
-
-  if (id == null) {
-    if (title) title.textContent = 'Nouveau client';
-    if (delBtn) delBtn.style.display = 'none';
-    requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
-    return;
-  }
-  if (title) title.textContent = 'Modifier le client';
-  if (delBtn) delBtn.style.display = '';
-  // Charger les données
-  fetch('/api/clients/' + id, { credentials: 'include' })
-    .then(r => r.json())
-    .then(c => {
-      setV('cli-numero', c.numero); setV('cli-code', c.code); setV('cli-etat', c.etat || 'Normal');
-      setV('cli-raison', c.raison_sociale); setV('cli-siret', c.siret); setV('cli-tva', c.tva);
-      setV('cli-rcs', c.rcs); setV('cli-ean', c.ean); setV('cli-nif', c.nif); setV('cli-groupe', c.groupe);
-      setV('cli-adresse1', c.adresse1); setV('cli-adresse2', c.adresse2); setV('cli-bp', c.bp);
-      setV('cli-cp', c.cp); setV('cli-ville', c.ville); setV('cli-code-pays', c.code_pays); setV('cli-pays', c.pays);
-      setV('cli-tel', c.telephone); setV('cli-fax', c.telecopie); setV('cli-email', c.email);
-      setV('cli-contact-nom', c.contact_nom); setV('cli-contact-fonction', c.contact_fonction);
-      setV('cli-contact-email', c.contact_email); setV('cli-contact-tel', c.contact_tel);
-      setV('cli-rep', c.representant); setV('cli-adv', c.adv);
-      setV('cli-mode-liv', c.mode_livraison); setV('cli-mode-reg', c.mode_reglement);
-      setV('cli-devise', c.devise); setV('cli-encours', c.encours_autorise); setV('cli-codecpta', c.code_comptable);
-      setV('cli-cat1', c.categorie1); setV('cli-cat2', c.categorie2); setV('cli-cat3', c.categorie3);
-      setV('cli-notes', c.notes);
-      requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
-    })
-    .catch(() => toast('Impossible de charger ce client.', true));
-}
-
-function closeCliModal() {
-  const overlay = document.getElementById('cli-modal-overlay');
-  if (!overlay) return;
-  overlay.style.display = 'none';
-  overlay.classList.add('hidden');
-  _cliEditing = null;
-}
-
-async function saveCliModal() {
-  const val = id => (document.getElementById(id)?.value || '').trim();
-  const raison = val('cli-raison');
-  if (!raison) {
-    toast('Raison sociale obligatoire.', true);
-    document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]')?.click();
-    document.getElementById('cli-raison')?.focus();
-    return;
-  }
-  const num = val('cli-numero');
-  const encours = val('cli-encours');
-  const payload = {
-    numero: num === '' ? null : parseInt(num, 10),
-    code: val('cli-code') || null,
-    raison_sociale: raison,
-    siret: val('cli-siret') || null,
-    tva: val('cli-tva') || null,
-    rcs: val('cli-rcs') || null,
-    ean: val('cli-ean') || null,
-    nif: val('cli-nif') || null,
-    groupe: val('cli-groupe') || null,
-    adresse1: val('cli-adresse1') || null,
-    adresse2: val('cli-adresse2') || null,
-    bp: val('cli-bp') || null,
-    cp: val('cli-cp') || null,
-    ville: val('cli-ville') || null,
-    code_pays: val('cli-code-pays') || null,
-    pays: val('cli-pays') || null,
-    telephone: val('cli-tel') || null,
-    telecopie: val('cli-fax') || null,
-    email: val('cli-email') || null,
-    contact_nom: val('cli-contact-nom') || null,
-    contact_fonction: val('cli-contact-fonction') || null,
-    contact_email: val('cli-contact-email') || null,
-    contact_tel: val('cli-contact-tel') || null,
-    representant: val('cli-rep') || null,
-    adv: val('cli-adv') || null,
-    mode_livraison: val('cli-mode-liv') || null,
-    mode_reglement: val('cli-mode-reg') || null,
-    devise: val('cli-devise') || null,
-    encours_autorise: encours === '' ? null : parseFloat(encours.replace(',', '.')),
-    code_comptable: val('cli-codecpta') || null,
-    categorie1: val('cli-cat1') || null,
-    categorie2: val('cli-cat2') || null,
-    categorie3: val('cli-cat3') || null,
-    etat: val('cli-etat') || 'Normal',
-    notes: val('cli-notes') || null,
-  };
-  const url = _cliEditing == null ? '/api/clients' : '/api/clients/' + _cliEditing;
-  const method = _cliEditing == null ? 'POST' : 'PUT';
-  try {
-    const r = await fetch(url, {
-      method, credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) {
-      let msg = 'Erreur lors de l\'enregistrement.';
-      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
-      toast(msg, true);
-      return;
-    }
-    toast(_cliEditing == null ? 'Client créé.' : 'Client mis à jour.', false);
-    closeCliModal();
-    await loadClients();
-  } catch(e) {
-    toast('Erreur réseau.', true);
-  }
-}
-
-async function deleteCliFromModal() {
-  if (_cliEditing == null) return;
-  const raison = (document.getElementById('cli-raison')?.value || '').trim();
-  if (!confirm(`Supprimer le client « ${raison} » ? Cette action est irréversible.`)) return;
-  try {
-    const r = await fetch('/api/clients/' + _cliEditing, { method: 'DELETE', credentials: 'include' });
-    if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
-    toast('Client supprimé.', false);
-    closeCliModal();
-    await loadClients();
-  } catch(e) { toast('Erreur réseau.', true); }
-}
-
-function onCliImportFile(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  _cliImportFile = file;
-  const fn = document.getElementById('cli-import-filename');
-  if (fn) fn.textContent = file.name;
-  const overlay = document.getElementById('cli-import-overlay');
-  if (overlay) { overlay.style.display = 'flex'; overlay.classList.remove('hidden'); }
-}
-
-function closeCliImportModal() {
-  const overlay = document.getElementById('cli-import-overlay');
-  if (overlay) { overlay.style.display = 'none'; overlay.classList.add('hidden'); }
-  _cliImportFile = null;
-  const inp = document.getElementById('cli-import-input');
-  if (inp) inp.value = '';
-}
-
-async function confirmCliImport() {
-  if (!_cliImportFile) { closeCliImportModal(); return; }
-  const mode = (document.querySelector('input[name="cli-import-mode"]:checked')?.value || 'merge');
-  if (mode === 'replace' && !confirm('Mode REMPLACER : tous les clients existants seront supprimés avant import. Continuer ?')) return;
-  const btn = document.getElementById('cli-import-confirm');
-  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
-  try {
-    const fd = new FormData();
-    fd.append('file', _cliImportFile);
-    const r = await fetch('/api/clients/import-xlsx?mode=' + encodeURIComponent(mode), {
-      method: 'POST', credentials: 'include', body: fd,
-    });
-    if (!r.ok) {
-      let msg = 'Erreur lors de l\'import.';
-      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
-      toast(msg, true);
-      return;
-    }
-    const data = await r.json();
-    let msg = `${data.inserted} créé${data.inserted > 1 ? 's' : ''}, ${data.updated} mis à jour`;
-    if (data.skipped) msg += `, ${data.skipped} ignoré${data.skipped > 1 ? 's' : ''}`;
-    msg += '.';
-    toast(msg, false);
-    if (data.errors && data.errors.length) {
-      console.warn('Erreurs import clients :', data.errors);
-    }
-    closeCliImportModal();
-    await loadClients();
-  } catch(e) { toast('Erreur réseau.', true); }
-  finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Lancer l\'import'; }
-  }
-}
-
-function exportClientsCsv() {
-  if (!_cliData.length) { toast('Aucun client à exporter.', true); return; }
-  const cols = [
-    ['numero', 'N°'], ['code', 'Code'], ['raison_sociale', 'Raison sociale'],
-    ['adresse1', 'Adresse 1'], ['adresse2', 'Adresse 2'], ['bp', 'B.P.'],
-    ['cp', 'C.P.'], ['ville', 'Ville'], ['code_pays', 'C.Pays'], ['pays', 'Pays'],
-    ['siret', 'Siret'], ['tva', 'N.TVA'], ['telephone', 'Téléphone'],
-    ['email', 'Email'], ['representant', 'Représentant'], ['adv', 'ADV'],
-    ['mode_reglement', 'Mode de règlement'], ['devise', 'Devise'],
-    ['encours_autorise', 'Encours autorisé'], ['code_comptable', 'Code Comptable'],
-    ['contact_nom', 'Contact'], ['contact_email', 'Email contact'],
-    ['contact_tel', 'Tél contact'], ['etat', 'État'],
-  ];
-  const head = cols.map(c => c[1]);
-  const rows = [head, ..._cliData.map(c => cols.map(([k]) => c[k] == null ? '' : c[k]))];
-  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'clients_' + new Date().toISOString().slice(0, 10) + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-}
-
-// ─── Promotion v1 → v2 ──────────────────────────────────────────────
-function _prEsc(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-async function loadPromoteStatus() {
-  const v2v = document.getElementById('pr-v2-version');
-  const v2h = document.getElementById('pr-v2-head');
-  const nxv = document.getElementById('pr-next-version');
-  const orh = document.getElementById('pr-origin-head');
-  const commitsEl = document.getElementById('pr-commits');
-  const goBtn = document.getElementById('pr-go-btn');
-  const blocked = document.getElementById('pr-blocked-reason');
-  if (commitsEl) commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
-  let data;
-  try {
-    data = await api('/api/promote/status');
-    if (!data) return;
-  } catch (e) {
-    commitsEl.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement : ' + _prEsc(e && e.message ? e.message : String(e)) + '</div>';
-    return;
-  }
-  v2v.textContent = data.v2_version ? 'v' + data.v2_version : '—';
-  v2h.textContent = data.v2_head || '';
-  nxv.textContent = data.next_version ? 'v' + data.next_version : '—';
-  orh.textContent = data.origin_head || '';
-
-  if (!data.commits_ahead || data.commits_ahead.length === 0) {
-    commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Rien à promouvoir — v2 est déjà à jour.</div>';
-  } else {
-    commitsEl.innerHTML = data.commits_ahead.map(c => (
-      '<div style="display:flex;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:flex-start">'
-        + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--accent);min-width:60px">' + _prEsc(c.hash) + '</span>'
-        + '<div style="flex:1;min-width:0">'
-          + '<div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis">' + _prEsc(c.subject) + '</div>'
-          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + _prEsc(c.author) + ' · ' + _prEsc(c.date) + '</div>'
-        + '</div>'
-      + '</div>'
-    )).join('');
-  }
-
-  goBtn.disabled = !data.can_promote;
-  blocked.textContent = data.can_promote ? '' : (data.reason || '');
-}
-
-async function runPromote() {
-  const goBtn = document.getElementById('pr-go-btn');
-  const notesEl = document.getElementById('pr-notes');
-  const outCard = document.getElementById('pr-output-card');
-  const outEl = document.getElementById('pr-output');
-  const notes = (notesEl.value || '').trim();
-
-  // Garde-fou confirm
-  if (!confirm('Promouvoir v1 → v2 maintenant ?\\nBackup DB, pull, bump patch, restart, healthcheck.\\nRollback auto si KO.')) return;
-
-  goBtn.disabled = true;
-  goBtn.textContent = 'Promotion en cours…';
-  outCard.style.display = 'block';
-  outEl.textContent = '';
-
-  try {
-    const r = await fetch(API + '/api/promote', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes }),
-    });
-    if (!r.ok) {
-      outEl.textContent += '[HTTP ' + r.status + '] ' + (await r.text().catch(() => '')) + '\\n';
-      goBtn.disabled = false;
-      goBtn.textContent = 'Promouvoir maintenant';
-      return;
-    }
-    // Stream la réponse ligne par ligne
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      outEl.textContent += decoder.decode(value, { stream: true });
-      outEl.scrollTop = outEl.scrollHeight;
-    }
-  } catch (e) {
-    outEl.textContent += '\\n[Erreur réseau : ' + (e && e.message ? e.message : String(e)) + ']\\n';
-  } finally {
-    goBtn.textContent = 'Promouvoir maintenant';
-    // Recharger le statut (commits zéro après succès, ou inchangé après rollback)
-    setTimeout(() => loadPromoteStatus(), 500);
-  }
-}
-
-// ─── Sync DB v2 → v1 ──────────────────────────────────────────────
-async function syncDbV1() {
-  const btn = document.getElementById('db-sync-btn');
-  const status = document.getElementById('db-sync-status');
-  if (!btn) return;
-  if (!confirm('⚠ Synchroniser DB v2 → v1 ?\n\nCette action écrase intégralement la DB v1 par la copie live de v2.\nToutes les données créées sur v1 depuis la dernière resync seront perdues.\n\nUn backup pré-resync est conservé automatiquement.\nv1 redémarrera dans ~15s.\n\nContinuer ?')) return;
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Synchronisation…';
-  if (status) status.textContent = '';
-  try {
-    const r = await fetch(API + '/api/sync-db-v1', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const text = await r.text().catch(() => '');
-    if (!r.ok) {
-      if (status) {
-        status.textContent = 'Echec (HTTP ' + r.status + ')';
-        status.style.color = 'var(--danger)';
-      }
-      if (typeof showToast === 'function') showToast('Sync DB echouee : ' + (text || r.status), 'danger');
-      else alert('Sync DB echouee : ' + (text || r.status));
-    } else {
-      if (status) {
-        status.textContent = 'OK · ' + new Date().toLocaleTimeString();
-        status.style.color = 'var(--success, var(--ok))';
-      }
-      if (typeof showToast === 'function') showToast('Resync lancee. v1 redemarrera dans ~15s.', 'success');
-    }
-  } catch (e) {
-    if (status) {
-      status.textContent = 'Erreur reseau';
-      status.style.color = 'var(--danger)';
-    }
-    if (typeof showToast === 'function') showToast('Erreur reseau : ' + (e && e.message ? e.message : String(e)), 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════
-// PRINTERS — CRUD imprimantes / templates / agents (superadmin)
-// ═════════════════════════════════════════════════════════════════════
-const PR = {
-  imprimantes: [], templates: [], agents: [], usages: [],
-  sub: 'imp',
-  editingImp: null, editingTpl: null,
+// v179 : MAINT_ROLE deja defini au debut du 1er script (var hoiste).
+// Reassignation defensive au cas ou body.data-maint-role aurait change.
+MAINT_ROLE = (document.body.getAttribute('data-maint-role') || 'admin');
+const MAINT_STATE = {
+  tasks: [],
+  codes: [],
+  operators: [],
+  saisieTaskId: null,
+  newModalAdminMode: false,  // v2.2.13 : true si modal ouverte via adminOpenRegisterOpModal
 };
 
-function prNoStore() { return { credentials: 'include', headers: {} }; }
+function _fmtDateISO(d){
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
+}
+function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
+// Helpers unifiés pour la typologie 3 catégories (v178, renommage labels v179).
+// Valeurs DB : 'controles', 'entretien', 'remplacements'.
+// Labels UI : Contrôles, Nettoyage, Interventions.
+// 'interventions' (legacy) et 'suivi' (legacy) sont remappés vers 'entretien'.
+function _maintCatLabelFront(cat){
+  if(cat === 'remplacements') return 'Interventions';
+  if(cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
+  return 'Contrôles';
+}
+function _maintCatCssFront(cat){
+  if(cat === 'remplacements') return 'remplacements';
+  if(cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'entretien';
+  return 'controles';
+}
+function _statutLabel(s){
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+}
 
-async function prFetch(url, opts) {
-  const o = { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...(opts || {}) };
-  const r = await fetch(url, o);
-  const txt = await r.text().catch(() => '');
-  let data = null; try { data = txt ? JSON.parse(txt) : null; } catch(e) {}
-  if (!r.ok) {
-    // v2 — remonte plus d'infos : detail JSON en priorite, sinon debut du body texte
-    let msg;
-    if (data && data.detail) {
-      msg = data.detail;
-    } else if (txt && txt.length < 300) {
-      msg = 'HTTP ' + r.status + ' : ' + txt.trim();
-    } else {
-      msg = 'HTTP ' + r.status + ' (voir logs serveur)';
-    }
-    console.error('[printers] prFetch error', url, r.status, txt);
-    throw new Error(msg);
+async function opFetchCodes(){
+  if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
+  const r = await fetch('/api/maintenance/codes', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.codes = []; return []; }
+  const d = await r.json();
+  // /api/maintenance/codes renvoie { items:[{code, label, categorie, niveau, periodique, ...}] }
+  MAINT_STATE.codes = (d.items || d.codes || []).map(c => ({
+    code: c.code, label: c.label, categorie: c.categorie,
+    niveau: c.niveau, periodique: !!c.periodique,
+    intervalle: c.intervalle || '',
+  }));
+  return MAINT_STATE.codes;
+}
+
+async function admFetchOperators(){
+  if(MAINT_STATE.operators.length) return MAINT_STATE.operators;
+  const r = await fetch('/api/maintenance/operators', { credentials:'include' });
+  if(!r.ok){ MAINT_STATE.operators = []; return []; }
+  const d = await r.json();
+  MAINT_STATE.operators = d.operators || [];
+  return MAINT_STATE.operators;
+}
+
+/* ── Vue Mes tâches ──────────────────────────────────────────────── */
+
+async function opLoadTasks(){
+  // v2.2.47 : autorise opérateur ET admin naviguant sur Mes tâches
+  // (body.admin-op-active), sinon ne fetch pas inutilement.
+  const isAdminOnOpView = (MAINT_ROLE !== 'operator' && document.body.classList.contains('admin-op-active'));
+  if(MAINT_ROLE !== 'operator' && !isAdminOnOpView) return;
+  const today = new Date();
+  const in60 = new Date(); in60.setDate(today.getDate() + 60);
+  const url = '/api/maintenance/events?date_from=' + _fmtDateISO(today) +
+              '&date_to=' + _fmtDateISO(in60) + '&_=' + Date.now();
+  const r = await fetch(url, { credentials:'include', cache: 'no-store' });
+  if(!r.ok){
+    // NE PAS wiper : garde la version en mémoire pour éviter que la vue
+    // se vide brutalement si l'endpoint 500 temporairement (ex. schema DB
+    // pas encore migré). Log pour diagnostic.
+    console.warn('[opLoadTasks] fetch KO status=', r.status, '— MAINT_STATE.tasks conservé.');
+    return;
   }
   return data;
 }
