@@ -2821,7 +2821,7 @@ def comparaison_ao(request: Request, ao_id: int):
                               r.quotation, r.prix_unitaire, r.devise, r.unite_quotation,
                               r.unite_quotation_original,
                               CASE WHEN COALESCE(r.unite_quotation_original, r.unite_quotation) != r.unite_quotation THEN 1 ELSE 0 END AS unite_manuel,
-                              r.coef, r.devise_prix_devis,
+                              r.coef, r.marge, r.devise_prix_devis,
                               r.delai_jours, r.commentaire
                        FROM ao_reponses r
                        JOIN ao_fournisseurs f ON f.id = r.ao_fournisseur_id
@@ -2879,6 +2879,7 @@ def comparaison_ao(request: Request, ao_id: int):
                             "devise": "EUR",
                             "unite_quotation": "mille",
                             "coef": 1.0,
+                            "marge": 1.0,
                             "devise_prix_devis": "EUR",
                         },
                         ctx,
@@ -2915,8 +2916,6 @@ def comparaison_ao(request: Request, ao_id: int):
                     })
                 rows_flat.append({
                     "ligne_id": ln["id"],
-                    "condi_unite": ln.get("condi_unite"),
-                    "condi_qte": ln.get("condi_qte"),
                     "reponse_id": rep.get("reponse_id"),
                     "fourni_id": rep.get("fourni_id"),
                     "nom_fournisseur": rep.get("nom_fournisseur"),
@@ -2924,7 +2923,10 @@ def comparaison_ao(request: Request, ao_id: int):
                     **{k: rep.get(k) for k in (
                         "quotation", "devise", "unite_quotation", "unite_quotation_original", "unite_manuel",
                         "prix_calcule", "transport_amount", "prix_au_mille", "prix_achat_mille", "coef",
-                        "devise_prix_devis", "prix_vente",
+                        "marge", "devise_prix_devis", "prix_vente",
+                        # Nouveau pipeline conditionnement (v217)
+                        "prix_achat_mille_dd", "unite_vente_type", "unite_vente_qte",
+                        "etiq_par_condi", "prix_achat_conditionne", "prix_vente_final",
                         "delai_jours", "commentaire",
                     )},
                     "series_breakdown": series_breakdown,
@@ -2944,6 +2946,7 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
     _require_ao(request)
     body = await request.json()
     coef = body.get("coef")
+    marge = body.get("marge")
     devise_prix_devis = body.get("devise_prix_devis")
     unite_quotation = body.get("unite_quotation")
     if unite_quotation is not None:
@@ -2957,6 +2960,13 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
             raise HTTPException(status_code=400, detail="Coefficient invalide.")
         if coef <= 0:
             raise HTTPException(status_code=400, detail="Coefficient invalide.")
+    if marge is not None:
+        try:
+            marge = float(marge)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Marge invalide.")
+        if marge <= 0:
+            raise HTTPException(status_code=400, detail="Marge invalide.")
     if devise_prix_devis is not None:
         devise_prix_devis = (devise_prix_devis or "").strip().upper()
         if devise_prix_devis not in DEVISES:
@@ -2978,6 +2988,11 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
             conn.execute(
                 "UPDATE ao_reponses SET coef=? WHERE id=?",
                 (coef, reponse_id),
+            )
+        if marge is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET marge=? WHERE id=?",
+                (marge, reponse_id),
             )
         if devise_prix_devis is not None:
             conn.execute(

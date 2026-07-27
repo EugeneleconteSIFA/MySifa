@@ -7550,17 +7550,30 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 215, "mp_fiche_mapping")
 
-    # v216 — Commentaire libre sur bobine scannée (traçabilité matières fabrication)
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=216 LIMIT 1").fetchone():
-        fmu_cols = {
-            r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()
-        }
-        if "commentaire" not in fmu_cols:
-            conn.execute(
-                "ALTER TABLE fab_matieres_utilisees ADD COLUMN commentaire TEXT"
-            )
-        conn.commit()
-        _record_schema_migration(conn, 216, "fab_matieres_commentaire")
+    # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
+    # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
+    # schema_migrations. Historique : le versionnage séquentiel entre branches
+    # parallèles a déjà causé (1) la perte silencieuse de la migration condi
+    # lors d'un ré-encodage, et (2) une collision de numéro — la version 216
+    # sert à « ao_lignes_condi » sur une branche et à « fab_matieres_commentaire »
+    # sur une autre. Avec un garde-fou par version, la 2e migration qui porte le
+    # même numéro est SILENCIEUSEMENT ignorée → colonne jamais créée → 500.
+    # On teste donc l'existence réelle de la colonne : idempotent, auto-réparateur,
+    # insensible à l'ordre de merge et aux collisions de version. Le PRAGMA est
+    # quasi gratuit et ne s'exécute qu'au boot.
+    # condi_unite/condi_qte : conditionnement de vente historique par ligne (legacy,
+    #   l'unité de vente vit désormais dans la fiche produit — conservé sans risque).
+    # marge : 2e multiplicateur commercial par réponse (prix de vente =
+    #   prix d'achat conditionné × coef × marge, cf. app/services/ao_pricing.py).
+    _ao_lignes_cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_lignes)").fetchall()}
+    if "condi_unite" not in _ao_lignes_cols:
+        conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_unite TEXT")
+    if "condi_qte" not in _ao_lignes_cols:
+        conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_qte REAL")
+    _ao_reponses_cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
+    if "marge" not in _ao_reponses_cols:
+        conn.execute("ALTER TABLE ao_reponses ADD COLUMN marge REAL NOT NULL DEFAULT 1.0")
+    conn.commit()
 
 
 
