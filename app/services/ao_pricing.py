@@ -293,12 +293,13 @@ def enrich_reponse_pricing(
 
     # ── Marge brute vs dernier prix de vente (fiche produit) ────────────────
     # dernier_prix_vente est saisi PAR UNITÉ DE VENTE (même base que le prix
-    # d'achat conditionné) → comparaison directe. Taux de marge = (PV−PA)/PA.
+    # d'achat conditionné) → comparaison directe.
+    # Taux de marque = (PV−PA)/PV (marge rapportée au prix de VENTE).
     out["has_produit"] = bool(ligne_ctx.get("has_produit"))
     dpv = _float_or_none(ligne_ctx.get("dernier_prix_vente"))
     out["dernier_prix_vente"] = dpv
-    if dpv is not None and prix_achat_conditionne is not None and prix_achat_conditionne > 0:
-        out["marge_brute_pct"] = (dpv - prix_achat_conditionne) / prix_achat_conditionne * 100.0
+    if dpv is not None and dpv > 0 and prix_achat_conditionne is not None:
+        out["marge_brute_pct"] = (dpv - prix_achat_conditionne) / dpv * 100.0
     else:
         out["marge_brute_pct"] = None
 
