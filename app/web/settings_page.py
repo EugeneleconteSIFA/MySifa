@@ -7200,6 +7200,9 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_alert_form.js?v=2.4.16"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.17"></script>
 <script src="/static/mysifa_impersonate.js"></script>
+<!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
+     autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
+<script src="/static/mysifa_promote.js?v=1"></script>
 </body>
 </html>
 """
