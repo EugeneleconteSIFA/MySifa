@@ -1634,11 +1634,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
           </div>
-          <span class="maint-subtoolbar-label" style="margin-left:8px">Grouper par</span>
-          <div class="maint-chip-group" id="maint-group-chips" role="tablist">
-            <button type="button" class="maint-chip active" data-group-by="status" onclick="setMaintGrouping('status')">Statut</button>
-            <button type="button" class="maint-chip" data-group-by="freq" onclick="setMaintGrouping('freq')">Fréquence</button>
-          </div>
         </div>
 
         <!-- Cartes des opérations de maintenance périodiques.
@@ -5643,11 +5638,11 @@ function setMaintMachine(m){
   renderMaintCards();
 }
 
-// --- v2.4.6 : filtre par statut + choix du regroupement ---------------
+// --- v2.4.6 : filtre par statut ---------------------------------------
 // Statuts : 'all' (défaut) · 'overdue' · 'soon' · 'ok' · 'never'
-// Groupement : 'status' (défaut) · 'freq' · 'machine'
+// Le regroupement est fixe (par statut) — le toggle a été retiré car
+// redondant avec le filtre statut et le sélecteur machine du haut.
 const MAINT_STATUS_FILTER_KEY = 'mysifa_maint_home_status_filter_v1';
-const MAINT_GROUPING_KEY      = 'mysifa_maint_home_grouping_v1';
 
 function getMaintStatusFilter(){
   try{
@@ -5661,19 +5656,6 @@ function setMaintStatusFilter(s){
   try{ localStorage.setItem(MAINT_STATUS_FILTER_KEY, s); }catch(e){}
   renderMaintCards();
 }
-function getMaintGrouping(){
-  try{
-    const v = localStorage.getItem(MAINT_GROUPING_KEY);
-    if(v === 'freq') return v;
-    return 'status';
-  }catch(e){ return 'status'; }
-}
-function setMaintGrouping(g){
-  if(g !== 'status' && g !== 'freq') return;
-  try{ localStorage.setItem(MAINT_GROUPING_KEY, g); }catch(e){}
-  renderMaintCards();
-}
-
 // Statut d'une opération à partir de son intervalle (jours) et du nombre de
 // jours depuis la dernière saisie. Seuils :
 //   - 'overdue' : ratio > 1 (retard, dès dépassement)
@@ -5774,10 +5756,6 @@ function _refreshMaintChipState(){
   const status = getMaintStatusFilter();
   document.querySelectorAll('[data-status-filter]').forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-status-filter') === status);
-  });
-  const grouping = getMaintGrouping();
-  document.querySelectorAll('[data-group-by]').forEach(el => {
-    el.classList.toggle('active', el.getAttribute('data-group-by') === grouping);
   });
 }
 // --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
@@ -6212,7 +6190,7 @@ function renderMaintCards(){
   });
   // v2.4.6 : nouveau filtre statut + choix du regroupement.
   const statusFilter = getMaintStatusFilter();
-  const grouping = getMaintGrouping();
+  const grouping = 'status';  // v2.4.6 : toggle retire, groupement fixe par statut
   _refreshMaintChipState();
   _refreshMaintCounters();
   const showWearParts = (catFilter === 'remplacements');
