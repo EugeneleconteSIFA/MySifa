@@ -3053,6 +3053,7 @@ function renderComparaison() {
     const nbBob = Number(r.etiquettes_par_bobine||0) || null;
     const bobCarton = Number(r.bobines_carton||0) || null;
     const cartPal = Number(r.cartons_palette||0) || null;
+    if (unite === 'mille') return 1000;
     if (unite === 'etiquette') return 1;
     if (unite === 'bobine') return nbBob || null;
     if (unite === 'carton') return (nbBob && bobCarton) ? nbBob*bobCarton : null;
@@ -3073,11 +3074,14 @@ function renderComparaison() {
       ? '<td><button type="button" class="btn btn-ghost btn-sm btn-saisir-prix" data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'" style="font-size:11px;padding:4px 8px;color:var(--accent);border:1px dashed var(--accent);background:var(--accent-bg)">'+icon('edit',12)+' Saisir</button></td>'
       : '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>';
     // Condi cell : select unité + input qté (persist par ligne)
-    const condiUnite = r.condi_unite || '';
-    const condiQte = r.condi_qte != null ? r.condi_qte : '';
-    const unites = ['bobine','carton','etiquette','palette']; // alpha
+    // Défaut : unité de vente "au mille d'étiquettes" (qté 1) tant que rien
+    // n'a été enregistré sur la ligne — le prix de vente s'affiche d'emblée.
+    const condiUnite = r.condi_unite || 'mille';
+    const condiQte = r.condi_qte != null ? r.condi_qte : 1;
+    const unites = ['mille','bobine','carton','etiquette','palette'];
+    const uLabels = {mille:'Au mille', bobine:'Bobine', carton:'Carton', etiquette:'Étiquette', palette:'Palette'};
     const uOpts = '<option value="">—</option>'+
-      unites.map(u => '<option value="'+u+'"'+(condiUnite===u?' selected':'')+'>'+u.charAt(0).toUpperCase()+u.slice(1)+'</option>').join('');
+      unites.map(u => '<option value="'+u+'"'+(condiUnite===u?' selected':'')+'>'+(uLabels[u]||u)+'</option>').join('');
     const condiCell = '<td>'+
       '<select class="inp-condi-unite" data-lid="'+escAttr(r.ligne_id||'')+'" style="font-size:11px;padding:2px 4px;max-width:88px">'+uOpts+'</select> '+
       '<input type="number" step="1" min="1" class="inp-condi-qte" data-lid="'+escAttr(r.ligne_id||'')+'" value="'+escAttr(condiQte)+'" placeholder="Qté" style="max-width:60px;font-size:11px;padding:2px 4px">'+

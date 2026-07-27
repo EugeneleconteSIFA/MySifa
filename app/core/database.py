@@ -7550,6 +7550,22 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 215, "mp_fiche_mapping")
 
+    # Migration 216 : conditionnement de vente sur les lignes d'AO.
+    # L'endpoint PATCH /api/ao/{ao_id}/lignes/{ligne_id}/condi (routers/ao.py)
+    # et le tableau comparatif MyAO écrivent/lisent ces colonnes ; elles
+    # n'avaient jamais été ajoutées au schéma → 500 "no such column" à la
+    # première sauvegarde d'un conditionnement.
+    # condi_unite : mille | bobine | carton | etiquette | palette
+    # condi_qte   : quantité d'unités vendues (ex. 3 cartons).
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=216 LIMIT 1").fetchone():
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_lignes)").fetchall()}
+        if "condi_unite" not in cols:
+            conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_unite TEXT")
+        if "condi_qte" not in cols:
+            conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_qte REAL")
+        conn.commit()
+        _record_schema_migration(conn, 216, "ao_lignes_condi")
+
 
 
 

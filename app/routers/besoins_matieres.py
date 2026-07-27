@@ -107,56 +107,89 @@ def _ratio_dans_fenetre(pe: dict, today: date, borne: date) -> float:
 
 # ── Requête source : dossiers du planning + fiches techniques ──────────
 
-_SQL_DOSSIERS = """
-    WITH pe_ext AS (
-        -- Étape 1 : on matérialise planning_entries + machine + of_imports.
-        -- Le CTE permet à la sous-requête corrélée sur fiches_techniques
-        -- (ci-dessous) d'accéder à `pe_ext.machine_nom` comme une colonne
-        -- normale, sans corrélation à 2 niveaux (que SQLite ne supporte pas).
-        SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
-               pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
-               pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
-               pe.position,
-               m.nom AS machine_nom,
-               oi.qte_etiquettes AS qte_etiquettes,
-               oi.qte_bobines    AS qte_bobines
-        FROM planning_entries pe
-        LEFT JOIN machines m ON m.id = pe.machine_id
-        LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
-        WHERE pe.statut IN ('attente', 'en_cours')
-    )
-    SELECT pe_ext.*,
-           ft.id                         AS ft_id,
-           ft.support                    AS ft_support,
-           ft.adhesif                    AS ft_adhesif,
-           ft.qte_au_mille               AS ft_qte_au_mille,
-           ft.eti_laize                  AS ft_eti_laize,
-           ft.eti_longueur               AS ft_eti_longueur,
-           ft.mandrin_dia                AS ft_mandrin_dia,
-           ft.nb_etiq_bobin              AS ft_nb_etiq_bobin,
-           ft.nb_bobines_carton          AS ft_nb_bobines_carton,
-           ft.cartons                    AS ft_cartons,
-           ft.palette_type               AS ft_palette_type,
-           ft.palette_nb_cartons_sol     AS ft_palette_nb_cartons_sol,
-           ft.palette_nb_cartons_hauteur AS ft_palette_nb_cartons_hauteur
-    FROM pe_ext
-    LEFT JOIN fiches_techniques ft ON ft.id = (
-        SELECT ft2.id FROM fiches_techniques ft2
-        WHERE COALESCE(NULLIF(TRIM(ft2.ref_produit_norm), ''), LOWER(TRIM(ft2.reference)))
-            = COALESCE(NULLIF(TRIM(pe_ext.ref_produit_norm), ''), LOWER(TRIM(pe_ext.ref_produit)))
-        ORDER BY
-          CASE
-            -- Tie-breaker machine : accès direct à pe_ext.machine_nom (résolu par le CTE).
-            WHEN LOWER(TRIM(COALESCE(ft2.machine,''))) = LOWER(TRIM(COALESCE(pe_ext.machine_nom,'')))
-                 AND TRIM(COALESCE(ft2.machine,'')) != '' THEN 0
-            WHEN TRIM(COALESCE(ft2.machine,'')) = '' THEN 1
-            ELSE 2
-          END,
-          ft2.id
-        LIMIT 1
-    )
-    ORDER BY COALESCE(pe_ext.planned_start, pe_ext.date_livraison, '9999'), pe_ext.position
+# NOTE : l'ancienne version faisait le tie-breaker machine dans une sous-requête
+# corrélée du ON (LEFT JOIN fiches_techniques ft ON ft.id = (SELECT ...)).
+# SQLite refuse la référence à une colonne d'un CTE ou d'une autre table du
+# FROM externe depuis cette sous-requête ("no such column: pe_ext.machine_nom"
+# / "no such column: m.nom") → 500 systématique sur les 3 endpoints GET.
+# On fait désormais le match fiche technique en Python : même logique que
+# planning.py (l. 3261+), mais multi-machines en un seul passage.
+
+_SQL_PE = """
+    SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
+           pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
+           pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
+           pe.position,
+           m.nom AS machine_nom,
+           oi.qte_etiquettes AS qte_etiquettes,
+           oi.qte_bobines    AS qte_bobines
+    FROM planning_entries pe
+    LEFT JOIN machines m ON m.id = pe.machine_id
+    LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
+    WHERE pe.statut IN ('attente', 'en_cours')
+    ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position
 """
+
+_SQL_FT = """
+    SELECT id, reference, ref_produit_norm, machine,
+           support, adhesif, qte_au_mille, eti_laize, eti_longueur,
+           mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
+           palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
+    FROM fiches_techniques
+"""
+
+_FT_FIELDS = (
+    "support", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
+    "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
+    "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
+)
+
+
+def _ft_key(norm, ref) -> str:
+    """Clé de rapprochement fiche↔dossier : ref_produit_norm si présent,
+    sinon la référence textuelle en minuscules — même COALESCE que le SQL
+    d'origine et que planning.py."""
+    n = (norm or "").strip()
+    if n:
+        return n
+    return (ref or "").strip().lower()
+
+
+def _load_dossiers(conn) -> list:
+    """Dossiers du planning (attente/en_cours) + fiche technique associée.
+
+    Tie-breaker machine identique à planning.py : fiche dont `machine`
+    correspond à la machine du dossier > fiche sans machine > autre, puis
+    id croissant. Chaque dossier reçoit les champs ft_* (None si aucune fiche).
+    """
+    pes = [dict(r) for r in conn.execute(_SQL_PE).fetchall()]
+    fts = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
+
+    by_key: dict = {}
+    for ft in fts:
+        by_key.setdefault(_ft_key(ft.get("ref_produit_norm"), ft.get("reference")), []).append(ft)
+
+    for pe in pes:
+        cands = by_key.get(_ft_key(pe.get("ref_produit_norm"), pe.get("ref_produit"))) or []
+        best = None
+        if cands:
+            mach = (pe.get("machine_nom") or "").strip().lower()
+
+            def _rank(ft):
+                fm = (ft.get("machine") or "").strip().lower()
+                if fm and fm == mach:
+                    r = 0
+                elif not fm:
+                    r = 1
+                else:
+                    r = 2
+                return (r, ft["id"])
+
+            best = min(cands, key=_rank)
+        pe["ft_id"] = best["id"] if best else None
+        for f in _FT_FIELDS:
+            pe[f"ft_{f}"] = best.get(f) if best else None
+    return pes
 
 
 def _load_mapping(conn) -> dict:
@@ -256,7 +289,7 @@ def besoins_par_dossier(request: Request):
     require_stock_matieres_admin(request)
     with get_db() as conn:
         mapping = _load_mapping(conn)
-        rows = [dict(r) for r in conn.execute(_SQL_DOSSIERS).fetchall()]
+        rows = _load_dossiers(conn)
     dossiers = []
     for pe in rows:
         besoins = _compute_besoins_dossier(pe, mapping)
@@ -294,7 +327,7 @@ def besoins_par_echeance(request: Request):
 
     with get_db() as conn:
         mapping = _load_mapping(conn)
-        rows = [dict(r) for r in conn.execute(_SQL_DOSSIERS).fetchall()]
+        rows = _load_dossiers(conn)
         # Stock actuel pour comparaison (mp_stock non laizé + mp_stock_laize agrégé)
         stock_map: dict = {}
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock GROUP BY matiere_id").fetchall():
@@ -369,7 +402,7 @@ def list_mapping(request: Request):
             JOIN matieres_premieres mp ON mp.id = m.matiere_id
             ORDER BY m.kind, LOWER(m.source_value)
         """).fetchall()]
-        rows = [dict(r) for r in conn.execute(_SQL_DOSSIERS).fetchall()]
+        rows = _load_dossiers(conn)
 
     mapping_keys = {(m["kind"], (m["source_value"] or "").strip().lower()) for m in maps}
     seen: dict = {}

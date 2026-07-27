@@ -2690,11 +2690,17 @@ def _build_lot_numero(fournisseur: Optional[str], dt: datetime, fsc_type_claim: 
 
 @router.get("/api/stock/fournisseurs")
 def list_fournisseurs_stock(request: Request):
-    """Liste des fournisseurs FSC pour la réception matière et le guide traça (lecture publique interne)."""
+    """Liste des fournisseurs FSC — réception matière, guide traça et sélecteurs stock.
+
+    NOTE : cette route était déclarée DEUX fois (ici et plus bas
+    `stock_list_fournisseurs`) ; FastAPI ne servait que la première, donc
+    `has_fsc` n'arrivait jamais au front (badge FSC muet). Fusion des deux :
+    on renvoie l'union des colonnes attendues par tous les appelants."""
     get_current_user(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
+            """SELECT id, nom, COALESCE(has_fsc, 1) AS has_fsc, licence, certificat,
+                      traca_photo_url, traca_explication, traca_exemple_code
                FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
@@ -7074,17 +7080,8 @@ def _mp_fournisseurs_by_laize(conn, matiere_id: int) -> dict[int, list[dict]]:
     return out
 
 
-@router.get("/api/stock/fournisseurs")
-def stock_list_fournisseurs(request: Request):
-    """Liste plate des fournisseurs (accessible a tous les utilisateurs stock)."""
-    require_stock(request)
-    with get_db() as conn:
-        rows = conn.execute("""
-            SELECT id, nom, COALESCE(has_fsc, 1) AS has_fsc, licence, certificat
-              FROM fournisseurs_fsc
-             ORDER BY nom COLLATE NOCASE ASC
-        """).fetchall()
-    return [dict(r) for r in rows]
+# (route GET /api/stock/fournisseurs fusionnée dans list_fournisseurs_stock
+#  plus haut — doublon supprimé, la première déclaration masquait celle-ci.)
 
 
 @router.put("/api/stock/matieres/{matiere_id}/laizes/{laize_id}/fournisseurs")

@@ -2194,7 +2194,7 @@ def _get_ligne_or_404(conn, ao_id: int, ligne_id: int) -> dict:
     return _row_dict(row)
 
 
-CONDI_UNITES = frozenset({"bobine", "carton", "etiquette", "palette"})
+CONDI_UNITES = frozenset({"mille", "bobine", "carton", "etiquette", "palette"})
 
 
 @router.patch("/{ao_id}/lignes/{ligne_id}/condi")

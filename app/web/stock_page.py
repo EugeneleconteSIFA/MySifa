@@ -18457,7 +18457,7 @@ function buildSidebarNavStructure() {
   ];
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
-    items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'shopping-bag', label: 'Besoins matières' });
+    items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'truck', label: 'Besoins matières' });
   }
   items.push(
     { kind: 'sep', label: 'Produits' },
