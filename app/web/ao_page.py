@@ -173,10 +173,23 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-table td.txt-left{text-align:left}
 .comp-cell-best{background:var(--accent-bg);color:var(--accent);font-weight:700}
 .comp-table input[type=number],.comp-table select{font-size:12px;padding:6px 8px;min-width:0}
-.comp-table .inp-coef{width:88px;max-width:88px;text-align:right}
-.comp-table .inp-dev-devis{max-width:80px}
-.comp-table th.comp-th-coef{min-width:96px}
-.comp-table td.comp-td-coef{min-width:96px}
+.comp-table .inp-coef,.comp-table .inp-marge{width:60px;max-width:60px;text-align:right;padding:6px 6px}
+.comp-table .inp-dev-devis{max-width:74px}
+.comp-table th.comp-th-coef,.comp-table td.comp-td-coef,.comp-table th.comp-th-marge,.comp-table td.comp-td-marge{min-width:60px;width:60px}
+/* Colonnes volontairement étroites (demande UX) */
+.comp-table th.comp-col-etiqbob,.comp-table td.comp-col-etiqbob{width:58px;min-width:52px}
+.comp-table th.comp-col-uquot,.comp-table td.comp-col-uquot{width:84px;min-width:76px}
+.comp-table .inp-unite-quot{max-width:76px;font-size:11px;padding:4px 4px}
+/* Barre de scroll horizontale TOUJOURS visible (l'utilisateur doit voir qu'il
+   peut défiler). overflow-x:scroll force la piste ; le style ::-webkit force
+   l'affichage même sur macOS (overlay scrollbars masquées par défaut). */
+.comp-scroll{overflow-x:scroll;overflow-y:visible;padding-bottom:2px}
+.comp-scroll::-webkit-scrollbar{height:12px;-webkit-appearance:none}
+.comp-scroll::-webkit-scrollbar-track{background:var(--bg);border-radius:6px}
+.comp-scroll::-webkit-scrollbar-thumb{background:var(--muted);border-radius:6px;border:2px solid var(--bg)}
+.comp-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+.comp-scroll{scrollbar-width:thin;scrollbar-color:var(--muted) var(--bg)}
+.comp-condi-label{font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap}
 .ao-hdr-btn{background:var(--card);border:1px solid var(--border);color:var(--text);transition:background .15s,border-color .15s}
 .ao-hdr-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .prod-ref-link,.ao-ligne-ref-link{color:var(--accent);text-decoration:none;font-weight:600;border-bottom:1px dashed transparent;transition:border-color .15s}
@@ -3044,22 +3057,20 @@ function renderComparaison() {
   });
   const head = '<tr>'+
     '<th>Réf. produit</th><th>Frontal</th><th>Adhésif</th>'+
-    '<th>Étiq. / bobine</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
-    '<th>Quotation</th><th>Devise</th><th>Unité quot.</th>'+
+    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
+    '<th>Quotation</th><th>Devise</th><th class="comp-col-uquot">Unité</th>'+
     '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th><th class="comp-th-coef">Coef</th>'+
     '<th>Devise devis</th><th>Prix d\'achat</th>'+
-    '<th style="min-width:150px">Condi.</th><th>Prix vente condi</th></tr>';
-  // Helper : étiquettes par unité de conditionnement à partir du ctx produit
-  function etiquettesParCondi(r, unite) {
-    if (!unite) return null;
-    const nbBob = Number(r.etiquettes_par_bobine||0) || null;
-    const bobCarton = Number(r.bobines_carton||0) || null;
-    const cartPal = Number(r.cartons_palette||0) || null;
-    if (unite === 'etiquette') return 1;
-    if (unite === 'bobine') return nbBob || null;
-    if (unite === 'carton') return (nbBob && bobCarton) ? nbBob*bobCarton : null;
-    if (unite === 'palette') return (nbBob && bobCarton && cartPal) ? nbBob*bobCarton*cartPal : null;
-    return null;
+    '<th>Condi.</th><th>Prix achat condi.</th><th class="comp-th-marge">Marge</th><th>Prix de vente</th></tr>';
+  const NB_COLS = 19;
+  // Libellé lisible de l'unité de vente (définie dans la fiche produit).
+  const UV_LABELS = {mille:'Au mille', etiquette:'Étiquette', bobine:'Bobine', carton:'Carton', palette:'Palette'};
+  function condiLabel(r) {
+    const t = r.unite_vente_type || 'mille';
+    const q = Number(r.unite_vente_qte || 1) || 1;
+    const base = UV_LABELS[t] || t;
+    if (t === 'mille') return base;             // "Au mille"
+    return (q > 1 ? (q + ' · ') : '') + base;   // "100 · Bobine" ou "Carton"
   }
   let body = '';
   rows.forEach(r => {
@@ -3074,44 +3085,32 @@ function renderComparaison() {
     const quotationCell = noRep
       ? '<td><button type="button" class="btn btn-ghost btn-sm btn-saisir-prix" data-lid="'+escAttr(r.ligne_id||'')+'" data-fid="'+escAttr(r.fourni_id||'')+'" data-fournisseur="'+escAttr(r.nom_fournisseur||'')+'" data-ref="'+escAttr(r.ref_produit||'')+'" style="font-size:11px;padding:4px 8px;color:var(--accent);border:1px dashed var(--accent);background:var(--accent-bg)">'+icon('edit',12)+' Saisir</button></td>'
       : '<td class="'+cls.trim()+'">'+formatMoney(r.quotation, devF)+'</td>';
-    // Condi cell : select unité + input qté (persist par ligne)
-    const condiUnite = r.condi_unite || '';
-    const condiQte = r.condi_qte != null ? r.condi_qte : '';
-    const unites = ['bobine','carton','etiquette','palette']; // alpha
-    const uOpts = '<option value="">—</option>'+
-      unites.map(u => '<option value="'+u+'"'+(condiUnite===u?' selected':'')+'>'+u.charAt(0).toUpperCase()+u.slice(1)+'</option>').join('');
-    const condiCell = '<td>'+
-      '<select class="inp-condi-unite" data-lid="'+escAttr(r.ligne_id||'')+'" style="font-size:11px;padding:2px 4px;max-width:88px">'+uOpts+'</select> '+
-      '<input type="number" step="1" min="1" class="inp-condi-qte" data-lid="'+escAttr(r.ligne_id||'')+'" value="'+escAttr(condiQte)+'" placeholder="Qté" style="max-width:60px;font-size:11px;padding:2px 4px">'+
-      '</td>';
-    // Prix vente condi = prix_achat_mille (devise F) × nb_etiq_par_condi × qte / 1000 × coef × conversion devise
-    let pvCondi = null;
-    const nbCondi = etiquettesParCondi(r, condiUnite);
-    const qteC = Number(condiQte) || null;
-    const missing = condiUnite && nbCondi == null; // sélectionné mais fiche incomplète
-    if (r.prix_achat_mille != null && nbCondi && qteC && r.coef) {
-      // Prix en devise fournisseur (par condi) : prix_achat_mille × nbCondi × qteC / 1000 × coef
-      const totalF = r.prix_achat_mille * nbCondi * qteC / 1000 * (Number(r.coef)||1);
-      // Conversion vers devise devis (via même logique que prix_vente)
-      const fx = Number(c.eur_usd_rate) || 0.9;
-      let converted = totalF;
-      if (devF === 'USD' && devD === 'EUR') converted = totalF * fx;
-      else if (devF === 'EUR' && devD === 'USD') converted = totalF / (fx || 1);
-      pvCondi = converted;
-    }
-    const pvCondiCell = missing
-      ? '<td><span class="btn-fiche-alerte" data-ref="'+escAttr(r.ref_produit||'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--warn,#a16207);background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);padding:3px 8px;border-radius:6px;cursor:pointer" title="Info manquante dans la fiche produit — clique pour compléter">'+icon('wrench',11)+' Compléter fiche</span></td>'
-      : '<td>'+(pvCondi != null ? formatMoney(pvCondi, devD) : '—')+'</td>';
+    // Condi. : lecture seule, unité de vente issue de la fiche produit.
+    // Si l'unité exige des données de conditionnement absentes (etiq_par_condi
+    // null pour un type carton/palette/bobine), on invite à compléter la fiche.
+    const uvType = r.unite_vente_type || 'mille';
+    const needsFiche = (uvType !== 'mille' && uvType !== 'etiquette') && (r.etiq_par_condi == null);
+    const condiCell = needsFiche
+      ? '<td><span class="btn-fiche-alerte" data-ref="'+escAttr(r.ref_produit||'')+'" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--warn,#a16207);background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.4);padding:3px 8px;border-radius:6px;cursor:pointer" title="Conditionnement manquant dans la fiche produit — clique pour compléter">'+icon('wrench',11)+' Compléter</span></td>'
+      : '<td><span class="comp-condi-label">'+escHtml(condiLabel(r))+'</span></td>';
+    // Prix d'achat conditionné (devise devis, par unité de vente). Calculé serveur.
+    const condiPrixCell = (r.prix_achat_conditionne != null)
+      ? '<td>'+formatMoney(r.prix_achat_conditionne, devD)+'</td>'
+      : '<td style="color:var(--muted)">—</td>';
+    // Prix de vente final = prix d'achat conditionné × coef × marge. Calculé serveur.
+    const prixVenteCell = (r.prix_vente_final != null)
+      ? '<td class="'+cls.trim()+'" style="font-weight:700">'+formatMoney(r.prix_vente_final, devD)+'</td>'
+      : '<td style="color:var(--muted)">—</td>';
     body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
       '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
       '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
       '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
-      '<td>'+formatInt(r.etiquettes_par_bobine)+'</td>'+
+      '<td class="comp-col-etiqbob">'+formatInt(r.etiquettes_par_bobine)+'</td>'+
       '<td>'+formatInt(r.quantite_etiquettes)+'</td>'+
       '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
       quotationCell+
       '<td>'+escHtml(devF)+'</td>'+
-      '<td>'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+' style="font-size:11px;padding:2px 4px">'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 5px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">manuel</span>' : '')+'</td>'+
+      '<td class="comp-col-uquot">'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 4px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">m</span>' : '')+'</td>'+
       '<td>'+formatMoney(r.prix_calcule, devF)+'</td>'+
       '<td style="color:var(--text2);font-size:11px" data-tr="'+escAttr(rid||'')+'">'+formatMoney(r.transport_amount, devF)+'</td>'+
       '<td class="'+cls.trim()+'">'+formatMoney(r.prix_au_mille, devF)+'</td>'+
@@ -3120,31 +3119,27 @@ function renderComparaison() {
         '<option value="EUR"'+(devD==='EUR'?' selected':'')+'>EUR</option>'+
         '<option value="USD"'+(devD==='USD'?' selected':'')+'>USD</option>'+
       '</select></td>'+
-      '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_achat_mille || r.prix_au_mille, devF)+'</td>'+
+      '<td class="'+cls.trim()+'" data-pv="'+escAttr(rid)+'">'+formatMoney(r.prix_achat_mille_dd != null ? r.prix_achat_mille_dd : r.prix_au_mille, devD)+'</td>'+
       condiCell+
-      pvCondiCell+
+      condiPrixCell+
+      '<td class="comp-td-marge"><input type="number" step="0.01" min="0.01" class="inp-marge" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.marge != null ? r.marge : 1)+'"'+dis+'></td>'+
+      prixVenteCell+
       '</tr>';
-    // Détail par série sous la ligne (si la ligne a des séries)
+    // Détail par série sous la ligne — ligne d'info pleine largeur (robuste au
+    // nombre de colonnes) : libellé + qté + prix calculé + prix de vente/mille.
     const sb = Array.isArray(r.series_breakdown) ? r.series_breakdown : [];
     if (sb.length > 0) {
       sb.forEach(s => {
         body += '<tr class="comp-serie-sub">'+
-          '<td class="serie-label" colspan="5">'+icon('corner-down-right',11)+' <strong style="color:var(--text2)">'+escHtml(s.libelle||'—')+'</strong>'+(s.notes?' <span style="color:var(--muted)">· '+escHtml(s.notes)+'</span>':'')+' — '+formatInt(s.quantite)+' étiq.</td>'+
-          '<td></td>'+
-          '<td></td><td></td><td></td>'+
-          '<td>'+formatMoney(s.prix_calcule, devF)+'</td>'+
-          '<td>'+formatMoney(s.transport_amount, devF)+'</td>'+
-          '<td></td><td></td><td></td>'+
-          '<td>'+formatMoney(s.prix_vente, devD)+'</td>'+
-          '<td></td><td></td>'+
+          '<td class="serie-label" colspan="'+NB_COLS+'">'+icon('corner-down-right',11)+' <strong style="color:var(--text2)">'+escHtml(s.libelle||'—')+'</strong>'+(s.notes?' <span style="color:var(--muted)">· '+escHtml(s.notes)+'</span>':'')+' — '+formatInt(s.quantite)+' étiq. · Prix calculé '+formatMoney(s.prix_calcule, devF)+' · Prix vente/mille '+formatMoney(s.prix_vente, devD)+'</td>'+
           '</tr>';
       });
     }
   });
   const fxNote = c.eur_usd_rate
-    ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' — conversion appliquée sur le prix de vente si les devises diffèrent.</p>'
-    : '';
-  return '<div class="card" style="overflow:auto"><table class="comp-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table>'+fxNote+'</div>';
+    ? '<p style="font-size:11px;color:var(--muted);margin-top:10px">Taux EUR/USD : '+Number(c.eur_usd_rate).toLocaleString('fr-FR', {maximumFractionDigits:4})+' — conversion appliquée sur le <strong>prix d\'achat</strong> si les devises diffèrent. Prix de vente = prix d\'achat conditionné × coef × marge.</p>'
+    : '<p style="font-size:11px;color:var(--muted);margin-top:10px">Prix de vente = prix d\'achat conditionné × coef × marge. Unité de vente (Condi.) définie dans la fiche produit.</p>';
+  return '<div class="card"><div class="comp-scroll"><table class="comp-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'+fxNote+'</div>';
 }
 
 function renderMessagerieContent(container) {
@@ -3438,7 +3433,8 @@ function bindDetailEvents() {
       if (!rid || isNaN(v) || v <= 0) { showToast('Coefficient invalide.', 'danger'); return; }
       try {
         await saveReponsePricing(rid, {coef: v});
-        showToast('Coefficient enregistré.', 'success');
+        // refetch pour recalculer le prix de vente affiché
+        if (S.ao) { await loadComparaison(S.ao.id); render(); }
       } catch(e) { showToast(e.message, 'danger'); }
     });
   });
@@ -3452,24 +3448,19 @@ function bindDetailEvents() {
       } catch(e) { showToast(e.message, 'danger'); }
     });
   });
-  // Condi : save unite + qté sur la ligne
-  async function saveCondi(lid) {
-    if (!lid) return;
-    const uEl = document.querySelector('.inp-condi-unite[data-lid="'+lid+'"]');
-    const qEl = document.querySelector('.inp-condi-qte[data-lid="'+lid+'"]');
-    const unite = uEl ? uEl.value : '';
-    const qteRaw = qEl ? qEl.value : '';
-    const qte = qteRaw !== '' ? parseFloat(qteRaw) : null;
-    try {
-      await api('/api/ao/'+S.ao.id+'/lignes/'+lid+'/condi', {
-        method:'PATCH', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({condi_unite: unite || null, condi_qte: qte})
-      });
-      if (S.ao) { await loadComparaison(S.ao.id); render(); }
-    } catch(e) { showToast(e.message || 'Erreur condi.', 'danger'); }
-  }
-  document.querySelectorAll('.inp-condi-unite').forEach(el => el.addEventListener('change', () => saveCondi(el.dataset.lid)));
-  document.querySelectorAll('.inp-condi-qte').forEach(el => el.addEventListener('change', () => saveCondi(el.dataset.lid)));
+  // Marge : multiplicateur commercial par réponse (prix de vente = condi × coef × marge)
+  document.querySelectorAll('.inp-marge').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      const rid = inp.dataset.rep;
+      const v = parseFloat(inp.value);
+      if (!rid || isNaN(v) || v <= 0) { showToast('Marge invalide.', 'danger'); return; }
+      try {
+        await saveReponsePricing(rid, {marge: v});
+        // refetch pour recalculer le prix de vente affiché
+        if (S.ao) { await loadComparaison(S.ao.id); render(); }
+      } catch(e) { showToast(e.message, 'danger'); }
+    });
+  });
   // Alerte "Compléter fiche" : ouvre le formulaire produit
   document.querySelectorAll('.btn-fiche-alerte').forEach(b => b.addEventListener('click', async () => {
     const ref = b.dataset.ref || '';

@@ -5,6 +5,10 @@ from typing import Any
 
 DEVISES = frozenset({"EUR", "USD"})
 UNITES_QUOTATION = frozenset({"mille", "bobine"})
+# Unités de vente possibles (définies dans la fiche produit). "mille" = au
+# mille d'étiquettes (défaut historique). Les autres dépendent du
+# conditionnement renseigné dans la fiche.
+UNITES_VENTE = frozenset({"mille", "etiquette", "bobine", "carton", "palette"})
 _DEFAULT_EUR_USD = 0.92
 
 
@@ -25,6 +29,49 @@ def _norm_devise(value: str | None) -> str:
 def _norm_unite(value: str | None) -> str:
     u = (value or "mille").strip().lower()
     return u if u in UNITES_QUOTATION else "mille"
+
+
+def _norm_unite_vente(value: str | None) -> str:
+    u = (value or "mille").strip().lower()
+    return u if u in UNITES_VENTE else "mille"
+
+
+def etiquettes_par_unite_vente(
+    unite_type: str | None,
+    unite_qte: Any,
+    nb_etiquettes_bobine: float | None,
+    bobines_carton: float | None,
+    cartons_palette: float | None,
+) -> float | None:
+    """Nombre d'étiquettes contenues dans 1 unité de vente.
+
+    Ex. « par carton » avec 2000 étiq/bobine et 8 bobines/carton → 16 000.
+    « par 100 bobines » (type=bobine, qté=100) → 100 × nb étiq/bobine.
+    Retourne None si une donnée de conditionnement nécessaire manque dans la
+    fiche (le tableau affiche alors « Compléter fiche »).
+    """
+    t = _norm_unite_vente(unite_type)
+    q = _float_or_none(unite_qte)
+    if q is None or q <= 0:
+        q = 1.0
+    nb_bob = _float_or_none(nb_etiquettes_bobine)
+    bc = _float_or_none(bobines_carton)
+    cp = _float_or_none(cartons_palette)
+    if t == "etiquette":
+        base: float | None = 1.0
+    elif t == "mille":
+        base = 1000.0
+    elif t == "bobine":
+        base = nb_bob
+    elif t == "carton":
+        base = (nb_bob * bc) if (nb_bob and bc) else None
+    elif t == "palette":
+        base = (nb_bob * bc * cp) if (nb_bob and bc and cp) else None
+    else:
+        base = None
+    if base is None:
+        return None
+    return base * q
 
 
 def get_eur_usd_rate(conn) -> float:
@@ -197,6 +244,53 @@ def enrich_reponse_pricing(
     else:
         out["prix_achat_mille"] = None
     out["prix_vente"] = prix_vente
+
+    # ── Nouveau pipeline conditionnement (v217) ─────────────────────────────
+    # Marge commerciale : 2e multiplicateur, distinct du coef.
+    marge = _float_or_none(reponse.get("marge"))
+    if marge is None or marge <= 0:
+        marge = 1.0
+    out["marge"] = marge
+
+    # Prix d'achat au mille exprimé dans la DEVISE DEVIS (demande #2 : la
+    # conversion de devise se fait au prix d'achat, pas au prix de vente).
+    # Transport inclus, sans coef ni marge.
+    if out["prix_achat_mille"] is not None:
+        prix_achat_mille_dd = convert_amount(
+            out["prix_achat_mille"], devise, devise_devis, eur_usd_rate
+        )
+    else:
+        prix_achat_mille_dd = None
+    out["prix_achat_mille_dd"] = prix_achat_mille_dd
+
+    # Unité de vente : vient de la fiche produit (lecture seule côté tableau).
+    uv_type = _norm_unite_vente(ligne_ctx.get("unite_vente_type"))
+    uv_qte = _float_or_none(ligne_ctx.get("unite_vente_qte")) or 1.0
+    etiq_par_condi = etiquettes_par_unite_vente(
+        uv_type, uv_qte,
+        ligne_ctx.get("etiquettes_par_bobine"),
+        ligne_ctx.get("bobines_carton"),
+        ligne_ctx.get("cartons_palette"),
+    )
+    out["unite_vente_type"] = uv_type
+    out["unite_vente_qte"] = uv_qte
+    out["etiq_par_condi"] = etiq_par_condi
+
+    # Prix d'achat conditionné = prix d'achat au mille (devise devis) ramené à
+    # l'unité de vente. Ex. au mille (1000 étiq) → identique au prix au mille.
+    if prix_achat_mille_dd is not None and etiq_par_condi:
+        prix_achat_conditionne = prix_achat_mille_dd * etiq_par_condi / 1000.0
+    else:
+        prix_achat_conditionne = None
+    out["prix_achat_conditionne"] = prix_achat_conditionne
+
+    # Prix de vente final = prix d'achat conditionné × coef × marge.
+    # (Choix produit : coef conserve son rôle, marge s'ajoute en cascade.)
+    if prix_achat_conditionne is not None:
+        out["prix_vente_final"] = prix_achat_conditionne * coef * marge
+    else:
+        out["prix_vente_final"] = None
+
     return out
 
 
@@ -211,12 +305,17 @@ def ligne_context_from_produit(
     frontal = None
     adhesif = None
     etiquettes_par_bobine = None
+    unite_vente_type = "mille"
+    unite_vente_qte = 1.0
 
     if produit:
         client_nom = produit.get("client_nom")
         fiche = produit.get("fiche") or {}
         mat = fiche.get("matiere") or {}
         bob = fiche.get("bobines") or {}
+        uv = fiche.get("unite_vente") or {}
+        unite_vente_type = _norm_unite_vente(uv.get("type"))
+        unite_vente_qte = _float_or_none(uv.get("quantite")) or 1.0
 
         def mp_label(mid: Any) -> str | None:
             if mid is None:
@@ -253,5 +352,7 @@ def ligne_context_from_produit(
         "etiquettes_par_bobine": etiquettes_par_bobine,
         "bobines_carton": bobines_carton,
         "cartons_palette": cartons_palette,
+        "unite_vente_type": unite_vente_type,
+        "unite_vente_qte": unite_vente_qte,
         "quantite_etiquettes": qte,
     }
