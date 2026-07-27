@@ -636,6 +636,10 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 /* ── Sous-toolbar Statut + Groupement (v2.4.6) ─────────────────────── */
 .maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
 .maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+/* v2.4.19 : toolbar unifiee Machine + Categorie + Statut sur une ligne */
+.maint-machine-toolbar{display:flex;align-items:center;gap:12px;row-gap:10px;margin:8px 0 20px 0;flex-wrap:wrap}
+.maint-toolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-machine-tabs,.maint-cat-tabs{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip{border:none;background:transparent;color:var(--text2);padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .maint-chip:hover{background:var(--bg);color:var(--text)}
@@ -1608,37 +1612,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
              Détermine quelles cartes "code maintenance périodique" s'affichent
              (Cohésio 1 ou Cohésio 2). Les cartes sont vides pour l'instant et
              seront alimentées par les saisies opérations/contrôles. -->
-        <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
-          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+        <!-- Toolbar unifiee (v2.4.19) : Machine + Categorie + Statut sur une seule
+             ligne (wrap responsive). Labels harmonises, toggles avec style
+             coherent (chips), pastilles compteurs sur machine/categorie. -->
+        <div class="maint-machine-toolbar">
+          <label class="maint-toolbar-label">Machine</label>
+          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span></button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span></button>
           </div>
-          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Catégorie</label>
-          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+          <label class="maint-toolbar-label">Catégorie</label>
+          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span></button>
           </div>
-          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
-        </div>
-
-        <!-- Sous-toolbar (v2.4.6) : filtre par statut + choix du regroupement.
-             Les compteurs à droite de chaque chip statut affichent le nombre
-             d'opérations pour la machine + catégorie sélectionnées. -->
-        <div class="maint-subtoolbar">
-          <span class="maint-subtoolbar-label">Statut</span>
+          <label class="maint-toolbar-label">Statut</label>
           <div class="maint-chip-group" id="maint-status-chips" role="tablist">
             <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="overdue" onclick="setMaintStatusFilter('overdue')">En retard<span class="maint-chip-count" data-status-count="overdue">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
-          </div>
-          <span class="maint-subtoolbar-label" style="margin-left:8px">Grouper par</span>
-          <div class="maint-chip-group" id="maint-group-chips" role="tablist">
-            <button type="button" class="maint-chip active" data-group-by="status" onclick="setMaintGrouping('status')">Statut</button>
-            <button type="button" class="maint-chip" data-group-by="freq" onclick="setMaintGrouping('freq')">Fréquence</button>
-            <button type="button" class="maint-chip" data-group-by="machine" onclick="setMaintGrouping('machine')">Machine</button>
           </div>
         </div>
 
@@ -5644,11 +5638,11 @@ function setMaintMachine(m){
   renderMaintCards();
 }
 
-// --- v2.4.6 : filtre par statut + choix du regroupement ---------------
+// --- v2.4.6 : filtre par statut ---------------------------------------
 // Statuts : 'all' (défaut) · 'overdue' · 'soon' · 'ok' · 'never'
-// Groupement : 'status' (défaut) · 'freq' · 'machine'
+// Le regroupement est fixe (par statut) — le toggle a été retiré car
+// redondant avec le filtre statut et le sélecteur machine du haut.
 const MAINT_STATUS_FILTER_KEY = 'mysifa_maint_home_status_filter_v1';
-const MAINT_GROUPING_KEY      = 'mysifa_maint_home_grouping_v1';
 
 function getMaintStatusFilter(){
   try{
@@ -5662,19 +5656,6 @@ function setMaintStatusFilter(s){
   try{ localStorage.setItem(MAINT_STATUS_FILTER_KEY, s); }catch(e){}
   renderMaintCards();
 }
-function getMaintGrouping(){
-  try{
-    const v = localStorage.getItem(MAINT_GROUPING_KEY);
-    if(v === 'freq' || v === 'machine') return v;
-    return 'status';
-  }catch(e){ return 'status'; }
-}
-function setMaintGrouping(g){
-  if(g !== 'status' && g !== 'freq' && g !== 'machine') return;
-  try{ localStorage.setItem(MAINT_GROUPING_KEY, g); }catch(e){}
-  renderMaintCards();
-}
-
 // Statut d'une opération à partir de son intervalle (jours) et du nombre de
 // jours depuis la dernière saisie. Seuils :
 //   - 'overdue' : ratio > 1 (retard, dès dépassement)
@@ -5775,10 +5756,6 @@ function _refreshMaintChipState(){
   const status = getMaintStatusFilter();
   document.querySelectorAll('[data-status-filter]').forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-status-filter') === status);
-  });
-  const grouping = getMaintGrouping();
-  document.querySelectorAll('[data-group-by]').forEach(el => {
-    el.classList.toggle('active', el.getAttribute('data-group-by') === grouping);
   });
 }
 // --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
@@ -6213,7 +6190,7 @@ function renderMaintCards(){
   });
   // v2.4.6 : nouveau filtre statut + choix du regroupement.
   const statusFilter = getMaintStatusFilter();
-  const grouping = getMaintGrouping();
+  const grouping = 'status';  // v2.4.6 : toggle retire, groupement fixe par statut
   _refreshMaintChipState();
   _refreshMaintCounters();
   const showWearParts = (catFilter === 'remplacements');
@@ -6284,32 +6261,54 @@ function renderMaintCards(){
     enriched = enrichFor(machine);
   }
 
-  // Compteurs par statut (avant application du filtre) pour la sous-toolbar.
-  const statusCounts = { all: enriched.length, overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
+  // Compteurs par statut, calculés sur l'ensemble non filtré.
+  // Règle produit (v2.4.20) : "Tous" exclut les jamais saisi + unknown pour
+  // dédensifier la vue ; ces opérations restent accessibles via le chip
+  // "Jamais saisi" (qui remonte à la fois never et unknown, sémantiquement
+  // proches — les deux = "pas de donnée exploitable").
+  const statusCounts = { overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
   enriched.forEach(e => { statusCounts[e.status] = (statusCounts[e.status] || 0) + 1; });
+  const neverAndUnknown = statusCounts.never + statusCounts.unknown;
+  // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
+  statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
   document.querySelectorAll('[data-status-count]').forEach(el => {
     const key = el.getAttribute('data-status-count');
-    el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
+    if(key === 'never'){
+      // Le chip "Jamais saisi" englobe unknown → compteur cumulé.
+      el.textContent = String(neverAndUnknown);
+    } else {
+      el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
+    }
   });
 
-  // Applique le filtre statut. 'all' => tout. Les statuts "unknown" sont
-  // remontés quand on demande "all" ou "never" (proche sémantiquement).
+  // Applique le filtre statut.
   const filtered = enriched.filter(e => {
-    if(statusFilter === 'all') return true;
+    if(statusFilter === 'all')   return (e.status !== 'never' && e.status !== 'unknown');
     if(statusFilter === 'never') return (e.status === 'never' || e.status === 'unknown');
     return e.status === statusFilter;
   });
 
   if(!filtered.length){
-    const msgs = {
-      overdue: 'Aucune opération en retard. 🎉',
-      soon:    'Aucune opération à faire dans les prochains jours.',
-      ok:      'Aucune opération à jour à afficher.',
-      never:   'Toutes les opérations ont déjà été saisies au moins une fois.',
-      all:     'Aucune opération à afficher.',
-    };
+    let emptyMsg;
+    if(statusFilter === 'all' && neverAndUnknown > 0){
+      // Cas particulier : il y a des ops "jamais saisi" mais on les a masquées.
+      // Explique le pourquoi + bouton implicite (le chip "Jamais saisi" est
+      // déjà là, il suffit de basculer).
+      const s = neverAndUnknown > 1 ? 's' : '';
+      emptyMsg = neverAndUnknown + ' opération' + s + ' jamais saisie' + s +
+                 ' masquée' + s + ' — bascule sur le filtre « Jamais saisi » pour les voir.';
+    } else {
+      const msgs = {
+        overdue: 'Aucune opération en retard. 🎉',
+        soon:    'Aucune opération à faire dans les prochains jours.',
+        ok:      'Aucune opération à jour à afficher.',
+        never:   'Toutes les opérations ont déjà été saisies au moins une fois.',
+        all:     'Aucune opération à afficher.',
+      };
+      emptyMsg = msgs[statusFilter] || msgs.all;
+    }
     grid.innerHTML = wearPartsHtml +
-      '<div class="maint-frames-empty" style="margin-top:24px">' + (msgs[statusFilter] || msgs.all) + '</div>';
+      '<div class="maint-frames-empty" style="margin-top:24px">' + emptyMsg + '</div>';
     return;
   }
 
