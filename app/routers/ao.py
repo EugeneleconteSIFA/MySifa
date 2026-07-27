@@ -2380,7 +2380,7 @@ async def add_fournisseur(request: Request, ao_id: int):
 
 
 @router.delete("/{ao_id}/fournisseurs/{fourni_id}")
-def delete_fournisseur(request: Request, ao_id: int, fourni_id: int):
+def delete_fournisseur_from_ao(request: Request, ao_id: int, fourni_id: int):
     _require_ao(request)
     with get_db() as conn:
         fourni = _get_fourni_in_ao(conn, ao_id, fourni_id)
