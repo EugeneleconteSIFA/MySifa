@@ -6688,6 +6688,29 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_promote.js?v=2">
 
 // ---- Fonctions restaurees depuis e503c42~1 ----
+
+async function initPrintersPanel() {
+  // Un seul chargement d'entrée : on tire tout en parallèle.
+  document.getElementById('pr-panel-ag').querySelector('#pr-ag-panel').style.display = '';
+  try {
+    const [imp, tpl, ag, us] = await Promise.all([
+      prFetch('/api/print/imprimantes'),
+      prFetch('/api/print/templates'),
+      prFetch('/api/print/agents'),
+      prFetch('/api/print/usages'),
+    ]);
+    PR.imprimantes = imp || [];
+    PR.templates = tpl || [];
+    PR.agents = ag || [];
+    PR.usages = us || [];
+  } catch (e) {
+    prToast('Chargement imprimantes: ' + e.message, 'danger');
+  }
+  prRenderImprimantes();
+  prRenderTemplates();
+  prRenderAgents();
+}
+
 // Wrapper fetch pour l'admin impression : JSON + erreur formattee
 async function prFetch(url, opts) {
   opts = opts || {};
