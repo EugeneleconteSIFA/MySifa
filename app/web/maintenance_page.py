@@ -1638,7 +1638,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="maint-chip-group" id="maint-group-chips" role="tablist">
             <button type="button" class="maint-chip active" data-group-by="status" onclick="setMaintGrouping('status')">Statut</button>
             <button type="button" class="maint-chip" data-group-by="freq" onclick="setMaintGrouping('freq')">Fréquence</button>
-            <button type="button" class="maint-chip" data-group-by="machine" onclick="setMaintGrouping('machine')">Machine</button>
           </div>
         </div>
 
@@ -5665,12 +5664,12 @@ function setMaintStatusFilter(s){
 function getMaintGrouping(){
   try{
     const v = localStorage.getItem(MAINT_GROUPING_KEY);
-    if(v === 'freq' || v === 'machine') return v;
+    if(v === 'freq') return v;
     return 'status';
   }catch(e){ return 'status'; }
 }
 function setMaintGrouping(g){
-  if(g !== 'status' && g !== 'freq' && g !== 'machine') return;
+  if(g !== 'status' && g !== 'freq') return;
   try{ localStorage.setItem(MAINT_GROUPING_KEY, g); }catch(e){}
   renderMaintCards();
 }
