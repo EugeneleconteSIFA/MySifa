@@ -619,6 +619,39 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-frame.is-overdue .maint-frame-head{border-bottom-color:rgba(248,113,113,.25)}
 .maint-frame.is-overdue .maint-frame-title{color:var(--danger,#f87171)}
 .maint-frame.is-overdue-critical{border-color:var(--danger,#dc2626);box-shadow:0 0 0 2px var(--danger,#dc2626),0 6px 16px rgba(220,38,38,.30);transform:scale(1.01);transform-origin:top center}
+/* ── Bande de statut à gauche de chaque carte (v2.4.6) ─────────────── */
+/* Une bande verticale de 4px teintée par statut : rouge (retard), orange (dû bientôt),
+   vert (à jour), gris (jamais saisi ou intervalle inconnu). */
+.maint-frame{position:relative}
+.maint-frame::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:transparent;border-top-left-radius:14px;border-bottom-left-radius:14px;transition:background-color .15s}
+.maint-frame[data-status="overdue"]::before{background:var(--danger,#f87171)}
+.maint-frame[data-status="soon"]::before{background:#fb923c}
+.maint-frame[data-status="ok"]::before{background:var(--ok,#34d399)}
+.maint-frame[data-status="never"]::before{background:var(--muted)}
+.maint-frame[data-status="unknown"]::before{background:var(--border)}
+/* Statut "à jour" volontairement plus discret : opacity légère pour amplifier
+   le contraste avec les cartes en alerte. */
+.maint-frame[data-status="ok"]{opacity:.85}
+.maint-frame[data-status="ok"]:hover{opacity:1}
+/* ── Sous-toolbar Statut + Groupement (v2.4.6) ─────────────────────── */
+.maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
+.maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
+.maint-chip{border:none;background:transparent;color:var(--text2);padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.maint-chip:hover{background:var(--bg);color:var(--text)}
+.maint-chip.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.maint-chip[data-status-filter="overdue"].active{background:var(--danger,#f87171);color:#fff}
+.maint-chip[data-status-filter="soon"].active{background:#fb923c;color:#fff}
+.maint-chip[data-status-filter="ok"].active{background:var(--ok,#34d399);color:#0a0e17}
+.maint-chip[data-status-filter="never"].active{background:var(--muted);color:#fff}
+/* ── Pastilles compteur sur onglets Machine et Catégorie (v2.4.6) ──── */
+.maint-tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--danger,#f87171);color:#fff;font-size:10px;font-weight:700;line-height:1;vertical-align:middle}
+.maint-tab-badge.hidden{display:none}
+.maint-machine-btn.active .maint-tab-badge,.maint-cat-btn.active .maint-tab-badge{background:#fff;color:var(--danger,#f87171)}
+/* Petite pastille "count" à côté des chips statut (info neutre, non alerte) */
+.maint-chip-count{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;margin-left:2px;border-radius:999px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:700;line-height:1}
+.maint-chip.active .maint-chip-count{background:rgba(255,255,255,.25);color:#fff}
+.maint-chip[data-status-filter="ok"].active .maint-chip-count{background:rgba(10,14,23,.25);color:#0a0e17}
 .ops-subtabs{display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--border)}
 .ops-subtab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;transition:all .15s;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
 .ops-subtab:hover{color:var(--text);background:var(--accent-bg)}
@@ -846,11 +879,7 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .op-op-card-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
 .op-op-card-status{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
-/* v2.4.9 : margin-top:auto pousse le bouton en bas de la carte quand
-   celle-ci est stretchée par le grid parent (op-event-box-cards). Résultat :
-   tous les boutons "Marquer comme terminée" d'une même ligne sont alignés
-   même quand certaines cartes ont "Consignes de l'admin" et d'autres non. */
-.op-op-card-cta{margin-top:auto;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.op-op-card-cta{margin-top:2px;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .op-op-card-cta:hover{filter:brightness(1.08)}
 .op-op-card-cta.is-done{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
 .op-op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
@@ -1582,15 +1611,35 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
           <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1</button>
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2</button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span></button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span></button>
           </div>
           <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
-            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien</button>
-            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions</button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span></button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span></button>
           </div>
           <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
+        </div>
+
+        <!-- Sous-toolbar (v2.4.6) : filtre par statut + choix du regroupement.
+             Les compteurs à droite de chaque chip statut affichent le nombre
+             d'opérations pour la machine + catégorie sélectionnées. -->
+        <div class="maint-subtoolbar">
+          <span class="maint-subtoolbar-label">Statut</span>
+          <div class="maint-chip-group" id="maint-status-chips" role="tablist">
+            <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="overdue" onclick="setMaintStatusFilter('overdue')">En retard<span class="maint-chip-count" data-status-count="overdue">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
+          </div>
+          <span class="maint-subtoolbar-label" style="margin-left:8px">Grouper par</span>
+          <div class="maint-chip-group" id="maint-group-chips" role="tablist">
+            <button type="button" class="maint-chip active" data-group-by="status" onclick="setMaintGrouping('status')">Statut</button>
+            <button type="button" class="maint-chip" data-group-by="freq" onclick="setMaintGrouping('freq')">Fréquence</button>
+            <button type="button" class="maint-chip" data-group-by="machine" onclick="setMaintGrouping('machine')">Machine</button>
+          </div>
         </div>
 
         <!-- Cartes des opérations de maintenance périodiques.
@@ -1670,8 +1719,44 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </section>
 
+        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
+        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
+        <div class="ops-list">
+          <div class="ops-list-head">
+            <div class="ops-list-title">Liste d'opérations de maintenance</div>
+            <div class="ops-list-head-right">
+              <div class="ops-list-count js-cat-count">0 opération</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
+                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
+                  <option value="Cohésio 1">Cohésio 1</option>
+                  <option value="Cohésio 2">Cohésio 2</option>
+                  <option value="DSI">DSI</option>
+                  <option value="Repiquage">Repiquage</option>
+                </select>
+              </div>
+              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
+            </div>
+          </div>
+          <div class="ops-table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
+                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
+                  <th aria-label="Actions"></th>
+                </tr>
+              </thead>
+              <tbody class="js-cat-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
         </div><!-- /plan-subview-calendrier -->
-      </div><!-- /view-planning -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
@@ -5558,6 +5643,144 @@ function setMaintMachine(m){
   WEARPART_LAST_DATES_STATE._cacheKey = null;
   renderMaintCards();
 }
+
+// --- v2.4.6 : filtre par statut + choix du regroupement ---------------
+// Statuts : 'all' (défaut) · 'overdue' · 'soon' · 'ok' · 'never'
+// Groupement : 'status' (défaut) · 'freq' · 'machine'
+const MAINT_STATUS_FILTER_KEY = 'mysifa_maint_home_status_filter_v1';
+const MAINT_GROUPING_KEY      = 'mysifa_maint_home_grouping_v1';
+
+function getMaintStatusFilter(){
+  try{
+    const v = localStorage.getItem(MAINT_STATUS_FILTER_KEY);
+    if(v === 'overdue' || v === 'soon' || v === 'ok' || v === 'never') return v;
+    return 'all';
+  }catch(e){ return 'all'; }
+}
+function setMaintStatusFilter(s){
+  if(s !== 'all' && s !== 'overdue' && s !== 'soon' && s !== 'ok' && s !== 'never') return;
+  try{ localStorage.setItem(MAINT_STATUS_FILTER_KEY, s); }catch(e){}
+  renderMaintCards();
+}
+function getMaintGrouping(){
+  try{
+    const v = localStorage.getItem(MAINT_GROUPING_KEY);
+    if(v === 'freq' || v === 'machine') return v;
+    return 'status';
+  }catch(e){ return 'status'; }
+}
+function setMaintGrouping(g){
+  if(g !== 'status' && g !== 'freq' && g !== 'machine') return;
+  try{ localStorage.setItem(MAINT_GROUPING_KEY, g); }catch(e){}
+  renderMaintCards();
+}
+
+// Statut d'une opération à partir de son intervalle (jours) et du nombre de
+// jours depuis la dernière saisie. Seuils :
+//   - 'overdue' : ratio > 1 (retard, dès dépassement)
+//   - 'soon'    : ratio >= 0.8 (dû dans les 20 % derniers de l'intervalle)
+//   - 'ok'      : ratio < 0.8 (à jour)
+//   - 'never'   : intervalle défini mais aucune saisie
+//   - 'unknown' : intervalle non reconnu
+function _maintComputeStatus(freqDays, daysSince){
+  if(freqDays == null || freqDays <= 0) return 'unknown';
+  if(daysSince == null) return 'never';
+  const ratio = daysSince / freqDays;
+  if(ratio > 1) return 'overdue';
+  if(ratio >= 0.8) return 'soon';
+  return 'ok';
+}
+
+// Libellés + ordre de tri des groupes "par statut" (retards en tête, jamais en bas).
+const MAINT_STATUS_ORDER = ['overdue','soon','ok','unknown','never'];
+const MAINT_STATUS_LABELS = {
+  overdue: 'En retard',
+  soon:    'Dû bientôt',
+  ok:      'À jour',
+  unknown: 'Intervalle non reconnu',
+  never:   'Jamais saisi',
+};
+// Liste des machines exposées dans la vue Maintenance (accueil).
+const MAINT_HOME_MACHINES = ['Cohésio 1', 'Cohésio 2'];
+
+// Recalcule et injecte les pastilles compteur retard sur les onglets Machine
+// et Catégorie, plus les compteurs par statut dans la sous-toolbar.
+// Note : ne dépend pas de l'onglet actif — on scanne l'ensemble pour que la
+// pastille "Cohésio 2" reste visible même en visualisant Cohésio 1.
+function _refreshMaintCounters(){
+  const items = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
+  // Compteurs de retards par machine (toutes catégories confondues)
+  MAINT_HOME_MACHINES.forEach(machine => {
+    let overdueCount = 0;
+    items.forEach(it => {
+      const freqDays = _parseFrequenceDays(it.intervalle);
+      if(freqDays == null || freqDays <= 0) return;
+      const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
+      if(!last) return;
+      try{
+        const d = new Date(last);
+        const today = new Date();
+        const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+        if(daysSince > freqDays) overdueCount++;
+      }catch(e){}
+    });
+    const badge = document.querySelector('[data-maint-machine-badge="' + machine.replace(/"/g,'\\"') + '"]');
+    if(badge){
+      if(overdueCount > 0){
+        badge.textContent = String(overdueCount);
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  });
+  // Compteurs de retards par catégorie (sur la machine actuellement sélectionnée)
+  const machine = getMaintMachine();
+  const catMap = { entretien: 0, remplacements: 0 };
+  items.forEach(it => {
+    const cat = it.categorie;
+    let bucket = null;
+    if(cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi') bucket = 'entretien';
+    else if(cat === 'remplacements') bucket = 'remplacements';
+    if(!bucket) return;
+    const freqDays = _parseFrequenceDays(it.intervalle);
+    if(freqDays == null || freqDays <= 0) return;
+    const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
+    if(!last) return;
+    try{
+      const d = new Date(last);
+      const today = new Date();
+      const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+      if(daysSince > freqDays) catMap[bucket]++;
+    }catch(e){}
+  });
+  Object.keys(catMap).forEach(cat => {
+    const badge = document.querySelector('[data-maint-cat-badge="' + cat + '"]');
+    if(!badge) return;
+    if(catMap[cat] > 0){
+      badge.textContent = String(catMap[cat]);
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  });
+}
+
+// Applique l'état actif visuel sur les chips statut + groupement.
+function _refreshMaintChipState(){
+  const status = getMaintStatusFilter();
+  document.querySelectorAll('[data-status-filter]').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-status-filter') === status);
+  });
+  const grouping = getMaintGrouping();
+  document.querySelectorAll('[data-group-by]').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-group-by') === grouping);
+  });
+}
 // --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
 // On interroge /api/maintenance/wearparts/last qui scanne production_data
 // pour la machine sélectionnée. Réponse : { items: { "couteaux_bande": {
@@ -5988,10 +6211,17 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-cat-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-cat') === catFilter);
   });
+  // v2.4.6 : nouveau filtre statut + choix du regroupement.
+  const statusFilter = getMaintStatusFilter();
+  const grouping = getMaintGrouping();
+  _refreshMaintChipState();
+  _refreshMaintCounters();
   const showWearParts = (catFilter === 'remplacements');
   // La section "Pièces d'usure" est rendue uniquement quand le toggle est
-  // sur "Remplacements" — les pièces d'usure sont par nature des remplacements.
-  const wearPartsHtml = showWearParts ? _renderWearPartsGroup(machine) : '';
+  // sur "Remplacements", pour la machine active, et quand on n'a pas de filtre
+  // statut restrictif (les pièces d'usure ont leur propre logique de suivi).
+  const wearPartsHtml = (showWearParts && statusFilter === 'all' && grouping !== 'machine')
+    ? _renderWearPartsGroup(machine) : '';
   // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
   // exclure des sections par intervalle (sinon les changements couteaux/
   // contre-couteaux apparaîtraient deux fois). Utile seulement quand la
@@ -6007,18 +6237,14 @@ function renderMaintCards(){
     });
   }
   // Filtre les codes avec periodique=OUI, exclus ceux déjà affichés dans la
-  // section Pièces d'usure. Toggle Entretien : cartes Nettoyage (DB: entretien
-  // / legacy) + Contrôles périodiques. Toggle Interventions : cartes
-  // Interventions (DB: remplacements) + Pièces d'usure (rendues à part).
+  // section Pièces d'usure.
   const baseItems = (OPS_TYPES_STATE.list || []).filter(it => {
     if(!it.periodique) return false;
     if(wearPartCodeIds.has(String(it.id))) return false;
     const cat = it.categorie;
     if(catFilter === 'entretien'){
-      // Nettoyage (DB: entretien / legacy interventions / suivi) + Contrôles périodiques
       return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
     }
-    // catFilter === 'remplacements' : uniquement les cartes Interventions (DB: remplacements)
     return cat === 'remplacements';
   });
   if(!baseItems.length){
@@ -6026,19 +6252,12 @@ function renderMaintCards(){
       '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
-  // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
-  // sur la machine sélectionnée, et infos de retard.
-  //
-  // Source des saisies : TOUJOURS OPS_STATE.
-  // Les cartes affichent les codes periodique=OUI (interventions + controles).
-  // Le select de la modale Contrôles ne propose que les controles periodique=NON,
-  // donc un code controle periodique=OUI ne peut être saisi que via la modale
-  // Opérations -> il atterrit dans OPS_STATE. Si on lit CTRL_STATE pour les
-  // controles, on rate ces saisies (bug observé : cartes restant à "Jamais"
-  // alors que des entrées existent dans l'historique des opérations).
-  const enriched = baseItems.map(it => {
+  // Enrichit chaque item pour une machine donnée : freqDays, last, daysSince,
+  // daysOverdue, status. On extrait dans une fonction pour pouvoir enrichir
+  // plusieurs machines à la fois quand grouping === 'machine'.
+  const enrichFor = (machineName) => baseItems.map(it => {
     const freqDays = _parseFrequenceDays(it.intervalle);
-    const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
+    const last = _lastInterventionFor(it.nom, machineName, OPS_STATE.list);
     let daysSince = null;
     if(last){
       try{
@@ -6051,33 +6270,97 @@ function renderMaintCards(){
     }
     const daysOverdue = (freqDays != null && daysSince != null) ? (daysSince - freqDays) : null;
     const overdue = (daysOverdue != null && daysOverdue > 0);
-    return { it, freqDays, last, daysSince, daysOverdue, overdue };
+    const status = _maintComputeStatus(freqDays, daysSince);
+    return { it, machine: machineName, freqDays, last, daysSince, daysOverdue, overdue, status };
   });
-  // Calcule le plus grand retard (toutes catégories) pour mettre en exergue
-  let maxOverdue = 0;
-  enriched.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
-  // Groupement par intervalle (en jours). Items sans intervalle reconnu -> groupe "null".
-  const groups = new Map();  // key = freqDays (number) ou 'unknown'
-  enriched.forEach(e => {
-    const key = (e.freqDays == null) ? 'unknown' : e.freqDays;
+
+  // Selon le regroupement, on enrichit sur 1 machine (statut/fréquence) ou
+  // sur toutes les machines de la vue (regroupement par machine).
+  let enriched;
+  if(grouping === 'machine'){
+    enriched = [];
+    MAINT_HOME_MACHINES.forEach(m => { enriched = enriched.concat(enrichFor(m)); });
+  } else {
+    enriched = enrichFor(machine);
+  }
+
+  // Compteurs par statut (avant application du filtre) pour la sous-toolbar.
+  const statusCounts = { all: enriched.length, overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
+  enriched.forEach(e => { statusCounts[e.status] = (statusCounts[e.status] || 0) + 1; });
+  document.querySelectorAll('[data-status-count]').forEach(el => {
+    const key = el.getAttribute('data-status-count');
+    el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
+  });
+
+  // Applique le filtre statut. 'all' => tout. Les statuts "unknown" sont
+  // remontés quand on demande "all" ou "never" (proche sémantiquement).
+  const filtered = enriched.filter(e => {
+    if(statusFilter === 'all') return true;
+    if(statusFilter === 'never') return (e.status === 'never' || e.status === 'unknown');
+    return e.status === statusFilter;
+  });
+
+  if(!filtered.length){
+    const msgs = {
+      overdue: 'Aucune opération en retard. 🎉',
+      soon:    'Aucune opération à faire dans les prochains jours.',
+      ok:      'Aucune opération à jour à afficher.',
+      never:   'Toutes les opérations ont déjà été saisies au moins une fois.',
+      all:     'Aucune opération à afficher.',
+    };
+    grid.innerHTML = wearPartsHtml +
+      '<div class="maint-frames-empty" style="margin-top:24px">' + (msgs[statusFilter] || msgs.all) + '</div>';
+    return;
+  }
+
+  // Poids de tri par statut pour le tri par urgence (Jamais tout en bas).
+  const statusWeight = { overdue: 0, soon: 1, ok: 2, unknown: 3, never: 4 };
+
+  // Groupement dynamique.
+  const groups = new Map();
+  filtered.forEach(e => {
+    let key;
+    if(grouping === 'status') key = e.status;
+    else if(grouping === 'machine') key = e.machine;
+    else /* freq */             key = (e.freqDays == null) ? 'unknown' : e.freqDays;
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(e);
   });
-  // Tri des groupes : plus petit intervalle en premier, 'unknown' à la fin
-  const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
-    if(a === 'unknown') return 1;
-    if(b === 'unknown') return -1;
-    return a - b;
-  });
-  // Tri à l'intérieur de chaque groupe : retard décroissant, puis alphabétique
+
+  // Tri des clés de groupe selon le mode.
+  let sortedKeys;
+  if(grouping === 'status'){
+    sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+      return (statusWeight[a] != null ? statusWeight[a] : 99)
+           - (statusWeight[b] != null ? statusWeight[b] : 99);
+    });
+  } else if(grouping === 'machine'){
+    sortedKeys = MAINT_HOME_MACHINES.filter(m => groups.has(m));
+  } else {
+    // freq : plus petit intervalle en premier, 'unknown' à la fin
+    sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+      if(a === 'unknown') return 1;
+      if(b === 'unknown') return -1;
+      return a - b;
+    });
+  }
+
+  // Tri intra-groupe : par urgence globale (statut asc puis retard décroissant
+  // puis alphabétique). "Jamais" est ainsi toujours en bas, sauf dans son
+  // propre groupe où il ne reste que du "never" — dans ce cas c'est l'alpha
+  // qui départage.
   groups.forEach((arr) => {
     arr.sort((a, b) => {
+      const wa = statusWeight[a.status] != null ? statusWeight[a.status] : 99;
+      const wb = statusWeight[b.status] != null ? statusWeight[b.status] : 99;
+      if(wa !== wb) return wa - wb;
       const oa = a.daysOverdue || 0;
       const ob = b.daysOverdue || 0;
       if(ob !== oa) return ob - oa;
       return (a.it.nom || '').localeCompare(b.it.nom || '', 'fr');
     });
   });
+
   const _fmtDateTime = (iso) => {
     if(!iso) return '—';
     try{
@@ -6088,22 +6371,35 @@ function renderMaintCards(){
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }catch(e){ return '—'; }
   };
-  // Construit le HTML : pièces d'usure d'abord, puis sections par intervalle.
+
+  // Libellé de groupe selon le mode.
+  const groupLabelFor = (key) => {
+    if(grouping === 'status') return MAINT_STATUS_LABELS[key] || String(key);
+    if(grouping === 'machine') return String(key);
+    return (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
+  };
+
+  // Construit le HTML : pièces d'usure d'abord (si applicable), puis groupes.
   let html = wearPartsHtml;
   sortedKeys.forEach(key => {
     const groupItems = groups.get(key);
-    const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
-    const cards = groupItems.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
+    const groupLabel = groupLabelFor(key);
+    const cards = groupItems.map(({it, machine: itemMachine, freqDays, last, daysSince, daysOverdue, overdue, status}) => {
       const catLabel = _maintCatLabelFront(it.categorie);
       let frameCls = 'maint-frame';
-      if(overdue){
-        frameCls += ' is-overdue';
+      if(overdue) frameCls += ' is-overdue';
+      // On garde is-overdue-critical uniquement quand on n'est pas en groupement
+      // par statut (sinon toute la section "En retard" scale, ce qui casse le layout).
+      if(overdue && grouping !== 'status'){
+        // Recalcule maxOverdue à la volée sur les items filtrés
+        let maxOverdue = 0;
+        filtered.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
         if(maxOverdue > 0 && daysOverdue === maxOverdue) frameCls += ' is-overdue-critical';
       }
       const lastHtml = last
         ? '<span class="maint-frame-stat-value">' + escHtml(_fmtDateTime(last)) + '</span>'
         : '<span class="maint-frame-stat-value muted">Jamais</span>';
-      // Statut de retard
+      // Badge textuel de retard (bas de carte).
       let badgeCls = 'unknown';
       let badgeLbl = '';
       let detailLbl = '';
@@ -6115,7 +6411,7 @@ function renderMaintCards(){
         } else {
           badgeCls = 'ok';
           const remaining = -daysOverdue;
-          badgeLbl = 'OK · J-' + remaining;
+          badgeLbl = (status === 'soon' ? 'Bientôt · J-' + remaining : 'OK · J-' + remaining);
           detailLbl = remaining + ' j avant prochaine échéance';
         }
       } else if(daysSince != null && freqDays == null){
@@ -6130,10 +6426,7 @@ function renderMaintCards(){
         badgeCls = 'unknown';
         badgeLbl = 'Aucune donnée';
       }
-      // Barre de progression : pourcentage écoulé depuis la dernière intervention
-      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur via
-      // _ratioColor (dégradé vert -> jaune -> orange -> rouge sur [0, 200%]),
-      // identique au code couleur des anneaux des pièces d'usure.
+      // Barre de progression : identique à l'existant.
       let progressHtml = '';
       if(freqDays != null && freqDays > 0 && daysSince != null){
         const ratio = daysSince / freqDays;
@@ -6149,7 +6442,6 @@ function renderMaintCards(){
             '</div>' +
           '</div>';
       } else if(freqDays != null && freqDays > 0 && daysSince == null){
-        // Intervalle défini mais jamais saisi : barre vide grisée
         progressHtml =
           '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opération sur cette machine. Intervalle prévu : ' + freqDays + ' jour(s).') + '">' +
             '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:0%"></div></div>' +
@@ -6159,10 +6451,15 @@ function renderMaintCards(){
             '</div>' +
           '</div>';
       }
-      // Si freqDays est null (intervalle non reconnu), pas de barre.
       const catCls = _maintCatCssFront(it.categorie);
       const nivNum = parseInt(it.niveau, 10) || 1;
-      return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+      // Étiquette machine visible uniquement quand on regroupe par statut/fréquence
+      // et qu'on affiche plusieurs machines simultanément (grouping=machine gère
+      // ça via le titre du groupe).
+      const machineChip = (grouping === 'machine')
+        ? ''
+        : '<span class="maint-frame-cat-pill" style="background:var(--bg);border-color:var(--border);color:var(--muted)">' + escHtml(itemMachine) + '</span>';
+      return '<section class="' + frameCls + '" data-status="' + status + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(itemMachine) + '">' +
         '<div class="maint-frame-head">' +
           '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
           '<div class="maint-frame-badges">' +
@@ -6527,9 +6824,6 @@ async function loadCtrlAcks(){
       _raw_comment: a.comment || '',
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
-      // v2.4.11 : remonte dismissed pour que ctrlIsAutoClose détecte aussi
-      // les anciennes esquives (comment vide, antérieures à v2.3.30).
-      _dismissed: a.dismissed === 1 || a.dismissed === true,
     }));
     CTRL_STATE.alerts_meta = data.alerts_meta || {};
     CTRL_STATE.known_alerts = Array.isArray(data.known_alerts) ? data.known_alerts : [];
@@ -6628,14 +6922,8 @@ function toggleAutoClose(){
   if(typeof renderCtrl === 'function') renderCtrl();
 }
 function ctrlIsAutoClose(c){
-  // v2.4.11 : double critère.
-  //   1) dismissed=1 → esquive quelle que soit l'époque (couvre les anciennes
-  //      esquives antérieures à v2.3.30 qui ont comment vide).
-  //   2) comment matche "Fermée auto" → auto-close serveur (backend
-  //      _auto_ack_periodic_alerts_on_arret v2.2.65) + esquives récentes
-  //      "Fermée auto (esquive) : <label>" (v2.3.30).
-  if(c && c._dismissed) return true;
   const raw = (c && c._raw_comment) || '';
+  // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
   return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
 }
 
