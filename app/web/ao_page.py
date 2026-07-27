@@ -190,9 +190,10 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 .comp-scroll{scrollbar-width:thin;scrollbar-color:var(--muted) var(--bg)}
 .comp-condi-label{font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap}
-/* Colonnes Frontal / Adhésif / Fournisseur : étroites, texte sur plusieurs lignes */
-.comp-table th.comp-col-fa,.comp-table td.comp-col-fa{width:72px;min-width:58px;max-width:82px;white-space:normal;word-break:break-word;line-height:1.25}
-.comp-table th.comp-col-fourn,.comp-table td.comp-col-fourn{width:92px;min-width:74px;max-width:104px;white-space:normal;word-break:break-word;line-height:1.25}
+/* Colonnes Frontal / Adhésif / Fournisseur : compactes mais lisibles, texte sur
+   2-3 lignes (pas 5-6). On coupe seulement les mots vraiment trop longs. */
+.comp-table th.comp-col-fa,.comp-table td.comp-col-fa{width:118px;min-width:100px;max-width:140px;white-space:normal;overflow-wrap:break-word;line-height:1.3}
+.comp-table th.comp-col-fourn,.comp-table td.comp-col-fourn{width:120px;min-width:100px;max-width:150px;white-space:normal;overflow-wrap:break-word;line-height:1.3}
 /* Colonne Marge brute : étroite, valeur + dernier prix de vente empilés */
 .comp-table th.comp-col-margeb,.comp-table td.comp-col-margeb{width:80px;min-width:72px;max-width:86px;white-space:normal;word-break:break-word}
 .ao-hdr-btn{background:var(--card);border:1px solid var(--border);color:var(--text);transition:background .15s,border-color .15s}

@@ -327,7 +327,7 @@ function renderProduitForm() {
     '</div>'+
     '<div style="font-size:11px;color:var(--muted);margin:2px 0 14px">Pilote la colonne <strong>Condi.</strong> et le calcul de la <strong>marge brute</strong> dans les demandes de prix. Défaut de vente : au mille d\'étiquettes.</div>'+
     // Historique : AO contenant ce produit
-    '<div style="font-size:12px;font-weight:600;color:var(--text2);border-top:1px solid var(--border);padding-top:12px;margin-bottom:8px">Appels d\'offres avec ce produit</div>'+
+    '<div style="font-size:14px;font-weight:700;color:var(--text);border-top:1px solid var(--border);padding-top:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px"><span style="width:3px;height:16px;background:var(--accent);border-radius:2px;display:inline-block"></span>Appels d\'offres avec ce produit</div>'+
     '<div id="pf-aos-list" style="display:flex;flex-direction:column;gap:6px">'+
     (function(){
       var aos = (d && d._aos !== undefined) ? d._aos : null;
@@ -342,8 +342,8 @@ function renderProduitForm() {
     })()+
     '</div>'+
     '</div>'+
-    '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:14px;padding-top:12px">'+
-    '<span></span><button type="button" class="btn btn-accent btn-sm" id="btn-pf-save-bottom">Enregistrer</button></div></div></div>';
+    '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:16px;padding-top:16px;justify-content:center">'+
+    '<button type="button" class="btn btn-accent" id="btn-pf-save-bottom" style="min-width:240px;padding:12px 32px;font-size:15px;font-weight:700">Enregistrer</button></div></div></div>';
 }
 
 function pfNum(v) {
