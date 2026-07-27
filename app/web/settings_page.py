@@ -6688,6 +6688,32 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_promote.js?v=2">
 
 // ---- Fonctions restaurees depuis e503c42~1 ----
+// Wrapper fetch pour l'admin impression : JSON + erreur formattee
+async function prFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign(
+    { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    opts.headers || {}
+  );
+  opts.credentials = opts.credentials || 'same-origin';
+  const r = await fetch(url, opts);
+  const ct = r.headers.get('content-type') || '';
+  let body = null;
+  if (ct.includes('application/json')) {
+    try { body = await r.json(); } catch (e) { body = null; }
+  } else {
+    body = await r.text();
+  }
+  if (!r.ok) {
+    const msg = (body && body.detail) ? body.detail : (typeof body === 'string' ? body : r.statusText);
+    const err = new Error(msg || ('HTTP ' + r.status));
+    err.status = r.status;
+    err.body = body;
+    throw err;
+  }
+  return body;
+}
+
 function prSetSub(sub) {
   PR.sub = sub;
   document.querySelectorAll('.pr-sub').forEach(b => {
