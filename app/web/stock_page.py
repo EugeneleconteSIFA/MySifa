@@ -658,6 +658,82 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-badge-mvt-ajustement{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
 .dash-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .dash-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+/* ── Besoins matières (onglet MyStock) ── */
+.bes-page{padding:0 0 32px}
+.bes-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px}
+.bes-header h1{margin:0 0 6px;font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.01em}
+.bes-header .bes-sub{font-size:13px;color:var(--muted);line-height:1.5}
+.bes-kpis{display:flex;gap:10px;flex-wrap:wrap}
+.bes-kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:100px;display:flex;flex-direction:column;gap:2px}
+.bes-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+.bes-kpi-val{font-size:20px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1}
+.bes-kpi-val.warn{color:var(--warn,#d97706)}
+.bes-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.bes-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px}
+.bes-seg-btn{padding:7px 14px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;font-family:inherit;transition:all .12s;white-space:nowrap}
+.bes-seg-btn:hover{color:var(--text)}
+.bes-seg-btn.active{background:var(--accent);color:#fff}
+.bes-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.bes-btn-secondary{padding:7px 14px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
+.bes-btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.bes-section{margin-bottom:24px}
+.bes-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 10px;padding:0 4px}
+.bes-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
+.bes-section-count{font-size:12px;color:var(--muted);font-weight:500}
+.bes-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.bes-table{width:100%;border-collapse:collapse;font-size:13px}
+.bes-table thead th{padding:10px 14px;text-align:left;background:var(--surface-alt,rgba(0,0,0,.02));border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.bes-table thead th.num{text-align:right}
+.bes-table tbody td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+.bes-table tbody tr:last-child td{border-bottom:none}
+.bes-table tbody tr:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.bes-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bes-row-warn{background:color-mix(in srgb,var(--warn,#d97706) 6%,transparent)}
+.bes-row-danger{background:color-mix(in srgb,#dc2626 5%,transparent)}
+.bes-src-value{font-weight:600;color:var(--text)}
+.bes-mp-cell .bes-mp-ref{font-weight:600;color:var(--text)}
+.bes-mp-cell .bes-mp-des{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-mp-none{color:var(--warn,#d97706);font-style:italic;font-size:12px}
+.bes-manque{color:#dc2626;font-weight:700}
+.bes-manque-zero{color:var(--muted)}
+.bes-btn-associate{padding:5px 12px;border:none;background:var(--accent);color:#fff;font-size:11px;font-weight:600;cursor:pointer;border-radius:5px;font-family:inherit;transition:all .12s}
+.bes-btn-associate:hover{filter:brightness(1.08)}
+.bes-btn-associate.mapped{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.bes-btn-associate.mapped:hover{border-color:var(--accent);color:var(--accent)}
+.bes-total-row td{background:color-mix(in srgb,var(--accent) 5%,transparent);font-weight:700;color:var(--text);border-top:1px solid var(--border)}
+.bes-dossier-ref{font-weight:700;color:var(--text)}
+.bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
+.bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.bes-statut-attente{background:color-mix(in srgb,var(--muted) 15%,transparent);color:var(--text2)}
+.bes-tag{display:inline-block;padding:3px 8px;margin:2px 3px 2px 0;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--text);border-radius:4px;font-size:11px;line-height:1.5}
+.bes-tag.warn{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706);font-weight:600}
+.bes-empty{padding:36px 20px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:10px}
+.bes-loading{padding:40px;text-align:center;color:var(--muted);font-size:14px}
+/* Modal spécifiques */
+.bes-map-list{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)}
+.bes-map-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.bes-map-row:last-child{border-bottom:none}
+.bes-map-kind{padding:2px 8px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--text2);border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;min-width:70px;text-align:center;letter-spacing:.4px}
+.bes-map-source{flex:1;font-weight:600;color:var(--text)}
+.bes-map-arrow{color:var(--muted);font-size:14px}
+.bes-map-target{flex:1;min-width:0}
+.bes-map-target .bes-mp-ref{font-weight:600;color:var(--text)}
+.bes-map-target .bes-mp-des{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-map-count{color:var(--muted);font-size:12px}
+.bes-map-btn-danger{padding:4px 10px;border:1px solid var(--border);background:transparent;color:#dc2626;font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:inherit}
+.bes-map-btn-danger:hover{border-color:#dc2626;background:color-mix(in srgb,#dc2626 8%,transparent)}
+.bes-map-h3{margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.bes-map-h3.warn{color:var(--warn,#d97706)}
+.bes-search-input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text);margin-bottom:10px;box-sizing:border-box}
+.bes-search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.bes-mat-list{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.bes-mat-item{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.bes-mat-item:last-child{border-bottom:none}
+.bes-mat-item:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.bes-mat-item-ref{font-weight:600;color:var(--text);font-size:13px}
+.bes-mat-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+
 /* ── Matières premières ── */
 .mp-page{padding:0 0 24px}
 .mp-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
@@ -2252,6 +2328,7 @@ function icon(name, size=16){
     'dollar-sign': '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+    'list-checks': '<path d="M3 5h6"/><path d="M3 12h6"/><path d="M3 19h6"/><polyline points="14 4 16 6 20 2"/><polyline points="14 11 16 13 20 9"/><polyline points="14 18 16 20 20 16"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -12564,7 +12641,7 @@ function invV2BuildListItems(container, items) {
 
 // ── Inventaire matière (par référence) — onglet dédié ──────────────
 // ══════════════════════════════════════════════════════════════════
-// ── Besoins matières (onglet MyStock) ────────────────────────────
+// ── Besoins matières (onglet MyStock) — v2 visuel refactorisé ────
 // ══════════════════════════════════════════════════════════════════
 const BESOINS_KIND_LABELS = {
   support: 'Support', adhesif: 'Adhésif', mandrin: 'Mandrin',
@@ -12576,7 +12653,7 @@ function _fmtQte(n, unite) {
   if (n == null || isNaN(n)) return '—';
   const rounded = n >= 100 ? Math.round(n) : (n >= 10 ? Math.round(n * 10) / 10 : Math.round(n * 100) / 100);
   const s = String(rounded).replace('.', ',');
-  return s + (unite ? ' ' + unite : '');
+  return s + (unite ? '\u202f' + unite : '');
 }
 
 function _fmtDate(iso) {
@@ -12588,64 +12665,65 @@ function _fmtDate(iso) {
 }
 
 function buildBesoinsMatieres() {
-  const wrap = el('div', { cls: 'content bes-tab', style: { padding: '18px 20px 40px' } });
+  const wrap = el('div', { cls: 'bes-page' });
 
   if (S.besoinsLoading) {
-    wrap.appendChild(el('div', { style: { padding: '40px', textAlign: 'center', color: 'var(--muted)' } }, 'Chargement…'));
+    wrap.appendChild(el('div', { cls: 'bes-loading' }, 'Chargement…'));
     return wrap;
   }
 
   const ech = S.besoinsEcheance || { lignes: [], today: '', borne_7j: '', borne_15j: '' };
   const dos = S.besoinsDossiers || { dossiers: [] };
   const view = S.besoinsView || 'echeance';
+  const lignes = ech.lignes || [];
+  const dossiers = dos.dossiers || [];
+  const nbDossiers = dossiers.length;
+  const nbNonMappes = lignes.filter(l => !l.mapped).length;
+  const nbMapped = lignes.length - nbNonMappes;
 
-  const nbDossiers = (dos.dossiers || []).length;
-  const nbNonMappes = (ech.lignes || []).filter(l => !l.mapped).length;
-
-  const header = el('div', { style: { marginBottom: '18px' } },
-    el('h2', { style: { margin: '0 0 6px', fontSize: '22px', fontWeight: '800', color: 'var(--text)' } }, 'Besoins matières'),
-    el('div', { style: { fontSize: '13px', color: 'var(--muted)', lineHeight: '1.5' } },
-      `${nbDossiers} dossier${nbDossiers > 1 ? 's' : ''} au planning (en cours ou en attente). `,
-      `Besoins calculés à partir des fiches techniques associées.`,
-      nbNonMappes > 0 ? el('span', { style: { color: 'var(--warning, #d97706)', fontWeight: '600', marginLeft: '6px' } },
-        `${nbNonMappes} valeur${nbNonMappes > 1 ? 's' : ''} sans correspondance MP.`) : null,
-    )
+  // ── Header : titre + KPIs ──
+  const header = el('div', { cls: 'bes-header' },
+    el('div', {},
+      el('h1', {}, 'Besoins matières'),
+      el('div', { cls: 'bes-sub' },
+        'Calculés à partir des fiches techniques associées aux dossiers de production en cours ou en attente.',
+      ),
+    ),
+    el('div', { cls: 'bes-kpis' },
+      el('div', { cls: 'bes-kpi' },
+        el('span', { cls: 'bes-kpi-lbl' }, 'Dossiers'),
+        el('span', { cls: 'bes-kpi-val' }, String(nbDossiers)),
+      ),
+      el('div', { cls: 'bes-kpi' },
+        el('span', { cls: 'bes-kpi-lbl' }, 'Réf. mappées'),
+        el('span', { cls: 'bes-kpi-val' }, String(nbMapped)),
+      ),
+      el('div', { cls: 'bes-kpi' },
+        el('span', { cls: 'bes-kpi-lbl' }, 'À associer'),
+        el('span', { cls: 'bes-kpi-val' + (nbNonMappes > 0 ? ' warn' : '') }, String(nbNonMappes)),
+      ),
+    ),
   );
   wrap.appendChild(header);
 
-  const btnStyle = (active) => ({
-    padding: '8px 14px', border: '1px solid var(--border)', background: active ? 'var(--accent)' : 'var(--surface)',
-    color: active ? '#fff' : 'var(--text)', fontWeight: '600', fontSize: '13px', cursor: 'pointer',
-    borderRadius: '0',
-  });
-  const toolbar = el('div', {
-    style: { display: 'flex', gap: '0', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap' }
-  },
-    el('div', { style: { display: 'flex', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' } },
+  // ── Toolbar : segmented + actions ──
+  const toolbar = el('div', { cls: 'bes-toolbar' },
+    el('div', { cls: 'bes-seg' },
       el('button', {
-        style: { ...btnStyle(view === 'echeance'), borderRight: '1px solid var(--border)' },
+        cls: 'bes-seg-btn' + (view === 'echeance' ? ' active' : ''),
         on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
-      }, 'Par échéance (7j / 15j / total)'),
+      }, 'Par échéance'),
       el('button', {
-        style: btnStyle(view === 'dossier'),
+        cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
     ),
-    el('div', { style: { flex: '1' } }),
-    el('button', {
-      style: {
-        padding: '8px 14px', border: '1px solid var(--border)', background: 'var(--surface)',
-        color: 'var(--text)', fontWeight: '600', fontSize: '13px', cursor: 'pointer', borderRadius: '6px',
-      },
-      on: { click: () => openBesoinsMappingModal() }
-    }, 'Gérer les correspondances FT → MP'),
-    el('button', {
-      style: {
-        padding: '8px 14px', border: '1px solid var(--border)', background: 'var(--surface)',
-        color: 'var(--text)', fontWeight: '600', fontSize: '13px', cursor: 'pointer', borderRadius: '6px', marginLeft: '8px',
-      },
-      on: { click: () => loadBesoinsMatieres() }
-    }, '⟳ Actualiser'),
+    el('div', { cls: 'bes-actions' },
+      el('button', { cls: 'bes-btn-secondary', on: { click: () => openBesoinsMappingModal() } },
+        iconEl('list-checks', 14), el('span', {}, 'Correspondances')),
+      el('button', { cls: 'bes-btn-secondary', on: { click: () => loadBesoinsMatieres() } },
+        iconEl('refresh-ccw', 14), el('span', {}, 'Actualiser')),
+    ),
   );
   wrap.appendChild(toolbar);
 
@@ -12654,18 +12732,15 @@ function buildBesoinsMatieres() {
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
-
   return wrap;
 }
 
 function _buildBesoinsEcheanceTable(ech) {
   const lignes = ech.lignes || [];
   if (!lignes.length) {
-    return el('div', { style: { padding: '30px', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '8px' } },
-      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.'
-    );
+    return el('div', { cls: 'bes-empty' },
+      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
   }
-
   const byKind = {};
   lignes.forEach(l => { (byKind[l.kind] ||= []).push(l); });
 
@@ -12684,26 +12759,24 @@ function _buildBesoinsEcheanceTable(ech) {
 
 function _buildBesoinsKindSection(kind, lignes) {
   const label = BESOINS_KIND_LABELS[kind] || kind;
-  const section = el('div', { style: { marginBottom: '24px' } });
-  section.appendChild(el('h3', {
-    style: { margin: '0 0 10px', fontSize: '15px', fontWeight: '700', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.5px' }
-  }, label));
+  const section = el('div', { cls: 'bes-section' });
 
-  const table = el('table', {
-    style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'var(--surface)' }
-  });
-  const thStyle = 'padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);font-weight:700;color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.3px';
-  const thNumStyle = thStyle + ';text-align:right';
+  section.appendChild(el('div', { cls: 'bes-section-head' },
+    el('span', { cls: 'bes-section-title' }, label),
+    el('span', { cls: 'bes-section-count' }, `${lignes.length} référence${lignes.length > 1 ? 's' : ''}`),
+  ));
+
+  const table = el('table', { cls: 'bes-table' });
   table.appendChild(el('thead', {}, el('tr', {},
-    el('th', { style: thStyle, html: 'Valeur fiche technique' }),
-    el('th', { style: thStyle, html: 'Matière première' }),
-    el('th', { style: thNumStyle, html: 'Besoin 7j' }),
-    el('th', { style: thNumStyle, html: 'Besoin 15j' }),
-    el('th', { style: thNumStyle, html: 'Total' }),
-    el('th', { style: thNumStyle, html: 'Stock' }),
-    el('th', { style: thNumStyle, html: 'Manque 7j' }),
-    el('th', { style: thNumStyle, html: 'Dossiers' }),
-    el('th', { style: thStyle, html: '' }),
+    el('th', {}, 'Valeur fiche technique'),
+    el('th', {}, 'Matière première'),
+    el('th', { cls: 'num' }, 'Besoin 7j'),
+    el('th', { cls: 'num' }, 'Besoin 15j'),
+    el('th', { cls: 'num' }, 'Total'),
+    el('th', { cls: 'num' }, 'Stock'),
+    el('th', { cls: 'num' }, 'Manque 7j'),
+    el('th', { cls: 'num' }, 'Dossiers'),
+    el('th', {}, ''),
   )));
 
   const tbody = el('tbody', {});
@@ -12713,135 +12786,106 @@ function _buildBesoinsKindSection(kind, lignes) {
     total15 += l.besoin_15j || 0;
     totalT += l.besoin_total || 0;
 
-    const tdStyle = 'padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle';
-    const tdNumStyle = tdStyle + ';text-align:right;font-variant-numeric:tabular-nums';
-    const rowStyle = !l.mapped
-      ? 'background:rgba(217,119,6,.08)'
-      : (l.manque_7j > 0 ? 'background:rgba(239,68,68,.06)' : '');
-
+    const rowCls = !l.mapped ? 'bes-row-warn' : (l.manque_7j > 0 ? 'bes-row-danger' : '');
     const matCell = l.mapped
-      ? el('td', { style: tdStyle },
-          el('div', { style: { fontWeight: '600' } }, l.matiere_ref || '—'),
-          l.matiere_designation ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, l.matiere_designation) : null,
+      ? el('td', { cls: 'bes-mp-cell' },
+          el('div', { cls: 'bes-mp-ref' }, l.matiere_ref || '—'),
+          l.matiere_designation ? el('div', { cls: 'bes-mp-des' }, l.matiere_designation) : null,
         )
-      : el('td', { style: tdStyle + ';color:var(--warning,#d97706);font-style:italic' }, 'Non associée');
+      : el('td', {}, el('span', { cls: 'bes-mp-none' }, 'Non associée'));
 
     const manqueCell = l.manque_7j != null && l.manque_7j > 0
-      ? el('td', { style: tdNumStyle + ';color:var(--danger,#dc2626);font-weight:700' }, _fmtQte(l.manque_7j, l.unite))
-      : el('td', { style: tdNumStyle + ';color:var(--muted)' }, l.mapped ? '0' : '—');
+      ? el('td', { cls: 'num' }, el('span', { cls: 'bes-manque' }, _fmtQte(l.manque_7j, l.unite)))
+      : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' }, l.mapped ? '0' : '—'));
 
-    const actionCell = el('td', { style: tdStyle + ';text-align:right' },
-      el('button', {
-        style: {
-          padding: '4px 10px', border: '1px solid var(--border)', background: l.mapped ? 'var(--surface)' : 'var(--accent)',
-          color: l.mapped ? 'var(--text)' : '#fff', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', fontWeight: '600',
-        },
-        on: { click: () => openBesoinAssocierModal(l.kind, l.source_value) }
-      }, l.mapped ? 'Modifier' : 'Associer'),
-    );
-
-    tbody.appendChild(el('tr', { style: rowStyle },
-      el('td', { style: tdStyle },
-        el('div', { style: { fontWeight: '600' } }, l.source_value || '—'),
-      ),
+    tbody.appendChild(el('tr', { cls: rowCls },
+      el('td', {}, el('span', { cls: 'bes-src-value' }, l.source_value || '—')),
       matCell,
-      el('td', { style: tdNumStyle }, _fmtQte(l.besoin_7j, l.unite)),
-      el('td', { style: tdNumStyle }, _fmtQte(l.besoin_15j, l.unite)),
-      el('td', { style: tdNumStyle + ';font-weight:700' }, _fmtQte(l.besoin_total, l.unite)),
-      el('td', { style: tdNumStyle + ';color:var(--muted)' }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—'),
+      el('td', { cls: 'num' }, _fmtQte(l.besoin_7j, l.unite)),
+      el('td', { cls: 'num' }, _fmtQte(l.besoin_15j, l.unite)),
+      el('td', { cls: 'num', style: { fontWeight: '700' } }, _fmtQte(l.besoin_total, l.unite)),
+      el('td', { cls: 'num', style: { color: 'var(--muted)' } }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—'),
       manqueCell,
-      el('td', { style: tdNumStyle + ';color:var(--muted)' }, String(l.nb_dossiers || 0)),
-      actionCell,
+      el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(l.nb_dossiers || 0)),
+      el('td', { style: { textAlign: 'right' } },
+        el('button', {
+          cls: 'bes-btn-associate' + (l.mapped ? ' mapped' : ''),
+          on: { click: () => openBesoinAssocierModal(l.kind, l.source_value) }
+        }, l.mapped ? 'Modifier' : 'Associer'),
+      ),
     ));
   });
 
-  const tdTotalStyle = 'padding:10px;background:var(--surface-alt,#f8f9fa);font-weight:700;border-top:2px solid var(--border)';
-  const tdTotalNumStyle = tdTotalStyle + ';text-align:right;font-variant-numeric:tabular-nums';
   const uniteDefault = (lignes[0] && lignes[0].unite) || '';
-  tbody.appendChild(el('tr', {},
-    el('td', { style: tdTotalStyle, colspan: '2' }, `TOTAL ${label.toUpperCase()}`),
-    el('td', { style: tdTotalNumStyle }, _fmtQte(total7, uniteDefault)),
-    el('td', { style: tdTotalNumStyle }, _fmtQte(total15, uniteDefault)),
-    el('td', { style: tdTotalNumStyle }, _fmtQte(totalT, uniteDefault)),
-    el('td', { style: tdTotalStyle, colspan: '4' }, ''),
+  tbody.appendChild(el('tr', { cls: 'bes-total-row' },
+    el('td', { colspan: '2' }, 'Total ' + label.toLowerCase()),
+    el('td', { cls: 'num' }, _fmtQte(total7, uniteDefault)),
+    el('td', { cls: 'num' }, _fmtQte(total15, uniteDefault)),
+    el('td', { cls: 'num' }, _fmtQte(totalT, uniteDefault)),
+    el('td', { colspan: '4' }, ''),
   ));
-
   table.appendChild(tbody);
-  section.appendChild(el('div', { style: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px' } }, table));
+  section.appendChild(el('div', { cls: 'bes-card' }, table));
   return section;
 }
 
 function _buildBesoinsDossierTable(dos) {
   const dossiers = dos.dossiers || [];
   if (!dossiers.length) {
-    return el('div', { style: { padding: '30px', textAlign: 'center', color: 'var(--muted)', border: '1px dashed var(--border)', borderRadius: '8px' } },
-      'Aucun dossier de production en cours ou en attente.'
-    );
+    return el('div', { cls: 'bes-empty' }, 'Aucun dossier de production en cours ou en attente.');
   }
 
-  const container = el('div', {});
-  const table = el('table', {
-    style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'var(--surface)' }
-  });
-  const thStyle = 'padding:8px 10px;text-align:left;border-bottom:2px solid var(--border);font-weight:700;color:var(--text2);font-size:12px;text-transform:uppercase;letter-spacing:.3px';
-  const thNumStyle = thStyle + ';text-align:right';
+  const table = el('table', { cls: 'bes-table' });
   table.appendChild(el('thead', {}, el('tr', {},
-    el('th', { style: thStyle, html: 'Dossier' }),
-    el('th', { style: thStyle, html: 'Client' }),
-    el('th', { style: thStyle, html: 'Machine' }),
-    el('th', { style: thStyle, html: 'Statut' }),
-    el('th', { style: thNumStyle, html: 'Étiq.' }),
-    el('th', { style: thStyle, html: 'Livraison' }),
-    el('th', { style: thStyle, html: 'Besoins' }),
+    el('th', {}, 'Dossier'),
+    el('th', {}, 'Client'),
+    el('th', {}, 'Machine'),
+    el('th', {}, 'Statut'),
+    el('th', { cls: 'num' }, 'Étiq.'),
+    el('th', {}, 'Livraison'),
+    el('th', {}, 'Besoins'),
   )));
 
   const tbody = el('tbody', {});
   let totalEtiq = 0;
   dossiers.forEach(d => {
     totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
-    const tdStyle = 'padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top';
-    const tdNumStyle = tdStyle + ';text-align:right;font-variant-numeric:tabular-nums';
-    const statColor = d.statut === 'en_cours' ? 'var(--accent)' : 'var(--muted)';
-
     const besoinsEls = (d.besoins || []).map(b => {
-      const style = !b.mapped
-        ? 'display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;background:rgba(217,119,6,.15);color:var(--warning,#d97706);border-radius:3px;font-size:11px;font-weight:600'
-        : 'display:inline-block;padding:2px 7px;margin:2px 3px 2px 0;background:var(--accent-bg,rgba(59,130,246,.08));color:var(--text);border-radius:3px;font-size:11px';
-      const txt = `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${_fmtQte(b.quantite, b.unite)}` + (b.mapped ? '' : ' (à associer)');
-      return el('span', { style, title: b.formule || '' }, txt);
+      const tag = el('span', {
+        cls: 'bes-tag' + (b.mapped ? '' : ' warn'),
+        title: b.formule || ''
+      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${_fmtQte(b.quantite, b.unite)}`);
+      return tag;
     });
-
     const besoinsCell = besoinsEls.length
-      ? el('td', { style: tdStyle }, ...besoinsEls)
-      : el('td', { style: tdStyle + ';color:var(--muted);font-style:italic' }, 'Aucun besoin calculé (fiche technique manquante ou incomplète)');
+      ? el('td', {}, ...besoinsEls)
+      : el('td', { style: { color: 'var(--muted)', fontStyle: 'italic', fontSize: '12px' } },
+          'Aucun besoin calculé (fiche technique manquante ou incomplète)');
 
     tbody.appendChild(el('tr', {},
-      el('td', { style: tdStyle },
-        el('div', { style: { fontWeight: '700' } }, d.reference || '—'),
-        d.numero_of ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, 'OF ' + d.numero_of) : null,
-        d.ref_produit ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, d.ref_produit) : null,
+      el('td', {},
+        el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
+        (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
+          [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
       ),
-      el('td', { style: tdStyle }, d.client || '—'),
-      el('td', { style: tdStyle }, d.machine_nom || '—'),
-      el('td', { style: tdStyle },
-        el('span', { style: { color: statColor, fontWeight: '600', fontSize: '12px' } }, d.statut === 'en_cours' ? 'En cours' : 'En attente'),
-      ),
-      el('td', { style: tdNumStyle }, d.qte_etiquettes ? String(d.qte_etiquettes) : '—'),
-      el('td', { style: tdStyle }, _fmtDate(d.date_livraison || d.planned_end)),
+      el('td', {}, d.client || '—'),
+      el('td', {}, d.machine_nom || '—'),
+      el('td', {}, el('span', { cls: 'bes-statut bes-statut-' + (d.statut || 'attente') },
+        d.statut === 'en_cours' ? 'En cours' : 'En attente')),
+      el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
+      el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
       besoinsCell,
     ));
   });
 
-  const tdTotalStyle = 'padding:10px;background:var(--surface-alt,#f8f9fa);font-weight:700;border-top:2px solid var(--border)';
-  tbody.appendChild(el('tr', {},
-    el('td', { style: tdTotalStyle, colspan: '4' }, `TOTAL — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
-    el('td', { style: tdTotalStyle + ';text-align:right;font-variant-numeric:tabular-nums' }, totalEtiq ? String(Math.round(totalEtiq)) : '—'),
-    el('td', { style: tdTotalStyle, colspan: '2' }, ''),
+  tbody.appendChild(el('tr', { cls: 'bes-total-row' },
+    el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
+    el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
+    el('td', { colspan: '2' }, ''),
   ));
 
   table.appendChild(tbody);
-  container.appendChild(el('div', { style: { overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px' } }, table));
-  return container;
+  return el('div', { cls: 'bes-card' }, table);
 }
 
 function openBesoinAssocierModal(kind, sourceValue) {
@@ -12862,16 +12906,11 @@ function openBesoinAssocierModal(kind, sourceValue) {
       'Valeur détectée dans les fiches techniques : ',
       el('strong', {}, sourceValue),
     ),
-    el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '13px', fontWeight: '600', color: 'var(--text)' } }, 'Matière première'),
-    (function() {
-      const input = el('input', {
-        cls: 'field-input',
-        placeholder: 'Rechercher (référence ou désignation)…',
-        style: { width: '100%', marginBottom: '10px' }
-      });
-      const listWrap = el('div', {
-        style: { maxHeight: '340px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }
-      });
+    el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.4px' } },
+      catFilter ? `Matières premières · catégorie ${catFilter}` : 'Toutes les matières'),
+    (function () {
+      const input = el('input', { cls: 'bes-search-input', placeholder: 'Rechercher (référence ou désignation)…' });
+      const listWrap = el('div', { cls: 'bes-mat-list' });
       const render = () => {
         const q = (input.value || '').trim().toLowerCase();
         const items = suggested.filter(m => {
@@ -12885,26 +12924,13 @@ function openBesoinAssocierModal(kind, sourceValue) {
           return;
         }
         items.forEach(m => {
-          const row = el('div', {
-            style: {
-              padding: '10px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: '10px',
-            },
-            on: {
-              click: async () => {
-                closeMroot();
-                await saveBesoinMapping(kind, sourceValue, m.id);
-              },
-              mouseenter: e => { e.currentTarget.style.background = 'var(--accent-bg, rgba(59,130,246,.08))'; },
-              mouseleave: e => { e.currentTarget.style.background = ''; },
-            }
+          listWrap.appendChild(el('div', {
+            cls: 'bes-mat-item',
+            on: { click: async () => { closeMroot(); await saveBesoinMapping(kind, sourceValue, m.id); } }
           },
-            el('div', { style: { flex: '1' } },
-              el('div', { style: { fontWeight: '600' } }, m.reference || '—'),
-              el('div', { style: { fontSize: '12px', color: 'var(--muted)' } }, (m.designation || '') + (m.categorie ? ' · ' + m.categorie : '')),
-            ),
-          );
-          listWrap.appendChild(row);
+            el('div', { cls: 'bes-mat-item-ref' }, m.reference || '—'),
+            el('div', { cls: 'bes-mat-item-meta' }, (m.designation || '') + (m.categorie ? ' · ' + m.categorie : '')),
+          ));
         });
       };
       input.addEventListener('input', render);
@@ -12913,7 +12939,7 @@ function openBesoinAssocierModal(kind, sourceValue) {
     })(),
     el('div', { cls: 'modal-actions', style: { marginTop: '16px' } },
       el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
-    )
+    ),
   );
   sheet.addEventListener('click', e => e.stopPropagation());
   overlay.appendChild(sheet);
@@ -12925,7 +12951,7 @@ async function openBesoinsMappingModal() {
   let data;
   try {
     data = await api('/api/stock/besoins-matieres/mapping');
-  } catch(e) {
+  } catch (e) {
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
     return;
   }
@@ -12937,88 +12963,50 @@ async function openBesoinsMappingModal() {
     el('span', { cls: 'modal-handle' }),
     el('div', { cls: 'modal-title' }, 'Correspondances fiche technique → matière première'),
     el('div', { cls: 'modal-sub' },
-      'Associe chaque valeur libre des fiches techniques (support, adhésif, mandrin, carton, palette) à une référence de matière première pour permettre le calcul des besoins.'
-    ),
+      'Associe chaque valeur libre des fiches techniques (support, adhésif, mandrin, carton, palette) à une référence de matière première pour permettre le calcul des besoins.'),
   );
 
   if (nonMappes.length) {
-    sheet.appendChild(el('h3', {
-      style: { margin: '18px 0 8px', fontSize: '14px', fontWeight: '700', color: 'var(--warning,#d97706)' }
-    }, `⚠ ${nonMappes.length} valeur${nonMappes.length > 1 ? 's' : ''} à associer`));
-    const box = el('div', { style: { border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' } });
+    sheet.appendChild(el('h3', { cls: 'bes-map-h3 warn' },
+      `⚠ ${nonMappes.length} valeur${nonMappes.length > 1 ? 's' : ''} à associer`));
+    const box = el('div', { cls: 'bes-map-list' });
     nonMappes.forEach(nm => {
-      box.appendChild(el('div', {
-        style: {
-          display: 'flex', padding: '8px 12px', borderBottom: '1px solid var(--border)',
-          alignItems: 'center', gap: '10px', fontSize: '13px',
-        }
-      },
-        el('span', {
-          style: {
-            padding: '2px 8px', background: 'var(--surface-alt,#f0f0f0)', borderRadius: '3px',
-            fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', minWidth: '70px', textAlign: 'center',
-          }
-        }, BESOINS_KIND_LABELS[nm.kind] || nm.kind),
-        el('span', { style: { flex: '1', fontWeight: '600' } }, nm.source_value),
-        el('span', { style: { color: 'var(--muted)', fontSize: '12px' } }, `${nm.count} dossier${nm.count > 1 ? 's' : ''}`),
-        el('button', {
-          style: {
-            padding: '4px 12px', border: 'none', background: 'var(--accent)', color: '#fff',
-            fontSize: '12px', cursor: 'pointer', borderRadius: '4px', fontWeight: '600',
-          },
-          on: { click: () => openBesoinAssocierModal(nm.kind, nm.source_value) }
-        }, 'Associer'),
+      box.appendChild(el('div', { cls: 'bes-map-row' },
+        el('span', { cls: 'bes-map-kind' }, BESOINS_KIND_LABELS[nm.kind] || nm.kind),
+        el('span', { cls: 'bes-map-source' }, nm.source_value),
+        el('span', { cls: 'bes-map-count' }, `${nm.count} dossier${nm.count > 1 ? 's' : ''}`),
+        el('button', { cls: 'bes-btn-associate', on: { click: () => openBesoinAssocierModal(nm.kind, nm.source_value) } }, 'Associer'),
       ));
     });
     sheet.appendChild(box);
   }
 
-  sheet.appendChild(el('h3', {
-    style: { margin: '20px 0 8px', fontSize: '14px', fontWeight: '700', color: 'var(--text)' }
-  }, `Correspondances enregistrées (${mappings.length})`));
+  sheet.appendChild(el('h3', { cls: 'bes-map-h3' },
+    `Correspondances enregistrées (${mappings.length})`));
   if (!mappings.length) {
-    sheet.appendChild(el('div', {
-      style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px', border: '1px dashed var(--border)', borderRadius: '6px' }
-    }, 'Aucune correspondance enregistrée.'));
+    sheet.appendChild(el('div', { cls: 'bes-empty' }, 'Aucune correspondance enregistrée.'));
   } else {
-    const box = el('div', { style: { border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' } });
+    const box = el('div', { cls: 'bes-map-list' });
     BESOINS_KIND_ORDER.forEach(kind => {
       const arr = mappings.filter(m => m.kind === kind);
-      if (!arr.length) return;
       arr.forEach(m => {
-        box.appendChild(el('div', {
-          style: {
-            display: 'flex', padding: '8px 12px', borderBottom: '1px solid var(--border)',
-            alignItems: 'center', gap: '10px', fontSize: '13px',
-          }
-        },
-          el('span', {
-            style: {
-              padding: '2px 8px', background: 'var(--surface-alt,#f0f0f0)', borderRadius: '3px',
-              fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', minWidth: '70px', textAlign: 'center',
-            }
-          }, BESOINS_KIND_LABELS[kind] || kind),
-          el('span', { style: { flex: '1', fontWeight: '600' } }, m.source_value),
-          el('span', { style: { color: 'var(--muted)' } }, '→'),
-          el('span', { style: { flex: '1' } },
-            el('div', { style: { fontWeight: '600' } }, m.matiere_ref || '—'),
-            m.matiere_designation ? el('div', { style: { fontSize: '11px', color: 'var(--muted)' } }, m.matiere_designation) : null,
+        box.appendChild(el('div', { cls: 'bes-map-row' },
+          el('span', { cls: 'bes-map-kind' }, BESOINS_KIND_LABELS[kind] || kind),
+          el('span', { cls: 'bes-map-source' }, m.source_value),
+          el('span', { cls: 'bes-map-arrow' }, '→'),
+          el('div', { cls: 'bes-map-target' },
+            el('div', { cls: 'bes-mp-ref' }, m.matiere_ref || '—'),
+            m.matiere_designation ? el('div', { cls: 'bes-mp-des' }, m.matiere_designation) : null,
           ),
-          el('button', {
-            style: {
-              padding: '4px 10px', border: '1px solid var(--border)', background: 'var(--surface)',
-              color: 'var(--danger,#dc2626)', fontSize: '11px', cursor: 'pointer', borderRadius: '4px', fontWeight: '600',
-            },
-            on: { click: async () => {
-              if (!confirm(`Supprimer la correspondance "${m.source_value}" → ${m.matiere_ref} ?`)) return;
-              try {
-                await api('/api/stock/besoins-matieres/mapping/' + m.id, { method: 'DELETE' });
-                showToast('Correspondance supprimée', 'success');
-                closeMroot();
-                await loadBesoinsMatieres();
-              } catch(e) { showToast('Erreur : ' + (e.message || 'inconnue'), 'error'); }
-            }}
-          }, 'Supprimer'),
+          el('button', { cls: 'bes-map-btn-danger', on: { click: async () => {
+            if (!confirm(`Supprimer la correspondance "${m.source_value}" → ${m.matiere_ref} ?`)) return;
+            try {
+              await api('/api/stock/besoins-matieres/mapping/' + m.id, { method: 'DELETE' });
+              showToast('Correspondance supprimée', 'success');
+              closeMroot();
+              await loadBesoinsMatieres();
+            } catch (e) { showToast('Erreur : ' + (e.message || 'inconnue'), 'error'); }
+          }}}, 'Supprimer'),
         ));
       });
     });
@@ -13033,6 +13021,7 @@ async function openBesoinsMappingModal() {
   document.getElementById('mroot').appendChild(overlay);
 }
 // ══════════════════════════════════════════════════════════════════
+
 
 function buildMatieresInventaire() {
   const rows = S.matInvList || [];
@@ -18457,7 +18446,7 @@ function buildSidebarNavStructure() {
   ];
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
-    items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'truck', label: 'Besoins matières' });
+    items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'list-checks', label: 'Besoins matières' });
   }
   items.push(
     { kind: 'sep', label: 'Produits' },
