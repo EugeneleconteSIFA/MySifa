@@ -659,8 +659,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .dash-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 /* ── Besoins matières (onglet MyStock) ── */
-.bes-page{padding:22px 26px 40px}
-.bes-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-top:4px;flex-wrap:wrap;margin-bottom:20px}
+.bes-page{padding:0 0 32px}
+.bes-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px}
 .bes-header h1{margin:0 0 6px;font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.01em}
 .bes-header .bes-sub{font-size:13px;color:var(--muted);line-height:1.5}
 .bes-kpis{display:flex;gap:10px;flex-wrap:wrap}

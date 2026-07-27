@@ -7550,18 +7550,6 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 215, "mp_fiche_mapping")
 
-    # v216 — Commentaire libre sur bobine scannée (traçabilité matières fabrication)
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=216 LIMIT 1").fetchone():
-        fmu_cols = {
-            r["name"] for r in conn.execute("PRAGMA table_info(fab_matieres_utilisees)").fetchall()
-        }
-        if "commentaire" not in fmu_cols:
-            conn.execute(
-                "ALTER TABLE fab_matieres_utilisees ADD COLUMN commentaire TEXT"
-            )
-        conn.commit()
-        _record_schema_migration(conn, 216, "fab_matieres_commentaire")
-
 
 
 
