@@ -1,10 +1,16 @@
-"""Paramètres MySifa — super administrateur uniquement."""
+"""Paramètres MySifa — accès par section (ROLES_SETTINGS_* dans config.py)."""
+
+import json as _json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from config import APP_VERSION
-from services.auth_service import get_current_user, is_superadmin
+from services.auth_service import (
+    get_current_user,
+    can_access_settings,
+    settings_sections_visibility,
+)
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
 
@@ -19,18 +25,20 @@ def settings_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/settings", status_code=302)
         raise
-    if not is_superadmin(user):
+    if not can_access_settings(user):
         return access_denied_response(
-            "Paramètres (super admin)",
+            "Paramètres",
             detail=(
-                "Cette application est réservée au super administrateur. "
+                "Cette application est réservée à l'administration des paramètres. "
                 "Merci de contacter un administrateur en cas de besoin."
             ),
         )
+    visibility = settings_sections_visibility(user)
     return HTMLResponse(
-        content=SETTINGS_HTML.replace("__V_LABEL__", f"v{APP_VERSION}").replace(
-            "/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK
-        )
+        content=SETTINGS_HTML
+            .replace("__V_LABEL__", f"v{APP_VERSION}")
+            .replace("__SETTINGS_VISIBILITY_JSON__", _json.dumps(visibility))
+            .replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
     )
 
 
@@ -476,7 +484,8 @@ body.light .menu-item:hover{background:rgba(8,145,178,.06);border-color:rgba(8,1
 .four-head-info p{margin:0;font-size:12px;color:var(--muted)}
 .four-head-info .four-count{color:var(--accent);font-weight:700}
 .four-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.four-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.four-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;position:sticky;top:0;z-index:5;background:var(--card);padding:8px 0;box-shadow:0 6px 8px -8px rgba(0,0,0,.35)}
+body.light .four-toolbar{box-shadow:0 6px 8px -8px rgba(0,0,0,.12)}
 .four-toolbar input.four-search,.four-toolbar select.four-filter{padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .four-toolbar input.four-search{flex:1;min-width:240px}
 .four-toolbar input.four-search:focus,.four-toolbar select.four-filter:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
@@ -487,6 +496,10 @@ body.light .four-toolbar input.four-search:focus,body.light .four-toolbar select
 body.light .four-view-toggle button.active{background:rgba(8,145,178,.12)}
 .four-pill{display:inline-block;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
 .four-pill.fsc{background:rgba(52,211,153,.15);color:var(--ok);border:1px solid rgba(52,211,153,.28)}
+.four-pill.fsc-warn{background:rgba(250,204,21,.15);color:#eab308;border:1px solid rgba(250,204,21,.35)}
+.four-pill.fsc-crit{background:rgba(249,115,22,.15);color:#f97316;border:1px solid rgba(249,115,22,.4)}
+.four-pill.fsc-exp{background:rgba(239,68,68,.15);color:var(--danger);border:1px solid rgba(239,68,68,.4);animation:fscExpPulse 2s ease-in-out infinite}
+@keyframes fscExpPulse{0%,100%{opacity:1}50%{opacity:.65}}
 .four-pill.nofsc{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
 .four-pill.traca{background:rgba(34,211,238,.1);color:var(--accent);border:1px solid rgba(34,211,238,.28)}
 .four-pill.traca-no{background:transparent;color:var(--muted);border:1px dashed var(--border)}
@@ -510,8 +523,10 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 .four-table .four-nom-cell{font-weight:600;color:var(--text)}
 .four-table .four-nom-cell small{display:block;font-weight:500;color:var(--muted);font-size:10px;margin-top:2px}
 .four-table .four-code-cell code{font-family:ui-monospace,monospace;font-size:11px;color:var(--text2)}
-.four-table td.four-act{text-align:right;white-space:nowrap}
-.four-table td.four-act .btn-sm{margin-left:4px}
+.four-table td.four-act{text-align:right;white-space:nowrap;padding-right:14px}
+.four-table td.four-act .btn-sm{margin-left:4px;padding:4px 8px;font-size:11px}
+.four-table td.four-act > *{vertical-align:middle}
+.four-table td.four-act .four-actif-toggle{margin-right:8px}
 @media(max-width:900px){
   .four-toolbar input.four-search{min-width:0;width:100%;flex:1 1 100%}
   .four-head{flex-direction:column;align-items:stretch}
@@ -520,9 +535,144 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 .btn-danger-solid{background:var(--danger);color:#fff;border:1px solid var(--danger);cursor:pointer}
 .btn-danger-solid:hover{filter:brightness(1.08)}
 .btn-danger-solid:disabled{opacity:.6;cursor:wait}
+
+/* ── Sous-onglets fournisseurs : visibilité forte ─────────────── */
+.four-sub-btn.btn.btn-sec{
+  background:var(--bg);
+  border:1.5px solid var(--border);
+  color:var(--text);
+  font-weight:600;
+  padding:10px 18px;
+  font-size:13px;
+  letter-spacing:.1px;
+  position:relative;
+  transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .1s;
+}
+.four-sub-btn.btn.btn-sec:hover:not(.active){
+  background:rgba(34,211,238,.06);
+  border-color:rgba(34,211,238,.5);
+  color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.25);
+}
+body.light .four-sub-btn.btn.btn-sec:hover:not(.active){
+  background:rgba(8,145,178,.05);
+  border-color:rgba(8,145,178,.45);
+}
+.four-sub-btn.btn.btn-sec.active{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:#04202a;
+  box-shadow:0 4px 14px rgba(34,211,238,.35),0 0 0 1px rgba(34,211,238,.45);
+  font-weight:700;
+}
+body.light .four-sub-btn.btn.btn-sec.active{
+  color:#fff;
+  box-shadow:0 3px 12px rgba(8,145,178,.32),0 0 0 1px rgba(8,145,178,.4);
+}
+.four-sub-btn.btn.btn-sec.active svg{opacity:1}
+.four-sub-btn.btn.btn-sec:not(.active) svg{opacity:.6}
+.four-sub-btn.btn.btn-sec:active{transform:translateY(1px)}
+
+/* ── Catégories fournisseur : chips ──────────────────────────── */
+.four-cat-picker{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.four-cat-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 11px;border-radius:999px;
+  background:var(--bg);border:1.5px solid var(--border);
+  color:var(--text2);font-size:12px;font-weight:600;
+  cursor:pointer;user-select:none;
+  transition:background .12s,border-color .12s,color .12s,box-shadow .12s;
+}
+.four-cat-chip:hover{border-color:rgba(34,211,238,.5);color:var(--accent)}
+.four-cat-chip.selected{
+  background:rgba(34,211,238,.14);
+  border-color:var(--accent);
+  color:var(--accent);
+  box-shadow:0 0 0 1px rgba(34,211,238,.35);
+}
+body.light .four-cat-chip.selected{background:rgba(8,145,178,.1);box-shadow:0 0 0 1px rgba(8,145,178,.35)}
+.four-cat-chip.selected::before{content:'✓ ';font-weight:800}
+.four-cat-chip.cat-neg{border-style:dashed}
+.four-cat-chip.cat-neg.selected{border-style:solid}
+.four-cat-chip.cat-st{border-style:dashed}
+.four-cat-chip.cat-st.selected{border-style:solid}
+
+/* Toggle actif (switch iOS-like) */
+.four-actif-toggle{display:inline-block;position:relative;width:34px;height:18px;cursor:pointer;flex-shrink:0}
+.four-actif-toggle input{opacity:0;width:0;height:0;position:absolute}
+.four-actif-toggle .fat-slider{position:absolute;inset:0;background:#374151;border-radius:9px;transition:background .2s}
+body.light .four-actif-toggle .fat-slider{background:#cbd5e1}
+.four-actif-toggle .fat-slider::before{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.four-actif-toggle input:checked ~ .fat-slider{background:var(--ok)}
+.four-actif-toggle input:checked ~ .fat-slider::before{transform:translateX(16px)}
+.four-actif-toggle input:disabled ~ .fat-slider{opacity:.5;cursor:wait}
+tr.four-row-inactif td{opacity:.55}
+tr.four-row-inactif td.four-nom-cell strong{text-decoration:line-through;color:var(--muted)}
+
+/* Drawer fiche fournisseur unifiée */
+.four-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;opacity:0;transition:opacity .2s;pointer-events:none}
+.four-drawer-backdrop.open{opacity:1;pointer-events:auto}
+.four-drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,95vw);background:var(--card);border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .25s ease;z-index:901;display:flex;flex-direction:column}
+.four-drawer.open{transform:translateX(0)}
+.four-drawer-head{padding:18px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.four-drawer-head h3{margin:0;font-size:16px;font-weight:700}
+.four-drawer-head .sub{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.four-drawer-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:22px;padding:0 4px;line-height:1;transition:color .12s}
+.four-drawer-close:hover{color:var(--text)}
+.four-drawer-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
+.four-drawer-tabs::-webkit-scrollbar{display:none}
+.four-drawer-tab{background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:12px 14px;cursor:pointer;font-family:inherit;position:relative;transition:color .12s;white-space:nowrap;border-bottom:2px solid transparent}
+.four-drawer-tab:hover{color:var(--text)}
+.four-drawer-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.four-drawer-body{flex:1;overflow-y:auto;padding:16px 20px}
+.four-drawer-body h4{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px;font-weight:700}
+.four-drawer-body .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;margin-bottom:14px}
+.four-drawer-body .kv dt{color:var(--muted);font-weight:600}
+.four-drawer-body .kv dd{margin:0;color:var(--text);word-break:break-word}
+.four-drawer-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:12px;background:var(--bg);border-radius:8px;border:1px dashed var(--border)}
+.four-drawer-list{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.four-drawer-list-item{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.four-drawer-list-item:last-child{border-bottom:none}
+
+/* Modale fusion / doublons */
+.four-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:850;display:flex;align-items:center;justify-content:center;padding:20px}
+.four-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;max-width:560px;width:100%;max-height:88vh;overflow:auto;padding:20px}
+.four-modal h3{margin:0 0 14px;font-size:16px}
+.four-modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+/* Chips affichés en lecture seule dans le tableau */
+.four-cats-cell{display:flex;flex-wrap:wrap;gap:4px;max-width:220px}
+.four-cat-pill{
+  display:inline-block;font-size:10px;font-weight:700;
+  padding:2px 7px;border-radius:6px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text2);
+  letter-spacing:.2px;text-transform:uppercase;line-height:1.5;
+}
+.four-cat-pill.cat-negoce{background:rgba(251,191,36,.14);color:#f59e0b;border-color:rgba(251,191,36,.35)}
+.four-cat-pill.cat-sous_traitant{background:rgba(167,139,250,.14);color:#a78bfa;border-color:rgba(167,139,250,.35)}
+body.light .four-cat-pill.cat-negoce{color:#b45309}
+body.light .four-cat-pill.cat-sous_traitant{color:#6d28d9}
 </style>
 </head>
 <body>
+<script>
+window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
+(function(){
+  var V = window.__SETTINGS_VISIBILITY__ || {};
+  function apply(){
+    document.querySelectorAll('[data-req-section]').forEach(function(el){
+      var sec = el.getAttribute('data-req-section');
+      if (sec && !V[sec]) el.style.display = 'none';
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else {
+    apply();
+  }
+})();
+</script>
+
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -536,65 +686,65 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         Menu général
       </button>
       <div class="nav-group-label"><span>Base</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <div class="nav-subgroup-label"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="operations">
+      <div class="nav-subgroup-label" data-req-section="fabrication"><span>Fabrication</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="operations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
-      <button type="button" class="nav-btn" data-tab="maintenance">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="maintenance">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
       </button>
-      <button type="button" class="nav-btn" data-tab="machines">
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="machines">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Machines
       </button>
-      <div class="nav-subgroup-label"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="emplacements">
+      <div class="nav-subgroup-label" data-req-section="logistique"><span>Logistique</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="emplacements">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Emplacements
       </button>
-      <button type="button" class="nav-btn" data-tab="laizes">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="laizes">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
       </button>
-      <button type="button" class="nav-btn" data-tab="importations">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="importations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
       </button>
-      <button type="button" class="nav-btn" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="bridge" title="Rapprochement MyStock ↔ Coûts matières">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3v18"/><path d="M18 3v18"/><path d="M6 8h12"/><path d="M6 16h12"/></svg>
         Appairage matières
       </button>
-      <div class="nav-subgroup-label"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="users">
+      <div class="nav-subgroup-label" data-req-section="contacts"><span>Contacts</span><svg class="nav-subgroup-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="users">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Utilisateurs
       </button>
-      <button type="button" class="nav-btn" data-tab="fournisseurs">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="fournisseurs">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Fournisseurs
       </button>
-      <button type="button" class="nav-btn" data-tab="clients">
+      <button type="button" class="nav-btn" data-req-section="contacts" data-tab="clients">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21V7l9-4 9 4v14"/><path d="M9 21V12h6v9"/><path d="M3 21h18"/></svg>
         Clients
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="matrix">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="access"><span>Accès</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="matrix">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Matrice d'accès
       </button>
-      <button type="button" class="nav-btn" data-tab="defaults">
+      <button type="button" class="nav-btn" data-req-section="access" data-tab="defaults">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
         Référentiel rôles
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="updates">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="communication"><span>Communication</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="communication" data-tab="updates">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Mises à jour
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="audit">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="audit_full"><span>Audit</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="audit">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
@@ -604,30 +754,39 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         </svg>
         Log
       </button>
-      <button type="button" class="nav-btn" data-tab="dashboards">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="dashboards">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         Tableaux de bord
       </button>
-      <button type="button" class="nav-btn" data-tab="fsc">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="fsc">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
       </button>
-      <button type="button" class="nav-btn" data-tab="api">
+      <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="api">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Clés API
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="printers">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Impression</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Imprimantes
       </button>
-      <div class="nav-group-label" style="margin-top:8px"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
-      <button type="button" class="nav-btn" data-tab="promote">
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="print_full"><span>Déploiement</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="print_full" data-tab="promote">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
+      </button>
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimantes
+      </button>
+      <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="fsc">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg>
+        Registre FSC
       </button>
     </div>
     <div class="sidebar-bottom">
@@ -679,7 +838,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
       </div>
       <div class="menu-grid">
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="fabrication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
             <div><span class="mg-lbl">Fabrication</span><span class="mg-desc">Codes opérations, maintenance et parc machines.</span></div>
@@ -703,7 +862,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="logistique">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
             <div><span class="mg-lbl">Logistique</span><span class="mg-desc">Stock, emplacements et imports transporteurs.</span></div>
@@ -732,7 +891,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="contacts">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
             <div><span class="mg-lbl">Contacts</span><span class="mg-desc">Utilisateurs, fournisseurs et clients (ERP).</span></div>
@@ -756,7 +915,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="access">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
             <div><span class="mg-lbl">Accès &amp; permissions</span><span class="mg-desc">Matrice des accès et rôles par défaut.</span></div>
@@ -775,7 +934,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="communication">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
             <div><span class="mg-lbl">Communication</span><span class="mg-desc">Annonces MAJ diffusées aux utilisateurs.</span></div>
@@ -789,7 +948,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="audit_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="10"/></svg></span>
             <div><span class="mg-lbl">Audit &amp; qualité</span><span class="mg-desc">Log d'activité, tableaux de bord, registre FSC.</span></div>
@@ -823,7 +982,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
 
-        <div class="menu-group">
+        <div class="menu-group" data-req-section="print_full">
           <div class="menu-group-head">
             <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
             <div><span class="mg-lbl">Impression &amp; déploiement</span><span class="mg-desc">Imprimantes, templates et promotion v1 → v2.</span></div>
@@ -837,6 +996,26 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <button type="button" class="menu-item" data-goto="promote">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Promouvoir v1 → v2</span><span class="mi-desc">Publier le staging en production après validation.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+
+        <div class="menu-group" data-req-section="tools_only">
+          <div class="menu-group-head">
+            <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+            <div><span class="mg-lbl">Outils</span><span class="mg-desc">Imprimantes et registre FSC.</span></div>
+          </div>
+          <div class="menu-items">
+            <button type="button" class="menu-item" data-goto="printers">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Imprimantes</span><span class="mi-desc">Configuration Zebra / Brother, templates étiquettes.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="fsc">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -960,6 +1139,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
                 <button type="button" data-fourview="flat" class="active" title="Liste alphabétique">Liste</button>
                 <button type="button" data-fourview="groupe" title="Groupé par maison mère">Par groupe</button>
               </div>
+              <button type="button" class="btn btn-sec btn-sm" id="four-doublons" title="Détecter les fournisseurs en doublon">Doublons</button>
+              <button type="button" class="btn btn-sec btn-sm" id="four-export-csv" title="Exporter la liste en CSV">Export CSV</button>
               <button type="button" class="btn btn-sm" id="four-add-toggle">+ Nouveau fournisseur</button>
             </div>
           </div>
@@ -972,6 +1153,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <option value="0">Non certifiés</option>
             </select>
             <select id="four-filter-groupe" class="four-filter" title="Filtrer par groupe"><option value="">Tous les groupes</option></select>
+            <select id="four-filter-cat" class="four-filter" title="Filtrer par catégorie fournie"><option value="">Catégorie : toutes</option></select>
             <select id="four-filter-traca" class="four-filter" title="Filtrer par guide traçabilité">
               <option value="">Traçabilité : tous</option>
               <option value="1">Guide renseigné</option>
@@ -985,6 +1167,8 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <input type="text" id="cf-nom" placeholder="Nom du fournisseur *" autocomplete="off">
               <input type="text" id="cf-groupe" placeholder="Groupe (ex: Fedrigoni) — optionnel" autocomplete="off" list="four-groupes-dl">
               <input type="text" id="cf-branche" placeholder="Branche du groupe (ex: Italy) — optionnel" autocomplete="off">
+              <input type="text" id="cf-siret" placeholder="SIRET (14 chiffres) — optionnel" autocomplete="off" inputmode="numeric" maxlength="17">
+              <input type="text" id="cf-tva" placeholder="TVA intracom (ex: FR12345678901) — optionnel" autocomplete="off">
               <datalist id="four-groupes-dl"></datalist>
             </div>
             <label style="display:inline-flex;align-items:center;gap:8px;margin:12px 0 10px;font-size:13px;color:var(--text);cursor:pointer">
@@ -994,6 +1178,11 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
             <div id="cf-fsc-fields" class="form-grid">
               <input type="text" id="cf-licence" placeholder="Code Licence FSC (ex: FSC-C004451)" autocomplete="off">
               <input type="text" id="cf-certificat" placeholder="Code Certificat FSC (ex: CU-COC-807907)" autocomplete="off">
+              <input type="date" id="cf-fsc-exp" title="Date d'expiration du certificat FSC" autocomplete="off">
+            </div>
+            <div style="margin-top:14px">
+              <label class="sub" style="display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">Catégories fournies <span style="color:var(--muted);font-weight:400;font-size:11px">— plusieurs choix possibles</span></label>
+              <div id="cf-categories-picker" class="four-cat-picker"></div>
             </div>
             <p class="sub" style="margin:10px 0 0;font-size:11px">Le guide de traçabilité (photo, code exemple) se configure ensuite via « Modifier ».</p>
             <div class="four-add-actions">
@@ -1518,7 +1707,7 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
             <h2 style="margin:0">Alertes maintenance</h2>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
+              <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Ajuster le délai minimum entre deux alertes affichées à l'opérateur.">Délai entre alertes</button>
               <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
               <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
             </div>
@@ -1772,9 +1961,24 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
         <div>
           <div style="font-size:17px;font-weight:700;color:var(--text)">Imprimantes</div>
           <div style="font-size:12px;color:var(--muted);margin-top:4px">
-            Configure les imprimantes réseau de l'usine et les agents locaux qui font le pont avec MySifa.
+            Configure les imprimantes réseau et locales (USB/LPT) de l'usine, et les agents qui font le pont avec MySifa.
           </div>
         </div>
+      </div>
+
+      <!-- Bandeau : lien vers le wizard "Comment connecter mon imprimante" -->
+      <div style="margin-bottom:16px;background:linear-gradient(135deg, rgba(240,165,0,0.08), rgba(45,111,187,0.05));border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div style="width:40px;height:40px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Première fois ? On t'accompagne pas à pas.</div>
+          <div style="font-size:12px;color:var(--muted)">Assistant guidé pour connecter une imprimante réseau ou locale (USB / LPT) — 3 étapes, prise en main de A à Z.</div>
+        </div>
+        <button class="btn btn-accent" onclick="prWizardStart()" style="padding:10px 18px;font-size:13px;font-weight:700;white-space:nowrap;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px;vertical-align:-2px"><polyline points="9 18 15 12 9 6"/></svg>
+          Comment connecter mon imprimante à MySifa
+        </button>
       </div>
 
       <!-- Sous-onglets Imprimantes / Templates / Agents -->
@@ -1845,13 +2049,31 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <label class="pr-lbl">Agent local</label>
               <select id="pr-f-agent" class="pr-inp"><option value="">Aucun</option></select>
             </div>
-            <div>
+            <div style="grid-column:span 2">
+              <label class="pr-lbl">Type de connexion</label>
+              <div style="display:flex;gap:16px;align-items:center;font-size:13px;color:var(--text);padding:6px 0">
+                <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+                  <input type="radio" name="pr-f-type" value="tcp_ip" id="pr-f-type-tcp" checked onchange="prToggleTypeConnexion()">
+                  Réseau (TCP/IP)
+                </label>
+                <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+                  <input type="radio" name="pr-f-type" value="windows_local" id="pr-f-type-win" onchange="prToggleTypeConnexion()">
+                  Locale (USB / LPT via PC hôte)
+                </label>
+              </div>
+            </div>
+            <div id="pr-f-tcp-ip-row">
               <label class="pr-lbl">Adresse IP</label>
               <input id="pr-f-ip" type="text" class="pr-inp" placeholder="192.168.1.42">
             </div>
-            <div>
+            <div id="pr-f-tcp-port-row">
               <label class="pr-lbl">Port</label>
               <input id="pr-f-port" type="number" class="pr-inp" value="9100">
+            </div>
+            <div id="pr-f-queue-row" style="grid-column:span 2;display:none">
+              <label class="pr-lbl">Nom de la queue Windows (côté PC hôte)</label>
+              <input id="pr-f-queue" type="text" class="pr-inp" placeholder="Ex : Zebra QL-800 ou ZDesigner GK420t">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Exact nom tel qu'il apparaît dans <em>Panneau de configuration &gt; Périphériques et imprimantes</em> sur le PC hôte. L'agent MySifa doit être installé sur ce PC (voir <code>tools/print_agent/install_agent_windows.ps1</code>).</div>
             </div>
             <div>
               <label class="pr-lbl">Langage</label>
@@ -1894,8 +2116,19 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 
       <!-- Modal template -->
       <div id="pr-tpl-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prCloseTplModal()">
-        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(820px,95vw);max-height:90vh;overflow:auto">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;width:min(1200px,97vw);max-height:92vh;overflow:auto">
           <h2 id="pr-tpl-modal-title" style="margin:0 0 18px;font-size:17px">Éditer le template</h2>
+
+          <!-- Galerie de modèles de départ (visible uniquement à la création) -->
+          <div id="pr-tpl-gallery-row" style="margin-bottom:14px;display:none">
+            <label class="pr-lbl">Partir d'un modèle prédéfini</label>
+            <select id="pr-tpl-gallery" class="pr-inp" onchange="prLoadFromGallery()" style="width:100%">
+              <option value="">— Vide (je pars de zéro) —</option>
+            </select>
+            <div id="pr-tpl-gallery-desc" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+          </div>
+
+          <!-- Ligne du haut : nom + usage -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
             <div>
               <label class="pr-lbl">Nom</label>
@@ -1906,17 +2139,56 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
               <select id="pr-tpl-usage" class="pr-inp"></select>
             </div>
           </div>
+
           <div style="margin-bottom:6px">
-            <label class="pr-lbl">Placeholders disponibles</label>
+            <label class="pr-lbl">Placeholders disponibles (clique pour insérer)</label>
             <div id="pr-tpl-placeholders" style="display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px"></div>
           </div>
-          <div style="margin-bottom:12px">
-            <label class="pr-lbl">Contenu (ZPL / EPL / ESC-POS avec placeholders)</label>
-            <textarea id="pr-tpl-contenu" class="pr-inp" spellcheck="false" style="min-height:280px;font-family:'SFMono-Regular',Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre;resize:vertical"></textarea>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">
-              Utilise <code>{{champ}}</code>, <code>{{barcode:champ,CODE128,140}}</code>, <code>{{qrcode:champ}}</code>, <code>{{now:%d/%m/%Y}}</code>.
+
+          <!-- Corps : éditeur à gauche, aperçu à droite -->
+          <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:14px;margin-bottom:12px">
+
+            <!-- Éditeur ZPL -->
+            <div>
+              <label class="pr-lbl">Contenu (ZPL / EPL / ESC-POS)</label>
+              <textarea id="pr-tpl-contenu" class="pr-inp" spellcheck="false" style="min-height:420px;font-family:'SFMono-Regular',Menlo,monospace;font-size:12px;line-height:1.5;white-space:pre;resize:vertical;width:100%"></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">
+                Placeholders : <code>{{champ}}</code>, <code>{{barcode:champ,CODE128,140}}</code>, <code>{{qrcode:champ}}</code>, <code>{{now:%d/%m/%Y}}</code>.
+              </div>
+            </div>
+
+            <!-- Aperçu WYSIWYG -->
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <label class="pr-lbl" style="margin:0">Aperçu (rendu réel via labelary.com)</label>
+                <button type="button" class="btn btn-ghost" onclick="prTplRefreshPreview()" style="padding:4px 10px;font-size:11px">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:4px;vertical-align:-1px"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  Actualiser
+                </button>
+              </div>
+              <!-- Dimensions pour l'aperçu (ajustables) -->
+              <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;font-size:11px;color:var(--muted)">
+                <span>Format :</span>
+                <input type="number" id="pr-tpl-prev-w" value="102" min="20" max="300" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:11px"> ×
+                <input type="number" id="pr-tpl-prev-h" value="152" min="20" max="300" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:11px"> mm
+                @
+                <select id="pr-tpl-prev-dpi" style="padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);font-size:11px">
+                  <option value="203">203 dpi</option>
+                  <option value="300">300 dpi</option>
+                  <option value="600">600 dpi</option>
+                </select>
+              </div>
+              <div id="pr-tpl-preview-box" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;min-height:420px;display:flex;align-items:center;justify-content:center;overflow:auto">
+                <div id="pr-tpl-preview-placeholder" style="color:var(--muted);font-size:12px;text-align:center;padding:20px">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.4;margin-bottom:8px"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15h18"/><path d="M9 3v18"/></svg>
+                  <div>Clique sur <strong>Actualiser</strong> pour voir<br>l'aperçu de ton template.</div>
+                </div>
+                <img id="pr-tpl-preview-img" style="display:none;max-width:100%;max-height:100%" alt="Aperçu">
+              </div>
+              <div id="pr-tpl-preview-err" style="font-size:11px;color:var(--danger);margin-top:4px"></div>
             </div>
           </div>
+
           <div style="display:flex;gap:8px;justify-content:space-between;margin-top:18px">
             <button id="pr-tpl-del" class="btn btn-ghost" style="color:var(--danger);display:none" onclick="prDeleteTemplate()">Supprimer</button>
             <div style="display:flex;gap:8px;margin-left:auto">
@@ -1926,6 +2198,264 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
           </div>
         </div>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════════
+           WIZARD : Comment connecter mon imprimante à MySifa
+           4 étapes : Type → Agent (+ installer si Locale) → Imprimante → Test
+           ═══════════════════════════════════════════════════════════════════════ -->
+      <div id="pr-wiz-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:950;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)prWizClose()">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0;width:min(760px,95vw);max-height:92vh;overflow:hidden;display:flex;flex-direction:column">
+
+          <!-- Header du wizard -->
+          <div style="padding:20px 24px 12px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+              <h2 style="margin:0;font-size:16px;font-weight:700;color:var(--text)">Connecter une imprimante à MySifa</h2>
+              <button onclick="prWizClose()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0;line-height:1">×</button>
+            </div>
+            <!-- Barre de progression étapes -->
+            <div id="pr-wiz-progress" style="display:flex;gap:6px;margin-top:14px">
+              <div class="pr-wiz-dot" data-s="1" style="flex:1;height:4px;background:var(--accent);border-radius:2px;transition:all .2s"></div>
+              <div class="pr-wiz-dot" data-s="2" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
+              <div class="pr-wiz-dot" data-s="3" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
+              <div class="pr-wiz-dot" data-s="4" style="flex:1;height:4px;background:var(--border);border-radius:2px;transition:all .2s"></div>
+            </div>
+            <div id="pr-wiz-step-label" style="font-size:11px;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:700">Étape 1 / 4 · Type d'imprimante</div>
+          </div>
+
+          <!-- Corps du wizard : 4 étapes, une seule visible à la fois -->
+          <div id="pr-wiz-body" style="padding:20px 24px;overflow-y:auto;flex:1">
+
+            <!-- ─── ÉTAPE 1 : Type d'imprimante ─── -->
+            <div class="pr-wiz-page" data-step="1">
+              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Comment est branchée ton imprimante ?</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choisis le cas qui correspond à ta situation.</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button type="button" class="pr-wiz-typebtn" onclick="prWizSelectType('tcp_ip')" style="text-align:left;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;font-family:inherit">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                    <div style="width:36px;height:36px;background:rgba(45,111,187,0.12);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--warn)">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    </div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text)">Réseau (IP)</div>
+                  </div>
+                  <div style="font-size:12px;color:var(--text2);line-height:1.5">Mon imprimante a sa propre adresse IP sur le LAN de l'usine (câble Ethernet ou Wifi).</div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:8px"><em>Ex : Zebra ZT230 avec option réseau</em></div>
+                </button>
+                <button type="button" class="pr-wiz-typebtn" onclick="prWizSelectType('windows_local')" style="text-align:left;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .15s;font-family:inherit">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                    <div style="width:36px;height:36px;background:rgba(240,165,0,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--accent)">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    </div>
+                    <div style="font-size:14px;font-weight:700;color:var(--text)">Locale (USB / LPT)</div>
+                  </div>
+                  <div style="font-size:12px;color:var(--text2);line-height:1.5">Mon imprimante est branchée physiquement sur un PC de l'usine, via USB ou port parallèle (LPT).</div>
+                  <div style="font-size:11px;color:var(--muted);margin-top:8px"><em>Ex : imprimante USB, matricielle en LPT</em></div>
+                </button>
+              </div>
+            </div>
+
+            <!-- ─── ÉTAPE 2 : Agent MySifa ─── -->
+            <div class="pr-wiz-page" data-step="2" style="display:none">
+              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px" id="pr-wiz-agent-title">Un agent MySifa doit être en place</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:16px" id="pr-wiz-agent-intro">L'agent est un petit programme qui fait le pont entre MySifa et l'imprimante. Il tourne en arrière-plan.</div>
+
+              <!-- Choix : agent existant ou nouveau (layout table pour éviter les collisions CSS input radio) -->
+              <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+
+                <!-- Option 1 : Agent existant -->
+                <div style="display:flex;align-items:flex-start;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="document.getElementById('pr-wiz-agent-existing').click()">
+                  <input type="radio" name="pr-wiz-agent-choice" value="existing" id="pr-wiz-agent-existing" onchange="prWizToggleAgentMode()" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;accent-color:var(--accent)">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Utiliser un agent existant</div>
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Si tu as déjà installé un agent MySifa sur un PC ou Pi accessible.</div>
+                    <div id="pr-wiz-agent-existing-row" style="display:none">
+                      <select id="pr-wiz-agent-select" class="pr-inp" style="width:100%;max-width:400px" onclick="event.stopPropagation()"><option value="">— Sélectionner un agent —</option></select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Option 2 : Nouvel agent -->
+                <div style="display:flex;align-items:flex-start;gap:12px;padding-top:12px;cursor:pointer" onclick="document.getElementById('pr-wiz-agent-new').click()">
+                  <input type="radio" name="pr-wiz-agent-choice" value="new" id="pr-wiz-agent-new" checked onchange="prWizToggleAgentMode()" style="width:16px;height:16px;flex-shrink:0;margin-top:2px;accent-color:var(--accent)">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Créer un nouvel agent</div>
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Recommandé si c'est ta première fois ou si tu ajoutes un nouveau PC hôte.</div>
+                    <div id="pr-wiz-agent-new-row" onclick="event.stopPropagation()">
+                      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <input type="text" id="pr-wiz-agent-name" class="pr-inp" placeholder="Ex : PC-Reception, PC-Quai-Expedition..." style="flex:1;min-width:200px">
+                        <button type="button" class="btn btn-accent" onclick="prWizCreateAgent()" style="padding:8px 14px;font-size:12px;white-space:nowrap">Créer l'agent</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bloc affiché après création : token + installer (surtout pour Locale) -->
+              <div id="pr-wiz-agent-created" style="display:none;margin-top:12px">
+                <div style="background:rgba(5,150,105,0.08);border-left:3px solid var(--success);border-radius:6px;padding:10px 12px;margin-bottom:12px">
+                  <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:4px">✓ Agent créé</div>
+                  <div style="font-size:11px;color:var(--text2)">Le token ci-dessous ne sera plus lisible après avoir fermé cet assistant. Copie-le maintenant.</div>
+                </div>
+
+                <div style="margin-bottom:12px">
+                  <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Token de l'agent</div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <input type="text" id="pr-wiz-token-display" readonly style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:12px">
+                    <button type="button" class="btn btn-ghost" onclick="prWizCopyToken()" style="padding:8px 12px;font-size:12px">📋 Copier</button>
+                  </div>
+                </div>
+
+                <!-- Instructions install (visibles pour Locale, cachées pour Réseau si agent existant utilisé) -->
+                <div id="pr-wiz-install-block">
+                  <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">Installer l'agent sur le PC hôte</div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">1</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Télécharge l'installeur :
+                        <div style="margin-top:6px">
+                          <a href="/api/print/installer/windows" download="install_agent_windows.ps1" class="btn btn-accent" style="padding:6px 12px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            install_agent_windows.ps1
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">2</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Copie le fichier sur le <strong>PC hôte de l'imprimante</strong> (clé USB, partage réseau, ou téléchargement direct sur ce PC).
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">3</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Sur le PC hôte, ouvre <strong>PowerShell en tant qu'Administrateur</strong> (Menu Démarrer → tape "powershell" → clic droit → Exécuter en admin), puis colle cette commande :
+                        <div style="display:flex;gap:6px;align-items:flex-start;margin-top:6px">
+                          <textarea id="pr-wiz-install-cmd" readonly style="flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:11px;resize:vertical;min-height:60px;line-height:1.4"></textarea>
+                          <button type="button" class="btn btn-ghost" onclick="prWizCopyInstallCmd()" style="padding:8px 12px;font-size:12px;white-space:nowrap">📋 Copier</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
+                    <div style="display:flex;gap:10px;align-items:flex-start">
+                      <div style="width:24px;height:24px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">4</div>
+                      <div style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">
+                        Attends la fin du script (~3-5 min : Python + pywin32 + NSSM + service Windows). Le message final doit indiquer <code style="background:var(--bg);border:1px solid var(--border);padding:1px 5px;border-radius:3px;font-family:monospace">SERVICE_RUNNING</code>.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ─── ÉTAPE 3 : Créer l'imprimante ─── -->
+            <div class="pr-wiz-page" data-step="3" style="display:none">
+              <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px">Créer l'imprimante dans MySifa</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Renseigne les infos de ton imprimante. L'agent que tu as sélectionné à l'étape précédente est rattaché automatiquement.</div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                <div style="grid-column:span 2">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom de l'imprimante *</label>
+                  <input type="text" id="pr-wiz-imp-nom" class="pr-inp" placeholder="Ex : Zebra Réception matière" style="width:100%">
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Poste / atelier</label>
+                  <input type="text" id="pr-wiz-imp-poste" class="pr-inp" placeholder="Ex : Réception" style="width:100%">
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Langage *</label>
+                  <select id="pr-wiz-imp-langage" class="pr-inp" style="width:100%">
+                    <option value="zpl">ZPL — Zebra</option>
+                    <option value="epl">EPL — vieilles Zebra</option>
+                    <option value="escpos">ESC/POS — Brother, tickets</option>
+                  </select>
+                </div>
+
+                <!-- Champs Réseau (IP + port) -->
+                <div id="pr-wiz-imp-ip-row">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Adresse IP *</label>
+                  <input type="text" id="pr-wiz-imp-ip" class="pr-inp" placeholder="192.168.1.42" style="width:100%">
+                </div>
+                <div id="pr-wiz-imp-port-row">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Port</label>
+                  <input type="number" id="pr-wiz-imp-port" class="pr-inp" value="9100" style="width:100%">
+                </div>
+
+                <!-- Champ Locale (nom queue Windows) -->
+                <div id="pr-wiz-imp-queue-row" style="display:none;grid-column:span 2">
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Nom exact de la queue Windows *</label>
+                  <input type="text" id="pr-wiz-imp-queue" class="pr-inp" placeholder="Ex : Zebra Z4M (300 dpi)" style="width:100%">
+                  <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:1.6;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+                    <div style="font-weight:700;color:var(--text);margin-bottom:8px;font-size:14px">Comment récupérer le nom exact ?</div>
+                    <div style="margin-bottom:10px">
+                      Sur le PC hôte, ouvre <strong>l'invite de commande</strong> (Menu Démarrer → tape <code style="background:var(--card);border:1px solid var(--border);padding:1px 6px;border-radius:3px;font-family:monospace;font-size:12px">cmd</code>) et lance :
+                    </div>
+                    <div style="display:flex;align-items:center;justify-content:center;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;margin-bottom:10px">
+                      <code style="font-family:monospace;font-size:14px;color:var(--text);font-weight:600">wmic printer get name</code>
+                    </div>
+                    <div>
+                      Copie-colle le nom retourné (attention aux <strong>espaces</strong>, <strong>majuscules</strong> et <strong>parenthèses</strong>).
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">DPI</label>
+                  <select id="pr-wiz-imp-dpi" class="pr-inp" style="width:100%">
+                    <option value="203">203 dpi (standard)</option>
+                    <option value="300">300 dpi</option>
+                    <option value="600">600 dpi</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:4px">Largeur × Hauteur (mm)</label>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    <input type="number" id="pr-wiz-imp-largeur" class="pr-inp" value="102" style="width:100%">
+                    <span style="color:var(--muted)">×</span>
+                    <input type="number" id="pr-wiz-imp-hauteur" class="pr-inp" value="152" style="width:100%">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ─── ÉTAPE 4 : Test d'impression ─── -->
+            <div class="pr-wiz-page" data-step="4" style="display:none">
+              <div style="text-align:center;padding:16px 0">
+                <div style="width:60px;height:60px;background:rgba(5,150,105,0.15);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--success)">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">Imprimante configurée !</div>
+                <div style="font-size:13px;color:var(--text2);margin-bottom:20px">
+                  L'imprimante <strong id="pr-wiz-created-name">—</strong> a été ajoutée à MySifa.
+                </div>
+                <button type="button" class="btn btn-accent" onclick="prWizTestPrint()" style="padding:12px 24px;font-size:13px;font-weight:700">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                  Lancer un test d'impression
+                </button>
+                <div id="pr-wiz-test-result" style="margin-top:12px;font-size:12px;color:var(--muted)"></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Footer navigation -->
+          <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <button type="button" id="pr-wiz-back-btn" onclick="prWizBack()" class="btn btn-ghost" style="padding:9px 18px;font-size:13px;visibility:hidden">← Retour</button>
+            <div style="flex:1"></div>
+            <button type="button" id="pr-wiz-next-btn" onclick="prWizNext()" class="btn btn-accent" style="padding:9px 18px;font-size:13px">Continuer →</button>
+          </div>
+        </div>
+      </div>
+
     </section>
 
     <section id="panel-formations" class="hidden">
@@ -3367,15 +3897,100 @@ let fourSearchQuery = '';
 let fourFilterFsc = '';
 let fourFilterGroupe = '';
 let fourFilterTraca = '';
+let fourFilterCat = '';
+
+// Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
+let _cfCatsGetSelected = () => [];
+
+// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down
+// ou pas encore déployée. Doit rester synchro avec FOURNISSEUR_CATEGORIES dans
+// app/routers/settings.py.
+const _FOURNISSEUR_CATS_FALLBACK = [
+  {code:'mandrin', label:'Mandrin'}, {code:'palette', label:'Palette'},
+  {code:'adhesif', label:'Adhésif'}, {code:'carton', label:'Carton'},
+  {code:'frontal', label:'Frontal'}, {code:'glassine', label:'Glassine'},
+  {code:'complexe', label:'Complexe'}, {code:'autre', label:'Autre'},
+  {code:'negoce', label:'Négoce'}, {code:'sous_traitant', label:'Sous-traitant'},
+];
+
+async function _loadFournisseurCategories(){
+  // Skip UNIQUEMENT si déjà chargé ET non-vide — sinon retente à chaque appel.
+  if (window.__FOURNISSEUR_CATS__ && window.__FOURNISSEUR_CATS__.length) {
+    return window.__FOURNISSEUR_CATS__;
+  }
+  try {
+    const list = await api('/api/fournisseurs/categories');
+    if (Array.isArray(list) && list.length) {
+      window.__FOURNISSEUR_CATS__ = list;
+      return window.__FOURNISSEUR_CATS__;
+    }
+    console.warn('[fournisseurs] /categories a renvoyé vide, fallback hardcodé utilisé');
+  } catch(e) {
+    console.error('[fournisseurs] /categories a échoué :', e && e.message ? e.message : e);
+  }
+  window.__FOURNISSEUR_CATS__ = _FOURNISSEUR_CATS_FALLBACK.slice();
+  return window.__FOURNISSEUR_CATS__;
+}
+
+function _renderCategoryPicker(container, initialSelected){
+  const cats = window.__FOURNISSEUR_CATS__ || [];
+  const sel = new Set(initialSelected || []);
+  container.innerHTML = cats.map(c => {
+    const cls = ['four-cat-chip'];
+    if (c.code === 'negoce') cls.push('cat-neg');
+    if (c.code === 'sous_traitant') cls.push('cat-st');
+    if (sel.has(c.code)) cls.push('selected');
+    return '<span class="' + cls.join(' ') + '" data-catcode="' + esc(c.code) + '" role="checkbox" tabindex="0" aria-checked="' + (sel.has(c.code) ? 'true':'false') + '">' + esc(c.label) + '</span>';
+  }).join('');
+  function toggle(chip){
+    const code = chip.dataset.catcode;
+    if (sel.has(code)) { sel.delete(code); chip.classList.remove('selected'); chip.setAttribute('aria-checked','false'); }
+    else { sel.add(code); chip.classList.add('selected'); chip.setAttribute('aria-checked','true'); }
+  }
+  container.onclick = (e) => { const chip = e.target.closest('[data-catcode]'); if (chip) toggle(chip); };
+  container.onkeydown = (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    const chip = e.target.closest('[data-catcode]');
+    if (chip) { e.preventDefault(); toggle(chip); }
+  };
+  return () => Array.from(sel);
+}
+
+function _fourCatsCellHTML(cats){
+  if (!Array.isArray(cats) || !cats.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  const labels = window.__FOURNISSEUR_CATS__ || [];
+  const map = {}; labels.forEach(c => { map[c.code] = c.label; });
+  return '<div class="four-cats-cell">' + cats.map(c => {
+    const lbl = map[c] || c;
+    return '<span class="four-cat-pill cat-' + esc(c) + '">' + esc(lbl) + '</span>';
+  }).join('') + '</div>';
+}
 
 async function loadFournisseurs() {
   try {
+    await _loadFournisseurCategories();
     const data = await api('/api/fournisseurs');
     fournisseursAll = Array.isArray(data) ? data : [];
   } catch (e) { fournisseursAll = []; toast(e.message, true); }
   fillFourGroupeFilter();
+  fillFourCatFilter();
+  // Une fois les selects remplis, on applique les filtres depuis l'URL
+  _fourReadURL();
   renderFournisseursTable();
   fillFourHistSelect();
+  // Init/refresh du picker de catégories dans le panneau d'ajout
+  const cfCatBox = document.getElementById('cf-categories-picker');
+  if (cfCatBox) _cfCatsGetSelected = _renderCategoryPicker(cfCatBox, []);
+}
+
+function fillFourCatFilter(){
+  const sel = document.getElementById('four-filter-cat');
+  if (!sel) return;
+  const cur = sel.value;
+  const cats = window.__FOURNISSEUR_CATS__ || [];
+  sel.innerHTML = '<option value="">Catégorie : toutes</option>' +
+    cats.map(c => '<option value="' + esc(c.code) + '">' + esc(c.label) + '</option>').join('');
+  if (cats.some(c => c.code === cur)) sel.value = cur;
 }
 
 function fillFourGroupeFilter() {
@@ -3395,9 +4010,37 @@ function _fourNorm(s){
 }
 function _fourHay(f){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  return _fourNorm([f.nom, f.groupe, f.branche, hasFsc ? f.licence : '', hasFsc ? f.certificat : '', hasFsc ? 'fsc certifie' : 'non certifie'].filter(Boolean).join(' '));
+  const catLabels = (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
+  const catsStr = (Array.isArray(f.categories) ? f.categories : []).map(c => catLabels[c] || c).join(' ');
+  return _fourNorm([f.nom, f.groupe, f.branche, catsStr, hasFsc ? f.licence : '', hasFsc ? f.certificat : '', hasFsc ? 'fsc certifie' : 'non certifie'].filter(Boolean).join(' '));
 }
 function _fourHasTraca(f){ return !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code); }
+
+// Retourne { days, cls, label } pour l'affichage du badge FSC selon la date d'expiration.
+// null si pas de date. cls = classe CSS suffixe (fsc, fsc-warn, fsc-crit, fsc-exp).
+function _fscExpirationInfo(f){
+  if (!f || !f.fsc_date_expiration) return null;
+  try {
+    const d = new Date(f.fsc_date_expiration + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diffMs = d.getTime() - today.getTime();
+    const days = Math.round(diffMs / 86400000);
+    if (days < 0) return { days, cls: 'fsc-exp', label: 'Expiré ' + Math.abs(days) + 'j' };
+    if (days <= 30) return { days, cls: 'fsc-crit', label: days + 'j' };
+    if (days <= 60) return { days, cls: 'fsc-warn', label: days + 'j' };
+    return { days, cls: 'fsc', label: '' };
+  } catch(e) { return null; }
+}
+function _fscBadgeHTML(f){
+  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+  if (!hasFsc) return '<span class="four-pill nofsc">— Non</span>';
+  const info = _fscExpirationInfo(f);
+  if (!info) return '<span class="four-pill fsc">FSC</span>';
+  const title = 'Certificat FSC expire le ' + f.fsc_date_expiration + (info.days < 0 ? ' (expiré)' : ' (' + info.days + ' jours)');
+  const lbl = info.label ? ('FSC · ' + info.label) : 'FSC';
+  return '<span class="four-pill ' + info.cls + '" title="' + esc(title) + '">' + esc(lbl) + '</span>';
+}
 
 function _fourFiltered(){
   const q = _fourNorm(fourSearchQuery).trim();
@@ -3406,6 +4049,10 @@ function _fourFiltered(){
     if (fourFilterFsc === '1' && !hasFsc) return false;
     if (fourFilterFsc === '0' && hasFsc) return false;
     if (fourFilterGroupe && (f.groupe || '') !== fourFilterGroupe) return false;
+    if (fourFilterCat) {
+      const cats = Array.isArray(f.categories) ? f.categories : [];
+      if (!cats.includes(fourFilterCat)) return false;
+    }
     const hasT = _fourHasTraca(f);
     if (fourFilterTraca === '1' && !hasT) return false;
     if (fourFilterTraca === '0' && hasT) return false;
@@ -3416,26 +4063,37 @@ function _fourFiltered(){
 
 function _fourRowHTML(f){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  const fscBadge = hasFsc
-    ? '<span class="four-pill fsc">FSC</span>'
-    : '<span class="four-pill nofsc">— Non</span>';
+  const fscBadge = _fscBadgeHTML(f);
   const groupeCell = f.groupe
     ? '<span class="four-groupe-tag">' + esc(f.groupe) + (f.branche ? '<span class="fgt-branche">· ' + esc(f.branche) + '</span>' : '') + '</span>'
     : '<span style="color:var(--muted);font-size:11px">—</span>';
   const tracaCell = _fourHasTraca(f)
     ? '<span class="four-pill traca">✓ Guide</span>'
     : '<span class="four-pill traca-no">—</span>';
-  return '<tr>' +
-    '<td class="four-nom-cell"><strong>' + esc(f.nom) + '</strong>' +
-      (f.branche && !f.groupe ? '<small>Branche : ' + esc(f.branche) + '</small>' : '') + '</td>' +
+  const catsCell = _fourCatsCellHTML(f.categories);
+  const actif = (f.actif == null) ? true : !!f.actif;
+  const rowCls = actif ? '' : ' class="four-row-inactif"';
+  const smallBits = [];
+  if (f.branche && !f.groupe) smallBits.push('Branche : ' + esc(f.branche));
+  if (f.siret) smallBits.push('SIRET ' + esc(f.siret));
+  const smallHTML = smallBits.length ? '<small>' + smallBits.join(' · ') + '</small>' : '';
+  return '<tr' + rowCls + '>' +
+    '<td class="four-nom-cell"><strong>' + esc(f.nom) + '</strong>' + smallHTML + '</td>' +
     '<td>' + fscBadge + '</td>' +
     '<td class="four-code-cell"><code>' + esc(hasFsc ? (f.licence || '—') : '—') + '</code></td>' +
     '<td class="four-code-cell"><code>' + esc(hasFsc ? (f.certificat || '—') : '—') + '</code></td>' +
     '<td>' + groupeCell + '</td>' +
+    '<td>' + catsCell + '</td>' +
     '<td>' + tracaCell + '</td>' +
     '<td class="four-act">' +
+      '<label class="four-actif-toggle" title="' + (actif ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour réactiver') + '">' +
+        '<input type="checkbox" data-factif="' + f.id + '"' + (actif ? ' checked' : '') + '>' +
+        '<span class="fat-slider"></span>' +
+      '</label>' +
+      '<button type="button" class="btn btn-sec btn-sm" data-fopen="' + f.id + '" title="Ouvrir la fiche complète">Fiche</button>' +
       '<button type="button" class="btn btn-sec btn-sm" data-fedit="' + f.id + '">Modifier</button>' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fdel="' + f.id + '" style="color:var(--danger)">Supprimer</button>' +
+      '<button type="button" class="btn btn-sec btn-sm" data-fmerge="' + f.id + '" title="Fusionner dans un autre fournisseur">Fusionner</button>' +
+      '<button type="button" class="btn btn-sec btn-sm" data-fdel="' + f.id + '" style="color:var(--danger)">Suppr.</button>' +
     '</td></tr>';
 }
 
@@ -3458,17 +4116,19 @@ function renderFournisseursTable() {
     wrap.innerHTML = '<div class="four-empty">Aucun fournisseur ne correspond aux filtres.<br><button type="button" class="btn btn-sec btn-sm" style="margin-top:12px" id="four-reset-filters">Réinitialiser les filtres</button></div>';
     const btn = document.getElementById('four-reset-filters');
     if (btn) btn.onclick = () => {
-      fourSearchQuery=''; fourFilterFsc=''; fourFilterGroupe=''; fourFilterTraca='';
+      fourSearchQuery=''; fourFilterFsc=''; fourFilterGroupe=''; fourFilterTraca=''; fourFilterCat='';
       const s=document.getElementById('four-search'); if(s) s.value='';
       const f=document.getElementById('four-filter-fsc'); if(f) f.value='';
       const g=document.getElementById('four-filter-groupe'); if(g) g.value='';
+      const c=document.getElementById('four-filter-cat'); if(c) c.value='';
       const t=document.getElementById('four-filter-traca'); if(t) t.value='';
       renderFournisseursTable();
+      _fourSyncURL();
     };
     return;
   }
   const head = '<table class="four-table"><thead><tr>' +
-    '<th>Nom</th><th>FSC</th><th>Licence FSC</th><th>Certificat FSC</th><th>Groupe / branche</th><th>Traçabilité</th><th></th>' +
+    '<th>Nom</th><th>FSC</th><th>Licence FSC</th><th>Certificat FSC</th><th>Groupe / branche</th><th>Catégories</th><th>Traçabilité</th><th></th>' +
     '</tr></thead>';
   let body = '';
   if (fourViewMode === 'groupe') {
@@ -3486,7 +4146,7 @@ function renderFournisseursTable() {
     body = '<tbody>' + keys.map(k => {
       const label = k === '__none__' ? 'Sans groupe' : k;
       const items = grouped[k].sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
-      return '<tr class="four-groupe-row"><td colspan="7">' + esc(label) + '<span class="fgh-count">· ' + items.length + '</span></td></tr>' +
+      return '<tr class="four-groupe-row"><td colspan="8">' + esc(label) + '<span class="fgh-count">· ' + items.length + '</span></td></tr>' +
         items.map(_fourRowHTML).join('');
     }).join('') + '</tbody>';
   } else {
@@ -3496,7 +4156,80 @@ function renderFournisseursTable() {
   wrap.innerHTML = head + body + '</table>';
   wrap.querySelectorAll('[data-fedit]').forEach(b => b.onclick = () => openEditFournisseur(Number(b.dataset.fedit)));
   wrap.querySelectorAll('[data-fdel]').forEach(b => b.onclick = () => deleteFournisseur(Number(b.dataset.fdel)));
+  wrap.querySelectorAll('[data-fopen]').forEach(b => b.onclick = () => openFournisseurDrawer(Number(b.dataset.fopen)));
+  wrap.querySelectorAll('[data-fmerge]').forEach(b => b.onclick = () => openMergeFournisseurModal(Number(b.dataset.fmerge)));
+  wrap.querySelectorAll('[data-factif]').forEach(cb => cb.onchange = () => toggleFournisseurActif(Number(cb.dataset.factif), cb));
 }
+
+async function toggleFournisseurActif(id, cbEl){
+  const desired = !!cbEl.checked;
+  cbEl.disabled = true;
+  try {
+    const res = await api('/api/fournisseurs/' + id + '/actif', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actif: desired }),
+    });
+    const fi = fournisseursAll.find(x => x.id === id);
+    if (fi) fi.actif = desired ? 1 : 0;
+    toast(desired ? 'Fournisseur activé' : 'Fournisseur désactivé');
+    // Repeindre pour appliquer la classe four-row-inactif sans reload
+    renderFournisseursTable();
+  } catch(e) {
+    cbEl.checked = !desired;
+    toast(e.message || 'Erreur toggle actif', true);
+  } finally {
+    cbEl.disabled = false;
+  }
+}
+
+// URL persistence des filtres Répertoire fournisseurs
+function _fourSyncURL(){
+  try {
+    const url = new URL(window.location.href);
+    const p = url.searchParams;
+    const setOrDel = (k, v) => { if (v) p.set(k, v); else p.delete(k); };
+    setOrDel('fq', fourSearchQuery);
+    setOrDel('ffsc', fourFilterFsc);
+    setOrDel('fgrp', fourFilterGroupe);
+    setOrDel('fcat', fourFilterCat);
+    setOrDel('ftra', fourFilterTraca);
+    setOrDel('fview', fourViewMode !== 'flat' ? fourViewMode : '');
+    window.history.replaceState(null, '', url.toString());
+  } catch(e) {}
+}
+
+function _fourReadURL(){
+  try {
+    const p = new URL(window.location.href).searchParams;
+    fourSearchQuery = p.get('fq') || '';
+    fourFilterFsc = p.get('ffsc') || '';
+    fourFilterGroupe = p.get('fgrp') || '';
+    fourFilterCat = p.get('fcat') || '';
+    fourFilterTraca = p.get('ftra') || '';
+    const v = p.get('fview'); if (v === 'groupe') fourViewMode = 'groupe';
+    // Reflète dans les inputs
+    const s = document.getElementById('four-search'); if (s) s.value = fourSearchQuery;
+    const f = document.getElementById('four-filter-fsc'); if (f) f.value = fourFilterFsc;
+    const g = document.getElementById('four-filter-groupe'); if (g) g.value = fourFilterGroupe;
+    const c = document.getElementById('four-filter-cat'); if (c) c.value = fourFilterCat;
+    const t = document.getElementById('four-filter-traca'); if (t) t.value = fourFilterTraca;
+    document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x =>
+      x.classList.toggle('active', x.dataset.fourview === fourViewMode));
+  } catch(e) {}
+}
+
+// Raccourci "/" pour focus la recherche fournisseurs — actif uniquement quand
+// l'onglet Fournisseurs est affiché et qu'aucun input n'a le focus.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
+  const panel = document.getElementById('panel-fournisseurs');
+  if (!panel || panel.classList.contains('hidden')) return;
+  const s = document.getElementById('four-search');
+  if (s) { e.preventDefault(); s.focus(); s.select(); }
+});
 
 // Toolbar : recherche + filtres
 (function bindFourToolbar(){
@@ -3507,24 +4240,37 @@ function renderFournisseursTable() {
     const caret = isSearch ? [ae.selectionStart, ae.selectionEnd] : null;
     fourSearchQuery = s.value;
     renderFournisseursTable();
+    _fourSyncURL();
     if (isSearch) {
       const el = document.getElementById('four-search');
       if (el) { el.focus(); if (caret) try { el.setSelectionRange(caret[0], caret[1]); } catch(e){} }
     }
   });
   const fFsc = document.getElementById('four-filter-fsc');
-  if (fFsc) fFsc.addEventListener('change', () => { fourFilterFsc = fFsc.value; renderFournisseursTable(); });
+  if (fFsc) fFsc.addEventListener('change', () => { fourFilterFsc = fFsc.value; renderFournisseursTable(); _fourSyncURL(); });
   const fGrp = document.getElementById('four-filter-groupe');
-  if (fGrp) fGrp.addEventListener('change', () => { fourFilterGroupe = fGrp.value; renderFournisseursTable(); });
+  if (fGrp) fGrp.addEventListener('change', () => { fourFilterGroupe = fGrp.value; renderFournisseursTable(); _fourSyncURL(); });
+  const fCat = document.getElementById('four-filter-cat');
+  if (fCat) fCat.addEventListener('change', () => { fourFilterCat = fCat.value; renderFournisseursTable(); _fourSyncURL(); });
   const fTra = document.getElementById('four-filter-traca');
-  if (fTra) fTra.addEventListener('change', () => { fourFilterTraca = fTra.value; renderFournisseursTable(); });
+  if (fTra) fTra.addEventListener('change', () => { fourFilterTraca = fTra.value; renderFournisseursTable(); _fourSyncURL(); });
   document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(b => {
     b.addEventListener('click', () => {
       fourViewMode = b.dataset.fourview;
       document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x => x.classList.toggle('active', x.dataset.fourview === fourViewMode));
       renderFournisseursTable();
+      _fourSyncURL();
     });
   });
+  // Export CSV — appuie sur l'endpoint /api/fournisseurs/export.csv
+  const btnExport = document.getElementById('four-export-csv');
+  if (btnExport) btnExport.addEventListener('click', () => {
+    try { window.location.href = API + '/api/fournisseurs/export.csv'; }
+    catch(e) { toast('Erreur téléchargement', true); }
+  });
+  // Doublons — ouvre modale de détection
+  const btnDoublons = document.getElementById('four-doublons');
+  if (btnDoublons) btnDoublons.addEventListener('click', openDoublonsModal);
   // Panneau ajout collapsible
   const addToggle = document.getElementById('four-add-toggle');
   const addPanel = document.getElementById('four-add-panel');
@@ -3562,12 +4308,17 @@ document.getElementById('cf-go').onclick = async () => {
   const has_fsc = !!(document.getElementById('cf-has-fsc') || {}).checked;
   const groupe = (document.getElementById('cf-groupe')?.value || '').trim();
   const branche = (document.getElementById('cf-branche')?.value || '').trim();
+  const siret = (document.getElementById('cf-siret')?.value || '').trim();
+  const tva_intracom = (document.getElementById('cf-tva')?.value || '').trim();
+  const fsc_date_expiration = (document.getElementById('cf-fsc-exp')?.value || '').trim();
+  const categories = (typeof _cfCatsGetSelected === 'function') ? _cfCatsGetSelected() : [];
   if (!nom) return toast('Nom du fournisseur requis', true);
   try {
     await api('/api/fournisseurs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, licence, certificat, has_fsc, groupe, branche }),
+      body: JSON.stringify({ nom, licence, certificat, has_fsc, groupe, branche,
+                             siret, tva_intracom, fsc_date_expiration, categories }),
     });
     toast('Fournisseur ajouté');
     document.getElementById('cf-nom').value = '';
@@ -3576,6 +4327,11 @@ document.getElementById('cf-go').onclick = async () => {
     const cbo = document.getElementById('cf-has-fsc'); if (cbo) cbo.checked = true;
     const cg = document.getElementById('cf-groupe'); if(cg) cg.value = '';
     const cb = document.getElementById('cf-branche'); if(cb) cb.value = '';
+    const csi = document.getElementById('cf-siret'); if(csi) csi.value = '';
+    const cti = document.getElementById('cf-tva'); if(cti) cti.value = '';
+    const cfe = document.getElementById('cf-fsc-exp'); if(cfe) cfe.value = '';
+    const cpBox = document.getElementById('cf-categories-picker');
+    if (cpBox) _cfCatsGetSelected = _renderCategoryPicker(cpBox, []);
     await loadFournisseurs();
     await loadFournisseursGroupes();
     // Replier le panneau d'ajout après succès
@@ -3612,12 +4368,23 @@ async function openEditFournisseur(id) {
     '<div id="ef-fsc-fields" style="' + (hasFscInit ? '' : 'opacity:.4;pointer-events:none') + '">' +
     '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
     '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
+    '<label class="sub">Date d\'expiration du certificat FSC</label><input type="date" id="ef-fsc-exp" value="' + esc(f.fsc_date_expiration || '') + '" style="margin-bottom:10px">' +
+    '</div>' +
+    '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
+    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Identité fiscale</p>' +
+    '<label class="sub">SIRET (14 chiffres)</label><input id="ef-siret" value="' + esc(f.siret || '') + '" style="margin-bottom:10px" placeholder="ex: 12345678901234" inputmode="numeric" maxlength="17">' +
+    '<label class="sub">TVA intracommunautaire</label><input id="ef-tva" value="' + esc(f.tva_intracom || '') + '" style="margin-bottom:10px" placeholder="ex: FR12345678901">' +
     '</div>' +
     '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
     '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Rattachement à un groupe</p>' +
     '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Si ce fournisseur est une branche d\'un groupe (ex: Fedrigoni Italy → groupe Fedrigoni, branche Italy).</p>' +
     '<label class="sub">Groupe</label><input id="ef-groupe" value="' + esc(f.groupe || '') + '" style="margin-bottom:10px" placeholder="ex: Fedrigoni" list="four-groupes-dl">' +
     '<label class="sub">Branche</label><input id="ef-branche" value="' + esc(f.branche || '') + '" style="margin-bottom:10px" placeholder="ex: Italy">' +
+    '</div>' +
+    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
+    '<p style="margin:0 0 6px;font-size:13px;font-weight:600;color:var(--text)">Catégories fournies</p>' +
+    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Plusieurs choix possibles. « Sous-traitant » active automatiquement le fournisseur pour les réceptions de produits finis sous-traités.</p>' +
+    '<div id="ef-categories-picker" class="four-cat-picker"></div>' +
     '</div>' +
     '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
     '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Code-barre de traçabilité</p>' +
@@ -3645,6 +4412,9 @@ async function openEditFournisseur(id) {
   const photoPreview = dlg.querySelector('#ef-photo-preview');
   const photoInput = dlg.querySelector('#ef-photo-input');
   const photoDelBtn = dlg.querySelector('#ef-photo-del');
+  const catBox = dlg.querySelector('#ef-categories-picker');
+  await _loadFournisseurCategories();
+  const efCatsGetSelected = catBox ? _renderCategoryPicker(catBox, Array.isArray(f.categories) ? f.categories : []) : (() => Array.isArray(f.categories) ? f.categories : []);
   expEl.value = f.traca_explication || '';
   codeEl.value = f.traca_exemple_code || '';
 
@@ -3716,11 +4486,15 @@ async function openEditFournisseur(id) {
       nom: dlg.querySelector('#ef-nom').value.trim(),
       licence: has_fsc ? dlg.querySelector('#ef-licence').value.trim() : '',
       certificat: has_fsc ? dlg.querySelector('#ef-certificat').value.trim() : '',
+      fsc_date_expiration: has_fsc ? (dlg.querySelector('#ef-fsc-exp')?.value || '').trim() : '',
       has_fsc,
       traca_explication: expEl.value.trim(),
       traca_exemple_code: codeEl.value.trim(),
       groupe: (dlg.querySelector('#ef-groupe')?.value || '').trim(),
       branche: (dlg.querySelector('#ef-branche')?.value || '').trim(),
+      siret: (dlg.querySelector('#ef-siret')?.value || '').trim(),
+      tva_intracom: (dlg.querySelector('#ef-tva')?.value || '').trim(),
+      categories: efCatsGetSelected(),
     };
     if (!body.nom) return toast('Nom requis', true);
     try {
@@ -3739,6 +4513,11 @@ async function openEditFournisseur(id) {
         fi.has_fsc = body.has_fsc ? 1 : 0;
         fi.groupe = body.groupe || null;
         fi.branche = body.branche || null;
+        fi.categories = body.categories || [];
+        fi.sous_traitant = body.categories.includes('sous_traitant') ? 1 : 0;
+        fi.siret = body.siret || null;
+        fi.tva_intracom = body.tva_intracom || null;
+        fi.fsc_date_expiration = body.fsc_date_expiration || null;
       }
       await loadFournisseursGroupes();
       toast('Fournisseur mis à jour');
@@ -3760,6 +4539,344 @@ async function deleteFournisseur(id) {
     toast('Fournisseur supprimé');
     await loadFournisseurs();
   } catch (e) { toast(e.message, true); }
+}
+
+// ─── Fusion de fournisseurs ────────────────────────────────────────
+function openMergeFournisseurModal(sourceId){
+  const src = fournisseursAll.find(x => x.id === sourceId);
+  if (!src) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'four-modal-backdrop';
+  const dlg = document.createElement('div');
+  dlg.className = 'four-modal';
+  // Trie candidats par ressemblance (norm nom en commun)
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(sasu|sarl|eurl|sas|snc|sa|scop|scp|gie)\b/g,'').replace(/[^a-z0-9]/g,'');
+  const srcN = norm(src.nom);
+  const candidates = fournisseursAll
+    .filter(x => x.id !== sourceId)
+    .map(x => ({ ...x, _score: (norm(x.nom) === srcN ? 100 : (x.groupe && x.groupe === src.groupe ? 20 : 0)) }))
+    .sort((a,b) => (b._score - a._score) || a.nom.localeCompare(b.nom, 'fr', {sensitivity:'base'}));
+  const opts = candidates.map(x => {
+    const hint = x._score >= 100 ? ' — nom identique après normalisation' : (x._score >= 20 ? ' — même groupe' : '');
+    return '<option value="' + x.id + '">' + esc(x.nom) + (x.groupe ? ' · ' + esc(x.groupe) : '') + hint + '</option>';
+  }).join('');
+  dlg.innerHTML =
+    '<h3>Fusionner « ' + esc(src.nom) + ' »</h3>' +
+    '<p class="sub" style="margin-top:-8px;font-size:12px">Toutes les données rattachées à ce fournisseur (contacts, réceptions, certificats, audits, historiques matières, JSON déclarations UE, catégories) seront réassignées vers la <strong>cible</strong>. Le fournisseur source sera <strong>supprimé</strong>.</p>' +
+    '<label class="sub" style="margin-top:12px;display:block">Fusionner dans (cible) *</label>' +
+    '<select id="mf-target" style="width:100%">' +
+      '<option value="">— Choisir un fournisseur cible —</option>' + opts +
+    '</select>' +
+    '<label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px;cursor:pointer">' +
+      '<input type="checkbox" id="mf-confirm" style="width:16px;height:16px">' +
+      'Je confirme : cette opération est <strong style="color:var(--danger);margin-left:4px">irréversible</strong>' +
+    '</label>' +
+    '<div id="mf-report" style="margin-top:10px"></div>' +
+    '<div class="actions">' +
+      '<button type="button" class="btn btn-sec" id="mf-cancel">Annuler</button>' +
+      '<button type="button" class="btn btn-danger-solid" id="mf-go" disabled>Fusionner</button>' +
+    '</div>';
+  backdrop.appendChild(dlg);
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  dlg.querySelector('#mf-cancel').onclick = close;
+  const cbo = dlg.querySelector('#mf-confirm');
+  const btn = dlg.querySelector('#mf-go');
+  const upd = () => { btn.disabled = !(cbo.checked && dlg.querySelector('#mf-target').value); };
+  cbo.onchange = upd;
+  dlg.querySelector('#mf-target').onchange = upd;
+  btn.onclick = async () => {
+    const targetId = Number(dlg.querySelector('#mf-target').value);
+    if (!targetId) return;
+    const tgt = fournisseursAll.find(x => x.id === targetId);
+    if (!confirm('Fusionner « ' + src.nom + ' » DANS « ' + (tgt ? tgt.nom : '?') + ' » ?\n\nLe fournisseur source sera supprimé.')) return;
+    btn.disabled = true; btn.textContent = 'Fusion en cours…';
+    try {
+      const r = await api('/api/fournisseurs/' + sourceId + '/merge/' + targetId, { method: 'POST' });
+      const rep = dlg.querySelector('#mf-report');
+      const parts = [];
+      if (r.moved) Object.entries(r.moved).forEach(([k,v]) => { if (v) parts.push(v + ' ' + k); });
+      if (r.renamed) Object.entries(r.renamed).forEach(([k,v]) => { if (v) parts.push(v + ' × ' + k); });
+      if (r.json_rewrites) parts.push(r.json_rewrites + ' JSON réécritures');
+      if (rep) rep.innerHTML = '<div style="background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);padding:10px;border-radius:8px;font-size:12px;color:var(--ok)">Fusion réussie. Réassignations : ' + esc(parts.join(' · ') || 'aucune référence à réassigner') + '</div>';
+      toast('Fusion réussie');
+      await loadFournisseurs();
+      setTimeout(close, 1800);
+    } catch(e) {
+      const rep = dlg.querySelector('#mf-report');
+      if (rep) rep.innerHTML = '<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);padding:10px;border-radius:8px;font-size:12px;color:var(--danger)">' + esc(e.message || 'Erreur') + '</div>';
+      btn.disabled = false; btn.textContent = 'Fusionner';
+    }
+  };
+}
+
+// ─── Doublons potentiels ──────────────────────────────────────────
+async function openDoublonsModal(){
+  const backdrop = document.createElement('div');
+  backdrop.className = 'four-modal-backdrop';
+  const dlg = document.createElement('div');
+  dlg.className = 'four-modal';
+  dlg.style.maxWidth = '760px';
+  dlg.innerHTML =
+    '<h3>Doublons potentiels</h3>' +
+    '<p class="sub" style="margin-top:-8px;font-size:12px">Regroupement par nom normalisé (accents, formes juridiques ignorées) et par SIRET identique.</p>' +
+    '<div id="fd-results" style="margin-top:12px"><div class="four-drawer-empty">Analyse en cours…</div></div>' +
+    '<div class="actions"><button type="button" class="btn btn-sec" id="fd-close">Fermer</button></div>';
+  backdrop.appendChild(dlg);
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
+  dlg.querySelector('#fd-close').onclick = close;
+  try {
+    const r = await api('/api/fournisseurs/doublons');
+    const box = dlg.querySelector('#fd-results');
+    if (!r || !r.groups || !r.groups.length) {
+      box.innerHTML = '<div class="four-drawer-empty">✓ Aucun doublon détecté.</div>';
+      return;
+    }
+    box.innerHTML = r.groups.map(g => {
+      const items = g.fournisseurs.map(f =>
+        '<div class="four-drawer-list-item" style="display:flex;align-items:center;justify-content:space-between;gap:8px">' +
+          '<div><strong>' + esc(f.nom) + '</strong>' +
+            (f.siret ? '<span style="color:var(--muted);font-size:11px;margin-left:8px">SIRET ' + esc(f.siret) + '</span>' : '') +
+            (f.ville ? '<span style="color:var(--muted);font-size:11px;margin-left:8px">' + esc(f.ville) + '</span>' : '') +
+            (f.has_fsc ? '<span class="four-pill fsc" style="margin-left:8px">FSC</span>' : '') +
+            (f.actif ? '' : '<span class="four-pill nofsc" style="margin-left:8px">Inactif</span>') +
+            '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + (f.nb_contacts || 0) + ' contact(s)</div>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sec btn-sm" data-fdmerge="' + f.id + '">Fusionner…</button>' +
+        '</div>'
+      ).join('');
+      return '<div style="margin-bottom:14px">' +
+        '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' +
+          esc(g.reason === 'siret' ? 'SIRET commun : ' + g.key : 'Nom similaire') +
+          '<span style="color:var(--accent);margin-left:6px">· ' + g.count + '</span>' +
+        '</div>' +
+        '<div class="four-drawer-list">' + items + '</div>' +
+      '</div>';
+    }).join('');
+    box.querySelectorAll('[data-fdmerge]').forEach(b => b.onclick = () => {
+      close();
+      openMergeFournisseurModal(Number(b.dataset.fdmerge));
+    });
+  } catch(e) {
+    dlg.querySelector('#fd-results').innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+  }
+}
+
+// ─── Drawer : fiche fournisseur unifiée ───────────────────────────
+let _fourDrawerCurrentId = null;
+
+function _ensureFourDrawer(){
+  let bd = document.getElementById('four-drawer-backdrop');
+  if (bd) return { backdrop: bd, drawer: document.getElementById('four-drawer') };
+  bd = document.createElement('div');
+  bd.id = 'four-drawer-backdrop';
+  bd.className = 'four-drawer-backdrop';
+  const dr = document.createElement('div');
+  dr.id = 'four-drawer';
+  dr.className = 'four-drawer';
+  dr.innerHTML =
+    '<div class="four-drawer-head">' +
+      '<div><h3 id="fd-title">Fournisseur</h3><p class="sub" id="fd-sub"></p></div>' +
+      '<button type="button" class="four-drawer-close" id="fd-close-btn" title="Fermer">×</button>' +
+    '</div>' +
+    '<div class="four-drawer-tabs" role="tablist">' +
+      '<button type="button" class="four-drawer-tab active" data-fdtab="identite">Identité</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="fsc">FSC</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="contacts">Contacts</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="receptions">Réceptions</button>' +
+      '<button type="button" class="four-drawer-tab" data-fdtab="traca">Traçabilité</button>' +
+    '</div>' +
+    '<div class="four-drawer-body" id="fd-body"></div>';
+  document.body.appendChild(bd);
+  document.body.appendChild(dr);
+  const close = () => { bd.classList.remove('open'); dr.classList.remove('open'); _fourDrawerCurrentId = null; };
+  bd.addEventListener('click', close);
+  dr.querySelector('#fd-close-btn').addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dr.classList.contains('open')) close(); });
+  dr.querySelectorAll('[data-fdtab]').forEach(btn => btn.addEventListener('click', () => {
+    dr.querySelectorAll('[data-fdtab]').forEach(x => x.classList.toggle('active', x.dataset.fdtab === btn.dataset.fdtab));
+    _fourDrawerRenderTab(btn.dataset.fdtab);
+  }));
+  return { backdrop: bd, drawer: dr };
+}
+
+function openFournisseurDrawer(id){
+  const f = fournisseursAll.find(x => x.id === id);
+  if (!f) return;
+  _fourDrawerCurrentId = id;
+  const { backdrop, drawer } = _ensureFourDrawer();
+  drawer.querySelector('#fd-title').textContent = f.nom || '(sans nom)';
+  const bits = [];
+  if (f.groupe) bits.push('Groupe ' + f.groupe + (f.branche ? ' · ' + f.branche : ''));
+  if (f.ville) bits.push(f.ville + (f.pays && f.pays !== 'FR' ? ' (' + f.pays + ')' : ''));
+  if (!f.actif) bits.push('INACTIF');
+  drawer.querySelector('#fd-sub').textContent = bits.join(' — ');
+  // Reset onglet Identité par défaut
+  drawer.querySelectorAll('[data-fdtab]').forEach(x => x.classList.toggle('active', x.dataset.fdtab === 'identite'));
+  _fourDrawerRenderTab('identite');
+  backdrop.classList.add('open');
+  drawer.classList.add('open');
+}
+
+// _fdKV(label, value, {html:true}) : pass html:true quand value contient déjà
+// du HTML pré-formaté (badges, code, spans). Par défaut la valeur string est
+// escapée pour éviter les XSS.
+function _fdKV(label, value, opts){
+  if (value === null || value === undefined || value === '') return '';
+  const useHtml = opts && opts.html;
+  const rendered = (typeof value === 'string' && !useHtml) ? esc(value) : value;
+  return '<dt>' + esc(label) + '</dt><dd>' + rendered + '</dd>';
+}
+
+async function _fourDrawerRenderTab(tab){
+  const id = _fourDrawerCurrentId;
+  if (!id) return;
+  const f = fournisseursAll.find(x => x.id === id);
+  if (!f) return;
+  const body = document.getElementById('fd-body');
+  if (!body) return;
+
+  if (tab === 'identite') {
+    const catLbls = (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
+    const catsHTML = (Array.isArray(f.categories) && f.categories.length)
+      ? '<div class="four-cats-cell" style="max-width:none">' + f.categories.map(c => '<span class="four-cat-pill cat-' + esc(c) + '">' + esc(catLbls[c] || c) + '</span>').join('') + '</div>'
+      : '<span style="color:var(--muted)">—</span>';
+    const addr = [f.adresse, [f.code_postal, f.ville].filter(Boolean).join(' '), f.pays && f.pays !== 'FR' ? f.pays : ''].filter(Boolean).join(', ');
+    body.innerHTML =
+      '<h4>Identité</h4>' +
+      '<dl class="kv">' +
+        _fdKV('Nom', f.nom) +
+        _fdKV('Statut', (f.actif == null || f.actif) ? '<span class="four-pill fsc">Actif</span>' : '<span class="four-pill nofsc">Inactif</span>', {html:true}) +
+        _fdKV('Groupe', f.groupe) +
+        _fdKV('Branche', f.branche) +
+        _fdKV('SIRET', f.siret) +
+        _fdKV('TVA intra.', f.tva_intracom) +
+        _fdKV('Langue', (f.langue_default || 'fr').toUpperCase()) +
+      '</dl>' +
+      '<h4>Adresse</h4>' +
+      '<dl class="kv">' + _fdKV('Adresse', addr || '—') + '</dl>' +
+      '<h4>Catégories</h4>' +
+      '<div style="margin-bottom:14px">' + catsHTML + '</div>' +
+      '<h4>Actions</h4>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-edit">Modifier</button>' +
+        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-merge">Fusionner…</button>' +
+        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-actif">' + (f.actif ? 'Désactiver' : 'Réactiver') + '</button>' +
+      '</div>';
+    body.querySelector('#fd-act-edit').onclick = () => openEditFournisseur(id);
+    body.querySelector('#fd-act-merge').onclick = () => openMergeFournisseurModal(id);
+    body.querySelector('#fd-act-actif').onclick = async () => {
+      try {
+        await api('/api/fournisseurs/' + id + '/actif', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actif: !f.actif }),
+        });
+        f.actif = f.actif ? 0 : 1;
+        toast(f.actif ? 'Fournisseur activé' : 'Fournisseur désactivé');
+        _fourDrawerRenderTab('identite');
+        renderFournisseursTable();
+      } catch(e) { toast(e.message || 'Erreur', true); }
+    };
+    return;
+  }
+
+  if (tab === 'fsc') {
+    const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+    body.innerHTML =
+      '<h4>Certification FSC</h4>' +
+      '<div style="margin-bottom:14px">' + _fscBadgeHTML(f) + '</div>' +
+      (hasFsc
+        ? '<dl class="kv">' +
+            _fdKV('Licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span style="color:var(--muted)">— manquant</span>', {html:true}) +
+            _fdKV('Certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span style="color:var(--muted)">— manquant</span>', {html:true}) +
+            _fdKV('Expiration', f.fsc_date_expiration ? esc(f.fsc_date_expiration) : '<span style="color:var(--muted)">— non renseignée</span>', {html:true}) +
+          '</dl>'
+        : '<div class="four-drawer-empty">Ce fournisseur n\'est pas certifié FSC.</div>');
+    return;
+  }
+
+  if (tab === 'contacts') {
+    body.innerHTML = '<div class="four-drawer-empty">Chargement…</div>';
+    try {
+      const list = await api('/api/fournisseurs/' + id + '/contacts');
+      if (!Array.isArray(list) || !list.length) {
+        body.innerHTML = '<h4>Contacts (0)</h4><div class="four-drawer-empty">Aucun contact enregistré.<br><br>Utilisez l\'onglet « Contacts & infos » pour en ajouter.</div>';
+        return;
+      }
+      body.innerHTML =
+        '<h4>Contacts (' + list.length + ')</h4>' +
+        '<div class="four-drawer-list">' +
+        list.map(c => {
+          const emails = Array.isArray(c.emails) ? c.emails.join(', ') : '';
+          const tels = Array.isArray(c.tels) ? c.tels.join(', ') : '';
+          return '<div class="four-drawer-list-item">' +
+            '<div><strong>' + esc(c.nom || '(sans nom)') + '</strong>' +
+              (c.is_principal ? '<span class="four-pill fsc" style="margin-left:6px">Principal</span>' : '') +
+              (c.actif ? '' : '<span class="four-pill nofsc" style="margin-left:6px">Inactif</span>') +
+            '</div>' +
+            (c.role ? '<div style="color:var(--muted);font-size:11px;margin-top:2px">' + esc(c.role) + '</div>' : '') +
+            (emails ? '<div style="margin-top:4px">✉ ' + esc(emails) + '</div>' : '') +
+            (tels ? '<div>☎ ' + esc(tels) + '</div>' : '') +
+          '</div>';
+        }).join('') +
+        '</div>';
+    } catch(e) {
+      body.innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+    }
+    return;
+  }
+
+  if (tab === 'receptions') {
+    body.innerHTML = '<div class="four-drawer-empty">Chargement…</div>';
+    try {
+      const r = await api('/api/fournisseurs/' + id + '/receptions');
+      const recs = (r && r.receptions) || [];
+      if (!recs.length) {
+        body.innerHTML = '<h4>Historique réceptions</h4><div class="four-drawer-empty">Aucune réception enregistrée dans MyStock pour ce fournisseur.</div>';
+        return;
+      }
+      body.innerHTML =
+        '<h4>Historique réceptions (' + recs.length + (recs.length >= 50 ? ' — 50 dernières' : '') + ')</h4>' +
+        '<div class="four-drawer-list">' +
+        recs.map(rec => {
+          const d = rec.created_at ? new Date(rec.created_at).toLocaleString('fr-FR') : '—';
+          const codes = Array.isArray(rec.items) ? rec.items.filter(Boolean) : [];
+          return '<div class="four-drawer-list-item">' +
+            '<div style="display:flex;justify-content:space-between;gap:8px">' +
+              '<strong>' + esc(d) + '</strong>' +
+              '<span style="color:var(--muted);font-size:11px">' + (rec.nb_bobines || codes.length) + ' bobine(s)</span>' +
+            '</div>' +
+            (rec.created_by_name ? '<div style="color:var(--muted);font-size:11px">' + esc(rec.created_by_name) + '</div>' : '') +
+            (rec.certificat_fsc ? '<div style="margin-top:4px;font-size:11px">Cert. FSC : <code>' + esc(rec.certificat_fsc) + '</code></div>' : '') +
+            (rec.note ? '<div style="margin-top:4px;font-size:11px;font-style:italic">' + esc(rec.note) + '</div>' : '') +
+          '</div>';
+        }).join('') +
+        '</div>';
+    } catch(e) {
+      body.innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+    }
+    return;
+  }
+
+  if (tab === 'traca') {
+    const has = !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code);
+    if (!has) {
+      body.innerHTML = '<h4>Guide traçabilité</h4><div class="four-drawer-empty">Aucun guide de traçabilité configuré. Utilisez « Modifier » pour ajouter une photo et un exemple de code-barre.</div>';
+      return;
+    }
+    body.innerHTML =
+      '<h4>Guide traçabilité</h4>' +
+      (f.traca_photo_url ? '<div style="margin-bottom:14px"><img src="' + esc(f.traca_photo_url) + '" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--border)"></div>' : '') +
+      '<dl class="kv">' +
+        _fdKV('Explication', f.traca_explication ? esc(f.traca_explication).replace(/\n/g, '<br>') : '<span style="color:var(--muted)">—</span>', {html:true}) +
+        _fdKV('Exemple de code', f.traca_exemple_code ? '<code>' + esc(f.traca_exemple_code) + '</code>' : '<span style="color:var(--muted)">—</span>', {html:true}) +
+      '</dl>';
+    return;
+  }
 }
 
 // Historique par fournisseur
@@ -4583,84 +5700,11 @@ async function importOpsJson() {
 // ── Codes maintenance (stockage SQLite cote serveur) ─────────────────
 // Cle localStorage conservee pour migration one-shot des codes existants
 // (anciennement stockes cote navigateur, perdus entre v1/v2 et entre appareils).
-const MAINT_CODES_STORAGE_KEY = 'mysifa_settings_maint_codes_v1';
-let _maintItems = [];
-let _maintEditCode = null;
-async function loadMaintCodes() {
-  try {
-    const r = await api('/api/maintenance/codes');
-    _maintItems = (r && Array.isArray(r.items)) ? r.items : [];
-  } catch (e) {
-    toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
-    _maintItems = [];
-  }
-  // Migration one-shot : si la liste serveur est vide ET qu'on a des codes en
-  // localStorage (heritage de l'ancienne implementation), on propose l'import.
-  if (_maintItems.length === 0) {
-    try {
-      const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
-      const local = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(local) && local.length > 0) {
-        if (confirm(local.length + ' code(s) maintenance trouve(s) dans le stockage local du navigateur.\n\nLes importer dans la base de donnees ? (recommande, ils seront ensuite disponibles sur tous les navigateurs et synchronises v2 -> v1)')) {
-          try {
-            const res = await api('/api/maintenance/codes/bulk-import', {
-              method: 'POST',
-              body: JSON.stringify({ items: local }),
-            });
-            toast((res?.imported || 0) + ' code(s) importe(s)');
-            try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
-            const r2 = await api('/api/maintenance/codes');
-            _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
-          } catch (e) {
-            toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-  renderMaintList();
-}
 // ─── Interventions libres (Lot 2) ────────────────────────────────
 // Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
-let _libresItems = [];
-let _libresSelection = new Set();
 
-async function loadLibres() {
-  const listEl = document.getElementById('libres-list');
-  if (!listEl) return;
-  try {
-    const r = await api('/api/maintenance/codes/libres');
-    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
-  } catch (e) {
-    _libresItems = [];
-  }
-  _libresSelection.clear();
-  _updateLibresSelectionUI();
-  renderLibresList();
-}
 
-function _fmtLibreDate(iso) {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
-    const pad = n => (n < 10 ? '0' + n : '' + n);
-    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
-  } catch (e) { return '—'; }
-}
 
-function _updateLibresSelectionUI() {
-  const btn = document.getElementById('libres-merge-btn');
-  const cnt = document.getElementById('libres-selection-count');
-  const n = _libresSelection.size;
-  if (btn) btn.disabled = (n !== 2);
-  if (cnt) {
-    if (n === 0) cnt.textContent = '';
-    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
-    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
-    else cnt.textContent = n + ' selectionnes (max 2)';
-  }
-}
 
 function libresToggleSelection(code, checked) {
   if (checked) {
@@ -4676,79 +5720,6 @@ function libresToggleSelection(code, checked) {
   _updateLibresSelectionUI();
 }
 
-function renderLibresList() {
-  const el = document.getElementById('libres-list');
-  if (!el) return;
-  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
-  let items = _libresItems.slice();
-  if (q) {
-    items = items.filter(o =>
-      String(o.label || '').toLowerCase().includes(q) ||
-      String(o.code || '').toLowerCase().includes(q)
-    );
-  }
-  if (!items.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
-      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
-    return;
-  }
-  const rows = items.map(o => {
-    const codeEsc = esc(String(o.code));
-    const labelEsc = esc(String(o.label || ''));
-    const checked = _libresSelection.has(o.code) ? ' checked' : '';
-    const usage = o.usage_count;
-    const usageChip = usage > 0
-      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
-      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
-    // v2.2.41 : bouton Archiver retiré — un libre est créé au moment de sa 1ère
-    // utilisation, donc usage_count >= 1 dès la naissance, le bouton était mort.
-    // Nettoyage désormais uniquement via Fusion.
-    const delBtn = '';
-    return '<tr>' +
-      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
-      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
-      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
-      '<td>' + usageChip + '</td>' +
-      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
-      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
-      '<td style="text-align:right;white-space:nowrap">' +
-        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
-        delBtn +
-      '</td>' +
-    '</tr>';
-  }).join('');
-  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
-    '<thead><tr>' +
-      '<th></th>' +
-      '<th>Code</th>' +
-      '<th>Titre</th>' +
-      '<th>Usage</th>' +
-      '<th>Derniere utilisation</th>' +
-      '<th>Cree le</th>' +
-      '<th style="text-align:right">Actions</th>' +
-    '</tr></thead>' +
-    '<tbody>' + rows + '</tbody></table></div>';
-  // Bind event delegation (checkbox + rename + delete)
-  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
-    });
-  });
-  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-libre-rename');
-      const it = _libresItems.find(x => x.code === code);
-      if (it) libresRename(code, it.label);
-    });
-  });
-  el.querySelectorAll('[data-libre-del]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-libre-del');
-      const it = _libresItems.find(x => x.code === code);
-      if (it) libresDelete(code, it.label);
-    });
-  });
-}
 
 async function libresRename(code, currentLabel) {
   const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
@@ -4813,423 +5784,21 @@ async function libresMergeSelected() {
   }
 }
 
-function _maintCatLabel(cat) {
-  // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
-  // et "remplacements" (UI: Interventions). Labels renommés v179.
-  // 'interventions' et 'suivi' (legacy) sont remappés vers Nettoyage à l'affichage.
-  if (cat === 'remplacements') return 'Interventions';
-  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
-  return 'Contrôles';
-}
-let _lastAckByCode = {};
-function renderMaintList() {
-  const el = document.getElementById('maint-list');
-  if (!el) return;
-  // Reconstruire la map code -> dernière intervention depuis les alertes auto.
-  _lastAckByCode = {};
-  if (Array.isArray(_alertsData)) {
-    _alertsData.forEach(a => {
-      if (a && a.linked_maint_code) {
-        _lastAckByCode[String(a.linked_maint_code)] = a.last_ack_at || '';
-      }
-    });
-  }
-  const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
-  let items = _maintItems.slice();
-  // Normaliser la catégorie sur les anciens enregistrements
-  items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
-  if (q) {
-    items = items.filter(o => {
-      const periodLbl = (o.periodique ? 'oui' : 'non');
-      return String(o.code || '').toLowerCase().includes(q) ||
-        String(o.label || '').toLowerCase().includes(q) ||
-        ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
-        _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
-        // v2.2.17 — periodique retiré du filtre
-        String(o.intervalle || '').toLowerCase().includes(q) ||
-        String(o.metrage_ref || '').toLowerCase().includes(q);
-    });
-  }
-  // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
-  // legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'affichage.
-  const _normCat = (c) => {
-    if (c === 'remplacements') return 'remplacements';
-    if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
-    return 'controles';
-  };
-  const _catOrder = (c) => {
-    const n = _normCat(c);
-    return n === 'controles' ? 0 : (n === 'entretien' ? 1 : 2);
-  };
-  items.sort((a, b) => {
-    const da = _catOrder(a.categorie);
-    const db = _catOrder(b.categorie);
-    if (da !== db) return da - db;
-    const ac = String(a.code || '').padStart(6, '0');
-    const bc = String(b.code || '').padStart(6, '0');
-    return ac.localeCompare(bc, 'fr');
-  });
-  if (!items.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
-    return;
-  }
-  const byCat = { controles: [], entretien: [], remplacements: [] };
-  items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
-  let body = '';
-  ['controles', 'entretien', 'remplacements'].forEach(cat => {
-    if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
-    byCat[cat].forEach(o => {
-      const c = esc(String(o.code));
-      const niv = parseInt(o.niveau, 10) || 1;
-      const catCls = cat;
-      // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
-      const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-      const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-      body += '<tr>'
-        + '<td class="op-code-cell">' + c + '</td>'
-        + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
-        + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
-        + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
-        + '<td>' + intervalleDisplay + '</td>'
-        + '<td>' + metrageDisplay + '</td>'
-        + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
-        +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
-        +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
-        + '</button></td>'
-        + '<td><div class="op-act">'
-        + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
-        + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
-        + '</div></td></tr>';
-    });
-  });
-  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
-    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
-  el.querySelectorAll('[data-maint-edit]').forEach(btn => {
-    btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
-  });
-  el.querySelectorAll('[data-maint-del]').forEach(btn => {
-    btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
-  });
-  el.querySelectorAll('[data-maint-docs]').forEach(btn => {
-    btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
-  });
-}
 
 // ── Documents attaches aux codes maintenance ─────────────────────────────
-async function openMaintDocsModal(code) {
-  const item = _maintItems.find(x => String(x.code) === String(code));
-  const label = item ? item.label : '';
-  const overlay = document.createElement('div');
-  overlay.className = 'alert-modal-overlay';
-  overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
-    + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
-    + '<div class="alert-modal-body">'
-    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
-    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
-    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
-    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
-    +     '<span>Ajouter un fichier</span>'
-    +   '</button>'
-    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
-    + '</div>'
-    + '<div class="alert-modal-foot">'
-    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
-    + '</div></div>';
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
-  const listEl = overlay.querySelector('#maint-docs-list');
-  const renderDocs = (items) => {
-    if (!items.length) {
-      listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document pour l\'instant.</p>';
-      return;
-    }
-    listEl.innerHTML = items.map(d => {
-      const sz = d.size_bytes != null ? (Math.round(d.size_bytes / 1024) + ' Ko') : '';
-      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0, 16).replace('T', ' ')) : '';
-      return '<div class="maint-doc-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
-        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
-        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
-        +   '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
-        +   '<button type="button" class="btn-sm btn-ghost danger" data-doc-del="' + d.id + '">Supprimer</button>'
-        + '</div>';
-    }).join('');
-    listEl.querySelectorAll('[data-doc-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Supprimer ce document ?')) return;
-        try {
-          await api('/api/maintenance/docs/' + b.getAttribute('data-doc-del'), { method: 'DELETE' });
-          toast('Document supprime');
-          await refresh();
-          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
-      });
-    });
-  };
-  const refresh = async () => {
-    try {
-      const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
-      renderDocs(Array.isArray(r.items) ? r.items : []);
-    } catch(e) {
-      listEl.innerHTML = '<p style="color:var(--danger);font-size:12px">' + esc(e.message || 'Erreur') + '</p>';
-    }
-  };
-  await refresh();
-
-  const fileInp = overlay.querySelector('#maint-doc-file');
-  const addBtn = overlay.querySelector('#maint-doc-add-btn');
-  addBtn.addEventListener('click', () => fileInp.click());
-  fileInp.addEventListener('change', async () => {
-    const f = fileInp.files && fileInp.files[0];
-    if (!f) return;
-    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
-    addBtn.disabled = true;
-    const fd = new FormData();
-    fd.append('file', f);
-    try {
-      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
-        method: 'POST', credentials: 'same-origin', body: fd
-      });
-      if (!res.ok) {
-        let msg = 'Upload echoue';
-        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
-        toast(msg, true); return;
-      }
-      toast('Document ajoute');
-      fileInp.value = '';
-      await refresh();
-      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
-  });
-}
-function openMaintForm(code) {
-  _maintEditCode = code || null;
-  const wrap = document.getElementById('maint-form-wrap');
-  const title = document.getElementById('maint-form-title');
-  const codeInp = document.getElementById('maint-code');
-  if (!wrap) return;
-  wrap.classList.remove('hidden');
-  const catSel = document.getElementById('maint-categorie');
-  // v2.2.17 — perSel retiré (périodicité cachée).
-  const intInp = document.getElementById('maint-intervalle');
-  const mInp   = document.getElementById('maint-metrage-ref');
-  if (code) {
-    const o = _maintItems.find(x => String(x.code) === String(code));
-    if (!o) return;
-    title.textContent = 'Modifier le code ' + code;
-    codeInp.value = o.code;
-    codeInp.disabled = true;
-    document.getElementById('maint-label').value = o.label || '';
-    document.getElementById('maint-niveau').value = String(o.niveau || 1);
-    if (catSel) {
-      // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
-      // Codes legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'édition.
-      let c;
-      if (o.categorie === 'remplacements') c = 'remplacements';
-      else if (o.categorie === 'entretien' || o.categorie === 'interventions' || o.categorie === 'suivi') c = 'entretien';
-      else c = 'controles';
-      catSel.value = c;
-    }
-    if (intInp) intInp.value = o.intervalle || '';
-    if (mInp)   mInp.value   = o.metrage_ref || '';
-  } else {
-    title.textContent = 'Nouveau code';
-    codeInp.value = '';
-    codeInp.disabled = false;
-    document.getElementById('maint-label').value = '';
-    document.getElementById('maint-niveau').value = '1';
-    if (catSel) catSel.value = 'controles';
-    if (intInp) intInp.value = '';
-    if (mInp)   mInp.value   = '';
-  }
-  // Section Documents : visible dans les 2 modes.
-  // En creation : la liste est masquee (aucun doc encore), l'upload est
-  // possible des que le code est saisi. En edition : la liste est chargee
-  // et l'upload attache directement au code existant.
-  const docsWrap = document.getElementById('maint-form-docs');
-  const docsList = document.getElementById('maint-form-docs-list');
-  const docsHint = document.getElementById('maint-form-docs-hint');
-  if (docsWrap) {
-    docsWrap.style.display = '';
-    _maintResetDocPicker();
-    _bindMaintFormDocUpload(code);
-    if (code) {
-      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
-      if (docsList) docsList.style.display = '';
-      _renderMaintFormDocs(code);
-    } else {
-      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
-      if (docsList) docsList.style.display = 'none';
-    }
-  }
-  // v2.2.34 : le scroller varie selon la page (window en Paramètres, .main en MyMaintenance).
-  // On tente les 2 : celui qui n'est pas le vrai scroller no-op silencieusement.
-  try {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    const m = document.querySelector('.main');
-    if (m) { if (m.scrollTo) m.scrollTo({ top: 0, behavior: 'smooth' }); else m.scrollTop = 0; }
-  } catch(e) {
-    try { window.scrollTo(0, 0); } catch(e2) {}
-    try { document.querySelector('.main').scrollTop = 0; } catch(e3) {}
-  }
-  codeInp.focus();
-}
-
-async function _renderMaintFormDocs(code) {
-  const list = document.getElementById('maint-form-docs-list');
-  if (!list) return;
-  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
-  try {
-    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
-    const items = Array.isArray(r.items) ? r.items : [];
-    if (!items.length) {
-      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>';
-      return;
-    }
-    list.innerHTML = items.map(d => {
-      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
-      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
-      const meta = [sz, dt, d.uploaded_by ? esc(d.uploaded_by) : ''].filter(Boolean).join(' · ');
-      return '<div class="maint-doc-row">'
-        + '<div class="maint-doc-row-info">'
-        +   '<span class="maint-doc-row-name" title="' + esc(d.filename) + '">' + esc(d.filename) + '</span>'
-        +   '<span class="maint-doc-row-meta">' + meta + '</span>'
-        + '</div>'
-        + '<a class="maint-doc-row-link" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener">Telecharger</a>'
-        + '<button type="button" class="maint-doc-row-del" data-form-doc-del="' + d.id + '">Supprimer</button>'
-        + '</div>';
-    }).join('');
-    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Supprimer ce document ?')) return;
-        try {
-          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
-          toast('Document supprime');
-          await _renderMaintFormDocs(code);
-          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
-      });
-    });
-  } catch(e) {
-    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
-  }
-}
 
 // Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
-async function _maintTriggerDocPicker() {
-  const codeInp = document.getElementById('maint-code');
-  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
-  if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
-  // En creation : sauvegarde le code en base avant l'upload, pour eviter
-  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
-  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
-  if (!codeExists) {
-    const labelInp = document.getElementById('maint-label');
-    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
-    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
-    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
-    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-    const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
-      ? rawCat
-      : (rawCat === 'interventions' ? 'entretien' : 'controles');
-    // v2.2.17 — periodique forcé à true (concept retiré côté UI).
-    const periodique = true;
-    const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
-    const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
-    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
-    try {
-      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
-      toast('Code enregistre - upload en cours');
-      _maintEditCode = codeNow;
-      codeInp.disabled = true;
-      await loadMaintCodes();
-      const listEl = document.getElementById('maint-form-docs-list');
-      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
-    } catch(e) {
-      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
-      return;
-    }
-  }
-  const inp = document.getElementById('maint-form-doc-file');
-  if (inp) inp.click();
-}
 
 // Compat : appele par openMaintForm, mais l'upload est declenche directement
 // par onchange du <input type=file>. No-op.
-function _bindMaintFormDocUpload(code) { /* upload direct via _maintOnDocFileChange */ }
 
 // Picker onchange -> upload immediat (pas de bouton Envoyer intermediaire).
-async function _maintOnDocFileChange() {
-  const inp = document.getElementById('maint-form-doc-file');
-  const f = inp && inp.files && inp.files[0];
-  if (!f) return;
-  if (f.size > 20 * 1024 * 1024) {
-    toast('Fichier trop volumineux (max 20 Mo)', true);
-    inp.value = '';
-    return;
-  }
-  const codeInp = document.getElementById('maint-code');
-  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
-  if (!codeNow) {
-    toast('Renseigne d\'abord le code', true);
-    inp.value = '';
-    return;
-  }
-  const btn = document.getElementById('maint-form-doc-add-btn');
-  if (btn) btn.disabled = true;
-  const fd = new FormData();
-  fd.append('file', f);
-  try {
-    const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
-      method: 'POST', credentials: 'same-origin', body: fd
-    });
-    if (!res.ok) {
-      let msg = 'Upload echoue';
-      try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
-      toast(msg, true); return;
-    }
-    toast('Document ajoute');
-    inp.value = '';
-    const listEl = document.getElementById('maint-form-docs-list');
-    if (listEl) listEl.style.display = '';
-    await _renderMaintFormDocs(codeNow);
-    if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-  } catch(e) {
-    toast('Erreur reseau', true);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
 
-function _maintResetDocPicker() {
-  const inp = document.getElementById('maint-form-doc-file');
-  if (inp) inp.value = '';
-}
 // Active/désactive Intervalle et Réf. métrage selon Périodique :
 //   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
 //     remplir l'intervalle de temps et/ou la référence métrage).
 //   - Périodique = NON : les deux champs sont vidés et grisés.
-function _maintTogglePeriodiqueUI(){
-  // v2.2.17 — perSel retiré (périodicité cachée).
-  const intInp = document.getElementById('maint-intervalle');
-  const mInp   = document.getElementById('maint-metrage-ref');
-  if (!perSel || !intInp || !mInp) return;
-  perSel.disabled = false;
-  const isPeriodic = (perSel.value === 'oui');
-  intInp.disabled = !isPeriodic;
-  intInp.style.opacity = isPeriodic ? '1' : '0.5';
-  mInp.disabled   = !isPeriodic;
-  mInp.style.opacity = isPeriodic ? '1' : '0.5';
-  mInp.style.display = '';
-  if (!isPeriodic) {
-    intInp.value = '';
-    mInp.value   = '';
-  }
-}
 function closeMaintForm() {
   _maintEditCode = null;
   const wrap = document.getElementById('maint-form-wrap');
@@ -5333,14 +5902,6 @@ function _fmtAlertDate(s) {
 }
 
 let _alertsFilterKind = 'all';
-
-function _alertIsConfigured(a) {
-  // Une alerte est "configurée" dès qu'elle a au moins une clé de paramètre
-  // (trigger / target / validation / checklist) renseignée par l'admin.
-  // Les alertes auto-créées par la migration v133 démarrent avec params={}.
-  if (!a || !a.params || typeof a.params !== 'object') return false;
-  return Object.keys(a.params).length > 0;
-}
 
 function renderAlertsList() {
   const box = document.getElementById('alerts-list');
@@ -5456,468 +6017,8 @@ document.addEventListener('click', (ev) => {
 });
 
 // Référentiels pour les formulaires d'alerte
-const _ALERT_TRIGGER_TYPES = [
-  { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
-  { v: 'periodic', l: 'Périodique — toutes les X minutes' },
-  { v: 'calendar', l: 'Calendaire — à heure fixe' },
-  { v: 'event',    l: 'Événementiel — sur action métier' },
-];
-const _ALERT_TRIGGER_EVENTS = [
-  { v: 'dossier_start',  l: 'Début de dossier' },
-  { v: 'dossier_end',    l: 'Fin de dossier' },
-  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
-];
-const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
-const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
-const _ALERT_DAYS = [
-  { v: 'mon', l: 'Lun' }, { v: 'tue', l: 'Mar' }, { v: 'wed', l: 'Mer' },
-  { v: 'thu', l: 'Jeu' }, { v: 'fri', l: 'Ven' }, { v: 'sat', l: 'Sam' }, { v: 'sun', l: 'Dim' },
-];
-
-function _alertDefaults(existing) {
-  const p = existing || {};
-  const trig = Object.assign({}, p.trigger || {});
-  // Compat rétro : si seul interval_hours est présent, on convertit en minutes.
-  if (trig.interval_minutes == null && trig.interval_hours != null) {
-    trig.interval_minutes = Math.round(Number(trig.interval_hours) * 60);
-    delete trig.interval_hours;
-  }
-  // Target : nouveau format = { machines: [...] }. Compat avec ancien { machine, role }.
-  const rawTarget = p.target || {};
-  let machines = rawTarget.machines;
-  if (!Array.isArray(machines)) {
-    if (typeof rawTarget.machine === 'string' && rawTarget.machine) {
-      machines = [rawTarget.machine];
-    } else {
-      machines = ['*'];
-    }
-  }
-  // Checklist : normalisation des items pour inclure le champ type (choice/value)
-  // et la conversion des anciens items "string" en objets.
-  const cl = Object.assign({ enabled: false, items: [] }, p.checklist || {});
-  if (!Array.isArray(cl.items)) cl.items = [];
-  cl.items = cl.items.map(it => {
-    if (typeof it === 'string') {
-      return { type: 'choice', label: it, responses: ['Conforme'] };
-    }
-    const t = (it && it.type) || 'choice';
-    if (t === 'value') {
-      return {
-        type: 'value',
-        label: (it && it.label) || '',
-        unit: (it && it.unit) || '',
-        min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
-        max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
-        required: !!(it && it.required),  // v2.2.86 : préserver required
-      };
-    }
-    const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
-    const ncResp = (it && Array.isArray(it.nc_responses))
-      ? it.nc_responses.filter(r => typeof r === 'string' && r.trim())
-      : [];
-    return {
-      type: 'choice',
-      label: (it && it.label) || '',
-      responses: responses.length ? responses : ['Conforme'],
-      multi: (it && it.multi === false) ? false : true,
-      allow_other: !!(it && it.allow_other),
-      other_is_nc: !!(it && it.other_is_nc),
-      nc_responses: ncResp,
-      required: !!(it && it.required),  // v2.2.86 : préserver required
-    };
-  });
-  return {
-    description: (typeof p.description === 'string') ? p.description : '',
-    trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
-    target: { machines: machines },
-    validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
-    dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
-    checklist: cl,
-    block_production: !!(p && p.block_production),  // v2.2.88
-  };
-}
-
-function _renderAlertFormFields(params, opts) {
-  opts = opts || {};
-  const d = _alertDefaults(params);
-  // Machines (multi-sélection via dropdown)
-  const machineList = _ALERT_MACHINES.filter(m => m !== '*');
-  const selectedMachines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const isAllMachines = selectedMachines.includes('*');
-  const machineCheckboxes = machineList.map(m => {
-    const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
-    const disabled = isAllMachines ? ' disabled' : '';
-    const rowCls = isAllMachines ? 'af-md-row is-disabled' : 'af-md-row';
-    const safeM = escAttr(m);
-    return '<div class="' + rowCls + '" onclick="_afRowClickByValue(event, \'' + safeM + '\')">'
-      + '<input type="checkbox" class="af-machine" value="' + safeM + '"' + (checked ? ' ' + checked : '') + disabled + ' onchange="_afOnMachineChange()">'
-      + '<div class="af-md-row-text">' + esc(m) + '</div>'
-      + '</div>';
-  }).join('');
-  let machinesInitialLabel;
-  if (isAllMachines) {
-    machinesInitialLabel = 'Toutes les machines';
-  } else if (selectedMachines.length === 0) {
-    machinesInitialLabel = 'Aucune machine sélectionnée';
-  } else if (selectedMachines.length === 1) {
-    machinesInitialLabel = selectedMachines[0];
-  } else if (selectedMachines.length <= 3) {
-    machinesInitialLabel = selectedMachines.join(', ');
-  } else {
-    machinesInitialLabel = selectedMachines.length + ' machines';
-  }
-  const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
-    '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
-  ).join('');
-  const eventOpts = _ALERT_TRIGGER_EVENTS.map(e =>
-    '<option value="' + e.v + '"' + (e.v === d.trigger.event ? ' selected' : '') + '>' + esc(e.l) + '</option>'
-  ).join('');
-  const daysHtml = _ALERT_DAYS.map(day => {
-    const checked = (d.trigger.days || []).indexOf(day.v) >= 0 ? 'checked' : '';
-    return '<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px"><input type="checkbox" class="af-day" value="' + day.v + '" ' + checked + ' style="margin:0">' + day.l + '</label>';
-  }).join(' ');
-
-  const nomBlock = opts.nomReadonly
-    ? '<div class="alert-field"><label class="alert-field-label">Titre <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code</span></label><input type="text" class="alert-field-input" value="' + escAttr(opts.nomValue || '') + '" disabled></div>'
-    : '<div class="alert-field"><label class="alert-field-label">Titre de l\'alerte <span style="color:var(--danger)">*</span></label><input type="text" id="af-nom" class="alert-field-input" maxlength="120" placeholder="Ex. Contrôle qualité Cohésio 1" value="' + escAttr(opts.nomValue || '') + '"></div>';
-
-  const descBlock = '<div class="alert-field">'
-    +   '<label class="alert-field-label">Description <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— contexte affiché à l\'opérateur</span></label>'
-    +   '<textarea id="af-description" class="alert-field-input" rows="2" maxlength="800" placeholder="Ex. Vérifier la tension Errepi et le serrage de la bobine — noter la valeur exacte pour analyse.">' + esc(d.description || '') + '</textarea>'
-    +   '<div class="alert-field-help">Optionnel. Affiché sous le titre de l\'alerte quand elle apparaît chez l\'opérateur.</div>'
-    + '</div>';
-  return nomBlock
-    + descBlock
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
-    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
-    +   '<div id="af-trigger-sub" class="alert-field-sub">'
-    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
-    +     '<div data-trigger-for="periodic">'
-    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
-    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +         '</div>'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
-    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
-    +         '</div>'
-    +       '</div>'
-    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="calendar">'
-    +       '<div class="alert-field-row">'
-    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
-    +         '<div></div>'
-    +       '</div>'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
-    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="event">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
-    +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
-    +       '<!-- v2.2.88 : Délai retiré pour after_calage. L\'alerte se déclenche à la saisie du calage. -->'
-    +     '</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +   '<div class="af-md-wrap">'
-    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
-    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
-    +       '<span class="af-md-trigger-caret">▼</span>'
-    +     '</button>'
-    +     '<div id="af-md-panel" class="af-md-panel">'
-    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
-    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
-    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
-    +       '</div>'
-    +       '<div class="af-md-sep"></div>'
-    +       machineCheckboxes
-    +     '</div>'
-    +   '</div>'
-    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
-    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
-    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
-    + '</div>'
-    // v2.2.88 : Bloque la production par alerte
-    + '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-    +   '<div>'
-    +     '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-    +     '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
-    +   '</div>'
-    +   '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    + '</div>'
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Aucune trace nulle part.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
-    +     '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
-    +     '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider).</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Questionnaire (points de contrôle)</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ex. découpe nette, colle conforme, centrage OK… L\'opérateur cochera chaque point lors de la validation.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-checklist-enabled" ' + (d.checklist.enabled ? 'checked' : '') + ' onchange="_afOnChecklistToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
-    +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
-    +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
-    +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
-    + '</div>';
-}
-
-function _afResponseRow(value, isNc) {
-  const safeVal = (value || '').replace(/"/g, '&quot;');
-  const ncChecked = isNc ? ' checked' : '';
-  return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
-    + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
-    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
-    +   '<input type="checkbox" class="af-cl-resp-nc"' + ncChecked + ' style="width:12px;height:12px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>NC</span>'
-    + '</label>'
-    + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
-    + '</div>';
-}
-
-function _afChecklistCardBody(item) {
-  const type = (item && item.type) || 'choice';
-  if (type === 'value') {
-    const safeUnit = ((item && item.unit) || '').replace(/"/g, '&quot;');
-    const safeMin = (item && item.min != null && item.min !== '') ? String(item.min) : '';
-    const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
-    return '<div class="af-cl-body" data-type="value">'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Unité</div><input type="text" class="alert-field-input af-cl-unit" maxlength="20" placeholder="bar, °C, mm…" value="' + safeUnit + '" style="padding:6px 10px;font-size:13px"></div>'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Min</div><input type="number" step="any" class="alert-field-input af-cl-min" placeholder="2.5" value="' + safeMin + '" style="padding:6px 10px;font-size:13px"></div>'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max</div><input type="number" step="any" class="alert-field-input af-cl-max" placeholder="3.2" value="' + safeMax + '" style="padding:6px 10px;font-size:13px"></div>'
-      + '</div>'
-      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… L\'opérateur saisira une valeur. Min/Max sont optionnels (vide = pas de borne).</div>'
-      + '</div>';
-  }
-  // type "choice"
-  const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
-  const ncList = (item && Array.isArray(item.nc_responses)) ? item.nc_responses.map(String) : [];
-  const responsesHtml = responses.map((r) => _afResponseRow(r, ncList.indexOf(String(r)) !== -1)).join('');
-  const multi = (item && item.multi === false) ? false : true;
-  return '<div class="af-cl-body" data-type="choice">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
-    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Réponses possibles</div>'
-    +   '<select class="alert-field-input af-cl-multi-sel" style="flex:0 0 auto;width:auto;padding:5px 8px;font-size:12px">'
-    +     '<option value="multi"' + (multi ? ' selected' : '') + '>Plusieurs réponses (cases)</option>'
-    +     '<option value="single"' + (!multi ? ' selected' : '') + '>Une seule réponse (radio)</option>'
-    +   '</select>'
-    + '</div>'
-    + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
-    + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' onchange="_afOnOtherToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
-    +   '<span>Ajouter une réponse <strong style="color:var(--text)">« Autre »</strong> avec zone d\'explication optionnelle</span>'
-    + '</label>'
-    + '<label class="af-cl-other-nc-lbl" style="display:' + ((item && item.allow_other) ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:4px;margin-left:22px;cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-nc"' + ((item && item.other_is_nc) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Traiter <strong style="color:var(--text)">« Autre »</strong> comme une <strong style="color:var(--danger)">non-conformité</strong></span>'
-    + '</label>'
-    + '</div>';
-}
-
-function _afOnOtherToggle(cb){
-  const body = cb.closest('.af-cl-body');
-  if(!body) return;
-  const ncLbl = body.querySelector('.af-cl-other-nc-lbl');
-  if(!ncLbl) return;
-  if(cb.checked){ ncLbl.style.display = 'flex'; }
-  else {
-    ncLbl.style.display = 'none';
-    const inp = ncLbl.querySelector('.af-cl-other-nc');
-    if(inp) inp.checked = false;
-  }
-}
-
-function _afChecklistCard(item) {
-  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
-  const type = (item && item.type) || 'choice';
-  const isRequired = !!(item && item.required);
-  const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
-                 + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
-  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
-    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
-    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;min-width:140px;font-weight:500">'
-    +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
-    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
-    + '</div>'
-    // v2.2.85 : case à cocher Obligatoire (bloque la validation opérateur si vide)
-    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
-    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
-    + '</label>'
-    + _afChecklistCardBody(item)
-    + '</div>';
-}
-
-function _afOnTypeChange(sel) {
-  const card = sel.closest('.af-cl-card');
-  if (!card) return;
-  const oldBody = card.querySelector('.af-cl-body');
-  if (!oldBody) return;
-  const newType = sel.value;
-  const defaultItem = (newType === 'value')
-    ? { type: 'value', label: '', unit: '', min: null, max: null }
-    : { type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false };
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCardBody(defaultItem);
-  const newBody = tmp.firstElementChild;
-  if (newBody) oldBody.replaceWith(newBody);
-}
-
-function _afRenderChecklistItems(items) {
-  const list = (items && items.length) ? items : [{ label: '', responses: ['Conforme'] }];
-  return list.map(_afChecklistCard).join('');
-}
-
-function _afAddChecklistItem() {
-  const wrap = document.getElementById('af-checklist-items');
-  if (!wrap) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false });
-  const card = tmp.firstElementChild;
-  wrap.appendChild(card);
-  card.querySelector('.af-cl-label')?.focus();
-}
-
-function _afAddResponse(btn) {
-  const card = btn.closest('.af-cl-card');
-  if (!card) return;
-  const list = card.querySelector('.af-cl-responses');
-  if (!list) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afResponseRow('');
-  const row = tmp.firstElementChild;
-  list.appendChild(row);
-  row.querySelector('.af-cl-resp-input')?.focus();
-}
-
-function _afRemoveResponse(btn) {
-  const row = btn.closest('.af-cl-resp-row');
-  if (!row) return;
-  const list = row.parentElement;
-  if (!list) { row.remove(); return; }
-  // Garde au moins une réponse par point
-  if (list.querySelectorAll('.af-cl-resp-row').length <= 1) {
-    toast('Un point doit garder au moins une réponse', true);
-    return;
-  }
-  row.remove();
-}
-
-function _afRemoveItem(btn) {
-  const card = btn.closest('.af-cl-card');
-  if (card) card.remove();
-}
-
-function _afOnChecklistToggle() {
-  const enabled = document.getElementById('af-checklist-enabled')?.checked;
-  const wrap = document.getElementById('af-checklist-wrap');
-  if (wrap) wrap.style.display = enabled ? '' : 'none';
-  if (enabled) {
-    const cards = document.querySelectorAll('.af-cl-card');
-    if (!cards.length) _afAddChecklistItem();
-  }
-}
-
 // v164 : toggle du bouton dismiss (fermeture sans saisie)
-function _afOnDismissToggle() {
-  const en = document.getElementById('af-dismiss-enabled')?.checked;
-  const wrap = document.getElementById('af-dismiss-wrap');
-  if (wrap) wrap.style.display = en ? '' : 'none';
-}
-
 // v2.2.42 : no-op depuis le retrait du filtre produit.
-function _afOnTriggerEventChange() {
-  // v2.2.88 : bloc délai retiré, plus rien à toggle.
-}
-
-function _afRowClick(ev, inputId) {
-  // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
-  // sur l'input pour éviter le double toggle (l'input gère son propre click).
-  if (ev.target.tagName === 'INPUT') return;
-  const inp = document.getElementById(inputId);
-  if (!inp || inp.disabled) return;
-  inp.checked = !inp.checked;
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function _afRowClickByValue(ev, value) {
-  if (ev.target.tagName === 'INPUT') return;
-  const row = ev.currentTarget;
-  const inp = row.querySelector('input.af-machine');
-  if (!inp || inp.disabled) return;
-  inp.checked = !inp.checked;
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function _afOnAllMachinesToggle() {
-  const allChk = document.getElementById('af-target-all');
-  if (!allChk) return;
-  document.querySelectorAll('.af-machine').forEach(el => {
-    el.disabled = allChk.checked;
-    if (allChk.checked) el.checked = false;
-    const row = el.closest('.af-md-row');
-    if (row) row.classList.toggle('is-disabled', allChk.checked);
-  });
-  _afUpdateMachinesLabel();
-}
-
-function _afOnMachineChange() {
-  const allChk = document.getElementById('af-target-all');
-  if (allChk && allChk.checked) {
-    const anyIndividual = Array.from(document.querySelectorAll('.af-machine:checked')).length > 0;
-    if (anyIndividual) allChk.checked = false;
-  }
-  _afUpdateMachinesLabel();
-}
-
-function _afUpdateMachinesLabel() {
-  const lbl = document.getElementById('af-md-label');
-  if (!lbl) return;
-  const all = !!document.getElementById('af-target-all')?.checked;
-  lbl.style.color = '';
-  if (all) { lbl.textContent = 'Toutes les machines'; return; }
-  const selected = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
-  if (!selected.length) {
-    lbl.textContent = 'Aucune machine sélectionnée';
-    lbl.style.color = 'var(--danger)';
-    return;
-  }
-  if (selected.length === 1) lbl.textContent = selected[0];
-  else if (selected.length <= 3) lbl.textContent = selected.join(', ');
-  else lbl.textContent = selected.length + ' machines';
-}
-
-function _afToggleMachinesPanel(ev) {
-  if (ev) ev.stopPropagation();
-  const panel = document.getElementById('af-md-panel');
-  if (!panel) return;
-  panel.classList.toggle('open');
-}
-
 // Fermeture du dropdown sur clic à l'extérieur (un seul listener global, idempotent)
 if (!window._afMachinesDropdownInit) {
   window._afMachinesDropdownInit = true;
@@ -5927,120 +6028,6 @@ if (!window._afMachinesDropdownInit) {
     if (ev.target.closest('.af-md-wrap')) return;
     panel.classList.remove('open');
   });
-}
-
-function _afOnTriggerChange() {
-  const t = document.getElementById('af-trigger-type')?.value || 'manual';
-  document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
-    el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
-  });
-  // v2.2.79 : après changement de type, sync l'état du bloc after_calage
-  if (typeof _afOnTriggerEventChange === 'function') _afOnTriggerEventChange();
-}
-
-function _afReadParams() {
-  const t = document.getElementById('af-trigger-type').value || 'manual';
-  const trig = { type: t };
-  if (t === 'periodic') {
-    const mInp = document.getElementById('af-trigger-interval-minutes');
-    const m = parseInt(mInp.value, 10);
-    if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
-    trig.interval_minutes = m;
-    const gInp = document.getElementById('af-trigger-grace-minutes');
-    if (gInp) {
-      const g = parseInt(gInp.value, 10);
-      if (isNaN(g) || g < 0 || g > 120) { toast('Délai avant 1ère alerte invalide (0 à 120 min)', true); return null; }
-      trig.grace_minutes = g;
-    }
-  } else if (t === 'calendar') {
-    const tm = document.getElementById('af-trigger-time').value || '';
-    if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
-    trig.time = tm;
-    const days = Array.from(document.querySelectorAll('.af-day:checked')).map(el => el.value);
-    if (!days.length) { toast('Au moins un jour requis', true); return null; }
-    trig.days = days;
-  } else if (t === 'event') {
-    trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
-    // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
-    delete trig.filter_conditionnement;
-    // v2.2.88 : delay_minutes retiré (n'a plus de sens dans le nouveau mode)
-    delete trig.delay_minutes;
-  }
-  // Lecture du questionnaire (cartes : label + réponses possibles)
-  const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
-  const items = [];
-  if (clEnabled) {
-    document.querySelectorAll('.af-cl-card').forEach(card => {
-      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
-      if (!label) return;
-      const type = card.querySelector('.af-cl-type')?.value || 'choice';
-      if (type === 'value') {
-        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
-        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
-        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
-        const item = { type: 'value', label: label };
-        if (unit) item.unit = unit;
-        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
-        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
-        // v2.2.85 : required
-        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
-        items.push(item);
-        return;
-      }
-      const responses = [];
-      const ncResponses = [];
-      card.querySelectorAll('.af-cl-resp-row').forEach(row => {
-        const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
-        if (!r) return;
-        responses.push(r);
-        if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
-      });
-      if (!responses.length) return;
-      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
-      const multi = (multiSel === 'single') ? false : true;
-      const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
-      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      // v2.2.85 : required
-      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
-      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
-      if (_reqCk) _choiceItem.required = true;
-      items.push(_choiceItem);
-    });
-  }
-  // Cible (lue en premier — interrompt si rien sélectionné)
-  let _tgt;
-  {
-    const all = !!document.getElementById('af-target-all')?.checked;
-    if (all) {
-      _tgt = { machines: ['*'] };
-    } else {
-      const ms = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
-      if (!ms.length) { toast('Sélectionne au moins une machine', true); return null; }
-      _tgt = { machines: ms };
-    }
-  }
-  const descEl = document.getElementById('af-description');
-  const descVal = descEl ? (descEl.value || '').trim() : '';
-  return {
-    description: descVal.slice(0, 800),
-    trigger: trig,
-    target: _tgt,
-    validation: {
-      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
-    },
-    // v2.2.88 : block_production par alerte
-    block_production: !!document.getElementById('af-block-production')?.checked,
-    dismiss_button: (function(){
-      const en = !!document.getElementById('af-dismiss-enabled')?.checked;
-      if(!en) return { enabled: false, label: '' };
-      const lbl = (document.getElementById('af-dismiss-label').value || 'Fermer l\'alerte').trim() || 'Fermer l\'alerte';
-      return { enabled: true, label: lbl };
-    })(),
-    checklist: {
-      enabled: clEnabled && items.length > 0,
-      items: items,
-    },
-  };
 }
 
 function openNewAlertModal() {
@@ -6160,15 +6147,16 @@ const placementOpts = placements.map(p =>
     const sizeOpts = sizes.map(s =>
       '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
     ).join('');
+    // v2.3.12 : modal simplifié — placement/size sont maintenant par alerte.
     overlay.innerHTML = '<div class="alert-modal">'
-      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-head"><h3>Délai entre alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
       + '<div class="alert-modal-body">'
-      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
-      +   '<div class="alert-field">'
+      +   '<!-- v2.3.12 : placement/size retirés (par alerte maintenant) -->'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Placement à l\'écran</label>'
       +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
       +   '</div>'
-      +   '<div class="alert-field">'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Taille</label>'
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
       +   '</div>'
@@ -6188,18 +6176,22 @@ const placementOpts = placements.map(p =>
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      // v2.3.27 : fix — depuis v2.3.12 le modal n'a plus qu'un champ (le
+      // délai). L'ancien code référençait ags-block qui n'est jamais rendu
+      // → getElementById(...).checked throw → toast d'erreur silencieux.
+      // On lit maintenant depuis _alertGlobalSettings (déjà chargé au boot).
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        placement: document.getElementById('ags-placement').value,
-        size: document.getElementById('ags-size').value,
-
+        placement: _alertGlobalSettings.placement || 'top-right',
+        size: _alertGlobalSettings.size || 'medium',
+        block_production: !!_alertGlobalSettings.block_production,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings = payload;
-        toast('Réglages enregistrés');
+        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
+        toast('Délai enregistré');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
@@ -6211,218 +6203,28 @@ function _stripAutoPrefix(nom) {
   return String(nom).replace(/^Contr[oôö]le\s*:\s*\d+\s*[–\-]\s*/i, '');
 }
 
-function _alertTriggerLabel(t) {
-  if (!t || !t.type) return 'Manuel';
-  if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
-  if (t.type === 'periodic') {
-    const m = (t.interval_minutes != null) ? t.interval_minutes
-              : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
-    return 'Périodique — toutes les ' + m + ' min';
-  }
-  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
-  if (t.type === 'event') {
-    const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
-    return 'Événementiel — ' + ev;
-  }
-  return t.type;
-}
-
 async function previewAlert(id) {
+  // v2.3.13 : refactor — appelle directement MysifaAlerts.simulate() au lieu
+  // de dupliquer la logique de rendu. Toute évolution du runtime bénéficie
+  // automatiquement au bouton "Tester sur moi".
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
-  // Charger les réglages globaux : placement, taille, bloque-production
   await loadAlertSettings();
-  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
-  const d = _alertDefaults(a.params);
-  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
-  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
-
-  const checklistHtml = clEnabled
-    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
-      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
-      +   d.checklist.items.map((it, idx) => {
-            const itType = it.type || 'choice';
-            if (itType === 'value') {
-              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
-              let toleranceHint = '';
-              if (it.min != null || it.max != null) {
-                const minStr = (it.min != null) ? String(it.min) : '−∞';
-                const maxStr = (it.max != null) ? String(it.max) : '+∞';
-                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
-              }
-              const _taReqStarV = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
-              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
-                + (it.required ? ' data-required="1"' : '')
-                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
-                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarV + '</div>'
-                + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
-                +   unit
-                + '</div>'
-                + toleranceHint
-                + '</div>';
-            }
-            const isMulti = it.multi !== false;
-            const inputType = isMulti ? 'checkbox' : 'radio';
-            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
-            const respHtml = it.responses.map((r) =>
-              '<label class="ta-chip">'
-              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
-              + '<span>' + esc(r) + '</span>'
-              + '</label>'
-            ).join('');
-            let otherHtml = '';
-            if (it.allow_other) {
-              otherHtml = '<label class="ta-chip ta-chip-other">'
-                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="_taOnOtherChange(this)">'
-                + '<span>Autre</span>'
-                + '</label>';
-            }
-            const otherArea = it.allow_other
-              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-              : '';
-            const _taReqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + _taReqStarC + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
-              + otherArea
-              + '</div>';
-          }).join('')
-      + '</div>'
-    : '';
-
-  // Construction du wrapper de simulation (positionnement, taille, backdrop)
-  const wrap = document.createElement('div');
-  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
-  // v2.2.88 : par alerte (fallback réglage global si présent pour rétrocompat)
-  if (d.block_production || settings.block_production) wrap.classList.add('ta-blocking');
-
-  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
-  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
-
-  // Description eventuelle (contexte affiche a l'operateur)
-  const _descText = (a.params && typeof a.params.description === 'string') ? a.params.description.trim() : '';
-  const _descHtml = _descText
-    ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + esc(_descText) + '</div>'
-    : '';
-
-  // Contenu de l'alerte (sans aucune chrome admin)
-  const alertHtml = '<div class="ta-sim-alert">'
-    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
-    + _descHtml
-    + checklistHtml
-    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
-    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-    + '<div class="ta-sim-actions">'
-    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
-    +   (d.dismiss_button && d.dismiss_button.enabled
-        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
-        : '')
-    + '</div>'
-    + '</div>';
-
-  wrap.innerHTML = exitBtn + alertHtml;
-  document.body.appendChild(wrap);
-
-  const close = () => wrap.remove();
-
-  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
-  document.getElementById('ta-sim-exit').addEventListener('click', close);
-
-  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
-  const onKey = (ev) => {
-    if (ev.key === 'Escape' && !d.block_production && !settings.block_production) {
-      close();
-      document.removeEventListener('keydown', onKey);
-    }
-  };
-  document.addEventListener('keydown', onKey);
-
-  // Si non bloquant + placement coin : cliquer en dehors ferme
-  if (!d.block_production && !settings.block_production) {
-    setTimeout(() => {
-      const outsideClick = (ev) => {
-        if (!wrap.contains(ev.target)) return;
-        if (ev.target.closest('.ta-sim-alert')) return;
-        if (ev.target.closest('.ta-sim-exit')) return;
-        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
-        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
-        close();
-        document.removeEventListener('keydown', onKey);
-      };
-      wrap.addEventListener('click', outsideClick);
-    }, 100);
+  if (!window.MysifaAlerts || typeof window.MysifaAlerts.simulate !== 'function') {
+    toast('Runtime alertes non chargé — impossible de tester', true);
+    return;
   }
-
-  // Valider — v2.2.87 : ne bloque que sur les questions REQUIRED
-  function _taIsComplete() {
-    if (!clEnabled) return true;
-    const items = wrap.querySelectorAll('.ta-cl-item');
-    for (const it of items) {
-      if (it.getAttribute('data-required') !== '1') continue;
-      const t = it.getAttribute('data-type') || 'choice';
-      if (t === 'value') {
-        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
-        if (v === '') return false;
-      } else {
-        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
-      }
-    }
-    return true;
+  if (typeof window.MysifaAlerts.start === 'function') {
+    try { await window.MysifaAlerts.start(); } catch(_){}
   }
-  // v2.2.87 : sync du bouton Valider selon required
-  function _taSyncValidateState() {
-    const btn = wrap.querySelector('#ta-validate');
-    if (!btn) return;
-    const ok = _taIsComplete();
-    btn.disabled = !ok;
-    btn.style.opacity = ok ? '' : '.5';
-    btn.style.cursor = ok ? '' : 'not-allowed';
-  }
-  function _taFinalize() {
-    toast('Test terminé — aucune donnée enregistrée.');
-    close();
-    document.removeEventListener('keydown', onKey);
-  }
-  function _taRenderValidate(actions) {
-    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
-    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  }
-  function _taRenderConfirm(actions) {
-    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
-      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
-      + '<div style="display:flex;gap:6px">'
-      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
-      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
-      + '</div>'
-      + '</div>';
-    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
-    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
-  }
-  function _taOnValidate() {
-    // v2.2.87 : bouton disabled tant que required pas OK → sécurité si on arrive ici
-    if (!_taIsComplete()) return;
-    _taFinalize();
-  }
-  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  // v2.2.87 : listeners pour recalculer l'état disabled en temps réel
-  wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val').forEach(el => {
-    el.addEventListener('change', _taSyncValidateState);
-    el.addEventListener('input', _taSyncValidateState);
+  await window.MysifaAlerts.simulate({
+    id: a.id,
+    nom: a.nom,
+    linked_maint_code: a.linked_maint_code || '',
+    params: a.params || {},
   });
-  _taSyncValidateState();
-  // v164 : bouton dismiss dans la preview
-  const taDismiss = document.getElementById('ta-dismiss');
-  if (taDismiss) {
-    taDismiss.addEventListener('click', () => {
-      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
-      close();
-      document.removeEventListener('keydown', onKey);
-    });
-  }
 }
+
 
 function openEditAlertModal(id) {
   const a = _alertsData.find(x => x.id === id);
@@ -6476,1973 +6278,6 @@ async function deleteUpdate(id) {
   } catch(e) { toast(e.message, true); }
 }
 
-// ── Audit log ─────────────────────────────────────────────
-let _auditOffset = 0;
-const _auditLimit = 50;
-let _auditSearchTimer = null;
-
-function debouncedAuditSearch() {
-  clearTimeout(_auditSearchTimer);
-  _auditSearchTimer = setTimeout(() => { _auditOffset = 0; loadAuditLogs(); }, 300);
-}
-
-const ACTION_COLORS = {
-  CREATE:   'var(--ok)',
-  UPDATE:   'var(--accent)',
-  DELETE:   'var(--danger)',
-  CLOSE:    'var(--muted)',
-  VALIDATE: 'var(--warn)',
-  REORDER:  'var(--text2)',
-  SEARCH:   'var(--accent)',
-  LOGIN:    'var(--text2)',
-  LOGOUT:   'var(--muted)',
-};
-const ACTION_LABELS = {
-  CREATE:'Création', UPDATE:'Modification', DELETE:'Suppression',
-  CLOSE:'Clôture', VALIDATE:'Validation', REORDER:'Réorganisation',
-  SEARCH:'Recherche', LOGIN:'Connexion', LOGOUT:'Déconnexion',
-};
-const MODULE_LABELS = {
-  planning:'Planning', fabrication:'Fabrication', stock:'Stock',
-  expe:'Expéditions', rh:'RH', settings:'Paramètres', auth:'Auth',
-  portal:'Portail',
-};
-
-async function loadAuditLogs() {
-  const wrap = document.getElementById('audit-table-wrap');
-  const pag  = document.getElementById('audit-pagination');
-  const search = (document.getElementById('audit-search')?.value || '').trim();
-  const module = document.getElementById('audit-filter-module')?.value || '';
-  const action = document.getElementById('audit-filter-action')?.value || '';
-
-  wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Chargement…</div>';
-
-  const params = new URLSearchParams({
-    limit: _auditLimit,
-    offset: _auditOffset,
-    ...(module && { module }),
-    ...(action && { action }),
-    ...(search && { search }),
-  });
-
-  const res = await fetch('/api/settings/audit?' + params, { credentials: 'include' });
-  if (!res.ok) { wrap.innerHTML = '<div style="color:var(--danger);font-size:13px">Erreur de chargement.</div>'; return; }
-  const { total, logs } = await res.json();
-
-  if (!logs.length) {
-    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Aucune action enregistrée.</div>';
-    pag.innerHTML = '';
-    return;
-  }
-
-  const rows = logs.map(l => {
-    const color = ACTION_COLORS[l.action] || 'var(--text2)';
-    const actionLabel = ACTION_LABELS[l.action] || l.action;
-    const moduleLabel = MODULE_LABELS[l.module] || l.module;
-    const dt = l.created_at_display != null && l.created_at_display !== ''
-      ? l.created_at_display
-      : (l.created_at ? l.created_at.replace('T', ' ').slice(0, 16) : '—');
-    const detailHtml = l.detail
-      ? `<span style="color:var(--muted);font-size:11px;display:block;margin-top:2px;
-                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px"
-               title="${escAttr(l.detail)}">${esc(l.detail)}</span>` : '';
-    return `<tr>
-      <td style="white-space:nowrap;font-family:monospace;font-size:11px;color:var(--muted)">${dt}</td>
-      <td style="font-size:13px;font-weight:600;color:var(--text)">${esc(l.user_nom||'—')}</td>
-      <td><span style="font-size:10px;font-weight:700;color:var(--bg);background:${color};
-                       padding:2px 7px;border-radius:20px;text-transform:uppercase">${actionLabel}</span></td>
-      <td><span style="font-size:11px;color:var(--text2);background:var(--accent-bg);
-                       padding:2px 6px;border-radius:6px">${moduleLabel}</span></td>
-      <td style="font-size:13px;color:var(--text);max-width:280px">
-        ${esc(l.objet||'—')}${detailHtml}
-      </td>
-    </tr>`;
-  }).join('');
-
-  wrap.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead>
-        <tr style="border-bottom:2px solid var(--border)">
-          <th style="text-align:left;padding:8px 12px 8px 0;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">Date</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Utilisateur</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Action</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Module</th>
-          <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;
-                     color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Objet</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.replace(/<tr>/g, '<tr style="border-bottom:1px solid var(--border)">')}
-      </tbody>
-    </table>`;
-
-  const from = _auditOffset + 1;
-  const to   = Math.min(_auditOffset + logs.length, total);
-  pag.innerHTML = `
-    <span>${from}–${to} sur ${total} actions</span>
-    <div style="display:flex;gap:6px">
-      <button type="button" onclick="_auditOffset=Math.max(0,_auditOffset-_auditLimit);loadAuditLogs()"
-              ${_auditOffset === 0 ? 'disabled' : ''}
-              style="background:var(--card);border:1px solid var(--border);border-radius:6px;
-                     padding:4px 10px;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
-        ← Précédent
-      </button>
-      <button type="button" onclick="_auditOffset=Math.min(total-_auditLimit,_auditOffset+_auditLimit);loadAuditLogs()"
-              ${to >= total ? 'disabled' : ''}
-              style="background:var(--card);border:1px solid var(--border);border-radius:6px;
-                     padding:4px 10px;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px">
-        Suivant →
-      </button>
-    </div>`;
-}
-
-// ── Registre FSC ─────────────────────────────────────────────
-const FSC_CLAIM_LABELS = {
-  non_fsc: 'Non FSC',
-  fsc_100: 'FSC 100%',
-  fsc_mix_credit: 'FSC Mix Credit',
-  fsc_mix: 'FSC Mix',
-  fsc_recycled: 'FSC Recycled',
-};
-const FSC_STATUT_LABELS = {
-  attente: 'En attente',
-  en_cours: 'En cours',
-  termine: 'Terminé',
-};
-let _fscDatesInit = false;
-
-function initFscDates() {
-  const duEl = document.getElementById('fsc-du');
-  const auEl = document.getElementById('fsc-au');
-  if (!duEl || !auEl) return;
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  if (!duEl.value) duEl.value = `${y}-01-01`;
-  if (!auEl.value) auEl.value = `${y}-${m}-${d}`;
-}
-
-function initFscPanel() {
-  initFscDates();
-  if (!_fscDatesInit) {
-    _fscDatesInit = true;
-  }
-  loadFscStats();
-  loadFscRegistre();
-}
-
-async function renderSettingsDashboards() {
-  const root = document.getElementById('settings-tab-content');
-  if (!root) return;
-  root.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:13px">Chargement…</div>';
-
-  let dashboards = [];
-  try {
-    const r = await fetch('/api/dashboards/admin', { credentials: 'include' });
-    if (r.ok) dashboards = await r.json();
-  } catch(e) {}
-
-  const WIDGET_TYPES = [
-    { value: 'stock_alerts',     label: 'Alertes stock matières premières' },
-    { value: 'planning_summary', label: 'Résumé planning production' },
-    { value: 'expe_today',       label: 'Départs expédition du jour' },
-  ];
-  const CATEGORIES_MP = ['mandrin','palette','adhesif','carton'];
-
-  function renderList() {
-    const listEl = document.createElement('div');
-    listEl.style.cssText = 'display:flex;flex-direction:column;gap:10px;margin-top:16px';
-
-    if (!dashboards.length) {
-      listEl.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:24px 0">Aucun tableau de bord créé.</div>';
-    } else {
-      dashboards.forEach(d => {
-        const card = document.createElement('div');
-        card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px';
-
-        const typeInfo = WIDGET_TYPES.find(t => t.value === d.widget_type) || { label: d.widget_type };
-        const statusBadge = d.actif
-          ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Actif</span>'
-          : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactif</span>';
-
-        card.innerHTML = `
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:14px;font-weight:700;color:var(--text)">${escHtml(d.titre)}</span>
-              ${statusBadge}
-            </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">${escHtml(typeInfo.label)}</div>
-            ${d.description ? `<div style="font-size:12px;color:var(--text2);margin-top:2px">${escHtml(d.description)}</div>` : ''}
-          </div>
-          <div style="display:flex;gap:8px;flex-shrink:0">
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" data-edit="${d.id}">Modifier</button>
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" data-del="${d.id}">Supprimer</button>
-          </div>`;
-
-        card.querySelector('[data-edit]').addEventListener('click', () => openDashboardModal(d));
-        card.querySelector('[data-del]').addEventListener('click', () => deleteDashboard(d.id, d.titre));
-        listEl.appendChild(card);
-      });
-    }
-    return listEl;
-  }
-
-  async function deleteDashboard(id, titre) {
-    if (!confirm(`Supprimer le tableau de bord "${titre}" ? Il sera retiré du portail de tous les utilisateurs.`)) return;
-    try {
-      const r = await fetch(`/api/dashboards/admin/${id}`, { method: 'DELETE', credentials: 'include' });
-      if (r.ok) {
-        dashboards = dashboards.filter(d => d.id !== id);
-        rebuildPage();
-        toast('Tableau de bord supprimé.', false);
-      } else {
-        toast('Erreur lors de la suppression.', true);
-      }
-    } catch(e) { toast('Erreur réseau.', true); }
-  }
-
-  function openDashboardModal(existing) {
-    const isEdit = !!existing;
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center';
-    overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
-
-    const modal = document.createElement('div');
-    modal.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;width:420px;max-width:92vw;box-shadow:0 16px 48px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden';
-
-    const head = document.createElement('div');
-    head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)';
-    head.innerHTML = `<span style="font-size:15px;font-weight:700;color:var(--text)">${isEdit ? 'Modifier' : 'Nouveau tableau de bord'}</span>`;
-    const btnX = document.createElement('button');
-    btnX.className = 'db-panel-btn';
-    btnX.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-    btnX.addEventListener('click', () => overlay.remove());
-    head.appendChild(btnX);
-
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:14px';
-
-    // Champ titre
-    const fTitre = document.createElement('div');
-    fTitre.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Titre</label>
-      <input id="db-f-titre" type="text" placeholder="Ex: Stocks à réapprovisionner" value="${escAttr(existing?.titre||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
-
-    // Champ description
-    const fDesc = document.createElement('div');
-    fDesc.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Description <span style="color:var(--muted);font-weight:400">(optionnel)</span></label>
-      <input id="db-f-desc" type="text" placeholder="Ex: Mandrins, cartons, palettes et adhésif" value="${escAttr(existing?.description||'')}" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">`;
-
-    // Champ type (désactivé en édition)
-    const fType = document.createElement('div');
-    const typeOpts = WIDGET_TYPES.map(t =>
-      `<option value="${t.value}" ${(existing?.widget_type===t.value||(!existing&&t.value==='stock_alerts'))?'selected':''}>${t.label}</option>` 
-    ).join('');
-    fType.innerHTML = `<label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Type de widget</label>
-      <select id="db-f-type" ${isEdit?'disabled':''} style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px">${typeOpts}</select>
-      ${isEdit?'<div style="font-size:11px;color:var(--muted);margin-top:4px">Le type ne peut pas être modifié après création.</div>':''}`;
-
-    // Config dynamique selon le type (stock_alerts → catégories)
-    const fConfig = document.createElement('div');
-    fConfig.id = 'db-f-config';
-
-    function renderConfigFields(type, currentConfig) {
-      fConfig.innerHTML = '';
-      if (type === 'stock_alerts') {
-        const cats = currentConfig?.categories || [];
-        fConfig.innerHTML = `<div>
-          <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Catégories affichées</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            ${CATEGORIES_MP.map(c => `
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg)">
-                <input type="checkbox" value="${c}" ${cats.includes(c)||!cats.length?'checked':''} style="accent-color:var(--accent)">
-                ${c.charAt(0).toUpperCase()+c.slice(1)}
-              </label>`).join('')}
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px">Si aucune sélectionnée, toutes les catégories sont affichées.</div>
-        </div>`;
-      }
-      // Pour planning_summary et expe_today : pas de config supplémentaire pour l'instant
-    }
-
-    const initType = existing?.widget_type || 'stock_alerts';
-    renderConfigFields(initType, existing?.config_json || {});
-
-    fType.querySelector('select')?.addEventListener('change', (e) => {
-      renderConfigFields(e.target.value, {});
-    });
-
-    // Champ actif
-    const fActif = document.createElement('div');
-    fActif.innerHTML = `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text2)">
-      <input id="db-f-actif" type="checkbox" ${(existing?.actif!==false)?'checked':''} style="accent-color:var(--accent);width:16px;height:16px">
-      Dashboard actif (visible par les utilisateurs)
-    </label>`;
-
-    // Bouton soumettre
-    const footer = document.createElement('div');
-    footer.style.cssText = 'padding:0 20px 20px;display:flex;justify-content:flex-end;gap:10px';
-    const btnCancel = document.createElement('button');
-    btnCancel.className = 'btn btn-ghost';
-    btnCancel.textContent = 'Annuler';
-    btnCancel.addEventListener('click', () => overlay.remove());
-
-    const btnSave = document.createElement('button');
-    btnSave.className = 'btn btn-accent';
-    btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-    btnSave.addEventListener('click', async () => {
-      const titre = document.getElementById('db-f-titre')?.value?.trim();
-      if (!titre) { toast('Le titre est requis.', true); return; }
-      const widget_type = document.getElementById('db-f-type')?.value || initType;
-      const desc = document.getElementById('db-f-desc')?.value?.trim() || '';
-      const actif = document.getElementById('db-f-actif')?.checked !== false;
-
-      // Collecter config
-      let config_json = {};
-      if (widget_type === 'stock_alerts') {
-        const checked = [...document.querySelectorAll('#db-f-config input[type=checkbox]:checked')].map(el => el.value);
-        if (checked.length && checked.length < CATEGORIES_MP.length) {
-          config_json.categories = checked;
-        }
-      }
-
-      btnSave.disabled = true;
-      btnSave.textContent = isEdit ? 'Enregistrement…' : 'Création…';
-
-      try {
-        let r;
-        if (isEdit) {
-          r = await fetch(`/api/dashboards/admin/${existing.id}`, {
-            method: 'PATCH', credentials: 'include',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ titre, description: desc, config_json, actif }),
-          });
-        } else {
-          r = await fetch('/api/dashboards/admin', {
-            method: 'POST', credentials: 'include',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ titre, description: desc, widget_type, config_json, actif }),
-          });
-        }
-        if (r.ok) {
-          overlay.remove();
-          // Recharger la liste
-          const r2 = await fetch('/api/dashboards/admin', { credentials: 'include' });
-          if (r2.ok) dashboards = await r2.json();
-          rebuildPage();
-          toast(isEdit ? 'Tableau de bord modifié.' : 'Tableau de bord créé.', false);
-        } else {
-          const err = await r.json().catch(() => ({}));
-          toast(err.detail || 'Erreur lors de la sauvegarde.', true);
-          btnSave.disabled = false;
-          btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-        }
-      } catch(e) {
-        toast('Erreur réseau.', true);
-        btnSave.disabled = false;
-        btnSave.textContent = isEdit ? 'Enregistrer' : 'Créer';
-      }
-    });
-
-    body.appendChild(fTitre);
-    body.appendChild(fDesc);
-    body.appendChild(fType);
-    body.appendChild(fConfig);
-    body.appendChild(fActif);
-    footer.appendChild(btnCancel);
-    footer.appendChild(btnSave);
-    modal.appendChild(head);
-    modal.appendChild(body);
-    modal.appendChild(footer);
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-    requestAnimationFrame(() => document.getElementById('db-f-titre')?.focus());
-  }
-
-  function rebuildPage() {
-    root.innerHTML = '';
-    buildPage();
-  }
-
-  function buildPage() {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'max-width:760px;margin:0 auto;padding:0 0 40px';
-
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
-    const h = document.createElement('div');
-    h.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--text)">Tableaux de bord</div><div style="font-size:13px;color:var(--muted);margin-top:4px">Créez des tableaux de bord que les utilisateurs peuvent ajouter à leur portail.</div>';
-    const btnNew = document.createElement('button');
-    btnNew.className = 'btn btn-accent';
-    btnNew.innerHTML = '+ Nouveau';
-    btnNew.style.cssText = 'flex-shrink:0;padding:8px 16px;font-size:13px';
-    btnNew.addEventListener('click', () => openDashboardModal(null));
-    topRow.appendChild(h);
-    topRow.appendChild(btnNew);
-    wrap.appendChild(topRow);
-    wrap.appendChild(renderList());
-    root.appendChild(wrap);
-  }
-
-  buildPage();
-}
-
-function fscClaimBadgeHtml(claim) {
-  const c = (claim || 'non_fsc').trim();
-  const label = FSC_CLAIM_LABELS[c] || esc(c);
-  let bg = 'rgba(148,163,184,.12)';
-  let color = 'var(--muted)';
-  if (c === 'fsc_100') {
-    bg = 'rgba(52,211,153,.12)';
-    color = 'var(--ok)';
-  } else if (c === 'fsc_recycled' || c.startsWith('fsc_mix')) {
-    bg = 'rgba(34,211,238,.12)';
-    color = 'var(--accent)';
-  }
-  return `<span class="fsc-claim-badge" style="background:${bg};color:${color}">${esc(label)}</span>`;
-}
-
-async function loadFscStats() {
-  const grid = document.getElementById('fsc-kpi-grid');
-  if (!grid) return;
-  try {
-    const d = await api('/api/fsc/stats');
-    if (!d) return;
-    const alertBadge = (d.alertes_ecart_total || 0) > 0 ? 'danger' : 'muted';
-    grid.innerHTML = `
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Réceptions FSC ce mois</div>
-        <div class="fsc-kpi-val">${esc(String(d.recep_fsc_ce_mois ?? 0))}</div>
-        <span class="fsc-kpi-badge accent">Mois en cours</span>
-      </div>
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Dossiers FSC actifs</div>
-        <div class="fsc-kpi-val">${esc(String(d.dossiers_fsc_actifs ?? 0))}</div>
-        <span class="fsc-kpi-badge accent">Non terminés</span>
-      </div>
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Dossiers FSC terminés</div>
-        <div class="fsc-kpi-val">${esc(String(d.dossiers_termines_fsc ?? 0))}</div>
-        <span class="fsc-kpi-badge ok">Historique</span>
-      </div>
-      <div class="fsc-kpi-card">
-        <div class="fsc-kpi-label">Alertes écart total</div>
-        <div class="fsc-kpi-val">${esc(String(d.alertes_ecart_total ?? 0))}</div>
-        <span class="fsc-kpi-badge ${alertBadge}">Confirmées</span>
-      </div>`;
-  } catch (e) {
-    grid.innerHTML = `<p style="color:var(--danger);font-size:13px">${esc(e.message || 'Erreur chargement KPIs')}</p>`;
-  }
-}
-
-function renderFscReceptions(rows) {
-  const wrap = document.getElementById('fsc-recep-wrap');
-  if (!wrap) return;
-  if (!rows.length) {
-    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Aucune réception FSC sur la période.</p>';
-    return;
-  }
-  const trs = rows.map(r => {
-    const dt = (r.created_at || '').replace('T', ' ').slice(0, 10);
-    return `<tr>
-      <td style="font-family:monospace;font-size:11px;color:var(--muted)">${esc(dt)}</td>
-      <td>${esc(r.fournisseur || '—')}</td>
-      <td style="font-family:monospace;font-size:11px">${esc(r.fournisseur_licence || '—')}</td>
-      <td>${esc(r.certificat_fsc || '—')}</td>
-      <td>${fscClaimBadgeHtml(r.fsc_type_claim)}</td>
-      <td style="text-align:center">${esc(String(r.nb_bobines ?? 0))}</td>
-      <td>${esc(r.created_by_name || '—')}</td>
-    </tr>`;
-  }).join('');
-  wrap.innerHTML = `<table>
-    <thead><tr>
-      <th>Date</th><th>Fournisseur</th><th>Licence FSC</th><th>Certificat</th>
-      <th>Type claim</th><th>Nb bobines</th><th>Réceptionné par</th>
-    </tr></thead>
-    <tbody>${trs}</tbody>
-  </table>`;
-}
-
-function renderFscDossiers(rows) {
-  const wrap = document.getElementById('fsc-dossiers-wrap');
-  if (!wrap) return;
-  if (!rows.length) {
-    wrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Aucun dossier FSC sur la période.</p>';
-    return;
-  }
-  const trs = rows.map(d => {
-    const alertes = Number(d.nb_alertes) || 0;
-    const rowCls = alertes > 0 ? ' class="fsc-row-alert"' : '';
-    const statut = FSC_STATUT_LABELS[d.statut] || d.statut || '—';
-    return `<tr${rowCls}>
-      <td style="font-weight:700;color:var(--accent)">${esc(d.reference || '—')}</td>
-      <td>${esc(d.client || '—')}</td>
-      <td>${fscClaimBadgeHtml(d.fsc_type_requis)}</td>
-      <td>${esc(statut)}</td>
-      <td style="font-family:monospace;font-size:11px">${esc(d.date_livraison || '—')}</td>
-      <td style="text-align:center">${esc(String(d.nb_bobines_scannees ?? 0))}</td>
-      <td style="text-align:center;font-weight:700;color:${alertes > 0 ? 'var(--danger)' : 'var(--muted)'}">${esc(String(alertes))}</td>
-    </tr>`;
-  }).join('');
-  wrap.innerHTML = `<table>
-    <thead><tr>
-      <th>Référence</th><th>Client</th><th>Type FSC requis</th><th>Statut</th>
-      <th>Date livraison</th><th>Bobines scannées</th><th>Alertes</th>
-    </tr></thead>
-    <tbody>${trs}</tbody>
-  </table>`;
-}
-
-async function loadFscRegistre() {
-  const du = document.getElementById('fsc-du')?.value || '';
-  const au = document.getElementById('fsc-au')?.value || '';
-  const recepWrap = document.getElementById('fsc-recep-wrap');
-  const dossWrap = document.getElementById('fsc-dossiers-wrap');
-  if (recepWrap) recepWrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>';
-  if (dossWrap) dossWrap.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px 0">Chargement…</p>';
-  try {
-    const params = new URLSearchParams();
-    if (du) params.set('du', du);
-    if (au) params.set('au', au);
-    const d = await api('/api/fsc/registre?' + params.toString());
-    if (!d) return;
-    renderFscReceptions(d.receptions || []);
-    renderFscDossiers(d.dossiers || []);
-  } catch (e) {
-    const msg = `<p style="color:var(--danger);font-size:13px;padding:12px 0">${esc(e.message || 'Erreur chargement')}</p>`;
-    if (recepWrap) recepWrap.innerHTML = msg;
-    if (dossWrap) dossWrap.innerHTML = msg;
-  }
-}
-
-function exportFscCsv() {
-  const du = document.getElementById('fsc-du')?.value || '';
-  const au = document.getElementById('fsc-au')?.value || '';
-  const params = new URLSearchParams({ format: 'csv' });
-  if (du) params.set('du', du);
-  if (au) params.set('au', au);
-  window.location.href = '/api/fsc/registre?' + params.toString();
-}
-
-// ── Clés API ──────────────────────────────────────────────────────
-async function loadApiKeys() {
-  const res = await fetch('/api/settings/api-keys', {credentials:'include'});
-  const data = await res.json();
-  const list = document.getElementById('ak-list');
-  if (!data.keys || data.keys.length === 0) {
-    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Aucune clé créée.</div>';
-    return;
-  }
-  list.innerHTML = data.keys.map(k => `
-    <div style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-      <div style="flex:1;min-width:160px">
-        <div style="font-size:13px;font-weight:600;color:var(--text)">${escHtml(k.name)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;font-family:monospace">${escHtml(k.key_prefix)}…</div>
-      </div>
-      <div style="font-size:11px;color:var(--muted)">${escHtml(k.scopes||'')}</div>
-      <div style="font-size:11px;color:var(--muted)">${k.last_used_at ? 'Dernière utilisation : '+escHtml(k.last_used_at.replace('T',' ').slice(0,16)) : 'Jamais utilisée'}</div>
-      <div>
-        <span style="display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;${k.is_active ? 'background:rgba(52,211,153,.15);color:var(--ok)' : 'background:rgba(248,113,113,.15);color:var(--danger)'}">
-          ${k.is_active ? 'Active' : 'Révoquée'}
-        </span>
-      </div>
-      <div style="display:flex;gap:6px">
-        ${k.is_active ? `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid var(--border)" onclick="revokeApiKey(${k.id})">Révoquer</button>` : ''}
-        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;border:1px solid rgba(248,113,113,.4);color:var(--danger)" onclick="deleteApiKey(${k.id})">Supprimer</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function createApiKey() {
-  const name = document.getElementById('ak-name').value.trim();
-  if (!name) { toast('Donnez un nom à cette clé.', true); return; }
-  const res = await fetch('/api/settings/api-keys', {
-    method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name})
-  });
-  if (!res.ok) { toast('Erreur lors de la création.', true); return; }
-  const data = await res.json();
-  document.getElementById('ak-name').value = '';
-  document.getElementById('ak-reveal-value').textContent = data.key;
-  document.getElementById('ak-reveal').style.display = 'block';
-  toast('Clé créée. Copiez-la maintenant.', false);
-  loadApiKeys();
-}
-
-// ── Sidebar sections collapse ──
-(function initNavGroups() {
-  // Groupes principaux
-  document.querySelectorAll('.nav-group-label').forEach(function(label) {
-    label.addEventListener('click', function() {
-      const collapsed = label.classList.toggle('ngl-collapsed');
-      // Parcourir les frères jusqu'au prochain nav-group-label
-      let el = label.nextElementSibling;
-      while (el && !el.classList.contains('nav-group-label')) {
-        if (collapsed) {
-          el.style.display = 'none';
-        } else {
-          el.style.display = '';
-        }
-        el = el.nextElementSibling;
-      }
-      // Re-appliquer l'état des sous-groupes (qu'on aurait pu écraser en expandant)
-      if (!collapsed) {
-        let el2 = label.nextElementSibling;
-        let subCollapsed = null;
-        while (el2 && !el2.classList.contains('nav-group-label')) {
-          if (el2.classList.contains('nav-subgroup-label')) {
-            subCollapsed = el2.classList.contains('nsl-collapsed');
-          } else if (subCollapsed && el2.classList.contains('nav-btn')) {
-            el2.style.display = 'none';
-          }
-          el2 = el2.nextElementSibling;
-        }
-      }
-    });
-  });
-  // Sous-groupes (à l'intérieur d'un groupe principal)
-  document.querySelectorAll('.nav-subgroup-label').forEach(function(label) {
-    label.addEventListener('click', function(ev) {
-      ev.stopPropagation();
-      const collapsed = label.classList.toggle('nsl-collapsed');
-      let el = label.nextElementSibling;
-      while (el && !el.classList.contains('nav-subgroup-label') && !el.classList.contains('nav-group-label')) {
-        if (el.classList.contains('nav-btn')) {
-          el.style.display = collapsed ? 'none' : '';
-        }
-        el = el.nextElementSibling;
-      }
-    });
-  });
-})();
-
-function copyApiKey() {
-  const val = document.getElementById('ak-reveal-value').textContent;
-  navigator.clipboard.writeText(val).then(() => toast('Clé copiée.', false));
-}
-
-async function revokeApiKey(id) {
-  if (!confirm('Révoquer cette clé ? Le pont Access ne pourra plus s\'authentifier.')) return;
-  const res = await fetch(`/api/settings/api-keys/${id}/revoke`, {method:'PATCH', credentials:'include'});
-  if (!res.ok) { toast('Erreur lors de la révocation.', true); return; }
-  toast('Clé révoquée.', false);
-  loadApiKeys();
-}
-
-async function deleteApiKey(id) {
-  if (!confirm('Supprimer définitivement cette clé ?')) return;
-  const res = await fetch(`/api/settings/api-keys/${id}`, {method:'DELETE', credentials:'include'});
-  if (!res.ok) { toast('Erreur lors de la suppression.', true); return; }
-  toast('Clé supprimée.', false);
-  loadApiKeys();
-}
-
-// ──────────────────────────────────────────────────
-// Emplacements
-// ──────────────────────────────────────────────────
-let _emplData = [];
-let _emplReady = false;
-
-// ── Laizes matières ────────────────────────────────────────────
-let _laizesReady = false;
-let _laizesList = [];
-
-async function initLaizesPanel() {
-  if (!_laizesReady) {
-    _laizesReady = true;
-    const form = document.getElementById('laizes-add-form');
-    if (form) {
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const mm = parseFloat(document.getElementById('laizes-add-mm').value);
-        const label = document.getElementById('laizes-add-label').value.trim();
-        const ordre = parseInt(document.getElementById('laizes-add-ordre').value, 10) || 0;
-        if (!mm || mm <= 0) { alert('Valeur (mm) invalide.'); return; }
-        try {
-          const r = await fetch('/api/admin/mp_laizes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ valeur_mm: mm, label: label || null, ordre }),
-          });
-          if (!r.ok) {
-            const err = await r.json().catch(() => ({ detail: 'erreur' }));
-            alert('Erreur : ' + (err.detail || r.statusText));
-            return;
-          }
-          document.getElementById('laizes-add-mm').value = '';
-          document.getElementById('laizes-add-label').value = '';
-          document.getElementById('laizes-add-ordre').value = '0';
-          await loadLaizesList();
-        } catch (e) { alert('Erreur : ' + e.message); }
-      });
-    }
-  }
-  await loadLaizesList();
-}
-
-async function loadLaizesList() {
-  try {
-    const r = await fetch('/api/admin/mp_laizes?all=1', { credentials: 'include' });
-    if (!r.ok) throw new Error('chargement impossible');
-    _laizesList = await r.json();
-  } catch (e) {
-    _laizesList = [];
-  }
-  renderLaizesList();
-}
-
-function renderLaizesList() {
-  const wrap = document.getElementById('laizes-list');
-  const empty = document.getElementById('laizes-empty');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  if (!_laizesList.length) {
-    if (empty) empty.style.display = '';
-    return;
-  }
-  if (empty) empty.style.display = 'none';
-  _laizesList.forEach(l => {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border);border-radius:10px;background:var(--card)';
-    if (!l.actif) row.style.opacity = '0.5';
-    const main = document.createElement('div');
-    main.style.cssText = 'flex:1;display:flex;align-items:center;gap:10px';
-    const lab = document.createElement('div');
-    lab.style.cssText = 'font-size:14px;font-weight:700;color:var(--text);min-width:80px';
-    lab.textContent = l.label;
-    const val = document.createElement('div');
-    val.style.cssText = 'font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums';
-    val.textContent = l.valeur_mm + ' mm · ordre ' + l.ordre;
-    main.append(lab, val);
-    row.appendChild(main);
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:6px';
-    const toggleBtn = document.createElement('button');
-    toggleBtn.type = 'button';
-    toggleBtn.className = 'btn btn-sec btn-sm';
-    toggleBtn.textContent = l.actif ? 'Désactiver' : 'Réactiver';
-    toggleBtn.addEventListener('click', async () => {
-      try {
-        const r = await fetch('/api/admin/mp_laizes/' + l.id, {
-          method: 'PUT', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actif: l.actif ? false : true }),
-        });
-        if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err.detail || 'erreur'); return; }
-        await loadLaizesList();
-      } catch (e) { alert(e.message); }
-    });
-    const delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'btn btn-sec btn-sm';
-    delBtn.style.color = 'var(--danger)';
-    delBtn.textContent = 'Supprimer';
-    delBtn.addEventListener('click', async () => {
-      if (!confirm('Supprimer la laize ' + l.label + ' ?')) return;
-      try {
-        const r = await fetch('/api/admin/mp_laizes/' + l.id, { method: 'DELETE', credentials: 'include' });
-        if (!r.ok) { const err = await r.json().catch(() => ({})); alert(err.detail || 'erreur'); return; }
-        await loadLaizesList();
-      } catch (e) { alert(e.message); }
-    });
-    actions.append(toggleBtn, delBtn);
-    row.appendChild(actions);
-    wrap.appendChild(row);
-  });
-}
-
-// ── Importations (Logistique) ─────────────────────────────────
-let _impReady = false;
-async function initImportationsPanel() {
-  const loading = document.getElementById('importations-loading');
-  const form = document.getElementById('importations-form');
-  const errBox = document.getElementById('importations-error');
-  const inpFull = document.getElementById('imp-qte-full');
-  const inpHalf = document.getElementById('imp-qte-half');
-  const saveBtn = document.getElementById('imp-save-btn');
-  const status = document.getElementById('imp-status');
-  if (!form || !inpFull || !inpHalf) return;
-
-  const showError = (msg) => {
-    if (loading) loading.style.display = 'none';
-    form.style.display = 'none';
-    if (errBox) { errBox.style.display = 'block'; errBox.textContent = msg; }
-  };
-
-  try {
-    const r = await fetch('/api/pricing/settings', { credentials: 'include' });
-    if (r.status === 403) { showError('Accès réservé à la Direction et au super admin.'); return; }
-    if (!r.ok) { showError('Erreur de chargement (' + r.status + ').'); return; }
-    const data = await r.json();
-    inpFull.value = String(Number(data.logistique_qte_m2_container_complet || 0));
-    inpHalf.value = String(Number(data.logistique_qte_m2_demi_container || 0));
-    if (loading) loading.style.display = 'none';
-    if (errBox) errBox.style.display = 'none';
-    form.style.display = 'flex';
-  } catch (e) {
-    showError('Erreur de chargement : ' + (e?.message || 'inconnue'));
-    return;
-  }
-
-  if (_impReady) return;
-  _impReady = true;
-
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const full = parseFloat(inpFull.value || '0');
-    const half = parseFloat(inpHalf.value || '0');
-    if (isNaN(full) || full < 0 || isNaN(half) || half < 0) {
-      status.textContent = 'Valeurs invalides.';
-      status.style.color = 'var(--danger)';
-      return;
-    }
-    saveBtn.disabled = true;
-    status.textContent = 'Enregistrement…';
-    status.style.color = 'var(--muted)';
-    try {
-      const r = await fetch('/api/pricing/settings', {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          logistique_qte_m2_container_complet: full,
-          logistique_qte_m2_demi_container: half,
-        }),
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.detail || ('HTTP ' + r.status));
-      }
-      status.textContent = 'Enregistré.';
-      status.style.color = 'var(--ok, #34d399)';
-      setTimeout(() => { status.textContent = ''; }, 2500);
-    } catch (e) {
-      status.textContent = 'Erreur : ' + (e?.message || 'enregistrement impossible');
-      status.style.color = 'var(--danger)';
-    } finally {
-      saveBtn.disabled = false;
-    }
-  });
-}
-
-async function initEmplacementsPanel() {
-  if (!_emplReady) {
-    _emplReady = true;
-    const search = document.getElementById('empl-search');
-    if (search) {
-      search.addEventListener('input', () => renderEmplGrid());
-      search.addEventListener('keydown', e => { if (e.key === 'Escape') { search.value = ''; renderEmplGrid(); } });
-    }
-    const form = document.getElementById('empl-add-form');
-    if (form) form.addEventListener('submit', e => { e.preventDefault(); addEmplacement(); });
-    const reloadBtn = document.getElementById('empl-reload-csv');
-    if (reloadBtn) reloadBtn.addEventListener('click', reloadEmplacementsCsv);
-    const importBtn = document.getElementById('empl-import-btn');
-    const importInput = document.getElementById('empl-import-input');
-    if (importBtn && importInput) {
-      importBtn.addEventListener('click', () => importInput.click());
-      importInput.addEventListener('change', () => importEmplacementsCsv(importInput));
-    }
-    const exportBtn = document.getElementById('empl-export-csv');
-    if (exportBtn) exportBtn.addEventListener('click', exportEmplacementsCsv);
-    // focus style
-    ['empl-search', 'empl-new-code'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.addEventListener('focus', () => { el.style.borderColor = 'var(--accent)'; el.style.boxShadow = '0 0 0 3px rgba(34,211,238,.12)'; });
-      el.addEventListener('blur',  () => { el.style.borderColor = ''; el.style.boxShadow = ''; });
-    });
-    const codeInp = document.getElementById('empl-new-code');
-    if (codeInp) codeInp.addEventListener('input', () => { codeInp.value = codeInp.value.toUpperCase(); });
-  }
-  await loadEmplacements();
-}
-
-async function loadEmplacements() {
-  const grid = document.getElementById('empl-grid');
-  if (grid) grid.innerHTML = '<span style="color:var(--muted);font-size:13px">Chargement…</span>';
-  try {
-    const r = await fetch('/api/settings/emplacements', { credentials: 'include' });
-    if (!r.ok) throw new Error('err');
-    _emplData = await r.json();
-  } catch(e) {
-    _emplData = [];
-    toast('Erreur lors du chargement des emplacements.', true);
-  }
-  renderEmplGrid();
-}
-
-function renderEmplGrid() {
-  const grid = document.getElementById('empl-grid');
-  const empty = document.getElementById('empl-empty');
-  const count = document.getElementById('empl-count');
-  if (!grid) return;
-
-  const q = (document.getElementById('empl-search')?.value || '').trim().toLowerCase();
-
-  const filtered = q
-    ? _emplData.filter(e => e.code.toLowerCase().includes(q))
-    : _emplData.slice();
-
-  if (count) count.textContent = _emplData.length + ' emplacement' + (_emplData.length > 1 ? 's' : '');
-
-  if (!filtered.length) {
-    grid.innerHTML = '';
-    if (empty) { empty.style.display = ''; empty.textContent = q ? 'Aucun résultat pour « ' + escHtml(q) + ' ».' : 'Aucun emplacement. Ajoutez-en un ou rechargez depuis le CSV.'; }
-    return;
-  }
-  if (empty) empty.style.display = 'none';
-
-  // Grouper : allée = préfixe lettres, rangée = 2 premiers chiffres qui suivent
-  const byAllee = {};
-  for (const e of filtered) {
-    const code = e.code;
-    const m = code.match(/^([A-Z]+)(\d{1,2})/i);
-    const allee  = m ? m[1].toUpperCase() : code[0].toUpperCase();
-    const rangee = m ? m[2].padStart(2, '0') : '??';
-    if (!byAllee[allee]) byAllee[allee] = {};
-    if (!byAllee[allee][rangee]) byAllee[allee][rangee] = [];
-    byAllee[allee][rangee].push(code);
-  }
-
-  const EMPL_LABELS = { 'Z0': 'Z0 – au sol pour expédition', 'Z1': 'Z1 – sortie de production' };
-
-  function pillHtml(code) {
-    const c = escHtml(code);
-    const label = escHtml(EMPL_LABELS[code] || code);
-    const title = EMPL_LABELS[code] ? escHtml(EMPL_LABELS[code]) : c;
-    return `<span class="empl-pill" data-code="${c}" title="${title}">
-      <span class="empl-pill-code">${label}</span>
-      <button type="button" class="empl-pill-del" aria-label="Supprimer ${c}" onclick="deleteEmplacement('${c}')">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </span>`;
-  }
-
-  let html = '';
-  for (const allee of Object.keys(byAllee).sort()) {
-    const rangees = byAllee[allee];
-    html += `<div class="empl-allee">
-      <div class="empl-allee-hd">
-        <span class="empl-allee-letter">${escHtml(allee)}</span>
-        <span class="empl-allee-label">Allée ${escHtml(allee)}</span>
-      </div>
-      <div class="empl-allee-body">`;
-    for (const rangee of Object.keys(rangees).sort()) {
-      const codes = rangees[rangee].slice().sort();
-      html += `<div class="empl-rangee">
-        <div class="empl-rangee-pills">${codes.map(pillHtml).join('')}</div>
-      </div>`;
-    }
-    html += `</div></div>`;
-  }
-  grid.innerHTML = html;
-}
-
-async function addEmplacement() {
-  const inp = document.getElementById('empl-new-code');
-  const code = (inp?.value || '').trim().toUpperCase();
-  if (!code) { toast('Saisissez un code emplacement.', true); inp?.focus(); return; }
-  const r = await fetch('/api/settings/emplacements', {
-    method: 'POST', credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code }),
-  });
-  if (r.status === 409) { toast(`L'emplacement ${code} existe déjà.`, true); return; }
-  if (!r.ok) {
-    let msg = 'Erreur lors de l\'ajout.';
-    try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(e) {}
-    toast(msg, true); return;
-  }
-  if (inp) inp.value = '';
-  toast(`Emplacement ${code} ajouté.`, false);
-  await loadEmplacements();
-}
-
-async function deleteEmplacement(code) {
-  if (!confirm(`Supprimer l'emplacement ${code} ?`)) return;
-  const r = await fetch('/api/settings/emplacements/' + encodeURIComponent(code), {
-    method: 'DELETE', credentials: 'include',
-  });
-  if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
-  toast(`Emplacement ${code} supprimé.`, false);
-  await loadEmplacements();
-}
-
-async function reloadEmplacementsCsv() {
-  const btn = document.getElementById('empl-reload-csv');
-  if (btn) { btn.disabled = true; btn.textContent = 'Rechargement…'; }
-  try {
-    const r = await fetch('/api/settings/emplacements/reload-csv', { method: 'POST', credentials: 'include' });
-    if (r.status === 422) {
-      toast('CSV introuvable ou vide — aucun emplacement importé.', true);
-    } else if (!r.ok) {
-      toast('Erreur lors du rechargement.', true);
-    } else {
-      const d = await r.json();
-      toast(d.imported + ' emplacement' + (d.imported > 1 ? 's' : '') + ' importé' + (d.imported > 1 ? 's' : '') + ' depuis le CSV.', false);
-      await loadEmplacements();
-    }
-  } catch(e) { toast('Erreur réseau.', true); }
-  finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Recharger depuis CSV'; }
-  }
-}
-
-async function importEmplacementsCsv(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  if (!confirm(`Remplacer le plan actuel par "${file.name}" ? Cette action écrasera tous les emplacements existants.`)) {
-    input.value = '';
-    return;
-  }
-  const btn = document.getElementById('empl-import-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await fetch('/api/settings/emplacements/import-csv', {
-      method: 'POST', credentials: 'include', body: fd,
-    });
-    const data = r.ok ? await r.json() : null;
-    if (!r.ok) {
-      let msg = 'Erreur lors de l\'import.';
-      try { const e = await r.clone().json(); if (e.detail) msg = e.detail; } catch(_) {}
-      toast(msg, true);
-    } else {
-      toast(data.imported + ' emplacement' + (data.imported > 1 ? 's' : '') + ' importé' + (data.imported > 1 ? 's' : '') + ' — nouveau plan enregistré.', false);
-      await loadEmplacements();
-    }
-  } catch(e) { toast('Erreur réseau.', true); }
-  finally {
-    input.value = '';
-    if (btn) { btn.disabled = false; btn.textContent = 'Importer nouveau CSV'; }
-  }
-}
-
-function exportEmplacementsCsv() {
-  if (!_emplData.length) { toast('Aucun emplacement à exporter.', true); return; }
-  const rows = [['code'], ..._emplData.map(e => [e.code])];
-  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'emplacements_' + new Date().toISOString().slice(0, 10) + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-}
-
-// ═══════════════════════════════════════════════════════════
-// Référentiel Clients (ERP)
-// ═══════════════════════════════════════════════════════════
-let _cliReady = false;
-let _cliData = [];
-let _cliEditing = null;        // id en cours d'édition, ou null pour création
-let _cliImportFile = null;
-let _cliSearchDebounce = null;
-
-async function initClientsPanel() {
-  if (!_cliReady) {
-    _cliReady = true;
-    const search = document.getElementById('cli-search');
-    if (search) {
-      search.addEventListener('input', () => {
-        clearTimeout(_cliSearchDebounce);
-        _cliSearchDebounce = setTimeout(loadClients, 220);
-      });
-      search.addEventListener('keydown', e => {
-        if (e.key === 'Escape') { search.value = ''; loadClients(); }
-      });
-    }
-    const etat = document.getElementById('cli-filter-etat');
-    if (etat) etat.addEventListener('change', loadClients);
-    const newBtn = document.getElementById('cli-new-btn');
-    if (newBtn) newBtn.addEventListener('click', () => openCliModal(null));
-    const importBtn = document.getElementById('cli-import-btn');
-    const importInput = document.getElementById('cli-import-input');
-    if (importBtn && importInput) {
-      importBtn.addEventListener('click', () => importInput.click());
-      importInput.addEventListener('change', () => onCliImportFile(importInput));
-    }
-    const exportBtn = document.getElementById('cli-export-csv');
-    if (exportBtn) exportBtn.addEventListener('click', exportClientsCsv);
-
-    // Sous-onglets du modal
-    document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(b => {
-      b.addEventListener('click', () => {
-        document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
-        b.classList.add('active');
-        document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
-        const target = document.getElementById(b.dataset.clisub);
-        if (target) target.style.display = '';
-      });
-    });
-
-    // ESC ferme les modals
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape') {
-        const m = document.getElementById('cli-modal-overlay');
-        const im = document.getElementById('cli-import-overlay');
-        if (m && m.style.display === 'flex') closeCliModal();
-        else if (im && im.style.display === 'flex') closeCliImportModal();
-      }
-    });
-  }
-  await loadClients();
-}
-
-async function loadClients() {
-  const tbody = document.getElementById('cli-tbody');
-  const search = (document.getElementById('cli-search')?.value || '').trim();
-  const etat = document.getElementById('cli-filter-etat')?.value || '';
-  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>';
-  try {
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (etat) params.set('etat', etat);
-    params.set('limit', '2000');
-    const r = await fetch('/api/clients?' + params.toString(), { credentials: 'include' });
-    if (!r.ok) throw new Error('err');
-    const data = await r.json();
-    _cliData = data.items || [];
-    // Mettre à jour le filtre état si on a la liste complète
-    const sel = document.getElementById('cli-filter-etat');
-    if (sel && data.etats) {
-      const cur = sel.value;
-      const opts = ['<option value="">Tous les états</option>'].concat(
-        data.etats.map(e => `<option value="${escAttr(e)}"${e === cur ? ' selected' : ''}>${escHtml(e)}</option>`)
-      );
-      sel.innerHTML = opts.join('');
-    }
-    const count = document.getElementById('cli-count');
-    if (count) {
-      const n = data.total || 0;
-      count.textContent = n + ' client' + (n > 1 ? 's' : '') + (search || etat ? ' filtré' + (n > 1 ? 's' : '') : '');
-    }
-  } catch(e) {
-    _cliData = [];
-    toast('Erreur lors du chargement des clients.', true);
-  }
-  renderCliTable();
-}
-
-function renderCliTable() {
-  const tbody = document.getElementById('cli-tbody');
-  const empty = document.getElementById('cli-empty');
-  if (!tbody) return;
-  if (!_cliData.length) {
-    tbody.innerHTML = '';
-    if (empty) {
-      empty.style.display = '';
-      const q = (document.getElementById('cli-search')?.value || '').trim();
-      empty.textContent = q
-        ? 'Aucun résultat pour « ' + q + ' ».'
-        : 'Aucun client. Cliquez sur « + Nouveau client » ou importez un fichier xlsx.';
-    }
-    return;
-  }
-  if (empty) empty.style.display = 'none';
-  const html = _cliData.map(c => {
-    const etat = c.etat || '';
-    const etatBg = etat === 'Bloqué' ? 'rgba(248,113,113,.15);color:#f87171;border-color:rgba(248,113,113,.35)'
-                : etat === 'Inactif' ? 'rgba(148,163,184,.18);color:var(--muted);border-color:rgba(148,163,184,.35)'
-                : 'rgba(52,211,153,.15);color:var(--success);border-color:rgba(52,211,153,.35)';
-    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openCliModal(${c.id})">
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);white-space:nowrap">${c.numero == null ? '' : escHtml(String(c.numero))}</td>
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.code || '')}</td>
-      <td style="padding:9px 12px;font-weight:600">${escHtml(c.raison_sociale || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.ville || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.pays || '')}</td>
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.telephone || '')}</td>
-      <td style="padding:9px 12px;font-size:12px">${escHtml(c.email || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap"><span style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${etatBg};border:1px solid">${escHtml(etat)}</span></td>
-      <td style="padding:9px 12px;white-space:nowrap"><button type="button" class="btn btn-sec btn-sm" onclick="event.stopPropagation();openCliModal(${c.id})">Modifier</button></td>
-    </tr>`;
-  }).join('');
-  tbody.innerHTML = html;
-}
-
-function openCliModal(id) {
-  _cliEditing = id;
-  const overlay = document.getElementById('cli-modal-overlay');
-  if (!overlay) return;
-  overlay.style.display = 'flex';
-  overlay.classList.remove('hidden');
-  // Reset onglets sur Identité
-  document.querySelectorAll('#cli-modal-overlay [data-clisub]').forEach(x => x.classList.remove('active'));
-  const firstTab = document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]');
-  if (firstTab) firstTab.classList.add('active');
-  document.querySelectorAll('#cli-modal-overlay .cli-tab').forEach(p => p.style.display = 'none');
-  const t = document.getElementById('cli-tab-info');
-  if (t) t.style.display = '';
-  // Reset values
-  const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v == null ? '' : v); };
-  setV('cli-numero', ''); setV('cli-code', ''); setV('cli-etat', 'Normal');
-  setV('cli-raison', ''); setV('cli-siret', ''); setV('cli-tva', '');
-  setV('cli-rcs', ''); setV('cli-ean', ''); setV('cli-nif', ''); setV('cli-groupe', '');
-  setV('cli-adresse1', ''); setV('cli-adresse2', ''); setV('cli-bp', '');
-  setV('cli-cp', ''); setV('cli-ville', ''); setV('cli-code-pays', ''); setV('cli-pays', '');
-  setV('cli-tel', ''); setV('cli-fax', ''); setV('cli-email', '');
-  setV('cli-contact-nom', ''); setV('cli-contact-fonction', '');
-  setV('cli-contact-email', ''); setV('cli-contact-tel', '');
-  setV('cli-rep', ''); setV('cli-adv', ''); setV('cli-mode-liv', ''); setV('cli-mode-reg', '');
-  setV('cli-devise', ''); setV('cli-encours', ''); setV('cli-codecpta', '');
-  setV('cli-cat1', ''); setV('cli-cat2', ''); setV('cli-cat3', '');
-  setV('cli-notes', '');
-  const delBtn = document.getElementById('cli-delete-btn');
-  const title = document.getElementById('cli-modal-title');
-
-  if (id == null) {
-    if (title) title.textContent = 'Nouveau client';
-    if (delBtn) delBtn.style.display = 'none';
-    requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
-    return;
-  }
-  if (title) title.textContent = 'Modifier le client';
-  if (delBtn) delBtn.style.display = '';
-  // Charger les données
-  fetch('/api/clients/' + id, { credentials: 'include' })
-    .then(r => r.json())
-    .then(c => {
-      setV('cli-numero', c.numero); setV('cli-code', c.code); setV('cli-etat', c.etat || 'Normal');
-      setV('cli-raison', c.raison_sociale); setV('cli-siret', c.siret); setV('cli-tva', c.tva);
-      setV('cli-rcs', c.rcs); setV('cli-ean', c.ean); setV('cli-nif', c.nif); setV('cli-groupe', c.groupe);
-      setV('cli-adresse1', c.adresse1); setV('cli-adresse2', c.adresse2); setV('cli-bp', c.bp);
-      setV('cli-cp', c.cp); setV('cli-ville', c.ville); setV('cli-code-pays', c.code_pays); setV('cli-pays', c.pays);
-      setV('cli-tel', c.telephone); setV('cli-fax', c.telecopie); setV('cli-email', c.email);
-      setV('cli-contact-nom', c.contact_nom); setV('cli-contact-fonction', c.contact_fonction);
-      setV('cli-contact-email', c.contact_email); setV('cli-contact-tel', c.contact_tel);
-      setV('cli-rep', c.representant); setV('cli-adv', c.adv);
-      setV('cli-mode-liv', c.mode_livraison); setV('cli-mode-reg', c.mode_reglement);
-      setV('cli-devise', c.devise); setV('cli-encours', c.encours_autorise); setV('cli-codecpta', c.code_comptable);
-      setV('cli-cat1', c.categorie1); setV('cli-cat2', c.categorie2); setV('cli-cat3', c.categorie3);
-      setV('cli-notes', c.notes);
-      requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
-    })
-    .catch(() => toast('Impossible de charger ce client.', true));
-}
-
-function closeCliModal() {
-  const overlay = document.getElementById('cli-modal-overlay');
-  if (!overlay) return;
-  overlay.style.display = 'none';
-  overlay.classList.add('hidden');
-  _cliEditing = null;
-}
-
-async function saveCliModal() {
-  const val = id => (document.getElementById(id)?.value || '').trim();
-  const raison = val('cli-raison');
-  if (!raison) {
-    toast('Raison sociale obligatoire.', true);
-    document.querySelector('#cli-modal-overlay [data-clisub="cli-tab-info"]')?.click();
-    document.getElementById('cli-raison')?.focus();
-    return;
-  }
-  const num = val('cli-numero');
-  const encours = val('cli-encours');
-  const payload = {
-    numero: num === '' ? null : parseInt(num, 10),
-    code: val('cli-code') || null,
-    raison_sociale: raison,
-    siret: val('cli-siret') || null,
-    tva: val('cli-tva') || null,
-    rcs: val('cli-rcs') || null,
-    ean: val('cli-ean') || null,
-    nif: val('cli-nif') || null,
-    groupe: val('cli-groupe') || null,
-    adresse1: val('cli-adresse1') || null,
-    adresse2: val('cli-adresse2') || null,
-    bp: val('cli-bp') || null,
-    cp: val('cli-cp') || null,
-    ville: val('cli-ville') || null,
-    code_pays: val('cli-code-pays') || null,
-    pays: val('cli-pays') || null,
-    telephone: val('cli-tel') || null,
-    telecopie: val('cli-fax') || null,
-    email: val('cli-email') || null,
-    contact_nom: val('cli-contact-nom') || null,
-    contact_fonction: val('cli-contact-fonction') || null,
-    contact_email: val('cli-contact-email') || null,
-    contact_tel: val('cli-contact-tel') || null,
-    representant: val('cli-rep') || null,
-    adv: val('cli-adv') || null,
-    mode_livraison: val('cli-mode-liv') || null,
-    mode_reglement: val('cli-mode-reg') || null,
-    devise: val('cli-devise') || null,
-    encours_autorise: encours === '' ? null : parseFloat(encours.replace(',', '.')),
-    code_comptable: val('cli-codecpta') || null,
-    categorie1: val('cli-cat1') || null,
-    categorie2: val('cli-cat2') || null,
-    categorie3: val('cli-cat3') || null,
-    etat: val('cli-etat') || 'Normal',
-    notes: val('cli-notes') || null,
-  };
-  const url = _cliEditing == null ? '/api/clients' : '/api/clients/' + _cliEditing;
-  const method = _cliEditing == null ? 'POST' : 'PUT';
-  try {
-    const r = await fetch(url, {
-      method, credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) {
-      let msg = 'Erreur lors de l\'enregistrement.';
-      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
-      toast(msg, true);
-      return;
-    }
-    toast(_cliEditing == null ? 'Client créé.' : 'Client mis à jour.', false);
-    closeCliModal();
-    await loadClients();
-  } catch(e) {
-    toast('Erreur réseau.', true);
-  }
-}
-
-async function deleteCliFromModal() {
-  if (_cliEditing == null) return;
-  const raison = (document.getElementById('cli-raison')?.value || '').trim();
-  if (!confirm(`Supprimer le client « ${raison} » ? Cette action est irréversible.`)) return;
-  try {
-    const r = await fetch('/api/clients/' + _cliEditing, { method: 'DELETE', credentials: 'include' });
-    if (!r.ok) { toast('Erreur lors de la suppression.', true); return; }
-    toast('Client supprimé.', false);
-    closeCliModal();
-    await loadClients();
-  } catch(e) { toast('Erreur réseau.', true); }
-}
-
-function onCliImportFile(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  _cliImportFile = file;
-  const fn = document.getElementById('cli-import-filename');
-  if (fn) fn.textContent = file.name;
-  const overlay = document.getElementById('cli-import-overlay');
-  if (overlay) { overlay.style.display = 'flex'; overlay.classList.remove('hidden'); }
-}
-
-function closeCliImportModal() {
-  const overlay = document.getElementById('cli-import-overlay');
-  if (overlay) { overlay.style.display = 'none'; overlay.classList.add('hidden'); }
-  _cliImportFile = null;
-  const inp = document.getElementById('cli-import-input');
-  if (inp) inp.value = '';
-}
-
-async function confirmCliImport() {
-  if (!_cliImportFile) { closeCliImportModal(); return; }
-  const mode = (document.querySelector('input[name="cli-import-mode"]:checked')?.value || 'merge');
-  if (mode === 'replace' && !confirm('Mode REMPLACER : tous les clients existants seront supprimés avant import. Continuer ?')) return;
-  const btn = document.getElementById('cli-import-confirm');
-  if (btn) { btn.disabled = true; btn.textContent = 'Import en cours…'; }
-  try {
-    const fd = new FormData();
-    fd.append('file', _cliImportFile);
-    const r = await fetch('/api/clients/import-xlsx?mode=' + encodeURIComponent(mode), {
-      method: 'POST', credentials: 'include', body: fd,
-    });
-    if (!r.ok) {
-      let msg = 'Erreur lors de l\'import.';
-      try { const d = await r.json(); if (d.detail) msg = d.detail; } catch(_) {}
-      toast(msg, true);
-      return;
-    }
-    const data = await r.json();
-    let msg = `${data.inserted} créé${data.inserted > 1 ? 's' : ''}, ${data.updated} mis à jour`;
-    if (data.skipped) msg += `, ${data.skipped} ignoré${data.skipped > 1 ? 's' : ''}`;
-    msg += '.';
-    toast(msg, false);
-    if (data.errors && data.errors.length) {
-      console.warn('Erreurs import clients :', data.errors);
-    }
-    closeCliImportModal();
-    await loadClients();
-  } catch(e) { toast('Erreur réseau.', true); }
-  finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Lancer l\'import'; }
-  }
-}
-
-function exportClientsCsv() {
-  if (!_cliData.length) { toast('Aucun client à exporter.', true); return; }
-  const cols = [
-    ['numero', 'N°'], ['code', 'Code'], ['raison_sociale', 'Raison sociale'],
-    ['adresse1', 'Adresse 1'], ['adresse2', 'Adresse 2'], ['bp', 'B.P.'],
-    ['cp', 'C.P.'], ['ville', 'Ville'], ['code_pays', 'C.Pays'], ['pays', 'Pays'],
-    ['siret', 'Siret'], ['tva', 'N.TVA'], ['telephone', 'Téléphone'],
-    ['email', 'Email'], ['representant', 'Représentant'], ['adv', 'ADV'],
-    ['mode_reglement', 'Mode de règlement'], ['devise', 'Devise'],
-    ['encours_autorise', 'Encours autorisé'], ['code_comptable', 'Code Comptable'],
-    ['contact_nom', 'Contact'], ['contact_email', 'Email contact'],
-    ['contact_tel', 'Tél contact'], ['etat', 'État'],
-  ];
-  const head = cols.map(c => c[1]);
-  const rows = [head, ..._cliData.map(c => cols.map(([k]) => c[k] == null ? '' : c[k]))];
-  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'clients_' + new Date().toISOString().slice(0, 10) + '.csv';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-}
-
-// ─── Promotion v1 → v2 ──────────────────────────────────────────────
-function _prEsc(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-async function loadPromoteStatus() {
-  const v2v = document.getElementById('pr-v2-version');
-  const v2h = document.getElementById('pr-v2-head');
-  const nxv = document.getElementById('pr-next-version');
-  const orh = document.getElementById('pr-origin-head');
-  const commitsEl = document.getElementById('pr-commits');
-  const goBtn = document.getElementById('pr-go-btn');
-  const blocked = document.getElementById('pr-blocked-reason');
-  if (commitsEl) commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
-  let data;
-  try {
-    data = await api('/api/promote/status');
-    if (!data) return;
-  } catch (e) {
-    commitsEl.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement : ' + _prEsc(e && e.message ? e.message : String(e)) + '</div>';
-    return;
-  }
-  v2v.textContent = data.v2_version ? 'v' + data.v2_version : '—';
-  v2h.textContent = data.v2_head || '';
-  nxv.textContent = data.next_version ? 'v' + data.next_version : '—';
-  orh.textContent = data.origin_head || '';
-
-  if (!data.commits_ahead || data.commits_ahead.length === 0) {
-    commitsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Rien à promouvoir — v2 est déjà à jour.</div>';
-  } else {
-    commitsEl.innerHTML = data.commits_ahead.map(c => (
-      '<div style="display:flex;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border);align-items:flex-start">'
-        + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--accent);min-width:60px">' + _prEsc(c.hash) + '</span>'
-        + '<div style="flex:1;min-width:0">'
-          + '<div style="font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis">' + _prEsc(c.subject) + '</div>'
-          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + _prEsc(c.author) + ' · ' + _prEsc(c.date) + '</div>'
-        + '</div>'
-      + '</div>'
-    )).join('');
-  }
-
-  goBtn.disabled = !data.can_promote;
-  blocked.textContent = data.can_promote ? '' : (data.reason || '');
-}
-
-async function runPromote() {
-  const goBtn = document.getElementById('pr-go-btn');
-  const notesEl = document.getElementById('pr-notes');
-  const outCard = document.getElementById('pr-output-card');
-  const outEl = document.getElementById('pr-output');
-  const notes = (notesEl.value || '').trim();
-
-  // Garde-fou confirm
-  if (!confirm('Promouvoir v1 → v2 maintenant ?\\nBackup DB, pull, bump patch, restart, healthcheck.\\nRollback auto si KO.')) return;
-
-  goBtn.disabled = true;
-  goBtn.textContent = 'Promotion en cours…';
-  outCard.style.display = 'block';
-  outEl.textContent = '';
-
-  try {
-    const r = await fetch(API + '/api/promote', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes }),
-    });
-    if (!r.ok) {
-      outEl.textContent += '[HTTP ' + r.status + '] ' + (await r.text().catch(() => '')) + '\\n';
-      goBtn.disabled = false;
-      goBtn.textContent = 'Promouvoir maintenant';
-      return;
-    }
-    // Stream la réponse ligne par ligne
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      outEl.textContent += decoder.decode(value, { stream: true });
-      outEl.scrollTop = outEl.scrollHeight;
-    }
-  } catch (e) {
-    outEl.textContent += '\\n[Erreur réseau : ' + (e && e.message ? e.message : String(e)) + ']\\n';
-  } finally {
-    goBtn.textContent = 'Promouvoir maintenant';
-    // Recharger le statut (commits zéro après succès, ou inchangé après rollback)
-    setTimeout(() => loadPromoteStatus(), 500);
-  }
-}
-
-// ─── Sync DB v2 → v1 ──────────────────────────────────────────────
-async function syncDbV1() {
-  const btn = document.getElementById('db-sync-btn');
-  const status = document.getElementById('db-sync-status');
-  if (!btn) return;
-  if (!confirm('⚠ Synchroniser DB v2 → v1 ?\n\nCette action écrase intégralement la DB v1 par la copie live de v2.\nToutes les données créées sur v1 depuis la dernière resync seront perdues.\n\nUn backup pré-resync est conservé automatiquement.\nv1 redémarrera dans ~15s.\n\nContinuer ?')) return;
-  const original = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Synchronisation…';
-  if (status) status.textContent = '';
-  try {
-    const r = await fetch(API + '/api/sync-db-v1', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    const text = await r.text().catch(() => '');
-    if (!r.ok) {
-      if (status) {
-        status.textContent = 'Echec (HTTP ' + r.status + ')';
-        status.style.color = 'var(--danger)';
-      }
-      if (typeof showToast === 'function') showToast('Sync DB echouee : ' + (text || r.status), 'danger');
-      else alert('Sync DB echouee : ' + (text || r.status));
-    } else {
-      if (status) {
-        status.textContent = 'OK · ' + new Date().toLocaleTimeString();
-        status.style.color = 'var(--success, var(--ok))';
-      }
-      if (typeof showToast === 'function') showToast('Resync lancee. v1 redemarrera dans ~15s.', 'success');
-    }
-  } catch (e) {
-    if (status) {
-      status.textContent = 'Erreur reseau';
-      status.style.color = 'var(--danger)';
-    }
-    if (typeof showToast === 'function') showToast('Erreur reseau : ' + (e && e.message ? e.message : String(e)), 'danger');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = original;
-  }
-}
-
-// ═════════════════════════════════════════════════════════════════════
-// PRINTERS — CRUD imprimantes / templates / agents (superadmin)
-// ═════════════════════════════════════════════════════════════════════
-const PR = {
-  imprimantes: [], templates: [], agents: [], usages: [],
-  sub: 'imp',
-  editingImp: null, editingTpl: null,
-};
-
-function prNoStore() { return { credentials: 'include', headers: {} }; }
-
-async function prFetch(url, opts) {
-  const o = { credentials: 'include', headers: { 'Content-Type': 'application/json' }, ...(opts || {}) };
-  const r = await fetch(url, o);
-  const txt = await r.text().catch(() => '');
-  let data = null; try { data = txt ? JSON.parse(txt) : null; } catch(e) {}
-  if (!r.ok) {
-    const msg = (data && data.detail) ? data.detail : ('HTTP ' + r.status);
-    throw new Error(msg);
-  }
-  return data;
-}
-
-function prToast(msg, kind) {
-  if (typeof showToast === 'function') showToast(msg, kind || 'success');
-  else console.log('[printers]', msg);
-}
-
-function _escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
-  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
-)); }
-
-async function initPrintersPanel() {
-  // Un seul chargement d'entrée : on tire tout en parallèle.
-  document.getElementById('pr-panel-ag').querySelector('#pr-ag-panel').style.display = '';
-  try {
-    const [imp, tpl, ag, us] = await Promise.all([
-      prFetch('/api/print/imprimantes'),
-      prFetch('/api/print/templates'),
-      prFetch('/api/print/agents'),
-      prFetch('/api/print/usages'),
-    ]);
-    PR.imprimantes = imp || [];
-    PR.templates = tpl || [];
-    PR.agents = ag || [];
-    PR.usages = us || [];
-  } catch (e) {
-    prToast('Chargement imprimantes: ' + e.message, 'danger');
-  }
-  prRenderImprimantes();
-  prRenderTemplates();
-  prRenderAgents();
-}
-
-function prSetSub(sub) {
-  PR.sub = sub;
-  document.querySelectorAll('.pr-sub').forEach(b => {
-    const on = b.dataset.prsub === sub;
-    b.style.color = on ? 'var(--text)' : 'var(--muted)';
-    b.style.borderBottom = '2px solid ' + (on ? 'var(--accent)' : 'transparent');
-    b.classList.toggle('active', on);
-  });
-  document.getElementById('pr-panel-imp').style.display = (sub === 'imp') ? '' : 'none';
-  document.getElementById('pr-panel-tpl').style.display = (sub === 'tpl') ? '' : 'none';
-  document.getElementById('pr-panel-ag').style.display = (sub === 'ag') ? '' : 'none';
-}
-
-// ─── Imprimantes ─────────────────────────────────────────────────
-function prRenderImprimantes() {
-  const root = document.getElementById('pr-imp-list');
-  if (!root) return;
-  if (!PR.imprimantes.length) {
-    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucune imprimante configurée. Clique sur « Nouvelle imprimante ».</div>';
-    return;
-  }
-  const agentMap = {};
-  PR.agents.forEach(a => { agentMap[a.id] = a; });
-  root.innerHTML = PR.imprimantes.map(i => {
-    const agent = i.agent_id ? agentMap[i.agent_id] : null;
-    const agentLbl = agent ? _escH(agent.nom) : '<em style="color:var(--muted)">Non rattachée</em>';
-    const status = i.actif
-      ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Active</span>'
-      : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactive</span>';
-    return `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:14px;font-weight:700;color:var(--text)">${_escH(i.nom)}</span>
-              ${status}
-              <span style="font-size:11px;background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${_escH(i.langage)}</span>
-            </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">
-              ${_escH(i.poste || 'Sans poste')} · ${_escH(i.ip_locale)}:${i.port} · ${i.largeur_mm}×${i.hauteur_mm}mm @ ${i.dpi}dpi · Agent : ${agentLbl}
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="prTestPrint(${i.id})">Test d'impression</button>
-            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="prEditImprimante(${i.id})">Modifier</button>
-          </div>
-        </div>
-      </div>`;
-  }).join('');
-}
-
-function prEditImprimante(id) {
-  PR.editingImp = id;
-  const i = id ? PR.imprimantes.find(x => x.id === id) : null;
-  document.getElementById('pr-imp-modal-title').textContent = i ? ('Modifier — ' + i.nom) : 'Nouvelle imprimante';
-  document.getElementById('pr-f-nom').value = i ? i.nom : '';
-  document.getElementById('pr-f-poste').value = (i && i.poste) || '';
-  const agSel = document.getElementById('pr-f-agent');
-  agSel.innerHTML = '<option value="">Aucun</option>' + PR.agents.map(a =>
-    `<option value="${a.id}">${_escH(a.nom)}</option>`).join('');
-  agSel.value = (i && i.agent_id) ? String(i.agent_id) : '';
-  document.getElementById('pr-f-ip').value = i ? i.ip_locale : '';
-  document.getElementById('pr-f-port').value = i ? i.port : 9100;
-  document.getElementById('pr-f-langage').value = i ? i.langage : 'zpl';
-  document.getElementById('pr-f-dpi').value = i ? i.dpi : 203;
-  document.getElementById('pr-f-largeur').value = i ? i.largeur_mm : 102;
-  document.getElementById('pr-f-hauteur').value = i ? i.hauteur_mm : 152;
-  document.getElementById('pr-f-note').value = (i && i.note) || '';
-  document.getElementById('pr-f-del').style.display = i ? '' : 'none';
-  document.getElementById('pr-imp-modal').style.display = 'flex';
-}
-
-function prCloseModal() {
-  document.getElementById('pr-imp-modal').style.display = 'none';
-  PR.editingImp = null;
-}
-
-async function prSaveImprimante() {
-  const body = {
-    nom: document.getElementById('pr-f-nom').value.trim(),
-    poste: document.getElementById('pr-f-poste').value.trim() || null,
-    agent_id: parseInt(document.getElementById('pr-f-agent').value, 10) || null,
-    ip_locale: document.getElementById('pr-f-ip').value.trim(),
-    port: parseInt(document.getElementById('pr-f-port').value, 10) || 9100,
-    langage: document.getElementById('pr-f-langage').value,
-    dpi: parseInt(document.getElementById('pr-f-dpi').value, 10) || 203,
-    largeur_mm: parseInt(document.getElementById('pr-f-largeur').value, 10) || 102,
-    hauteur_mm: parseInt(document.getElementById('pr-f-hauteur').value, 10) || 152,
-    note: document.getElementById('pr-f-note').value.trim() || null,
-  };
-  if (!body.nom) { prToast('Nom requis.', 'danger'); return; }
-  if (!body.ip_locale) { prToast('IP requise.', 'danger'); return; }
-  try {
-    if (PR.editingImp) {
-      await prFetch('/api/print/imprimantes/' + PR.editingImp, {
-        method: 'PATCH', body: JSON.stringify(body),
-      });
-      prToast('Imprimante modifiée.');
-    } else {
-      await prFetch('/api/print/imprimantes', {
-        method: 'POST', body: JSON.stringify(body),
-      });
-      prToast('Imprimante créée.');
-    }
-    prCloseModal();
-    await initPrintersPanel();
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-async function prDeleteImprimante() {
-  if (!PR.editingImp) return;
-  if (!confirm('Supprimer cette imprimante ? Les templates associés seront également supprimés.')) return;
-  try {
-    await prFetch('/api/print/imprimantes/' + PR.editingImp, { method: 'DELETE' });
-    prToast('Imprimante supprimée.');
-    prCloseModal();
-    await initPrintersPanel();
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-async function prTestPrint(imprimanteId) {
-  try {
-    const r = await prFetch('/api/print/test', {
-      method: 'POST', body: JSON.stringify({ imprimante_id: imprimanteId }),
-    });
-    prToast(r.message || 'Test envoyé.', 'success');
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-// ─── Templates ──────────────────────────────────────────────────
-function prRenderTemplates() {
-  const root = document.getElementById('pr-tpl-list');
-  if (!root) return;
-  if (!PR.imprimantes.length) {
-    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Ajoute d\'abord une imprimante.</div>';
-    return;
-  }
-  const impMap = {};
-  PR.imprimantes.forEach(i => { impMap[i.id] = i; });
-  const grouped = {};
-  PR.imprimantes.forEach(i => { grouped[i.id] = { imp: i, templates: [] }; });
-  PR.templates.forEach(t => { if (grouped[t.imprimante_id]) grouped[t.imprimante_id].templates.push(t); });
-  root.innerHTML = Object.values(grouped).map(g => {
-    const tplHtml = g.templates.length
-      ? g.templates.map(t => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-top:6px">
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;color:var(--text)">${_escH(t.nom)}</div>
-            <div style="font-size:11px;color:var(--muted)">${_escH(t.usage_label)} — ${t.actif ? 'Actif' : 'Inactif'}</div>
-          </div>
-          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prEditTemplate(${t.id})">Modifier</button>
-        </div>`).join('')
-      : '<div style="padding:8px 12px;color:var(--muted);font-size:12px;font-style:italic">Aucun template pour cette imprimante.</div>';
-    return `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--text)">${_escH(g.imp.nom)}</div>
-            <div style="font-size:11px;color:var(--muted)">${_escH(g.imp.langage.toUpperCase())} — ${_escH(g.imp.poste || 'Sans poste')}</div>
-          </div>
-          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prNewTemplate(${g.imp.id})">+ Template</button>
-        </div>
-        ${tplHtml}
-      </div>`;
-  }).join('');
-}
-
-function prNewTemplate(imprimanteId) {
-  PR.editingTpl = { imprimanteId };
-  document.getElementById('pr-tpl-modal-title').textContent = 'Nouveau template';
-  document.getElementById('pr-tpl-nom').value = '';
-  document.getElementById('pr-tpl-contenu').value = '';
-  const usel = document.getElementById('pr-tpl-usage');
-  usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
-  usel.value = PR.usages[0] ? PR.usages[0].key : '';
-  prRenderPlaceholders(usel.value);
-  usel.onchange = () => prRenderPlaceholders(usel.value);
-  document.getElementById('pr-tpl-del').style.display = 'none';
-  document.getElementById('pr-tpl-modal').style.display = 'flex';
-}
-
-function prEditTemplate(id) {
-  const t = PR.templates.find(x => x.id === id);
-  if (!t) return;
-  PR.editingTpl = { id: t.id, imprimanteId: t.imprimante_id };
-  document.getElementById('pr-tpl-modal-title').textContent = 'Modifier — ' + t.nom;
-  document.getElementById('pr-tpl-nom').value = t.nom;
-  document.getElementById('pr-tpl-contenu').value = t.contenu;
-  const usel = document.getElementById('pr-tpl-usage');
-  usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
-  usel.value = t.usage_key;
-  usel.disabled = true; // usage fixe une fois créé, sinon création d'un nouveau
-  prRenderPlaceholders(usel.value);
-  document.getElementById('pr-tpl-del').style.display = '';
-  document.getElementById('pr-tpl-modal').style.display = 'flex';
-}
-
-function prRenderPlaceholders(usageKey) {
-  const usage = PR.usages.find(u => u.key === usageKey);
-  const root = document.getElementById('pr-tpl-placeholders');
-  if (!root) return;
-  if (!usage) { root.innerHTML = '<span style="color:var(--muted)">Aucun placeholder défini.</span>'; return; }
-  root.innerHTML = usage.placeholders.map(p => {
-    const raw = p.startsWith('{{') ? p : `{{${p}}}`;
-    return `<button type="button" onclick="prInsertPh('${raw.replace(/'/g,"\\'")}')" style="background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-family:monospace;font-size:11px;color:var(--accent);cursor:pointer">${_escH(raw)}</button>`;
-  }).join('');
-}
-
-function prInsertPh(placeholder) {
-  const ta = document.getElementById('pr-tpl-contenu');
-  const s = ta.selectionStart, e = ta.selectionEnd;
-  ta.value = ta.value.slice(0, s) + placeholder + ta.value.slice(e);
-  ta.focus();
-  ta.setSelectionRange(s + placeholder.length, s + placeholder.length);
-}
-
-function prCloseTplModal() {
-  document.getElementById('pr-tpl-modal').style.display = 'none';
-  document.getElementById('pr-tpl-usage').disabled = false;
-  PR.editingTpl = null;
-}
-
-async function prSaveTemplate() {
-  const nom = document.getElementById('pr-tpl-nom').value.trim();
-  const contenu = document.getElementById('pr-tpl-contenu').value;
-  const usage_key = document.getElementById('pr-tpl-usage').value;
-  if (!nom) { prToast('Nom requis.', 'danger'); return; }
-  if (!contenu.trim()) { prToast('Contenu requis.', 'danger'); return; }
-  try {
-    if (PR.editingTpl && PR.editingTpl.id) {
-      await prFetch('/api/print/templates/' + PR.editingTpl.id, {
-        method: 'PATCH', body: JSON.stringify({ nom, contenu }),
-      });
-      prToast('Template enregistré.');
-    } else {
-      await prFetch('/api/print/templates', {
-        method: 'POST',
-        body: JSON.stringify({
-          imprimante_id: PR.editingTpl.imprimanteId,
-          usage_key, nom, contenu,
-        }),
-      });
-      prToast('Template créé.');
-    }
-    prCloseTplModal();
-    await initPrintersPanel();
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-async function prDeleteTemplate() {
-  if (!PR.editingTpl || !PR.editingTpl.id) return;
-  if (!confirm('Supprimer ce template ?')) return;
-  try {
-    await prFetch('/api/print/templates/' + PR.editingTpl.id, { method: 'DELETE' });
-    prToast('Template supprimé.');
-    prCloseTplModal();
-    await initPrintersPanel();
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-// ─── Agents ─────────────────────────────────────────────────────
-function prRenderAgents() {
-  const root = document.getElementById('pr-ag-list');
-  if (!root) return;
-  if (!PR.agents.length) {
-    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucun agent local configuré. Crée un agent pour connecter un poste de l\'usine.</div>';
-    return;
-  }
-  const now = Date.now();
-  root.innerHTML = PR.agents.map(a => {
-    const hb = a.last_heartbeat ? new Date(a.last_heartbeat) : null;
-    const ageMin = hb ? Math.round((now - hb.getTime()) / 60000) : null;
-    let live;
-    if (!hb) live = '<span style="color:var(--muted);font-size:11px">Jamais connecté</span>';
-    else if (ageMin < 3) live = '<span style="display:inline-flex;align-items:center;gap:6px;color:var(--success);font-size:11px"><span style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block"></span>En ligne</span>';
-    else live = `<span style="color:var(--warn);font-size:11px">Hors ligne (${ageMin}min)</span>`;
-    return `
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:14px;font-weight:700;color:var(--text)">${_escH(a.nom)}</span>
-            ${live}
-          </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">
-            ${a.last_ip ? 'IP: ' + _escH(a.last_ip) + ' · ' : ''}Créé le ${_escH((a.created_at || '').slice(0,10))}
-          </div>
-        </div>
-        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" onclick="prDeleteAgent(${a.id})">Supprimer</button>
-      </div>`;
-  }).join('');
-}
-
-async function prCreateAgent() {
-  const nom = prompt('Nom de l\'agent (ex : Pi-Réception) :');
-  if (!nom || !nom.trim()) return;
-  try {
-    const r = await prFetch('/api/print/agents', {
-      method: 'POST', body: JSON.stringify({ nom: nom.trim() }),
-    });
-    // Reveal token
-    const reveal = document.getElementById('pr-ag-token-reveal');
-    const val = document.getElementById('pr-ag-token-value');
-    val.textContent = r.token;
-    reveal.style.display = '';
-    prToast('Agent créé. Copie le token maintenant.', 'success');
-    await initPrintersPanel();
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-function prCopyToken() {
-  const val = document.getElementById('pr-ag-token-value').textContent;
-  if (navigator.clipboard) navigator.clipboard.writeText(val).then(() => prToast('Token copié.'));
-  else {
-    const ta = document.createElement('textarea');
-    ta.value = val; document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); prToast('Token copié.'); } catch(e) {}
-    document.body.removeChild(ta);
-  }
-}
-
-async function prDeleteAgent(id) {
-  if (!confirm('Supprimer cet agent ? Les imprimantes rattachées perdront leur agent (à réaffecter).')) return;
-  try {
-    await prFetch('/api/print/agents/' + id, { method: 'DELETE' });
-    prToast('Agent supprimé.');
-    await initPrintersPanel();
-  } catch (e) {
-    prToast('Erreur : ' + e.message, 'danger');
-  }
-}
-
-// Styles utilitaires pour la modale printers
-(function _prInjectCss(){
-  const s = document.createElement('style');
-  s.textContent = `
-    .pr-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px}
-    .pr-inp{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;box-sizing:border-box;font-family:inherit;outline:none}
-    .pr-inp:focus{border-color:var(--accent)}
-  `;
-  document.head.appendChild(s);
-})();
 
 </script>
 <script>
@@ -8813,7 +6648,15 @@ async function unlinkBridge(mp_id) {
 }
 
 </script>
+<!-- v2.4.16 : scripts alert_form + alert_runtime perdus lors du retrait du bloc orphelin en v2.4.15, remis ici. -->
+<!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
+<script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
+<!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
+     autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
+<script src="/static/mysifa_promote.js?v=1"></script>
 </body>
 </html>
 """

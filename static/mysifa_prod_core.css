@@ -920,3 +920,52 @@ body.light .contact-modal-overlay{background:rgba(15,23,42,.42)}
 .contact-modal input,.contact-modal select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;box-sizing:border-box}
 .contact-modal input:focus,.contact-modal select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 body.light .contact-modal input:focus,body.light .contact-modal select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
+
+/* ── v1.7 — Colonne "Actions" des tableaux OF & Fiches ─────────────
+   Le CSS global `td { max-width:200px; overflow:hidden }` (l. 592) clippe
+   la barre d'icones actions quand elle contient 4-5 boutons (Modifier,
+   Apercu, Imprimer, Telecharger, Supprimer).
+
+   v1.7.1 → 240px, v1.7.2 → 320px : problème "min-width" pas respecté
+   par le browser en table-layout:auto (les autres colonnes bouffent
+   la place au profit de leur contenu long).
+
+   v1.7.3 — fix definitif : nouvelle classe `.table-actions-wide` a poser
+   sur les tableaux OF et Fiches. Passe le tableau en `table-layout:fixed`
+   ce qui garantit que la colonne Actions garde exactement la largeur
+   qu'on lui donne, meme si les autres colonnes ont du contenu long
+   (le contenu long est simplement tronque avec ellipsis dans les
+   autres colonnes, ce qui est deja le comportement du CSS global). */
+.table-std.table-actions-wide{
+  table-layout:fixed;
+  width:100%;
+}
+.table-std.table-actions-wide th,
+.table-std.table-actions-wide td{
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.table-std.table-actions-wide th.th-actions,
+.table-std.table-actions-wide td.td-actions{
+  width:260px !important;
+  min-width:260px !important;
+  max-width:260px !important;
+  overflow:visible !important;
+  white-space:nowrap !important;
+}
+.table-std.table-actions-wide td.td-actions > div{
+  display:flex;
+  gap:4px;
+  justify-content:flex-start;
+  overflow:visible;
+}
+/* Retro-compat : les anciennes regles th-actions/td-actions restent utiles
+   pour les tables qui n'ont pas encore la classe .table-actions-wide. */
+.table-std th.th-actions{
+  min-width:260px;
+}
+.table-std td.td-actions{
+  max-width:none;
+  overflow:visible;
+  white-space:nowrap;
+}

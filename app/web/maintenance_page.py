@@ -3,10 +3,7 @@ Route : /maintenance
 
 Contrôle d'accès multi-rôle :
 - Admin (accès complet) : superadmin, direction, administration.
-- Opérateur (vue « Mes tâches ») : rôle fabrication, uniquement quand le flag
-  global MAINTENANCE_OPEN_BETA est activé dans .env. Sert à ouvrir
-  progressivement le module aux opérateurs sur v1 (staging) avant la promotion
-  en prod, sans exposer l'interface encore incomplète à toute l'usine.
+- Opérateur (vue « Mes tâches ») : rôle fabrication.
 Le rôle effectif (admin / operator) est injecté dans le tag racine via
 l'attribut data-maint-role, ce qui permet au CSS et au JS de la page de
 basculer l'affichage entre les vues admin et opérateur sans deux templates
@@ -26,7 +23,6 @@ from config import (
     ROLE_ADMINISTRATION_VENTES,
     ROLE_ADMINISTRATION_TECHNIQUE,
     ROLE_FABRICATION,
-    MAINTENANCE_OPEN_BETA,
 )
 
 # v2.2.46 : inclut les 2 sous-rôles administration modernes (ventes/technique)
@@ -44,21 +40,19 @@ def _get_maintenance_role(user: dict) -> Optional[str]:
     """Retourne 'admin', 'operator' ou None selon le rôle effectif de l'user.
 
     - 'admin'    : superadmin, direction, administration.
-    - 'operator' : fabrication, uniquement si MAINTENANCE_OPEN_BETA=1.
+    - 'operator' : fabrication.
     - None       : pas d'accès (déclencher access_denied_response).
 
     Utilise `effective_role()` pour respecter l'impersonation : un superadmin
     qui simule un rôle `fabrication` doit voir la vue opérateur, pas celle
-    d'admin. C'est pour ça que l'ancienne whitelist d'idents a été retirée —
-    elle court-circuitait l'impersonation en renvoyant 'admin' même quand
-    le rôle simulé était différent.
+    d'admin.
     """
     if not user:
         return None
     role = effective_role(user)
     if role in _MAINTENANCE_ADMIN_ROLES:
         return "admin"
-    if role == ROLE_FABRICATION and MAINTENANCE_OPEN_BETA:
+    if role == ROLE_FABRICATION:
         return "operator"
     return None
 
@@ -852,7 +846,11 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .op-op-card-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
 .op-op-card-status{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
-.op-op-card-cta{margin-top:2px;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+/* v2.4.9 : margin-top:auto pousse le bouton en bas de la carte quand
+   celle-ci est stretchée par le grid parent (op-event-box-cards). Résultat :
+   tous les boutons "Marquer comme terminée" d'une même ligne sont alignés
+   même quand certaines cartes ont "Consignes de l'admin" et d'autres non. */
+.op-op-card-cta{margin-top:auto;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .op-op-card-cta:hover{filter:brightness(1.08)}
 .op-op-card-cta.is-done{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
 .op-op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
@@ -1672,44 +1670,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </section>
 
-        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count">0 opération</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
-            </div>
-          </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody class="js-cat-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
         </div><!-- /plan-subview-calendrier -->
+      </div><!-- /view-planning -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
@@ -1729,7 +1691,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
               <h2 style="margin:0;font-size:15px;font-weight:700">Gestion des alertes</h2>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Placement, taille des alertes, et blocage de la production.">Réglages</button>
+                <button type="button" class="btn btn-sec" onclick="openAlertSettingsModal()" title="Ajuster le délai minimum entre deux alertes affichées à l'opérateur.">Délai entre alertes</button>
                 <button type="button" class="btn" onclick="disableAllAlerts()" title="Bascule toutes les alertes en inactif. Aucune n'est supprimée — c'est un kill switch d'urgence.">Désactiver toutes les alertes</button>
                 <button type="button" class="btn" onclick="openNewAlertModal()">+ Nouvelle alerte</button>
               </div>
@@ -1751,19 +1713,19 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="filters">
             <div class="filter-group">
               <label for="filt-controles-type">Type de contrôle</label>
-              <select id="filt-controles-type" class="filter-input" onchange="ctrlResetPage(); resetPointFilters(); renderCtrl()">
+              <select id="filt-controles-type" class="filter-input" onchange="ctrlAutoFilter({resetPoints:true})">
                 <option value="">Tous les types</option>
               </select>
             </div>
             <div class="filter-group">
               <label for="filt-controles-operateur">Opérateur</label>
-              <select id="filt-controles-operateur" class="filter-input">
+              <select id="filt-controles-operateur" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Tous les opérateurs</option>
               </select>
             </div>
             <div class="filter-group">
               <label for="filt-controles-machine">Machine</label>
-              <select id="filt-controles-machine" class="filter-input">
+              <select id="filt-controles-machine" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Toutes les machines</option>
                 <option value="Cohésio 1">Cohésio 1</option>
                 <option value="Cohésio 2">Cohésio 2</option>
@@ -1773,21 +1735,21 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </div>
             <div class="filter-group">
               <label for="filt-controles-conformite">Conformité</label>
-              <select id="filt-controles-conformite" class="filter-input" onchange="ctrlResetPage(); renderCtrl()">
+              <select id="filt-controles-conformite" class="filter-input" onchange="ctrlAutoFilter()">
                 <option value="">Toutes les réponses</option>
                 <option value="nc">Non-conformes uniquement</option>
                 <option value="ok">Conformes uniquement</option>
               </select>
             </div>
-            <div class="filter-group">
-              <label for="filt-controles-date-from">Du</label>
-              <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du">
+            <!-- v2.3.36 : Du/Au fusionnés — v2.3.37 : bouton Filtrer retiré, filtrage auto sur onchange -->
+            <div class="filter-group" style="flex:1 1 220px">
+              <label>Période</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="date" id="filt-controles-date-from" class="filter-input" aria-label="Du" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
+                <span style="color:var(--muted);font-size:14px">→</span>
+                <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au" style="min-width:0;flex:1" onchange="ctrlAutoFilter()">
+              </div>
             </div>
-            <div class="filter-group">
-              <label for="filt-controles-date-to">Au</label>
-              <input type="date" id="filt-controles-date-to" class="filter-input" aria-label="Au">
-            </div>
-            <button type="button" class="filters-apply-btn" onclick="ctrlResetPage(); renderCtrl()">Filtrer</button>
           </div>
           <div class="filters-date-presets" id="ctrl-date-presets">
             <span class="filters-date-presets-label">Période :</span>
@@ -1810,6 +1772,12 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="ops-list-head">
             <div class="ops-list-title">Historique des alertes</div>
             <div class="ops-list-head-right">
+              <!-- v2.3.35 : toggle "Fermetures auto" relocalisé du panneau filtres vers ce header, style identique à "Colonnes produit" -->
+              <button type="button" class="ctrl-extra-toggle" id="ctrl-autoclose-toggle" onclick="toggleAutoClose()" title="Afficher ou masquer les lignes 'Fermée auto' générées automatiquement quand une saisie non-productive (arrêt, fin de production…) clôt une alerte périodique.">
+                <span class="ctrl-extra-toggle-label">Fermetures auto</span>
+                <span class="ctrl-extra-toggle-dot" id="ctrl-autoclose-toggle-dot"></span>
+                <span class="ctrl-extra-toggle-state" id="ctrl-autoclose-toggle-state">OFF</span>
+              </button>
               <button type="button" class="ctrl-extra-toggle" id="ctrl-extra-toggle" onclick="toggleExtraCols()" title="Afficher ou masquer les colonnes extraites de la fiche technique (référence produit, adhésif, glassine)">
                 <span class="ctrl-extra-toggle-label">Colonnes produit</span>
                 <span class="ctrl-extra-toggle-dot" id="ctrl-extra-toggle-dot"></span>
@@ -6559,6 +6527,9 @@ async function loadCtrlAcks(){
       _raw_comment: a.comment || '',
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
+      // v2.4.11 : remonte dismissed pour que ctrlIsAutoClose détecte aussi
+      // les anciennes esquives (comment vide, antérieures à v2.3.30).
+      _dismissed: a.dismissed === 1 || a.dismissed === true,
     }));
     CTRL_STATE.alerts_meta = data.alerts_meta || {};
     CTRL_STATE.known_alerts = Array.isArray(data.known_alerts) ? data.known_alerts : [];
@@ -6631,6 +6602,54 @@ function sortCtrl(field){
   }
   renderCtrl();
 }
+// v2.3.29 : mémorise la préférence "afficher les fermetures auto"
+// (par défaut masquées — elles polluent l'historique quotidien).
+// v2.3.35 : localStorage = source de vérité (plus de checkbox DOM), et un
+// toggle stylé dans le header "Historique des alertes" gère l'état.
+const CTRL_SHOW_AUTO_KEY = 'mysifa_ctrl_show_auto_close';
+function ctrlLoadShowAutoClose(){
+  try { return localStorage.getItem(CTRL_SHOW_AUTO_KEY) === '1'; }
+  catch(_) { return false; }
+}
+function ctrlSaveShowAutoClose(v){
+  try { localStorage.setItem(CTRL_SHOW_AUTO_KEY, v ? '1' : '0'); } catch(_) {}
+}
+function updateAutoCloseToggleUI(){
+  const on = ctrlLoadShowAutoClose();
+  const state = document.getElementById('ctrl-autoclose-toggle-state');
+  const btn = document.getElementById('ctrl-autoclose-toggle');
+  if(state) state.textContent = on ? 'ON' : 'OFF';
+  if(btn) btn.classList.toggle('ctrl-extra-toggle-on', on);
+}
+function toggleAutoClose(){
+  ctrlSaveShowAutoClose(!ctrlLoadShowAutoClose());
+  updateAutoCloseToggleUI();
+  ctrlResetPage();
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
+function ctrlIsAutoClose(c){
+  // v2.4.11 : double critère.
+  //   1) dismissed=1 → esquive quelle que soit l'époque (couvre les anciennes
+  //      esquives antérieures à v2.3.30 qui ont comment vide).
+  //   2) comment matche "Fermée auto" → auto-close serveur (backend
+  //      _auto_ack_periodic_alerts_on_arret v2.2.65) + esquives récentes
+  //      "Fermée auto (esquive) : <label>" (v2.3.30).
+  if(c && c._dismissed) return true;
+  const raw = (c && c._raw_comment) || '';
+  return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
+}
+
+// v2.3.37 : filtrage auto — plus de bouton Filtrer. Chaque champ appelle
+// ctrlAutoFilter() à onchange.
+// v2.3.38 : toast retiré à la demande de l'utilisateur (le re-render
+// de la table est déjà un feedback suffisant).
+function ctrlAutoFilter(opts){
+  opts = opts || {};
+  ctrlResetPage();
+  if(opts.resetPoints) resetPointFilters();
+  if(typeof renderCtrl === 'function') renderCtrl();
+}
+
 function getCtrlFilters(){
   const v = id => (document.getElementById(id)?.value || '').trim();
   return {
@@ -6640,6 +6659,8 @@ function getCtrlFilters(){
     dateFrom:  v('filt-controles-date-from'),
     dateTo:    v('filt-controles-date-to'),
     conformite:v('filt-controles-conformite'),
+    // v2.3.35 : lu directement depuis localStorage (plus de checkbox DOM)
+    showAuto:  ctrlLoadShowAutoClose(),
   };
 }
 function resetCtrlFilters(){
@@ -6647,7 +6668,8 @@ function resetCtrlFilters(){
     const el = document.getElementById('filt-controles-' + k);
     if(el) el.value = '';
   });
-  renderCtrl();
+  // v2.3.37 : passe par ctrlAutoFilter pour toast + reset page
+  ctrlAutoFilter({resetPoints:true});
 }
 function applyCtrlDatePreset(key){
   const p = maintDatePresets()[key];
@@ -6656,7 +6678,8 @@ function applyCtrlDatePreset(key){
   const to   = document.getElementById('filt-controles-date-to');
   if(from) from.value = p.from;
   if(to)   to.value   = p.to;
-  renderCtrl();
+  // v2.3.37 : les chips preset déclenchent aussi le toast
+  ctrlAutoFilter();
 }
 function updateCtrlDatePresetChips(){
   const presets = maintDatePresets();
@@ -6932,17 +6955,32 @@ function openAckDetail(prefixedId){
       sections = dosSec + bobSec + matSec + etiSec + impSec;
     }
     const dosHeader = '<div class="ack-di-head"><span class="ack-di-badge">Dossier ' + escHtml(noDos) + '</span>' + (dosInfo && dosInfo.client ? '<span class="ack-di-badge-sub">' + escHtml(dosInfo.client) + '</span>' : '') + '</div>';
+    // v2.3.44 : le bloc "Contexte dossier & fiche technique" est maintenant
+    // dans un <details> fermé par défaut. Le badge Dossier reste visible
+    // au-dessus du details pour garder l'info essentielle à l'œil.
     if(sections){
-      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier &amp; fiche technique</label>' + dosHeader + sections + '</div>';
+      dossierHtml = '<div class="ack-di-wrap" style="margin-top:12px">'
+        + dosHeader
+        + '<details style="margin-top:8px">'
+        +   '<summary style="cursor:pointer;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding:6px 0;user-select:none;list-style:revert">Contexte dossier &amp; fiche technique</summary>'
+        +   '<div style="margin-top:8px">' + sections + '</div>'
+        + '</details>'
+        + '</div>';
     } else {
-      dossierHtml = '<div class="ack-di-wrap"><label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px 0">Contexte dossier</label>' + dosHeader + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">Aucune fiche technique associée à ce dossier.</div></div>';
+      dossierHtml = '<div class="ack-di-wrap" style="margin-top:12px">'
+        + dosHeader
+        + '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:6px">Aucune fiche technique associée à ce dossier.</div>'
+        + '</div>';
     }
   }
 
   const overlay = document.createElement('div');
   overlay.className = 'ta-sim ta-pl-center ta-blocking';
   overlay.id = 'ack-detail-overlay';
-  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:640px">'
+  // v2.3.44 : hauteur limitée + scroll interne pour ne pas déborder de l'écran
+  // quand la fiche technique est développée. Largeur ramenée à 480 pour rester
+  // cohérent avec le viewer partagé (mysifa_ack_viewer.js).
+  overlay.innerHTML = '<div class="ta-sim-alert" style="max-width:480px;width:480px;max-height:85vh;overflow-y:auto">'
     + '<div class="ta-sim-title">' + escHtml(ack.type || 'Contrôle') + '</div>'
     + '<div class="ta-sim-sub">' + contextLine + '</div>'
     + checklistHtml
@@ -7022,6 +7060,8 @@ function renderCtrl(){
       if(f.conformite === 'nc' && !isNc) return false;
       if(f.conformite === 'ok' && isNc)  return false;
     }
+    // v2.3.29 : masque les fermetures automatiques par défaut
+    if(!f.showAuto && ctrlIsAutoClose(c)) return false;
     if(!_matchPointFilters(c)) return false;
     return true;
   });
@@ -7152,7 +7192,7 @@ function renderCtrl(){
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
         '</button>';
       } else {
-        actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
+        actionHtml = '<button type="button" class="ops-row-btn del" onclick="event.stopPropagation();deleteCtrl(\'' + escAttr(c.id) + '\')" title="Supprimer">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
         '</button>';
       }
@@ -7160,8 +7200,11 @@ function renderCtrl(){
       const isNc = _ackHasNonConformite(c);
       const trClass = isNc ? ' class="ctrl-row-nc"' : '';
       const ncTitle = isNc ? ' title="Non-conformité — une réponse ne correspond pas à la valeur attendue"' : '';
+      // v2.3.44 : simple clic (au lieu du double-clic) pour ouvrir le détail
+      // d'une ack. La ligne reste sélectionnable via les cellules qui ont
+      // event.stopPropagation() ailleurs (pill dossier, réponse cliquable).
       const dblAttr = (c._source === 'alert')
-        ? ' ondblclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Double-clic pour voir le détail"')
+        ? ' onclick="openAckDetail(\'' + escAttr(c.id) + '\')" style="cursor:pointer"' + (isNc ? '' : ' title="Cliquer pour voir le détail"')
         : '';
       return '<tr' + trClass + dblAttr + ncTitle + '>' + cells + '</tr>';
     });
@@ -7489,6 +7532,8 @@ async function loadMe(){
   });
   loadCtrl();
   updateExtraToggleUI();
+  // v2.3.35 : init du toggle "Fermetures auto" (relocalisé dans le header historique)
+  updateAutoCloseToggleUI();
   loadCtrlAcks();
   loadCtrlTypes().then(() => renderCtrlTypes()).catch(() => renderCtrlTypes());
   loadPlanning();
@@ -7755,14 +7800,6 @@ function _fmtAlertDate(s) {
 
 let _alertsFilterKind = 'all';
 
-function _alertIsConfigured(a) {
-  // Une alerte est "configurée" dès qu'elle a au moins une clé de paramètre
-  // (trigger / target / validation / checklist) renseignée par l'admin.
-  // Les alertes auto-créées par la migration v133 démarrent avec params={}.
-  if (!a || !a.params || typeof a.params !== 'object') return false;
-  return Object.keys(a.params).length > 0;
-}
-
 function renderAlertsList() {
   const box = document.getElementById('alerts-list');
   if (!box) return;
@@ -7877,447 +7914,11 @@ document.addEventListener('click', (ev) => {
 });
 
 // Référentiels pour les formulaires d'alerte
-const _ALERT_TRIGGER_TYPES = [
-  { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
-  { v: 'periodic', l: 'Périodique — toutes les X minutes' },
-  { v: 'calendar', l: 'Calendaire — à heure fixe' },
-  { v: 'event',    l: 'Événementiel — sur action métier' },
-];
-const _ALERT_TRIGGER_EVENTS = [
-  { v: 'dossier_start',  l: 'Début de dossier' },
-  { v: 'dossier_end',    l: 'Fin de dossier' },
-];
-const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
-const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
-const _ALERT_DAYS = [
-  { v: 'mon', l: 'Lun' }, { v: 'tue', l: 'Mar' }, { v: 'wed', l: 'Mer' },
-  { v: 'thu', l: 'Jeu' }, { v: 'fri', l: 'Ven' }, { v: 'sat', l: 'Sam' }, { v: 'sun', l: 'Dim' },
-];
-
-function _alertDefaults(existing) {
-  const p = existing || {};
-  const trig = Object.assign({}, p.trigger || {});
-  // Compat rétro : si seul interval_hours est présent, on convertit en minutes.
-  if (trig.interval_minutes == null && trig.interval_hours != null) {
-    trig.interval_minutes = Math.round(Number(trig.interval_hours) * 60);
-    delete trig.interval_hours;
-  }
-  // Target : nouveau format = { machines: [...] }. Compat avec ancien { machine, role }.
-  const rawTarget = p.target || {};
-  let machines = rawTarget.machines;
-  if (!Array.isArray(machines)) {
-    if (typeof rawTarget.machine === 'string' && rawTarget.machine) {
-      machines = [rawTarget.machine];
-    } else {
-      machines = ['*'];
-    }
-  }
-  // Checklist : normalisation des items pour inclure le champ type (choice/value)
-  // et la conversion des anciens items "string" en objets.
-  const cl = Object.assign({ enabled: false, items: [] }, p.checklist || {});
-  if (!Array.isArray(cl.items)) cl.items = [];
-  cl.items = cl.items.map(it => {
-    if (typeof it === 'string') {
-      return { type: 'choice', label: it, responses: ['Conforme'] };
-    }
-    const t = (it && it.type) || 'choice';
-    if (t === 'value') {
-      return {
-        type: 'value',
-        label: (it && it.label) || '',
-        unit: (it && it.unit) || '',
-        min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
-        max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
-      };
-    }
-    const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
-    const ncResp = (it && Array.isArray(it.nc_responses))
-      ? it.nc_responses.filter(r => typeof r === 'string' && r.trim())
-      : [];
-    return {
-      type: 'choice',
-      label: (it && it.label) || '',
-      responses: responses.length ? responses : ['Conforme'],
-      multi: (it && it.multi === false) ? false : true,
-      allow_other: !!(it && it.allow_other),
-      other_is_nc: !!(it && it.other_is_nc),
-      nc_responses: ncResp,
-    };
-  });
-  return {
-    description: (typeof p.description === 'string') ? p.description : '',
-    trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
-    target: { machines: machines },
-    validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
-    dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
-    checklist: cl,
-  };
-}
-
-function _renderAlertFormFields(params, opts) {
-  opts = opts || {};
-  const d = _alertDefaults(params);
-  // Machines (multi-sélection via dropdown)
-  const machineList = _ALERT_MACHINES.filter(m => m !== '*');
-  const selectedMachines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const isAllMachines = selectedMachines.includes('*');
-  const machineCheckboxes = machineList.map(m => {
-    const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
-    const disabled = isAllMachines ? ' disabled' : '';
-    const rowCls = isAllMachines ? 'af-md-row is-disabled' : 'af-md-row';
-    const safeM = escAttr(m);
-    return '<div class="' + rowCls + '" onclick="_afRowClickByValue(event, \'' + safeM + '\')">'
-      + '<input type="checkbox" class="af-machine" value="' + safeM + '"' + (checked ? ' ' + checked : '') + disabled + ' onchange="_afOnMachineChange()">'
-      + '<div class="af-md-row-text">' + esc(m) + '</div>'
-      + '</div>';
-  }).join('');
-  let machinesInitialLabel;
-  if (isAllMachines) {
-    machinesInitialLabel = 'Toutes les machines';
-  } else if (selectedMachines.length === 0) {
-    machinesInitialLabel = 'Aucune machine sélectionnée';
-  } else if (selectedMachines.length === 1) {
-    machinesInitialLabel = selectedMachines[0];
-  } else if (selectedMachines.length <= 3) {
-    machinesInitialLabel = selectedMachines.join(', ');
-  } else {
-    machinesInitialLabel = selectedMachines.length + ' machines';
-  }
-  const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
-    '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
-  ).join('');
-  const eventOpts = _ALERT_TRIGGER_EVENTS.map(e =>
-    '<option value="' + e.v + '"' + (e.v === d.trigger.event ? ' selected' : '') + '>' + esc(e.l) + '</option>'
-  ).join('');
-  const daysHtml = _ALERT_DAYS.map(day => {
-    const checked = (d.trigger.days || []).indexOf(day.v) >= 0 ? 'checked' : '';
-    return '<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px"><input type="checkbox" class="af-day" value="' + day.v + '" ' + checked + ' style="margin:0">' + day.l + '</label>';
-  }).join(' ');
-
-  const nomBlock = opts.nomReadonly
-    ? '<div class="alert-field"><label class="alert-field-label">Titre <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code</span></label><input type="text" class="alert-field-input" value="' + escAttr(opts.nomValue || '') + '" disabled></div>'
-    : '<div class="alert-field"><label class="alert-field-label">Titre de l\'alerte <span style="color:var(--danger)">*</span></label><input type="text" id="af-nom" class="alert-field-input" maxlength="120" placeholder="Ex. Contrôle qualité Cohésio 1" value="' + escAttr(opts.nomValue || '') + '"></div>';
-
-  const descBlock = '<div class="alert-field">'
-    +   '<label class="alert-field-label">Description <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— contexte affiché à l\'opérateur</span></label>'
-    +   '<textarea id="af-description" class="alert-field-input" rows="2" maxlength="800" placeholder="Ex. Vérifier la tension Errepi et le serrage de la bobine — noter la valeur exacte pour analyse.">' + esc(d.description || '') + '</textarea>'
-    +   '<div class="alert-field-help">Optionnel. Affiché sous le titre de l\'alerte quand elle apparaît chez l\'opérateur.</div>'
-    + '</div>';
-  return nomBlock
-    + descBlock
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
-    +   '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
-    +   '<div id="af-trigger-sub" class="alert-field-sub">'
-    +     '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
-    +     '<div data-trigger-for="periodic">'
-    +       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
-    +           '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +         '</div>'
-    +         '<div>'
-    +           '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
-    +           '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
-    +         '</div>'
-    +       '</div>'
-    +       '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="calendar">'
-    +       '<div class="alert-field-row">'
-    +         '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
-    +         '<div></div>'
-    +       '</div>'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
-    +       '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
-    +     '</div>'
-    +     '<div data-trigger-for="event">'
-    +       '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
-    +       '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '<!-- v2.2.42 : Filtre produit retiré (jamais fonctionné) -->'
-    +     '</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +   '<div class="af-md-wrap">'
-    +     '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
-    +       '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
-    +       '<span class="af-md-trigger-caret">▼</span>'
-    +     '</button>'
-    +     '<div id="af-md-panel" class="af-md-panel">'
-    +       '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
-    +         '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
-    +         '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
-    +       '</div>'
-    +       '<div class="af-md-sep"></div>'
-    +       machineCheckboxes
-    +     '</div>'
-    +   '</div>'
-    +   '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
-    + '</div>'
-    + '<div class="alert-field">'
-    +   '<label class="alert-field-label">Validation <span style="color:var(--danger)">*</span></label>'
-    +   '<input type="text" id="af-validation-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.validation.button_label) + '" placeholder="Valider">'
-    +   '<div class="alert-field-help">Libellé du bouton que l\'opérateur cliquera pour fermer l\'alerte une fois le contrôle effectué.</div>'
-    + '</div>'
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Aucune trace nulle part.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
-    +     '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
-    +     '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider).</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Questionnaire (points de contrôle)</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ex. découpe nette, colle conforme, centrage OK… L\'opérateur cochera chaque point lors de la validation.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-checklist-enabled" ' + (d.checklist.enabled ? 'checked' : '') + ' onchange="_afOnChecklistToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
-    +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
-    +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
-    +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
-    + '</div>';
-}
-
-function _afResponseRow(value, isNc) {
-  const safeVal = (value || '').replace(/"/g, '&quot;');
-  const ncChecked = isNc ? ' checked' : '';
-  return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
-    + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
-    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
-    +   '<input type="checkbox" class="af-cl-resp-nc"' + ncChecked + ' style="width:12px;height:12px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>NC</span>'
-    + '</label>'
-    + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
-    + '</div>';
-}
-
-function _afChecklistCardBody(item) {
-  const type = (item && item.type) || 'choice';
-  if (type === 'value') {
-    const safeUnit = ((item && item.unit) || '').replace(/"/g, '&quot;');
-    const safeMin = (item && item.min != null && item.min !== '') ? String(item.min) : '';
-    const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
-    return '<div class="af-cl-body" data-type="value">'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Unité</div><input type="text" class="alert-field-input af-cl-unit" maxlength="20" placeholder="bar, °C, mm…" value="' + safeUnit + '" style="padding:6px 10px;font-size:13px"></div>'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Min</div><input type="number" step="any" class="alert-field-input af-cl-min" placeholder="2.5" value="' + safeMin + '" style="padding:6px 10px;font-size:13px"></div>'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max</div><input type="number" step="any" class="alert-field-input af-cl-max" placeholder="3.2" value="' + safeMax + '" style="padding:6px 10px;font-size:13px"></div>'
-      + '</div>'
-      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… L\'opérateur saisira une valeur. Min/Max sont optionnels (vide = pas de borne).</div>'
-      + '</div>';
-  }
-  // type "choice"
-  const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
-  const ncList = (item && Array.isArray(item.nc_responses)) ? item.nc_responses.map(String) : [];
-  const responsesHtml = responses.map((r) => _afResponseRow(r, ncList.indexOf(String(r)) !== -1)).join('');
-  const multi = (item && item.multi === false) ? false : true;
-  return '<div class="af-cl-body" data-type="choice">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
-    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Réponses possibles</div>'
-    +   '<select class="alert-field-input af-cl-multi-sel" style="flex:0 0 auto;width:auto;padding:5px 8px;font-size:12px">'
-    +     '<option value="multi"' + (multi ? ' selected' : '') + '>Plusieurs réponses (cases)</option>'
-    +     '<option value="single"' + (!multi ? ' selected' : '') + '>Une seule réponse (radio)</option>'
-    +   '</select>'
-    + '</div>'
-    + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
-    + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' onchange="_afOnOtherToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
-    +   '<span>Ajouter une réponse <strong style="color:var(--text)">« Autre »</strong> avec zone d\'explication optionnelle</span>'
-    + '</label>'
-    + '<label class="af-cl-other-nc-lbl" style="display:' + ((item && item.allow_other) ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:4px;margin-left:22px;cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-nc"' + ((item && item.other_is_nc) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Traiter <strong style="color:var(--text)">« Autre »</strong> comme une <strong style="color:var(--danger)">non-conformité</strong></span>'
-    + '</label>'
-    + '</div>';
-}
-
-function _afOnOtherToggle(cb){
-  const body = cb.closest('.af-cl-body');
-  if(!body) return;
-  const ncLbl = body.querySelector('.af-cl-other-nc-lbl');
-  if(!ncLbl) return;
-  if(cb.checked){ ncLbl.style.display = 'flex'; }
-  else {
-    ncLbl.style.display = 'none';
-    const inp = ncLbl.querySelector('.af-cl-other-nc');
-    if(inp) inp.checked = false;
-  }
-}
-
-function _afChecklistCard(item) {
-  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
-  const type = (item && item.type) || 'choice';
-  const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
-                 + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
-  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
-    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
-    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;min-width:140px;font-weight:500">'
-    +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
-    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
-    + '</div>'
-    + _afChecklistCardBody(item)
-    + '</div>';
-}
-
-function _afOnTypeChange(sel) {
-  const card = sel.closest('.af-cl-card');
-  if (!card) return;
-  const oldBody = card.querySelector('.af-cl-body');
-  if (!oldBody) return;
-  const newType = sel.value;
-  const defaultItem = (newType === 'value')
-    ? { type: 'value', label: '', unit: '', min: null, max: null }
-    : { type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false };
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCardBody(defaultItem);
-  const newBody = tmp.firstElementChild;
-  if (newBody) oldBody.replaceWith(newBody);
-}
-
-function _afRenderChecklistItems(items) {
-  const list = (items && items.length) ? items : [{ label: '', responses: ['Conforme'] }];
-  return list.map(_afChecklistCard).join('');
-}
-
-function _afAddChecklistItem() {
-  const wrap = document.getElementById('af-checklist-items');
-  if (!wrap) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false });
-  const card = tmp.firstElementChild;
-  wrap.appendChild(card);
-  card.querySelector('.af-cl-label')?.focus();
-}
-
-function _afAddResponse(btn) {
-  const card = btn.closest('.af-cl-card');
-  if (!card) return;
-  const list = card.querySelector('.af-cl-responses');
-  if (!list) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afResponseRow('');
-  const row = tmp.firstElementChild;
-  list.appendChild(row);
-  row.querySelector('.af-cl-resp-input')?.focus();
-}
-
-function _afRemoveResponse(btn) {
-  const row = btn.closest('.af-cl-resp-row');
-  if (!row) return;
-  const list = row.parentElement;
-  if (!list) { row.remove(); return; }
-  // Garde au moins une réponse par point
-  if (list.querySelectorAll('.af-cl-resp-row').length <= 1) {
-    toast('Un point doit garder au moins une réponse', true);
-    return;
-  }
-  row.remove();
-}
-
-function _afRemoveItem(btn) {
-  const card = btn.closest('.af-cl-card');
-  if (card) card.remove();
-}
-
-function _afOnChecklistToggle() {
-  const enabled = document.getElementById('af-checklist-enabled')?.checked;
-  const wrap = document.getElementById('af-checklist-wrap');
-  if (wrap) wrap.style.display = enabled ? '' : 'none';
-  if (enabled) {
-    const cards = document.querySelectorAll('.af-cl-card');
-    if (!cards.length) _afAddChecklistItem();
-  }
-}
-
+// v2.3.33 : bascule la section Paramètres (déclencheur / machines / affichage / …)
+// Force l'ouverture de la section Paramètres — appelé par _afReadParams pour
+// que les erreurs de validation portant sur des champs planqués soient visibles.
 // v164 : toggle du bouton dismiss (fermeture sans saisie)
-function _afOnDismissToggle() {
-  const en = document.getElementById('af-dismiss-enabled')?.checked;
-  const wrap = document.getElementById('af-dismiss-wrap');
-  if (wrap) wrap.style.display = en ? '' : 'none';
-}
-
 // v2.2.42 : no-op depuis le retrait du filtre produit.
-function _afOnTriggerEventChange() { /* no-op */ }
-
-function _afRowClick(ev, inputId) {
-  // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
-  // sur l'input pour éviter le double toggle (l'input gère son propre click).
-  if (ev.target.tagName === 'INPUT') return;
-  const inp = document.getElementById(inputId);
-  if (!inp || inp.disabled) return;
-  inp.checked = !inp.checked;
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function _afRowClickByValue(ev, value) {
-  if (ev.target.tagName === 'INPUT') return;
-  const row = ev.currentTarget;
-  const inp = row.querySelector('input.af-machine');
-  if (!inp || inp.disabled) return;
-  inp.checked = !inp.checked;
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function _afOnAllMachinesToggle() {
-  const allChk = document.getElementById('af-target-all');
-  if (!allChk) return;
-  document.querySelectorAll('.af-machine').forEach(el => {
-    el.disabled = allChk.checked;
-    if (allChk.checked) el.checked = false;
-    const row = el.closest('.af-md-row');
-    if (row) row.classList.toggle('is-disabled', allChk.checked);
-  });
-  _afUpdateMachinesLabel();
-}
-
-function _afOnMachineChange() {
-  const allChk = document.getElementById('af-target-all');
-  if (allChk && allChk.checked) {
-    const anyIndividual = Array.from(document.querySelectorAll('.af-machine:checked')).length > 0;
-    if (anyIndividual) allChk.checked = false;
-  }
-  _afUpdateMachinesLabel();
-}
-
-function _afUpdateMachinesLabel() {
-  const lbl = document.getElementById('af-md-label');
-  if (!lbl) return;
-  const all = !!document.getElementById('af-target-all')?.checked;
-  lbl.style.color = '';
-  if (all) { lbl.textContent = 'Toutes les machines'; return; }
-  const selected = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
-  if (!selected.length) {
-    lbl.textContent = 'Aucune machine sélectionnée';
-    lbl.style.color = 'var(--danger)';
-    return;
-  }
-  if (selected.length === 1) lbl.textContent = selected[0];
-  else if (selected.length <= 3) lbl.textContent = selected.join(', ');
-  else lbl.textContent = selected.length + ' machines';
-}
-
-function _afToggleMachinesPanel(ev) {
-  if (ev) ev.stopPropagation();
-  const panel = document.getElementById('af-md-panel');
-  if (!panel) return;
-  panel.classList.toggle('open');
-}
-
 // Fermeture du dropdown sur clic à l'extérieur (un seul listener global, idempotent)
 if (!window._afMachinesDropdownInit) {
   window._afMachinesDropdownInit = true;
@@ -8327,108 +7928,6 @@ if (!window._afMachinesDropdownInit) {
     if (ev.target.closest('.af-md-wrap')) return;
     panel.classList.remove('open');
   });
-}
-
-function _afOnTriggerChange() {
-  const t = document.getElementById('af-trigger-type')?.value || 'manual';
-  document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
-    el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
-  });
-}
-
-function _afReadParams() {
-  const t = document.getElementById('af-trigger-type').value || 'manual';
-  const trig = { type: t };
-  if (t === 'periodic') {
-    const mInp = document.getElementById('af-trigger-interval-minutes');
-    const m = parseInt(mInp.value, 10);
-    if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
-    trig.interval_minutes = m;
-    const gInp = document.getElementById('af-trigger-grace-minutes');
-    if (gInp) {
-      const g = parseInt(gInp.value, 10);
-      if (isNaN(g) || g < 0 || g > 120) { toast('Délai avant 1ère alerte invalide (0 à 120 min)', true); return null; }
-      trig.grace_minutes = g;
-    }
-  } else if (t === 'calendar') {
-    const tm = document.getElementById('af-trigger-time').value || '';
-    if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
-    trig.time = tm;
-    const days = Array.from(document.querySelectorAll('.af-day:checked')).map(el => el.value);
-    if (!days.length) { toast('Au moins un jour requis', true); return null; }
-    trig.days = days;
-  } else if (t === 'event') {
-    trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
-    // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
-    delete trig.filter_conditionnement;
-  }
-  // Lecture du questionnaire (cartes : label + réponses possibles)
-  const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
-  const items = [];
-  if (clEnabled) {
-    document.querySelectorAll('.af-cl-card').forEach(card => {
-      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
-      if (!label) return;
-      const type = card.querySelector('.af-cl-type')?.value || 'choice';
-      if (type === 'value') {
-        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
-        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
-        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
-        const item = { type: 'value', label: label };
-        if (unit) item.unit = unit;
-        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
-        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
-        items.push(item);
-        return;
-      }
-      const responses = [];
-      const ncResponses = [];
-      card.querySelectorAll('.af-cl-resp-row').forEach(row => {
-        const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
-        if (!r) return;
-        responses.push(r);
-        if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
-      });
-      if (!responses.length) return;
-      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
-      const multi = (multiSel === 'single') ? false : true;
-      const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
-      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      items.push({ type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses });
-    });
-  }
-  // Cible (lue en premier — interrompt si rien sélectionné)
-  let _tgt;
-  {
-    const all = !!document.getElementById('af-target-all')?.checked;
-    if (all) {
-      _tgt = { machines: ['*'] };
-    } else {
-      const ms = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
-      if (!ms.length) { toast('Sélectionne au moins une machine', true); return null; }
-      _tgt = { machines: ms };
-    }
-  }
-  const descEl = document.getElementById('af-description');
-  const descVal = descEl ? (descEl.value || '').trim() : '';
-  return {
-    description: descVal.slice(0, 800),
-    trigger: trig,
-    target: _tgt,
-    validation: {
-      button_label: (document.getElementById('af-validation-label').value || 'Valider').trim() || 'Valider',
-    },
-    dismiss_button: (function(){
-      const en = !!document.getElementById('af-dismiss-enabled')?.checked;
-      if(!en) return { enabled: false, label: '' };
-      const lbl = (document.getElementById('af-dismiss-label').value || 'Fermer l\'alerte').trim() || 'Fermer l\'alerte';
-      return { enabled: true, label: lbl };
-    })(),
-    checklist: {
-      enabled: clEnabled && items.length > 0,
-      items: items,
-    },
-  };
 }
 
 function openNewAlertModal() {
@@ -8548,15 +8047,16 @@ const placementOpts = placements.map(p =>
     const sizeOpts = sizes.map(s =>
       '<option value="' + s.v + '"' + (s.v === _alertGlobalSettings.size ? ' selected' : '') + '>' + esc(s.l) + '</option>'
     ).join('');
+    // v2.3.12 : modal simplifié — placement/size sont maintenant par alerte.
     overlay.innerHTML = '<div class="alert-modal">'
-      + '<div class="alert-modal-head"><h3>Réglages des alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
+      + '<div class="alert-modal-head"><h3>Délai entre alertes</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
       + '<div class="alert-modal-body">'
-      +   '<p style="font-size:12px;color:var(--muted);margin:0 0 14px 0">Réglages globaux appliqués à toutes les alertes actives.</p>'
-      +   '<div class="alert-field">'
+      +   '<!-- v2.3.12 : placement/size retirés (par alerte maintenant) -->'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Placement à l\'écran</label>'
       +     '<select id="ags-placement" class="alert-field-input">' + placementOpts + '</select>'
       +   '</div>'
-      +   '<div class="alert-field">'
+      +   '<div class="alert-field" style="display:none">'
       +     '<label class="alert-field-label">Taille</label>'
       +     '<select id="ags-size" class="alert-field-input">' + sizeOpts + '</select>'
       +   '</div>'
@@ -8565,13 +8065,7 @@ const placementOpts = placements.map(p =>
       +     '<input type="number" id="ags-gap" class="alert-field-input" min="0" max="120" step="1" value="' + _alertGlobalSettings.min_gap_minutes + '">'
       +     '<div class="alert-field-help">Après chaque validation d\'alerte, aucune autre alerte n\'apparaît sur l\'écran de l\'opérateur pendant ce délai. Évite qu\'il soit surchargé quand plusieurs alertes deviennent dues en même temps (typiquement à la reprise de production). 0 = pas de délai.</div>'
       +   '</div>'
-      +   '<div class="alert-field" style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-      +     '<div>'
-      +       '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-      +       '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut pas saisir de production tant que l\'alerte n\'a pas été validée.</span>'
-      +     '</div>'
-      +     '<label class="toggle"><input type="checkbox" id="ags-block" ' + (_alertGlobalSettings.block_production ? 'checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-      +   '</div>'
+
       + '</div>'
       + '<div class="alert-modal-foot">'
       +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
@@ -8582,18 +8076,22 @@ const placementOpts = placements.map(p =>
     overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     document.getElementById('ags-save').addEventListener('click', async () => {
+      // v2.3.27 : fix — depuis v2.3.12 le modal n'a plus qu'un champ (le
+      // délai). L'ancien code référençait ags-block qui n'est jamais rendu
+      // → getElementById(...).checked throw → toast d'erreur silencieux.
+      // On lit maintenant depuis _alertGlobalSettings (déjà chargé au boot).
       const gapInput = document.getElementById('ags-gap');
       const gapVal = gapInput ? parseInt(gapInput.value, 10) : 5;
       const payload = {
-        placement: document.getElementById('ags-placement').value,
-        size: document.getElementById('ags-size').value,
-        block_production: document.getElementById('ags-block').checked,
+        placement: _alertGlobalSettings.placement || 'top-right',
+        size: _alertGlobalSettings.size || 'medium',
+        block_production: !!_alertGlobalSettings.block_production,
         min_gap_minutes: (isNaN(gapVal) || gapVal < 0) ? 5 : Math.min(gapVal, 120),
       };
       try {
         await api('/api/maintenance/alert-settings', { method: 'PUT', body: JSON.stringify(payload) });
-        _alertGlobalSettings = payload;
-        toast('Réglages enregistrés');
+        _alertGlobalSettings.min_gap_minutes = payload.min_gap_minutes;
+        toast('Délai enregistré');
         close();
       } catch (e) { toast(e && e.message ? e.message : 'Erreur', true); }
     });
@@ -8605,199 +8103,28 @@ function _stripAutoPrefix(nom) {
   return String(nom).replace(/^Contr[oôö]le\s*:\s*\d+\s*[–\-]\s*/i, '');
 }
 
-function _alertTriggerLabel(t) {
-  if (!t || !t.type) return 'Manuel';
-  if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
-  if (t.type === 'periodic') {
-    const m = (t.interval_minutes != null) ? t.interval_minutes
-              : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
-    return 'Périodique — toutes les ' + m + ' min';
-  }
-  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
-  if (t.type === 'event') {
-    const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
-    return 'Événementiel — ' + ev;
-  }
-  return t.type;
-}
-
 async function previewAlert(id) {
+  // v2.3.13 : refactor — appelle directement MysifaAlerts.simulate() au lieu
+  // de dupliquer la logique de rendu. Toute évolution du runtime bénéficie
+  // automatiquement au bouton "Tester sur moi".
   const a = _alertsData.find(x => x.id === id);
   if (!a) return;
-  // Charger les réglages globaux : placement, taille, bloque-production
   await loadAlertSettings();
-  const settings = _alertGlobalSettings || { placement: 'center', size: 'medium', block_production: true };
-  const d = _alertDefaults(a.params);
-  const machines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const machinesLbl = machines.includes('*') ? 'Toutes les machines' : machines.map(esc).join(', ');
-  const clEnabled = !!(d.checklist.enabled && d.checklist.items && d.checklist.items.length);
-
-  const checklistHtml = clEnabled
-    ? '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Points de contrôle</label>'
-      + '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px" id="ta-checklist">'
-      +   d.checklist.items.map((it, idx) => {
-            const itType = it.type || 'choice';
-            if (itType === 'value') {
-              const unit = it.unit ? '<span style="font-size:12px;color:var(--text2);font-weight:500;min-width:24px">' + esc(it.unit) + '</span>' : '';
-              let toleranceHint = '';
-              if (it.min != null || it.max != null) {
-                const minStr = (it.min != null) ? String(it.min) : '−∞';
-                const maxStr = (it.max != null) ? String(it.max) : '+∞';
-                toleranceHint = '<div style="font-size:10px;color:var(--muted);margin-top:3px">Tolérance : ' + esc(minStr) + ' à ' + esc(maxStr) + (it.unit ? ' ' + esc(it.unit) : '') + '</div>';
-              }
-              return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="value"'
-                + (it.min != null ? ' data-min="' + esc(String(it.min)) + '"' : '')
-                + (it.max != null ? ' data-max="' + esc(String(it.max)) + '"' : '') + '>'
-                + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-                + '<div style="display:flex;align-items:center;gap:8px">'
-                +   '<input type="number" step="any" class="ta-cl-val" data-point="' + idx + '" placeholder="Valeur" style="flex:1;padding:6px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box" oninput="_taOnValueInput(this)">'
-                +   unit
-                + '</div>'
-                + toleranceHint
-                + '</div>';
-            }
-            const isMulti = it.multi !== false;
-            const inputType = isMulti ? 'checkbox' : 'radio';
-            const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
-            const respHtml = it.responses.map((r) =>
-              '<label class="ta-chip">'
-              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
-              + '<span>' + esc(r) + '</span>'
-              + '</label>'
-            ).join('');
-            let otherHtml = '';
-            if (it.allow_other) {
-              otherHtml = '<label class="ta-chip ta-chip-other">'
-                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="_taOnOtherChange(this)">'
-                + '<span>Autre</span>'
-                + '</label>';
-            }
-            const otherArea = it.allow_other
-              ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-              : '';
-            return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + '>'
-              + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + esc(it.label) + '</div>'
-              + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
-              + otherArea
-              + '</div>';
-          }).join('')
-      + '</div>'
-    : '';
-
-  // Construction du wrapper de simulation (positionnement, taille, backdrop)
-  const wrap = document.createElement('div');
-  wrap.className = 'ta-sim ta-pl-' + (settings.placement || 'center') + ' ta-sz-' + (settings.size || 'medium');
-  if (settings.block_production) wrap.classList.add('ta-blocking');
-
-  // Bouton "Quitter le test" — toujours visible, en dehors de l'alerte
-  const exitBtn = '<button type="button" class="ta-sim-exit" id="ta-sim-exit" title="Sortir du mode test">× Quitter le test</button>';
-
-  // Description eventuelle (contexte affiche a l'operateur)
-  const _descText = (a.params && typeof a.params.description === 'string') ? a.params.description.trim() : '';
-  const _descHtml = _descText
-    ? '<div class="ta-sim-desc" style="font-size:13px;color:var(--text2);line-height:1.5;margin:-8px 0 14px 0;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;white-space:pre-wrap">' + esc(_descText) + '</div>'
-    : '';
-
-  // Contenu de l'alerte (sans aucune chrome admin)
-  const alertHtml = '<div class="ta-sim-alert">'
-    + '<div class="ta-sim-title">' + esc(_stripAutoPrefix(a.nom)) + '</div>'
-    + _descHtml
-    + checklistHtml
-    + '<label style="display:block;font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px 0">Commentaire (optionnel)</label>'
-    + '<textarea id="ta-comment" rows="2" placeholder="Ajoute un commentaire libre" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
-    + '<div class="ta-sim-actions">'
-    +   '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>'
-    +   (d.dismiss_button && d.dismiss_button.enabled
-        ? '<button type="button" id="ta-dismiss" class="ta-sim-btn" style="background:#f97316;color:#fff;border-color:#f97316">' + esc(d.dismiss_button.label || 'Fermer l\'alerte') + '</button>'
-        : '')
-    + '</div>'
-    + '</div>';
-
-  wrap.innerHTML = exitBtn + alertHtml;
-  document.body.appendChild(wrap);
-
-  const close = () => wrap.remove();
-
-  // Sortie par le bouton "Quitter le test" — escape hatch admin universel
-  document.getElementById('ta-sim-exit').addEventListener('click', close);
-
-  // Sortie par ESC : seulement si l'alerte n'est PAS bloquante (simulation fidèle)
-  const onKey = (ev) => {
-    if (ev.key === 'Escape' && !settings.block_production) {
-      close();
-      document.removeEventListener('keydown', onKey);
-    }
-  };
-  document.addEventListener('keydown', onKey);
-
-  // Si non bloquant + placement coin : cliquer en dehors ferme
-  if (!settings.block_production) {
-    setTimeout(() => {
-      const outsideClick = (ev) => {
-        if (!wrap.contains(ev.target)) return;
-        if (ev.target.closest('.ta-sim-alert')) return;
-        if (ev.target.closest('.ta-sim-exit')) return;
-        // Pour les placements en coin / haut / bas : clic sur la zone vide hors alerte
-        if ((settings.placement || '').indexOf('right') >= 0) return; // pas de zone vide cliquable
-        close();
-        document.removeEventListener('keydown', onKey);
-      };
-      wrap.addEventListener('click', outsideClick);
-    }, 100);
+  if (!window.MysifaAlerts || typeof window.MysifaAlerts.simulate !== 'function') {
+    toast('Runtime alertes non chargé — impossible de tester', true);
+    return;
   }
-
-  // Valider
-  function _taIsComplete() {
-    if (!clEnabled) return true;
-    const items = wrap.querySelectorAll('.ta-cl-item');
-    for (const it of items) {
-      const t = it.getAttribute('data-type') || 'choice';
-      if (t === 'value') {
-        const v = (it.querySelector('.ta-cl-val')?.value || '').trim();
-        if (v === '') return false;
-      } else {
-        if (!it.querySelectorAll('.ta-cl-resp:checked').length) return false;
-      }
-    }
-    return true;
+  if (typeof window.MysifaAlerts.start === 'function') {
+    try { await window.MysifaAlerts.start(); } catch(_){}
   }
-  function _taFinalize() {
-    toast('Test terminé — aucune donnée enregistrée.');
-    close();
-    document.removeEventListener('keydown', onKey);
-  }
-  function _taRenderValidate(actions) {
-    actions.innerHTML = '<button type="button" id="ta-validate" class="ta-sim-btn">' + esc(d.validation.button_label) + '</button>';
-    document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  }
-  function _taRenderConfirm(actions) {
-    actions.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;width:100%">'
-      + '<div style="font-size:12px;color:var(--warn);line-height:1.4;text-align:center">Certains points ne sont pas remplis. Valider quand même ?</div>'
-      + '<div style="display:flex;gap:6px">'
-      +   '<button type="button" id="ta-edit" class="ta-sim-btn" style="flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border)">Modifier</button>'
-      +   '<button type="button" id="ta-confirm" class="ta-sim-btn" style="flex:1">Valider quand même</button>'
-      + '</div>'
-      + '</div>';
-    document.getElementById('ta-confirm').addEventListener('click', _taFinalize);
-    document.getElementById('ta-edit').addEventListener('click', () => _taRenderValidate(actions));
-  }
-  function _taOnValidate() {
-    if (_taIsComplete()) { _taFinalize(); return; }
-    const actions = wrap.querySelector('.ta-sim-actions');
-    if (!actions) { _taFinalize(); return; }
-    _taRenderConfirm(actions);
-  }
-  document.getElementById('ta-validate').addEventListener('click', _taOnValidate);
-  // v164 : bouton dismiss dans la preview
-  const taDismiss = document.getElementById('ta-dismiss');
-  if (taDismiss) {
-    taDismiss.addEventListener('click', () => {
-      toast('Test terminé (bouton Fermer cliqué — aucune donnée enregistrée).');
-      close();
-      document.removeEventListener('keydown', onKey);
-    });
-  }
+  await window.MysifaAlerts.simulate({
+    id: a.id,
+    nom: a.nom,
+    linked_maint_code: a.linked_maint_code || '',
+    params: a.params || {},
+  });
 }
+
 
 function openEditAlertModal(id) {
   const a = _alertsData.find(x => x.id === id);
@@ -8864,7 +8191,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 
@@ -11482,84 +10811,12 @@ window.opSetPlanTab = opSetPlanTabWithCal;
 // Réutilise les adapters esc/toast/api de v2.2.19 (déjà en place).
 // ═══════════════════════════════════════════════════════════════════
 // v2.2.29 fix : déclarations globales oubliées (lignes 4587-4588 de settings_page.py)
-let _maintItems = [];
-let _maintEditCode = null;
 
-async function loadMaintCodes() {
-  try {
-    const r = await api('/api/maintenance/codes');
-    _maintItems = (r && Array.isArray(r.items)) ? r.items : [];
-  } catch (e) {
-    toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
-    _maintItems = [];
-  }
-  // Migration one-shot : si la liste serveur est vide ET qu'on a des codes en
-  // localStorage (heritage de l'ancienne implementation), on propose l'import.
-  if (_maintItems.length === 0) {
-    try {
-      const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
-      const local = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(local) && local.length > 0) {
-        if (confirm(local.length + ' code(s) maintenance trouve(s) dans le stockage local du navigateur.\n\nLes importer dans la base de donnees ? (recommande, ils seront ensuite disponibles sur tous les navigateurs et synchronises v2 -> v1)')) {
-          try {
-            const res = await api('/api/maintenance/codes/bulk-import', {
-              method: 'POST',
-              body: JSON.stringify({ items: local }),
-            });
-            toast((res?.imported || 0) + ' code(s) importe(s)');
-            try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
-            const r2 = await api('/api/maintenance/codes');
-            _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
-          } catch (e) {
-            toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-  renderMaintList();
-}
 // ─── Interventions libres (Lot 2) ────────────────────────────────
 // Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
-let _libresItems = [];
-let _libresSelection = new Set();
 
-async function loadLibres() {
-  const listEl = document.getElementById('libres-list');
-  if (!listEl) return;
-  try {
-    const r = await api('/api/maintenance/codes/libres');
-    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
-  } catch (e) {
-    _libresItems = [];
-  }
-  _libresSelection.clear();
-  _updateLibresSelectionUI();
-  renderLibresList();
-}
 
-function _fmtLibreDate(iso) {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
-    const pad = n => (n < 10 ? '0' + n : '' + n);
-    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
-  } catch (e) { return '—'; }
-}
 
-function _updateLibresSelectionUI() {
-  const btn = document.getElementById('libres-merge-btn');
-  const cnt = document.getElementById('libres-selection-count');
-  const n = _libresSelection.size;
-  if (btn) btn.disabled = (n !== 2);
-  if (cnt) {
-    if (n === 0) cnt.textContent = '';
-    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
-    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
-    else cnt.textContent = n + ' selectionnes (max 2)';
-  }
-}
 
 function libresToggleSelection(code, checked) {
   if (checked) {
@@ -11575,79 +10832,6 @@ function libresToggleSelection(code, checked) {
   _updateLibresSelectionUI();
 }
 
-function renderLibresList() {
-  const el = document.getElementById('libres-list');
-  if (!el) return;
-  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
-  let items = _libresItems.slice();
-  if (q) {
-    items = items.filter(o =>
-      String(o.label || '').toLowerCase().includes(q) ||
-      String(o.code || '').toLowerCase().includes(q)
-    );
-  }
-  if (!items.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
-      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
-    return;
-  }
-  const rows = items.map(o => {
-    const codeEsc = esc(String(o.code));
-    const labelEsc = esc(String(o.label || ''));
-    const checked = _libresSelection.has(o.code) ? ' checked' : '';
-    const usage = o.usage_count;
-    const usageChip = usage > 0
-      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
-      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
-    // v2.2.41 : bouton Archiver retiré — un libre est créé au moment de sa 1ère
-    // utilisation, donc usage_count >= 1 dès la naissance, le bouton était mort.
-    // Nettoyage désormais uniquement via Fusion.
-    const delBtn = '';
-    return '<tr>' +
-      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
-      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
-      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
-      '<td>' + usageChip + '</td>' +
-      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
-      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
-      '<td style="text-align:right;white-space:nowrap">' +
-        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
-        delBtn +
-      '</td>' +
-    '</tr>';
-  }).join('');
-  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
-    '<thead><tr>' +
-      '<th></th>' +
-      '<th>Code</th>' +
-      '<th>Titre</th>' +
-      '<th>Usage</th>' +
-      '<th>Derniere utilisation</th>' +
-      '<th>Cree le</th>' +
-      '<th style="text-align:right">Actions</th>' +
-    '</tr></thead>' +
-    '<tbody>' + rows + '</tbody></table></div>';
-  // Bind event delegation (checkbox + rename + delete)
-  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
-    });
-  });
-  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-libre-rename');
-      const it = _libresItems.find(x => x.code === code);
-      if (it) libresRename(code, it.label);
-    });
-  });
-  el.querySelectorAll('[data-libre-del]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-libre-del');
-      const it = _libresItems.find(x => x.code === code);
-      if (it) libresDelete(code, it.label);
-    });
-  });
-}
 
 async function libresRename(code, currentLabel) {
   const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
@@ -11712,423 +10896,21 @@ async function libresMergeSelected() {
   }
 }
 
-function _maintCatLabel(cat) {
-  // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
-  // et "remplacements" (UI: Interventions). Labels renommés v179.
-  // 'interventions' et 'suivi' (legacy) sont remappés vers Nettoyage à l'affichage.
-  if (cat === 'remplacements') return 'Interventions';
-  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
-  return 'Contrôles';
-}
-let _lastAckByCode = {};
-function renderMaintList() {
-  const el = document.getElementById('maint-list');
-  if (!el) return;
-  // Reconstruire la map code -> dernière intervention depuis les alertes auto.
-  _lastAckByCode = {};
-  if (Array.isArray(_alertsData)) {
-    _alertsData.forEach(a => {
-      if (a && a.linked_maint_code) {
-        _lastAckByCode[String(a.linked_maint_code)] = a.last_ack_at || '';
-      }
-    });
-  }
-  const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
-  let items = _maintItems.slice();
-  // Normaliser la catégorie sur les anciens enregistrements
-  items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
-  if (q) {
-    items = items.filter(o => {
-      const periodLbl = (o.periodique ? 'oui' : 'non');
-      return String(o.code || '').toLowerCase().includes(q) ||
-        String(o.label || '').toLowerCase().includes(q) ||
-        ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
-        _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
-        // v2.2.17 — periodique retiré du filtre
-        String(o.intervalle || '').toLowerCase().includes(q) ||
-        String(o.metrage_ref || '').toLowerCase().includes(q);
-    });
-  }
-  // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
-  // legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'affichage.
-  const _normCat = (c) => {
-    if (c === 'remplacements') return 'remplacements';
-    if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
-    return 'controles';
-  };
-  const _catOrder = (c) => {
-    const n = _normCat(c);
-    return n === 'controles' ? 0 : (n === 'entretien' ? 1 : 2);
-  };
-  items.sort((a, b) => {
-    const da = _catOrder(a.categorie);
-    const db = _catOrder(b.categorie);
-    if (da !== db) return da - db;
-    const ac = String(a.code || '').padStart(6, '0');
-    const bc = String(b.code || '').padStart(6, '0');
-    return ac.localeCompare(bc, 'fr');
-  });
-  if (!items.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
-    return;
-  }
-  const byCat = { controles: [], entretien: [], remplacements: [] };
-  items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
-  let body = '';
-  ['controles', 'entretien', 'remplacements'].forEach(cat => {
-    if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
-    byCat[cat].forEach(o => {
-      const c = esc(String(o.code));
-      const niv = parseInt(o.niveau, 10) || 1;
-      const catCls = cat;
-      // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
-      const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-      const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-      body += '<tr>'
-        + '<td class="op-code-cell">' + c + '</td>'
-        + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
-        + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
-        + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
-        + '<td>' + intervalleDisplay + '</td>'
-        + '<td>' + metrageDisplay + '</td>'
-        + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
-        +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
-        +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
-        + '</button></td>'
-        + '<td><div class="op-act">'
-        + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
-        + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
-        + '</div></td></tr>';
-    });
-  });
-  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
-    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
-  el.querySelectorAll('[data-maint-edit]').forEach(btn => {
-    btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
-  });
-  el.querySelectorAll('[data-maint-del]').forEach(btn => {
-    btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
-  });
-  el.querySelectorAll('[data-maint-docs]').forEach(btn => {
-    btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
-  });
-}
 
 // ── Documents attaches aux codes maintenance ─────────────────────────────
-async function openMaintDocsModal(code) {
-  const item = _maintItems.find(x => String(x.code) === String(code));
-  const label = item ? item.label : '';
-  const overlay = document.createElement('div');
-  overlay.className = 'alert-modal-overlay';
-  overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
-    + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
-    + '<div class="alert-modal-body">'
-    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
-    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
-    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
-    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
-    +     '<span>Ajouter un fichier</span>'
-    +   '</button>'
-    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
-    + '</div>'
-    + '<div class="alert-modal-foot">'
-    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
-    + '</div></div>';
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
-  const listEl = overlay.querySelector('#maint-docs-list');
-  const renderDocs = (items) => {
-    if (!items.length) {
-      listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document pour l\'instant.</p>';
-      return;
-    }
-    listEl.innerHTML = items.map(d => {
-      const sz = d.size_bytes != null ? (Math.round(d.size_bytes / 1024) + ' Ko') : '';
-      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0, 16).replace('T', ' ')) : '';
-      return '<div class="maint-doc-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
-        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
-        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
-        +   '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
-        +   '<button type="button" class="btn-sm btn-ghost danger" data-doc-del="' + d.id + '">Supprimer</button>'
-        + '</div>';
-    }).join('');
-    listEl.querySelectorAll('[data-doc-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Supprimer ce document ?')) return;
-        try {
-          await api('/api/maintenance/docs/' + b.getAttribute('data-doc-del'), { method: 'DELETE' });
-          toast('Document supprime');
-          await refresh();
-          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
-      });
-    });
-  };
-  const refresh = async () => {
-    try {
-      const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
-      renderDocs(Array.isArray(r.items) ? r.items : []);
-    } catch(e) {
-      listEl.innerHTML = '<p style="color:var(--danger);font-size:12px">' + esc(e.message || 'Erreur') + '</p>';
-    }
-  };
-  await refresh();
-
-  const fileInp = overlay.querySelector('#maint-doc-file');
-  const addBtn = overlay.querySelector('#maint-doc-add-btn');
-  addBtn.addEventListener('click', () => fileInp.click());
-  fileInp.addEventListener('change', async () => {
-    const f = fileInp.files && fileInp.files[0];
-    if (!f) return;
-    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
-    addBtn.disabled = true;
-    const fd = new FormData();
-    fd.append('file', f);
-    try {
-      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
-        method: 'POST', credentials: 'same-origin', body: fd
-      });
-      if (!res.ok) {
-        let msg = 'Upload echoue';
-        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
-        toast(msg, true); return;
-      }
-      toast('Document ajoute');
-      fileInp.value = '';
-      await refresh();
-      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
-  });
-}
-function openMaintForm(code) {
-  _maintEditCode = code || null;
-  const wrap = document.getElementById('maint-form-wrap');
-  const title = document.getElementById('maint-form-title');
-  const codeInp = document.getElementById('maint-code');
-  if (!wrap) return;
-  wrap.classList.remove('hidden');
-  const catSel = document.getElementById('maint-categorie');
-  // v2.2.17 — perSel retiré (périodicité cachée).
-  const intInp = document.getElementById('maint-intervalle');
-  const mInp   = document.getElementById('maint-metrage-ref');
-  if (code) {
-    const o = _maintItems.find(x => String(x.code) === String(code));
-    if (!o) return;
-    title.textContent = 'Modifier le code ' + code;
-    codeInp.value = o.code;
-    codeInp.disabled = true;
-    document.getElementById('maint-label').value = o.label || '';
-    document.getElementById('maint-niveau').value = String(o.niveau || 1);
-    if (catSel) {
-      // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
-      // Codes legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'édition.
-      let c;
-      if (o.categorie === 'remplacements') c = 'remplacements';
-      else if (o.categorie === 'entretien' || o.categorie === 'interventions' || o.categorie === 'suivi') c = 'entretien';
-      else c = 'controles';
-      catSel.value = c;
-    }
-    if (intInp) intInp.value = o.intervalle || '';
-    if (mInp)   mInp.value   = o.metrage_ref || '';
-  } else {
-    title.textContent = 'Nouveau code';
-    codeInp.value = '';
-    codeInp.disabled = false;
-    document.getElementById('maint-label').value = '';
-    document.getElementById('maint-niveau').value = '1';
-    if (catSel) catSel.value = 'controles';
-    if (intInp) intInp.value = '';
-    if (mInp)   mInp.value   = '';
-  }
-  // Section Documents : visible dans les 2 modes.
-  // En creation : la liste est masquee (aucun doc encore), l'upload est
-  // possible des que le code est saisi. En edition : la liste est chargee
-  // et l'upload attache directement au code existant.
-  const docsWrap = document.getElementById('maint-form-docs');
-  const docsList = document.getElementById('maint-form-docs-list');
-  const docsHint = document.getElementById('maint-form-docs-hint');
-  if (docsWrap) {
-    docsWrap.style.display = '';
-    _maintResetDocPicker();
-    _bindMaintFormDocUpload(code);
-    if (code) {
-      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
-      if (docsList) docsList.style.display = '';
-      _renderMaintFormDocs(code);
-    } else {
-      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
-      if (docsList) docsList.style.display = 'none';
-    }
-  }
-  // v2.2.34 : le scroller varie selon la page (window en Paramètres, .main en MyMaintenance).
-  // On tente les 2 : celui qui n'est pas le vrai scroller no-op silencieusement.
-  try {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    const m = document.querySelector('.main');
-    if (m) { if (m.scrollTo) m.scrollTo({ top: 0, behavior: 'smooth' }); else m.scrollTop = 0; }
-  } catch(e) {
-    try { window.scrollTo(0, 0); } catch(e2) {}
-    try { document.querySelector('.main').scrollTop = 0; } catch(e3) {}
-  }
-  codeInp.focus();
-}
-
-async function _renderMaintFormDocs(code) {
-  const list = document.getElementById('maint-form-docs-list');
-  if (!list) return;
-  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
-  try {
-    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
-    const items = Array.isArray(r.items) ? r.items : [];
-    if (!items.length) {
-      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>';
-      return;
-    }
-    list.innerHTML = items.map(d => {
-      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
-      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
-      const meta = [sz, dt, d.uploaded_by ? esc(d.uploaded_by) : ''].filter(Boolean).join(' · ');
-      return '<div class="maint-doc-row">'
-        + '<div class="maint-doc-row-info">'
-        +   '<span class="maint-doc-row-name" title="' + esc(d.filename) + '">' + esc(d.filename) + '</span>'
-        +   '<span class="maint-doc-row-meta">' + meta + '</span>'
-        + '</div>'
-        + '<a class="maint-doc-row-link" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener">Telecharger</a>'
-        + '<button type="button" class="maint-doc-row-del" data-form-doc-del="' + d.id + '">Supprimer</button>'
-        + '</div>';
-    }).join('');
-    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Supprimer ce document ?')) return;
-        try {
-          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
-          toast('Document supprime');
-          await _renderMaintFormDocs(code);
-          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
-      });
-    });
-  } catch(e) {
-    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
-  }
-}
 
 // Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
-async function _maintTriggerDocPicker() {
-  const codeInp = document.getElementById('maint-code');
-  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
-  if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
-  // En creation : sauvegarde le code en base avant l'upload, pour eviter
-  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
-  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
-  if (!codeExists) {
-    const labelInp = document.getElementById('maint-label');
-    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
-    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
-    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
-    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-    const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
-      ? rawCat
-      : (rawCat === 'interventions' ? 'entretien' : 'controles');
-    // v2.2.17 — periodique forcé à true (concept retiré côté UI).
-    const periodique = true;
-    const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
-    const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
-    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
-    try {
-      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
-      toast('Code enregistre - upload en cours');
-      _maintEditCode = codeNow;
-      codeInp.disabled = true;
-      await loadMaintCodes();
-      const listEl = document.getElementById('maint-form-docs-list');
-      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
-    } catch(e) {
-      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
-      return;
-    }
-  }
-  const inp = document.getElementById('maint-form-doc-file');
-  if (inp) inp.click();
-}
 
 // Compat : appele par openMaintForm, mais l'upload est declenche directement
 // par onchange du <input type=file>. No-op.
-function _bindMaintFormDocUpload(code) { /* upload direct via _maintOnDocFileChange */ }
 
 // Picker onchange -> upload immediat (pas de bouton Envoyer intermediaire).
-async function _maintOnDocFileChange() {
-  const inp = document.getElementById('maint-form-doc-file');
-  const f = inp && inp.files && inp.files[0];
-  if (!f) return;
-  if (f.size > 20 * 1024 * 1024) {
-    toast('Fichier trop volumineux (max 20 Mo)', true);
-    inp.value = '';
-    return;
-  }
-  const codeInp = document.getElementById('maint-code');
-  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
-  if (!codeNow) {
-    toast('Renseigne d\'abord le code', true);
-    inp.value = '';
-    return;
-  }
-  const btn = document.getElementById('maint-form-doc-add-btn');
-  if (btn) btn.disabled = true;
-  const fd = new FormData();
-  fd.append('file', f);
-  try {
-    const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
-      method: 'POST', credentials: 'same-origin', body: fd
-    });
-    if (!res.ok) {
-      let msg = 'Upload echoue';
-      try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
-      toast(msg, true); return;
-    }
-    toast('Document ajoute');
-    inp.value = '';
-    const listEl = document.getElementById('maint-form-docs-list');
-    if (listEl) listEl.style.display = '';
-    await _renderMaintFormDocs(codeNow);
-    if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-  } catch(e) {
-    toast('Erreur reseau', true);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
 
-function _maintResetDocPicker() {
-  const inp = document.getElementById('maint-form-doc-file');
-  if (inp) inp.value = '';
-}
 // Active/désactive Intervalle et Réf. métrage selon Périodique :
 //   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
 //     remplir l'intervalle de temps et/ou la référence métrage).
 //   - Périodique = NON : les deux champs sont vidés et grisés.
-function _maintTogglePeriodiqueUI(){
-  // v2.2.17 — perSel retiré (périodicité cachée).
-  const intInp = document.getElementById('maint-intervalle');
-  const mInp   = document.getElementById('maint-metrage-ref');
-  if (!perSel || !intInp || !mInp) return;
-  perSel.disabled = false;
-  const isPeriodic = (perSel.value === 'oui');
-  intInp.disabled = !isPeriodic;
-  intInp.style.opacity = isPeriodic ? '1' : '0.5';
-  mInp.disabled   = !isPeriodic;
-  mInp.style.opacity = isPeriodic ? '1' : '0.5';
-  mInp.style.display = '';
-  if (!isPeriodic) {
-    intInp.value = '';
-    mInp.value   = '';
-  }
-}
 function closeMaintForm() {
   _maintEditCode = null;
   const wrap = document.getElementById('maint-form-wrap');

@@ -8,7 +8,7 @@ Fixes:
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME
+from config import APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -43,6 +43,9 @@ def stock_page(request: Request):
             return access_denied_response("MyStock")
     # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
     html = STOCK_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
+    html = html.replace(
+        "__STOCK_UNITE_VENTE_DEFAUT__", _js_escape(STOCK_UNITE_VENTE_DEFAUT)
+    )
     # Important: prevent iOS/PWA from serving stale HTML/JS.
     return HTMLResponse(
         content=html,
@@ -362,10 +365,15 @@ body.light .field-input.empl-upper::placeholder{
   font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s;white-space:nowrap}
 .btn:hover{filter:brightness(1.05);box-shadow:0 0 0 4px rgba(34,211,238,.18)}
 .btn:active{transform:translateY(1px)}
-body.light .btn{color:#fff}
+body.light .btn:not(.btn-ghost):not(.btn-soft){color:#fff}
 .btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:10px;
   padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+body.light .btn.btn-ghost{color:var(--text2)}
+body.light .btn.btn-ghost:hover{color:var(--accent)}
+.btn-ghost.mp-back-btn{background:var(--accent-bg);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:700}
+.btn-ghost.mp-back-btn:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);border-color:var(--accent);color:var(--accent)}
+body.light .btn-ghost.mp-back-btn{color:var(--accent)}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 body.light .btn-sm{color:#fff}
@@ -653,6 +661,82 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-badge-mvt-ajustement{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
 .dash-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .dash-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+/* ── Besoins matières (onglet MyStock) ── */
+.bes-page{padding:0 0 32px}
+.bes-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px}
+.bes-header h1{margin:0 0 6px;font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.01em}
+.bes-header .bes-sub{font-size:13px;color:var(--muted);line-height:1.5}
+.bes-kpis{display:flex;gap:10px;flex-wrap:wrap}
+.bes-kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:100px;display:flex;flex-direction:column;gap:2px}
+.bes-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+.bes-kpi-val{font-size:20px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1}
+.bes-kpi-val.warn{color:var(--warn,#d97706)}
+.bes-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.bes-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px}
+.bes-seg-btn{padding:7px 14px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;font-family:inherit;transition:all .12s;white-space:nowrap}
+.bes-seg-btn:hover{color:var(--text)}
+.bes-seg-btn.active{background:var(--accent);color:#fff}
+.bes-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.bes-btn-secondary{padding:7px 14px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
+.bes-btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.bes-section{margin-bottom:24px}
+.bes-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 10px;padding:0 4px}
+.bes-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
+.bes-section-count{font-size:12px;color:var(--muted);font-weight:500}
+.bes-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.bes-table{width:100%;border-collapse:collapse;font-size:13px}
+.bes-table thead th{padding:10px 14px;text-align:left;background:var(--surface-alt,rgba(0,0,0,.02));border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+.bes-table thead th.num{text-align:right}
+.bes-table tbody td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+.bes-table tbody tr:last-child td{border-bottom:none}
+.bes-table tbody tr:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.bes-table td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bes-row-warn{background:color-mix(in srgb,var(--warn,#d97706) 6%,transparent)}
+.bes-row-danger{background:color-mix(in srgb,#dc2626 5%,transparent)}
+.bes-src-value{font-weight:600;color:var(--text)}
+.bes-mp-cell .bes-mp-ref{font-weight:600;color:var(--text)}
+.bes-mp-cell .bes-mp-des{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-mp-none{color:var(--warn,#d97706);font-style:italic;font-size:12px}
+.bes-manque{color:#dc2626;font-weight:700}
+.bes-manque-zero{color:var(--muted)}
+.bes-btn-associate{padding:5px 12px;border:none;background:var(--accent);color:#fff;font-size:11px;font-weight:600;cursor:pointer;border-radius:5px;font-family:inherit;transition:all .12s}
+.bes-btn-associate:hover{filter:brightness(1.08)}
+.bes-btn-associate.mapped{background:transparent;color:var(--text2);border:1px solid var(--border)}
+.bes-btn-associate.mapped:hover{border-color:var(--accent);color:var(--accent)}
+.bes-total-row td{background:color-mix(in srgb,var(--accent) 5%,transparent);font-weight:700;color:var(--text);border-top:1px solid var(--border)}
+.bes-dossier-ref{font-weight:700;color:var(--text)}
+.bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
+.bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.bes-statut-attente{background:color-mix(in srgb,var(--muted) 15%,transparent);color:var(--text2)}
+.bes-tag{display:inline-block;padding:3px 8px;margin:2px 3px 2px 0;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--text);border-radius:4px;font-size:11px;line-height:1.5}
+.bes-tag.warn{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706);font-weight:600}
+.bes-empty{padding:36px 20px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:10px}
+.bes-loading{padding:40px;text-align:center;color:var(--muted);font-size:14px}
+/* Modal spécifiques */
+.bes-map-list{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)}
+.bes-map-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
+.bes-map-row:last-child{border-bottom:none}
+.bes-map-kind{padding:2px 8px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--text2);border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;min-width:70px;text-align:center;letter-spacing:.4px}
+.bes-map-source{flex:1;font-weight:600;color:var(--text)}
+.bes-map-arrow{color:var(--muted);font-size:14px}
+.bes-map-target{flex:1;min-width:0}
+.bes-map-target .bes-mp-ref{font-weight:600;color:var(--text)}
+.bes-map-target .bes-mp-des{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-map-count{color:var(--muted);font-size:12px}
+.bes-map-btn-danger{padding:4px 10px;border:1px solid var(--border);background:transparent;color:#dc2626;font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:inherit}
+.bes-map-btn-danger:hover{border-color:#dc2626;background:color-mix(in srgb,#dc2626 8%,transparent)}
+.bes-map-h3{margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.bes-map-h3.warn{color:var(--warn,#d97706)}
+.bes-search-input{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text);margin-bottom:10px;box-sizing:border-box}
+.bes-search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.bes-mat-list{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--card)}
+.bes-mat-item{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.bes-mat-item:last-child{border-bottom:none}
+.bes-mat-item:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.bes-mat-item-ref{font-weight:600;color:var(--text);font-size:13px}
+.bes-mat-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+
 /* ── Matières premières ── */
 .mp-page{padding:0 0 24px}
 .mp-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
@@ -711,9 +795,11 @@ body.light .mp-search-wrap:focus-within{
 .mp-card-stock-mini{font-size:12px;font-weight:600;color:var(--muted);margin-top:4px;line-height:1.3}
 .mp-card-stock-mini.alert{color:var(--warn)}
 .mp-act-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;
-  border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;
-  flex-shrink:0;transition:border-color .15s,color .15s,background .15s;font-family:inherit}
-.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+  border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:8px;
+  background:var(--accent-bg);color:var(--accent);cursor:pointer;
+  flex-shrink:0;transition:border-color .15s,color .15s,background .15s,filter .15s;font-family:inherit}
+.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);filter:brightness(1.05)}
+.action-bar .mp-act-icon{height:auto;min-height:44px;width:44px}
 .mp-card-des{font-size:13px;color:var(--text2);line-height:1.4}
 .mp-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
 .mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
@@ -1071,16 +1157,19 @@ body.light .hist-filters-card.sticky{box-shadow:0 4px 16px rgba(15,23,42,.08)}
 .hist-empty{text-align:center;color:var(--muted);font-size:13px;padding:48px 20px;background:var(--card);
   border:1px solid var(--border);border-radius:12px;line-height:1.5}
 .hist-results-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;
-  border-bottom:1px solid var(--border);background:var(--bg);color:var(--text);flex-wrap:wrap}
+.hist-results-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;
+  border-bottom:1px solid var(--border);background:var(--card);color:var(--text);flex-wrap:wrap}
 .hist-results-head-left{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
 .hist-results-head-nav{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
-.hist-results-head .hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.hist-results-head .hist-count{font-size:12px;font-weight:600;color:var(--text2)}
-.hist-results-head .hist-pagination-info{font-size:12px;color:var(--text2);font-weight:600;min-width:88px;text-align:center;white-space:nowrap}
-.hist-results-head-nav .btn{min-width:96px}
-.hist-results-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.hist-count{font-size:12px;font-weight:600;color:var(--text2)}
+.hist-results-head .hist-results-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.hist-results-head .hist-count{font-size:14px;font-weight:700;color:var(--text)}
+.hist-results-head .hist-pagination-info{font-size:13px;color:var(--text);font-weight:700;min-width:104px;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-results-head-nav .btn{min-width:110px;padding:9px 16px;font-size:13px}
+.hist-results-head-nav .btn.btn-ghost{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.hist-results-head-nav .btn.btn-ghost:not(:disabled):hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.hist-results-head-nav .btn.btn-ghost:disabled{opacity:1;color:var(--muted);border-color:var(--border);background:transparent;cursor:not-allowed}
+.hist-results-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.hist-count{font-size:14px;font-weight:700;color:var(--text)}
 .hist-table-wrap{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .hist-table{width:100%;min-width:1200px;border-collapse:collapse;font-size:13px}
 .hist-unite{font-size:12px;color:var(--text2);white-space:nowrap}
@@ -1636,6 +1725,41 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
   padding:12px 32px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
 
 /* ── Réception matière ─────────────────────────────────────── */
+.recep-add-row{display:flex;gap:8px;align-items:center;flex-wrap:nowrap}
+@media(max-width:600px){.recep-add-row{flex-wrap:wrap}}
+.recep-add-row .recep-manual-inp{flex:1;min-width:0}
+
+.recep-picker-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.recep-picker-title{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text);display:flex;align-items:center;gap:8px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2;margin-bottom:6px}.recep-picker-title svg{color:var(--accent);flex-shrink:0}
+.recep-picker-row{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;align-items:end}
+@media(max-width:800px){.recep-picker-row{grid-template-columns:1fr}}
+.recep-picker-field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.recep-picker-field label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.recep-picker-sel{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
+.recep-picker-sel:focus{border-color:var(--accent)}
+.recep-picker-sel[disabled]{opacity:.45;cursor:not-allowed}
+.recep-picker-hint{font-size:11px;color:var(--muted);margin-top:2px}
+.recep-picker-custom{display:flex;gap:6px;align-items:center;margin-top:4px}
+.recep-picker-custom input{flex:1;background:var(--bg);border:1.5px solid var(--accent);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;outline:none}
+.recep-picker-custom button{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--text2);cursor:pointer}
+.recep-picker-locked{background:var(--accent-bg);border:1.5px solid var(--accent);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-weight:600;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.recep-picker-locked-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.recep-picker-locked-ref{font-family:monospace;font-size:13px;color:var(--accent)}
+.recep-picker-locked-des{font-size:11px;color:var(--text2);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recep-mat-badge{display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.recep-mat-cell{display:flex;flex-direction:column;gap:1px;min-width:0}
+.recep-mat-cell-ref{font-family:monospace;font-size:12px;color:var(--text);font-weight:600}
+.recep-mat-cell-lai{font-size:11px;color:var(--text2)}
+.recep-mat-cell-empty{color:var(--muted);font-style:italic;font-size:12px}
+/* Modal simplifié fiche matière */
+.recep-mini-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.recep-mini-modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:640px;width:100%;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.recep-mini-head{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding-bottom:12px}
+.recep-mini-head-title{font-size:15px;font-weight:700;color:var(--text)}
+.recep-mini-head-sub{font-size:12px;color:var(--muted);font-family:monospace;margin-top:2px}
+.recep-mini-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:20px;padding:0 6px;line-height:1}
+.recep-mini-close:hover{color:var(--danger)}
+
 .recep-page{padding:14px 20px 20px;max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .recep-head-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;width:100%;margin-bottom:2px}
 .recep-head-row .recep-title{flex:0 0 auto;min-width:0;margin:0}
@@ -1644,7 +1768,7 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 .recep-layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.recep-layout{grid-template-columns:1fr}}
 .recep-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
-.recep-card-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);display:flex;align-items:center;gap:7px}
+.recep-card-title{font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text);display:flex;align-items:center;gap:8px;padding-left:10px;border-left:3px solid var(--accent);line-height:1.2;margin-bottom:2px}.recep-card-title svg{color:var(--accent);flex-shrink:0}
 /* Scanner vidéo */
 .recep-video-wrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3;max-height:260px;display:flex;align-items:center;justify-content:center}
 .recep-video{width:100%;height:100%;object-fit:cover}
@@ -1705,7 +1829,8 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 body.light .recep-hist-detail .form-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 /* Fournisseur search */
 .recep-fourn-wrap{margin-top:8px}
-.recep-fourn-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+.recep-fourn-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);display:flex;align-items:center;gap:6px;margin:8px 0 4px 0;opacity:.85}
+.recep-fourn-label svg{color:var(--text2);flex-shrink:0;opacity:.7}
 .recep-fourn-search-wrap{position:relative}
 .recep-fourn-inp{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);outline:none;transition:border-color .15s;box-sizing:border-box}
 .recep-fourn-inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
@@ -1793,6 +1918,16 @@ body.light .recep-print-title{color:#059669}
 .recep-print-field input{background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:inherit;outline:none;transition:border-color .15s}
 .recep-print-field input:focus{border-color:var(--accent)}
 .recep-print-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+
+/* ── Mode embed (iframe depuis /fabrication) ───────────────── */
+body.stock-embed .sidebar,
+body.stock-embed .sidebar-overlay,
+body.stock-embed .mobile-topbar,
+body.stock-embed .contact-modal-overlay .contact-close ~ .version { display:none !important }
+body.stock-embed .app-layout { grid-template-columns: 1fr !important; }
+body.stock-embed .main-area { width:100% !important; }
+body.stock-embed { background: var(--bg, transparent) !important; }
+
 </style>
 </head>
 <body>
@@ -1823,6 +1958,7 @@ let S = {
   stockReadOnly: false,
   tracaOnly: false,
   fabStockMode: false,  // fabrication : accès limité aux sections Matières premières + Outils
+  embedMode: false,     // affiché en iframe depuis /fabrication : masque sidebar + topbar
   sidebarOpen: false,
   searchQuery: '',
   searchResults: null,
@@ -1879,6 +2015,20 @@ let S = {
   recepFournisseurOpen: false, // dropdown ouvert
   recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
   recepLastLot: null,      // dernier lot créé (pour modale impression étiquettes)
+  // Réception structurée par matière (v2)
+  recepMatieresLaizees: null,  // cache des matières laizées {matieres: [...]}
+  recepMatieresLoading: false,
+  recepCategorie: '',      // 'frontal' | 'glassine' | 'complexe'
+  recepMatiereId: null,    // id matière sélectionnée pour la prochaine bobine
+  recepMatiereRef: '',     // référence matière (affichage)
+  recepMatiereDes: '',     // désignation matière (affichage)
+  recepLaizeId: null,      // laize id sélectionnée
+  recepLaizeLabel: '',     // label affiché (ex: "333 mm")
+  recepLaizeValeurMm: null,// valeur mm (redondant, sert au format autre)
+  recepLaizeCustomOn: false,// mode saisie "autre laize"
+  recepLaizeCustomMm: '',  // valeur saisie manuellement
+  recepModalMode: false,   // true = modal simplifié depuis fiche matière
+  recepModalMatiere: null, // matière verrouillée en mode modal
   // Inventaire matière (par référence)
   matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
   matInvLoading: false,
@@ -2181,6 +2331,7 @@ function icon(name, size=16){
     'dollar-sign': '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+    'list-checks': '<path d="M3 5h6"/><path d="M3 12h6"/><path d="M3 19h6"/><polyline points="14 4 16 6 20 2"/><polyline points="14 11 16 13 20 9"/><polyline points="14 18 16 20 20 16"/>',
   };
   return `<svg ${a} aria-hidden="true" style="display:inline-block;vertical-align:middle;flex-shrink:0">${p[name]||p['grid']}</svg>`;
 }
@@ -2195,16 +2346,26 @@ function iconEl(name, size=16){
 function el(tag, attrs, ...children) {
   const e = document.createElement(tag);
   if (attrs) {
-    const { cls, className, on, style: s, html, ...rest } = attrs;
+    const { cls, className, on, style: s, html, attrs: subAttrs, ...rest } = attrs;
     const cn = cls || className;
     if (cn) e.className = cn;
     if (on) Object.entries(on).forEach(([ev,fn]) => e.addEventListener(ev, fn));
     if (s && typeof s === 'object') Object.assign(e.style, s);
     else if (typeof s === 'string') e.style.cssText = s;
     if (html) { e.innerHTML = html; }
+    // Support legacy attrs: { key: val } — extrait et applique via setAttribute
+    if (subAttrs && typeof subAttrs === 'object') {
+      Object.entries(subAttrs).forEach(([k,v]) => {
+        if (v === null || v === undefined || v === false) return;
+        if (k === 'disabled' && v) { e.disabled = true; return; }
+        if (k === 'id') { e.id = String(v); return; }
+        e.setAttribute(k, v);
+      });
+    }
     Object.entries(rest).forEach(([k,v]) => {
       if (v === null || v === undefined || v === false) return;
       if (k === 'disabled' && v) { e.disabled = true; return; }
+      if (k === 'id') { e.id = String(v); return; }
       e.setAttribute(k, v);
     });
   }
@@ -2495,6 +2656,48 @@ async function loadInventaireMatieres() {
   } finally {
     S.matInvLoading = false;
     renderContent();
+  }
+}
+
+// ── Besoins matières ─────────────────────────────────────────────
+async function loadBesoinsMatieres() {
+  S.besoinsLoading = true;
+  renderContent();
+  try {
+    const [parEch, parDos] = await Promise.all([
+      api('/api/stock/besoins-matieres/par-echeance'),
+      api('/api/stock/besoins-matieres/par-dossier'),
+    ]);
+    S.besoinsEcheance = parEch || { lignes: [] };
+    S.besoinsDossiers = parDos || { dossiers: [] };
+    if (!S.besoinsView) S.besoinsView = 'echeance';
+    if (!S.matList || !S.matList.length) {
+      try {
+        const m = await api('/api/stock/matieres');
+        S.matList = Array.isArray(m) ? m : (m && m.items) || [];
+      } catch(e) { /* silencieux */ }
+    }
+  } catch(e) {
+    S.besoinsEcheance = { lignes: [] };
+    S.besoinsDossiers = { dossiers: [] };
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.besoinsLoading = false;
+    renderContent();
+  }
+}
+
+async function saveBesoinMapping(kind, sourceValue, matiereId) {
+  try {
+    await api('/api/stock/besoins-matieres/mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, source_value: sourceValue, matiere_id: matiereId }),
+    });
+    showToast('Correspondance enregistrée', 'success');
+    await loadBesoinsMatieres();
+  } catch(e) {
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
   }
 }
 
@@ -2937,6 +3140,7 @@ async function submitMouvement(body) {
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'dashboard') await loadDashboard();
     else if (S.tab === 'produits-finis') await loadProduitsFinis();
+    else if (S.tab === 'production') await loadProduction();
     else if (S.tab === 'inventaire') await loadInventaireList();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -3115,6 +3319,7 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
               if (S.selProduit) await loadProduit(S.selProduit.produit.id);
               else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
               else if (S.tab === 'produits-finis') await loadProduitsFinis();
+              else if (S.tab === 'production') await loadProduction();
               else if (S.tab === 'dashboard') await loadDashboard();
             } catch (e) { showToast(e.message, 'error'); }
           }}
@@ -3181,6 +3386,7 @@ async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, 
     if (S.selProduit) await loadProduit(S.selProduit.produit.id);
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'produits-finis') await loadProduitsFinis();
+    else if (S.tab === 'production') await loadProduction();
     else if (S.tab === 'dashboard') await loadDashboard();
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -3191,6 +3397,9 @@ const STOCK_EMPL_AU_SOL = 'Z0';
 const STOCK_EMPL_AU_SOL_LABEL = 'Au sol - à expédier';
 const STOCK_EMPL_SORTIE_PROD = 'Z1';
 const STOCK_EMPL_SORTIE_PROD_LABEL = 'En attente - sortie de prod';
+// Unite de vente appliquee a une reference produit fini creee automatiquement
+// a l'entree Z1. Valeur SIFA par defaut, surchargeable par instance (config.py).
+const STOCK_UNITE_VENTE_DEFAUT = '__STOCK_UNITE_VENTE_DEFAUT__';
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
 const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
@@ -5378,7 +5587,7 @@ function buildMatiereDetail() {
   const seuil = parseFloat(m.seuil_alerte) || 0;
 
   const back = el('button', {
-    cls: 'btn-ghost',
+    cls: 'btn-ghost mp-back-btn',
     style: { marginBottom: '14px' },
     type: 'button',
     on: { click: clearMatiereSel },
@@ -5392,6 +5601,17 @@ function buildMatiereDetail() {
         type: 'button',
         on: { click: () => openModalMouvement('entree', m) },
       }, '↓ Entrée'),
+    );
+    // Bouton Réception : réservé aux matières laizées (frontal/glassine/complexe)
+    if (m.laizee) {
+      actionBtns.push(el('button', {
+        cls: 'mp-act-btn',
+        type: 'button',
+        style: { background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)', fontWeight: '700' },
+        on: { click: () => openReceptionMatiereModal(m) },
+      }, iconEl('truck', 14), ' Réception'));
+    }
+    actionBtns.push(
       el('button', {
         cls: 'mp-act-btn mp-act-sortie',
         type: 'button',
@@ -9172,6 +9392,47 @@ function _z1FormatDossierLine(d) {
   return refLine;
 }
 
+// Unite de vente du produit du dossier (MyStock, table produits.unite).
+// Sans cette info l'operateur ne sait pas s'il compte en bobines, en cartons
+// ou en etiquettes : la quantite saisie en Z1 devient ininterpretable.
+function _z1UniteVente(d) {
+  if (!d) return null;
+  const ref = String(d.ref_produit || '').trim();
+  if (!ref) return null;
+  const connu = !!d.produit_connu;
+  const unite = String((connu ? d.unite_vente : d.unite_vente_defaut) || '').trim();
+  if (!unite) return null;
+  return { unite: unite, connu: connu };
+}
+
+// L'unite se suffit a elle-meme : pas de libelle prefixe. Le seul ajout est
+// le marqueur 'nouvelle ref' quand la reference n'existe pas encore en base.
+function _z1UniteLabel(uv) {
+  return uv.connu ? uv.unite : uv.unite + ' - nouvelle ref';
+}
+
+// Fond plein + color:var(--bg) : texte contraste dans les deux themes
+// (regle boutons a fond colore, CLAUDE.md). Accent = reference connue,
+// warn = reference qui sera creee a la validation.
+function _z1UniteBadge(uv, opts) {
+  const compact = !!(opts && opts.compact);
+  return el('span', {
+    style: {
+      display: 'inline-block',
+      padding: compact ? '2px 8px' : '3px 10px',
+      borderRadius: '999px',
+      background: uv.connu ? 'var(--accent)' : 'var(--warn)',
+      color: 'var(--bg)',
+      fontSize: compact ? '10px' : '11px',
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: '.5px',
+      whiteSpace: 'nowrap',
+      flex: '0 0 auto',
+    },
+  }, _z1UniteLabel(uv));
+}
+
 function _z1MakeNoteFromDossier(dossier) {
   if (!dossier || !dossier.no_dossier) return '';
   return 'Production dossier ' + dossier.no_dossier + ' - ' + _fmtDateFRz1(new Date());
@@ -9239,6 +9500,10 @@ function _renderZ1DossierBanner(container, ctx) {
     if (refLine) {
       bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
         'Reference : ' + refLine));
+    }
+    const uv = _z1UniteVente(dossierSel);
+    if (uv) {
+      bodyLines.push(el('div', { style: { marginTop: '8px' } }, _z1UniteBadge(uv)));
     }
     if (dossierSel.machine_nom) {
       bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
@@ -9325,12 +9590,10 @@ function _z1DossierRow(dossier, opts) {
   const badgeText = opts && opts.badge
     ? opts.badge
     : (termine ? 'Termine' : (dossier.statut_reel === 'reellement_en_saisie' ? 'En cours' : ''));
-  const badgeStyle = termine
-    ? { color: 'var(--warn)', borderColor: 'var(--warn)' }
-    : { color: 'var(--accent)', borderColor: 'var(--accent)' };
 
   const refLine = _z1FormatDossierLine(dossier);
   const cli = dossier.client ? ' - ' + dossier.client : '';
+  const uvRow = _z1UniteVente(dossier);
 
   return el('button', {
     type: 'button',
@@ -9364,19 +9627,30 @@ function _z1DossierRow(dossier, opts) {
             'Machine : ' + dossier.machine_nom)
         : null,
     ),
-    badgeText
-      ? el('span', {
-          style: Object.assign({
-            padding: '2px 8px',
-            fontSize: '10px',
-            fontWeight: '700',
-            textTransform: 'uppercase',
-            letterSpacing: '.5px',
-            borderRadius: '999px',
-            border: '1px solid',
+    (uvRow || badgeText)
+      ? el('div', {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: '4px',
             flex: '0 0 auto',
-          }, badgeStyle),
-        }, badgeText)
+          },
+        },
+          uvRow ? _z1UniteBadge(uvRow, { compact: true }) : null,
+          badgeText
+            ? el('div', {
+                style: {
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  textTransform: 'uppercase',
+                  letterSpacing: '.5px',
+                  whiteSpace: 'nowrap',
+                  color: termine ? 'var(--warn)' : 'var(--accent)',
+                },
+              }, badgeText)
+            : null,
+        )
       : null,
   );
 }
@@ -9815,7 +10089,7 @@ async function submitPfMouvement() {
     const payload = {
       reference: String(refVal).trim().toUpperCase(),
       designation: String(refVal).trim().toUpperCase(),
-      unite: 'étiquette',
+      unite: STOCK_UNITE_VENTE_DEFAUT,
       emplacement: body.emplacement,
       quantite: body.quantite,
       note: body.note,
@@ -12429,6 +12703,389 @@ function invV2BuildListItems(container, items) {
 }
 
 // ── Inventaire matière (par référence) — onglet dédié ──────────────
+// ══════════════════════════════════════════════════════════════════
+// ── Besoins matières (onglet MyStock) — v2 visuel refactorisé ────
+// ══════════════════════════════════════════════════════════════════
+const BESOINS_KIND_LABELS = {
+  support: 'Support', adhesif: 'Adhésif', mandrin: 'Mandrin',
+  carton: 'Carton', palette: 'Palette',
+};
+const BESOINS_KIND_ORDER = ['support', 'adhesif', 'mandrin', 'carton', 'palette'];
+
+function _fmtQte(n, unite) {
+  if (n == null || isNaN(n)) return '—';
+  const rounded = n >= 100 ? Math.round(n) : (n >= 10 ? Math.round(n * 10) / 10 : Math.round(n * 100) / 100);
+  const s = String(rounded).replace('.', ',');
+  return s + (unite ? '\u202f' + unite : '');
+}
+
+function _fmtDate(iso) {
+  if (!iso) return '—';
+  const d = String(iso).slice(0, 10);
+  const parts = d.split('-');
+  if (parts.length !== 3) return d;
+  return parts[2] + '/' + parts[1] + '/' + parts[0].slice(2);
+}
+
+function buildBesoinsMatieres() {
+  const wrap = el('div', { cls: 'bes-page' });
+
+  if (S.besoinsLoading) {
+    wrap.appendChild(el('div', { cls: 'bes-loading' }, 'Chargement…'));
+    return wrap;
+  }
+
+  const ech = S.besoinsEcheance || { lignes: [], today: '', borne_7j: '', borne_15j: '' };
+  const dos = S.besoinsDossiers || { dossiers: [] };
+  const view = S.besoinsView || 'echeance';
+  const lignes = ech.lignes || [];
+  const dossiers = dos.dossiers || [];
+  const nbDossiers = dossiers.length;
+  const nbNonMappes = lignes.filter(l => !l.mapped).length;
+  const nbMapped = lignes.length - nbNonMappes;
+
+  // ── Header : titre + KPIs ──
+  const header = el('div', { cls: 'bes-header' },
+    el('div', {},
+      el('h1', {}, 'Besoins matières'),
+      el('div', { cls: 'bes-sub' },
+        'Calculés à partir des fiches techniques associées aux dossiers de production en cours ou en attente.',
+      ),
+    ),
+    el('div', { cls: 'bes-kpis' },
+      el('div', { cls: 'bes-kpi' },
+        el('span', { cls: 'bes-kpi-lbl' }, 'Dossiers'),
+        el('span', { cls: 'bes-kpi-val' }, String(nbDossiers)),
+      ),
+      el('div', { cls: 'bes-kpi' },
+        el('span', { cls: 'bes-kpi-lbl' }, 'Réf. mappées'),
+        el('span', { cls: 'bes-kpi-val' }, String(nbMapped)),
+      ),
+      el('div', { cls: 'bes-kpi' },
+        el('span', { cls: 'bes-kpi-lbl' }, 'À associer'),
+        el('span', { cls: 'bes-kpi-val' + (nbNonMappes > 0 ? ' warn' : '') }, String(nbNonMappes)),
+      ),
+    ),
+  );
+  wrap.appendChild(header);
+
+  // ── Toolbar : segmented + actions ──
+  const toolbar = el('div', { cls: 'bes-toolbar' },
+    el('div', { cls: 'bes-seg' },
+      el('button', {
+        cls: 'bes-seg-btn' + (view === 'echeance' ? ' active' : ''),
+        on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
+      }, 'Par échéance'),
+      el('button', {
+        cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
+        on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
+      }, 'Par dossier'),
+    ),
+    el('div', { cls: 'bes-actions' },
+      el('button', { cls: 'bes-btn-secondary', on: { click: () => openBesoinsMappingModal() } },
+        iconEl('list-checks', 14), el('span', {}, 'Correspondances')),
+      el('button', { cls: 'bes-btn-secondary', on: { click: () => loadBesoinsMatieres() } },
+        iconEl('refresh-ccw', 14), el('span', {}, 'Actualiser')),
+    ),
+  );
+  wrap.appendChild(toolbar);
+
+  if (view === 'echeance') {
+    wrap.appendChild(_buildBesoinsEcheanceTable(ech));
+  } else {
+    wrap.appendChild(_buildBesoinsDossierTable(dos));
+  }
+  return wrap;
+}
+
+function _buildBesoinsEcheanceTable(ech) {
+  const lignes = ech.lignes || [];
+  if (!lignes.length) {
+    return el('div', { cls: 'bes-empty' },
+      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
+  }
+  const byKind = {};
+  lignes.forEach(l => { (byKind[l.kind] ||= []).push(l); });
+
+  const container = el('div', {});
+  BESOINS_KIND_ORDER.forEach(kind => {
+    const arr = byKind[kind];
+    if (!arr || !arr.length) return;
+    container.appendChild(_buildBesoinsKindSection(kind, arr));
+  });
+  Object.keys(byKind).forEach(k => {
+    if (BESOINS_KIND_ORDER.includes(k)) return;
+    container.appendChild(_buildBesoinsKindSection(k, byKind[k]));
+  });
+  return container;
+}
+
+function _buildBesoinsKindSection(kind, lignes) {
+  const label = BESOINS_KIND_LABELS[kind] || kind;
+  const section = el('div', { cls: 'bes-section' });
+
+  section.appendChild(el('div', { cls: 'bes-section-head' },
+    el('span', { cls: 'bes-section-title' }, label),
+    el('span', { cls: 'bes-section-count' }, `${lignes.length} référence${lignes.length > 1 ? 's' : ''}`),
+  ));
+
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', {}, 'Valeur fiche technique'),
+    el('th', {}, 'Matière première'),
+    el('th', { cls: 'num' }, 'Besoin 7j'),
+    el('th', { cls: 'num' }, 'Besoin 15j'),
+    el('th', { cls: 'num' }, 'Total'),
+    el('th', { cls: 'num' }, 'Stock'),
+    el('th', { cls: 'num' }, 'Manque 7j'),
+    el('th', { cls: 'num' }, 'Dossiers'),
+    el('th', {}, ''),
+  )));
+
+  const tbody = el('tbody', {});
+  let total7 = 0, total15 = 0, totalT = 0;
+  lignes.forEach(l => {
+    total7 += l.besoin_7j || 0;
+    total15 += l.besoin_15j || 0;
+    totalT += l.besoin_total || 0;
+
+    const rowCls = !l.mapped ? 'bes-row-warn' : (l.manque_7j > 0 ? 'bes-row-danger' : '');
+    const matCell = l.mapped
+      ? el('td', { cls: 'bes-mp-cell' },
+          el('div', { cls: 'bes-mp-ref' }, l.matiere_ref || '—'),
+          l.matiere_designation ? el('div', { cls: 'bes-mp-des' }, l.matiere_designation) : null,
+        )
+      : el('td', {}, el('span', { cls: 'bes-mp-none' }, 'Non associée'));
+
+    const manqueCell = l.manque_7j != null && l.manque_7j > 0
+      ? el('td', { cls: 'num' }, el('span', { cls: 'bes-manque' }, _fmtQte(l.manque_7j, l.unite)))
+      : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' }, l.mapped ? '0' : '—'));
+
+    tbody.appendChild(el('tr', { cls: rowCls },
+      el('td', {}, el('span', { cls: 'bes-src-value' }, l.source_value || '—')),
+      matCell,
+      el('td', { cls: 'num' }, _fmtQte(l.besoin_7j, l.unite)),
+      el('td', { cls: 'num' }, _fmtQte(l.besoin_15j, l.unite)),
+      el('td', { cls: 'num', style: { fontWeight: '700' } }, _fmtQte(l.besoin_total, l.unite)),
+      el('td', { cls: 'num', style: { color: 'var(--muted)' } }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—'),
+      manqueCell,
+      el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(l.nb_dossiers || 0)),
+      el('td', { style: { textAlign: 'right' } },
+        el('button', {
+          cls: 'bes-btn-associate' + (l.mapped ? ' mapped' : ''),
+          on: { click: () => openBesoinAssocierModal(l.kind, l.source_value) }
+        }, l.mapped ? 'Modifier' : 'Associer'),
+      ),
+    ));
+  });
+
+  const uniteDefault = (lignes[0] && lignes[0].unite) || '';
+  tbody.appendChild(el('tr', { cls: 'bes-total-row' },
+    el('td', { colspan: '2' }, 'Total ' + label.toLowerCase()),
+    el('td', { cls: 'num' }, _fmtQte(total7, uniteDefault)),
+    el('td', { cls: 'num' }, _fmtQte(total15, uniteDefault)),
+    el('td', { cls: 'num' }, _fmtQte(totalT, uniteDefault)),
+    el('td', { colspan: '4' }, ''),
+  ));
+  table.appendChild(tbody);
+  section.appendChild(el('div', { cls: 'bes-card' }, table));
+  return section;
+}
+
+function _buildBesoinsDossierTable(dos) {
+  const dossiers = dos.dossiers || [];
+  if (!dossiers.length) {
+    return el('div', { cls: 'bes-empty' }, 'Aucun dossier de production en cours ou en attente.');
+  }
+
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', {}, 'Dossier'),
+    el('th', {}, 'Client'),
+    el('th', {}, 'Machine'),
+    el('th', {}, 'Statut'),
+    el('th', { cls: 'num' }, 'Étiq.'),
+    el('th', {}, 'Livraison'),
+    el('th', {}, 'Besoins'),
+  )));
+
+  const tbody = el('tbody', {});
+  let totalEtiq = 0;
+  dossiers.forEach(d => {
+    totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
+    const besoinsEls = (d.besoins || []).map(b => {
+      const tag = el('span', {
+        cls: 'bes-tag' + (b.mapped ? '' : ' warn'),
+        title: b.formule || ''
+      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${_fmtQte(b.quantite, b.unite)}`);
+      return tag;
+    });
+    const besoinsCell = besoinsEls.length
+      ? el('td', {}, ...besoinsEls)
+      : el('td', { style: { color: 'var(--muted)', fontStyle: 'italic', fontSize: '12px' } },
+          'Aucun besoin calculé (fiche technique manquante ou incomplète)');
+
+    tbody.appendChild(el('tr', {},
+      el('td', {},
+        el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
+        (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
+          [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
+      ),
+      el('td', {}, d.client || '—'),
+      el('td', {}, d.machine_nom || '—'),
+      el('td', {}, el('span', { cls: 'bes-statut bes-statut-' + (d.statut || 'attente') },
+        d.statut === 'en_cours' ? 'En cours' : 'En attente')),
+      el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
+      el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
+      besoinsCell,
+    ));
+  });
+
+  tbody.appendChild(el('tr', { cls: 'bes-total-row' },
+    el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
+    el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
+    el('td', { colspan: '2' }, ''),
+  ));
+
+  table.appendChild(tbody);
+  return el('div', { cls: 'bes-card' }, table);
+}
+
+function openBesoinAssocierModal(kind, sourceValue) {
+  closeMroot();
+  const label = BESOINS_KIND_LABELS[kind] || kind;
+  const matList = S.matList || [];
+  const catFilter = { support: 'frontal', adhesif: 'adhesif', mandrin: 'mandrin', carton: 'carton', palette: 'palette' }[kind];
+  const filtered = catFilter
+    ? matList.filter(m => (m.categorie || '').toLowerCase() === catFilter)
+    : matList;
+  const suggested = filtered.length ? filtered : matList;
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '520px' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, `Associer ${label.toLowerCase()} → matière première`),
+    el('div', { cls: 'modal-sub' },
+      'Valeur détectée dans les fiches techniques : ',
+      el('strong', {}, sourceValue),
+    ),
+    el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.4px' } },
+      catFilter ? `Matières premières · catégorie ${catFilter}` : 'Toutes les matières'),
+    (function () {
+      const input = el('input', { cls: 'bes-search-input', placeholder: 'Rechercher (référence ou désignation)…' });
+      const listWrap = el('div', { cls: 'bes-mat-list' });
+      const render = () => {
+        const q = (input.value || '').trim().toLowerCase();
+        const items = suggested.filter(m => {
+          if (!q) return true;
+          const s = ((m.reference || '') + ' ' + (m.designation || '') + ' ' + (m.categorie || '')).toLowerCase();
+          return s.includes(q);
+        }).slice(0, 200);
+        listWrap.innerHTML = '';
+        if (!items.length) {
+          listWrap.appendChild(el('div', { style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' } }, 'Aucune matière trouvée'));
+          return;
+        }
+        items.forEach(m => {
+          listWrap.appendChild(el('div', {
+            cls: 'bes-mat-item',
+            on: { click: async () => { closeMroot(); await saveBesoinMapping(kind, sourceValue, m.id); } }
+          },
+            el('div', { cls: 'bes-mat-item-ref' }, m.reference || '—'),
+            el('div', { cls: 'bes-mat-item-meta' }, (m.designation || '') + (m.categorie ? ' · ' + m.categorie : '')),
+          ));
+        });
+      };
+      input.addEventListener('input', render);
+      setTimeout(() => { input.focus(); render(); }, 50);
+      return el('div', {}, input, listWrap);
+    })(),
+    el('div', { cls: 'modal-actions', style: { marginTop: '16px' } },
+      el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
+    ),
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+
+async function openBesoinsMappingModal() {
+  closeMroot();
+  let data;
+  try {
+    data = await api('/api/stock/besoins-matieres/mapping');
+  } catch (e) {
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+    return;
+  }
+  const mappings = (data && data.mapping) || [];
+  const nonMappes = (data && data.non_mappe) || [];
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '820px', maxHeight: '85vh', overflowY: 'auto' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Correspondances fiche technique → matière première'),
+    el('div', { cls: 'modal-sub' },
+      'Associe chaque valeur libre des fiches techniques (support, adhésif, mandrin, carton, palette) à une référence de matière première pour permettre le calcul des besoins.'),
+  );
+
+  if (nonMappes.length) {
+    sheet.appendChild(el('h3', { cls: 'bes-map-h3 warn' },
+      `⚠ ${nonMappes.length} valeur${nonMappes.length > 1 ? 's' : ''} à associer`));
+    const box = el('div', { cls: 'bes-map-list' });
+    nonMappes.forEach(nm => {
+      box.appendChild(el('div', { cls: 'bes-map-row' },
+        el('span', { cls: 'bes-map-kind' }, BESOINS_KIND_LABELS[nm.kind] || nm.kind),
+        el('span', { cls: 'bes-map-source' }, nm.source_value),
+        el('span', { cls: 'bes-map-count' }, `${nm.count} dossier${nm.count > 1 ? 's' : ''}`),
+        el('button', { cls: 'bes-btn-associate', on: { click: () => openBesoinAssocierModal(nm.kind, nm.source_value) } }, 'Associer'),
+      ));
+    });
+    sheet.appendChild(box);
+  }
+
+  sheet.appendChild(el('h3', { cls: 'bes-map-h3' },
+    `Correspondances enregistrées (${mappings.length})`));
+  if (!mappings.length) {
+    sheet.appendChild(el('div', { cls: 'bes-empty' }, 'Aucune correspondance enregistrée.'));
+  } else {
+    const box = el('div', { cls: 'bes-map-list' });
+    BESOINS_KIND_ORDER.forEach(kind => {
+      const arr = mappings.filter(m => m.kind === kind);
+      arr.forEach(m => {
+        box.appendChild(el('div', { cls: 'bes-map-row' },
+          el('span', { cls: 'bes-map-kind' }, BESOINS_KIND_LABELS[kind] || kind),
+          el('span', { cls: 'bes-map-source' }, m.source_value),
+          el('span', { cls: 'bes-map-arrow' }, '→'),
+          el('div', { cls: 'bes-map-target' },
+            el('div', { cls: 'bes-mp-ref' }, m.matiere_ref || '—'),
+            m.matiere_designation ? el('div', { cls: 'bes-mp-des' }, m.matiere_designation) : null,
+          ),
+          el('button', { cls: 'bes-map-btn-danger', on: { click: async () => {
+            if (!confirm(`Supprimer la correspondance "${m.source_value}" → ${m.matiere_ref} ?`)) return;
+            try {
+              await api('/api/stock/besoins-matieres/mapping/' + m.id, { method: 'DELETE' });
+              showToast('Correspondance supprimée', 'success');
+              closeMroot();
+              await loadBesoinsMatieres();
+            } catch (e) { showToast('Erreur : ' + (e.message || 'inconnue'), 'error'); }
+          }}}, 'Supprimer'),
+        ));
+      });
+    });
+    sheet.appendChild(box);
+  }
+
+  sheet.appendChild(el('div', { cls: 'modal-actions', style: { marginTop: '18px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+  ));
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+// ══════════════════════════════════════════════════════════════════
+
+
 function buildMatieresInventaire() {
   const rows = S.matInvList || [];
   const q = (S.matInvQuery || '').trim().toLowerCase();
@@ -12859,6 +13516,7 @@ function renderContent() {
   }
   else if (S.tab === 'inventaire') content = buildInventaire();
   else if (S.tab === 'matieres-inventaire') content = buildMatieresInventaire();
+  else if (S.tab === 'besoins-matieres') content = buildBesoinsMatieres();
   else if (S.tab === 'traca') content = buildTraca();
   else if (S.tab === 'reception') content = buildReception();
   else if (S.tab === 'historique') content = buildHistorique();
@@ -13561,14 +14219,102 @@ async function loadRecepHistory() {
   S.recepHistLoading = false; renderContent();
 }
 
+// ── Réception structurée : chargement matières laizées + reset selecteurs ──
+async function loadReceptionMatieres(force) {
+  if (S.recepMatieresLaizees && !force) return S.recepMatieresLaizees;
+  if (S.recepMatieresLoading) return null;
+  S.recepMatieresLoading = true;
+  try {
+    const d = await api('/api/stock/matieres/laizees');
+    S.recepMatieresLaizees = d || { matieres: [] };
+  } catch(e) {
+    showToast('Erreur chargement matières : ' + e.message, 'error');
+    S.recepMatieresLaizees = { matieres: [] };
+  }
+  S.recepMatieresLoading = false;
+  return S.recepMatieresLaizees;
+}
+
+function recepFilterMatieres(categorie) {
+  const data = S.recepMatieresLaizees;
+  if (!data || !data.matieres) return [];
+  if (!categorie) return data.matieres;
+  return data.matieres.filter(m => m.categorie === categorie);
+}
+
+function recepFindMatiere(matiereId) {
+  const data = S.recepMatieresLaizees;
+  if (!data || !data.matieres || !matiereId) return null;
+  return data.matieres.find(m => m.id === parseInt(matiereId, 10)) || null;
+}
+
+function recepPickCategorie(cat) {
+  S.recepCategorie = cat || '';
+  S.recepMatiereId = null; S.recepMatiereRef = ''; S.recepMatiereDes = '';
+  S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  renderContent();
+}
+
+function recepPickMatiere(mid) {
+  const m = recepFindMatiere(mid);
+  if (!m) { S.recepMatiereId = null; S.recepMatiereRef = ''; S.recepMatiereDes = ''; renderContent(); return; }
+  S.recepMatiereId = m.id;
+  S.recepMatiereRef = m.reference || '';
+  S.recepMatiereDes = m.designation || '';
+  S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  renderContent();
+}
+
+function recepPickLaize(lid) {
+  if (lid === '__custom__') {
+    S.recepLaizeCustomOn = true; S.recepLaizeCustomMm = '';
+    S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+    renderContent();
+    return;
+  }
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  const m = recepFindMatiere(S.recepMatiereId);
+  if (!m) return;
+  const l = (m.laizes || []).find(x => x.id === parseInt(lid, 10));
+  if (!l) { S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null; renderContent(); return; }
+  S.recepLaizeId = l.id;
+  S.recepLaizeLabel = l.label || (l.valeur_mm + ' mm');
+  S.recepLaizeValeurMm = l.valeur_mm;
+  renderContent();
+}
+
 function recepAddCode(code) {
   const c = (code || '').trim();
   if (!c) return;
-  // Doublon dans la session en cours → juste signaler, on ajoute quand même (deux bobines peuvent avoir le même code dans des cas rares)
+  // Validation matière + laize (obligatoire dès qu'on a activé le mode structuré)
+  // En mode modal simplifié, la matière est verrouillée via S.recepMatiereId — pas besoin de la ré-vérifier ici.
+  if (!S.recepMatiereId) {
+    showToast('Choisis une matière avant d\'ajouter une bobine.', 'error');
+    return;
+  }
+  if (!S.recepLaizeId && !(S.recepLaizeCustomOn && parseFloat(S.recepLaizeCustomMm) > 0)) {
+    showToast('Choisis une laize avant d\'ajouter une bobine.', 'error');
+    return;
+  }
   const isDup = S.recepItems.some(i => i.code === c);
   const now = new Date();
   const ts = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
-  S.recepItems = [...S.recepItems, { code: c, ts, isNew: true, isDup }];
+  // Snapshot des selecteurs actuels — ils resteront pre-remplis pour la bobine suivante
+  const laizeValeurMm = S.recepLaizeCustomOn ? parseFloat(S.recepLaizeCustomMm) : (S.recepLaizeValeurMm || null);
+  const laizeLabel = S.recepLaizeCustomOn ? (parseFloat(S.recepLaizeCustomMm) + ' mm (nouvelle)') : (S.recepLaizeLabel || '');
+  const item = {
+    code: c, ts, isNew: true, isDup,
+    categorie: S.recepCategorie,
+    matiere_id: S.recepMatiereId,
+    matiere_ref: S.recepMatiereRef,
+    matiere_designation: S.recepMatiereDes,
+    laize_id: S.recepLaizeCustomOn ? null : S.recepLaizeId,
+    laize_label: laizeLabel,
+    laize_valeur_mm: laizeValeurMm,
+  };
+  S.recepItems = [...S.recepItems, item];
   // Effacer le flag "nouveau" après 600ms (animation CSS)
   setTimeout(() => {
     S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
@@ -13777,11 +14523,18 @@ async function recepValider() {
   }
   try {
     const codes = S.recepItems.map(i => i.code);
+    const items = S.recepItems.map(i => {
+      const it = { code: i.code };
+      if (i.matiere_id) it.matiere_id = i.matiere_id;
+      if (i.laize_id) it.laize_id = i.laize_id;
+      else if (i.laize_valeur_mm) it.laize_valeur_mm = i.laize_valeur_mm;
+      return it;
+    });
     const d = await api('/api/stock/receptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        codes,
+        items,
         note: S.recepNote,
         fournisseur: S.recepFournisseur,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
@@ -13807,9 +14560,20 @@ async function recepValider() {
       };
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
+      // Reset selecteurs de reception structuree (categorie/matiere/laize)
+      // En mode modal simplifie on ferme la modal apres validation
+      if (S.recepModalMode) {
+        S.recepModalMode = false;
+        S.recepModalMatiere = null;
+        closeReceptionMiniModal();
+      }
+      S.recepCategorie = '';
+      S.recepMatiereId = null; S.recepMatiereRef = ''; S.recepMatiereDes = '';
+      S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+      S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
       recepStopCamera();
       await loadRecepHistory();
-      // Ouvrir la modale d'impression étiquettes d'identification (léger délai pour laisser le toast s'afficher)
+      // Ouvrir la modale d'impression etiquettes d'identification (leger delai pour laisser le toast s'afficher)
       setTimeout(() => recepShowPrintModal(S.recepLastLot), 320);
     }
   } catch(e) { showToast('Erreur : ' + e.message, 'error'); }
@@ -13827,8 +14591,225 @@ function recepBuildLotPreview(fournisseur, fscClaim, dt) {
   return 'LOT-' + dateStr + '-' + hourStr + '-' + fourn + '-' + fsc;
 }
 
+// ─── Modal simplifié Réception depuis une fiche matière ──────────────────
+// Matière pré-verrouillée, choix laize + scan/saisie manuelle des bobines.
+// Réutilise l'infrastructure existante (recepAddCode, recepValider) via S.recepModalMode.
+async function openReceptionMatiereModal(matiere) {
+  if (!matiere || !matiere.id) return;
+  // Si des bobines sont déjà en cours de scan pour une autre matière, prévenir
+  if (S.recepItems && S.recepItems.length > 0 && S.recepMatiereId && S.recepMatiereId !== matiere.id) {
+    if (!confirm('Une réception est déjà en cours pour une autre matière (' + S.recepItems.length + ' bobine' + (S.recepItems.length > 1 ? 's' : '') + '). La vider et démarrer une nouvelle réception ?')) return;
+    S.recepItems = [];
+  }
+  // Verrouiller la matière dans l'état partagé
+  S.recepModalMode = true;
+  S.recepModalMatiere = matiere;
+  S.recepCategorie = matiere.categorie || '';
+  S.recepMatiereId = matiere.id;
+  S.recepMatiereRef = matiere.reference || '';
+  S.recepMatiereDes = matiere.designation || '';
+  // Pré-remplir la laize si la matière n'en a qu'une seule
+  const laizes = Array.isArray(matiere.stock_par_laize) ? matiere.stock_par_laize : [];
+  if (laizes.length === 1) {
+    S.recepLaizeId = laizes[0].laize_id;
+    S.recepLaizeLabel = laizes[0].label || (laizes[0].valeur_mm + ' mm');
+    S.recepLaizeValeurMm = laizes[0].valeur_mm;
+  } else {
+    S.recepLaizeId = null; S.recepLaizeLabel = ''; S.recepLaizeValeurMm = null;
+  }
+  S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = '';
+  // Charger le cache des matières laizées (nécessaire pour recepFindMatiere → laizes)
+  await loadReceptionMatieres();
+  renderReceptionMiniModal();
+}
+
+function closeReceptionMiniModal() {
+  const ov = document.getElementById('recep-mini-overlay');
+  if (ov) ov.remove();
+  S.recepModalMode = false;
+  S.recepModalMatiere = null;
+  // On ne reset PAS les autres champs — l'utilisateur peut vouloir aller sur l'onglet
+  // Réception matière et continuer. Le reset complet se fait au moment de la validation.
+}
+
+function renderReceptionMiniModal() {
+  const existing = document.getElementById('recep-mini-overlay');
+  if (existing) existing.remove();
+  if (!S.recepModalMode) return;
+  const m = S.recepModalMatiere || {};
+
+  const overlay = el('div', {
+    cls: 'recep-mini-overlay',
+    on: { click: (e) => { if (e.target === overlay) closeReceptionMiniModal(); } },
+  });
+  overlay.id = 'recep-mini-overlay';
+  const modal = el('div', { cls: 'recep-mini-modal', on: { click: (e) => e.stopPropagation() } });
+
+  // ── Header ──
+  const head = el('div', { cls: 'recep-mini-head' },
+    el('div', null,
+      el('div', { cls: 'recep-mini-head-title' }, 'Réception — ' + (m.designation || m.reference || 'matière')),
+      el('div', { cls: 'recep-mini-head-sub' }, (m.categorie || '').toUpperCase() + ' · ' + (m.reference || '')),
+    ),
+    el('button', {
+      cls: 'recep-mini-close',
+      type: 'button',
+      title: 'Fermer',
+      on: { click: () => {
+        if (S.recepItems.length > 0 && !confirm('Fermer sans valider ? Les ' + S.recepItems.length + ' bobine(s) scannée(s) seront perdues.')) return;
+        S.recepItems = [];
+        closeReceptionMiniModal();
+      } },
+    }, '✕'),
+  );
+  modal.appendChild(head);
+
+  // ── Picker (matière verrouillée) ──
+  modal.appendChild(buildReceptionPicker(true));
+
+  // ── Fournisseur + FSC (simplifié — sélecteur natif) ──
+  const fournWrap = el('div', { cls: 'recep-fourn-wrap' });
+  fournWrap.appendChild(el('div', { cls: 'recep-fourn-label' },
+    iconEl('truck', 13), ' Fournisseur',
+    el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'),
+  ));
+  const fournSel = document.createElement('select');
+  fournSel.className = 'recep-picker-sel';
+  const optE = document.createElement('option');
+  optE.value = ''; optE.textContent = '— Choisir un fournisseur —';
+  fournSel.appendChild(optE);
+  (Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : []).forEach(f => {
+    const o = document.createElement('option');
+    o.value = f.nom; o.textContent = f.nom + (f.certificat ? ' — ' + f.certificat : '');
+    if (S.recepFournisseur === f.nom) o.selected = true;
+    fournSel.appendChild(o);
+  });
+  fournSel.addEventListener('change', (e) => {
+    S.recepFournisseur = e.target.value || '';
+    renderReceptionMiniModal();
+  });
+  fournWrap.appendChild(fournSel);
+  const fscTypeSel = document.createElement('select');
+  fscTypeSel.className = 'recep-picker-sel';
+  fscTypeSel.style.marginTop = '6px';
+  [['non_fsc', 'Non FSC'], ['fsc_100', 'FSC 100%'], ['fsc_mix_credit', 'FSC Mix Credit'],
+   ['fsc_mix', 'FSC Mix'], ['fsc_recycled', 'FSC Recycled']].forEach(([v, lbl]) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = lbl;
+    if ((S.recepFscTypeClaim || 'fsc_mix') === v) o.selected = true;
+    fscTypeSel.appendChild(o);
+  });
+  fscTypeSel.addEventListener('change', (e) => { S.recepFscTypeClaim = e.target.value; renderReceptionMiniModal(); });
+  fournWrap.appendChild(fscTypeSel);
+  modal.appendChild(fournWrap);
+
+  // ── Saisie manuelle (mode principal) + scan optionnel ──
+  const inputCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Ajouter une bobine (scan ou saisie)'),
+  );
+  const manInp = el('input', {
+    cls: 'recep-manual-inp',
+    type: 'text', placeholder: 'Code-barres — puis Entrée', autocomplete: 'off', spellcheck: 'false',
+  });
+  manInp.value = S.recepManual || '';
+  manInp.addEventListener('input', e => { S.recepManual = e.target.value; });
+  manInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; e.target.value = ''; e.target.focus(); renderReceptionMiniModal(); setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50); }
+    }
+  });
+  const addBtn = el('button', {
+    cls: 'btn-recep btn-recep-primary',
+    type: 'button',
+    on: { click: () => {
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; manInp.value = ''; renderReceptionMiniModal(); setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50); }
+    } },
+  }, '+ Ajouter');
+  const scanBtn = el('button', {
+    cls: 'btn-recep btn-recep-ghost',
+    type: 'button',
+    on: { click: recepStartCamera },
+  }, iconEl('scan', 14), ' Scanner');
+  inputCard.appendChild(el('div', { cls: 'recep-manual-wrap', style: { display: 'flex', gap: '6px' } }, manInp, addBtn, scanBtn));
+  modal.appendChild(inputCard);
+
+  // ── Tableau bobines ajoutees (compact) ──
+  const listCard = el('div', { cls: 'recep-card' },
+    el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' } },
+      el('div', { cls: 'recep-card-title' }, iconEl('package', 14), ' Bobines à réceptionner'),
+      el('div', { cls: 'recep-count' }, 'Total : ', el('strong', null, String(S.recepItems.length)))),
+  );
+  if (S.recepItems.length === 0) {
+    listCard.appendChild(el('div', { cls: 'recep-empty' }, 'Aucune bobine ajoutée. Choisis la laize et scanne / saisis un code-barres.'));
+  } else {
+    const table = el('table', { cls: 'recep-table' });
+    table.appendChild(el('thead', null, el('tr', null,
+      el('th', null, '#'), el('th', null, 'Code'), el('th', null, 'Laize'), el('th', null, 'Heure'), el('th', null, ''),
+    )));
+    const tbody = el('tbody');
+    S.recepItems.forEach((it, i) => {
+      tbody.appendChild(el('tr', { cls: it.isNew ? 'recep-row-new' : '' },
+        el('td', null, String(i + 1)),
+        el('td', null, el('span', { cls: 'recep-code' }, it.code)),
+        el('td', null, it.laize_label || (it.laize_valeur_mm ? it.laize_valeur_mm + ' mm' : '—')),
+        el('td', null, it.ts),
+        el('td', null, el('button', {
+          cls: 'recep-del-btn',
+          type: 'button',
+          on: { click: () => { S.recepItems = S.recepItems.filter((_, j) => j !== i); renderReceptionMiniModal(); } },
+        }, '✕')),
+      ));
+    });
+    table.appendChild(tbody);
+    listCard.appendChild(el('div', { cls: 'recep-table-wrap' }, table));
+  }
+  modal.appendChild(listCard);
+
+  // ── Boutons Valider / Annuler ──
+  const canValid = S.recepItems.length > 0 && !!S.recepFournisseur;
+  const actions = el('div', { cls: 'recep-actions' },
+    el('button', {
+      cls: 'btn-recep btn-recep-muted',
+      type: 'button',
+      on: { click: () => {
+        if (S.recepItems.length > 0 && !confirm('Annuler la réception ? Les ' + S.recepItems.length + ' bobine(s) scannée(s) seront perdues.')) return;
+        S.recepItems = [];
+        closeReceptionMiniModal();
+      } },
+    }, 'Annuler'),
+    el('button', {
+      cls: 'btn-recep btn-recep-success',
+      type: 'button',
+      disabled: !canValid,
+      style: canValid ? {} : { opacity: '0.5', cursor: 'not-allowed' },
+      on: { click: recepValider },
+    }, iconEl('check-circle', 15), ' Valider (' + S.recepItems.length + ')'),
+  );
+  modal.appendChild(actions);
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  // Focus l'input codebarre pour saisie immédiate
+  setTimeout(() => document.querySelector('#recep-mini-overlay .recep-manual-inp')?.focus(), 50);
+}
+
+// Wrapper : quand on est en mode modal, on re-render la modal après chaque renderContent
+// (patch discret pour ne pas casser l'existant : après un renderContent, si mode modal actif → refresh modal)
+(function() {
+  const origRender = typeof renderContent === 'function' ? renderContent : null;
+  if (!origRender) return;
+  window.__origRenderContent = origRender;
+  window.renderContent = function() {
+    origRender.apply(this, arguments);
+    if (S.recepModalMode) {
+      try { renderReceptionMiniModal(); } catch(e) { console.error('renderReceptionMiniModal:', e); }
+    }
+  };
+})();
+
 // ── Modale impression étiquettes après validation ──
-function recepShowPrintModal(lot) {
+function recepShowPrintModal(lot, isReprint) {
   if (!lot || !lot.lot_numero) return;
   closeMroot();
   const claimLabels = (typeof FSC_CLAIM_LABELS !== 'undefined' && FSC_CLAIM_LABELS)
@@ -13897,7 +14878,7 @@ function recepShowPrintModal(lot) {
       el('button', { cls: 'btn-recep btn-recep-muted', on: { click: closeMroot } }, 'Fermer'),
       el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
-        recepPrintLabelsSmart(lot, state.refProduit, n, claimLabel);
+        recepPrintLabelsSmart(lot, state.refProduit, n, claimLabel, isReprint);
       }}}, iconEl('printer', 14), ' Imprimer'),
       el('button', { cls: 'btn-recep btn-recep-muted', style: { fontSize: '11px', padding: '6px 10px' }, on: { click: () => {
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
@@ -13914,7 +14895,7 @@ function recepShowPrintModal(lot) {
 // Envoie les jobs d'impression au VPS ; l'agent local les récupère et les
 // pousse sur l'imprimante réseau. Fallback navigateur (window.print) via le
 // petit bouton "Navigateur" à côté du bouton principal.
-async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) {
+async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, isReprint) {
   const fscBanner = ((lot && lot.fsc_type_claim) || 'non_fsc') === 'non_fsc'
     ? 'MATIERE NON FSC' : 'MATIERE FSC';
   const now = new Date();
@@ -13935,7 +14916,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) 
     const r = await api('/api/print/label', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usage_key: 'reception_matiere', copies: nbEtiquettes, data }),
+      body: JSON.stringify({ usage_key: 'reception_matiere', copies: nbEtiquettes, data, variante: isReprint ? 'compact' : 'full' }),
     });
     showToast((r.copies || nbEtiquettes) + ' étiquette(s) envoyée(s) à ' + (r.imprimante || 'imprimante'), 'success');
     closeMroot();
@@ -13944,7 +14925,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) 
     const msg = e && e.message ? e.message : String(e);
     // Erreur 409 "Aucune imprimante configurée" : proposer le picker
     if (msg && (msg.includes('Aucune imprimante') || msg.includes('template'))) {
-      _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, msg);
+      _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, msg, isReprint);
       return;
     }
     // Autres erreurs : toast + fallback proposé
@@ -13953,7 +14934,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel) 
 }
 
 // Picker d'imprimante affiché en cas d'absence de défaut utilisateur
-async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg) {
+async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg, isReprint) {
   let imprimantes = [];
   try {
     imprimantes = await api('/api/print/my-imprimantes');
@@ -14002,6 +14983,7 @@ async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel
           copies: nbEtiquettes,
           imprimante_id: impId,
           data,
+          variante: isReprint ? 'compact' : 'full',
         }),
       });
       if (remember) {
@@ -14089,6 +15071,108 @@ function recepPrintLabels(lot, refProduit, nbEtiquettes, claimLabel) {
   if (w) w.document.close();
 }
 
+// v1.6.1 - Modal de selection de l'imprimante par defaut pour la reception matiere
+// Ouvert depuis l'icone imprimante dans le header. Sauvegarde via PUT /api/print/my-defaults.
+async function openReceptionPrinterPicker() {
+  let imprimantes = [];
+  let defaults = {};
+  try {
+    imprimantes = await api('/api/print/my-imprimantes');
+    defaults = await api('/api/print/my-defaults');
+  } catch(e) {
+    showToast('Erreur chargement imprimantes : ' + e.message, 'error');
+    return;
+  }
+  if (!imprimantes || !imprimantes.length) {
+    showToast('Aucune imprimante configuree. Va dans Parametres > Imprimantes.', 'warn');
+    return;
+  }
+  const currentDefault = defaults['reception_matiere'] || '';
+
+  const overlay = el('div', {
+    cls: 'modal-overlay',
+    style: {
+      position: 'fixed', inset: '0', background: 'rgba(0,0,0,.5)', zIndex: '900',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+    },
+    on: { click: e => { if (e.target === overlay) overlay.remove(); } }
+  });
+
+  const sheet = el('div', {
+    style: {
+      background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '14px',
+      padding: '22px', maxWidth: '480px', width: '100%',
+      boxShadow: '0 12px 40px rgba(0,0,0,.4)',
+    }
+  });
+
+  sheet.appendChild(el('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '16px', fontWeight: '700', color: 'var(--text)', marginBottom: '6px' }
+  }, iconEl('printer', 18), el('span', null, 'Imprimante par defaut - reception matiere')));
+
+  sheet.appendChild(el('div', {
+    style: { fontSize: '12px', color: 'var(--muted)', marginBottom: '16px', lineHeight: '1.5' }
+  }, 'Cette imprimante sera utilisee automatiquement pour les etiquettes de reception matiere. Tu peux la modifier a tout moment.'));
+
+  const select = el('select', {
+    style: {
+      width: '100%', padding: '9px 12px', borderRadius: '8px',
+      border: '1.5px solid var(--border)', background: 'var(--bg)', color: 'var(--text)',
+      fontSize: '13px', fontFamily: 'inherit', marginBottom: '18px', outline: 'none',
+    }
+  });
+  const optNone = el('option', { attrs: { value: '' } }, '- Aucune (me redemander a chaque fois) -');
+  if (!currentDefault) optNone.selected = true;
+  select.appendChild(optNone);
+  imprimantes.forEach(i => {
+    const label = (i.poste ? i.poste + ' - ' : '') + i.nom;
+    const opt = el('option', { attrs: { value: String(i.id) } }, label);
+    if (String(i.id) === String(currentDefault)) opt.selected = true;
+    select.appendChild(opt);
+  });
+  sheet.appendChild(select);
+
+  const btnRow = el('div', {
+    style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' }
+  });
+  btnRow.appendChild(el('button', {
+    attrs: { type: 'button' },
+    style: {
+      padding: '9px 16px', borderRadius: '8px', border: '1px solid var(--border)',
+      background: 'transparent', color: 'var(--text2)', fontSize: '13px', cursor: 'pointer',
+      fontFamily: 'inherit',
+    },
+    on: { click: () => overlay.remove() }
+  }, 'Annuler'));
+  btnRow.appendChild(el('button', {
+    attrs: { type: 'button' },
+    style: {
+      padding: '9px 16px', borderRadius: '8px', border: 'none',
+      background: 'var(--accent)', color: '#fff', fontSize: '13px', fontWeight: '700',
+      cursor: 'pointer', fontFamily: 'inherit',
+    },
+    on: { click: async () => {
+      const val = select.value ? parseInt(select.value, 10) : null;
+      try {
+        const newDefaults = Object.assign({}, defaults, { reception_matiere: val });
+        await api('/api/print/my-defaults', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ defaults: newDefaults })
+        });
+        showToast(val ? 'Imprimante par defaut enregistree.' : 'Defaut retire (picker au prochain envoi).', 'success');
+        overlay.remove();
+      } catch(e) {
+        showToast('Erreur enregistrement : ' + e.message, 'error');
+      }
+    }}
+  }, 'Enregistrer'));
+  sheet.appendChild(btnRow);
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+}
+
 function buildReception() {
   const wrap = el('div', { cls: 'recep-page' });
 
@@ -14112,6 +15196,18 @@ function buildReception() {
   wrap.appendChild(el('div', { cls: 'recep-head-row' },
     el('div', { cls: 'recep-title' }, 'Réception ', el('span', null, 'matière')),
     subtabs,
+    // v1.6.1 - Bouton icone pour choisir l'imprimante par defaut
+    el('button', {
+      attrs: { type: 'button', title: 'Choisir mon imprimante par défaut pour la réception matière' },
+      style: {
+        display: 'inline-flex', alignItems: 'center', gap: '4px',
+        padding: '6px 10px', borderRadius: '6px',
+        border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--text2)',
+        fontSize: '11px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit',
+        marginLeft: '8px', flexShrink: '0',
+      },
+      on: { click: () => openReceptionPrinterPicker() }
+    }, iconEl('printer', 14)),
   ));
 
   if (sub === 'nouvelle') {
@@ -14123,6 +15219,132 @@ function buildReception() {
 }
 
 // ── Sous-onglet : Faire une réception ─────────────────────────────
+// ── Picker Catégorie/Matière/Laize partagé entre onglet et modal simplifié ──
+// lockedMatiere = true → matière verrouillée (mode modal fiche matière)
+function buildReceptionPicker(lockedMatiere) {
+  const wrap = el('div', { cls: 'recep-picker-card' });
+  wrap.appendChild(el('div', { cls: 'recep-picker-title' },
+    iconEl('package', 14), ' Bobine en cours — matière & laize',
+    S.recepMatieresLoading
+      ? el('span', { style: { fontSize: '11px', color: 'var(--muted)', marginLeft: '8px' } }, '(chargement…)')
+      : null,
+  ));
+
+  if (!S.recepMatieresLaizees && !S.recepMatieresLoading) {
+    loadReceptionMatieres().then(() => renderContent());
+  }
+
+  const row = el('div', { cls: 'recep-picker-row' });
+
+  // ── Bloc CATÉGORIE ──
+  const catField = el('div', { cls: 'recep-picker-field' });
+  catField.appendChild(el('label', null, 'Catégorie'));
+  if (lockedMatiere) {
+    catField.appendChild(el('div', { cls: 'recep-picker-locked' },
+      el('span', { cls: 'recep-mat-badge' },
+        (S.recepCategorie || '').toUpperCase() || '—')
+    ));
+  } else {
+    const catSel = document.createElement('select');
+    catSel.className = 'recep-picker-sel';
+    [['', '— Choisir —'], ['complexe', 'Complexe'], ['frontal', 'Frontal'], ['glassine', 'Glassine']].forEach(([v, lbl]) => {
+      const o = document.createElement('option');
+      o.value = v; o.textContent = lbl;
+      if (S.recepCategorie === v) o.selected = true;
+      catSel.appendChild(o);
+    });
+    catSel.addEventListener('change', (e) => recepPickCategorie(e.target.value));
+    catField.appendChild(catSel);
+  }
+  row.appendChild(catField);
+
+  // ── Bloc MATIÈRE ──
+  const matField = el('div', { cls: 'recep-picker-field' });
+  matField.appendChild(el('label', null, 'Matière'));
+  if (lockedMatiere) {
+    matField.appendChild(el('div', { cls: 'recep-picker-locked' },
+      el('div', { cls: 'recep-picker-locked-info' },
+        el('div', { cls: 'recep-picker-locked-ref' }, S.recepMatiereRef || '—'),
+        S.recepMatiereDes ? el('div', { cls: 'recep-picker-locked-des' }, S.recepMatiereDes) : null,
+      ),
+      iconEl('lock', 14),
+    ));
+  } else {
+    const mats = recepFilterMatieres(S.recepCategorie);
+    const matSel = document.createElement('select');
+    matSel.className = 'recep-picker-sel';
+    if (!S.recepCategorie) matSel.disabled = true;
+    const optEmpty = document.createElement('option');
+    optEmpty.value = ''; optEmpty.textContent = S.recepCategorie ? '— Choisir une matière —' : '— Choisir catégorie d\'abord —';
+    matSel.appendChild(optEmpty);
+    mats.forEach(m => {
+      const o = document.createElement('option');
+      o.value = String(m.id);
+      o.textContent = m.reference + (m.designation ? ' — ' + m.designation : '');
+      if (S.recepMatiereId === m.id) o.selected = true;
+      matSel.appendChild(o);
+    });
+    matSel.addEventListener('change', (e) => recepPickMatiere(e.target.value));
+    matField.appendChild(matSel);
+    if (S.recepCategorie && !mats.length) {
+      matField.appendChild(el('div', { cls: 'recep-picker-hint' },
+        'Aucune matière ' + S.recepCategorie + ' active — à créer dans le référentiel.'));
+    }
+  }
+  row.appendChild(matField);
+
+  // ── Bloc LAIZE ──
+  const laiField = el('div', { cls: 'recep-picker-field' });
+  laiField.appendChild(el('label', null, 'Laize'));
+  const m = recepFindMatiere(S.recepMatiereId);
+  const laizes = m ? (m.laizes || []) : [];
+  const laiSel = document.createElement('select');
+  laiSel.className = 'recep-picker-sel';
+  if (!S.recepMatiereId) laiSel.disabled = true;
+  const optE = document.createElement('option');
+  optE.value = ''; optE.textContent = S.recepMatiereId ? '— Choisir —' : '— Matière d\'abord —';
+  laiSel.appendChild(optE);
+  laizes.forEach(l => {
+    const o = document.createElement('option');
+    o.value = String(l.id);
+    o.textContent = l.label || (l.valeur_mm + ' mm');
+    if (S.recepLaizeId === l.id && !S.recepLaizeCustomOn) o.selected = true;
+    laiSel.appendChild(o);
+  });
+  const optCustom = document.createElement('option');
+  optCustom.value = '__custom__'; optCustom.textContent = '+ Autre laize (mm)';
+  if (S.recepLaizeCustomOn) optCustom.selected = true;
+  laiSel.appendChild(optCustom);
+  laiSel.addEventListener('change', (e) => recepPickLaize(e.target.value));
+  laiField.appendChild(laiSel);
+  if (S.recepLaizeCustomOn) {
+    const inp = el('input', {
+      type: 'number', step: '0.1', min: '1', placeholder: 'Valeur en mm (ex: 425)', autocomplete: 'off',
+    });
+    inp.value = S.recepLaizeCustomMm || '';
+    inp.addEventListener('input', e => { S.recepLaizeCustomMm = e.target.value; });
+    const cancel = el('button', {
+      type: 'button', attrs: { title: 'Annuler la laize personnalisée' },
+      on: { click: () => { S.recepLaizeCustomOn = false; S.recepLaizeCustomMm = ''; renderContent(); } },
+    }, '✕');
+    laiField.appendChild(el('div', { cls: 'recep-picker-custom' }, inp, cancel));
+    laiField.appendChild(el('div', { cls: 'recep-picker-hint' },
+      'La laize sera créée dans les paramètres et rattachée à la matière.'));
+  }
+  row.appendChild(laiField);
+
+  wrap.appendChild(row);
+
+  const pret = !!(S.recepMatiereId && (S.recepLaizeId || (S.recepLaizeCustomOn && parseFloat(S.recepLaizeCustomMm) > 0)));
+  wrap.appendChild(el('div', { cls: 'recep-picker-hint',
+    style: { color: pret ? 'var(--success)' : 'var(--muted)', fontWeight: pret ? '600' : '500' } },
+    pret
+      ? '✓ Prêt à ajouter des bobines — les infos restent pré-remplies entre chaque ajout.'
+      : 'Choisis d\'abord catégorie → matière → laize pour ajouter des bobines.'));
+
+  return wrap;
+}
+
 function buildReceptionNouvelle() {
   const block = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } });
 
@@ -14147,50 +15369,58 @@ function buildReceptionNouvelle() {
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
 
-  // ── Grille scanner + saisie manuelle ──
-  const grid = el('div', { cls: 'recep-layout' });
+  // ── Picker Catégorie / Matière / Laize (mode structuré) ──
+  if (!S.recepModalMode) {
+    block.appendChild(buildReceptionPicker(false));
+  }
 
-  const camCard = el('div', { cls: 'recep-card' },
-    el('div', { cls: 'recep-card-title' }, iconEl('scan', 14), ' Scanner une bobine')
+  // ── Section compacte : Ajouter une bobine (scan ou saisie manuelle) ──
+  const addCard = el('div', { cls: 'recep-card' },
+    el('div', { cls: 'recep-card-title' }, iconEl('package', 14), ' Ajouter une bobine (scan ou saisie manuelle)')
   );
-  const placeholder = el('div', { cls: 'recep-cam-placeholder' },
-    iconEl('scan', 40),
-    el('div', null, 'Appuyez sur "Démarrer" pour activer la caméra')
-  );
-  camCard.appendChild(placeholder);
-  camCard.appendChild(el('button', { cls: 'btn-recep btn-recep-primary', on: { click: recepStartCamera } }, iconEl('scan', 14), ' Démarrer le scan'));
-  grid.appendChild(camCard);
+  const addRow = el('div', { cls: 'recep-add-row' });
+  const addInp = el('input', {
+    cls: 'recep-manual-inp',
+    type: 'text',
+    placeholder: 'Code-barres — Entrée pour ajouter',
+    autocomplete: 'off',
+    autocorrect: 'off',
+    spellcheck: 'false',
+  });
+  addInp.value = S.recepManual || '';
+  addInp.addEventListener('input', e => { S.recepManual = e.target.value; });
+  addInp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; addInp.value = ''; addInp.focus(); }
+    }
+  });
+  const addBtn = el('button', {
+    cls: 'btn-recep btn-recep-primary',
+    type: 'button',
+    on: { click: () => {
+      if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; addInp.value = ''; addInp.focus(); }
+    } },
+  }, '+ Ajouter');
+  const scanBtn = el('button', {
+    cls: 'btn-recep btn-recep-ghost',
+    type: 'button',
+    on: { click: recepStartCamera },
+  }, iconEl('scan', 14), ' Scanner');
+  addRow.append(addInp, addBtn, scanBtn);
+  addCard.appendChild(addRow);
 
-  const manCard = el('div', { cls: 'recep-card' },
-    el('div', { cls: 'recep-card-title' }, iconEl('tag', 14), ' Saisie manuelle'),
-    el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' } }, 'Saisissez ou collez un code-barres puis appuyez sur Entrée'),
-    (() => {
-      const wrap2 = el('div', { cls: 'recep-manual-wrap' });
-      const inp = el('input', { cls: 'recep-manual-inp', attrs: { type: 'text', placeholder: 'Ex: 3700123456789', autocomplete: 'off', autocorrect: 'off', spellcheck: 'false' } });
-      inp.value = S.recepManual || '';
-      inp.addEventListener('input', e => { S.recepManual = e.target.value; });
-      inp.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
-        }
-      });
-      const btn = el('button', { cls: 'btn-recep btn-recep-ghost', on: { click: () => {
-        if (S.recepManual.trim()) { recepAddCode(S.recepManual); S.recepManual = ''; inp.value = ''; inp.focus(); }
-      }}}, '+ Ajouter');
-      wrap2.append(inp, btn);
-      return wrap2;
-    })(),
-    el('div', { cls: 'recep-card-title', style: { marginTop: '8px' } }, iconEl('inbox', 14), ' Note (optionnel)'),
-    (() => {
-      const inp = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Ex: Livraison fournisseur X, bon de livraison 123…' } });
-      inp.value = S.recepNote || '';
-      inp.addEventListener('input', e => { S.recepNote = e.target.value; });
-      return inp;
-    })()
-  );
-  grid.appendChild(manCard);
-  block.appendChild(grid);
+  // Note (optionnel) — compacte sous le champ code-barres
+  const noteInp = el('input', {
+    cls: 'recep-note-inp',
+    type: 'text',
+    placeholder: 'Note (optionnel) — ex: BL fournisseur, remarque…',
+  });
+  noteInp.value = S.recepNote || '';
+  noteInp.addEventListener('input', e => { S.recepNote = e.target.value; });
+  addCard.appendChild(noteInp);
+
+  block.appendChild(addCard);
 
   // ── Tableau bobines scannées + fournisseur/FSC + preview lot ──
   const tableCard = el('div', { cls: 'recep-card' });
@@ -14334,17 +15564,27 @@ function buildReceptionNouvelle() {
     table.appendChild(el('thead', null, el('tr', null,
       el('th', null, '#'),
       el('th', null, 'Code-barres'),
+      el('th', null, 'Matière · Laize'),
       el('th', null, 'Heure'),
       el('th', null, '')
     )));
     const tbody = el('tbody');
     S.recepItems.forEach((item, i) => {
+      const matCell = item.matiere_id
+        ? el('div', { cls: 'recep-mat-cell' },
+            el('div', { cls: 'recep-mat-cell-ref' },
+              (item.categorie ? el('span', { cls: 'recep-mat-badge' }, item.categorie.toUpperCase()) : null),
+              ' ' + (item.matiere_ref || ('#' + item.matiere_id))),
+            el('div', { cls: 'recep-mat-cell-lai' }, item.laize_label || (item.laize_valeur_mm ? item.laize_valeur_mm + ' mm' : '—')),
+          )
+        : el('span', { cls: 'recep-mat-cell-empty' }, 'Sans matière');
       const tr = el('tr', { cls: item.isNew ? 'recep-row-new' : '' },
         el('td', null, String(i + 1)),
         el('td', null,
           el('span', { cls: 'recep-code' }, item.code),
           item.isDup ? el('span', { cls: 'recep-dup-badge' }, 'doublon') : null
         ),
+        el('td', null, matCell),
         el('td', null, item.ts),
         el('td', null, el('button', { cls: 'recep-del-btn', attrs: { title: 'Supprimer' }, on: { click: () => {
           S.recepItems = S.recepItems.filter((_, j) => j !== i);
@@ -14447,7 +15687,7 @@ function buildReceptionHistorique() {
                 nb_bobines_ajoutees: lot.nb_bobines || 1,
                 nb_bobines_total: lot.nb_bobines || 1,
                 codes: lot.items || [],
-              });
+              }, true);  // v1.7 - isReprint=true : envoie variante=compact au serveur
             }}
           }, iconEl('printer', 14), ' Réimprimer étiquettes');
           detail.appendChild(reprintBtn);
@@ -14550,9 +15790,30 @@ function valEnsureState() {
       exporting: false,
       mpCollapsed: false,
       pfCollapsed: false,
-      snapshotDate: null };
+      snapshotDate: null,
+      // Sparkline 30 jours de la valo totale (MP+PF). Charge en arriere-plan
+      // apres le loadValorisation initial. { points: [{date, total}], loading: bool }
+      trend: { points: [], loading: false } };
   }
   return S.valorisation;
+}
+
+async function loadValorisationTrend() {
+  const v = valEnsureState();
+  if (!v.trend) v.trend = { points: [], loading: false };
+  v.trend.loading = true;
+  try {
+    const data = await api('/api/stock/valorisation/trend?days=15');
+    v.trend.points = Array.isArray(data?.points) ? data.points : [];
+  } catch (e) {
+    // Silencieux : le sparkline est un plus, pas critique. Sur echec on ne
+    // toaste pas, on laisse juste la zone vide.
+    v.trend.points = [];
+  } finally {
+    v.trend.loading = false;
+    // Re-render juste la card total (via full render pour rester simple)
+    renderValorisationView(true);
+  }
 }
 
 async function loadValorisation() {
@@ -14571,6 +15832,13 @@ async function loadValorisation() {
   } finally {
     v.loading = false;
     renderValorisationView(true);
+    // Charge le trend en arriere-plan (fire-and-forget) : n'attend pas la
+    // reponse pour rendre. Le sparkline se remplira quand /trend repond.
+    // Conditions : (1) pas en mode date figee, (2) role Direction/superadmin
+    // (les autres roles ne voient pas le sparkline -- inutile de fetcher).
+    if (!v.snapshotDate && (S.user && (S.user.role === 'superadmin' || S.user.role === 'direction'))) {
+      loadValorisationTrend();
+    }
   }
 }
 
@@ -14677,6 +15945,249 @@ function valToggleSort(column) {
   renderValorisationView(true);
 }
 
+function buildValorisationSparkline() {
+  // Bloc "Tendance 30 derniers jours" : petit titre + sparkline lissee.
+  // - Courbe smoothed via Bezier cubique (Catmull-Rom → cubique) : pas d'angles
+  //   pointus, rendu fluide meme quand une valeur decroche.
+  // - Padding vertical genereux : l'amplitude ne colle pas aux bords.
+  // - Hover interactif : ligne verticale + point vert + tooltip flottant
+  //   (date + valeur formatee). Zone de capture = tout le SVG.
+  const v = valEnsureState();
+  const trend = v.trend || { points: [], loading: false };
+  const wrap = el('div', {
+    style: 'flex:1 1 auto;min-width:0;position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:6px'
+  });
+  wrap.append(el('div', {
+    style: 'font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:right'
+  }, 'Tendance 15 derniers jours'));
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const W = 200, H = 60, padTop = 8, padBot = 8;
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.width = '100%';
+  svg.style.height = '60px';
+  svg.style.display = 'block';
+  svg.style.overflow = 'visible';
+
+  const pts = (trend.points || []).filter(p => p && typeof p.total === 'number');
+  if (pts.length < 2) {
+    // Placeholder discret : point de suspension quand data pas encore prete.
+    const placeholderText = document.createElementNS(svgNS, 'text');
+    placeholderText.setAttribute('x', String(W / 2));
+    placeholderText.setAttribute('y', String(H / 2 + 3));
+    placeholderText.setAttribute('text-anchor', 'middle');
+    placeholderText.setAttribute('fill', 'var(--muted)');
+    placeholderText.setAttribute('font-size', '10');
+    placeholderText.setAttribute('opacity', '0.5');
+    placeholderText.textContent = trend.loading ? '…' : '';
+    svg.appendChild(placeholderText);
+    wrap.append(svg);
+    return wrap;
+  }
+
+  const totals = pts.map(p => Number(p.total || 0));
+  const rawMin = Math.min.apply(null, totals);
+  const rawMax = Math.max.apply(null, totals);
+  // Marge de 8% en haut et en bas de l'amplitude pour eviter que la courbe
+  // colle aux bords (rendu plus doux visuellement, notamment quand une valeur
+  // "decroche" du reste).
+  const amplitude = (rawMax - rawMin) || Math.max(1, rawMax * 0.001);
+  const margin = amplitude * 0.08;
+  const min = rawMin - margin;
+  const max = rawMax + margin;
+  const range = (max - min) || 1;
+  const usableH = H - padTop - padBot;
+  const stepX = pts.length > 1 ? W / (pts.length - 1) : 0;
+  const y = (t) => padTop + usableH - ((t - min) / range) * usableH;
+  const coords = totals.map((t, i) => [i * stepX, y(t)]);
+
+  // ── Lissage Catmull-Rom → cubic Bezier ──
+  // Chaque segment devient une courbe C avec 2 points de controle deduits des
+  // voisins. Tension 0.18 : lisse mais pas mou -- garde la lisibilite des pics.
+  function smoothPath(coordArr) {
+    if (coordArr.length < 2) return '';
+    let d = 'M ' + coordArr[0][0].toFixed(2) + ' ' + coordArr[0][1].toFixed(2);
+    const T = 0.18;
+    for (let i = 0; i < coordArr.length - 1; i++) {
+      const p0 = coordArr[i - 1] || coordArr[i];
+      const p1 = coordArr[i];
+      const p2 = coordArr[i + 1];
+      const p3 = coordArr[i + 2] || p2;
+      const cp1x = p1[0] + (p2[0] - p0[0]) * T;
+      const cp1y = p1[1] + (p2[1] - p0[1]) * T;
+      const cp2x = p2[0] - (p3[0] - p1[0]) * T;
+      const cp2y = p2[1] - (p3[1] - p1[1]) * T;
+      d += ' C ' + cp1x.toFixed(2) + ' ' + cp1y.toFixed(2)
+        + ', ' + cp2x.toFixed(2) + ' ' + cp2y.toFixed(2)
+        + ', ' + p2[0].toFixed(2) + ' ' + p2[1].toFixed(2);
+    }
+    return d;
+  }
+  const smoothD = smoothPath(coords);
+
+  // Zone remplie sous la courbe (gradient très discret)
+  const gradId = 'val-spark-grad-' + Math.floor(Math.random() * 1e9);
+  const defs = document.createElementNS(svgNS, 'defs');
+  const grad = document.createElementNS(svgNS, 'linearGradient');
+  grad.setAttribute('id', gradId);
+  grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+  grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+  const s1 = document.createElementNS(svgNS, 'stop');
+  s1.setAttribute('offset', '0%');
+  s1.setAttribute('stop-color', '#16a34a');
+  s1.setAttribute('stop-opacity', '0.22');
+  const s2 = document.createElementNS(svgNS, 'stop');
+  s2.setAttribute('offset', '100%');
+  s2.setAttribute('stop-color', '#16a34a');
+  s2.setAttribute('stop-opacity', '0');
+  grad.appendChild(s1); grad.appendChild(s2);
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
+  const areaPath = document.createElementNS(svgNS, 'path');
+  // Reprend la courbe lissee et referme jusqu'a la baseline
+  const areaD = smoothD + ' L ' + coords[coords.length - 1][0].toFixed(2) + ' ' + H
+    + ' L ' + coords[0][0].toFixed(2) + ' ' + H + ' Z';
+  areaPath.setAttribute('d', areaD);
+  areaPath.setAttribute('fill', 'url(#' + gradId + ')');
+  svg.appendChild(areaPath);
+
+  // Ligne lissee
+  const linePath = document.createElementNS(svgNS, 'path');
+  linePath.setAttribute('d', smoothD);
+  linePath.setAttribute('fill', 'none');
+  linePath.setAttribute('stroke', '#16a34a');
+  linePath.setAttribute('stroke-width', '1.8');
+  linePath.setAttribute('stroke-linecap', 'round');
+  linePath.setAttribute('stroke-linejoin', 'round');
+  linePath.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(linePath);
+
+  // Point sur la derniere valeur (aujourd'hui) -- toujours visible.
+  const last = coords[coords.length - 1];
+  const dot = document.createElementNS(svgNS, 'circle');
+  dot.setAttribute('cx', last[0].toFixed(2));
+  dot.setAttribute('cy', last[1].toFixed(2));
+  dot.setAttribute('r', '2.5');
+  dot.setAttribute('fill', '#16a34a');
+  dot.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.appendChild(dot);
+
+  // ── Hover interactif ──
+  // Elements masques par defaut, actives via mousemove sur le rect de capture.
+  const hoverLine = document.createElementNS(svgNS, 'line');
+  hoverLine.setAttribute('y1', String(padTop - 2));
+  hoverLine.setAttribute('y2', String(H - padBot + 2));
+  hoverLine.setAttribute('stroke', '#16a34a');
+  hoverLine.setAttribute('stroke-width', '1');
+  hoverLine.setAttribute('stroke-dasharray', '2 2');
+  hoverLine.setAttribute('opacity', '0.5');
+  hoverLine.setAttribute('vector-effect', 'non-scaling-stroke');
+  hoverLine.style.display = 'none';
+  svg.appendChild(hoverLine);
+
+  const hoverDot = document.createElementNS(svgNS, 'circle');
+  hoverDot.setAttribute('r', '3.5');
+  hoverDot.setAttribute('fill', '#16a34a');
+  hoverDot.setAttribute('stroke', 'var(--card)');
+  hoverDot.setAttribute('stroke-width', '1.5');
+  hoverDot.setAttribute('vector-effect', 'non-scaling-stroke');
+  hoverDot.style.display = 'none';
+  svg.appendChild(hoverDot);
+
+  // Rectangle transparent qui capture les evenements sur toute la surface
+  const captureRect = document.createElementNS(svgNS, 'rect');
+  captureRect.setAttribute('x', '0'); captureRect.setAttribute('y', '0');
+  captureRect.setAttribute('width', String(W));
+  captureRect.setAttribute('height', String(H));
+  captureRect.setAttribute('fill', 'transparent');
+  captureRect.style.cursor = 'crosshair';
+  svg.appendChild(captureRect);
+
+  // Tooltip HTML positionne absolu (plus flexible que du <text> SVG pour la
+  // typo et le passage au-dessus du bord).
+  const tooltip = el('div', {
+    style:
+      'position:absolute;pointer-events:none;background:var(--card);' +
+      'border:1px solid var(--border);border-radius:8px;' +
+      'padding:6px 10px;font-size:11px;line-height:1.35;' +
+      'box-shadow:0 4px 12px rgba(0,0,0,.12);' +
+      'white-space:nowrap;transform:translate(-50%, -100%);' +
+      'transition:opacity .1s;opacity:0;z-index:10'
+  });
+  const tooltipDate = el('div', {
+    style: 'font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px'
+  });
+  const tooltipValue = el('div', {
+    style: 'font-size:13px;font-weight:700;color:#16a34a;font-variant-numeric:tabular-nums'
+  });
+  tooltip.append(tooltipDate, tooltipValue);
+  wrap.append(tooltip);
+
+  // Formate "2026-07-21" en "21 juil." (mois court, sans zéro initial jour)
+  const MOIS_COURT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin',
+                       'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  function fmtDateShort(iso) {
+    if (!iso || iso.length < 10) return iso || '';
+    const y = iso.slice(0, 4), m = parseInt(iso.slice(5, 7), 10), d = parseInt(iso.slice(8, 10), 10);
+    if (isNaN(m) || isNaN(d)) return iso;
+    return d + ' ' + (MOIS_COURT[m - 1] || '') + ' ' + y;
+  }
+
+  captureRect.addEventListener('mousemove', (ev) => {
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    // Convertit la coordonnee ecran -> coordonnee viewBox X (0..W)
+    const relX = ((ev.clientX - rect.left) / rect.width) * W;
+    // Trouve l'index le plus proche
+    let idx = Math.round(relX / stepX);
+    if (idx < 0) idx = 0;
+    if (idx >= coords.length) idx = coords.length - 1;
+    const [cx, cy] = coords[idx];
+    // Positionne indicators SVG (en viewBox coords)
+    hoverLine.setAttribute('x1', String(cx));
+    hoverLine.setAttribute('x2', String(cx));
+    hoverLine.style.display = '';
+    hoverDot.setAttribute('cx', String(cx));
+    hoverDot.setAttribute('cy', String(cy));
+    hoverDot.style.display = '';
+    // Positionne tooltip (en pixels ecran, relatif au wrap)
+    const wrapRect = wrap.getBoundingClientRect();
+    // Coord ecran du point hover
+    const screenX = rect.left + (cx / W) * rect.width;
+    const screenY = rect.top + (cy / H) * rect.height;
+    let tx = screenX - wrapRect.left;
+    let ty = screenY - wrapRect.top - 8; // 8px de marge au-dessus du point
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+    tooltipDate.textContent = fmtDateShort(pts[idx].date);
+    tooltipValue.textContent = valFormatEuro(pts[idx].total);
+    tooltip.style.opacity = '1';
+    // Clamp horizontal : evite que le tooltip deborde a droite/gauche du wrap
+    // (mesure apres textContent pour avoir la vraie largeur)
+    requestAnimationFrame(() => {
+      const tRect = tooltip.getBoundingClientRect();
+      const wRect = wrap.getBoundingClientRect();
+      const halfW = tRect.width / 2;
+      let clampedX = tx;
+      if (screenX - wRect.left - halfW < 0) clampedX = halfW;
+      if (screenX - wRect.left + halfW > wRect.width) clampedX = wRect.width - halfW;
+      tooltip.style.left = clampedX + 'px';
+    });
+  });
+
+  captureRect.addEventListener('mouseleave', () => {
+    hoverLine.style.display = 'none';
+    hoverDot.style.display = 'none';
+    tooltip.style.opacity = '0';
+  });
+
+  wrap.append(svg);
+  return wrap;
+}
+
 function buildValorisationKpis() {
   const v = valEnsureState();
   const pf = (S.valorisation && S.valorisation.pf) ? S.valorisation.pf : null;
@@ -14727,34 +16238,43 @@ function buildValorisationKpis() {
   };
 
   // ── Total global ──────────────────────────────────────────────
-  // Chiffre recalculé en gros vert au-dessus, chiffre d'origine plus discret dessous
-  // dès qu'un breakdown est actif (MP réel OU PF avec charges).
+  // Layout 2 colonnes : texte a gauche (titre + gros chiffre + base optionnelle),
+  // sparkline "Tendance 30 derniers jours" a droite. Le sparkline occupe l'espace
+  // vide qui existait auparavant.
   const totalHasBreakdown = showReelBreakdown || _pfHasCharges;
-  const kpiTotalChildren = [
+  const kpiTotalLeftChildren = [
     el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px' }, 'Stock valorisé — Total'),
   ];
   if (totalHasBreakdown) {
-    kpiTotalChildren.push(
+    kpiTotalLeftChildren.push(
       el('div', { style: 'font-size:24px;font-weight:800;color:#16a34a' }, valFormatEuro(totalGlobalReel))
     );
-    kpiTotalChildren.push(
+    kpiTotalLeftChildren.push(
       el('div', { style: 'font-size:15px;font-weight:700;color:var(--muted);margin-top:4px;display:flex;align-items:baseline;gap:6px' },
         el('span', null, valFormatEuro(totalGlobal)),
         el('span', { style: 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
     );
   } else {
-    kpiTotalChildren.push(
+    kpiTotalLeftChildren.push(
       el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalGlobal))
     );
   }
-  kpiTotalChildren.push(
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-      pfLoaded ? 'MP + PF' : 'MP + PF (chargement PF…)')
-  );
+  // Le sparkline "Tendance 15 derniers jours" n'est visible que pour
+  // Direction / superadmin (meme perimetre que les KPI reels / dedoublement).
+  // Les autres roles voient la card en layout classique (colonne unique).
+  const kpiTotalLeft = el('div', {
+    style: 'display:flex;flex-direction:column;justify-content:center;min-width:0;' +
+           (canSeeUSD ? 'flex:0 0 auto' : 'flex:1 1 auto'),
+  }, ...kpiTotalLeftChildren);
+  const kpiTotalContent = [kpiTotalLeft];
+  if (canSeeUSD) {
+    kpiTotalContent.push(buildValorisationSparkline());
+  }
   const kpiTotal = el('div', { style:
-    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
-    ...kpiTotalChildren
+    'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' +
+    'display:flex;align-items:stretch;gap:14px;overflow:hidden' },
+    ...kpiTotalContent
   );
 
   // ── Matières premières — dédoublé EUR / réel si réfs USD ou taxe ──
@@ -14772,30 +16292,15 @@ function buildValorisationKpis() {
         el('span', { style: 'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px' }, 'base')
       )
     );
-    const refsLabel = buildBreakdownLabel();
-    const subPieces = [
-      `${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`,
-    ];
-    if (refsLabel) subPieces.push(refsLabel);
-    if (tauxTxt) subPieces.push(tauxTxt);
-    if (taxTxt) subPieces.push(taxTxt);
-    if (transportTxt) subPieces.push(transportTxt);
-    kpiMPChildren.push(
-      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
-        subPieces.join(' · ')
-      )
-    );
   } else {
-    const subPieces = [`${s.nb_refs_valorisees || 0} / ${s.nb_refs || 0} références valorisées`];
-    if (canSeeUSD && tauxTxt) subPieces.push(tauxTxt);
-    if (canSeeUSD && taxTxt) subPieces.push(taxTxt);
-    if (canSeeUSD && transportTxt) subPieces.push(transportTxt);
+    // Vue non-direction : affiche simplement le total MP en gros vert (sinon
+    // la card serait vide). Cette valeur EST la base pour eux -- pas de reel.
     kpiMPChildren.push(
-      el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px' },
-        subPieces.join(' · ')
-      )
+      el('div', { style: 'font-size:24px;font-weight:800;color:var(--accent)' }, valFormatEuro(totalMP))
     );
   }
+  // Sous-texte enleve (referentiel / taux USD / taxe / transport) -- infos
+  // dispo dans la table + settings, on garde la card epuree.
   const kpiMP = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' },
     ...kpiMPChildren
@@ -14825,22 +16330,8 @@ function buildValorisationKpis() {
       el('div', { style: 'font-size:24px;font-weight:800;color:var(--text)' }, pfLoaded ? valFormatEuro(totalPF) : '—')
     );
   }
-  const pfSubPieces = [];
-  if (pfLoaded) {
-    pfSubPieces.push(`${pfS.nb_refs_valorisees || 0} / ${pfS.nb_refs || 0} références valorisées`);
-    if (canSeeUSD && pfChargePct > 0) {
-      pfSubPieces.push('Charge prod. ' + pfChargePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
-    }
-    if (canSeeUSD && pfStoragePct > 0) {
-      pfSubPieces.push('Stockage ' + pfStoragePct.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %');
-    }
-  } else {
-    pfSubPieces.push('Chargement…');
-  }
-  kpiPFChildren.push(
-    el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
-      pfSubPieces.join(' · '))
-  );
+  // Sous-texte enleve (referentiel / charges / stockage) -- infos dispo dans
+  // la table + settings, on garde la card epuree.
 
   const kpiPF = el('div', { style:
     'background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;' + (pfLoaded ? '' : 'opacity:.55') },
@@ -14859,7 +16350,7 @@ function buildValorisationCategoriePills() {
   const wrap = el('div', { style:
     'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
-  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
+  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
   // Précalcule les totaux par sous-section frontal (à partir des items)
@@ -15107,7 +16598,7 @@ function buildValorisationTableRow(item) {
     );
     const editBtn = el('button', {
       type: 'button', title: 'Éditer prix m² et métrage',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
+      style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
       on: { click: () => openValorisationParamsModal(item.matiere_id) },
     });
     editBtn.appendChild(iconEl('edit', 11));
@@ -15142,7 +16633,7 @@ function buildValorisationTableRow(item) {
       prixUnitTxt, ' · ', upTxt);
     const editBtn = el('button', {
       type: 'button', title: 'Éditer prix unitaire et conditionnement',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
+      style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
       on: { click: () => openValorisationConditionnementModal(item.matiere_id || item.id) },
     });
     editBtn.appendChild(iconEl('edit', 11));
@@ -15287,11 +16778,11 @@ function buildValorisationTableRow(item) {
   // Action 3 : package → toggle taxe_importation (vert si actif)
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix de cette référence',
-    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
     on: {
       click: () => openValorisationHistorique(item.matiere_id || item.id),
       mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
     },
   });
   histBtn.appendChild(iconEl('clock', 14));
@@ -15313,14 +16804,14 @@ function buildValorisationTableRow(item) {
         'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
         + (usdOn
             ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-            : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+            : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
       on: {
         click: () => toggleValorisationUSD(item.matiere_id || item.id),
         mouseenter: (e) => {
           if (!usdOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
         },
         mouseleave: (e) => {
-          if (!usdOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+          if (!usdOn) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
         },
       },
     });
@@ -15344,14 +16835,14 @@ function buildValorisationTableRow(item) {
           'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
           + (taxOn
               ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-              : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+              : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
         on: {
           click: () => toggleValorisationTaxe(item.matiere_id || item.id),
           mouseenter: (e) => {
             if (!taxOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
           },
           mouseleave: (e) => {
-            if (!taxOn) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+            if (!taxOn) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
           },
         },
       });
@@ -15385,14 +16876,14 @@ function buildValorisationTableRow(item) {
           'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
           + (trActive
               ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-              : 'background:transparent;border:1px solid var(--border);color:var(--text2)'),
+              : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
         on: {
           click: () => toggleValorisationTransport(item.matiere_id || item.id),
           mouseenter: (e) => {
             if (!trActive) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
           },
           mouseleave: (e) => {
-            if (!trActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; }
+            if (!trActive) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
           },
         },
       });
@@ -15478,7 +16969,7 @@ async function openValorisationConditionnementModal(matiereId) {
   const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
   actions.appendChild(el('button', {
     type: 'button',
-    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;cursor:pointer',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer',
     on: { click: () => { root.innerHTML = ''; } },
   }, 'Annuler'));
   const saveBtn = el('button', {
@@ -15562,7 +17053,7 @@ async function openValorisationParamsModal(matiereId) {
   const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
   actions.appendChild(el('button', {
     type: 'button',
-    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-weight:600;cursor:pointer',
+    style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-weight:600;cursor:pointer',
     on: { click: () => { root.innerHTML = ''; } },
   }, 'Annuler'));
   const saveBtn = el('button', {
@@ -15702,7 +17193,7 @@ function renderValorisationHistoriqueModal() {
       mat ? (mat.reference + ' — ' + (mat.designation || '')) : 'Chargement…')
   );
   const closeBtn = el('button', {
-    type: 'button', style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
+    type: 'button', style: 'background:var(--bg);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
     on: { click: closeValorisationHistorique } }, '×');
   head.append(headTitles, closeBtn);
 
@@ -15948,7 +17439,7 @@ function renderPFHistoriqueModal() {
     ),
     el('button', {
       type: 'button',
-      style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
+      style: 'background:var(--bg);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;color:var(--text2);cursor:pointer;font-size:18px;line-height:1',
       on: { click: closePFHistorique },
     }, '×'),
   );
@@ -16103,7 +17594,7 @@ function buildValorisationPFToolbar() {
   // Refresh
   const refreshBtn = el('button', {
     type: 'button', title: 'Recharger',
-    style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
+    style: 'padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center',
     on: { click: () => loadValorisationPF() },
   });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
@@ -16118,7 +17609,7 @@ function buildValorisationPFFilterPills() {
   const wrap = el('div', { id: 'val-pf-pills-wrap', style:
     'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;align-items:center' });
 
-  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
+  const base = 'padding:7px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px';
   const active = 'padding:7px 14px;border-radius:999px;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
   const warn = 'padding:7px 14px;border-radius:999px;border:1px solid #fb923c;background:rgba(251,146,60,0.15);color:#fb923c;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px';
 
@@ -16262,7 +17753,7 @@ function buildValorisationPFTableRow(item) {
   // Historique
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix',
-    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2)',
     on: { click: () => openPFHistorique(item.id) },
   });
   histBtn.appendChild(iconEl('clock', 14));
@@ -16342,7 +17833,7 @@ function buildValorisationSectionChevron(collapsed, onToggle) {
   const btn = el('button', {
     type: 'button',
     title: collapsed ? 'Afficher la section' : 'Masquer la section',
-    style: 'background:transparent;border:1px solid var(--border);border-radius:8px;width:28px;height:28px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:transform .15s, background .15s;' + (collapsed ? '' : 'transform:rotate(90deg)'),
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:transform .15s, background .15s;' + (collapsed ? '' : 'transform:rotate(90deg)'),
     on: { click: onToggle },
   });
   // chevron-right inline SVG (le bouton tourne pour pointer vers le bas)
@@ -16476,8 +17967,9 @@ function buildValorisationGlobalToolbar() {
     dateInp.addEventListener('change', async () => {
       const iso = dateInp.value || '';
       v.snapshotDate = (iso && iso !== todayIso) ? iso : null;
-      await loadValorisation();
-      await loadValorisationPF();
+      // Chargement MP + PF en parallele : divise le temps d'attente par ~2
+      // vs. l'ancien await sequentiel (chaque endpoint fait son propre snapshot).
+      await Promise.all([loadValorisation(), loadValorisationPF()]);
     });
     // Lien « Aujourd'hui » (visible seulement en mode snapshot)
     // Chevron pour signaler l'affordance (calendrier ouvrable)
@@ -16488,19 +17980,60 @@ function buildValorisationGlobalToolbar() {
     if (isSnapshot) {
       const resetLink = el('button', {
         type: 'button', title: 'Revenir à aujourd\'hui',
-        style: 'padding:3px 8px;border:1px solid #f59e0b;border-radius:6px;background:transparent;color:#c2410c;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.3px',
+        style: 'padding:3px 8px;border:1px solid #f59e0b;border-radius:6px;background:var(--card);color:#c2410c;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.3px',
         on: {
           click: async () => {
             v.snapshotDate = null;
             dateInp.value = todayIso;
-            await loadValorisation();
-            await loadValorisationPF();
+            // Parallelisation MP+PF (2x moins d'attente)
+            await Promise.all([loadValorisation(), loadValorisationPF()]);
           },
         },
       }, 'Aujourd\'hui');
       dateWrap.append(resetLink);
     }
     wrap.append(dateWrap);
+  }
+
+  // ── Badge « Chargement… » visible pendant le fetch (MP ou PF) ──
+  // Indispensable pour le mode figure : le recalcul serveur (snapshot stock +
+  // prix a la date) peut prendre quelques secondes. Sans ce badge, l'ancienne
+  // table reste affichee sans signal visuel -> l'utilisateur croit que rien
+  // ne se passe et reclique.
+  const pfState = (v.pf) ? v.pf : null;
+  const isLoading = !!(v.loading || (pfState && pfState.loading));
+  if (isLoading) {
+    const loadingBadge = el('div', {
+      id: 'val-loading-badge',
+      style:
+        'display:inline-flex;align-items:center;gap:8px;padding:6px 12px;' +
+        'border:1px solid var(--accent);border-radius:10px;' +
+        'background:rgba(59,130,246,0.08);color:var(--accent);' +
+        'font-size:12px;font-weight:700;text-transform:uppercase;' +
+        'letter-spacing:.4px;user-select:none',
+    });
+    // Spinner SVG circulaire anime (pas de dependance CSS externe)
+    const spinner = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    spinner.setAttribute('width', '14');
+    spinner.setAttribute('height', '14');
+    spinner.setAttribute('viewBox', '0 0 24 24');
+    spinner.setAttribute('fill', 'none');
+    spinner.style.animation = 'val-spin 0.9s linear infinite';
+    spinner.innerHTML =
+      '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" stroke-opacity="0.25"/>' +
+      '<path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>';
+    // Injecte le keyframe une seule fois (idempotent)
+    if (!document.getElementById('val-spin-kf')) {
+      const st = document.createElement('style');
+      st.id = 'val-spin-kf';
+      st.textContent = '@keyframes val-spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(st);
+    }
+    loadingBadge.appendChild(spinner);
+    // Libelle contextuel : « Recalcul en cours » si snapshot, sinon « Chargement »
+    const label = v.snapshotDate ? 'Recalcul à la date…' : 'Chargement…';
+    loadingBadge.appendChild(el('span', null, label));
+    wrap.append(loadingBadge);
   }
 
   // ── Espaceur (pousse les actions à droite) ──
@@ -16580,11 +18113,12 @@ function buildValorisationGlobalToolbar() {
   // ── Bouton Rafraîchir (MP + PF) ──
   const refreshBtn = el('button', {
     type: 'button', title: 'Recharger MP + PF',
-      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
+      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
     on: {
-      click: async () => { await loadValorisation(); await loadValorisationPF(); },
+      // Parallelise MP+PF pour diviser le temps du refresh
+      click: async () => { await Promise.all([loadValorisation(), loadValorisationPF()]); },
       mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-      mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+      mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
     } });
   refreshBtn.appendChild(iconEl('refresh-ccw', 14));
   wrap.append(refreshBtn);
@@ -16594,11 +18128,11 @@ function buildValorisationGlobalToolbar() {
     const settingsBtn = el('button', {
       type: 'button',
       title: 'Paramètres MyCouts',
-      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
+      style: 'padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;transition:background .15s, color .15s',
       on: {
         click: () => openValorisationSettingsModal(),
         mouseenter: (e) => { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; },
-        mouseleave: (e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text2)'; },
+        mouseleave: (e) => { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; },
       },
     });
     settingsBtn.appendChild(iconEl('settings', 14));
@@ -16710,7 +18244,7 @@ async function openValorisationSettingsModal() {
   rateRow.appendChild(rateInp);
   const refreshFxBtn = el('button', {
     type: 'button', title: 'Récupérer le taux courant depuis exchangerate.host',
-    style: 'padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600',
+    style: 'padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600',
   });
   refreshFxBtn.appendChild(iconEl('refresh-ccw', 12));
   refreshFxBtn.appendChild(el('span', null, 'Rafraîchir'));
@@ -16787,7 +18321,7 @@ async function openValorisationSettingsModal() {
   const actions = el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:22px;border-top:1px solid var(--border);padding-top:16px' });
   const cancelBtn = el('button', {
     type: 'button',
-    style: 'padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-weight:600',
+    style: 'padding:10px 18px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;font-weight:600',
     on: { click: () => { root.innerHTML = ''; } },
   }, 'Annuler');
   const saveBtn = el('button', {
@@ -16819,8 +18353,8 @@ async function openValorisationSettingsModal() {
       });
       root.innerHTML = '';
       showToast('Paramètres enregistrés.', 'success');
-      await loadValorisation();  // Recharge MP avec les nouveaux taux/taxe
-      await loadValorisationPF();  // Recharge PF pour appliquer charge prod / stockage
+      // Recharge MP + PF en parallele avec les nouveaux taux/taxe/charges
+      await Promise.all([loadValorisation(), loadValorisationPF()]);
     } catch (e) {
       showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
       saveBtn.disabled = false;
@@ -16925,11 +18459,13 @@ const STOCK_TAB_DOC_TITLES = {
   monitoring: 'Monitoring — MyStock — MySifa',
   valorisation: 'Valorisation — MyStock — MySifa',
   production: 'Production — MyStock — MySifa',
+  'besoins-matieres': 'Besoins matières — MyStock — MySifa',
 };
 
 const STOCK_TAB_MOBILE_TITLES = {
   dashboard: 'Tableau de bord',
   matieres: 'Matières premières',
+  'besoins-matieres': 'Besoins matières',
   'produits-finis': 'Produits finis',
   negoce: 'Produits de négoce',
   referentiel: 'Référentiel',
@@ -16973,6 +18509,7 @@ function buildSidebarNavStructure() {
   ];
   if (isMatieresAdmin() && !S.stockReadOnly) {
     items.push({ kind: 'btn', tab: 'matieres-inventaire', icon: 'clipboard', label: 'Inventaire matière' });
+    items.push({ kind: 'btn', tab: 'besoins-matieres', icon: 'list-checks', label: 'Besoins matières' });
   }
   items.push(
     { kind: 'sep', label: 'Produits' },
@@ -17128,7 +18665,7 @@ function render() {
     el('div', { cls:'scroll-area', id:'scroll-area' })
   );
 
-  layout.append(sidebar, main);
+  if (S.embedMode) { layout.append(main); } else { layout.append(sidebar, main); }
   root.appendChild(layout);
 
   document.title = STOCK_TAB_DOC_TITLES[S.tab] || 'MyStock — MySifa';
@@ -17653,6 +19190,10 @@ async function init() {
   S.tracaOnly = false;
   // Fabrication : accès limité aux sections Matières premières + Outils, lecture seule
   S.fabStockMode = (user.role === 'fabrication');
+  // Mode embed : /stock est chargé dans une iframe depuis /fabrication
+  try { S.embedMode = (new URLSearchParams(window.location.search).get('embed') === '1'); }
+  catch(e){ S.embedMode = false; }
+  if (S.embedMode) { document.body.classList.add('stock-embed'); }
   // Charger les fournisseurs FSC
   await loadFournisseursFSC();
   // Charger le référentiel des laizes (utilisé dans modal matière + valorisation)
@@ -17694,6 +19235,7 @@ async function init() {
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }
+  else if (S.tab === 'besoins-matieres') { await loadBesoinsMatieres(); }
   else if (S.tab === 'matieres') { await loadMatieres(); }
   else if (S.tab === 'produits-finis') { await loadProduitsFinis(); }
   else if (S.tab === 'negoce') { await loadNegoce(); }

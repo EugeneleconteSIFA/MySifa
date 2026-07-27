@@ -12,7 +12,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
-from config import classify_operation
+from config import classify_operation, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
 from app.routers.stock import (
@@ -856,10 +856,44 @@ def _machine_id_for_ref(conn, ref: Optional[str]) -> Optional[int]:
     return int(r["machine_id"]) if r and r["machine_id"] is not None else None
 
 
-def _hydrate_dossier_row(row) -> dict:
+def _unite_vente_produit(conn, ref_produit) -> tuple:
+    """Unite de vente MyStock d'une reference produit.
+
+    Retourne (unite, connu). `connu=False` quand la reference n'existe pas
+    encore dans `produits` : l'entree Z1 la creera avec l'unite par defaut.
+    """
+    ref = (ref_produit or "").strip().upper()
+    if not ref or conn is None:
+        return None, False
+    try:
+        row = conn.execute(
+            "SELECT unite FROM produits WHERE UPPER(TRIM(reference)) = ? LIMIT 1",
+            (ref,),
+        ).fetchone()
+    except Exception:
+        return None, False
+    if not row:
+        return None, False
+    return ((row["unite"] or "").strip() or STOCK_UNITE_VENTE_DEFAUT), True
+
+
+def _with_unite_vente(d: dict, conn=None) -> dict:
+    """Ajoute l'unite de vente au payload dossier (modale Entree Z1 MyStock).
+
+    L'operateur doit savoir s'il saisit des bobines, des cartons ou des
+    etiquettes : sans cette info la quantite tapee est ambigue.
+    """
+    unite, connu = _unite_vente_produit(conn, d.get("ref_produit"))
+    d["unite_vente"] = unite
+    d["produit_connu"] = connu
+    d["unite_vente_defaut"] = STOCK_UNITE_VENTE_DEFAUT
+    return d
+
+
+def _hydrate_dossier_row(row, conn=None) -> dict:
     d = dict(row)
     d["fictif"] = False
-    return d
+    return _with_unite_vente(d, conn)
 
 
 def _fictif_dossier_payload(ref: str, machine_nom: Optional[str] = None) -> dict:
@@ -872,6 +906,9 @@ def _fictif_dossier_payload(ref: str, machine_nom: Optional[str] = None) -> dict
         "machine_nom": machine_nom,
         "statut_reel": None,
         "fictif": True,
+        "unite_vente": None,
+        "produit_connu": False,
+        "unite_vente_defaut": STOCK_UNITE_VENTE_DEFAUT,
     }
 
 
@@ -955,7 +992,7 @@ def get_dossier_en_cours(request: Request):
                 (active_ref,),
             ).fetchone()
             if row:
-                dossier = _hydrate_dossier_row(row)
+                dossier = _hydrate_dossier_row(row, conn)
             else:
                 dossier = _fictif_dossier_payload(
                     active_ref,
@@ -985,7 +1022,7 @@ def get_dossier_en_cours(request: Request):
                    LIMIT 2""",
                 (mid, excl),
             ).fetchall()
-            precedents = [_hydrate_dossier_row(r) for r in prev_rows]
+            precedents = [_hydrate_dossier_row(r, conn) for r in prev_rows]
 
         return {
             "dossier": dossier,
@@ -1036,7 +1073,7 @@ def search_dossiers(request: Request, q: str = "", limit: int = 20):
                LIMIT ?""",
             (pat, pat, pat, pat, limit),
         ).fetchall()
-        return {"dossiers": [_hydrate_dossier_row(r) for r in rows]}
+        return {"dossiers": [_hydrate_dossier_row(r, conn) for r in rows]}
 
 
 @router.get("/api/fabrication/dossier/{no_dossier}/stats")
@@ -1252,16 +1289,24 @@ async def create_saisie(request: Request):
         machine_id_resolved = machine_obj["id"]
         dernier_metrage = machine_obj.get("dernier_metrage")  # peut être None
 
-        # v2.2.88 — Garde-fou : refuser la saisie si une alerte maintenance
-        # bloquante est due pour cette machine. Le front doit afficher
-        # l'alerte + attendre validation avant de retenter.
+        # v2.2.89 — Garde-fou : refuser UNIQUEMENT la saisie 03 (Production) ou
+        # 88 (Reprise) si une alerte maintenance bloquante est due. Les autres
+        # codes (calage, arrêt, pause…) passent normalement — l'opérateur doit
+        # pouvoir enchaîner des calages sans être bloqué à chaque saisie.
         try:
-            from app.routers.settings import _check_blocking_alert_due
-            if _check_blocking_alert_due(conn, user, machine_name):
-                raise HTTPException(
-                    status_code=423,
-                    detail="Une alerte maintenance bloquante est due sur cette machine. Valide-la avant de saisir.",
-                )
+            if cl["code"] in ("03", "88"):
+                from app.routers.settings import _check_blocking_alert_due
+                _blocking = _check_blocking_alert_due(conn, user, machine_name)
+                if _blocking:
+                    # v2.3.5 : inclure les alertes dans le detail — le front les
+                    # affiche directement sans avoir à re-fetch un endpoint.
+                    raise HTTPException(
+                        status_code=423,
+                        detail={
+                            "message": "Une alerte maintenance bloquante est due sur cette machine. Valide-la avant de saisir Production.",
+                            "alerts": _blocking,
+                        },
+                    )
         except HTTPException:
             raise
         except Exception:
@@ -1532,9 +1577,14 @@ async def create_saisie(request: Request):
         try:
             if cl["code"] not in ("03", "88") or fin_dossier_flag:
                 from app.routers.settings import _auto_ack_periodic_alerts_on_arret
+                # v2.3.31 : on passe l'id de la saisie qu'on vient d'insérer
+                # pour que _is_periodic_alert_due puisse évaluer l'état de
+                # la machine "avant" cette saisie (sinon la saisie non-prod
+                # fausse le calcul et l'alerte est vue comme non-due).
                 _auto_ack_periodic_alerts_on_arret(
                     conn, user, machine_name, no_dossier or "",
                     cl["code"], cl.get("label") or "", op_str,
+                    exclude_saisie_id=new_id,
                 )
         except Exception:
             pass  # ne jamais bloquer la saisie opérateur
@@ -1652,6 +1702,7 @@ def list_matieres(request: Request, machine_id: int = None, no_dossier: str = No
               sr.id AS reception_id_found,
               COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
               COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
+              sr.fsc_type_claim AS fsc_type_claim,
               ff.licence AS fournisseur_licence,
               CASE
                 WHEN sr.id IS NOT NULL THEN 'reception'
@@ -2161,6 +2212,48 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             return {"dossiers": [dict(r) for r in rows]}
 
 
+@router.put("/api/fabrication/matieres/{matiere_id}/commentaire")
+async def update_matiere_commentaire(matiere_id: int, request: Request):
+    """Ajoute ou modifie le commentaire libre d'une bobine scannée."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    commentaire = (body.get("commentaire") or "").strip() or None
+    from_tracabilite = bool(body.get("tracabilite"))
+
+    operateur = user.get("operateur_lie") or ""
+    if not operateur:
+        operateur = user.get("nom") or ""
+
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT * FROM fab_matieres_utilisees WHERE id=?", (matiere_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Scan non trouvé")
+        if not _can_edit_matiere_scan(
+            user, dict(ex), operateur, from_tracabilite=from_tracabilite
+        ):
+            raise HTTPException(status_code=403, detail="Non autorisé")
+
+        conn.execute(
+            "UPDATE fab_matieres_utilisees SET commentaire=? WHERE id=?",
+            (commentaire, matiere_id),
+        )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Commentaire bobine #{matiere_id}",
+        detail={"no_dossier": ex["no_dossier"], "code_barre": ex["code_barre"]},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True}
+
+
 @router.put("/api/fabrication/saisie/{saisie_id}/commentaire")
 async def update_commentaire(saisie_id: int, request: Request):
     """Ajoute ou modifie le commentaire d'une saisie existante."""
@@ -2226,6 +2319,7 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
 
     body = await request.json()
     qte_raw = body.get("qte_etiquettes")
+    cartons_raw = body.get("nb_cartons")
     commentaire = (body.get("commentaire") or "").strip() or None
 
     try:
@@ -2234,6 +2328,15 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
         raise HTTPException(status_code=400, detail="Quantite d'etiquettes invalide")
     if qte is None or qte < 0:
         raise HTTPException(status_code=400, detail="Quantite d'etiquettes invalide")
+
+    cartons = None
+    if cartons_raw not in (None, "", "null"):
+        try:
+            cartons = int(float(str(cartons_raw).replace(",", ".")))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Nombre de cartons invalide")
+        if cartons < 0:
+            raise HTTPException(status_code=400, detail="Nombre de cartons invalide")
 
     with get_db() as conn:
         ex = conn.execute(
@@ -2253,20 +2356,37 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
             raise HTTPException(status_code=403, detail="Non autorise")
 
         now_iso = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
-        conn.execute(
-            """UPDATE production_data
-               SET quantite_traitee=?, commentaire=?,
-                   modifie_par=?, modifie_le=?, modifie_note=?
-               WHERE id=?""",
-            (
-                qte,
-                commentaire,
-                user.get("nom") or user.get("email") or "",
-                now_iso,
-                "Modification saisie repiquage",
-                saisie_id,
-            ),
-        )
+        if cartons is not None:
+            conn.execute(
+                """UPDATE production_data
+                   SET quantite_traitee=?, nb_cartons=?, commentaire=?,
+                       modifie_par=?, modifie_le=?, modifie_note=?
+                   WHERE id=?""",
+                (
+                    qte,
+                    cartons,
+                    commentaire,
+                    user.get("nom") or user.get("email") or "",
+                    now_iso,
+                    "Modification saisie repiquage",
+                    saisie_id,
+                ),
+            )
+        else:
+            conn.execute(
+                """UPDATE production_data
+                   SET quantite_traitee=?, commentaire=?,
+                       modifie_par=?, modifie_le=?, modifie_note=?
+                   WHERE id=?""",
+                (
+                    qte,
+                    commentaire,
+                    user.get("nom") or user.get("email") or "",
+                    now_iso,
+                    "Modification saisie repiquage",
+                    saisie_id,
+                ),
+            )
         conn.commit()
 
     log_action(
@@ -2274,7 +2394,7 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
         action="UPDATE",
         module="fabrication",
         objet=f"Saisie repiquage #{saisie_id} modifiee",
-        detail={"no_dossier": ex["no_dossier"], "qte_etiquettes": qte},
+        detail={"no_dossier": ex["no_dossier"], "qte_etiquettes": qte, "nb_cartons": cartons},
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
@@ -3641,11 +3761,54 @@ async def create_saisie_stock(request: Request):
 
 _PATCH_SAFE_FIELDS_PF = {"note", "no_dossier"}
 _PATCH_SAFE_FIELDS_MP = {"note", "ref_bl", "no_dossier"}
+# Champs admin-only : necessitent une resolution particuliere (voir _resolve_operateur_patch)
+_PATCH_ADMIN_FIELDS = {"operateur"}
 _PATCH_LOCKED_FIELDS = {
     "quantite", "matiere_id", "produit_id", "laize_id",
     "emplacement", "emplacement_source", "emplacement_dest",
     "type_mouvement",
 }
+
+
+def _resolve_operateur_patch(conn, kind: str, operateur: Optional[str]) -> dict:
+    """Resout un nom d'operateur (operateur_lie ou nom d'utilisateur) vers les
+    colonnes a mettre a jour sur la ligne stock : created_by + created_by_name.
+
+    - stock_pf : created_by est l'email (TEXT), created_by_name le nom.
+    - stock_mp : created_by est l'id utilisateur (INTEGER), created_by_name le nom.
+
+    Renvoie un dict pret a merger dans `updates`. Si operateur est None ou vide,
+    on efface simplement created_by* (rarement souhaite, mais on l'autorise pour
+    admin).
+    """
+    name = (operateur or "").strip() if operateur else ""
+    if not name:
+        if kind == "stock_pf":
+            return {"created_by": None, "created_by_name": None}
+        return {"created_by": None, "created_by_name": None}
+    # Cherche l'utilisateur qui matche par operateur_lie OU par nom (case-insensitive)
+    urow = conn.execute(
+        """SELECT id, email, nom, operateur_lie FROM users
+           WHERE LOWER(TRIM(COALESCE(operateur_lie,''))) = LOWER(TRIM(?))
+              OR LOWER(TRIM(COALESCE(nom,''))) = LOWER(TRIM(?))
+           LIMIT 1""",
+        (name, name),
+    ).fetchone()
+    if not urow:
+        # Pas d'utilisateur correspondant : on garde le nom mais on ne casse pas
+        # la reference created_by (peut etre un operateur externe / libre-saisie).
+        if kind == "stock_pf":
+            return {"created_by_name": name}
+        return {"created_by_name": name}
+    urow = dict(urow)
+    if kind == "stock_pf":
+        return {"created_by": urow.get("email") or None, "created_by_name": name}
+    # stock_mp : created_by est un INTEGER (users.id)
+    try:
+        uid = int(urow.get("id"))
+    except (TypeError, ValueError):
+        uid = None
+    return {"created_by": uid, "created_by_name": name}
 
 
 def _can_edit_saisie_stock(user: dict, row: dict, *, kind: str) -> bool:
@@ -3739,6 +3902,16 @@ async def patch_saisie_stock(kind: str, mvt_id: int, request: Request):
                 if k in body:
                     v = body[k]
                     updates[k] = (str(v).strip() or None) if v is not None else None
+
+        # Reassignation d'operateur (admin uniquement) : resout le nom vers
+        # created_by (+ created_by_name) sur la ligne stock.
+        if "operateur" in body:
+            if not is_admin(user):
+                raise HTTPException(
+                    403,
+                    "Reassignation d'operateur reservee aux administrateurs",
+                )
+            updates.update(_resolve_operateur_patch(conn, kind, body.get("operateur")))
 
         if not updates:
             return {"ok": True, "updated_fields": [], "id": mvt_id, "kind": kind}

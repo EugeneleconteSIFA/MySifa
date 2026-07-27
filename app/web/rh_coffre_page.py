@@ -367,7 +367,16 @@ const TAB_META={
   bulletins:{title:'Bulletins',sub:'Dépôt mensuel, dashboard et impression groupée.'},
   ndf:{title:'Notes de frais',sub:'Validation, marquage payées et export comptable.'},
 };
-function showTab(tab){
+var RH_COFFRE_VALID_TABS=['bulletins','ndf'];
+function _readRhCoffreTab(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(RH_COFFRE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  try{var u=new URLSearchParams(location.search).get('tab');
+    if(u&&RH_COFFRE_VALID_TABS.indexOf(u)!==-1)return u;}catch(e){}
+  return 'bulletins';
+}
+function showTab(tab, opts){
+  var silent=!!(opts&&opts.silent);
   CURRENT_TAB=tab;
   ['bulletins','ndf'].forEach(id=>{
     const pane=document.getElementById('pane-'+id);
@@ -381,6 +390,7 @@ function showTab(tab){
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=meta.title;
   if(tab==='ndf')loadNdf();
   closeSidebar();
+  if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
 }
 
 function updateUserChip(){
@@ -600,9 +610,9 @@ document.getElementById('btn-logout').onclick=async()=>{
     const badge=document.getElementById('ndf-badge');
     if(badge && all.notes.length>0){badge.style.display='';badge.textContent=String(all.notes.length);}
   }catch(e){}
-  const tabParam=new URLSearchParams(location.search).get('tab');
-  if(tabParam && TAB_META[tabParam])showTab(tabParam);
+  showTab(_readRhCoffreTab(),{silent:false});
 })();
+window.addEventListener('hashchange',function(){try{showTab(_readRhCoffreTab(),{silent:true});}catch(e){}});
 </script>
 </body>
 </html>

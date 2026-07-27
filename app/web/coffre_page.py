@@ -341,7 +341,16 @@ const TAB_META={
   documents:{title:'Autres documents',sub:'Contrats, attestations et autres pièces RH.'},
   ndf:{title:'Notes de frais',sub:'Dépôt de justificatifs et suivi des remboursements.'},
 };
-function showTab(tab){
+var COFFRE_VALID_TABS=['bulletins','documents','ndf'];
+function _readCoffreTab(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(COFFRE_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  try{var u=new URLSearchParams(location.search).get('tab');
+    if(u&&COFFRE_VALID_TABS.indexOf(u)!==-1)return u;}catch(e){}
+  return 'bulletins';
+}
+function showTab(tab, opts){
+  var silent=!!(opts&&opts.silent);
   CURRENT_TAB=tab;
   ['bulletins','documents','ndf'].forEach(id=>{
     const pane=document.getElementById('pane-'+id);
@@ -354,6 +363,7 @@ function showTab(tab){
   const s=document.getElementById('page-sub');if(s)s.textContent=meta.sub;
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=meta.title;
   closeSidebar();
+  if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
 }
 
 function updateUserChip(){
@@ -535,9 +545,9 @@ document.getElementById('btn-logout').onclick=async()=>{
   loadBulletins();
   loadDocs();
   loadNdf();
-  const tabParam=new URLSearchParams(location.search).get('tab');
-  if(tabParam && TAB_META[tabParam])showTab(tabParam);
+  showTab(_readCoffreTab(),{silent:false});
 })();
+window.addEventListener('hashchange',function(){try{showTab(_readCoffreTab(),{silent:true});}catch(e){}});
 </script>
 </body>
 </html>

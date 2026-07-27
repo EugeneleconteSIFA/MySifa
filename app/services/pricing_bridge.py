@@ -337,11 +337,18 @@ def list_orphaned_mc(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def suggest_matches(conn: sqlite3.Connection, mp_id: int, limit: int = 5) -> list[dict[str, Any]]:
+def suggest_matches(conn: sqlite3.Connection, mp_id: int, limit: int = 500) -> list[dict[str, Any]]:
     """
-    Pour une matière MyStock non appairée, retourne jusqu'à `limit`
-    propositions de mc_material triées par pertinence (match nom exact,
-    puis inclusion partielle, puis même catégorie).
+    Pour une matière MyStock non appairée, retourne TOUTES les mc_material actives
+    triées par pertinence :
+      - Score 100+ : match exact appellation
+      - Score 80+  : match exact nom
+      - Score 20+  : match partiel appellation
+      - Score 15+  : match partiel nom
+      - Score 5    : même catégorie pricing (bonus)
+      - Score 0    : aucune parenté détectée
+    Le frontend affiche une searchbox pour filtrer côté client dans cette liste
+    complète. `limit` sert de garde-fou (défaut 500 : couvre tous les cas réels).
     """
     mp = conn.execute(
         "SELECT id, categorie, reference, designation, pricing_role "
@@ -353,7 +360,6 @@ def suggest_matches(conn: sqlite3.Connection, mp_id: int, limit: int = 5) -> lis
     ref = (mp["reference"] or "").strip().lower()
     des = (mp["designation"] or "").strip().lower()
     role = (mp["pricing_role"] or "").strip().lower()
-    # Mapping pricing_role -> mc_material_category.code
     role_to_code = {
         "frontal":  "FRONTAL",
         "adhesif":  "ADHESIF",
@@ -385,7 +391,10 @@ def suggest_matches(conn: sqlite3.Connection, mp_id: int, limit: int = 5) -> lis
             score += 15
         if cat_code and r["category_code"] == cat_code:
             score += 5
-        if score > 0:
-            scored.append((score, dict(r)))
-    scored.sort(key=lambda t: -t[0])
+        d = dict(r)
+        d["_score"] = score
+        d["_same_category"] = bool(cat_code and r["category_code"] == cat_code)
+        scored.append((score, d))
+    # Tri : score desc, puis même catégorie desc, puis nom asc
+    scored.sort(key=lambda t: (-t[0], not t[1]["_same_category"], (t[1]["name"] or "").lower()))
     return [d for _, d in scored[:limit]]

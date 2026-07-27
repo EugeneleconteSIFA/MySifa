@@ -547,7 +547,16 @@ function refreshAvatarPreview(){
 }
 
 // ── Onglets ───────────────────────────────────────────────────────
-function showTab(tab){
+var PROFIL_VALID_TABS=['info','prefs','calendrier','notifs','dashboards'];
+function _readProfilTab(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(PROFIL_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  try{var u=new URLSearchParams(location.search).get('tab');
+    if(u&&PROFIL_VALID_TABS.indexOf(u)!==-1)return u;}catch(e){}
+  return 'info';
+}
+function showTab(tab, opts){
+  var silent=!!(opts&&opts.silent);
   CURRENT_TAB=tab;
   ['info','prefs','calendrier','notifs','dashboards'].forEach(id=>{
     const pane=document.getElementById('pane-'+id);
@@ -577,6 +586,7 @@ function showTab(tab){
   if(tab==='notifs')renderNotifs();
   if(tab==='dashboards')loadDashboardsTab();
   closeSidebar();
+  if(!silent){try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}}
 }
 
 // ── Onglet Mes dashboards ─────────────────────────────────────────
@@ -1412,12 +1422,8 @@ document.getElementById('btn-logout').onclick=async()=>{
     updateUserChip();
     renderInfo();
     if(window.MySifaHumeur)requestAnimationFrame(()=>MySifaHumeur.maybeShow(ME));
-    const tabParam=new URLSearchParams(location.search).get('tab');
-    if(tabParam==='prefs')showTab('prefs');
-    else if(tabParam==='calendrier')showTab('calendrier');
-    else if(tabParam==='notifs')showTab('notifs');
-    else if(tabParam==='dashboards')showTab('dashboards');
-    if(location.hash.startsWith('#cal-'))openCalColorFromHash();
+    var _initTab=_readProfilTab(); if(_initTab!=='info') showTab(_initTab,{silent:false});
+    if(location.hash&&location.hash.startsWith('#cal-'))openCalColorFromHash();
   }catch(e){
     if(e.message!=='auth'){
 
@@ -1425,6 +1431,7 @@ document.getElementById('btn-logout').onclick=async()=>{
     }
   }
 })();
+window.addEventListener('hashchange',function(){try{showTab(_readProfilTab(),{silent:true});}catch(e){}});
 </script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>

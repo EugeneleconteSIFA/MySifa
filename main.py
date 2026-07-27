@@ -90,6 +90,7 @@ from app.routers.learning import router as learning_api_router
 from app.routers.guides import router as guides_api_router
 from app.web.learning_page import router as learning_page_router
 from app.routers.print import router as print_router
+from app.routers.besoins_matieres import router as besoins_matieres_router
 
 
 @asynccontextmanager
@@ -344,6 +345,7 @@ app.include_router(router_rentabilite)
 app.include_router(router_matiere_prix, prefix="/api/matiere")
 app.include_router(planning_router)
 app.include_router(router_stock)
+app.include_router(besoins_matieres_router)
 app.include_router(reconciliation_router)
 app.include_router(support_router)
 app.include_router(messages_router)

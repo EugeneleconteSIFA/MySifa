@@ -122,8 +122,13 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px}
     .muted{color:var(--muted)}
     .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
-    .d{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px}
-    .d h3{font-size:14px;font-weight:900;margin-bottom:6px}
+    .d{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;position:relative}
+    .d h3{font-size:14px;font-weight:900;margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .d.closed{opacity:.72;background:color-mix(in srgb,var(--muted) 8%,var(--bg))}
+    .d.closed h3{color:var(--text2)}
+    .badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+    .badge-closed{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent)}
+    .closed-note{margin-top:10px;padding:8px 12px;background:color-mix(in srgb,var(--danger) 8%,transparent);border-left:3px solid var(--danger);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.55}
     .meta{font-size:12px;color:var(--text2);line-height:1.7}
     .btn{border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text);transition:filter .15s,border-color .15s,color .15s,background .15s}
     .btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -319,21 +324,29 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       return;
     }
     rows.forEach(it=>{
+      const paletteKey = it.type_palette ? String(it.type_palette).trim().toLowerCase() : '';
+      const paletteLabelKey = paletteKey ? ('pallet_'+paletteKey) : '';
+      const paletteLabel = paletteLabelKey && t(paletteLabelKey)!==paletteLabelKey ? t(paletteLabelKey) : paletteKey;
       const meta = [
         it.poids_total_kg!=null ? (it.poids_total_kg+' kg') : null,
         it.nb_palette!=null ? (it.nb_palette+' '+t('pallets')) : null,
+        paletteLabel ? (t('palletType')+' : '+paletteLabel) : null,
         it.type_envoi ? typeLabel(it.type_envoi) : null,
         it.contraintes ? (t('constraints')+': '+it.contraintes) : null,
       ].filter(Boolean).join(' · ');
-      const canReply = it.demande_statut!=='cloturee' && !['retenue','recue'].includes(it.reponse_statut);
+      const isClosed = it.demande_statut==='cloturee';
+      const canReply = !isClosed && !['retenue','recue'].includes(it.reponse_statut);
       const btn = canReply ? '<button class="btn btn-accent" data-id="'+it.demande_id+'">'+esc(t('reply'))+'</button>' : '';
-      const deja = !canReply && it.prix!=null ? '<span class="muted">'+esc(t('saved'))+'</span>' : '';
+      const deja = !canReply && !isClosed && it.prix!=null ? '<span class="muted">'+esc(t('saved'))+'</span>' : '';
       const priceTxt = it.prix!=null ? (t('price')+': <strong>'+Number(it.prix).toFixed(2)+' €</strong>') : (t('price')+': '+t('dash'));
       const delTxt = it.delai_jours!=null ? (t('delay')+': <strong>J+'+it.delai_jours+'</strong>') : (t('delay')+': '+t('dash'));
-      const html = '<div class="d"><h3>'+esc(t('request'))+' #'+it.demande_id+' — '+esc(it.code_postal_destination||'')+'</h3>'
+      const closedBadge = isClosed ? '<span class="badge badge-closed">'+esc(t('closedBadge'))+'</span>' : '';
+      const closedNote = isClosed ? '<div class="closed-note">'+esc(t('closedNote'))+'</div>' : '';
+      const html = '<div class="d'+(isClosed?' closed':'')+'"><h3>'+esc(t('request'))+' #'+it.demande_id+' — '+esc(it.code_postal_destination||'')+closedBadge+'</h3>'
         +'<div class="meta"><span class="muted">'+esc(meta||'')+'</span>'+deja+'<br>'
         +'<span class="muted">'+esc(t('created'))+' '+(it.created_at||'').slice(0,10)+'</span></div>'
-        +'<div class="row" style="justify-content:space-between"><div class="meta">'+priceTxt+' · '+delTxt+'</div>'+btn+'</div></div>';
+        +'<div class="row" style="justify-content:space-between"><div class="meta">'+priceTxt+' · '+delTxt+'</div>'+btn+'</div>'
+        +closedNote+'</div>';
       const wrap=document.createElement('div');
       wrap.innerHTML=html;
       const node=wrap.firstElementChild;

@@ -156,3 +156,65 @@ table.pr-table tr{cursor:pointer}
   .content{padding:0}
   .main{width:100%}
 }
+
+
+/* ─── Dashboard KPI direction — tuiles par catégorie ─────────────── */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+.cat-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cat-tile-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.cat-tile-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cat-tile-count { font-size: 11px; color: var(--muted); }
+.cat-tile-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.cat-tile-unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 4px;
+}
+.cat-tile-var {
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+.cat-var { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cat-var.muted   { color: var(--muted); }
+.cat-var.success { color: var(--success); }
+.cat-var.danger  { color: var(--danger); }
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 24px 0 4px;
+}

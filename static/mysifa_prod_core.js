@@ -225,7 +225,38 @@
   function set(u){
     Object.assign(S, u);
     render();
+    if(u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
+
+  var _PROD_SUB_TABS=['kpis','saisies','erreurs','rapport'];
+  var _OF_SUB_TABS=['of','fiche','pending','sansof'];
+  function _readProdHash(){
+    try{var h=(location.hash||'').replace(/^#/,'').trim();
+      if(!h)return null;
+      var r={};
+      if(_PROD_SUB_TABS.indexOf(h)!==-1)r.subPage=h;
+      else if(_OF_SUB_TABS.indexOf(h)!==-1)r.ofSubTab=h;
+      return (r.subPage||r.ofSubTab)?r:null;
+    }catch(e){return null;}
+  }
+  function _syncProdHash(){
+    try{
+      var h='';
+      if(S.page==='production'&&S.subPage&&S.subPage!=='kpis')h=S.subPage;
+      else if(S.page==='of'&&S.ofSubTab&&S.ofSubTab!=='of')h=S.ofSubTab;
+      var target=h?'#'+h:'';
+      if(target){try{history.replaceState(null,'',target);}catch(e){}}
+      else{try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}}
+    }catch(e){}
+  }
+  window.addEventListener('hashchange',function(){
+    try{var hv=_readProdHash();
+      if(hv){
+        if(hv.subPage&&S.page==='production'){S.subPage=hv.subPage;render();}
+        if(hv.ofSubTab&&S.page==='of'){S.ofSubTab=hv.ofSubTab;render();}
+      }
+    }catch(e){}
+  });
   function toast(m, t = 'success'){
     set({toast: {message: m, type: t}});
     setTimeout(() => set({toast: null}), 3500);
@@ -1587,6 +1618,20 @@ function renderOfTab(){
       title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview','_blank');}
     },iconEl('eye',13)));
     if(row.pdf_filename){
+      // v1.7 — bouton Imprimer : ouvre le popup partage (mysifa_print_modal.js)
+      // pour choisir imprimante + params + envoyer sur l'imprimante bureautique.
+      acts.push(h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Imprimer', onClick:()=>{
+          if(typeof openPrintModal!=='function'){toast('Modal impression indisponible.','error');return;}
+          openPrintModal({
+            entityType:'of',
+            entityId:row.id,
+            title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
+            subtitle:(row.reference?('Ref '+row.reference+' — '):'')+(row.machine||''),
+          });
+        }
+      },iconEl('printer',13)));
       acts.push(h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
         title:'Télécharger PDF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}
@@ -1618,7 +1663,8 @@ function renderOfTab(){
       h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
       h('td',null,escHtml(dateCrea)),
       h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
-      h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+      // v1.7 — className 'td-actions' pour override du clip global (cf. CSS)
+      h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
@@ -1635,7 +1681,9 @@ function renderOfTab(){
       async()=>{if(page<Math.ceil(total/50)-1){set({ofPage:page+1});await loadOfImports();render();}}
     ),
     h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std'},
+      // v1.7.3 — classe 'table-actions-wide' active le table-layout:fixed
+      // + width 260px sur la colonne Actions (cf. CSS th.th-actions).
+      h('table',{className:'table-std table-actions-wide'},
         h('thead',null,h('tr',null,
           h('th',{style:{width:'36px'}},
             h('input',{type:'checkbox',style:'cursor:pointer',
@@ -1648,7 +1696,7 @@ function renderOfTab(){
           ),
           h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),
           h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Date création'),
-          h('th',null,'Statut'),h('th',null,'Actions')
+          h('th',null,'Statut'),h('th',{className:'th-actions'},'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))
       )
@@ -1710,6 +1758,27 @@ function renderFichesTab(){
         style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
         title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')
       },iconEl('file',13)),
+      // Fiche technique CLIENT bilingue FR/EN (infos essentielles uniquement,
+      // logo + coordonnées SIFA en-tête, mentions confidentialité en pied).
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Fiche client (FR / EN)',
+        onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-client','_blank')
+      },iconEl('user',13)),
+      // v1.7 — bouton Imprimer (entre Prévisualiser et Modifier) : ouvre le popup
+      // partagé pour choisir imprimante + params + envoyer le PDF.
+      h('button',{
+        style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+        title:'Imprimer',onClick:()=>{
+          if(typeof openPrintModal!=='function'){toast('Modal impression indisponible.','error');return;}
+          openPrintModal({
+            entityType:'fiche',
+            entityId:row.id,
+            title:'Imprimer fiche '+(row.reference||('#'+row.id)),
+            subtitle:[row.format,row.machine].filter(Boolean).join(' — '),
+          });
+        }
+      },iconEl('printer',13)),
       h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
         title:'Modifier',onClick:()=>openFicheEditModal(row)
@@ -1743,7 +1812,8 @@ function renderFichesTab(){
       h('td',null,escHtml(row.machine||'—')),
       h('td',null,row.nb_couleurs!=null?escHtml(String(row.nb_couleurs)):'—'),
       h('td',null,escHtml(row.source||'—')),
-      h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+      // v1.7 — className 'td-actions' pour override du clip global (cf. CSS)
+      h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
@@ -1760,7 +1830,9 @@ function renderFichesTab(){
       async()=>{if(page<Math.ceil(total/50)-1){set({fichePage:page+1});await loadFiches();render();}}
     ),
     h('div',{style:{overflowX:'auto'}},
-      h('table',{className:'table-std'},
+      // v1.7.3 — classe 'table-actions-wide' active le table-layout:fixed
+      // + width 260px sur la colonne Actions (cf. CSS th.th-actions).
+      h('table',{className:'table-std table-actions-wide'},
         h('thead',null,h('tr',null,
           h('th',{style:{width:'36px'}},
             h('input',{type:'checkbox',style:'cursor:pointer',
@@ -1773,7 +1845,7 @@ function renderFichesTab(){
           ),
           h('th',null,'Référence'),h('th',null,'Format'),h('th',null,'Laize eti.'),
           h('th',null,'Support'),h('th',null,'Machine'),h('th',null,'Nb coul.'),
-          h('th',null,'Source'),h('th',null,'Actions')
+          h('th',null,'Source'),h('th',{className:'th-actions'},'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))
       )
@@ -1782,37 +1854,36 @@ function renderFichesTab(){
 }
 
 function renderOfPage(){
+  // Sous-navigation OF harmonisée avec la barre d'onglets de /prod
+  // (classe .nav-tabs partagée, badges centrés, icônes cohérentes).
+  const cur = S.ofSubTab || 'of';
   const ambigusN = Number(S.pendingOfAmbigus || 0);
   const sansOfN  = Number(S.pendingOfSansOf  || 0);
-  const pendingBadge = ambigusN > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(ambigusN))
-    : null;
-  const sansOfBadge = sansOfN > 0
-    ? h('span',{style:'display:inline-block;margin-left:8px;padding:2px 8px;border-radius:10px;background:var(--danger);color:#fff;font-size:11px;font-weight:700;line-height:1.4'}, String(sansOfN))
-    : null;
-  const subNav=h('div',{style:{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'20px',flexWrap:'wrap'}},
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='of'?'var(--accent)':'transparent'};color:${S.ofSubTab==='of'?'var(--accent)':'var(--muted)'};font-family:inherit`,
-      onClick:()=>{set({ofSubTab:'of'});render();}
-    },'Ordres de fabrication'),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='fiche'?'var(--accent)':'transparent'};color:${S.ofSubTab==='fiche'?'var(--accent)':'var(--muted)'};font-family:inherit`,
-      onClick:async()=>{set({ofSubTab:'fiche'});await loadFiches();render();}
-    },'Fiches techniques'),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='pending'?'var(--accent)':'transparent'};color:${S.ofSubTab==='pending'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
-      onClick:async()=>{set({ofSubTab:'pending'});await loadPendingOfMappings();render();}
-    },'Mappings à valider', pendingBadge),
-    h('button',{
-      style:`padding:10px 18px;font-size:13px;font-weight:600;border:none;background:transparent;cursor:pointer;border-bottom:2px solid ${S.ofSubTab==='sansof'?'var(--accent)':'transparent'};color:${S.ofSubTab==='sansof'?'var(--accent)':'var(--muted)'};font-family:inherit;display:inline-flex;align-items:center`,
-      onClick:async()=>{set({ofSubTab:'sansof'});await loadDossiersSansOf();render();}
-    },'Dossiers sans OF', sansOfBadge),
+  const mkBadge = (n)=> n>0 ? h('span',{className:'nav-tab-badge'}, String(n)) : null;
+  const tabs = [
+    {key:'of',      label:'Ordres de fabrication', icon:'clipboard',      load:null},
+    {key:'fiche',   label:'Fiches techniques',     icon:'file-text',      load:async()=>{await loadFiches();}},
+    {key:'pending', label:'Mappings à valider',    icon:'alert-triangle', badge:mkBadge(ambigusN), load:async()=>{await loadPendingOfMappings();}},
+    {key:'sansof',  label:'Dossiers sans OF',      icon:'folder',         badge:mkBadge(sansOfN),  load:async()=>{await loadDossiersSansOf();}},
+  ];
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Ordres de fabrication'},
+    ...tabs.map(t=>h('button',{
+      type:'button',
+      role:'tab',
+      'aria-selected': cur===t.key ? 'true' : 'false',
+      className:'nav-tab'+(cur===t.key?' active':''),
+      onClick:async()=>{
+        set({ofSubTab:t.key});
+        if(t.load) await t.load();
+        render();
+      }
+    }, iconEl(t.icon,14), ' '+t.label, t.badge))
   );
   return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
-    S.ofSubTab==='fiche'   ? renderFichesTab()
-      : S.ofSubTab==='pending' ? renderPendingOfMappingsTab()
-      : S.ofSubTab==='sansof'  ? renderDossiersSansOfTab()
+    cur==='fiche'   ? renderFichesTab()
+      : cur==='pending' ? renderPendingOfMappingsTab()
+      : cur==='sansof'  ? renderDossiersSansOfTab()
       : renderOfTab()
   );
 }
@@ -4225,6 +4296,31 @@ function openAddModal(templateRow) {
 // /api/fabrication/saisie-stock/{kind}/{id}, ou supprime via DELETE.
 // Les champs verrouilles (quantite, produit/matiere, emplacement, laize)
 // necessitent supprimer + recreer.
+// v2.3.43 : ouvre le viewer partagé pour une ligne kind='alert_ack'
+// (module externe static/mysifa_ack_viewer.js déjà chargé par prod_page.py).
+function _openAlertAckViewer(row){
+  if(!row || row.kind !== 'alert_ack') return;
+  if(!window.MysifaAckViewer || typeof window.MysifaAckViewer.open !== 'function'){
+    if(window.console) window.console.warn('[alert-ack] MysifaAckViewer non chargé — vérifier prod_page.py.');
+    return;
+  }
+  let params = {}, responses = {};
+  try { params    = JSON.parse(row._alert_params    || '{}'); } catch(_) {}
+  try { responses = JSON.parse(row._alert_responses || '{}'); } catch(_) {}
+  const items = (params && params.checklist && Array.isArray(params.checklist.items))
+    ? params.checklist.items : [];
+  window.MysifaAckViewer.open({
+    alert_nom      : row._alert_nom || row.operation || 'Alerte',
+    responses      : responses,
+    checklist_items: items,
+    comment        : row._alert_comment || '',
+    machine        : row.machine || '',
+    date           : row.date_operation || '',
+    operateur      : row.operateur || row.operateur_nom || '',
+    no_dossier     : row.no_dossier || '',
+  });
+}
+
 function openEditStockModal(row){
   try{ const m=document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(e){}
   const kind = row.kind; // stock_pf | stock_mp
@@ -4263,6 +4359,31 @@ function openEditStockModal(row){
   }
   addField('Note','note','');
 
+  // Operateur (admin uniquement) - reassigner la saisie a un autre operateur
+  let operateurSel = null;
+  if(isAdmin(S.user)){
+    const wrap = h('div',{style:{marginBottom:'12px'}});
+    wrap.appendChild(h('label',{style:{display:'block',fontSize:'11px',fontWeight:'600',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}}, 'Opérateur'));
+    const opsList = (S.filters && S.filters.operators) || [];
+    const currentOp = String(row.operateur || row.operateur_nom || '');
+    operateurSel = h('select',{style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontSize:'13px'}},
+      h('option',{value:''}, '— Choisir —'),
+      ...opsList.map(o => {
+        const opt = h('option',{value:o}, opName(o));
+        if(o === currentOp) opt.selected = true;
+        return opt;
+      })
+    );
+    // Si l'operateur actuel n'est pas dans la liste, l'ajouter pour ne pas le perdre
+    if(currentOp && !opsList.includes(currentOp)){
+      const opt = h('option',{value:currentOp}, opName(currentOp) + ' (actuel)');
+      opt.selected = true;
+      operateurSel.appendChild(opt);
+    }
+    wrap.appendChild(operateurSel);
+    box.appendChild(wrap);
+  }
+
   // Info fields non editables
   const lockedInfo = h('div',{style:{marginTop:'8px',padding:'10px 12px',background:'rgba(148,163,184,.06)',border:'1px solid var(--border)',borderRadius:'8px',fontSize:'12px',color:'var(--muted)',lineHeight:'1.6'}},
     'Quantite, ' + (isMP?'matiere, laize':'produit fini, emplacement') + ' non modifiables ici. Pour les changer : supprimer puis recreer.'
@@ -4288,6 +4409,11 @@ function openEditStockModal(row){
   saveBtn.addEventListener('click', async ()=>{
     const body = {};
     fields.forEach(f=>{ const v=(f.inp.value||'').trim(); if(v!==String(row[f.key]||'')) body[f.key]=v||null; });
+    if(operateurSel){
+      const cur = String(row.operateur || row.operateur_nom || '');
+      const v = (operateurSel.value||'').trim();
+      if(v !== cur) body.operateur = v || null;
+    }
     if(Object.keys(body).length===0){ overlay.remove(); return; }
     try{
       await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -4308,11 +4434,20 @@ function openEditStockModal(row){
 }
 
 function openEditModal(row) {
+  // v2.3.43 : redirige vers le viewer d'ack quand on tombe sur une alerte
+  // validée (via clic direct, navigation ‹/› ou Ctrl+←/→). L'édition
+  // classique n'a aucun sens sur un ack — id non numérique, opération
+  // non éditable, pas de compteur/métrage. Lecture seule.
+  if(row && row.kind === 'alert_ack'){
+    try{ const m = document.querySelector('.add-row-modal'); if(m) m.remove(); }catch(_){}
+    _openAlertAckViewer(row);
+    return;
+  }
   try{
     const m = document.querySelector('.add-row-modal');
     if(m) m.remove();
   }catch(e){}
- 
+
   const list = getVisibleSaisiesRowsForNav();
   const total = list.length || 0;
   const curIdx0 = total ? list.findIndex(r=>String(r.id)===String(row.id)) : -1;
@@ -4587,8 +4722,11 @@ function renderSaisies(){
   function addDurations(baseRows){
     const rows = (baseRows||[]).slice();
     // Durée = écart avec la saisie suivante du même opérateur (en minutes)
+    // v2.3.43 : les acks d'alertes n'ont pas de durée et ne rentrent pas
+    // dans le calcul de la saisie précédente/suivante.
     const byOp = new Map();
     rows.forEach(r=>{
+      if(r.kind === 'alert_ack') return;
       const k = String(r.operateur||'').trim();
       if(!byOp.has(k)) byOp.set(k, []);
       byOp.get(k).push(r);
@@ -4676,7 +4814,9 @@ function renderSaisies(){
   });
  
   // ── Checkbox "tout sélectionner" ─────────────────────────────
-  const allIds=rows.map(r=>r.id);
+  // v2.3.43 : les acks d'alertes sont lecture seule — jamais dans le
+  // bulk-select ni dans les actions groupées Annuler / Rétablir.
+  const allIds=rows.filter(r=>r.kind!=='alert_ack').map(r=>r.id);
   const allChecked=allIds.length>0&&allIds.every(id=>S.selectedRows.has(id));
   const chkAll=h('input',{type:'checkbox'});
   chkAll.checked=allChecked;
@@ -4697,8 +4837,13 @@ function renderSaisies(){
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
 
+    // v2.3.43 : nouveau kind 'alert_ack' — alertes maintenance validées
+    const isAlertAck = row.kind === 'alert_ack';
+
     let rowBg = '';
-    if (fictifRow) {
+    if (isAlertAck) {
+      rowBg = 'rgba(34,211,238,.10)';           // v2.3.43 : cyan discret alertes validées
+    } else if (fictifRow) {
       rowBg = 'rgba(167,139,250,.10)';          // dossier fictif (FICTIF:)
     } else if (row.operation_severity === 'critique') {
       rowBg = 'rgba(248,113,113,.18)';          // rouge soutenu
@@ -4715,24 +4860,38 @@ function renderSaisies(){
     }
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
+
+    // v2.3.43 : les acks d'alertes sont TOUJOURS cliquables (même en readOnly)
+    // et ouvrent le viewer partagé MysifaAckViewer.open.
+    if(isAlertAck){
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click',()=>_openAlertAckViewer(row));
+    } else if(!readOnly){
+      tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
+    }
  
-    if(!readOnly) tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
- 
-    // Checkbox ligne
-    const chk=h('input',{type:'checkbox'});
-    chk.checked=S.selectedRows.has(row.id);
-    chk.addEventListener('click',e=>e.stopPropagation());
-    chk.addEventListener('change',()=>{
-      if(chk.checked) S.selectedRows.add(row.id);
-      else S.selectedRows.delete(row.id);
-      render();
-    });
-    const tdChk=h('td',null,chk);
-    tdChk.addEventListener('click',e=>e.stopPropagation());
-    tr.appendChild(tdChk);
- 
+    // Checkbox ligne — désactivée pour les acks d'alertes (lecture seule)
+    if(isAlertAck){
+      tr.appendChild(h('td',null));
+    } else {
+      const chk=h('input',{type:'checkbox'});
+      chk.checked=S.selectedRows.has(row.id);
+      chk.addEventListener('click',e=>e.stopPropagation());
+      chk.addEventListener('change',()=>{
+        if(chk.checked) S.selectedRows.add(row.id);
+        else S.selectedRows.delete(row.id);
+        render();
+      });
+      const tdChk=h('td',null,chk);
+      tdChk.addEventListener('click',e=>e.stopPropagation());
+      tr.appendChild(tdChk);
+    }
+
     let badge=null;
-    if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
+    if(isAlertAck) badge=h('span',{className:'badge-alert-ack',title:"Alerte validée par un opérateur — lecture seule",
+      style:{background:'var(--accent-bg)',color:'var(--accent)',border:'1px solid var(--accent)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
+    },'ALERTE');
+    else if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
     else if(row.modifie_par) badge=h('span',{className:'badge-modif',title:'Modifié par '+row.modifie_par+' le '+fD(row.modifie_le)},'✏ Corrigé');
  
     tr.appendChild(h('td',{style:{fontSize:'11px',color:'var(--muted)',whiteSpace:'nowrap',fontFamily:'monospace'}},fDSecs(row.date_operation)));
@@ -4759,14 +4918,17 @@ function renderSaisies(){
         : row.metrage_total_debut!=null ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_total_debut)+' m (déb.)')
         : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
         : '-'));
-    if(readOnly){
+    // v2.3.43 : commentaire toujours lecture seule pour un ack (id string non éditable)
+    if(readOnly || isAlertAck){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
     }
     tr.appendChild(h('td',null,badge));
- 
-    if(!readOnly){
+
+    // v2.3.43 : pas de boutons +/- pour un ack — id "ack-<n>" n'est pas
+    // un vrai row de production_data (DELETE /api/saisies/ack-42 renverrait 404).
+    if(!readOnly && !isAlertAck){
       const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
       const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
         style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},
@@ -5859,12 +6021,15 @@ function renderProdPage(){
     allTabs.push({key:'rapport', label:'Rapport hebdo', icon:'bar-chart-2'});
   }
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
-  const subNav = h('div',{className:'nav-tabs'},
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',
+      role:'tab',
+      'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
         S.subPage=t.key;
+        _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
@@ -6840,6 +7005,7 @@ function renderProdKpis(){
         const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
+      try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
       // Charger les données initiales pour la sous-page courante (étape 2g).
       try{ startAlertsBadgePolling(); }catch(e){}
       try{

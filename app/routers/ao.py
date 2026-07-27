@@ -1,4 +1,4 @@
-"""MySifa — MyAO (appels d'offre) — API interne.
+"""MySifa — MyAO (appels d'offres) — API interne.
 
 Routes : /api/ao/*
 Rôles : superadmin, direction
@@ -17,7 +17,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.services.audit_service import log_action
 from app.services.email_service import email_invitation_ao, send_email
@@ -83,7 +83,7 @@ def _require_brouillon(ao: dict) -> None:
     if ao.get("statut") != "brouillon":
         raise HTTPException(
             status_code=400,
-            detail="Modification impossible — l'appel d'offre n'est plus en brouillon.",
+            detail="Modification impossible — l'appel d'offres n'est plus en brouillon.",
         )
 
 
@@ -136,18 +136,68 @@ def _pj_file_path(ao_id: int, stored_name: str) -> str:
 
 # ─── Liste et création ───────────────────────────────────────────
 
+
+def _translate_or_original(text, target_lang, conn):
+    """Traduit text vers target_lang via translate_service + cache.
+    Retourne l'original en cas d'erreur ou si target = fr."""
+    if not text or not (text or "").strip():
+        return text
+    tgt = (target_lang or "").strip().upper()
+    if not tgt or tgt in ("FR", "FR-FR"):
+        return text
+    try:
+        from app.services.translate_service import translate as _svc_translate
+        res = _svc_translate(conn, text=text, target_lang=tgt, source_lang="FR", formality="default")
+        return res.get("translated") or text
+    except Exception:
+        return text
+
+
 @router.get("")
-def list_ao(request: Request):
+def list_ao(request: Request, filter: str = ""):
+    """List AOs. Par defaut : actifs uniquement (deleted_at IS NULL).
+    filter=corbeille : uniquement les supprimes."""
     _require_ao(request)
+    show_deleted = (filter or "").strip().lower() == "corbeille"
+    where_deleted = "d.deleted_at IS NOT NULL" if show_deleted else "d.deleted_at IS NULL"
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT d.id, d.reference, d.titre, d.statut, d.date_creation, d.date_limite,
-                      (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id) AS nb_fournisseurs,
-                      (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id AND f.statut = 'repondu') AS nb_reponses
-               FROM ao_demandes d
-               ORDER BY d.date_creation DESC"""
+            f"""SELECT d.id, d.reference, d.titre, d.statut, d.date_creation, d.date_limite,
+                       d.deleted_at,
+                       (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id) AS nb_fournisseurs,
+                       (SELECT COUNT(*) FROM ao_fournisseurs f WHERE f.ao_id = d.id AND f.statut = 'repondu') AS nb_reponses,
+                       (SELECT GROUP_CONCAT(DISTINCT l.ref_produit)
+                          FROM ao_lignes l
+                          WHERE l.ao_id = d.id
+                            AND l.ref_produit IS NOT NULL AND l.ref_produit != '') AS refs_produits,
+                       (SELECT GROUP_CONCAT(DISTINCT COALESCE(cg.raison_sociale, lc.nom))
+                          FROM ao_lignes l
+                          JOIN ao_produits p ON p.ref = l.ref_produit
+                          LEFT JOIN clients            cg ON cg.id = p.client_id
+                          LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+                          WHERE l.ao_id = d.id) AS clients,
+                       COALESCE(d.prix_transport_pct, 0) AS prix_transport_pct
+                FROM ao_demandes d
+                WHERE {where_deleted}
+                ORDER BY d.date_creation DESC"""
         ).fetchall()
-    return [_row_dict(r) for r in rows]
+        # Enrichit chaque AO avec le résumé de ses lignes (ref + qté) pour affichage
+        # dans la colonne « Titre » de la liste (auto-généré).
+        out: list[dict] = []
+        for r in rows:
+            d = _row_dict(r)
+            lignes = conn.execute(
+                """SELECT ref_produit, quantite FROM ao_lignes
+                   WHERE ao_id=? ORDER BY position, id""",
+                (int(d["id"]),),
+            ).fetchall()
+            d["lignes_summary"] = [
+                {"ref": (l["ref_produit"] or "").strip() or "—",
+                 "qte": (float(l["quantite"]) if l["quantite"] is not None else None)}
+                for l in lignes
+            ]
+            out.append(d)
+    return out
 
 
 @router.post("")
@@ -470,17 +520,29 @@ async def picker_create_fournisseur(request: Request):
     licence = (body.get("licence") or "").strip() or None
     certificat = (body.get("certificat") or "").strip() or None
     with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        # Colonnes disponibles + valeurs supplémentaires (ville, langue_default)
+        insert_cols = ["nom", "licence", "certificat"]
+        insert_vals: list = [nom, licence, certificat]
+        for extra in ("ville", "langue_default"):
+            if extra in cols and body.get(extra) is not None:
+                v = body.get(extra)
+                if isinstance(v, str):
+                    v = v.strip() or None
+                insert_cols.append(extra)
+                insert_vals.append(v)
+        placeholders = ",".join("?" * len(insert_cols))
         try:
             cur = conn.execute(
-                "INSERT INTO fournisseurs_fsc (nom, licence, certificat) VALUES (?,?,?)",
-                (nom, licence, certificat),
+                f"INSERT INTO fournisseurs_fsc ({', '.join(insert_cols)}) VALUES ({placeholders})",
+                tuple(insert_vals),
             )
             conn.commit()
             new_id = cur.lastrowid
         except Exception:
             raise HTTPException(409, "Ce fournisseur existe déjà.")
         row = conn.execute(
-            "SELECT id, nom, licence, certificat FROM fournisseurs_fsc WHERE id=?",
+            "SELECT * FROM fournisseurs_fsc WHERE id=?",
             (new_id,),
         ).fetchone()
     log_action(
@@ -489,6 +551,263 @@ async def picker_create_fournisseur(request: Request):
         ip=request.client.host if request.client else None,
     )
     return _row_dict(row)
+
+
+
+
+@router.get("/picker/fournisseurs-with-contacts")
+def picker_fournisseurs_with_contacts(request: Request, search: str = ""):
+    """Fournisseurs actifs + leurs contacts, pour le modal AO."""
+    _require_ao(request)
+    import json as _json
+    with get_db() as conn:
+        four_cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        actif_clause = "AND (actif IS NULL OR actif=1)" if "actif" in four_cols else ""
+        select_extras = ""
+        for extra in ("ville", "langue_default", "tags"):
+            if extra in four_cols:
+                select_extras += f", {extra}"
+        if search:
+            like = f"%{search.strip()}%"
+            search_cols = ["nom"]
+            if "ville" in four_cols: search_cols.append("ville")
+            if "tags" in four_cols: search_cols.append("tags")
+            where = " OR ".join(f"{c} LIKE ?" for c in search_cols)
+            frows = conn.execute(
+                f"SELECT id, nom, licence, has_fsc{select_extras} FROM fournisseurs_fsc "
+                f"WHERE ({where}) {actif_clause} ORDER BY nom COLLATE NOCASE",
+                tuple([like] * len(search_cols)),
+            ).fetchall()
+        else:
+            frows = conn.execute(
+                f"SELECT id, nom, licence, has_fsc{select_extras} FROM fournisseurs_fsc "
+                f"WHERE 1=1 {actif_clause} ORDER BY nom COLLATE NOCASE"
+            ).fetchall()
+
+        has_contacts_table = bool(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fournisseur_contacts'"
+        ).fetchone())
+        contacts_by_four = {}
+        if has_contacts_table:
+            crows = conn.execute(
+                """SELECT id, fournisseur_id, nom, fonction, emails, tels, langue, is_principal
+                   FROM fournisseur_contacts WHERE actif=1
+                   ORDER BY is_principal DESC, nom COLLATE NOCASE"""
+            ).fetchall()
+            for c in crows:
+                d = dict(c)
+                for k in ("emails", "tels"):
+                    raw = d.get(k)
+                    if raw:
+                        try:
+                            parsed = _json.loads(raw)
+                            d[k] = parsed if isinstance(parsed, list) else []
+                        except (_json.JSONDecodeError, TypeError):
+                            d[k] = []
+                    else:
+                        d[k] = []
+                d["is_principal"] = bool(d.get("is_principal"))
+                contacts_by_four.setdefault(d["fournisseur_id"], []).append(d)
+
+    out = []
+    for f in frows:
+        fd = dict(f)
+        raw = fd.get("tags")
+        if raw:
+            try:
+                fd["tags"] = _json.loads(raw) if isinstance(raw, str) else []
+                if not isinstance(fd["tags"], list):
+                    fd["tags"] = []
+            except (_json.JSONDecodeError, TypeError):
+                fd["tags"] = []
+        else:
+            fd["tags"] = []
+        fd["contacts"] = contacts_by_four.get(fd["id"], [])
+        out.append(fd)
+    return out
+
+
+# ─── CRUD Fournisseurs (onglet Fournisseurs MyAO) ─────────────────
+# Ces endpoints permettent d'éditer directement les fournisseurs et
+# leurs contacts depuis MyAO, sans devoir passer par Paramètres.
+# La table fournisseurs_fsc est partagée avec Qualité / Fabrication,
+# donc la suppression est un soft-delete via actif=0 (protégeant les
+# références historiques dans les autres modules).
+
+@router.put("/picker/fournisseurs/{four_id}")
+async def update_fournisseur(request: Request, four_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du fournisseur obligatoire.")
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        # Champs autorisés à l'édition
+        allowed = ("nom", "licence", "certificat", "ville", "langue_default")
+        sets = []
+        vals: list = []
+        for k in allowed:
+            if k in cols and k in body:
+                v = body.get(k)
+                if isinstance(v, str):
+                    v = v.strip() or None
+                sets.append(f"{k}=?")
+                vals.append(v)
+        if not sets:
+            raise HTTPException(status_code=400, detail="Rien à modifier.")
+        vals.append(four_id)
+        try:
+            cur = conn.execute(
+                f"UPDATE fournisseurs_fsc SET {', '.join(sets)} WHERE id=?", vals
+            )
+        except Exception:
+            raise HTTPException(status_code=409, detail="Nom déjà utilisé.")
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+    return _row_dict(row)
+
+
+@router.delete("/picker/fournisseurs/{four_id}")
+def delete_fournisseur(request: Request, four_id: int):
+    """Soft-delete (actif=0) — la table est partagée avec d'autres modules
+    et supprimer physiquement casserait l'historique."""
+    _require_ao(request)
+    with get_db() as conn:
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+        if "actif" in cols:
+            cur = conn.execute(
+                "UPDATE fournisseurs_fsc SET actif=0 WHERE id=?", (four_id,)
+            )
+        else:
+            cur = conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (four_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        conn.commit()
+    return {"ok": True, "fournisseur_id": four_id}
+
+
+@router.post("/picker/fournisseurs/{four_id}/contacts")
+async def create_fournisseur_contact(request: Request, four_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du contact obligatoire.")
+    import json as _json
+    fonction = (body.get("fonction") or "").strip() or None
+    langue = (body.get("langue") or "fr").strip().lower()
+    if langue not in ("fr", "en", "it", "es", "de"):
+        langue = "fr"
+    emails = body.get("emails") or []
+    if isinstance(emails, str):
+        emails = [e.strip() for e in emails.split(",") if e.strip()]
+    tels = body.get("tels") or []
+    if isinstance(tels, str):
+        tels = [t.strip() for t in tels.split(",") if t.strip()]
+    is_principal = 1 if body.get("is_principal") else 0
+    with get_db() as conn:
+        exists = conn.execute(
+            "SELECT id FROM fournisseurs_fsc WHERE id=?", (four_id,)
+        ).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        # Si is_principal, remettre les autres à 0
+        if is_principal:
+            conn.execute(
+                "UPDATE fournisseur_contacts SET is_principal=0 WHERE fournisseur_id=?",
+                (four_id,),
+            )
+        now_iso = _now_paris_iso()
+        cur = conn.execute(
+            """INSERT INTO fournisseur_contacts
+               (fournisseur_id, nom, fonction, emails, tels, langue, is_principal, actif, created_at)
+               VALUES (?,?,?,?,?,?,?,1,?)""",
+            (four_id, nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal, now_iso),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+        row = conn.execute(
+            "SELECT * FROM fournisseur_contacts WHERE id=?", (new_id,)
+        ).fetchone()
+    d = _row_dict(row)
+    for k in ("emails", "tels"):
+        try:
+            d[k] = _json.loads(d.get(k) or "[]")
+        except (_json.JSONDecodeError, TypeError):
+            d[k] = []
+    d["is_principal"] = bool(d.get("is_principal"))
+    return d
+
+
+@router.put("/picker/fournisseurs/{four_id}/contacts/{contact_id}")
+async def update_fournisseur_contact(request: Request, four_id: int, contact_id: int):
+    _require_ao(request)
+    body = await request.json()
+    nom = (body.get("nom") or "").strip()
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du contact obligatoire.")
+    import json as _json
+    fonction = (body.get("fonction") or "").strip() or None
+    langue = (body.get("langue") or "fr").strip().lower()
+    if langue not in ("fr", "en", "it", "es", "de"):
+        langue = "fr"
+    emails = body.get("emails") or []
+    if isinstance(emails, str):
+        emails = [e.strip() for e in emails.split(",") if e.strip()]
+    tels = body.get("tels") or []
+    if isinstance(tels, str):
+        tels = [t.strip() for t in tels.split(",") if t.strip()]
+    is_principal = 1 if body.get("is_principal") else 0
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM fournisseur_contacts WHERE id=? AND fournisseur_id=?",
+            (contact_id, four_id),
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Contact introuvable.")
+        if is_principal:
+            conn.execute(
+                "UPDATE fournisseur_contacts SET is_principal=0 WHERE fournisseur_id=? AND id!=?",
+                (four_id, contact_id),
+            )
+        conn.execute(
+            """UPDATE fournisseur_contacts
+               SET nom=?, fonction=?, emails=?, tels=?, langue=?, is_principal=?, updated_at=?
+               WHERE id=?""",
+            (nom, fonction, _json.dumps(emails), _json.dumps(tels), langue, is_principal, _now_paris_iso(), contact_id),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM fournisseur_contacts WHERE id=?", (contact_id,)
+        ).fetchone()
+    d = _row_dict(row)
+    for k in ("emails", "tels"):
+        try:
+            d[k] = _json.loads(d.get(k) or "[]")
+        except (_json.JSONDecodeError, TypeError):
+            d[k] = []
+    d["is_principal"] = bool(d.get("is_principal"))
+    return d
+
+
+@router.delete("/picker/fournisseurs/{four_id}/contacts/{contact_id}")
+def delete_fournisseur_contact(request: Request, four_id: int, contact_id: int):
+    """Soft-delete (actif=0)."""
+    _require_ao(request)
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE fournisseur_contacts SET actif=0 WHERE id=? AND fournisseur_id=?",
+            (contact_id, four_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Contact introuvable.")
+        conn.commit()
+    return {"ok": True, "contact_id": contact_id}
 
 
 # ─── Matières premières (lecture pour fiches produit) ─────────────
@@ -642,6 +961,159 @@ def _produit_from_body(body: dict, conn) -> tuple[str, str, str, str | None, int
     return ref, designation, unite, notes, client_id, fiche_json
 
 
+
+# =========================================================================
+# --- AO params + fiches techniques + config EUR/USD -----------------------
+# =========================================================================
+
+@router.patch("/{ao_id}/params")
+async def update_ao_params(request: Request, ao_id: int):
+    """Met a jour les parametres de calcul de l'AO (pour l'instant : prix_transport_pct)."""
+    _require_ao(request)
+    body = await request.json()
+    pct = body.get("prix_transport_pct")
+    try:
+        pct = float(pct) if pct is not None else 0.0
+    except (TypeError, ValueError):
+        pct = 0.0
+    pct = max(0.0, min(100.0, pct))
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=?", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO introuvable.")
+        conn.execute(
+            "UPDATE ao_demandes SET prix_transport_pct=? WHERE id=?",
+            (pct, ao_id),
+        )
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id, "prix_transport_pct": pct}
+
+
+@router.get("/fiches-techniques")
+def search_fiches_techniques(request: Request, q: str = "", limit: int = 20):
+    """Recherche autocomplete sur fiches_techniques (reference, designation, client)."""
+    _require_ao(request)
+    q_norm = (q or "").strip()
+    try:
+        limit = max(1, min(50, int(limit)))
+    except (TypeError, ValueError):
+        limit = 20
+    with get_db() as conn:
+        if not q_norm:
+            rows = conn.execute(
+                """SELECT id, reference, designation, client, format, matiere
+                   FROM fiches_techniques
+                   ORDER BY date_import DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        else:
+            like = f"%{q_norm}%"
+            rows = conn.execute(
+                """SELECT id, reference, designation, client, format, matiere
+                   FROM fiches_techniques
+                   WHERE reference LIKE ? COLLATE NOCASE
+                      OR IFNULL(designation,'') LIKE ? COLLATE NOCASE
+                      OR IFNULL(client,'')      LIKE ? COLLATE NOCASE
+                   ORDER BY
+                     CASE WHEN reference LIKE ? COLLATE NOCASE THEN 0 ELSE 1 END,
+                     reference COLLATE NOCASE
+                   LIMIT ?""",
+                (like, like, like, f"{q_norm}%", limit),
+            ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.get("/fiches-techniques/by-ref")
+def get_fiche_technique(request: Request, ref: str = ""):
+    """Retourne la fiche technique complete (query param `ref` : supporte les slashes)."""
+    _require_ao(request)
+    reference = (ref or "").strip()
+    if not reference:
+        raise HTTPException(status_code=400, detail="Reference vide.")
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            (reference,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Fiche technique introuvable pour '{reference}'.")
+        return dict(row)
+
+
+@router.get("/config/eur-usd")
+def get_eur_usd(request: Request):
+    """Retourne le taux EUR/USD actif. Source de verite : mc_setting.eur_usd_rate.
+    Fallback : matiere_config.taux_change_usd."""
+    _require_ao(request)
+    with get_db() as conn:
+        rate = 0.0
+        try:
+            row = conn.execute(
+                "SELECT value_decimal FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+            ).fetchone()
+            if row and row[0] is not None:
+                rate = float(row[0])
+        except Exception:
+            rate = 0.0
+        if rate <= 0:
+            try:
+                row = conn.execute(
+                    "SELECT valeur FROM matiere_config WHERE cle='taux_change_usd' LIMIT 1"
+                ).fetchone()
+                if row:
+                    rate = float(row[0])
+            except Exception:
+                pass
+    return {"eur_usd_rate": rate}
+
+
+@router.post("/config/eur-usd")
+async def set_eur_usd(request: Request):
+    """Ecrit le taux EUR/USD dans les deux tables (source unifiee).
+    Corps : { "eur_usd_rate": <float> }"""
+    user = _require_ao(request)
+    body = await request.json()
+    try:
+        rate = float(body.get("eur_usd_rate") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="eur_usd_rate invalide.")
+    if rate <= 0:
+        raise HTTPException(status_code=400, detail="eur_usd_rate doit etre > 0.")
+    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        # 1. mc_setting (source canonique)
+        try:
+            existing = conn.execute(
+                "SELECT 1 FROM mc_setting WHERE key='eur_usd_rate' LIMIT 1"
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE mc_setting SET value_decimal=?, updated_at=?, updated_by=?, source=? WHERE key='eur_usd_rate'",
+                    (rate, now, user.get("id"), "ao_panel"),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO mc_setting (key, value_decimal, updated_at, updated_by, source) VALUES ('eur_usd_rate', ?, ?, ?, ?)",
+                    (rate, now, user.get("id"), "ao_panel"),
+                )
+        except Exception as e:
+            # Table peut-etre absente (migration MyCouts pas passee). On log en douceur.
+            print(f"[eur-usd] mc_setting write failed: {e}")
+        # 2. matiere_config (compat Cout matiere)
+        try:
+            conn.execute(
+                """INSERT INTO matiere_config (cle, valeur, updated_at) VALUES (?,?,?)
+                   ON CONFLICT(cle) DO UPDATE SET valeur=excluded.valeur, updated_at=excluded.updated_at""",
+                ("taux_change_usd", str(rate), now),
+            )
+        except Exception as e:
+            print(f"[eur-usd] matiere_config write failed: {e}")
+        conn.commit()
+    return {"ok": True, "eur_usd_rate": rate}
+
+
+
 def _serialize_produit_row(row: dict, conn) -> dict:
     client_nom = row.get("client_nom") or _client_nom(conn, row.get("client_id"))
     return produit_row_to_api(row, client_nom)
@@ -682,6 +1154,30 @@ def get_produit(request: Request, produit_id: int):
         return _serialize_produit_row(_row_dict(row), conn)
 
 
+@router.get("/produits/{produit_id}/aos")
+def produit_aos(request: Request, produit_id: int):
+    """Liste des appels d'offres (hors corbeille) contenant ce produit — pour
+    la section « historique » de la fiche produit. Match sur ref_produit."""
+    _require_ao(request)
+    with get_db() as conn:
+        prow = conn.execute("SELECT ref FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
+        if not prow:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        ref = (prow["ref"] or "").strip()
+        if not ref:
+            return {"aos": []}
+        rows = conn.execute(
+            """SELECT DISTINCT d.id, d.reference, d.titre, d.statut, d.date_limite
+               FROM ao_lignes l
+               JOIN ao_demandes d ON d.id = l.ao_id
+               WHERE LOWER(TRIM(l.ref_produit)) = LOWER(TRIM(?))
+                 AND d.deleted_at IS NULL
+               ORDER BY d.id DESC""",
+            (ref,),
+        ).fetchall()
+    return {"aos": [dict(r) for r in rows]}
+
+
 @router.get("/produits/{produit_id}/export")
 def export_produit_fiche(request: Request, produit_id: int):
     _require_ao(request)
@@ -711,6 +1207,70 @@ def export_produit_fiche(request: Request, produit_id: int):
         mp_map = _load_matieres_map(conn, ids) if ids else {}
     html = render_fiche_html(produit, client_nom=produit.get("client_nom"), matieres_map=mp_map)
     return HTMLResponse(content=html)
+
+
+@router.get("/produits/{produit_id}/pdf-fournisseur")
+def export_produit_fiche_pdf_fournisseur(
+    request: Request,
+    produit_id: int,
+    ao_id: int | None = None,
+):
+    """
+    Génère le PDF fournisseur (bilingue FR/EN) d'une fiche produit MyAO.
+
+    Reprend la charte graphique du PDF client mais avec les données
+    brutes de la fiche produit (pas de mapping/classification).
+
+    Query param optionnel : ao_id — si fourni, la référence de l'AO
+    apparaît en pied de page du PDF.
+    """
+    _require_ao(request)
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
+               FROM ao_produits p
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+               WHERE p.id=?""",
+            (produit_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+        produit = _serialize_produit_row(_row_dict(row), conn)
+        fiche = produit.get("fiche") or {}
+        ids: set[int] = set()
+        mat = fiche.get("matiere") or {}
+        for key in ("frontal_id", "adhesif_id", "glassine_id"):
+            if mat.get(key):
+                ids.add(int(mat[key]))
+        cond = fiche.get("conditionnement") or {}
+        for block in (cond.get("carton") or {}, cond.get("palette") or {}):
+            if block.get("matiere_id"):
+                ids.add(int(block["matiere_id"]))
+        mp_map = _load_matieres_map(conn, ids) if ids else {}
+        ao_reference: str | None = None
+        if ao_id:
+            ao_row = conn.execute(
+                "SELECT reference FROM ao_demandes WHERE id=?", (ao_id,)
+            ).fetchone()
+            if ao_row:
+                ao_reference = ao_row["reference"]
+
+    try:
+        from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
+        pdf_bytes = generate_fiche_fournisseur_pdf(
+            produit, matieres_map=mp_map, ao_reference=ao_reference,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur génération PDF : {exc}") from exc
+
+    ref_clean = re.sub(r"[^\w\-]+", "_", str(produit.get("ref") or produit_id).split(" - ")[0])
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="fiche_fournisseur_{ref_clean}.pdf"'},
+    )
 
 
 @router.post("/produits")
@@ -759,7 +1319,59 @@ async def update_produit(request: Request, produit_id: int):
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
+        # Regénère les fiches PDF attachées aux AO ouverts qui utilisent
+        # cette référence (brouillon ou envoyé, pas clôturé) — idempotent.
+        try:
+            _regen_fiches_for_ref(conn, ref)
+            conn.commit()
+        except Exception:
+            logger.exception("Regen fiches PDF sur update produit %s échoué", produit_id)
         return _serialize_produit_row(_row_dict(row), conn)
+
+
+def _regen_fiches_for_ref(conn, ref_produit: str) -> None:
+    """Regénère la fiche PDF fournisseur pour tous les AO ouverts utilisant
+    cette référence. Ne touche pas aux AO clôturés."""
+    if not ref_produit:
+        return
+    aos = conn.execute(
+        """SELECT DISTINCT d.id, d.reference
+           FROM ao_demandes d
+           JOIN ao_lignes l ON l.ao_id = d.id
+           WHERE l.ref_produit = ?
+             AND d.statut IN ('brouillon', 'envoyee')
+             AND d.deleted_at IS NULL""",
+        (ref_produit,),
+    ).fetchall()
+    if not aos:
+        return
+    produits_map = _produits_by_ref_map(conn)
+    now_iso = _now_paris_iso()
+    for ao in aos:
+        # Supprime les PJ auto existantes pour cette ref (nom idempotent)
+        ref_clean = re.sub(r"[^\w\-]+", "_", ref_produit.split(" - ")[0])
+        fname = f"fiche_fournisseur_{ref_clean}.pdf"
+        pjs_to_del = conn.execute(
+            "SELECT id, stored_name FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
+            (int(ao["id"]), fname),
+        ).fetchall()
+        for pj in pjs_to_del:
+            try:
+                path = os.path.join(_ao_upload_dir(int(ao["id"])), pj["stored_name"])
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+        if pjs_to_del:
+            conn.execute(
+                "DELETE FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
+                (int(ao["id"]), fname),
+            )
+        _auto_attach_fournisseur_pdfs(
+            conn, int(ao["id"]), ao["reference"],
+            [{"ref_produit": ref_produit}],
+            produits_map, now_iso,
+        )
 
 
 @router.delete("/produits/{produit_id}")
@@ -860,8 +1472,9 @@ def _enrich_ligne_display(
     ln: dict,
     produits_map: dict[str, dict],
     matieres_map: dict[int, dict],
+    series_by_ligne: dict[int, list[dict]] | None = None,
 ) -> dict:
-    """Ajoute client et étiq./bobine depuis le catalogue produit (fiche)."""
+    """Ajoute client, étiq./bobine, séries depuis le catalogue et la DB."""
     ref_key = (ln.get("ref_produit") or "").strip().lower()
     produit = produits_map.get(ref_key)
     ctx = ligne_context_from_produit(
@@ -872,7 +1485,31 @@ def _enrich_ligne_display(
     )
     ln["client_nom"] = ctx.get("client_nom")
     ln["etiquettes_par_bobine"] = ctx.get("etiquettes_par_bobine")
+    # Séries — la somme des quantités séries doit égaler la quantité ligne (contrôle applicatif)
+    series = (series_by_ligne or {}).get(int(ln.get("id") or 0), [])
+    ln["series"] = series
+    try:
+        ln["series_qty_sum"] = sum(float(s.get("quantite") or 0) for s in series)
+    except Exception:
+        ln["series_qty_sum"] = 0.0
     return ln
+
+
+def _load_series_by_ligne(conn, ligne_ids: list[int]) -> dict[int, list[dict]]:
+    if not ligne_ids:
+        return {}
+    qmarks = ",".join("?" * len(ligne_ids))
+    rows = conn.execute(
+        f"""SELECT * FROM ao_lignes_series
+            WHERE ligne_id IN ({qmarks})
+            ORDER BY ligne_id, position, id""",
+        tuple(ligne_ids),
+    ).fetchall()
+    out: dict[int, list[dict]] = {}
+    for r in rows:
+        d = _row_dict(r)
+        out.setdefault(int(d["ligne_id"]), []).append(d)
+    return out
 
 
 @router.get("/{ao_id}/voisins")
@@ -923,8 +1560,10 @@ def get_ao(request: Request, ao_id: int):
         produits_map = _produits_by_ref_map(conn)
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
+        ligne_ids = [int(r["id"]) for r in lignes_rows]
+        series_by_ligne = _load_series_by_ligne(conn, ligne_ids)
         lignes = [
-            _enrich_ligne_display(_row_dict(r), produits_map, matieres_map)
+            _enrich_ligne_display(_row_dict(r), produits_map, matieres_map, series_by_ligne)
             for r in lignes_rows
         ]
     return {
@@ -963,30 +1602,105 @@ async def update_ao(request: Request, ao_id: int):
 
 
 @router.patch("/{ao_id}/cloturer")
-def cloturer_ao(request: Request, ao_id: int):
+async def cloturer_ao(request: Request, ao_id: int):
+    """Cloture l'AO et notifie optionnellement le fournisseur retenu.
+
+    Body JSON optionnel :
+      - fournisseur_retenu_id (int) : id du fournisseur invite retenu
+      - message_perso (str) : message personnalise ajoute a l'email au retenu
+    """
     _require_ao(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    fournisseur_retenu_id = body.get("fournisseur_retenu_id")
+    if fournisseur_retenu_id is not None:
+        try:
+            fournisseur_retenu_id = int(fournisseur_retenu_id)
+        except (TypeError, ValueError):
+            fournisseur_retenu_id = None
+    message_perso = (body.get("message_perso") or "").strip() or None
+    now = _now_paris_iso()
+
     with get_db() as conn:
         ao = _get_ao_or_404(conn, ao_id)
         if ao.get("statut") != "envoyee":
             raise HTTPException(
                 status_code=400,
-                detail="Clôture impossible — l'appel d'offre doit être au statut « envoyée ».",
+                detail="Cloture impossible : l'appel d'offres doit etre au statut envoyee.",
             )
-        conn.execute(
-            "UPDATE ao_demandes SET statut='cloturee' WHERE id=?",
-            (ao_id,),
-        )
+        fourni_retenu = None
+        if fournisseur_retenu_id:
+            fourni_retenu = conn.execute(
+                "SELECT * FROM ao_fournisseurs WHERE id=? AND ao_id=?",
+                (fournisseur_retenu_id, ao_id),
+            ).fetchone()
+            if not fourni_retenu:
+                raise HTTPException(status_code=400, detail="Fournisseur retenu invalide.")
+
+        aod_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+        if "fournisseur_retenu_id" in aod_cols and "date_cloture" in aod_cols:
+            conn.execute(
+                "UPDATE ao_demandes SET statut='cloturee', fournisseur_retenu_id=?, date_cloture=? WHERE id=?",
+                (fournisseur_retenu_id, now, ao_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE ao_demandes SET statut='cloturee' WHERE id=?",
+                (ao_id,),
+            )
         conn.commit()
         updated = _get_ao_or_404(conn, ao_id)
+
+    if fourni_retenu:
+        try:
+            subject, html_body = email_offre_retenue(
+                dict(updated), dict(fourni_retenu), message_perso=message_perso
+            )
+            send_email(fourni_retenu["email_contact"], subject, html_body)
+        except Exception as e:
+            logger.warning("Envoi email offre retenue echoue pour AO %s: %s", ao_id, e)
+
     return updated
 
 
 @router.delete("/{ao_id}")
 def delete_ao(request: Request, ao_id: int):
-    """Suppression complète d'un appel d'offre (lignes, fournisseurs, réponses,
-    messages, pièces jointes et fichiers sur disque)."""
+    """Soft-delete : deplace l'AO dans la corbeille (deleted_at = now).
+    Pour supprimer definitivement : voir DELETE /{ao_id}/definitif."""
+    _require_ao(request)
+    now = _now_paris_iso()
+    with get_db() as conn:
+        row = conn.execute("SELECT id, deleted_at FROM ao_demandes WHERE id=?", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO introuvable.")
+        conn.execute("UPDATE ao_demandes SET deleted_at=? WHERE id=?", (now, ao_id))
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id, "deleted_at": now}
+
+
+@router.post("/{ao_id}/restaurer")
+def restaurer_ao(request: Request, ao_id: int):
+    """Restaure un AO de la corbeille."""
+    _require_ao(request)
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=? AND deleted_at IS NOT NULL", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="AO non trouve dans la corbeille.")
+        conn.execute("UPDATE ao_demandes SET deleted_at=NULL WHERE id=?", (ao_id,))
+        conn.commit()
+    return {"ok": True, "ao_id": ao_id}
+
+
+@router.delete("/{ao_id}/definitif")
+def delete_ao_definitif(request: Request, ao_id: int):
+    """Suppression definitive (uniquement si deja dans la corbeille)."""
     user = _require_ao(request)
     with get_db() as conn:
+        row = conn.execute("SELECT id FROM ao_demandes WHERE id=? AND deleted_at IS NOT NULL", (ao_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="AO doit d'abord etre dans la corbeille.")
         ao = _get_ao_or_404(conn, ao_id)
         # Récupère les noms de fichiers PJ pour suppression disque
         pjs = conn.execute(
@@ -1043,9 +1757,177 @@ def delete_ao(request: Request, ao_id: int):
     return {"ok": True}
 
 
+
+
+@router.get("/{ao_id}/export.pdf")
+def export_ao_pdf(request: Request, ao_id: int):
+    """Genere un PDF recapitulant l'AO : infos, lignes, fournisseurs invites + reponses."""
+    from fastapi.responses import Response
+    _require_ao(request)
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        lignes = [dict(r) for r in conn.execute(
+            "SELECT * FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
+            (ao_id,),
+        ).fetchall()]
+        fournis = [dict(r) for r in conn.execute(
+            "SELECT * FROM ao_fournisseurs WHERE ao_id=? ORDER BY nom_fournisseur COLLATE NOCASE",
+            (ao_id,),
+        ).fetchall()]
+        # Reponses regroupees par fournisseur
+        rep_rows = conn.execute(
+            """SELECT r.ao_fournisseur_id, r.ligne_id, r.quotation, r.devise,
+                      r.unite_quotation, r.delai_jours, r.commentaire
+               FROM ao_reponses r
+               JOIN ao_fournisseurs f ON f.id = r.ao_fournisseur_id
+               WHERE f.ao_id=?""",
+            (ao_id,),
+        ).fetchall()
+        reponses_by_fourni: dict[int, dict[int, dict]] = {}
+        for r in rep_rows:
+            reponses_by_fourni.setdefault(r["ao_fournisseur_id"], {})[r["ligne_id"]] = dict(r)
+
+    # Genere le PDF avec reportlab (deja dans les deps)
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    except ImportError:
+        raise HTTPException(status_code=500, detail="reportlab non disponible sur le serveur.")
+
+    from io import BytesIO
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=1.5*cm, rightMargin=1.5*cm,
+                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    styles = getSampleStyleSheet()
+    h1 = styles["Heading1"]
+    h2 = styles["Heading2"]
+    small = ParagraphStyle("small", parent=styles["Normal"], fontSize=8, leading=10)
+    normal = styles["Normal"]
+
+    story = []
+    story.append(Paragraph(f"Appel d'offres — {ao.get('reference') or ''}", h1))
+    story.append(Paragraph(ao.get("titre") or "", h2))
+    story.append(Spacer(1, 0.3*cm))
+
+    info_data = [
+        ["Reference", ao.get("reference") or "—"],
+        ["Statut", (ao.get("statut") or "").capitalize()],
+        ["Date creation", (ao.get("date_creation") or "")[:10]],
+        ["Date limite", ao.get("date_limite") or "—"],
+        ["Responsable", ao.get("responsable_email") or "—"],
+    ]
+    info_tbl = Table(info_data, colWidths=[4*cm, 12*cm])
+    info_tbl.setStyle(TableStyle([
+        ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+        ("FONTSIZE", (0,0), (-1,-1), 9),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ]))
+    story.append(info_tbl)
+    story.append(Spacer(1, 0.4*cm))
+
+    if ao.get("description"):
+        story.append(Paragraph("<b>Description</b>", normal))
+        story.append(Paragraph(str(ao.get("description")), small))
+        story.append(Spacer(1, 0.3*cm))
+
+    # Lignes produits
+    story.append(Paragraph("<b>Lignes produits</b>", h2))
+    if lignes:
+        lignes_data = [["Ref produit", "Designation", "Quantite", "Unite", "Notes"]]
+        for ln in lignes:
+            lignes_data.append([
+                ln.get("ref_produit") or "",
+                (ln.get("designation") or "")[:60],
+                str(ln.get("quantite") or ""),
+                ln.get("unite") or "",
+                (ln.get("notes") or "")[:40],
+            ])
+        tbl = Table(lignes_data, colWidths=[3*cm, 6*cm, 2*cm, 2*cm, 4*cm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef2f7")),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ]))
+        story.append(tbl)
+    else:
+        story.append(Paragraph("<i>Aucune ligne produit.</i>", small))
+    story.append(Spacer(1, 0.5*cm))
+
+    # Fournisseurs invites + reponses
+    story.append(Paragraph("<b>Fournisseurs invites</b>", h2))
+    if fournis:
+        four_data = [["Nom", "Email", "Statut", "Envoi", "Reponse"]]
+        for f in fournis:
+            four_data.append([
+                (f.get("nom_fournisseur") or "")[:30],
+                (f.get("email_contact") or "")[:35],
+                (f.get("statut") or ""),
+                (f.get("date_envoi") or "")[:10],
+                (f.get("date_reponse") or "")[:10],
+            ])
+        tbl = Table(four_data, colWidths=[4*cm, 6*cm, 2.5*cm, 2*cm, 2.5*cm])
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef2f7")),
+            ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE", (0,0), (-1,-1), 8),
+            ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
+        ]))
+        story.append(tbl)
+        story.append(Spacer(1, 0.5*cm))
+
+        # Reponses detaillees par fournisseur
+        for f in fournis:
+            reps = reponses_by_fourni.get(f["id"])
+            if not reps:
+                continue
+            story.append(PageBreak())
+            story.append(Paragraph(f"Reponse — {f.get('nom_fournisseur') or ''}", h2))
+            rep_data = [["Ref produit", "Prix", "Devise", "Unite", "Delai (j)", "Commentaire"]]
+            for ln in lignes:
+                r = reps.get(ln["id"])
+                if not r:
+                    continue
+                rep_data.append([
+                    ln.get("ref_produit") or "",
+                    (f"{r.get('quotation'):.4f}" if r.get('quotation') is not None else "—"),
+                    r.get("devise") or "EUR",
+                    r.get("unite_quotation") or "mille",
+                    str(r.get("delai_jours") or "—"),
+                    (r.get("commentaire") or "")[:40],
+                ])
+            tbl = Table(rep_data, colWidths=[3*cm, 2.5*cm, 1.5*cm, 2*cm, 2*cm, 6*cm])
+            tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#eef2f7")),
+                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ("FONTSIZE", (0,0), (-1,-1), 8),
+                ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
+            ]))
+            story.append(tbl)
+    else:
+        story.append(Paragraph("<i>Aucun fournisseur invite.</i>", small))
+
+    doc.build(story)
+    pdf_bytes = buf.getvalue()
+    buf.close()
+
+    filename = f"AO_{ao.get('reference') or ao_id}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/{ao_id}/dupliquer")
 async def dupliquer_ao(request: Request, ao_id: int):
-    """Duplique un appel d'offre. Le nouveau AO est en statut 'brouillon'.
+    """Duplique un appel d'offres. Le nouveau AO est en statut 'brouillon'.
 
     Body JSON optionnel :
       - with_fournisseurs (bool, défaut True) : recopie les fournisseurs (sans réponses)
@@ -1059,6 +1941,18 @@ async def dupliquer_ao(request: Request, ao_id: int):
         body = {}
     with_fournisseurs = bool(body.get("with_fournisseurs", True))
     with_pieces_jointes = bool(body.get("with_pieces_jointes", False))
+    # fournisseur_ids : liste optionnelle d'IDs a recopier. Si absente,
+    # copie tous les fournisseurs (comportement existant). Si liste vide,
+    # ne copie aucun fournisseur meme si with_fournisseurs=True.
+    fournisseur_ids_raw = body.get("fournisseur_ids")
+    fournisseur_ids: list[int] | None = None
+    if isinstance(fournisseur_ids_raw, list):
+        fournisseur_ids = []
+        for v in fournisseur_ids_raw:
+            try:
+                fournisseur_ids.append(int(v))
+            except (TypeError, ValueError):
+                pass
     titre_override = (body.get("titre") or "").strip() or None
     now = _now_paris_iso()
 
@@ -1105,11 +1999,19 @@ async def dupliquer_ao(request: Request, ao_id: int):
             )
 
         # Copie des fournisseurs (sans dates d'envoi / ouverture / réponse, nouveau token, statut='invite')
-        if with_fournisseurs:
-            src_fournis = conn.execute(
-                "SELECT * FROM ao_fournisseurs WHERE ao_id=?",
-                (ao_id,),
-            ).fetchall()
+        # Si fournisseur_ids est fourni : ne copier que ceux-là. Sinon : tous (si with_fournisseurs).
+        if with_fournisseurs and (fournisseur_ids is None or fournisseur_ids):
+            if fournisseur_ids is not None:
+                qmarks = ",".join("?" * len(fournisseur_ids))
+                src_fournis = conn.execute(
+                    f"SELECT * FROM ao_fournisseurs WHERE ao_id=? AND id IN ({qmarks})",
+                    tuple([ao_id] + fournisseur_ids),
+                ).fetchall()
+            else:
+                src_fournis = conn.execute(
+                    "SELECT * FROM ao_fournisseurs WHERE ao_id=?",
+                    (ao_id,),
+                ).fetchall()
             for f in src_fournis:
                 src_langue = _normalize_langue(f["langue"] if "langue" in f.keys() else "fr")
                 conn.execute(
@@ -1176,6 +2078,21 @@ async def dupliquer_ao(request: Request, ao_id: int):
 
 # ─── Lignes ──────────────────────────────────────────────────────
 
+def _regen_titre_ao(conn, ao_id: int) -> None:
+    """Régénère le titre de l'AO à partir de ses lignes (refs concaténées).
+    Appelé après chaque INSERT/UPDATE/DELETE sur ao_lignes."""
+    refs = [
+        (r["ref_produit"] or "").strip()
+        for r in conn.execute(
+            "SELECT ref_produit FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
+            (ao_id,),
+        ).fetchall()
+    ]
+    refs = [r for r in refs if r]
+    titre = " · ".join(refs) if refs else "Nouvel appel d'offres"
+    conn.execute("UPDATE ao_demandes SET titre=? WHERE id=?", (titre, ao_id))
+
+
 @router.post("/{ao_id}/lignes")
 async def add_ligne(request: Request, ao_id: int):
     _require_ao(request)
@@ -1207,10 +2124,24 @@ async def add_ligne(request: Request, ao_id: int):
                VALUES (?,?,?,?,?,?,?)""",
             (ao_id, ref_produit, designation, quantite, unite, notes, position),
         )
+        _regen_titre_ao(conn, ao_id)
         conn.commit()
         ligne = conn.execute(
             "SELECT * FROM ao_lignes WHERE id=?", (cur.lastrowid,)
         ).fetchone()
+        # Auto-attach : génère la fiche PDF fournisseur pour ce produit dès
+        # l'ajout de la ligne (pas seulement à l'envoi).
+        try:
+            now_iso = _now_paris_iso()
+            produits_map = _produits_by_ref_map(conn)
+            _auto_attach_fournisseur_pdfs(
+                conn, ao_id, ao.get("reference"),
+                [{"ref_produit": ref_produit}],
+                produits_map, now_iso,
+            )
+            conn.commit()
+        except Exception:
+            logger.exception("Auto-attach fiche PDF à l'ajout ligne échoué (AO %s)", ao_id)
     return _row_dict(ligne)
 
 
@@ -1246,6 +2177,7 @@ async def update_ligne(request: Request, ao_id: int, ligne_id: int):
                WHERE id=? AND ao_id=?""",
             (ref_produit, designation, quantite, unite, notes, ligne_id, ao_id),
         )
+        _regen_titre_ao(conn, ao_id)
         conn.commit()
         ligne = conn.execute(
             "SELECT * FROM ao_lignes WHERE id=?", (ligne_id,)
@@ -1265,6 +2197,161 @@ def delete_ligne(request: Request, ao_id: int, ligne_id: int):
         )
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Ligne introuvable")
+        _regen_titre_ao(conn, ao_id)
+        conn.commit()
+    return {"ok": True}
+
+
+# ─── Séries ────────────────────────────────────────────────────────
+# Une ligne d'AO peut être déclinée en plusieurs séries (même produit,
+# légère variation — souvent d'impression). La somme des quantités des
+# séries doit égaler la quantité de la ligne mère (contrôle applicatif :
+# on renvoie series_qty_sum et le front peut avertir).
+
+def _get_ligne_or_404(conn, ao_id: int, ligne_id: int) -> dict:
+    row = conn.execute(
+        "SELECT * FROM ao_lignes WHERE id=? AND ao_id=?",
+        (ligne_id, ao_id),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Ligne introuvable")
+    return _row_dict(row)
+
+
+CONDI_UNITES = frozenset({"mille", "bobine", "carton", "etiquette", "palette"})
+
+
+@router.patch("/{ao_id}/lignes/{ligne_id}/condi")
+async def update_ligne_condi(request: Request, ao_id: int, ligne_id: int):
+    """Met à jour le conditionnement de vente (unité + quantité) sur une ligne."""
+    _require_ao(request)
+    body = await request.json()
+    unite = body.get("condi_unite")
+    qte = body.get("condi_qte")
+    if unite is not None:
+        unite = (unite or "").strip().lower() or None
+        if unite and unite not in CONDI_UNITES:
+            raise HTTPException(status_code=400, detail="Unité condi invalide.")
+    if qte is not None and qte != "":
+        try:
+            qte = float(qte)
+            if qte <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Quantité condi invalide.")
+    else:
+        qte = None
+    with get_db() as conn:
+        _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        conn.execute(
+            "UPDATE ao_lignes SET condi_unite=?, condi_qte=? WHERE id=? AND ao_id=?",
+            (unite, qte, ligne_id, ao_id),
+        )
+        conn.commit()
+    return {"ok": True, "ligne_id": ligne_id, "condi_unite": unite, "condi_qte": qte}
+
+
+def _load_series_for_ligne(conn, ligne_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM ao_lignes_series WHERE ligne_id=? ORDER BY position, id",
+        (ligne_id,),
+    ).fetchall()
+    return [_row_dict(r) for r in rows]
+
+
+@router.post("/{ao_id}/lignes/{ligne_id}/series")
+async def create_serie(request: Request, ao_id: int, ligne_id: int):
+    _require_ao(request)
+    body = await request.json()
+    libelle = (body.get("libelle") or "").strip()
+    if not libelle:
+        raise HTTPException(status_code=400, detail="Libellé obligatoire.")
+    try:
+        quantite = float(body.get("quantite") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    if quantite < 0:
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    notes = (body.get("notes") or "").strip() or None
+    now = _now_paris_iso()
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        # AO envoyée : bloqué (les fournisseurs ont déjà répondu peut-être)
+        if ao.get("statut") not in ("brouillon", "envoyee"):
+            raise HTTPException(status_code=400, detail="AO clôturé — impossible d'ajouter une série.")
+        pos_row = conn.execute(
+            "SELECT COALESCE(MAX(position), -1) AS m FROM ao_lignes_series WHERE ligne_id=?",
+            (ligne_id,),
+        ).fetchone()
+        position = int(pos_row["m"]) + 1
+        cur = conn.execute(
+            """INSERT INTO ao_lignes_series
+               (ligne_id, position, libelle, quantite, notes, created_at)
+               VALUES (?,?,?,?,?,?)""",
+            (ligne_id, position, libelle, quantite, notes, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM ao_lignes_series WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    return _row_dict(row)
+
+
+@router.put("/{ao_id}/lignes/{ligne_id}/series/{serie_id}")
+async def update_serie(request: Request, ao_id: int, ligne_id: int, serie_id: int):
+    _require_ao(request)
+    body = await request.json()
+    libelle = (body.get("libelle") or "").strip()
+    if not libelle:
+        raise HTTPException(status_code=400, detail="Libellé obligatoire.")
+    try:
+        quantite = float(body.get("quantite") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    if quantite < 0:
+        raise HTTPException(status_code=400, detail="Quantité invalide.")
+    notes = (body.get("notes") or "").strip() or None
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        if ao.get("statut") == "cloturee":
+            raise HTTPException(status_code=400, detail="AO clôturé — édition impossible.")
+        cur = conn.execute(
+            """UPDATE ao_lignes_series
+               SET libelle=?, quantite=?, notes=?
+               WHERE id=? AND ligne_id=?""",
+            (libelle, quantite, notes, serie_id, ligne_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Série introuvable")
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM ao_lignes_series WHERE id=?", (serie_id,)
+        ).fetchone()
+    return _row_dict(row)
+
+
+@router.delete("/{ao_id}/lignes/{ligne_id}/series/{serie_id}")
+def delete_serie(request: Request, ao_id: int, ligne_id: int, serie_id: int):
+    _require_ao(request)
+    with get_db() as conn:
+        ao = _get_ao_or_404(conn, ao_id)
+        _get_ligne_or_404(conn, ao_id, ligne_id)
+        if ao.get("statut") == "cloturee":
+            raise HTTPException(status_code=400, detail="AO clôturé — suppression impossible.")
+        # Les réponses fournisseur liées à cette série sont détachées (serie_id → NULL)
+        conn.execute(
+            "UPDATE ao_reponses SET serie_id=NULL WHERE serie_id=?",
+            (serie_id,),
+        )
+        cur = conn.execute(
+            "DELETE FROM ao_lignes_series WHERE id=? AND ligne_id=?",
+            (serie_id, ligne_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Série introuvable")
         conn.commit()
     return {"ok": True}
 
@@ -1280,16 +2367,35 @@ async def add_fournisseur(request: Request, ao_id: int):
     if not nom or not email:
         raise HTTPException(status_code=400, detail="Nom et email du fournisseur obligatoires.")
     langue = _normalize_langue(body.get("langue"))
-
+    fournisseur_id = body.get("fournisseur_id")
+    contact_id = body.get("fournisseur_contact_id")
+    try:
+        fournisseur_id = int(fournisseur_id) if fournisseur_id is not None else None
+    except (TypeError, ValueError):
+        fournisseur_id = None
+    try:
+        contact_id = int(contact_id) if contact_id is not None else None
+    except (TypeError, ValueError):
+        contact_id = None
     token = str(uuid.uuid4())
     with get_db() as conn:
         _get_ao_or_404(conn, ao_id)
-        cur = conn.execute(
-            """INSERT INTO ao_fournisseurs
-               (ao_id, nom_fournisseur, email_contact, token, statut, langue)
-               VALUES (?,?,?,?,'invite',?)""",
-            (ao_id, nom, email, token, langue),
-        )
+        af_cols = {r[1] for r in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()}
+        if "fournisseur_id" in af_cols and "fournisseur_contact_id" in af_cols:
+            cur = conn.execute(
+                """INSERT INTO ao_fournisseurs
+                   (ao_id, nom_fournisseur, email_contact, token, statut, langue,
+                    fournisseur_id, fournisseur_contact_id)
+                   VALUES (?,?,?,?,'invite',?,?,?)""",
+                (ao_id, nom, email, token, langue, fournisseur_id, contact_id),
+            )
+        else:
+            cur = conn.execute(
+                """INSERT INTO ao_fournisseurs
+                   (ao_id, nom_fournisseur, email_contact, token, statut, langue)
+                   VALUES (?,?,?,?,'invite',?)""",
+                (ao_id, nom, email, token, langue),
+            )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM ao_fournisseurs WHERE id=?", (cur.lastrowid,)
@@ -1315,7 +2421,141 @@ def delete_fournisseur(request: Request, ao_id: int, fourni_id: int):
     return {"ok": True}
 
 
+
+
+@router.put("/{ao_id}/fournisseurs/{fourni_id}")
+async def update_fournisseur_ao(request: Request, ao_id: int, fourni_id: int):
+    """Override local (nom, email, langue) d'un fournisseur invite — ne touche pas Parametres."""
+    _require_ao(request)
+    body = await request.json()
+    with get_db() as conn:
+        fourni = _get_fourni_in_ao(conn, ao_id, fourni_id)
+        if fourni.get("statut") == "repondu":
+            raise HTTPException(status_code=400, detail="Modification impossible — le fournisseur a deja repondu.")
+        nom = (body.get("nom_fournisseur") or fourni["nom_fournisseur"] or "").strip()
+        email = (body.get("email_contact") or fourni["email_contact"] or "").strip().lower()
+        if not nom or not email:
+            raise HTTPException(status_code=400, detail="Nom et email obligatoires.")
+        if "langue" in body:
+            langue = _normalize_langue(body.get("langue"))
+        else:
+            langue = fourni.get("langue") or "fr"
+        conn.execute(
+            """UPDATE ao_fournisseurs SET nom_fournisseur=?, email_contact=?, langue=?
+               WHERE id=? AND ao_id=?""",
+            (nom, email, langue, fourni_id, ao_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM ao_fournisseurs WHERE id=?", (fourni_id,)).fetchone()
+    return _row_dict(row)
+
+
 # ─── Envoi ───────────────────────────────────────────────────────
+
+def _auto_attach_fournisseur_pdfs(
+    conn,
+    ao_id: int,
+    ao_reference: str | None,
+    lignes_raw: list[dict],
+    produits_map: dict[str, dict],
+    now_iso: str,
+) -> None:
+    """
+    Génère un PDF fournisseur bilingue pour chaque produit référencé dans
+    l'AO et l'insère dans `ao_pieces_jointes`. Appelé au moment de
+    l'envoi de l'AO — les PDFs apparaissent immédiatement dans l'onglet
+    Documents du portail fournisseur.
+
+    Idempotent : les PDFs déjà présents (nom de fichier commençant par
+    "fiche_fournisseur_<ref>") ne sont pas recréés, ce qui permet de
+    relancer l'envoi sans dupliquer les pièces jointes.
+    """
+    try:
+        from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
+    except ImportError:
+        logger.warning("fiche_pdf_fournisseur indisponible, auto-attach ignoré.")
+        return
+
+    # Références produit uniques dans l'AO
+    refs = {(ln.get("ref_produit") or "").strip() for ln in lignes_raw}
+    refs.discard("")
+    if not refs:
+        return
+
+    # Pièces jointes déjà présentes (pour l'idempotence)
+    existing = {
+        r["filename"]
+        for r in conn.execute(
+            "SELECT filename FROM ao_pieces_jointes WHERE ao_id=?", (ao_id,)
+        ).fetchall()
+    }
+
+    dest_dir = _ao_upload_dir(ao_id)
+
+    for ref in sorted(refs):
+        produit = produits_map.get(ref.lower()) or produits_map.get(ref)
+        if not produit or not produit.get("id"):
+            continue
+
+        ref_clean = re.sub(r"[^\w\-]+", "_", ref.split(" - ")[0])
+        filename = f"fiche_fournisseur_{ref_clean}.pdf"
+        if filename in existing:
+            continue
+
+        # Recharge le produit avec client_nom (comme dans /export)
+        row = conn.execute(
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
+               FROM ao_produits p
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+               WHERE p.id=?""",
+            (int(produit["id"]),),
+        ).fetchone()
+        if not row:
+            continue
+        prod_full = _serialize_produit_row(_row_dict(row), conn)
+
+        # Matières map pour ce produit uniquement
+        fiche = prod_full.get("fiche") or {}
+        ids: set[int] = set()
+        mat = fiche.get("matiere") or {}
+        for key in ("frontal_id", "adhesif_id", "glassine_id"):
+            if mat.get(key):
+                ids.add(int(mat[key]))
+        cond = fiche.get("conditionnement") or {}
+        for block in (cond.get("carton") or {}, cond.get("palette") or {}):
+            if block.get("matiere_id"):
+                ids.add(int(block["matiere_id"]))
+        mp_map = _load_matieres_map(conn, ids) if ids else {}
+
+        try:
+            pdf_bytes = generate_fiche_fournisseur_pdf(
+                prod_full, matieres_map=mp_map, ao_reference=ao_reference,
+            )
+        except Exception:
+            logger.exception(
+                "Échec génération PDF fournisseur pour produit %s (AO %s)",
+                ref, ao_reference,
+            )
+            continue
+
+        stored_name = str(uuid.uuid4()) + ".pdf"
+        dest_path = os.path.join(dest_dir, stored_name)
+        try:
+            with open(dest_path, "wb") as f:
+                f.write(pdf_bytes)
+        except OSError:
+            logger.exception("Écriture PDF fournisseur impossible : %s", dest_path)
+            continue
+
+        conn.execute(
+            """INSERT INTO ao_pieces_jointes
+               (ao_id, filename, stored_name, taille_octets, uploaded_by, date)
+               VALUES (?,?,?,?,?,?)""",
+            (ao_id, filename, stored_name, len(pdf_bytes), "auto-fiche-produit", now_iso),
+        )
+
 
 @router.post("/{ao_id}/envoyer")
 def envoyer_ao(request: Request, ao_id: int):
@@ -1329,7 +2569,7 @@ def envoyer_ao(request: Request, ao_id: int):
         if ao.get("statut") == "cloturee":
             raise HTTPException(
                 status_code=400,
-                detail="Envoi impossible — l'appel d'offre est clôturé.",
+                detail="Envoi impossible — l'appel d'offres est clôturé.",
             )
         lignes_raw = [
             _row_dict(r)
@@ -1351,6 +2591,14 @@ def envoyer_ao(request: Request, ao_id: int):
                WHERE ao_id=? AND statut='invite' AND date_envoi IS NULL""",
             (ao_id,),
         ).fetchall()
+
+        # ── Auto-attach : génère un PDF fournisseur par produit de l'AO
+        # et l'insère dans ao_pieces_jointes (visible côté portail dans
+        # l'onglet Documents). Idempotent : ne recrée pas les PDFs déjà
+        # attachés lors d'un envoi précédent (détecté par nom de fichier
+        # commençant par "fiche_fournisseur_").
+        _auto_attach_fournisseur_pdfs(conn, ao_id, ao.get("reference"),
+                                      lignes_raw, produits_map, now)
 
         for row in fournisseurs:
             fourni = _row_dict(row)
@@ -1532,7 +2780,7 @@ async def post_message(request: Request, ao_id: int, fourni_id: int):
     lien = f"{BASE_URL.rstrip('/')}/portail/ao/{fourni['token']}"
     subject = f"[MySifa] Nouveau message — {reference}"
     corps_texte = (
-        f"Vous avez reçu un message concernant l'appel d'offre {reference}.\n\n"
+        f"Vous avez reçu un message concernant l'appel d'offres {reference}.\n\n"
         f"{message}\n\n"
         f"Accéder à la demande : {lien}"
     )
@@ -1570,7 +2818,14 @@ def comparaison_ao(request: Request, ao_id: int):
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
         eur_usd = get_eur_usd_rate(conn)
+        _ao_pct_row = conn.execute(
+            "SELECT COALESCE(prix_transport_pct, 0) AS pct FROM ao_demandes WHERE id=?",
+            (ao_id,),
+        ).fetchone()
+        transport_pct = float(_ao_pct_row[0]) if _ao_pct_row else 0.0
 
+        ligne_ids_all = [int(r["id"]) for r in lignes_rows]
+        series_by_ligne = _load_series_by_ligne(conn, ligne_ids_all)
         lignes_out: list[dict[str, Any]] = []
         rows_flat: list[dict[str, Any]] = []
         for ln_row in lignes_rows:
@@ -1588,7 +2843,9 @@ def comparaison_ao(request: Request, ao_id: int):
                 for r in conn.execute(
                     """SELECT r.id AS reponse_id, f.id AS fourni_id, f.nom_fournisseur,
                               r.quotation, r.prix_unitaire, r.devise, r.unite_quotation,
-                              r.coef, r.devise_prix_devis,
+                              r.unite_quotation_original,
+                              CASE WHEN COALESCE(r.unite_quotation_original, r.unite_quotation) != r.unite_quotation THEN 1 ELSE 0 END AS unite_manuel,
+                              r.coef, r.marge, r.devise_prix_devis,
                               r.delai_jours, r.commentaire
                        FROM ao_reponses r
                        JOIN ao_fournisseurs f ON f.id = r.ao_fournisseur_id
@@ -1603,7 +2860,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 raw = rep_by_fourni.get(int(f["id"]))
                 if raw:
                     reponses.append(
-                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                        enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct)
                     )
             prices_mille = [
                 float(r["prix_au_mille"])
@@ -1616,6 +2873,7 @@ def comparaison_ao(request: Request, ao_id: int):
                 prix_moyen = sum(prices_mille) / len(prices_mille)
             else:
                 prix_min = prix_max = prix_moyen = None
+            series_list = series_by_ligne.get(int(ln["id"]), [])
             ligne_out = {
                 "id": ln["id"],
                 "ref_produit": ln["ref_produit"],
@@ -1627,13 +2885,14 @@ def comparaison_ao(request: Request, ao_id: int):
                 "prix_min": prix_min,
                 "prix_max": prix_max,
                 "prix_moyen": prix_moyen,
+                "series": series_list,
             }
             lignes_out.append(ligne_out)
             for f in fournisseurs:
                 fid = int(f["id"])
                 raw = rep_by_fourni.get(fid)
                 if raw:
-                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd)
+                    rep = enrich_reponse_pricing(raw, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct)
                 else:
                     rep = enrich_reponse_pricing(
                         {
@@ -1644,11 +2903,41 @@ def comparaison_ao(request: Request, ao_id: int):
                             "devise": "EUR",
                             "unite_quotation": "mille",
                             "coef": 1.0,
+                            "marge": 1.0,
                             "devise_prix_devis": "EUR",
                         },
                         ctx,
                         eur_usd_rate=eur_usd,
+                        transport_pct=transport_pct,
                     )
+                # Détail par série — prix calculé + prix vente pour chaque série
+                # (utile pour l'affichage sous-ligne dans le comparateur)
+                series_breakdown: list[dict[str, Any]] = []
+                for s in series_list:
+                    s_ctx = dict(ctx)
+                    s_ctx["quantite_etiquettes"] = float(s.get("quantite") or 0)
+                    s_rep = enrich_reponse_pricing(
+                        dict(raw) if raw else {
+                            "reponse_id": None,
+                            "quotation": None,
+                            "devise": rep.get("devise"),
+                            "unite_quotation": rep.get("unite_quotation"),
+                            "coef": rep.get("coef", 1.0),
+                            "devise_prix_devis": rep.get("devise_prix_devis"),
+                        },
+                        s_ctx,
+                        eur_usd_rate=eur_usd,
+                        transport_pct=transport_pct,
+                    )
+                    series_breakdown.append({
+                        "id": s.get("id"),
+                        "libelle": s.get("libelle"),
+                        "quantite": s.get("quantite"),
+                        "notes": s.get("notes"),
+                        "prix_calcule": s_rep.get("prix_calcule"),
+                        "transport_amount": s_rep.get("transport_amount"),
+                        "prix_vente": s_rep.get("prix_vente"),
+                    })
                 rows_flat.append({
                     "ligne_id": ln["id"],
                     "reponse_id": rep.get("reponse_id"),
@@ -1656,11 +2945,17 @@ def comparaison_ao(request: Request, ao_id: int):
                     "nom_fournisseur": rep.get("nom_fournisseur"),
                     **ctx,
                     **{k: rep.get(k) for k in (
-                        "quotation", "devise", "unite_quotation",
-                        "prix_calcule", "prix_au_mille", "coef",
-                        "devise_prix_devis", "prix_vente",
+                        "quotation", "devise", "unite_quotation", "unite_quotation_original", "unite_manuel",
+                        "prix_calcule", "transport_amount", "prix_au_mille", "prix_achat_mille", "coef",
+                        "marge", "devise_prix_devis", "prix_vente",
+                        # Nouveau pipeline conditionnement (v217)
+                        "prix_achat_mille_dd", "unite_vente_type", "unite_vente_qte",
+                        "etiq_par_condi", "prix_achat_conditionne", "prix_vente_final",
+                        # Marge brute vs dernier prix de vente (fiche produit)
+                        "dernier_prix_vente", "has_produit", "marge_brute_pct",
                         "delai_jours", "commentaire",
                     )},
+                    "series_breakdown": series_breakdown,
                 })
 
     return {
@@ -1677,7 +2972,13 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
     _require_ao(request)
     body = await request.json()
     coef = body.get("coef")
+    marge = body.get("marge")
     devise_prix_devis = body.get("devise_prix_devis")
+    unite_quotation = body.get("unite_quotation")
+    if unite_quotation is not None:
+        unite_quotation = (unite_quotation or "").strip().lower()
+        if unite_quotation not in UNITES_QUOTATION:
+            raise HTTPException(status_code=400, detail="Unite invalide.")
     if coef is not None:
         try:
             coef = float(coef)
@@ -1685,6 +2986,13 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
             raise HTTPException(status_code=400, detail="Coefficient invalide.")
         if coef <= 0:
             raise HTTPException(status_code=400, detail="Coefficient invalide.")
+    if marge is not None:
+        try:
+            marge = float(marge)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Marge invalide.")
+        if marge <= 0:
+            raise HTTPException(status_code=400, detail="Marge invalide.")
     if devise_prix_devis is not None:
         devise_prix_devis = (devise_prix_devis or "").strip().upper()
         if devise_prix_devis not in DEVISES:
@@ -1707,10 +3015,27 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
                 "UPDATE ao_reponses SET coef=? WHERE id=?",
                 (coef, reponse_id),
             )
+        if marge is not None:
+            conn.execute(
+                "UPDATE ao_reponses SET marge=? WHERE id=?",
+                (marge, reponse_id),
+            )
         if devise_prix_devis is not None:
             conn.execute(
                 "UPDATE ao_reponses SET devise_prix_devis=? WHERE id=?",
                 (devise_prix_devis, reponse_id),
+            )
+        if unite_quotation is not None:
+            # Recup original pour calculer unite_manuel
+            row_orig = conn.execute(
+                "SELECT COALESCE(unite_quotation_original, unite_quotation) AS orig FROM ao_reponses WHERE id=?",
+                (reponse_id,),
+            ).fetchone()
+            orig_unite = (row_orig[0] if row_orig else None) or unite_quotation
+            manuel_flag = 0 if unite_quotation == orig_unite else 1
+            conn.execute(
+                "UPDATE ao_reponses SET unite_quotation=?, unite_manuel=? WHERE id=?",
+                (unite_quotation, manuel_flag, reponse_id),
             )
         conn.commit()
         updated = conn.execute(
@@ -1728,20 +3053,135 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
         eur_usd = get_eur_usd_rate(conn)
+        _ao_pct_row2 = conn.execute(
+            "SELECT COALESCE(prix_transport_pct, 0) AS pct FROM ao_demandes WHERE id=?",
+            (ao_id,),
+        ).fetchone()
+        transport_pct2 = float(_ao_pct_row2[0]) if _ao_pct_row2 else 0.0
         produit = produits_map.get((row["ref_produit"] or "").strip().lower())
         ctx = ligne_context_from_produit(
             row["ref_produit"], row["quantite"], produit, matieres_map
         )
-        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd)
+        return enrich_reponse_pricing(rep_out, ctx, eur_usd_rate=eur_usd, transport_pct=transport_pct2)
+
+
+@router.post("/{ao_id}/lignes/{ligne_id}/reponses-manuelles")
+async def create_reponse_manuelle(request: Request, ao_id: int, ligne_id: int):
+    """Crée une réponse fournisseur saisie manuellement en interne.
+
+    Utilisé quand un fournisseur donne son prix par email/téléphone plutôt
+    que via le portail. La ligne côté comparateur affiche l'offre comme
+    n'importe quelle autre réponse. Le fournisseur est marqué "repondu".
+
+    Body : {ao_fournisseur_id, quotation, devise, unite_quotation,
+             delai_jours?, commentaire?, coef?, devise_prix_devis?}
+    """
+    user = _require_ao(request)
+    body = await request.json()
+    try:
+        ao_fournisseur_id = int(body.get("ao_fournisseur_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Fournisseur invalide.")
+    quotation = body.get("quotation")
+    if quotation is None or str(quotation).strip() == "":
+        raise HTTPException(status_code=400, detail="Quotation obligatoire.")
+    try:
+        quotation = float(quotation)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Quotation invalide.")
+    devise = (body.get("devise") or "EUR").strip().upper()
+    if devise not in DEVISES:
+        devise = "EUR"
+    unite = (body.get("unite_quotation") or "mille").strip().lower()
+    if unite not in UNITES_QUOTATION:
+        raise HTTPException(status_code=400, detail="Unité invalide.")
+    delai = body.get("delai_jours")
+    if delai is not None and str(delai).strip() != "":
+        try:
+            delai = int(delai)
+        except (TypeError, ValueError):
+            delai = None
+    else:
+        delai = None
+    commentaire = (body.get("commentaire") or "").strip() or None
+    coef = body.get("coef")
+    if coef is not None:
+        try:
+            coef = float(coef)
+        except (TypeError, ValueError):
+            coef = 1.0
+        if coef <= 0:
+            coef = 1.0
+    else:
+        coef = 1.0
+    devise_prix_devis = (body.get("devise_prix_devis") or "EUR").strip().upper()
+    if devise_prix_devis not in DEVISES:
+        devise_prix_devis = "EUR"
+    now = _now_paris_iso()
+    with get_db() as conn:
+        _get_ao_or_404(conn, ao_id)
+        # Vérifier que la ligne appartient à l'AO
+        ln = conn.execute(
+            "SELECT * FROM ao_lignes WHERE id=? AND ao_id=?",
+            (ligne_id, ao_id),
+        ).fetchone()
+        if not ln:
+            raise HTTPException(status_code=404, detail="Ligne introuvable.")
+        # Vérifier que le fournisseur appartient à l'AO
+        fourni = conn.execute(
+            "SELECT * FROM ao_fournisseurs WHERE id=? AND ao_id=?",
+            (ao_fournisseur_id, ao_id),
+        ).fetchone()
+        if not fourni:
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        # Existe déjà une réponse pour ce couple (fournisseur, ligne, sans série) ?
+        existing = conn.execute(
+            """SELECT id FROM ao_reponses
+               WHERE ao_fournisseur_id=? AND ligne_id=? AND serie_id IS NULL""",
+            (ao_fournisseur_id, ligne_id),
+        ).fetchone()
+        if existing:
+            raise HTTPException(status_code=409, detail="Une réponse existe déjà pour ce fournisseur — modifiez-la à la place.")
+        conn.execute(
+            """INSERT INTO ao_reponses
+               (ao_fournisseur_id, ligne_id, quotation, prix_unitaire,
+                devise, unite_quotation, unite_quotation_original, unite_manuel,
+                coef, devise_prix_devis, delai_jours, commentaire)
+               VALUES (?,?,?,?,?,?,?,1,?,?,?,?)""",
+            (
+                ao_fournisseur_id, ligne_id, quotation, quotation,
+                devise, unite, unite,
+                coef, devise_prix_devis, delai, commentaire,
+            ),
+        )
+        # Marquer le fournisseur "repondu" (comportement analogue au portail)
+        conn.execute(
+            """UPDATE ao_fournisseurs
+               SET statut='repondu', date_reponse=COALESCE(date_reponse, ?)
+               WHERE id=?""",
+            (now, ao_fournisseur_id),
+        )
+        conn.commit()
+    log_action(
+        user=user, action="CREATE", module="ao",
+        objet=f"Réponse manuelle · AO {ao_id} · fournisseur {ao_fournisseur_id}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "ao_id": ao_id, "ligne_id": ligne_id,
+            "ao_fournisseur_id": ao_fournisseur_id}
 
 
 @router.get("/{ao_id}/non-lus")
 def non_lus(request: Request, ao_id: int):
-    """Retourne le nombre de messages fournisseur non lus, par fournisseur."""
+    """Retourne pour chaque fournisseur de l'AO le nombre de messages non lus
+    et le nombre total de messages. Format : {fourni_id: {"unread": n, "total": m}}
+    Rétrocompatible : pour l'ancien front qui lit `S.nonLus[id]` comme un int,
+    on renvoie ce format enrichi avec les deux vues au niveau top-level.
+    """
     _require_ao(request)
     with get_db() as conn:
         _get_ao_or_404(conn, ao_id)
-        rows = conn.execute(
+        unread_rows = conn.execute(
             """SELECT ao_fournisseur_id, COUNT(*) AS n
                FROM ao_messages
                WHERE ao_fournisseur_id IN (
@@ -1750,4 +3190,21 @@ def non_lus(request: Request, ao_id: int):
                GROUP BY ao_fournisseur_id""",
             (ao_id,),
         ).fetchall()
-    return {str(r["ao_fournisseur_id"]): int(r["n"]) for r in rows}
+        total_rows = conn.execute(
+            """SELECT ao_fournisseur_id, COUNT(*) AS n
+               FROM ao_messages
+               WHERE ao_fournisseur_id IN (
+                 SELECT id FROM ao_fournisseurs WHERE ao_id=?
+               )
+               GROUP BY ao_fournisseur_id""",
+            (ao_id,),
+        ).fetchall()
+    unread = {str(r["ao_fournisseur_id"]): int(r["n"]) for r in unread_rows}
+    totals = {str(r["ao_fournisseur_id"]): int(r["n"]) for r in total_rows}
+    return {
+        # Rétrocompatibilité : premier niveau = compte non lus par fournisseur
+        **unread,
+        # Nouvelles clés dédiées
+        "_unread": unread,
+        "_totals": totals,
+    }

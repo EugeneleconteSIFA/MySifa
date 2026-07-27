@@ -26,7 +26,12 @@ from datetime import datetime
 from typing import Any
 
 
-LANGAGES = ("zpl", "epl", "escpos")
+# v1.7 — ajout de "pdf" pour l'impression de documents bureautiques (OF, fiches
+# techniques) vers des imprimantes A4/A3 laser/jet. Le langage "pdf" est un
+# passthrough : les bytes du PDF sont stockes tels quels dans print_jobs.payload
+# et transmis a l'agent, qui les envoie a SumatraPDF pour impression sur la
+# queue Windows cible (avec params copies/duplex/format/bac/N&B via data_json).
+LANGAGES = ("zpl", "epl", "escpos", "pdf")
 
 # Placeholder simple : {{ clef }} ou {{ clef.sous_clef }} (support dot notation)
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}")
@@ -118,6 +123,16 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
     """
     if langage not in LANGAGES:
         raise ValueError(f"Langage inconnu : {langage!r}. Attendu : {LANGAGES}")
+    # v1.7 — le langage "pdf" ne rend pas de template : les bytes du PDF sont
+    # fournis directement par l'endpoint POST /api/print/pdf. render_template
+    # n'est jamais appele pour un job PDF (l'endpoint stocke directement le
+    # blob dans print_jobs.payload). Si on arrive ici avec langage=pdf, c'est
+    # que quelqu'un a mal cable l'appel — on remonte une erreur explicite.
+    if langage == "pdf":
+        raise ValueError(
+            "Le langage 'pdf' ne s'utilise pas via render_template. "
+            "Utilise l'endpoint POST /api/print/pdf pour soumettre un job PDF."
+        )
     if template is None:
         template = ""
     if data is None:
@@ -160,27 +175,156 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
 #
 DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 ^CI28
-^PW812
-^LL1218
-^LH0,0
-^FO40,40^GB732,1138,4^FS
-^FO60,70^A0N,40,40^FDIDENTIFICATION BOBINE^FS
-^FO60,120^GB692,3,3^FS
-^FO60,150^A0N,55,55^FD{{fsc_banner}}^FS
-^FO60,240^A0N,26,26^FDReference produit^FS
-^FO60,280^A0N,45,45^FD{{ref_produit}}^FS
-^FO60,360^A0N,26,26^FDFournisseur^FS
-^FO60,400^A0N,42,42^FD{{fournisseur}}^FS
-^FO60,480^A0N,26,26^FDStatut FSC^FS
-^FO60,520^A0N,40,40^FD{{fsc_label}}^FS
-^FO60,600^A0N,26,26^FDN de lot^FS
-^FO60,640^A0N,40,40^FD{{lot_numero}}^FS
-^FO60,730^A0N,26,26^FDCode-barres bobine^FS
-^FO60,770^BY3^BCN,140,Y,N,N^FD{{code_barre}}^FS
-^FO60,970^A0N,22,22^FDReception le {{date_reception}} par {{operateur_nom}}^FS
-^FO60,1010^A0N,22,22^FDSIFA^FS
+^PW1188
+^LL1476
+^LH96,96
+^FO0,0^A0N,68,68^FDSIFA^FS
+^FO660,0^GB336,108,108^FS
+^FO690,30^A0N,48,48^FR^FD{{fsc_banner}}^FS
+^FO0,140^A0N,60,60^FD{{lot_numero}}^FS
+^BY4,3,240
+^FO0,220^BCN,240,N,N,N^FD{{lot_numero}}^FS
+^FO0,500^A0N,42,42^FDReference : {{ref_matiere}}^FS
+^FO0,560^A0N,38,38^FDFournisseur : {{fournisseur}}^FS
+^FO0,615^A0N,38,38^FDCertificat FSC : {{certificat_fsc}}^FS
+^FO0,670^A0N,38,38^FDReception : {{date_reception}}^FS
+^FO0,725^A0N,38,38^FDBobines : {{nb_bobines}} / {{nb_bobines_total}}^FS
+^FO0,800^GB1000,3,3^FS
+^FO0,820^A0N,42,42^FDCODES BOBINES^FS
+^FO0,880^A0N,32,32^FD{{codes_bobines}}^FS
 ^XZ
 """
+
+# Template COMPACT 107x50mm pour reimpression (203dpi = 8dpmm)
+# 107mm x 8 = 856 dots, 50mm x 8 = 400 dots
+DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
+^CI28
+^PW1284
+^LL600
+^LH24,24
+^FO0,0^A0N,68,68^FD{{lot_numero}}^FS
+^FO0,82^GB180,44,44^FS
+^FO8,90^A0N,32,32^FR^FD{{fsc_banner}}^FS
+^FO200,88^A0N,32,32^FD{{date_reception}}^FS
+^BY3,2.5,180
+^FO0,145^BCN,180,N,N,N^FD{{lot_numero}}^FS
+^FO0,345^A0N,32,32^FDMATIERE : {{ref_matiere}}^FS
+^FO0,390^A0N,28,28^FD{{fournisseur}} — {{site}}^FS
+^XZ
+"""
+
+
+# Templates prédéfinis complémentaires (galerie de départ pour l'admin).
+# Format : liste de dicts {key, nom, description, langage, contenu}.
+DEFAULT_TEMPLATE_GALLERY = [
+    {
+        "key": "bobine_full",
+        "nom": "Étiquette bobine — complète (FSC + code-barres + QR)",
+        "description": "Format A6 (102×152mm). Header SIFA, badge FSC inversé, référence produit gros, fournisseur, lot très visible, code-barres CODE128, QR code + traçabilité.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 102,
+        "hauteur_mm": 152,
+        "contenu": DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL,
+    },
+    {
+        "key": "bobine_compact",
+        "nom": "Étiquette bobine — compacte (petit format 57×32mm)",
+        "description": "Format ticket (57×32mm). Juste l'essentiel : lot + code-barres + FSC.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 57,
+        "hauteur_mm": 32,
+        "contenu": """^XA
+^CI28
+^PW456
+^LL256
+^LH0,0
+^FO10,10^A0N,22,22^FD{{fsc_banner}}^FS
+^FO10,40^A0N,26,26^FD{{lot_numero}}^FS
+^FO10,80^BY2,3,80^BCN,80,N,N,N^FD{{lot_numero}}^FS
+^FO10,180^A0N,16,16^FD{{ref_produit}}^FS
+^FO10,205^A0N,14,14^FD{{fournisseur}} - {{date_reception}}^FS
+^XZ
+""",
+    },
+    {
+        "key": "emplacement_stock",
+        "nom": "Étiquette emplacement stock (grand)",
+        "description": "Format A5 (102×74mm). Code emplacement en très gros + code-barres pour scan mobile.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 102,
+        "hauteur_mm": 74,
+        "contenu": """^XA
+^CI28
+^PW812
+^LL592
+^LH0,0
+^FO30,30^A0N,26,26^FDEMPLACEMENT^FS
+^FO30,70^A0N,130,130^FD{{ref_produit}}^FS
+^FO30,240^BY5,3,180^BCN,180,Y,N,N^FD{{ref_produit}}^FS
+^FO30,530^A0N,20,20^FDSIFA - Loos^FS
+^XZ
+""",
+    },
+    {
+        "key": "colis_expedition",
+        "nom": "Étiquette colis expédition (100×150mm)",
+        "description": "Format standard colis. Client, adresse, numéro de commande, code-barres tracking.",
+        "langage": "zpl",
+        "usage_key": "reception_matiere",
+        "largeur_mm": 100,
+        "hauteur_mm": 150,
+        "contenu": """^XA
+^CI28
+^PW800
+^LL1200
+^LH0,0
+^FO30,30^A0N,32,32^FDEXPEDITION^FS
+^FO30,80^GB740,3,3^FS
+^FO30,110^A0N,22,22^FDDestinataire :^FS
+^FO30,150^A0N,42,42^FD{{fournisseur}}^FS
+^FO30,220^A0N,26,26^FD{{ref_produit}}^FS
+^FO30,290^GB740,2,2^FS
+^FO30,320^A0N,22,22^FDNumero de commande :^FS
+^FO30,360^A0N,55,55^FD{{lot_numero}}^FS
+^FO30,470^BY4,3,150^BCN,150,Y,N,N^FD{{code_barre}}^FS
+^FO30,700^BQN,2,8^FDLA,{{code_barre}}^FS
+^FO320,720^A0N,22,22^FDExpedie le :^FS
+^FO320,750^A0N,32,32^FD{{date_reception}}^FS
+^FO320,810^A0N,22,22^FDPar :^FS
+^FO320,840^A0N,28,28^FD{{operateur_nom}}^FS
+^FO30,1150^A0N,18,18^FDSIFA Loos - Support: contact@sifa.pro^FS
+^XZ
+""",
+    },
+]
+
+
+def list_default_templates() -> list[dict]:
+    """Renvoie la galerie de templates prédéfinis pour l'UI (sans le contenu ZPL
+    complet dans la liste, juste key + nom + description + dimensions)."""
+    return [
+        {
+            "key": t["key"],
+            "nom": t["nom"],
+            "description": t["description"],
+            "langage": t["langage"],
+            "usage_key": t["usage_key"],
+            "largeur_mm": t["largeur_mm"],
+            "hauteur_mm": t["hauteur_mm"],
+        }
+        for t in DEFAULT_TEMPLATE_GALLERY
+    ]
+
+
+def get_default_template(key: str) -> dict | None:
+    """Renvoie le template prédéfini complet (avec contenu) par sa clé."""
+    for t in DEFAULT_TEMPLATE_GALLERY:
+        if t["key"] == key:
+            return t
+    return None
 
 
 def default_templates_seed() -> list[dict]:
@@ -191,7 +335,7 @@ def default_templates_seed() -> list[dict]:
     return [
         {
             "usage_key": "reception_matiere",
-            "nom": "Étiquette réception matière",
+            "nom": "Étiquette réception matière (complète)",
             "contenu": DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL,
         },
     ]
@@ -213,8 +357,24 @@ USAGES = [
             "{{qrcode:lot_numero}}", "{{now:%d/%m/%Y}}",
         ],
     },
-    # À venir : etiquette_of (MyProd), etiquette_colis (MyExpé),
-    # etiquette_emplacement (MyStock), etc.
+    # v1.7 — usages "PDF passthrough" pour MyProd. Aucun template n'est
+    # applique : c'est le PDF genere/importe qui sert de payload direct
+    # (endpoint POST /api/print/pdf). Ces usages doivent etre associes a
+    # une imprimante de langage="pdf" (imprimante bureautique via
+    # SumatraPDF sur agent Windows).
+    {
+        "key": "of_document",
+        "label": "Ordre de fabrication (PDF)",
+        "module": "prod",
+        "placeholders": [],
+    },
+    {
+        "key": "fiche_technique",
+        "label": "Fiche technique (PDF)",
+        "module": "prod",
+        "placeholders": [],
+    },
+    # À venir : etiquette_colis (MyExpé), etiquette_emplacement (MyStock), etc.
 ]
 
 

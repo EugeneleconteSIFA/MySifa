@@ -3,9 +3,30 @@
 AO_PRODUIT_FORM_CSS = """
 .pf-wrap{max-width:1100px}
 .pf-sticky-bar{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
-justify-content:space-between;padding:10px 0;margin-bottom:12px;background:var(--bg);
-border-bottom:1px solid var(--border)}
-.pf-sticky-bar .pf-actions{display:flex;gap:8px;flex-wrap:wrap}
+justify-content:space-between;padding:10px 14px;margin-bottom:16px;
+background:linear-gradient(135deg, var(--card) 0%, var(--accent-bg) 100%);
+border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
+box-shadow:0 2px 8px rgba(15,23,42,.04)}
+.pf-sticky-bar .pf-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+/* Boutons sticky-bar produit : contraste net sur fond gradient clair */
+.pf-sticky-bar .btn-ghost.btn-sm{background:var(--card);border:1px solid var(--border);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06);transition:background .15s,border-color .15s,color .15s}
+.pf-sticky-bar .btn-ghost.btn-sm:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.pf-sticky-bar .btn-ghost.btn-sm[disabled]{opacity:.5;cursor:not-allowed}
+/* Pager 1/N : encart carte pour bien se détacher */
+.pf-sticky-bar .nav-pager{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px 4px;box-shadow:0 1px 2px rgba(0,0,0,.06);gap:2px}
+.pf-sticky-bar .nav-pager .nav-pos{color:var(--text);font-weight:700;font-size:13px;padding:0 10px}
+.pf-sticky-bar .nav-pager .btn-icon{width:28px;height:28px;border-radius:8px;color:var(--text2)}
+.pf-sticky-bar .nav-pager .btn-icon:hover{background:var(--accent-bg);color:var(--accent)}
+/* Titre de page renforcé : accent coloré + micro-badge de statut */
+.pf-page-hdr{display:flex;align-items:center;gap:14px;margin:4px 0 18px;padding:14px 18px;
+background:linear-gradient(135deg, var(--accent-bg) 0%, transparent 60%);
+border-left:4px solid var(--accent);border-radius:0 12px 12px 0}
+.pf-page-hdr .pf-page-icon{display:inline-flex;align-items:center;justify-content:center;
+width:38px;height:38px;border-radius:10px;background:var(--accent);color:#fff;flex-shrink:0}
+.pf-page-hdr h1{font-size:20px;font-weight:800;margin:0;line-height:1.2;color:var(--text)}
+.pf-page-hdr .pf-page-sub{font-size:12px;color:var(--muted);margin-top:2px;font-weight:500}
+.pf-page-hdr .pf-page-status{margin-left:auto;padding:4px 10px;border-radius:999px;font-size:11px;
+font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:var(--accent-bg);color:var(--accent)}
 .pf-section{margin-bottom:18px}
 .pf-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
 color:var(--accent);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
@@ -41,6 +62,8 @@ align-items:center}
 .pf-client-picker{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pf-client-display{flex:1;min-width:0;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pf-client-display.is-empty{font-weight:400}
+.pf-client-row{grid-column:span 2}
+@media(max-width:960px){.pf-client-row{grid-column:span 1}}
 .pf-pick-list{max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:10px}
 .pf-pick-item{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
 .pf-pick-item:last-child{border-bottom:none}
@@ -75,7 +98,7 @@ function defaultProduitFiche() {
     etiquette: { laize: '', longueur: '', rayon: '', perforation: '' },
     echenillage: { droite: '', gauche: '', avance: '' },
     matiere: { frontal_id: '', adhesif_id: '', grammage_adhesif: '', glassine_id: '', couleur_glassine: '' },
-    bobines: { diametre_mandrin: '', enroulement: 'interieur', diametre_bobine: '', nb_etiquettes: '' },
+    bobines: { diametre_mandrin: '', enroulement: 'exterieur', diametre_bobine: '', nb_etiquettes: '' },
     impressions_detail: {
       aplat: false, aplat_pourcent: '', recto: 0, verso: 0,
       recto_details: [], verso_details: []
@@ -84,6 +107,13 @@ function defaultProduitFiche() {
       carton: { matiere_id: '', bobines_sol: '', nb_etages: '', bobines_carton: '' },
       palette: { matiere_id: '', cartons_sol: '', nb_etages: '', cartons_palette: '' }
     },
+    // Unité de vente du produit : type + quantité (ex. type 'carton' qté 1,
+    // ou type 'bobine' qté 100). Sert au calcul du prix conditionné dans MyAO.
+    // Défaut : au mille d'étiquettes.
+    unite_vente: { type: 'mille', quantite: 1 },
+    // Dernier prix de vente connu, exprimé PAR UNITÉ DE VENTE (même base que
+    // le prix d'achat conditionné). Sert au calcul de la marge brute.
+    dernier_prix_vente: '',
     particularites: ''
   };
 }
@@ -188,7 +218,14 @@ function renderProduitForm() {
     icon('file-text',14)+' PDF</button>'+
     '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
-    '<div class="page-hdr" style="margin-bottom:10px"><h1 style="font-size:18px">'+(d.id?'Modifier':'Nouveau')+' produit</h1></div>'+
+    '<div class="pf-page-hdr">'+
+      '<span class="pf-page-icon">'+icon('package',20)+'</span>'+
+      '<div>'+
+        '<h1>'+(d.id?'Modifier':'Nouveau')+' produit</h1>'+
+        '<div class="pf-page-sub">'+(d.ref ? escHtml(d.ref) : 'Fiche produit MyAO')+(d.client_label ? ' · '+escHtml(d.client_label) : '')+'</div>'+
+      '</div>'+
+      (d.id ? '<span class="pf-page-status">Enregistré</span>' : '<span class="pf-page-status" style="background:rgba(251,191,36,.15);color:var(--warn)">Nouveau</span>')+
+    '</div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Infos générales</div><div class="pf-card pf-general">'+
     pfRow('Réf. produit', '<input id="pf-ref" value="'+escAttr(d.ref)+'" required>')+
@@ -196,7 +233,8 @@ function renderProduitForm() {
       '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
-    pfRow('Client', clientPicker, 'pf-inline-wide')+
+    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-client-row')+
+    pfRow('Client', clientPicker, 'pf-inline-wide pf-client-row')+
     '</div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
@@ -262,6 +300,47 @@ function renderProduitForm() {
     '<div class="pf-section"><div class="pf-section-title">Particularités</div>'+
     '<div class="pf-card">'+
     pfRow('Notes', '<textarea id="pf-part" rows="3" placeholder="Notes spécifiques…">'+escHtml(f.particularites)+'</textarea>', 'pf-inline-wide')+
+    '</div></div>'+
+
+    // ── Unité de vente et historique (tout en bas) ──────────────────────────
+    '<div class="pf-section"><div class="pf-section-title">Unité de vente et historique</div>'+
+    '<div class="pf-card">'+
+    // Rappel conditionnement compact
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+
+      'Conditionnement : <strong style="color:var(--text2)">'+(f.bobines.nb_etiquettes||'—')+'</strong> étiq/bobine · '+
+      '<strong style="color:var(--text2)">'+(f.conditionnement.carton.bobines_carton||'—')+'</strong> bobines/carton · '+
+      '<strong style="color:var(--text2)">'+(f.conditionnement.palette.cartons_palette||'—')+'</strong> cartons/palette'+
+    '</div>'+
+    // Vendu par (compact, resserré)
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<label style="font-size:12px;color:var(--text);font-weight:600;width:130px;flex-shrink:0">Vendu par</label>'+
+      '<input type="number" min="1" step="1" id="pf-uv-qte" value="'+escAttr((f.unite_vente&&f.unite_vente.quantite)||1)+'" style="width:64px;padding:6px 8px;text-align:center">'+
+      '<select id="pf-uv-type" style="width:auto;min-width:150px;padding:6px 10px">'+
+      ['mille','etiquette','bobine','carton','palette'].map(function(u){var lbl={mille:'Mille (1000 étiq.)',etiquette:'Étiquette',bobine:'Bobine',carton:'Carton',palette:'Palette'}[u];return '<option value="'+u+'"'+(((f.unite_vente&&f.unite_vente.type)||'mille')===u?' selected':'')+'>'+lbl+'</option>';}).join('')+
+      '</select>'+
+    '</div>'+
+    // Dernier prix de vente
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
+      '<label style="font-size:12px;color:var(--text);font-weight:600;width:130px;flex-shrink:0">Dernier prix de vente</label>'+
+      '<input type="number" min="0" step="0.0001" id="pf-dpv" value="'+escAttr(f.dernier_prix_vente!=null?f.dernier_prix_vente:'')+'" placeholder="0.00" style="width:110px;padding:6px 8px;text-align:right">'+
+      '<span style="font-size:11px;color:var(--muted)">€ par unité de vente</span>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin:2px 0 14px">Pilote la colonne <strong>Condi.</strong> et le calcul de la <strong>marge brute</strong> dans les demandes de prix. Défaut de vente : au mille d\'étiquettes.</div>'+
+    // Historique : AO contenant ce produit
+    '<div style="font-size:12px;font-weight:600;color:var(--text2);border-top:1px solid var(--border);padding-top:12px;margin-bottom:8px">Appels d\'offres avec ce produit</div>'+
+    '<div id="pf-aos-list" style="display:flex;flex-direction:column;gap:6px">'+
+    (function(){
+      var aos = (d && d._aos !== undefined) ? d._aos : null;
+      if (aos === null) return '<span style="font-size:12px;color:var(--muted)">Chargement…</span>';
+      if (!aos.length) return '<span style="font-size:12px;color:var(--muted)">Aucun appel d\'offres avec ce produit.</span>';
+      return aos.map(function(a){
+        return '<a href="#" class="pf-ao-link" data-ao-id="'+escAttr(a.id)+'" style="font-size:12px;color:var(--accent);text-decoration:none;display:flex;gap:8px;align-items:baseline">'+
+          '<strong>'+escHtml(a.reference||('AO '+a.id))+'</strong>'+
+          (a.titre?'<span style="color:var(--text2)">'+escHtml(a.titre)+'</span>':'')+
+          '<span style="color:var(--muted);font-size:11px">'+escHtml(a.statut||'')+'</span></a>';
+      }).join('');
+    })()+
+    '</div>'+
     '</div>'+
     '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:14px;padding-top:12px">'+
     '<span></span><button type="button" class="btn btn-accent btn-sm" id="btn-pf-save-bottom">Enregistrer</button></div></div></div>';
@@ -340,6 +419,11 @@ function collectProduitForm() {
       cartons_palette: pfInt(document.getElementById('pf-pal-cart')?.value)
     }
   };
+  f.unite_vente = {
+    type: document.getElementById('pf-uv-type')?.value || 'mille',
+    quantite: pfInt(document.getElementById('pf-uv-qte')?.value) || 1
+  };
+  f.dernier_prix_vente = pfNum(document.getElementById('pf-dpv')?.value);
   f.particularites = document.getElementById('pf-part')?.value.trim() || '';
   return {
     ref: document.getElementById('pf-ref')?.value.trim(),
@@ -433,6 +517,15 @@ async function saveProduitForm() {
     }
     showToast('Fiche produit enregistrée.', 'success');
     await loadProduits();
+    if (S._pendingWizardHook && typeof S._pendingWizardHook.onSaved === 'function') {
+      const hook = S._pendingWizardHook;
+      S._pendingWizardHook = null;
+      S.produitForm = null;
+      S.produitView = 'list';
+      S.section = 'ao';
+      hook.onSaved(saved);
+      return;
+    }
     S.produitForm = produitFromApi(saved);
     render();
   } catch (e) {
@@ -452,10 +545,40 @@ async function openProduitForm(edit) {
   if (!S.matieres) {
     try { await loadMatieresForProduit(); } catch (e) { /* liste vide */ }
   }
+  // Historique AO : chargé en asynchrone, re-render quand prêt. _aos undefined
+  // tant que non chargé → affiche « Chargement… ».
+  if (S.produitForm && S.produitForm.id) {
+    const pid = S.produitForm.id;
+    api('/api/ao/produits/' + pid + '/aos')
+      .then(r => { if (S.produitForm && S.produitForm.id === pid) { S.produitForm._aos = (r && r.aos) || []; render(); } })
+      .catch(() => { if (S.produitForm && S.produitForm.id === pid) { S.produitForm._aos = []; render(); } });
+  } else if (S.produitForm) {
+    S.produitForm._aos = [];
+  }
   render();
 }
 
 function closeProduitForm() {
+  if (S._pendingWizardHook && typeof S._pendingWizardHook.onCanceled === 'function') {
+    const hook = S._pendingWizardHook;
+    S._pendingWizardHook = null;
+    S.produitView = 'list';
+    S.produitForm = null;
+    S.section = 'ao';
+    hook.onCanceled();
+    return;
+  }
+  // Retour vers l'AO qu'on a quitté (si la fiche a été ouverte depuis une ligne d'AO)
+  const ret = S._returnFromProduit;
+  if (ret && ret.section === 'ao' && ret.ao_id != null) {
+    S._returnFromProduit = null;
+    S.produitView = 'list';
+    S.produitForm = null;
+    S.section = 'ao';
+    openDetail(ret.ao_id);
+    return;
+  }
+  S._returnFromProduit = null;
   S.produitView = 'list';
   S.produitForm = null;
   render();
@@ -466,11 +589,18 @@ function exportProduitPdf() {
     showToast('Enregistrez le produit avant d\'exporter.', 'warn');
     return;
   }
-  window.open('/api/ao/produits/'+S.produitForm.id+'/export', '_blank');
+  window.open('/api/ao/produits/'+S.produitForm.id+'/pdf-fournisseur', '_blank');
 }
 
 function bindProduitFormEvents() {
   document.getElementById('btn-pf-back')?.addEventListener('click', closeProduitForm);
+  try { bindRefSifaAutocomplete(); } catch(e) { /* no-op */ }
+  // Historique : clic sur un AO → ouvre le détail de cet AO
+  document.querySelectorAll('.pf-ao-link').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    const id = parseInt(a.dataset.aoId, 10);
+    if (!isNaN(id)) { S.section = 'ao'; openDetail(id); }
+  }));
   document.getElementById('btn-pf-save')?.addEventListener('click', () => { saveProduitForm(); });
   document.getElementById('btn-pf-save-bottom')?.addEventListener('click', () => { saveProduitForm(); });
   document.querySelectorAll('.pf-sticky-bar .btn-nav-prev, .pf-sticky-bar .btn-nav-next').forEach(btn => {
@@ -519,6 +649,100 @@ function bindProduitFormEvents() {
   if (refInp && !refInp.value.trim()) {
     requestAnimationFrame(() => { refInp.focus(); });
   }
+}
+
+
+async function searchFichesTechniques(q) {
+  try {
+    const rows = await api('/api/ao/fiches-techniques?q=' + encodeURIComponent(q||'') + '&limit=20');
+    return Array.isArray(rows) ? rows : [];
+  } catch(e) { return []; }
+}
+
+async function fetchFicheTechnique(ref) {
+  return api('/api/ao/fiches-techniques/by-ref?ref=' + encodeURIComponent(ref));
+}
+
+// Applique la fiche technique aux champs VIDES uniquement.
+function fillProduitFromFiche(fiche) {
+  if (!fiche) return {applied: 0, skipped: 0};
+  const setIfEmpty = (id, val) => {
+    if (val == null || val === '') return false;
+    const el = document.getElementById(id);
+    if (!el) return false;
+    const cur = (el.value || '').trim();
+    if (cur === '' || cur === '0') { el.value = val; return true; }
+    return false;
+  };
+  let applied = 0, skipped = 0;
+  // Etiquette
+  if (setIfEmpty('pf-et-laize', fiche.laize_optimale || fiche.laize)) applied++; else if (fiche.laize) skipped++;
+  // Bobines
+  if (setIfEmpty('pf-bob-nb', fiche.nb_etiq_bobin)) applied++;
+  if (setIfEmpty('pf-bob-diam', fiche.dia_ext)) applied++;
+  if (setIfEmpty('pf-bob-mand', fiche.mandrin_longueur)) applied++;
+  // Impressions
+  if (setIfEmpty('pf-imp-recto', fiche.recto)) applied++;
+  if (setIfEmpty('pf-imp-verso', fiche.verso)) applied++;
+  // Matiere : nom en texte (frontal/adhesif sont des IDs cote produit).
+  // On ne remplit PAS ces selects — mapping ID/nom trop fragile. On log.
+  // Client texte (si champ client vide et fiche a un nom, ne rien faire — le picker est pilote a part).
+  // Cartons/palettes
+  if (setIfEmpty('pf-cart-bob', fiche.nb_bobines_carton)) applied++;
+  if (setIfEmpty('pf-cart-sol', fiche.nb_au_sol)) applied++;
+  if (setIfEmpty('pf-cart-etages', fiche.nb_etage)) applied++;
+  if (setIfEmpty('pf-pal-sol', fiche.palette_nb_cartons_sol)) applied++;
+  if (setIfEmpty('pf-pal-etages', fiche.palette_nb_cartons_hauteur)) applied++;
+  // Reference du produit : si vide et on a la ref de la fiche, la reprendre
+  if (setIfEmpty('pf-ref', fiche.reference)) applied++;
+  return {applied, skipped};
+}
+
+function bindRefSifaAutocomplete() {
+  const inp = document.getElementById('pf-refsifa');
+  const list = document.getElementById('pf-refsifa-list');
+  const btnClear = document.getElementById('btn-pf-refsifa-clear');
+  if (!inp || !list) return;
+  let hideT = null;
+  const hide = () => { list.style.display = 'none'; };
+  const show = () => { list.style.display = 'block'; };
+  const render = (rows) => {
+    if (!rows.length) { list.innerHTML = '<div style="padding:12px 14px;color:var(--muted);font-size:12px">Aucune fiche</div>'; show(); return; }
+    list.innerHTML = rows.map(r =>
+      '<div class="pf-refsifa-item" data-ref="' + escAttr(r.reference) + '" style="padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">' +
+        '<strong>' + escHtml(r.reference) + '</strong> - ' + escHtml(r.designation||'') +
+        (r.client ? ' <span style="color:var(--muted)">(' + escHtml(r.client) + ')</span>' : '') +
+      '</div>'
+    ).join('');
+    show();
+    list.querySelectorAll('.pf-refsifa-item').forEach(it => {
+      it.addEventListener('mousedown', async (ev) => {
+        ev.preventDefault();
+        const ref = it.dataset.ref;
+        inp.value = ref;
+        hide();
+        try {
+          const fiche = await fetchFicheTechnique(ref);
+          const res = fillProduitFromFiche(fiche);
+          showToast(res.applied + ' champs remplis depuis la fiche ' + ref + '.', 'success');
+        } catch(e) { showToast(e.message || 'Erreur fiche technique.', 'danger'); }
+      });
+    });
+  };
+  let debT = null;
+  inp.addEventListener('input', () => {
+    if (debT) clearTimeout(debT);
+    debT = setTimeout(async () => {
+      const rows = await searchFichesTechniques(inp.value);
+      render(rows);
+    }, 200);
+  });
+  inp.addEventListener('focus', async () => {
+    const rows = await searchFichesTechniques(inp.value);
+    render(rows);
+  });
+  inp.addEventListener('blur', () => { if (hideT) clearTimeout(hideT); hideT = setTimeout(hide, 200); });
+  if (btnClear) btnClear.addEventListener('click', () => { inp.value = ''; hide(); inp.focus(); });
 }
 
 async function loadMatieresForProduit() {

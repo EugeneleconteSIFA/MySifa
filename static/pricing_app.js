@@ -382,6 +382,66 @@
     S.settings = settings;
   }
 
+  function renderCategoryTiles(cats) {
+    if (!cats.length) return "";
+    const tiles = cats.map(c => {
+      const price = c.avg_price_eur_per_kg_or_m2;
+      const basis = c.price_basis_dominant === "PER_M2" ? "€/m²" : "€/kg";
+      const pv = c.variation_pct_30d != null ? parseFloat(c.variation_pct_30d) : null;
+      let vHtml = '<span class="cat-var muted">—</span>';
+      if (pv != null) {
+        const color = Math.abs(pv) < 0.5 ? "muted" : (pv > 0 ? "danger" : "success");
+        const arrow = pv > 0 ? "▲" : (pv < 0 ? "▼" : "•");
+        const abs = Math.abs(pv).toFixed(2);
+        vHtml = `<span class="cat-var ${color}">${arrow} ${abs}%</span>`;
+      }
+      return `<div class="cat-tile">
+        <div class="cat-tile-head">
+          <div class="cat-tile-label">${escHtml(c.label)}</div>
+          <div class="cat-tile-count">${c.count_materials} réf.</div>
+        </div>
+        <div class="cat-tile-value">${price != null ? fmtNum(price, 4, 4) : "—"} <span class="cat-tile-unit">${basis}</span></div>
+        <div class="cat-tile-var">Variation 30j : ${vHtml}</div>
+      </div>`;
+    }).join("");
+    return `<div class="section-title">Prix matières par catégorie <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">— moyenne des références actives</span></div>
+      <div class="cat-grid">${tiles}</div>`;
+  }
+
+  function renderRecentMovers(movers, totalMaterials) {
+    if (!movers.length) {
+      return `<div class="chart-card" style="margin-top:16px">
+        <h2>Matières à surveiller <span style="font-size:12px;color:var(--muted);font-weight:400">— variations sur les 30 derniers jours</span></h2>
+        <div class="empty" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
+          Aucune variation détectée sur les ${totalMaterials || 0} matières actives.<br>
+          <span style="font-size:11px">Modifiez un prix côté MyStock ou Coûts matières pour voir les variations remonter ici.</span>
+        </div>
+      </div>`;
+    }
+    const rows = movers.map(m => {
+      const pct = parseFloat(m.variation_pct);
+      const color = pct > 0 ? "danger" : "success";
+      const arrow = pct > 0 ? "▲" : "▼";
+      const abs = Math.abs(pct).toFixed(2);
+      return `<div class="mover-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;color:var(--text)">${escHtml(m.name)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(m.category_code)} · il y a ${m.days_ago} j</div>
+        </div>
+        <div style="text-align:right;font-size:12px;color:var(--muted)">
+          ${fmtNum(m.old_price, 4, 4)} → <strong style="color:var(--text)">${fmtNum(m.new_price, 4, 4)}</strong>
+        </div>
+        <div class="cat-var ${color}" style="min-width:80px;text-align:right;font-weight:700;font-size:13px">
+          ${arrow} ${abs}%
+        </div>
+      </div>`;
+    }).join("");
+    return `<div class="chart-card" style="margin-top:16px">
+      <h2>Matières à surveiller <span style="font-size:12px;color:var(--muted);font-weight:400">— variations sur les 30 derniers jours</span></h2>
+      <div>${rows}</div>
+    </div>`;
+  }
+
   async function renderDashboard() {
     S.dashboard = await api("/api/pricing/dashboard");
     const d = S.dashboard;
@@ -390,19 +450,6 @@
       : "—";
     const fxSrc = d.eur_usd_rate_source || "—";
     const fxStale = isFxStale(d.eur_usd_rate_updated_at);
-    const topBars = (d.top_products || [])
-      .map((p) => {
-        const max = d.top_products[0] ? parseFloat(d.top_products[0].total_eur_per_m2) : 1;
-        const v = parseFloat(p.total_eur_per_m2);
-        const w = max > 0 ? (v / max) * 100 : 0;
-        return `<div class="bar-row">
-          <div class="bar-label" title="${escAttr(p.code)}">${escHtml(p.code)}</div>
-          <div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div>
-          <div class="bar-val">${fmtEurM2(v)}</div>
-        </div>`;
-      })
-      .join("");
-
     setContent(`
       <div class="page-head">
         <div><h1>Tableau de bord</h1><div class="sub">Calcul des coûts matières</div></div>
@@ -423,10 +470,8 @@
         <button type="button" class="btn btn-accent" data-nav="/pricing/products">Produits</button>
         ${S.canWrite ? '<button type="button" class="btn btn-ghost" data-nav="/pricing/settings">Paramètres</button>' : ""}
       </div>
-      <div class="chart-card">
-        <h2>Top 10 produits — coût €/m²</h2>
-        ${topBars || '<div class="empty">Aucun produit calculable</div>'}
-      </div>
+      ${renderCategoryTiles(d.variations_by_category || [])}
+      ${renderRecentMovers(d.recent_movers || [], (d.materials_active || 0))}
     `);
     document.querySelectorAll("[data-nav]").forEach((b) => {
       b.onclick = () => navigate(b.getAttribute("data-nav"));

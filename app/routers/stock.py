@@ -365,6 +365,52 @@ def _get_container_params(conn) -> tuple[float, float, float, float]:
 # historisé avant ou à la date. Aucun changement historisé avant la date → prix
 # actuel (le prix courant s'appliquait déjà à l'époque, faute d'historique).
 
+# ─── Cache des snapshots (perf) ──────────────────────────────────────────────
+# Les snapshots (stock + prix à une date passée) sont couteux : on doit scanner
+# toute la table mouvements/historique et retrouver le premier evt post-date par
+# reference. Sur une base volumineuse, ca prend plusieurs secondes.
+#
+# Ces snapshots sont deterministes en fonction de (date_iso, contenu de la table).
+# On les met en cache in-process, avec pour cle (date_iso, max_id) : des qu'un
+# nouveau mouvement est insere, max_id change et le cache est invalide
+# automatiquement. Verifier max_id coute une simple lecture indexee (PRIMARY KEY).
+#
+# Effet : 2eme click sur la meme date -> quasi-instantane (sans I/O disque
+# significatif). Le cache est purement en memoire, borne a 32 entrees par table
+# (~50 dates differentes suffit largement pour une session utilisateur), et est
+# perdu au restart -- pas de risque de corruption.
+_SNAPSHOT_CACHE_MAX_ENTRIES = 32
+_MP_STOCK_SNAPSHOT_CACHE: dict[tuple[str, int], tuple[dict[int, float], dict[tuple[int, int], float]]] = {}
+_MP_PRICE_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+_PF_STOCK_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+_PF_PRICE_SNAPSHOT_CACHE: dict[tuple[str, int], dict[int, float]] = {}
+
+
+def _table_max_id(conn, table: str) -> int:
+    """Retourne MAX(id) de la table (0 si vide). Utilise la PK -> O(log n)."""
+    try:
+        row = conn.execute(f"SELECT COALESCE(MAX(id), 0) AS m FROM {table}").fetchone()
+        return int(row["m"] or 0) if row else 0
+    except sqlite3.Error:
+        return 0
+
+
+def _cache_get_or_set(cache: dict, key: tuple, factory):
+    """Renvoie cache[key] si present, sinon calcule via factory() et stocke.
+    Purge FIFO si le cache depasse _SNAPSHOT_CACHE_MAX_ENTRIES."""
+    if key in cache:
+        return cache[key]
+    value = factory()
+    if len(cache) >= _SNAPSHOT_CACHE_MAX_ENTRIES:
+        # Purge la plus vieille entree (FIFO -- dict Python 3.7+ garde l'ordre d'insertion)
+        try:
+            first_key = next(iter(cache))
+            cache.pop(first_key, None)
+        except StopIteration:
+            pass
+    cache[key] = value
+    return value
+
 
 def _date_iso_end_of_day(date_iso: str) -> str:
     """YYYY-MM-DD → YYYY-MM-DDT23:59:59 (fin de journée locale, cohérent avec le
@@ -378,6 +424,18 @@ def _mp_stock_snapshot_at_date(conn, date_iso: str) -> tuple[dict[int, float], d
     - stock_non_laize : dict {matiere_id → quantite}
     - stock_laize     : dict {(matiere_id, laize_id) → quantite}
     """
+    # Cache in-process : cle = (date, MAX(mp_mouvements.id)). Auto-invalide des
+    # qu'un mouvement est ajoute (nouveau MAX id).
+    cache_key = (date_iso, _table_max_id(conn, "mp_mouvements"))
+    return _cache_get_or_set(
+        _MP_STOCK_SNAPSHOT_CACHE, cache_key,
+        lambda: _mp_stock_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _mp_stock_snapshot_at_date_uncached(
+    conn, date_iso: str,
+) -> tuple[dict[int, float], dict[tuple[int, int], float]]:
     end = _date_iso_end_of_day(date_iso)
     # Non-laizées : premier mouvement > end avec laize_id NULL
     rows = conn.execute(
@@ -456,6 +514,15 @@ def _pf_stock_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
     Reconstitution : premier mouvement > end par (produit_id, emplacement) — on somme
     ensuite les quantite_avant pour retrouver le stock global.
     Fallback = stock actuel agrégé toutes emplacements pour les produits sans mouvement postérieur."""
+    # Cache : cle = (date, MAX(mouvements_stock.id))
+    cache_key = (date_iso, _table_max_id(conn, "mouvements_stock"))
+    return _cache_get_or_set(
+        _PF_STOCK_SNAPSHOT_CACHE, cache_key,
+        lambda: _pf_stock_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _pf_stock_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]:
     end = _date_iso_end_of_day(date_iso)
     rows = conn.execute(
         """
@@ -514,6 +581,14 @@ def _mp_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
     - Matières laizées     : prix = prix_eur_m2 courant à la date
     L'historique mp_valorisation_historique stocke les deux dans la même colonne
     prix_apres (le sens dépend du type de matière — géré par le caller)."""
+    cache_key = (date_iso, _table_max_id(conn, "mp_valorisation_historique"))
+    return _cache_get_or_set(
+        _MP_PRICE_SNAPSHOT_CACHE, cache_key,
+        lambda: _mp_price_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _mp_price_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]:
     end = _date_iso_end_of_day(date_iso)
     rows = conn.execute(
         """
@@ -541,6 +616,14 @@ def _mp_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
 
 def _pf_price_snapshot_at_date(conn, date_iso: str) -> dict[int, float]:
     """Retourne dict {produit_id → prix_unitaire_ht} au soir de date_iso."""
+    cache_key = (date_iso, _table_max_id(conn, "pf_valorisation_historique"))
+    return _cache_get_or_set(
+        _PF_PRICE_SNAPSHOT_CACHE, cache_key,
+        lambda: _pf_price_snapshot_at_date_uncached(conn, date_iso),
+    )
+
+
+def _pf_price_snapshot_at_date_uncached(conn, date_iso: str) -> dict[int, float]:
     end = _date_iso_end_of_day(date_iso)
     rows = conn.execute(
         """
@@ -2607,14 +2690,100 @@ def _build_lot_numero(fournisseur: Optional[str], dt: datetime, fsc_type_claim: 
 
 @router.get("/api/stock/fournisseurs")
 def list_fournisseurs_stock(request: Request):
-    """Liste des fournisseurs FSC pour la réception matière et le guide traça (lecture publique interne)."""
+    """Liste des fournisseurs FSC — réception matière, guide traça et sélecteurs stock.
+
+    NOTE : cette route était déclarée DEUX fois (ici et plus bas
+    `stock_list_fournisseurs`) ; FastAPI ne servait que la première, donc
+    `has_fsc` n'arrivait jamais au front (badge FSC muet). Fusion des deux :
+    on renvoie l'union des colonnes attendues par tous les appelants."""
     get_current_user(request)
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT id, nom, licence, certificat, traca_photo_url, traca_explication, traca_exemple_code
+            """SELECT id, nom, COALESCE(has_fsc, 1) AS has_fsc, licence, certificat,
+                      traca_photo_url, traca_explication, traca_exemple_code
                FROM fournisseurs_fsc ORDER BY nom COLLATE NOCASE ASC"""
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+
+@router.get("/api/stock/matieres/laizees")
+def list_matieres_laizees(request: Request, categorie: Optional[str] = None):
+    """Liste des matieres laizees (frontal/glassine/complexe) avec leurs laizes.
+
+    Utilisee par le formulaire de reception matiere pour peupler les selecteurs
+    categorie/matiere/laize. Filtrable par categorie.
+    """
+    require_stock(request)
+    cat = (categorie or "").strip().lower() or None
+    if cat and cat not in _MP_CATEGORIES_LAIZEES:
+        raise HTTPException(400, "Categorie non laizee.")
+    with get_db() as conn:
+        if cat:
+            rows = conn.execute(
+                """SELECT id, categorie, reference, designation, couleur
+                   FROM matieres_premieres
+                   WHERE actif = 1 AND categorie = ?
+                   ORDER BY reference COLLATE NOCASE ASC""",
+                (cat,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, categorie, reference, designation, couleur
+                   FROM matieres_premieres
+                   WHERE actif = 1 AND categorie IN ('frontal','glassine','complexe')
+                   ORDER BY categorie ASC, reference COLLATE NOCASE ASC"""
+            ).fetchall()
+        result = []
+        for r in rows:
+            laizes = conn.execute(
+                """SELECT l.id, l.valeur_mm, l.label
+                   FROM mp_matiere_laizes ml
+                   JOIN mp_laizes l ON l.id = ml.laize_id
+                   WHERE ml.matiere_id = ?
+                   ORDER BY l.valeur_mm ASC""",
+                (r["id"],),
+            ).fetchall()
+            result.append({
+                "id": r["id"],
+                "categorie": r["categorie"],
+                "reference": r["reference"],
+                "designation": r["designation"],
+                "couleur": r["couleur"] if "couleur" in r.keys() and r["couleur"] else None,
+                "laizes": [
+                    {"id": l["id"], "valeur_mm": float(l["valeur_mm"]), "label": l["label"]}
+                    for l in laizes
+                ],
+            })
+    return {"matieres": result}
+
+
+def _upsert_laize_valeur_mm(conn, valeur_mm: float) -> int:
+    """Upsert dans mp_laizes global par valeur_mm. Retourne l'id de la laize."""
+    if valeur_mm <= 0 or valeur_mm > 5000:
+        raise HTTPException(400, "Valeur de laize invalide (0 < valeur_mm <= 5000).")
+    # Arrondi au dixieme pour eviter les doublons 333.0 vs 333.00001
+    v = round(float(valeur_mm), 2)
+    existing = conn.execute(
+        "SELECT id FROM mp_laizes WHERE ABS(valeur_mm - ?) < 0.05 LIMIT 1", (v,)
+    ).fetchone()
+    if existing:
+        return int(existing["id"])
+    # Format lisible : "333 mm" ou "333.5 mm"
+    label = ("{:g} mm").format(v)
+    cur = conn.execute(
+        "INSERT INTO mp_laizes (valeur_mm, label, ordre, actif) VALUES (?, ?, 999, 1)",
+        (v, label),
+    )
+    return int(cur.lastrowid)
+
+
+def _ensure_matiere_laize_link(conn, matiere_id: int, laize_id: int) -> None:
+    """Attache une laize a une matiere (idempotent)."""
+    conn.execute(
+        "INSERT OR IGNORE INTO mp_matiere_laizes (matiere_id, laize_id) VALUES (?, ?)",
+        (matiere_id, laize_id),
+    )
 
 
 @router.get("/api/stock/receptions")
@@ -2641,18 +2810,64 @@ def list_receptions(request: Request, limit: int = 50):
 
 @router.post("/api/stock/receptions")
 async def create_reception(request: Request):
-    """Enregistre une réception de bobines (lot de codes-barres).
+    """Enregistre une reception de bobines (lot de codes-barres).
 
-    Règle de fusion : si un lot existe déjà avec exactement les mêmes
-    (fournisseur, jour, heure, type FSC), les bobines sont ajoutées à ce
-    lot au lieu d'en créer un nouveau. Le numéro de lot est déterministe :
+    Deux formats acceptes dans le body :
+    - Ancien (retro-compatible) : { codes: [str, ...], note, fournisseur, ... }
+    - Nouveau : { items: [{code, matiere_id?, laize_id?, laize_valeur_mm?}, ...],
+                  note, fournisseur, ... }
+
+    Pour chaque item avec matiere_id : cree un mp_mouvements type='entree' qty=1
+    sur (matiere, laize) et met a jour mp_stock_laize + mp_stock global. La
+    laize peut etre creee a la volee si laize_valeur_mm est fourni sans
+    laize_id (upsert dans mp_laizes + rattachement a mp_matiere_laizes).
+
+    Regle de fusion : si un lot existe deja avec exactement les memes
+    (fournisseur, jour, heure, type FSC), les bobines sont ajoutees a ce
+    lot au lieu d'en creer un nouveau. Le numero de lot est deterministe :
     LOT-YYYYMMDD-HH-FOURN-FSC.
     """
     user = require_stock(request)
     body = await request.json()
-    codes = [str(c).strip() for c in (body.get("codes") or []) if str(c).strip()]
-    if not codes:
-        raise HTTPException(status_code=400, detail="Aucun code-barres fourni")
+
+    # ── Parsing du format items[] (nouveau) ou codes[] (retro-compat) ──
+    items_raw = body.get("items")
+    normalized_items: list[dict] = []
+    if isinstance(items_raw, list) and items_raw:
+        for it in items_raw:
+            if not isinstance(it, dict):
+                continue
+            code = str(it.get("code") or "").strip()
+            if not code:
+                continue
+            entry: dict = {"code": code}
+            mid = it.get("matiere_id")
+            if mid not in (None, ""):
+                try:
+                    entry["matiere_id"] = int(mid)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "matiere_id invalide.") from None
+            lid = it.get("laize_id")
+            if lid not in (None, ""):
+                try:
+                    entry["laize_id"] = int(lid)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "laize_id invalide.") from None
+            lval = it.get("laize_valeur_mm")
+            if lval not in (None, ""):
+                try:
+                    entry["laize_valeur_mm"] = float(lval)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "laize_valeur_mm invalide.") from None
+            normalized_items.append(entry)
+    else:
+        # Retro-compat : liste plate de codes-barres sans matiere/laize
+        codes = [str(c).strip() for c in (body.get("codes") or []) if str(c).strip()]
+        normalized_items = [{"code": c} for c in codes]
+
+    if not normalized_items:
+        raise HTTPException(status_code=400, detail="Aucune bobine fournie")
+
     note = (body.get("note") or "").strip() or None
     fournisseur = (body.get("fournisseur") or "").strip() or None
     certificat_fsc = (body.get("certificat_fsc") or "").strip() or None
@@ -2660,14 +2875,55 @@ async def create_reception(request: Request):
     if fsc_type_claim != "non_fsc" and not certificat_fsc:
         raise HTTPException(
             status_code=400,
-            detail="Certificat FSC requis pour une réception certifiée FSC.",
+            detail="Certificat FSC requis pour une reception certifiee FSC.",
         )
     now_dt = datetime.now()
     now = now_dt.isoformat()
     lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
 
+    created_by = user.get("email")
+    created_by_name = (user.get("nom") or "").strip() or None
+    nb_bobines_ajoutees = len(normalized_items)
+
     with get_db() as conn:
-        # Fusion : chercher un lot identique du jour/heure/fournisseur/FSC.
+        # ── Precharge des matieres impliquees (verifier existence + laizee) ──
+        matiere_ids = {int(it["matiere_id"]) for it in normalized_items if "matiere_id" in it}
+        matieres_cache: dict[int, dict] = {}
+        for mid in matiere_ids:
+            row = conn.execute(
+                """SELECT id, categorie FROM matieres_premieres
+                   WHERE id = ? AND actif = 1""",
+                (mid,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"Matiere {mid} introuvable ou inactive.")
+            if not _mp_is_laizee(row["categorie"]):
+                raise HTTPException(
+                    400,
+                    f"Matiere {mid} non laizee — reception structuree reservee "
+                    "aux categories frontal / glassine / complexe.",
+                )
+            matieres_cache[mid] = {"id": row["id"], "categorie": row["categorie"]}
+
+        # ── Resolution des laizes par item (upsert si valeur_mm sans laize_id) ──
+        for it in normalized_items:
+            mid = it.get("matiere_id")
+            if mid is None:
+                continue
+            if "laize_id" not in it and "laize_valeur_mm" in it:
+                lid = _upsert_laize_valeur_mm(conn, it["laize_valeur_mm"])
+                _ensure_matiere_laize_link(conn, mid, lid)
+                it["laize_id"] = lid
+            elif "laize_id" in it:
+                # S'assurer que la laize est bien associee a la matiere (auto-lien)
+                _ensure_matiere_laize_link(conn, mid, it["laize_id"])
+            else:
+                raise HTTPException(
+                    400,
+                    f"Bobine '{it['code']}' : laize obligatoire pour une matiere laizee.",
+                )
+
+        # ── Fusion ou creation du lot ──
         existing = conn.execute(
             """SELECT id, nb_bobines FROM stock_receptions
                WHERE lot_numero = ?
@@ -2678,20 +2934,23 @@ async def create_reception(request: Request):
         if existing:
             reception_id = existing["id"]
             merged_note = _merge_note(note, conn, reception_id)
-            conn.executemany(
-                "INSERT INTO stock_reception_items (reception_id, code_barre, scanned_at) VALUES (?,?,?)",
-                [(reception_id, code, now) for code in codes],
-            )
+            for it in normalized_items:
+                conn.execute(
+                    """INSERT INTO stock_reception_items
+                       (reception_id, code_barre, scanned_at, matiere_id, laize_id)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (reception_id, it["code"], now,
+                     it.get("matiere_id"), it.get("laize_id")),
+                )
             conn.execute(
                 """UPDATE stock_receptions
                    SET nb_bobines = COALESCE(nb_bobines, 0) + ?,
                        note = COALESCE(?, note)
                    WHERE id = ?""",
-                (len(codes), merged_note, reception_id),
+                (nb_bobines_ajoutees, merged_note, reception_id),
             )
-            conn.commit()
             merged = True
-            new_total = (existing["nb_bobines"] or 0) + len(codes)
+            new_total = (existing["nb_bobines"] or 0) + nb_bobines_ajoutees
         else:
             cur = conn.execute(
                 """INSERT INTO stock_receptions
@@ -2700,10 +2959,10 @@ async def create_reception(request: Request):
                    VALUES (?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
-                    user.get("email"),
-                    user.get("nom"),
+                    created_by,
+                    created_by_name,
                     note,
-                    len(codes),
+                    nb_bobines_ajoutees,
                     fournisseur,
                     certificat_fsc,
                     fsc_type_claim,
@@ -2711,19 +2970,83 @@ async def create_reception(request: Request):
                 ),
             )
             reception_id = cur.lastrowid
-            conn.executemany(
-                "INSERT INTO stock_reception_items (reception_id, code_barre, scanned_at) VALUES (?,?,?)",
-                [(reception_id, code, now) for code in codes],
-            )
-            conn.commit()
+            for it in normalized_items:
+                conn.execute(
+                    """INSERT INTO stock_reception_items
+                       (reception_id, code_barre, scanned_at, matiere_id, laize_id)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (reception_id, it["code"], now,
+                     it.get("matiere_id"), it.get("laize_id")),
+                )
             merged = False
-            new_total = len(codes)
+            new_total = nb_bobines_ajoutees
+
+        # ── Pour chaque bobine liee a une matiere : +1 sur mp_stock_laize + mvt ──
+        # Regroupement par (matiere_id, laize_id) pour un seul mvt par groupe.
+        from collections import defaultdict
+        grouped: dict[tuple[int, int], int] = defaultdict(int)
+        for it in normalized_items:
+            if "matiere_id" in it and "laize_id" in it:
+                grouped[(it["matiere_id"], it["laize_id"])] += 1
+
+        for (mid, lid), nb in grouped.items():
+            # Etat avant
+            stock_row = conn.execute(
+                "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+                (mid, lid),
+            ).fetchone()
+            qte_avant = float(stock_row["quantite"]) if stock_row else 0.0
+            qte_apres = qte_avant + nb
+            # Update mp_stock_laize
+            conn.execute(
+                """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+                   VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)
+                   ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                       quantite=excluded.quantite,
+                       updated_at=excluded.updated_at,
+                       updated_by_name=excluded.updated_by_name""",
+                (mid, lid, qte_apres, created_by_name),
+            )
+            # Recalcul mp_stock global (somme des mp_stock_laize)
+            total_row = conn.execute(
+                "SELECT COALESCE(SUM(quantite), 0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+                (mid,),
+            ).fetchone()
+            total_q = float(total_row["s"] or 0)
+            conn.execute(
+                """INSERT OR REPLACE INTO mp_stock (matiere_id, quantite, updated_at, updated_by_name)
+                   VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)""",
+                (mid, total_q, created_by_name),
+            )
+            # Mouvement d'entree trace + reference au lot
+            mvt_note = f"Reception lot {lot_numero}"
+            if fournisseur:
+                mvt_note += f" - {fournisseur}"
+            conn.execute(
+                """INSERT INTO mp_mouvements (
+                       matiere_id, type_mouvement, quantite,
+                       quantite_avant, quantite_apres,
+                       ref_bl, note,
+                       emplacement_source, emplacement_dest,
+                       created_by, created_by_name, laize_id, prix_eur_m2
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    mid, "entree", nb,
+                    qte_avant, qte_apres,
+                    lot_numero, mvt_note,
+                    None, None,
+                    created_by, created_by_name,
+                    lid, None,
+                ),
+            )
+
+        conn.commit()
 
     return {
         "success": True,
         "id": reception_id,
         "nb_bobines": new_total,
-        "nb_bobines_ajoutees": len(codes),
+        "nb_bobines_ajoutees": nb_bobines_ajoutees,
         "lot_numero": lot_numero,
         "merged": merged,
     }
@@ -5153,6 +5476,100 @@ def _enrich_items_with_usd(
         it["transport_supplement_eur_per_m2"] = round(supp_per_m2, 4)
 
 
+# ─── Trend valorisation (30 derniers jours) ──────────────────────────────────
+# Cache endpoint keye par la version des 4 tables sources + les params qui
+# influencent le total (taux USD, taxe, containers, charges PF). Des qu'un
+# nouveau mouvement / prix / parametre change, la cle change et le trend
+# est recalcule. Sinon renvoi instantane. Purement en memoire.
+_VALO_TREND_CACHE: dict[tuple, list[dict]] = {}
+_VALO_TREND_CACHE_MAX_ENTRIES = 8
+
+
+def _compute_valorisation_trend(conn, days: int) -> list[dict]:
+    """Retourne [{"date": "YYYY-MM-DD", "total": float}, ...] pour les `days`
+    derniers jours (aujourd'hui inclus, tri croissant).
+
+    Le total = MP reel (avec taxe/USD/transport) + PF (avec charges si applicable).
+    C'est ce qui s'affiche en gros vert dans la card "Stock valorise -- Total".
+
+    Perf : appelle _valorisation_query_at_date + _pf_valo_query_at_date en boucle
+    (30 iterations). Chaque iteration reuse le cache des snapshots (defini plus
+    haut). Le resultat final est ensuite cache au niveau endpoint : 2e appel = 0.
+    """
+    from datetime import date as _date  # local import, evite pollution top-level
+    today = _date.today()
+    taux = _get_taux_eur_usd(conn)
+    tax_pct = _get_import_tax_pct(conn)
+    c_full, c_half, q_full, q_half = _get_container_params(conn)
+    charge = _get_charge_production_pct(conn)
+    storage = _get_storage_fees_pct(conn)
+
+    points: list[dict] = []
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        d_iso = d.strftime("%Y-%m-%d")
+        # snapshot_date=None pour aujourd'hui (evite un calcul inutile)
+        snap = None if i == 0 else d_iso
+        items_mp = _valorisation_query_at_date(conn, snap)
+        items_pf = _pf_valo_query_at_date(conn, snap)
+        _enrich_items_with_usd(items_mp, taux, tax_pct, c_full, c_half, q_full, q_half)
+        summary_mp = _valorisation_summary(items_mp, taux, tax_pct, c_full, c_half, q_full, q_half)
+        _pf_enrich_charges(items_pf, charge_prod_pct=charge, storage_fees_pct=storage)
+        summary_pf = _pf_valo_summary(items_pf, charge_prod_pct=charge, storage_fees_pct=storage)
+        # Meme regle que buildValorisationKpis cote frontend : reel MP + (charges PF si actives)
+        total_mp = float(summary_mp.get("total_mp_reel") or summary_mp.get("total_mp") or 0)
+        if charge > 0 or storage > 0:
+            total_pf = float(summary_pf.get("total_pf_avec_charges") or 0)
+        else:
+            total_pf = float(summary_pf.get("total_pf") or 0)
+        points.append({"date": d_iso, "total": round(total_mp + total_pf, 2)})
+    return points
+
+
+@router.get("/api/stock/valorisation/trend")
+def get_valorisation_trend(request: Request, days: int = 30):
+    """Renvoie la valo totale (MP reel + PF avec charges) pour chaque jour des
+    `days` derniers jours. Utilise pour le sparkline dans la scorecard totale.
+
+    Reserve Direction / superadmin (comme le KPI reel MP+PF)."""
+    user = require_stock_matieres_admin(request)
+    # Bornes de securite : 7 <= days <= 90 (pas d'usage au-dela)
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = 30
+    if days < 7:
+        days = 7
+    if days > 90:
+        days = 90
+    with get_db() as conn:
+        # Cle cache : versions + params (les params modifient le total meme sans
+        # nouveau mouvement -- ex. changement de taux USD via les settings).
+        cache_key = (
+            days,
+            _table_max_id(conn, "mp_mouvements"),
+            _table_max_id(conn, "mouvements_stock"),
+            _table_max_id(conn, "mp_valorisation_historique"),
+            _table_max_id(conn, "pf_valorisation_historique"),
+            round(_get_taux_eur_usd(conn), 6),
+            round(_get_import_tax_pct(conn), 4),
+            round(_get_charge_production_pct(conn), 4),
+            round(_get_storage_fees_pct(conn), 4),
+        )
+        if cache_key in _VALO_TREND_CACHE:
+            points = _VALO_TREND_CACHE[cache_key]
+        else:
+            points = _compute_valorisation_trend(conn, days)
+            if len(_VALO_TREND_CACHE) >= _VALO_TREND_CACHE_MAX_ENTRIES:
+                try:
+                    first = next(iter(_VALO_TREND_CACHE))
+                    _VALO_TREND_CACHE.pop(first, None)
+                except StopIteration:
+                    pass
+            _VALO_TREND_CACHE[cache_key] = points
+    return {"points": points, "days": days}
+
+
 @router.get("/api/stock/valorisation")
 def get_valorisation(request: Request, date: str | None = None):
     """Valorisation MP. Query optionnel `date=YYYY-MM-DD` → figée à cette date
@@ -6663,17 +7080,8 @@ def _mp_fournisseurs_by_laize(conn, matiere_id: int) -> dict[int, list[dict]]:
     return out
 
 
-@router.get("/api/stock/fournisseurs")
-def stock_list_fournisseurs(request: Request):
-    """Liste plate des fournisseurs (accessible a tous les utilisateurs stock)."""
-    require_stock(request)
-    with get_db() as conn:
-        rows = conn.execute("""
-            SELECT id, nom, COALESCE(has_fsc, 1) AS has_fsc, licence, certificat
-              FROM fournisseurs_fsc
-             ORDER BY nom COLLATE NOCASE ASC
-        """).fetchall()
-    return [dict(r) for r in rows]
+# (route GET /api/stock/fournisseurs fusionnée dans list_fournisseurs_stock
+#  plus haut — doublon supprimé, la première déclaration masquait celle-ci.)
 
 
 @router.put("/api/stock/matieres/{matiere_id}/laizes/{laize_id}/fournisseurs")

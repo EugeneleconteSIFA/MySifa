@@ -114,7 +114,7 @@ def _require_not_cloture(ao: dict) -> None:
     if ao.get("statut") == "cloturee":
         raise HTTPException(
             status_code=403,
-            detail="Cet appel d'offre est clôturé.",
+            detail="Cet appel d'offres est clôturé.",
         )
 
 
@@ -122,6 +122,55 @@ def _fourni_upload_dir(ao_id: int, fourni_id: int) -> str:
     path = os.path.join(UPLOAD_DIR, "ao", str(ao_id), "fournisseurs", str(fourni_id))
     os.makedirs(path, exist_ok=True)
     return path
+
+
+def _ensure_auto_attached_fiches(conn, ao_id: int, ao_reference: str | None) -> None:
+    """Rattrapage idempotent : génère les fiches PDF fournisseur manquantes.
+
+    Appelé au premier accès au portail sur un AO envoyé. Skip complet si
+    toutes les fiches sont déjà présentes.
+    """
+    import re
+    # Références produit distinctes de l'AO
+    refs = [
+        (r["ref_produit"] or "").strip()
+        for r in conn.execute(
+            "SELECT DISTINCT ref_produit FROM ao_lignes WHERE ao_id=?",
+            (ao_id,),
+        ).fetchall()
+    ]
+    refs = [r for r in refs if r]
+    if not refs:
+        return
+    # PJ déjà présentes
+    existing = {
+        r["filename"]
+        for r in conn.execute(
+            "SELECT filename FROM ao_pieces_jointes WHERE ao_id=?", (ao_id,)
+        ).fetchall()
+    }
+    # Rien à faire si toutes les fiches sont là
+    missing = []
+    for ref in refs:
+        ref_clean = re.sub(r"[^\w\-]+", "_", ref.split(" - ")[0])
+        fname = f"fiche_fournisseur_{ref_clean}.pdf"
+        if fname not in existing:
+            missing.append(ref)
+    if not missing:
+        return
+    # Import tardif pour éviter la dépendance circulaire
+    from app.routers.ao import (
+        _auto_attach_fournisseur_pdfs,
+        _produits_by_ref_map,
+    )
+    produits_map = _produits_by_ref_map(conn)
+    lignes_raw = [
+        {"ref_produit": ref, "designation": "", "quantite": None, "unite": None}
+        for ref in missing
+    ]
+    now = _now_paris_iso()
+    _auto_attach_fournisseur_pdfs(conn, ao_id, ao_reference, lignes_raw, produits_map, now)
+    conn.commit()
 
 
 def _ao_pj_path(ao_id: int, stored_name: str, fourni_id: int | None = None) -> str:
@@ -247,15 +296,32 @@ def _portail_payload(conn, ao: dict, fourni: dict) -> dict[str, Any]:
         (ao_id,),
     ).fetchall()
     lignes = []
+    ligne_ids: list[int] = []
     for r in lignes_raw:
         ln = _row_dict(r)
         ctx = _produit_ctx_for_ligne(conn, ln.get("ref_produit") or "")
         ln.update(ctx)
+        ligne_ids.append(int(ln["id"]))
         lignes.append(ln)
+    # Séries par ligne (portail fournisseur : lecture seule)
+    series_by_ligne: dict[int, list[dict]] = {}
+    if ligne_ids:
+        qmarks = ",".join("?" * len(ligne_ids))
+        for r in conn.execute(
+            f"""SELECT id, ligne_id, position, libelle, quantite, notes
+                FROM ao_lignes_series
+                WHERE ligne_id IN ({qmarks})
+                ORDER BY ligne_id, position, id""",
+            tuple(ligne_ids),
+        ).fetchall():
+            d = _row_dict(r)
+            series_by_ligne.setdefault(int(d["ligne_id"]), []).append(d)
+    for ln in lignes:
+        ln["series"] = series_by_ligne.get(int(ln["id"]), [])
     reponses = [
         _row_dict(r)
         for r in conn.execute(
-            """SELECT ligne_id, quotation, prix_unitaire, devise, unite_quotation,
+            """SELECT ligne_id, serie_id, quotation, prix_unitaire, devise, unite_quotation,
                       delai_jours, commentaire
                FROM ao_reponses WHERE ao_fournisseur_id=?""",
             (fourni_id,),
@@ -408,6 +474,46 @@ def list_portail_demandes(request: Request, token: str):
         }
 
 
+
+def _translate_offre_texts(data: dict, target_lang: str, conn) -> dict:
+    """Traduit les champs texte de l'offre selon target_lang (FR/EN/DE/...)."""
+    if not data or not target_lang:
+        return data
+    tgt = (target_lang or "").strip().upper()
+    if not tgt or tgt in ("FR", "FR-FR"):
+        return data
+    try:
+        from app.services.translate_service import translate as _svc_translate
+    except Exception:
+        return data
+
+    def _t(text):
+        if not text or not str(text).strip():
+            return text
+        try:
+            res = _svc_translate(conn, text=str(text), target_lang=tgt, source_lang="FR", formality="default")
+            return res.get("translated") or text
+        except Exception:
+            return text
+
+    ao = data.get("ao") if isinstance(data, dict) else None
+    if isinstance(ao, dict):
+        if ao.get("description"):
+            ao["description"] = _t(ao["description"])
+        if ao.get("titre"):
+            ao["titre"] = _t(ao["titre"])
+    lignes = data.get("lignes") if isinstance(data, dict) else []
+    if isinstance(lignes, list):
+        for ln in lignes:
+            if not isinstance(ln, dict):
+                continue
+            if ln.get("notes"):
+                ln["notes"] = _t(ln["notes"])
+            if ln.get("designation"):
+                ln["designation"] = _t(ln["designation"])
+    return data
+
+
 @router_api.get("/ao/{token}")
 def get_portail_data(request: Request, token: str):
     ip = _client_ip(request)
@@ -424,7 +530,22 @@ def get_portail_data(request: Request, token: str):
             conn.commit()
             fourni["statut"] = "ouvert"
             fourni["date_ouverture"] = now
-        return _portail_payload(conn, ao, fourni)
+        # Rattrapage : si l'AO est envoyée et qu'il manque des fiches PDF
+        # (AO envoyé avant l'auto-attach, ou produit ajouté au catalogue plus
+        # tard), on les génère maintenant — idempotent.
+        try:
+            if ao.get("statut") == "envoyee":
+                _ensure_auto_attached_fiches(conn, int(ao["id"]), ao.get("reference"))
+        except Exception:
+            logger.exception("Rattrapage fiches PDF portail échoué (AO %s)", ao.get("id"))
+        payload = _portail_payload(conn, ao, fourni)
+        # Traduction auto selon langue fournisseur
+        try:
+            _lang = (fourni.get("langue") if isinstance(fourni, dict) else None) or ""
+        except Exception:
+            _lang = ""
+        payload = _translate_offre_texts(payload, _lang, conn)
+        return payload
 
 
 @router_api.post("/ao/{token}/repondre")
@@ -479,14 +600,16 @@ async def repondre_ao(request: Request, token: str):
             conn.execute(
                 """INSERT OR REPLACE INTO ao_reponses
                    (ao_fournisseur_id, ligne_id, quotation, prix_unitaire,
-                    devise, unite_quotation, delai_jours, commentaire)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                    devise, unite_quotation, unite_quotation_original, unite_manuel,
+                    delai_jours, commentaire)
+                   VALUES (?,?,?,?,?,?,?,0,?,?)""",
                 (
                     fourni_id,
                     ligne_id,
                     quotation,
                     quotation,
                     devise,
+                    unite_q,
                     unite_q,
                     delai,
                     commentaire,
@@ -551,7 +674,70 @@ def list_portail_messages(request: Request, token: str):
                ORDER BY date ASC""",
             (fourni["id"],),
         ).fetchall()
+        # Mark interne messages as read once fournisseur consulted them
+        conn.execute(
+            """UPDATE ao_messages SET lu=1
+               WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
+            (fourni["id"],),
+        )
+        conn.commit()
     return [_row_dict(r) for r in rows]
+
+
+@router_api.get("/ao/{token}/counts")
+def get_portail_counts(request: Request, token: str):
+    """Retourne totaux + non-lus pour messages et documents."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        msg_unread = conn.execute(
+            """SELECT COUNT(*) FROM ao_messages
+               WHERE ao_fournisseur_id=? AND expediteur='interne' AND lu=0""",
+            (fourni["id"],),
+        ).fetchone()[0]
+        msg_total = conn.execute(
+            "SELECT COUNT(*) FROM ao_messages WHERE ao_fournisseur_id=?",
+            (fourni["id"],),
+        ).fetchone()[0]
+        try:
+            docs_new = conn.execute(
+                """SELECT COUNT(*) FROM ao_pieces_jointes
+                   WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
+                     AND COALESCE(vu_par_fournisseur, 0)=0""",
+                (ao["id"], fourni["id"]),
+            ).fetchone()[0]
+        except Exception:
+            docs_new = 0
+        docs_total = conn.execute(
+            """SELECT COUNT(*) FROM ao_pieces_jointes
+               WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)""",
+            (ao["id"], fourni["id"]),
+        ).fetchone()[0]
+    return {
+        "messages_non_lus": int(msg_unread or 0),
+        "messages_total": int(msg_total or 0),
+        "documents_nouveaux": int(docs_new or 0),
+        "documents_total": int(docs_total or 0),
+    }
+
+
+@router_api.post("/ao/{token}/documents/mark-viewed")
+def portail_mark_docs_viewed(request: Request, token: str):
+    """Marque tous les documents comme vus par le fournisseur."""
+    ip = _client_ip(request)
+    with get_db() as conn:
+        ao, fourni = _get_fourni_or_404(token, conn, ip=ip)
+        try:
+            conn.execute(
+                """UPDATE ao_pieces_jointes SET vu_par_fournisseur=1
+                   WHERE ao_id=? AND (ao_fournisseur_id IS NULL OR ao_fournisseur_id=?)
+                     AND COALESCE(vu_par_fournisseur, 0)=0""",
+                (ao["id"], fourni["id"]),
+            )
+            conn.commit()
+        except Exception:
+            pass
+    return {"ok": True}
 
 
 @router_api.post("/ao/{token}/messages")

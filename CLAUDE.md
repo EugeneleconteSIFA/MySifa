@@ -310,6 +310,54 @@ Ces règles ont été violées deux fois par des IA (Cursor puis Claude) et ont 
 /* Variantes : .btn-accent (fond --accent), .btn-danger (fond --danger), .btn-ghost (transparent) */
 ```
 
+**Règles absolues sur les boutons — à respecter partout, sans exception**
+
+1. **Pas de fond transparent au repos.** Un bouton avec `background: transparent`
+   sur un fond de page `var(--bg)` est visuellement absent tant que le curseur
+   n'est pas dessus — l'utilisateur ne voit pas l'affordance. Toujours donner
+   un fond explicite :
+   - Bouton posé **sur la page** (fond `var(--bg)`) → `background: var(--card)`
+     (blanc en mode clair, sombre en mode dark) pour contraster avec le fond.
+   - Bouton posé **à l'intérieur d'une card / modal** (fond `var(--card)`) →
+     `background: var(--bg)` (gris clair / plus sombre) pour contraster avec
+     la card.
+   - Bouton **actif / sélectionné** → `background: var(--accent-bg)` +
+     `border: 1px solid var(--accent)` + `color: var(--accent)`.
+   - Bouton **danger / destructif** → fond `var(--danger)` + texte blanc.
+
+   La variante `.btn-ghost` de la CSS globale reste tolérée uniquement pour
+   des cas très localisés (ex. bouton "×" de fermeture posé sur un fond déjà
+   coloré) — jamais comme choix par défaut pour un CTA visible dans la page.
+
+2. **Cohérence hover.** Si le repos est `var(--card)`, le hover doit être
+   `var(--bg)` (effet "s'assombrit" en mode clair, "s'éclaircit" en mode
+   dark). Et **toujours définir le `mouseleave` symétrique** qui rétablit le
+   fond de repos — sinon le bouton "reste" en état hover après un clic.
+   Anti-pattern classique : `mouseleave` qui remet `transparent` alors que le
+   repos est `var(--card)` → flash inversé au sortir du bouton.
+
+3. **Boutons à fond coloré (accent, success, danger, warn) — la couleur du
+   texte et de l'icône dépend du thème.** Un bouton `background: var(--accent)`
+   (cyan) affiche du texte lisible en mode dark avec `color: #0a0e17` (le fond
+   dark), mais en mode light il faut du texte foncé pour rester lisible sur
+   le cyan. Pattern à adopter :
+   ```css
+   /* Sur fond --accent : texte foncé qui reste lisible dans les 2 thèmes */
+   .btn-accent { background: var(--accent); color: var(--bg); }
+   ```
+   Le principe : `color: var(--bg)` produit **automatiquement** un texte
+   contrasté (foncé sur clair, clair sur foncé) parce que `--bg` bascule
+   avec le thème. Idem pour un bouton `background: var(--danger)` (rouge)
+   qui reste toujours foncé → `color: #ffffff` est acceptable. Le point clé :
+   **jamais** `color: var(--text)` ou `color: var(--text2)` sur un bouton à
+   fond coloré — ces variables suivent le thème et vont produire du texte
+   sombre sur fond sombre en mode dark, invisible.
+
+   Bug historique : une IA a mis `color: var(--text2)` sur un badge cyan
+   `background: var(--accent-bg)` — invisible en mode dark (text2 = clair
+   sur accent-bg qui est déjà clair). Toujours tester dans les deux thèmes
+   à chaque ajout de composant à fond coloré.
+
 **Inputs / Champs**
 ```css
 background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
@@ -635,6 +683,87 @@ et re-taper `git checkout` retronque à nouveau.
   interactif, envelopper dans `& { … }` avec `if ($LASTEXITCODE -ne 0) { return }`
   après chaque commande. Le `return` sort du scriptblock sans fermer la fenêtre
   (contrairement à `exit 1`).
+
+---
+
+## Git — merges, conflits et cohabitation avec Cursor (leçons du 24 juillet 2026)
+
+Cette section documente une panne qui a mis la v1 en 502 pendant plusieurs heures.
+La cause n'était pas un bug applicatif : c'était un empilement d'erreurs de workflow
+git + interférence d'éditeur pendant un `device_commit_files`. À éviter à tout prix.
+
+### Ce qui s'est passé — schéma général
+
+1. Un merge `feature/myao-improvements` → `staging` avait produit des marqueurs de
+   conflit `<<<<<<< HEAD` / `>>>>>>>` dans plusieurs fichiers, jamais résolus.
+2. Des commits `wip` ont été faits par-dessus **sans regarder le contenu** — les
+   marqueurs ont été committés dans le repo, silencieux car cachés dans des raw
+   strings Python (`SETTINGS_HTML = r"""..."""`) qui parsent quand même.
+3. Claude a édité ces fichiers sans détecter les marqueurs (son `ast.parse` a
+   validé, mais les marqueurs cassaient le JS émis au browser).
+4. Cursor était ouvert avec MySifa. Entre le `device_commit_files` de Claude et
+   le `git add`, Cursor a détecté le changement disque et réécrit le fichier
+   avec sa vue interne (encore polluée par les marqueurs).
+5. Le commit final contenait la version corrompue de Cursor, pas celle de Claude.
+
+### Règles à suivre systématiquement
+
+**Avant tout Edit / Write sur un fichier de code**, Claude DOIT :
+
+1. Lancer `git status` et refuser d'éditer si `Unmerged paths` / `both modified`
+   apparaît. Demander à Eugène de résoudre le merge (ou `git merge --abort`)
+   avant de commencer.
+
+2. Grep systématique des marqueurs de conflit sur chaque fichier cible :
+   ```bash
+   grep -cnE '^<<<<<<<|^=======$|^>>>>>>>' <fichier>
+   ```
+   Si le résultat est > 0 → STOP. Signaler les lignes à Eugène, ne pas éditer.
+
+3. `ast.parse` (Python) n'est PAS un check suffisant : les marqueurs peuvent
+   être piégés dans des raw strings et passer le parseur alors qu'ils cassent
+   le JavaScript émis au client. Toujours combiner avec le grep marqueurs.
+
+**Cursor / VS Code ouverts pendant un commit automatisé** — risque de réinjection :
+
+- Quand Claude s'apprête à écrire un fichier via `device_commit_files` sur un
+  fichier qu'un éditeur tient ouvert avec état "dirty" ou vue "merge en cours",
+  l'éditeur peut écraser le fichier livré par sa vue interne.
+- Avant tout gros push via bridge, Claude demande à Eugène de fermer complètement
+  Cursor (`Cmd+Q`, pas juste la croix de fenêtre) et vérifie via
+  `ps aux | grep -iE 'Cursor' | grep -v grep` que le process est bien mort.
+- Après `device_commit_files`, faire calculer le MD5 côté Mac dans le même bloc
+  bash que le `git add` — le hash doit matcher ce que Claude a livré.
+- Revérifier le MD5 après `git add`. Il DOIT rester identique. Si divergence,
+  un process a écrit entre-temps et il faut recommencer avec l'éditeur fermé.
+
+**Commits « wip » et hygiène git** :
+
+- Un `git commit -am 'wip'` sans regarder `git status` peut committer des
+  marqueurs de conflit non résolus, des fichiers auto-générés (`nohup.out`,
+  `__pycache__`, `.pyc`), ou du contenu d'un merge en cours.
+- Toujours faire `git status` **et** `grep -rE '^<<<<<<<' .` avant tout commit
+  qui vient d'un merge, avant de valider.
+- Éviter `git add .` / `git add -A` sur un état incertain — préférer les
+  fichiers explicites (`git add app/routers/settings.py`) pour ne pas embarquer
+  des artefacts d'éditeur ou de venv.
+
+### Récupérer d'un fichier corrompu committé
+
+Si un commit corrompu a atteint `staging` (marqueurs de conflit dans le repo) :
+
+1. Identifier le dernier commit sain :
+   ```bash
+   for c in $(git log --format=%H -10 -- <fichier>); do
+     ok=$(git show $c:<fichier> 2>/dev/null | grep -cE '^<<<<<<<|^>>>>>>>')
+     echo "$c → $ok marqueur(s)"
+   done
+   ```
+2. Reconstruire le fichier propre en repartant de la dernière version saine +
+   réintégration manuelle des changements légitimes des commits suivants
+   (Claude peut faire ce travail depuis sa vue si le fichier existe encore
+   dans son `/tmp/` de session).
+3. Fermer Cursor, livrer via bridge, vérifier MD5, commit + push d'un trait.
 
 ---
 

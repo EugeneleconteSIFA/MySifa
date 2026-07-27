@@ -249,6 +249,27 @@ class PricingDashboardProductRow(BaseModel):
     sell_price_eur_per_m2: Decimal
 
 
+class CategoryVariationOut(BaseModel):
+    """Prix moyen + variation 30j pour une catégorie mc_material."""
+    code: str
+    label: str
+    count_materials: int
+    avg_price_eur_per_kg_or_m2: Optional[Decimal] = None
+    price_basis_dominant: Optional[str] = None  # 'PER_KG' ou 'PER_M2'
+    variation_pct_30d: Optional[Decimal] = None  # % moyen pondéré
+
+
+class MaterialMoverOut(BaseModel):
+    """Matière dont le prix a bougé significativement récemment."""
+    id: int
+    name: str
+    category_code: str
+    old_price: Decimal
+    new_price: Decimal
+    variation_pct: Decimal
+    days_ago: int
+
+
 class PricingDashboardOut(BaseModel):
     materials_active: int
     products_active: int
@@ -257,6 +278,8 @@ class PricingDashboardOut(BaseModel):
     eur_usd_rate_source: Optional[str] = None
     avg_sell_price_eur_m2: Optional[Decimal] = None
     top_products: list[PricingDashboardProductRow]
+    variations_by_category: list[CategoryVariationOut] = []
+    recent_movers: list[MaterialMoverOut] = []
 
 
 class McMaterialCategoryOut(BaseModel):

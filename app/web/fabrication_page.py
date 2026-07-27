@@ -11,6 +11,9 @@ from config import APP_ORG_NAME
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
+# v1.7 — modal partage pour impression de PDF (OF, fiches techniques) vers
+# une imprimante bureautique via l'agent local. Cf. app/web/print_modal.py.
+from app.web.print_modal import PRINT_MODAL_CSS, PRINT_MODAL_JS
 
 router = APIRouter()
 
@@ -466,6 +469,115 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-tab-btn:hover:not(.active){color:var(--text2);background:rgba(255,255,255,.04)}
 .fab-tab-btn svg{opacity:.65}
 .fab-tab-btn.active svg{opacity:1}
+
+/* ── Tabs plus visibles pour opérateurs ─────────────────────── */
+.fab-footer-tabs-row{
+  display:flex;align-items:center;justify-content:center;width:100%;
+  margin-bottom:2px;
+}
+.fab-tab-nav--prominent{
+  border-width:1.5px;border-radius:12px;
+  box-shadow:0 2px 6px rgba(0,0,0,.10);
+}
+.fab-tab-nav--prominent .fab-tab-btn{
+  width:auto;min-width:82px;padding:9px 14px 7px;
+  font-size:11px;letter-spacing:.6px;
+  color:var(--text2);
+}
+.fab-tab-nav--prominent .fab-tab-btn svg{
+  width:18px;height:18px;opacity:.85;margin-bottom:2px;
+}
+.fab-tab-nav--prominent .fab-tab-btn.active{
+  color:var(--accent);background:var(--accent-bg);
+  box-shadow:inset 0 -2px 0 var(--accent);
+}
+.fab-tab-nav--prominent .fab-tab-btn.active svg{opacity:1}
+
+/* ── Panneau Stock natif (miroir de MyStock Production) ────── */
+.fab-stock-native{
+  display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;
+  padding:20px 24px;gap:18px;
+}
+.fab-prod-head{margin-bottom:2px}
+.fab-prod-head-title{
+  font-size:22px;font-weight:800;color:var(--text);margin:0 0 4px;letter-spacing:.3px;
+}
+.fab-prod-head-sub{font-size:13px;color:var(--muted);line-height:1.4}
+.fab-prod-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;
+}
+.fab-prod-card{
+  display:flex;align-items:center;gap:14px;padding:16px 18px;
+  border-radius:14px;border:1px solid var(--border);
+  background:var(--card);cursor:pointer;font-family:inherit;text-align:left;
+  transition:all .15s;color:var(--text);
+}
+.fab-prod-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.10);border-color:var(--accent)}
+.fab-prod-card:active{transform:translateY(0);filter:brightness(.97)}
+.fab-prod-card-ico{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;
+}
+.fab-prod-card-mp-in  .fab-prod-card-ico{background:#38bdf8}
+.fab-prod-card-mp-out .fab-prod-card-ico{background:#fbbf24;color:#7c2d12}
+.fab-prod-card-z1-in  .fab-prod-card-ico{background:#34d399}
+.fab-prod-card-z1-out .fab-prod-card-ico{background:#f87171}
+.fab-prod-card-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:2px;letter-spacing:.2px}
+.fab-prod-card-sub{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+
+.fab-prod-z1-card{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;
+}
+.fab-prod-z1-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-bottom:10px;flex-wrap:wrap;
+}
+.fab-prod-z1-title{
+  font-size:14px;font-weight:800;color:var(--text);
+  display:flex;align-items:center;gap:8px;
+}
+.fab-prod-z1-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.fab-prod-z1-refresh{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);cursor:pointer;
+  font-family:inherit;font-size:12px;font-weight:700;transition:all .15s;
+}
+.fab-prod-z1-refresh:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.fab-prod-empty{padding:32px 20px;text-align:center;color:var(--muted);font-size:13px}
+.fab-prod-empty-hint{font-size:11px;color:var(--muted);opacity:.7;margin-top:6px}
+.fab-prod-err{padding:20px;color:var(--danger);font-size:13px;text-align:center}
+.fab-prod-z1-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.fab-prod-z1-row{
+  display:flex;align-items:center;gap:12px;padding:12px 14px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  transition:border-color .1s;
+}
+.fab-prod-z1-row:hover{border-color:var(--accent)}
+.fab-prod-z1-left{flex:1;min-width:0}
+.fab-prod-z1-ref{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.3px}
+.fab-prod-z1-des{font-size:12px;color:var(--text2);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fab-prod-z1-meta{display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.fab-prod-z1-meta span{display:inline-flex;align-items:center;gap:4px}
+.fab-prod-z1-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.fab-prod-z1-qty{font-size:16px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.fab-prod-z1-actions{display:flex;gap:5px}
+.fab-prod-z1-btn{
+  display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:6px;
+  border:1px solid var(--border);background:var(--card);cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:700;color:var(--text2);transition:all .12s;
+}
+.fab-prod-z1-btn-add:hover{border-color:var(--success);color:var(--success);background:rgba(52,211,153,.10)}
+.fab-prod-z1-btn-edit:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+
+
+/* ── Centrage sections footer ──────────────────────────────── */
+.fab-footer{align-items:center}
+.fab-footer-info{justify-content:center}
+.fab-footer-actions{align-items:center;justify-content:center;gap:6px}
+.fab-footer-tools{align-items:stretch;justify-content:center}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
 .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -543,9 +655,37 @@ table.fab-traca-table tr:last-child td{border-bottom:none}
 .fab-traca-link{font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase}
 .fab-traca-link.ok{color:var(--success)}
 .fab-traca-link.bad{color:var(--danger)}
-.fab-traca-del{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 6px;
-  border-radius:4px;transition:color .12s}
-.fab-traca-del:hover{color:var(--danger)}
+.fab-traca-actions{
+  display:inline-flex;gap:6px;align-items:center;justify-content:flex-end;
+}
+.fab-traca-print,.fab-traca-del,.fab-traca-comment{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;padding:0;border-radius:8px;
+  background:rgba(148,163,184,.14);border:1px solid transparent;
+  color:var(--text2);cursor:pointer;transition:all .12s;
+}
+.fab-traca-print{
+  background:rgba(20,184,166,.14);color:var(--accent,#14b8a6);
+}
+.fab-traca-print:hover{
+  background:var(--accent,#14b8a6);border-color:var(--accent,#14b8a6);color:#fff;
+}
+.fab-traca-comment{
+  background:rgba(59,130,246,.14);color:#3b82f6;
+}
+.fab-traca-comment:hover{
+  background:#3b82f6;border-color:#3b82f6;color:#fff;
+}
+.fab-traca-comment.has-comment{
+  background:rgba(59,130,246,.22);border-color:rgba(59,130,246,.35);color:#3b82f6;
+}
+.fab-traca-del{
+  background:rgba(239,68,68,.12);color:#ef4444;
+}
+.fab-traca-del:hover{
+  background:var(--danger,#ef4444);border-color:var(--danger,#ef4444);color:#fff;
+}
+.fab-traca-print:disabled{opacity:.5;cursor:not-allowed}
 .fab-traca-fsc-warn{
   display:inline-flex;align-items:center;justify-content:center;
   margin-left:6px;color:var(--warn);font-weight:800;font-size:13px;
@@ -847,7 +987,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -856,7 +996,26 @@ body.has-topbar .fab-main{padding-top:74px}
   // POST sur /api/maintenance/alerts/{id}/ack — l'historique est tracé en DB.
   if (window.MysifaAlerts) {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => MysifaAlerts.start());
+      document.addEventListener('DOMContentLoaded', () => {
+        MysifaAlerts.start();
+        // v2.3.11 : listener global pour cacher le loading pendant qu'une
+        // alerte bloquante est affichée. La fonction set(...) est globale
+        // dans fabrication_page — si loading était true, on le passe à false.
+        window.addEventListener('mysifa-saisie-awaiting-alert', () => {
+          try {
+            if(typeof set === 'function' && S && S.loading){
+              set({loading: false});
+            }
+          } catch(_){}
+        });
+        window.addEventListener('mysifa-saisie-retrying', () => {
+          try {
+            if(typeof set === 'function' && S && !S.loading){
+              set({loading: true});
+            }
+          } catch(_){}
+        });
+      });
     } else {
       MysifaAlerts.start();
     }
@@ -935,6 +1094,14 @@ let S = {
   showFinModal: false,
   showCommentModal: false,
   commentSaisieId: null,
+  showTracaCommentModal: false,
+  tracaCommentId: null,
+  tracaCommentText: '',
+  showRepiquageEditModal: false,
+  repiquageEditSaisie: null,
+  repiquageEditCartons: '',
+  repiquageEditEtiq: '',
+  repiquageEditCommentaire: '',
   showArret50Modal: false,
   arret50Comment: '',
 
@@ -947,7 +1114,9 @@ let S = {
   searchQuery: '',
 
   // Footer tabs
-  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'of'
+  fabTab: 'saisie',   // 'saisie' | 'print' | 'traca' | 'stats' (Stock) | 'of'
+  stockProdZ1: {refs:[],total_unites:0,nb_refs:0}, // Z1 en attente sortie de prod
+  stockProdLoading: false,
 
   // Import OF PDF
   ofImports: [],
@@ -1099,7 +1268,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1315,6 +1484,10 @@ function icon(name,size=16){
     grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
     'minus-circle':'<circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/>',
     box:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'log-in':'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>',
+    package:'<path d="M16.5 9.4l-9-5.19"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    'refresh-ccw':'<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10"/><path d="M3.51 15a9 9 0 0 0 14.85 3.36L23 14"/>',
+    users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('width',String(size));svg.setAttribute('height',String(size));
@@ -1336,16 +1509,53 @@ function svgIcon(name,size=16){
 async function apiFetch(path, opts={}){
   const r = await fetch(path, {credentials:'include', ...opts});
   if(r.status===401){ window.location.href='/'; return null; }
-  // v2.2.88 : HTTP 423 = alerte maintenance bloquante due. Force le refresh
-  // du runtime des alertes pour afficher la modale bloquante à l'écran.
+  // v2.3.6 : HTTP 423 = alerte maintenance bloquante. Affiche l'alerte,
+  // attend l'ACK, puis RETENTE automatiquement la saisie (Production/Reprise).
   if(r.status===423){
-    try {
-      if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
-        window.MysifaAlerts.refresh();
-      }
-    } catch(_){}
     const e = await r.json().catch(()=>({}));
-    throw new Error(e.detail || 'Alerte maintenance à valider avant toute saisie.');
+    console.log('[MysifaAlerts] 423 response :', e);
+    let msg = 'Alerte maintenance à valider avant la saisie de production.';
+    let hasBlockingAlerts = false;
+    try {
+      const detail = e.detail;
+      if(typeof detail === 'string'){
+        msg = detail;
+      } else if(detail && typeof detail === 'object'){
+        msg = detail.message || msg;
+        const alerts = detail.alerts;
+        if(Array.isArray(alerts) && alerts.length && window.MysifaAlerts && typeof window.MysifaAlerts.showBlockingAlerts === 'function'){
+          console.log('[MysifaAlerts] 423 → afficher', alerts.length, 'alerte(s) bloquante(s)');
+          await window.MysifaAlerts.showBlockingAlerts(alerts);
+          hasBlockingAlerts = true;
+        } else {
+          console.warn('[MysifaAlerts] 423 mais aucune alerte dans le detail — fallback refresh');
+          if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh === 'function'){
+            window.MysifaAlerts.refresh();
+          }
+        }
+      }
+    } catch(err){
+      console.warn('[MysifaAlerts] error handling 423 :', err);
+    }
+    // v2.3.6 : attendre l'ACK de l'alerte puis retenter la saisie originale.
+    // Si dismiss ou erreur → throw normalement.
+    if(hasBlockingAlerts && window.MysifaAlerts && typeof window.MysifaAlerts.waitForBlockingAck === 'function'){
+      // v2.3.11 : signaler à l'UI que la saisie attend une action de l'user
+      // (le code appelant cache son spinner "Enregistrement...")
+      window.dispatchEvent(new CustomEvent('mysifa-saisie-awaiting-alert'));
+      try {
+        console.log('[MysifaAlerts] 423 — waiting for ack before retry');
+        await window.MysifaAlerts.waitForBlockingAck();
+        console.log('[MysifaAlerts] alert acked — retrying saisie', path);
+        // v2.3.11 : signaler à l'UI qu'on va retenter (peut ré-afficher spinner)
+        window.dispatchEvent(new CustomEvent('mysifa-saisie-retrying'));
+        return apiFetch(path, opts);
+      } catch(waitErr){
+        console.log('[MysifaAlerts] alert dismissed or error :', waitErr);
+        window.dispatchEvent(new CustomEvent('mysifa-saisie-dismissed'));
+      }
+    }
+    throw new Error(msg);
   }
   if(!r.ok){
     const e = await r.json().catch(()=>({}));
@@ -1513,6 +1723,18 @@ async function triggerOp(opCode, opLabel, extra={}){
   const opStr = opCode+' - '+opLabel;
   set({loading:true});
   try{
+    // v2.3.29 : préserve les données de l'alerte si l'op a commencé à
+    // la remplir mais n'a pas cliqué Valider. Sinon le backend
+    // _auto_ack_periodic_alerts_on_arret écrase l'ack avec un message
+    // vide "Fermée auto : XX – …". Bypass pour 03 (reprise = productif,
+    // pas d'auto-close) mais garde-fou sur tous les autres codes.
+    if(opCode !== '03'){
+      try {
+        if(window.MysifaAlerts && typeof window.MysifaAlerts.flushOpenAcks === 'function'){
+          await window.MysifaAlerts.flushOpenAcks();
+        }
+      } catch(_) {}
+    }
     const body = {operation: opStr, date_operation: nowIsoLocal(), ...extra};
     if(S.dossier) body.no_dossier = S.dossier.reference;
     if(S.machine) body.machine = S.machine.nom;
@@ -1565,6 +1787,27 @@ async function saveComment(){
     Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, loading:false});
     render();
     _fabRestoreUiState(ui);
+  }catch(e){
+    showToast('Erreur : '+e.message,'danger');
+    set({loading:false});
+  }
+}
+
+async function saveTracaComment(){
+  const id = S.tracaCommentId;
+  if(!id) return;
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/matieres/'+id+'/commentaire',{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({commentaire: S.tracaCommentText||''}),
+    });
+    const cleaned = (S.tracaCommentText||'').trim();
+    const m = Array.isArray(S.tracaMatieres) ? S.tracaMatieres.find(x=>x.id===id) : null;
+    if(m) m.commentaire = cleaned || null;
+    showToast('Commentaire enregistré');
+    Object.assign(S, {showTracaCommentModal:false, tracaCommentText:'', tracaCommentId:null, loading:false});
+    render();
   }catch(e){
     showToast('Erreur : '+e.message,'danger');
     set({loading:false});
@@ -1854,6 +2097,7 @@ function handleOpTrigger(code, label, cat){
 /* ── Main table ──────────────────────────────────────────────── */
 /* ── Tab navigation ──────────────────────────────────────────── */
 async function switchFabTab(tab){
+  try{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}catch(e){}
   if(tab!=='traca' && S.tracaScanning) tracaStopCamera();
   set({fabTab:tab});
   if(tab==='traca'){
@@ -1866,10 +2110,17 @@ async function switchFabTab(tab){
     if(S.ofSubTab==='fiche') await loadFiches();
   }
   if(tab==='stats'){
-    await loadDossierStats();
+    await loadStockProduction();
   }
 }
 
+var FAB_VALID_TABS=['saisie','print','traca','of','stats'];
+function _readFabTab(){
+  try{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(FAB_VALID_TABS.indexOf(h)!==-1)return h;}catch(e){}
+  return 'saisie';
+}
+window.addEventListener('hashchange',function(){try{var t=_readFabTab();if(t!==S.fabTab)set({fabTab:t});}catch(e){}});
 async function loadDossierStats(){
   const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
   if(!ref){
@@ -2243,6 +2494,18 @@ function renderOfPanel(){
       }, svgIcon('edit',14)),
     ];
     if(row.pdf_filename){
+      // v1.7 — bouton imprimer (avant le telecharger PDF) : ouvre le popup
+      // de choix imprimante + params, puis POST /api/print/pdf.
+      actBtns.push(h('button',{
+        className:'fab-btn fab-btn-ghost fab-btn-sm',
+        title:'Imprimer',
+        onClick:()=>openPrintModal({
+          entityType:'of',
+          entityId:row.id,
+          title:'Imprimer OF '+(row.of_numero||('#'+row.id)),
+          subtitle:(row.reference?('Ref '+row.reference+' — '):'') + (row.machine||''),
+        }),
+      }, svgIcon('printer',14)));
       actBtns.push(h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
         title:'Télécharger PDF',
@@ -2405,6 +2668,14 @@ function renderFichesPanel(){
   const rows=(S.fiches||[]).map(row=>{
     const acts=[
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Prévisualiser PDF',onClick:()=>window.open('/api/fiches-techniques/'+row.id+'/pdf-preview','_blank')},svgIcon('file',14)),
+      // v1.7 — bouton imprimer : ouvre le popup de choix imprimante + params,
+      // puis POST /api/print/pdf avec entity_type='fiche'.
+      h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Imprimer',onClick:()=>openPrintModal({
+        entityType:'fiche',
+        entityId:row.id,
+        title:'Imprimer fiche '+(row.reference||('#'+row.id)),
+        subtitle:[row.format,row.machine].filter(Boolean).join(' — '),
+      })},svgIcon('printer',14)),
       h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',title:'Modifier',onClick:()=>openFicheEditModal(row)},svgIcon('edit',14)),
     ];
     if(S.user&&S.user.role==='superadmin'){
@@ -2947,8 +3218,9 @@ function tracaShowFicheManuelle(codeBarre){
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px';
 
+    const dlId = 'fiche-fournisseurs-dl-'+Math.random().toString(36).slice(2,8);
     const opts = list.map(f =>
-      `<option value="${escAttr(String(f.id))}">${escHtml(f.nom)}</option>`
+      `<option value="${escAttr(f.nom||'')}"></option>`
     ).join('');
 
     overlay.innerHTML = `
@@ -2963,14 +3235,13 @@ function tracaShowFicheManuelle(codeBarre){
 
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;
                       letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
-          Sélectionner le fournisseur
+          Rechercher le fournisseur
         </label>
-        <select id="fiche-fournisseur-select"
-                style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-                       background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit">
-          <option value="">— Choisir un fournisseur —</option>
-          ${opts}
-        </select>
+        <input id="fiche-fournisseur-input" type="text" list="${dlId}"
+               placeholder="Tapez pour rechercher…" autocomplete="off" spellcheck="false"
+               style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+                      background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit;box-sizing:border-box"/>
+        <datalist id="${dlId}">${opts}</datalist>
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
@@ -2996,14 +3267,18 @@ function tracaShowFicheManuelle(codeBarre){
 
     document.body.appendChild(overlay);
 
-    const sel = overlay.querySelector('#fiche-fournisseur-select');
+    const inp = overlay.querySelector('#fiche-fournisseur-input');
     const nomEl = overlay.querySelector('#fiche-fournisseur-nom');
     const licEl = overlay.querySelector('#fiche-fournisseur-licence');
     const btn = overlay.querySelector('#fiche-manual-confirm');
 
+    function findFournisseur(){
+      const val = (inp?.value || '').trim().toLowerCase();
+      if(!val) return null;
+      return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
+    }
     function updateLicence(){
-      const fid = sel?.value;
-      const f = list.find(x => String(x.id) === fid);
+      const f = findFournisseur();
       if(f){
         if(nomEl){ nomEl.textContent = f.nom; nomEl.style.color = 'var(--text)'; }
         if(licEl){ licEl.textContent = f.licence || '—'; licEl.style.color = 'var(--text)'; }
@@ -3014,7 +3289,11 @@ function tracaShowFicheManuelle(codeBarre){
         if(btn){ btn.disabled = true; btn.style.opacity = '.5'; }
       }
     }
-    if(sel) sel.addEventListener('change', updateLicence);
+    if(inp){
+      inp.addEventListener('input', updateLicence);
+      inp.addEventListener('change', updateLicence);
+      setTimeout(()=>inp.focus(), 50);
+    }
 
     overlay.querySelector('#fiche-manual-cancel').onclick = () => {
       overlay.remove();
@@ -3022,8 +3301,9 @@ function tracaShowFicheManuelle(codeBarre){
     };
 
     overlay.querySelector('#fiche-manual-confirm').onclick = async () => {
-      const fid = sel?.value;
-      if(!fid) return;
+      const f = findFournisseur();
+      if(!f) return;
+      const fid = f.id;
       overlay.remove();
       set({tracaAutoSaving:true});
       try{
@@ -3052,8 +3332,9 @@ function tracaAskFournisseur(){
     backdrop.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9200;display:flex;align-items:center;justify-content:center;padding:16px';
     const box=document.createElement('div');
     box.style.cssText='background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;max-width:420px;width:100%';
+    const dlId = 'tf-dl-'+Math.random().toString(36).slice(2,8);
     const opts = list
-      .map(x=>`<option value="${Number(x.id)}">${escHtml(x.nom||'')}</option>`)
+      .map(x=>`<option value="${escAttr(x.nom||'')}"></option>`)
       .join('');
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
@@ -3064,10 +3345,10 @@ function tracaAskFournisseur(){
         Ce code-barres n'est lié à aucune réception matière.
       </div>
       <label style="font-size:10px;color:var(--muted);font-weight:800;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px">Fournisseur</label>
-      <select id="tf-sel" style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px">
-        <option value="">— Choisir —</option>
-        ${opts}
-      </select>
+      <input id="tf-inp" type="text" list="${dlId}" placeholder="Tapez pour rechercher…"
+             autocomplete="off" spellcheck="false"
+             style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box"/>
+      <datalist id="${dlId}">${opts}</datalist>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
         <button type="button" id="tf-cancel" class="fab-btn fab-btn-ghost fab-btn-sm">Annuler</button>
         <button type="button" id="tf-ok" class="fab-btn fab-btn-primary fab-btn-sm" disabled>Valider</button>
@@ -3078,12 +3359,18 @@ function tracaAskFournisseur(){
     backdrop.onclick=(e)=>{ if(e.target===backdrop) close(null); };
     box.querySelector('#tf-close').onclick=()=>close(null);
     box.querySelector('#tf-cancel').onclick=()=>close(null);
-    box.querySelector('#tf-cancel').onclick=()=>close(null);
-    const sel = box.querySelector('#tf-sel');
+    const inp = box.querySelector('#tf-inp');
     const ok = box.querySelector('#tf-ok');
-    sel.onchange=()=>{ ok.disabled = !sel.value; };
-    ok.onclick=()=>{ const v = sel.value ? Number(sel.value) : null; close(v||null); };
+    function pick(){
+      const val = (inp.value||'').trim().toLowerCase();
+      return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
+    }
+    function refresh(){ ok.disabled = !pick(); }
+    inp.addEventListener('input', refresh);
+    inp.addEventListener('change', refresh);
+    ok.onclick=()=>{ const f = pick(); close(f ? Number(f.id) : null); };
     document.body.appendChild(backdrop);
+    setTimeout(()=>inp.focus(), 50);
   });
 }
 
@@ -3093,6 +3380,127 @@ async function tracaDeleteMatiere(id){
     S.tracaMatieres = S.tracaMatieres.filter(m=>m.id!==id);
     render();
   }catch(e){ showToast(e.message,'danger'); }
+}
+
+// Réimprime l'étiquette d'identification d'une bobine scannée (format compact
+// 107x50mm) pour la recoller sur une bobine remise en stock. Reuse le même
+// endpoint /api/print/label + usage_key='reception_matiere' que la page Stock.
+function _tracaBuildLabelData(m){
+  const FSC_CLAIM_LABELS = {
+    non_fsc: 'Non FSC', fsc_100: 'FSC 100%', fsc_mix_credit: 'FSC Mix Credit',
+    fsc_mix: 'FSC Mix', fsc_recycled: 'FSC Recycled'
+  };
+  const claim = (m.fsc_type_claim || 'non_fsc');
+  const fscBanner = claim === 'non_fsc' ? 'MATIERE NON FSC' : 'MATIERE FSC';
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const dateStr = pad(now.getDate())+'/'+pad(now.getMonth()+1)+'/'+now.getFullYear();
+  const operateurNom = (S && S.user && S.user.nom) || 'Opérateur';
+  const code = (m.code_barre || '').toString();
+  const fournisseur = (m.fournisseur || m.fournisseur_manual || '').toString();
+  return {
+    lot_numero: code,
+    fournisseur: fournisseur,
+    fsc_label: FSC_CLAIM_LABELS[claim] || 'Non FSC',
+    fsc_banner: fscBanner,
+    ref_produit: '',
+    ref_matiere: '',
+    site: 'SIFA',
+    code_barre: code,
+    operateur_nom: operateurNom,
+    date_reception: dateStr,
+  };
+}
+
+async function tracaReprintEtiquette(m){
+  if(!m || !m.code_barre){ showToast('Code barre manquant','danger'); return; }
+  const data = _tracaBuildLabelData(m);
+  set({tracaAutoSaving:true});
+  try{
+    const r = await apiFetch('/api/print/label',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({usage_key:'reception_matiere', copies:1, data, variante:'compact'}),
+    });
+    showToast('Étiquette envoyée à '+(r.imprimante||'imprimante'),'success');
+  }catch(e){
+    const msg = e && e.message ? e.message : String(e);
+    if(msg && (msg.includes('Aucune imprimante') || msg.includes('template'))){
+      // Pas de défaut utilisateur : afficher le picker
+      await _tracaShowPrinterPicker(m, data, msg);
+    } else {
+      showToast('Impression : '+msg,'danger');
+    }
+  } finally {
+    set({tracaAutoSaving:false});
+  }
+}
+
+async function _tracaShowPrinterPicker(m, data, warnMsg){
+  let imprimantes = [];
+  try{
+    imprimantes = await apiFetch('/api/print/my-imprimantes');
+  } catch(e){
+    showToast('Impossible de charger la liste des imprimantes : '+e.message,'danger');
+    return;
+  }
+  if(!imprimantes || !imprimantes.length){
+    showToast('Aucune imprimante configurée dans MySifa. Contacte l\'admin.','danger');
+    return;
+  }
+  return new Promise((resolve)=>{
+    document.getElementById('traca-printer-picker')?.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'traca-printer-picker';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1200;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.addEventListener('click', e=>{ if(e.target===overlay){ overlay.remove(); resolve(); } });
+    const card = document.createElement('div');
+    card.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;max-width:440px;width:100%;max-height:90vh;overflow:auto';
+    card.innerHTML = `
+      <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">Choisir une imprimante</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">${warnMsg ? String(warnMsg).replace(/</g,'&lt;') : 'Sélectionne l\'imprimante pour l\'étiquette de la bobine.'}</div>
+      <select id="_tp-picker" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;margin-bottom:12px">
+        ${imprimantes.map(i=>`<option value="${i.id}">${(i.poste?i.poste+' — ':'')}${String(i.nom).replace(/</g,'&lt;')}</option>`).join('')}
+      </select>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);margin-bottom:16px;cursor:pointer">
+        <input type="checkbox" id="_tp-remember" checked style="width:16px;height:16px;cursor:pointer">
+        Retenir comme imprimante par défaut pour la réception matière
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="_tp-cancel" style="padding:9px 16px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:13px;font-family:inherit;font-weight:600;cursor:pointer">Annuler</button>
+        <button id="_tp-go" style="padding:9px 16px;border-radius:10px;border:none;background:var(--accent);color:#000;font-size:13px;font-family:inherit;font-weight:700;cursor:pointer">Imprimer</button>
+      </div>
+    `;
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    card.querySelector('#_tp-cancel').onclick = ()=>{ overlay.remove(); resolve(); };
+    card.querySelector('#_tp-go').onclick = async ()=>{
+      const impId = parseInt(card.querySelector('#_tp-picker').value,10);
+      const remember = card.querySelector('#_tp-remember').checked;
+      if(!impId){ resolve(); return; }
+      try{
+        const r = await apiFetch('/api/print/label',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({usage_key:'reception_matiere', copies:1, imprimante_id:impId, data, variante:'compact'}),
+        });
+        if(remember){
+          try{
+            await apiFetch('/api/print/my-defaults',{
+              method:'PUT',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({defaults:{reception_matiere:impId}}),
+            });
+          }catch(e){}
+        }
+        showToast('Étiquette envoyée à '+(r.imprimante||'imprimante'),'success');
+        overlay.remove();
+        resolve();
+      }catch(e){
+        showToast('Erreur : '+(e&&e.message?e.message:String(e)),'danger');
+      }
+    };
+  });
 }
 
 async function tracaStartCamera(){
@@ -3232,8 +3640,19 @@ function renderTracaPanel(){
           h('td',null,linkBadge),
           h('td',null,m.no_dossier||h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},'—')),
           h('td',null,timeStr),
-          h('td',null,h('button',{className:'fab-traca-del',title:'Supprimer',
-            onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',12)))
+          h('td',{style:{whiteSpace:'nowrap',textAlign:'right'}},
+            h('div',{className:'fab-traca-actions'},
+              h('button',{className:'fab-traca-print',title:'Réimprimer étiquette (bobine à remettre en stock)',
+                onClick:()=>tracaReprintEtiquette(m)},svgIcon('printer',14)),
+              h('button',{
+                className:'fab-traca-comment'+(m.commentaire?' has-comment':''),
+                title: m.commentaire ? ('Commentaire : '+m.commentaire) : 'Ajouter un commentaire',
+                onClick:()=>set({showTracaCommentModal:true, tracaCommentId:m.id, tracaCommentText:m.commentaire||''})
+              }, svgIcon(m.commentaire?'edit':'message-square',14)),
+              h('button',{className:'fab-traca-del',title:'Supprimer',
+                onClick:()=>tracaDeleteMatiere(m.id)},svgIcon('trash',14))
+            )
+          )
         );
       })
     : [h('tr',null,h('td',{colSpan:'7',className:'fab-traca-empty'},
@@ -3345,151 +3764,165 @@ function renderTracaPanel(){
   );
 }
 
-function renderStatsPanel(){
-  const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'-';
-  const ref = S.dossier && (S.dossier.reference || S.dossier.no_dossier);
-  if(!ref){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
-        h('span',{className:'fab-main-sub'},machineName)
-      ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},
-        'Aucun dossier actif. Demarrez un dossier (op 01) pour voir ses stats.'
-      )
-    );
+function _fmtDateStockProd(iso){
+  if(!iso) return '—';
+  const s = String(iso);
+  const d = s.slice(0,10).split('-');
+  const hm = s.length >= 16 ? s.slice(11,16) : '';
+  if(d.length===3) return d[2]+'/'+d[1]+(hm?' '+hm:'');
+  return s;
+}
+function _fmtU(n, unit){
+  const num = Number(n||0);
+  const s = num.toLocaleString('fr-FR');
+  return s + (unit ? ' '+unit : '');
+}
+async function loadStockProduction(){
+  set({stockProdLoading:true});
+  try{
+    const d = await apiFetch('/api/stock/sortie-prod');
+    set({stockProdZ1: d || {refs:[],total_unites:0,nb_refs:0}, stockProdLoading:false});
+  }catch(e){
+    set({stockProdZ1: {refs:[],total_unites:0,nb_refs:0,_err: e.message||'Erreur de chargement.'},
+         stockProdLoading:false});
   }
-  const st = S.dossierStats;
-  if(S.dossierStatsLoading || !st){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
-        h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
-        h('span',{className:'fab-main-sub'},machineName)
-      ),
-      h('div',{style:{padding:'40px 24px',textAlign:'center',color:'var(--muted)'}},'Chargement...')
-    );
-  }
-  if(st._err){
-    return h('div',{className:'fab-main'},
-      h('div',{className:'fab-main-head'},
-        h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier')
-      ),
-      h('div',{style:{padding:'24px',color:'var(--danger)'}}, st._err)
-    );
-  }
-
-  // Section Produits finis (Z1)
-  const pfRows = (st.pf_totaux || []).map(r => {
-    const dt = r.created_at ? new Date(r.created_at) : null;
-    const dateStr = dt && !isNaN(dt)
-      ? dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
-      : '-';
-    return h('tr',null,
-      h('td',null, r.produit_reference || '-'),
-      h('td',{style:{color:'var(--text2)'}}, r.produit_designation || ''),
-      h('td',{style:{textAlign:'right',fontWeight:'700'}},
-        Number(r.quantite).toLocaleString('fr-FR') + ' ' + (r.produit_unite || '')),
-      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, dateStr),
-      h('td',{style:{color:'var(--muted)',fontSize:'11px'}}, r.created_by_name || '-'),
-    );
-  });
-  const pfTotalQte = (st.pf_totaux || []).reduce((s, r) => s + Number(r.quantite || 0), 0);
-
-  // Section Palettes
-  const palRows = (st.palettes || []).map(p => h('div',{
-    style:{display:'flex',alignItems:'center',gap:'12px',padding:'10px 14px',
-           background:'var(--bg)',borderRadius:'8px',marginBottom:'6px',
-           border:'1px solid var(--border)'}
+}
+function _stockGoTo(action){
+  // Redirige vers MyStock avec le sous-onglet Production actif.
+  // action = 'entree-mp' | 'sortie-mp' | 'entree-z1' | 'sortie-z1'
+  const url = '/stock?tab=production&auto=' + encodeURIComponent(action||'');
+  window.location.href = url;
+}
+function _buildStockActionCard(opts){
+  return h('button',{
+    className:'fab-prod-card fab-prod-card-'+opts.kind,
+    type:'button',
+    onClick:opts.onClick,
   },
-    h('div',{style:{flex:'1'}},
-      h('div',{style:{fontWeight:'600',fontSize:'13px',color:'var(--text)'}},
-        (p.palette_reference || '-') + (p.is_europe ? ' · EUROPE' : ' · perdue')),
-      h('div',{style:{fontSize:'11px',color:'var(--muted)'}}, p.palette_designation || '')
-    ),
-    h('div',{style:{fontSize:'20px',fontWeight:'800',color:'var(--accent)'}},
-      String(p.nombre_total) + ' pal.')
-  ));
-
-  // Section MP scannees
-  const mpCount = (st.mp_scannees || []).length;
-
-  return h('div',{className:'fab-main', style:{overflow:'auto'}},
-    h('div',{className:'fab-main-head'},
-      h('span',{className:'fab-main-title'}, svgIcon('bar-chart-2',16),' Stats dossier'),
-      h('span',{style:{fontSize:'12px',fontWeight:'700',color:'var(--accent)'}}, ref),
-      h('span',{className:'fab-main-sub'},machineName)
-    ),
-    h('div',{style:{padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}},
-      // Resume en tetes de cartes
-      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:'10px'}},
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Entrees Z1'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
-            String(st.nb_z1_entrees || 0)),
-          h('div',{style:{fontSize:'11px',color:'var(--text2)',marginTop:'2px'}},
-            Number(pfTotalQte).toLocaleString('fr-FR') + ' unites')
-        ),
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'Palettes'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}},
-            String(st.nb_palettes_total || 0))
-        ),
-        h('div',{style:{padding:'12px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'10px'}},
-          h('div',{style:{fontSize:'11px',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px'}},'MP scannees'),
-          h('div',{style:{fontSize:'22px',fontWeight:'800',color:'var(--text)'}}, String(mpCount))
-        )
-      ),
-
-      // Section PF Z1
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('package',14),' Produits finis en Z1'),
-        pfRows.length
-          ? h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:'12px'}},
-              h('thead',null, h('tr',null,
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Reference'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Designation'),
-                h('th',{style:{textAlign:'right',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Quantite'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Date'),
-                h('th',{style:{textAlign:'left',padding:'6px 8px',fontSize:'10px',color:'var(--muted)',textTransform:'uppercase',borderBottom:'1px solid var(--border)'}},'Operateur'),
-              )),
-              h('tbody',null, ...pfRows.map(r => {
-                // patch les styles des cellules
-                r.querySelectorAll && r.querySelectorAll('td').forEach(td => { td.style.padding = '8px'; td.style.borderBottom = '1px solid var(--border)'; });
-                return r;
-              }))
-            )
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune entree Z1 pour ce dossier.')
-      ),
-
-      // Section Palettes
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('layers',14),' Palettes utilisees'),
-        palRows.length
-          ? h('div',null, ...palRows)
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune palette enregistree pour ce dossier.')
-      ),
-
-      // Section MP scannees (renvoi vers Traca pour le detail)
-      h('div',{className:'card',style:{padding:'14px 16px',background:'var(--card)',border:'1px solid var(--border)',borderRadius:'12px'}},
-        h('div',{style:{fontSize:'13px',fontWeight:'700',marginBottom:'10px',display:'flex',alignItems:'center',gap:'8px'}},
-          svgIcon('scan',14),' Matieres premieres scannees'),
-        mpCount > 0
-          ? h('div',null,
-              h('div',{style:{fontSize:'12px',color:'var(--text2)',marginBottom:'10px'}},
-                String(mpCount) + ' bobine' + (mpCount > 1 ? 's' : '') + ' scannee' + (mpCount > 1 ? 's' : '') + ' liee' + (mpCount > 1 ? 's' : '') + ' a ce dossier.'),
-              h('button',{className:'fab-btn fab-btn-ghost fab-btn-sm',
-                onClick: () => { void switchFabTab('traca'); }},
-                svgIcon('arrow-right',12),' Voir le detail dans Traca')
-            )
-          : h('div',{style:{padding:'12px',color:'var(--muted)',fontSize:'12px',textAlign:'center'}},
-              'Aucune matiere scannee pour ce dossier.')
-      )
+    h('div',{className:'fab-prod-card-ico'}, svgIcon(opts.icon,22)),
+    h('div',{className:'fab-prod-card-txt'},
+      h('div',{className:'fab-prod-card-title'}, opts.title),
+      h('div',{className:'fab-prod-card-sub'}, opts.sub),
     )
+  );
+}
+function _renderStockZ1List(){
+  const z1 = S.stockProdZ1 || {refs:[],total_unites:0,nb_refs:0};
+  const currentName = String((S.user && S.user.nom) || '').trim().toLowerCase();
+
+  const head = h('div',{className:'fab-prod-z1-head'},
+    h('div',null,
+      h('div',{className:'fab-prod-z1-title'},
+        svgIcon('package',16),
+        ' Contenu Z1 — En attente sortie de prod',
+      ),
+      h('div',{className:'fab-prod-z1-sub'},
+        z1.nb_refs ?
+          (z1.nb_refs + ' référence' + (z1.nb_refs>1?'s':'') + ' · '
+           + Number(z1.total_unites||0).toLocaleString('fr-FR')
+           + ' unité' + ((z1.total_unites||0)>1?'s':''))
+          : 'Aucun produit en Z1.'
+      ),
+    ),
+    h('button',{
+      className:'fab-prod-z1-refresh',
+      type:'button',
+      title:'Rafraîchir',
+      onClick:()=>loadStockProduction()
+    }, svgIcon('refresh-ccw',14),' Actualiser'),
+  );
+
+  let body;
+  if(S.stockProdLoading){
+    body = h('div',{className:'fab-prod-empty'},'Chargement…');
+  } else if(z1._err){
+    body = h('div',{className:'fab-prod-err'}, z1._err);
+  } else if(!z1.refs || !z1.refs.length){
+    body = h('div',{className:'fab-prod-empty'},
+      h('div',{style:{fontSize:'24px',color:'var(--muted)',marginBottom:'4px'}},'·'),
+      h('div',null,'Aucune sortie de production enregistrée.'),
+      h('div',{className:'fab-prod-empty-hint'},
+        'Cliquez sur « Entrée Z1 » pour ajouter ce qui sort de production.'
+      ),
+    );
+  } else {
+    const rows = z1.refs.map(r => {
+      const lineOp = String(r.dernier_operateur || '').trim().toLowerCase();
+      const canEdit = currentName && lineOp && currentName === lineOp;
+      const rightChildren = [
+        h('div',{className:'fab-prod-z1-qty'}, _fmtU(r.quantite||0, r.unite||'')),
+      ];
+      if(canEdit){
+        rightChildren.push(h('div',{className:'fab-prod-z1-actions'},
+          h('button',{
+            className:'fab-prod-z1-btn fab-prod-z1-btn-add',
+            type:'button',
+            title:'Ajouter une quantité à cette référence',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('add-to:'+r.id); },
+          }, svgIcon('plus-circle',12),' Ajouter'),
+          h('button',{
+            className:'fab-prod-z1-btn fab-prod-z1-btn-edit',
+            type:'button',
+            title:'Modifier la quantité totale en Z1',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('edit:'+r.id); },
+          }, svgIcon('edit',12),' Modifier'),
+        ));
+      }
+      return h('div',{className:'fab-prod-z1-row'},
+        h('div',{className:'fab-prod-z1-left'},
+          h('div',{className:'fab-prod-z1-ref'}, r.reference || '—'),
+          h('div',{className:'fab-prod-z1-des'}, r.designation || ''),
+          h('div',{className:'fab-prod-z1-meta'},
+            h('span',{className:'fab-prod-z1-meta-date'},
+              svgIcon('clock',11),' '+ _fmtDateStockProd(r.derniere_entree || r.date_fifo)),
+            h('span',{className:'fab-prod-z1-meta-op'},
+              svgIcon('users',11),' '+ (r.dernier_operateur || '—')),
+          ),
+        ),
+        h('div',{className:'fab-prod-z1-right'}, ...rightChildren)
+      );
+    });
+    body = h('div',{className:'fab-prod-z1-list'}, ...rows);
+  }
+
+  return h('div',{className:'fab-prod-z1-card'}, head, body);
+}
+
+function renderStatsPanel(){
+  // Vue Stock native — miroir visuel de MyStock (buildProductionView),
+  // sans iframe, alimentée par /api/stock/sortie-prod.  Les clics sur
+  // les 4 cartes redirigent vers /stock?tab=production&auto=<action>
+  // pour ouvrir la modale correspondante (les modales de MyStock ne
+  // sont pas dupliquées ici).
+  return h('div',{className:'fab-main fab-stock-native'},
+    h('div',{className:'fab-prod-head'},
+      h('h2',{className:'fab-prod-head-title'}, 'Production'),
+      h('div',{className:'fab-prod-head-sub'},
+        'Saisie rapide des entrées/sorties matières premières et sortie de production (Z1).'),
+    ),
+    h('div',{className:'fab-prod-grid'},
+      _buildStockActionCard({
+        kind:'mp-in',  icon:'log-in',      title:'Entrée MP',
+        sub:'Réception matière',
+        onClick:()=>_stockGoTo('entree-mp'),
+      }),
+      _buildStockActionCard({
+        kind:'mp-out', icon:'log-out',     title:'Sortie MP',
+        sub:'Consommation production',
+        onClick:()=>_stockGoTo('sortie-mp'),
+      }),
+      _buildStockActionCard({
+        kind:'z1-in',  icon:'plus-circle', title:'Entrée Z1',
+        sub:'Sortie de production',
+        onClick:()=>_stockGoTo('entree-z1'),
+      }),
+      _buildStockActionCard({
+        kind:'z1-out', icon:'edit',        title:'Sortie Z1',
+        sub:'Corriger / retirer',
+        onClick:()=>_stockGoTo('sortie-z1'),
+      }),
+    ),
+    _renderStockZ1List()
   );
 }
 
@@ -3776,32 +4209,55 @@ async function openTracabiliteModal(noDossier){
   }
 }
 
+/* ── Tabs footer : définitions + filtrage rôle ─────────────── */
+function _fabTabDefs(){
+  // Tab 'stats' est renommé "Stock" (icône package) pour donner
+  // accès aux vues MyStock depuis la fabrication.
+  return [
+    {key:'saisie', icon:'edit',    label:'Saisie'},
+    {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
+    {key:'traca',  icon:'scan',    label:'Traça'},
+    {key:'stats',  icon:'box',     label:'Stock'},
+    {key:'of',     icon:'file',    label:'Fiches + OF', ofOnly:true},
+  ];
+}
+function _isFabricationOperator(){
+  const r = S.user && S.user.role;
+  // Un pur opérateur fabrication OU un admin qui a explicitement
+  // basculé en vue opérateur : on masque Imprimer et Fiches+OF.
+  return r === 'fabrication' || S.saisieViewMode === 'operator';
+}
+function _visibleFabTabs(){
+  const opView = _isFabricationOperator();
+  return _fabTabDefs().filter(t => {
+    if(t.adminOnly && opView) return false;
+    if(t.ofOnly && (!canAccessOfTab() || opView)) return false;
+    return true;
+  });
+}
+function _renderFabTabNav(extraClass){
+  const tabs = _visibleFabTabs().map(t =>
+    h('button',{
+      className:'fab-tab-btn'+(S.fabTab===t.key?' active':''),
+      title:t.label,
+      onClick:()=>{ void switchFabTab(t.key); }
+    }, svgIcon(t.icon,16), t.label)
+  );
+  return h('div',{className:'fab-tab-nav'+(extraClass?' '+extraClass:'')}, ...tabs);
+}
+
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
   // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
   const isAdminUser = S.user && ((S.user.role==='superadmin'||S.user.role==='administration'||S.user.role==='administration_ventes'||S.user.role==='administration_technique'||S.user.role==='direction'));
   const isAdminView = !!isAdminUser && S.saisieViewMode==='admin';
   if(isAdminView){
-    const adminTabBtns = [
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
-        svgIcon('edit',16),'Saisie'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
-        svgIcon('printer',16),'Imprimer'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-        svgIcon('scan',16),'Traça'),
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
-        svgIcon('bar-chart-2',16),'Stats'),
-    ];
-    if(canAccessOfTab()){
-      adminTabBtns.push(
-        h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-          svgIcon('file',16),'Fiches + OF')
-      );
-    }
+    const adminTabNav = _renderFabTabNav();
+    adminTabNav.style.marginLeft = 'auto';
     return h('div',{className:'fab-footer fab-footer--admin'},
       h('div',{style:{fontSize:'12px',color:'var(--muted)',fontWeight:'800',letterSpacing:'.4px',textTransform:'uppercase',flexShrink:0}},
         'Vue admin — lecture seule'),
-      h('div',{className:'fab-tab-nav',style:{marginLeft:'auto'}}, ...adminTabBtns)
+      adminTabNav
     );
   }
 
@@ -3980,24 +4436,10 @@ function renderFooter(){
     )
   );
 
-  // Tab nav (always visible at bottom of footer)
-  const tabBtns = [
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='saisie'?' active':''),onClick:()=>{ void switchFabTab('saisie'); }},
-      svgIcon('edit',16),'Saisie'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='print'?' active':''),onClick:()=>{ void switchFabTab('print'); }},
-      svgIcon('printer',16),'Imprimer'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='traca'?' active':''),onClick:()=>{ void switchFabTab('traca'); }},
-      svgIcon('scan',16),'Traça'),
-    h('button',{className:'fab-tab-btn'+(S.fabTab==='stats'?' active':''),onClick:()=>{ void switchFabTab('stats'); }},
-      svgIcon('bar-chart-2',16),'Stats'),
-  ];
-  if(canAccessOfTab()){
-    tabBtns.push(
-      h('button',{className:'fab-tab-btn'+(S.fabTab==='of'?' active':''),onClick:()=>{ void switchFabTab('of'); }},
-        svgIcon('file',16),'Fiches + OF')
-    );
-  }
-  const tabNav = h('div',{className:'fab-tab-nav'}, ...tabBtns);
+  // Tab nav : maintenant positionné ENTRE les infos dossier et
+  // le bouton "Fin de production" (dans centerSection, en tête).
+  // Rendu identique quel que soit l'onglet actif -> footer unifié.
+  const tabNav = _renderFabTabNav('fab-tab-nav--prominent');
 
   const isOperatorView = S.saisieViewMode === 'operator';
 
@@ -4012,43 +4454,20 @@ function renderFooter(){
   }, svgIcon(isLight?'sun':'moon',14),
     h('span',{className:'fab-theme-label'}, isLight?'Clair':'Sombre'));
 
-  const tabNavWrap = h('div',{className:'fab-footer-row2'}, tabNav, themeBtn);
-
-  // When on non-saisie tabs, show a minimal status line instead of full footer
-  if(S.fabTab!=='saisie'){
-    const machineName = (S.machine&&S.machine.nom)||(S.user&&S.user.machine_nom)||'—';
-    const dossierLabel = S.dossier ? fabDossierRefLabel(S.dossier) : 'Aucun dossier';
-    const fscFooterBtn = S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
-      ? h('button',{
-          className:'fab-btn fab-btn-ghost',
-          style:{fontSize:'10px',padding:'2px 8px'},
-          onClick:()=>openTracabiliteModal(S.dossier.reference || S.dossier.numero_of || ''),
-        },'FSC')
-      : null;
-    const footerCls = 'fab-footer fab-footer-operator fab-footer--alt';
-    return h('div',{className:footerCls,style:{gridTemplateColumns:'1fr'}},
-      h('div',{style:{display:'flex',alignItems:'center',justifyContent:'center',gap:'10px',
-        fontSize:'10px',color:'var(--muted)',padding:'2px 0',flexWrap:'wrap'}},
-        h('span',null, svgIcon('tool',11),' '+machineName),
-        h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',null,dossierLabel),
-        h('span',{style:{color:'var(--border)'}},'/'),
-        h('span',{className:'fab-etat-badge '+etatClass(S.etat),style:{fontSize:'9px',padding:'2px 6px'}}, etatLabel(S.etat)),
-        fscFooterBtn,
-        themeBtn
-      ),
-      h('div',{className:'fab-footer-row2',style:{justifyContent:'center'}}, tabNav)
-    );
-  }
+  // centerSection : la nav des onglets est empilée AU-DESSUS des
+  // action buttons ("Fin de production", etc.), bien centrée et
+  // agrandie pour être immédiatement visible.
+  const actionsSection = h('div',{className:'fab-footer-actions'},
+    machineSelectorRow,
+    h('div',{className:'fab-footer-btns'},...btns),
+    h('div',{className:'fab-footer-tabs-row'}, tabNav),
+    h('div',{className:'fab-footer-row2'}, themeBtn)
+  );
 
   const footerCls = 'fab-footer' + (isOperatorView ? ' fab-footer-operator' : '');
   return h('div',{className:footerCls},
     infoSection,
-    h('div',{className:'fab-footer-actions'},
-      machineSelectorRow,
-      h('div',{className:'fab-footer-btns'},...btns),
-      tabNavWrap
-    ),
+    actionsSection,
     toolsSection
   );
 }
@@ -4518,6 +4937,15 @@ function renderFinModal(){
 
     set({showFinModal:false, loading:true});
     try{
+      // v2.3.29 : préserve les données de l'alerte que l'op aurait
+      // commencée à remplir avant de cliquer Fin de production. Sans
+      // ça, l'auto-close backend écrit "Fermée auto : 89 – …" à la
+      // place des réponses saisies (bug qualité produits finis).
+      try {
+        if(window.MysifaAlerts && typeof window.MysifaAlerts.flushOpenAcks === 'function'){
+          await window.MysifaAlerts.flushOpenAcks();
+        }
+      } catch(_) {}
       const body = {
         operation:'89 - Fin de production',
         date_operation: nowIsoLocal(),
@@ -4671,6 +5099,37 @@ function renderCommentModal(){
   );
 }
 
+function renderTracaCommentModal(){
+  const ta = h('textarea',{placeholder:'Note libre sur cette bobine (anomalie, remise en stock…)',rows:'3'});
+  ta.value = S.tracaCommentText||'';
+  ta.addEventListener('input',e=>{ S.tracaCommentText=e.target.value; });
+  setTimeout(()=>ta.focus(),50);
+
+  const m = Array.isArray(S.tracaMatieres) ? S.tracaMatieres.find(x=>x.id===S.tracaCommentId) : null;
+  const code = m ? (m.code_barre||'') : '';
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showTracaCommentModal:false});}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'},svgIcon('message-square',18),' Commenter la bobine'),
+      h('div',{className:'fab-modal-sub'},
+        code ? ('Bobine '+code+' — note libre visible sur la traçabilité matières.')
+             : 'Note libre visible sur la traçabilité matières.'
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Commentaire'),
+        ta
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:()=>set({showTracaCommentModal:false})},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',
+          onClick:saveTracaComment},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
+}
+
 /* ── Mobile topbar ───────────────────────────────────────────── */
 function renderTopbar(){
   return h('div',{className:'mobile-topbar fab-topbar'},
@@ -4745,6 +5204,104 @@ async function deleteRepiquageHistoriqueSaisie(saisieId){
   }finally{
     set({loading:false});
   }
+}
+
+function openRepiquageEditModal(row){
+  if(!row) return;
+  set({
+    showRepiquageEditModal: true,
+    repiquageEditSaisie: row,
+    repiquageEditCartons: String(Number(row.nb_cartons)||0),
+    repiquageEditEtiq: String(Number(row.quantite_traitee)||0),
+    repiquageEditCommentaire: row.commentaire||'',
+  });
+}
+
+async function saveRepiquageEditSaisie(){
+  const row = S.repiquageEditSaisie;
+  if(!row || !row.id) return;
+  const cartons = Number(String(S.repiquageEditCartons||'').replace(',', '.'));
+  const etiq = Number(String(S.repiquageEditEtiq||'').replace(',', '.'));
+  if(!Number.isFinite(cartons) || cartons < 0){ showToast('Nombre de cartons invalide','danger'); return; }
+  if(!Number.isFinite(etiq) || etiq < 0){ showToast('Nombre d\'étiquettes invalide','danger'); return; }
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/saisie/'+row.id+'/repiquage', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        qte_etiquettes: etiq,
+        nb_cartons: cartons,
+        commentaire: S.repiquageEditCommentaire||'',
+      }),
+    });
+    if(S.repiquageDossierActif){
+      await loadRepiquageHistorique(S.repiquageDossierActif);
+      await loadRepiquageEtat(S.repiquageDossierActif);
+    }
+    showToast('Saisie modifiée','success');
+    Object.assign(S, {
+      showRepiquageEditModal:false, repiquageEditSaisie:null,
+      repiquageEditCartons:'', repiquageEditEtiq:'', repiquageEditCommentaire:'',
+      loading:false,
+    });
+    render();
+  }catch(e){
+    showToast(e?.message||'Erreur','danger');
+    set({loading:false});
+  }
+}
+
+function renderRepiquageEditModal(){
+  const row = S.repiquageEditSaisie || {};
+
+  const inpCartons = h('input',{type:'number',min:'0',step:'1',
+    style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'14px',boxSizing:'border-box'}});
+  inpCartons.value = S.repiquageEditCartons||'';
+  inpCartons.addEventListener('input',e=>{ S.repiquageEditCartons = e.target.value; });
+
+  const inpEtiq = h('input',{type:'number',min:'0',step:'1',
+    style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'14px',boxSizing:'border-box'}});
+  inpEtiq.value = S.repiquageEditEtiq||'';
+  inpEtiq.addEventListener('input',e=>{ S.repiquageEditEtiq = e.target.value; });
+
+  const ta = h('textarea',{placeholder:'Commentaire (facultatif)',rows:'3',
+    style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px',resize:'vertical',boxSizing:'border-box'}});
+  ta.value = S.repiquageEditCommentaire||'';
+  ta.addEventListener('input',e=>{ S.repiquageEditCommentaire = e.target.value; });
+
+  setTimeout(()=>inpCartons.focus(),50);
+
+  const opNom = row.operateur||'—';
+  const dateStr = String(row.date_operation||'').replace('T',' ').slice(0,16);
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showRepiquageEditModal:false});}},
+    h('div',{className:'fab-modal',style:{maxWidth:'460px'}},
+      h('div',{className:'fab-modal-title'},svgIcon('edit',18),' Modifier la saisie'),
+      h('div',{className:'fab-modal-sub'},
+        'Opérateur : '+opNom+' — '+dateStr
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Cartons'),
+        inpCartons
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Étiquettes'),
+        inpEtiq
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Commentaire'),
+        ta
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:()=>set({showRepiquageEditModal:false})},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',
+          onClick:saveRepiquageEditSaisie},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
 }
 
 async function loadRepiquageDiscussion(no_dossier){
@@ -5753,12 +6310,20 @@ function renderRepiquageHistoriqueView(){
           h('td',null, r.commentaire
             ? h('span',{className:'fab-comment-cell',title:r.commentaire}, r.commentaire)
             : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')),
-          isAdminUser ? h('td',null, h('button',{
-            className:'fab-comment-btn',
-            title:'Supprimer',
-            onClick:()=>deleteRepiquageHistoriqueSaisie(r.id),
-            style:{color:'var(--danger)'},
-          }, svgIcon('trash',13))) : null
+          isAdminUser ? h('td',{style:{whiteSpace:'nowrap',textAlign:'right'}},
+            h('button',{
+              className:'fab-comment-btn',
+              title:'Modifier la saisie',
+              onClick:()=>openRepiquageEditModal(r),
+              style:{color:'var(--accent)',marginRight:'2px'},
+            }, svgIcon('edit',13)),
+            h('button',{
+              className:'fab-comment-btn',
+              title:'Supprimer',
+              onClick:()=>deleteRepiquageHistoriqueSaisie(r.id),
+              style:{color:'var(--danger)'},
+            }, svgIcon('trash',13))
+          ) : null
         );
       })
     : [h('tr',null,
@@ -6301,6 +6866,8 @@ function render(){
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
+  if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());
+  if(S.showRepiquageEditModal) root.appendChild(renderRepiquageEditModal());
   if(S.repiquageAttentionOpen) root.appendChild(renderRepiquageAttentionModal());
   if(S.repiquageEditParamOpen) root.appendChild(renderRepiquageEditParamModal());
   if(S.repiquageAdjustOpen) root.appendChild(renderRepiquageAdjustModal());
@@ -6375,6 +6942,7 @@ async function init(){
 
   // Load session
   await loadSession();
+  var _initFabTab=_readFabTab(); if(_initFabTab!=='saisie') set({fabTab:_initFabTab});
   // Vue admin (lecture) : charger la liste globale du jour si sélectionnée
   if(isAdm && S.saisieViewMode==='admin'){
     await loadAdminSaisiesJour();
@@ -6427,3 +6995,17 @@ init();
 </html>"""
 
 FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+
+# v1.7 — Injection du modal partage d'impression PDF (CSS + JS) juste avant la
+# fin du </head> et de </script>. On evite les placeholders et on injecte
+# directement pour rester compatible avec toute modif ulterieure du template.
+FABRICATION_HTML = FABRICATION_HTML.replace(
+    "</style>",
+    PRINT_MODAL_CSS + "\n</style>",
+    1,  # premiere occurrence seulement (le </style> principal du <head>)
+)
+FABRICATION_HTML = FABRICATION_HTML.replace(
+    "init();\n</script>",
+    PRINT_MODAL_JS + "\ninit();\n</script>",
+    1,
+)

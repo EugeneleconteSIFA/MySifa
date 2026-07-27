@@ -146,7 +146,7 @@ body{{
   font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
   min-height:100vh;line-height:1.5;
 }}
-.wrap{{max-width:860px;margin:0 auto;padding:20px 16px 48px}}
+.wrap{{max-width:1280px;margin:0 auto;padding:20px 20px 48px}}
 .hdr{{
   display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
   margin-bottom:20px;flex-wrap:wrap;
@@ -170,11 +170,12 @@ body{{
 .tabs{{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}}
 .tab{{
   padding:10px 16px;border-radius:10px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);font-size:13px;font-weight:600;
+  background:var(--card);color:var(--text);font-size:13px;font-weight:600;
   cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s;
+  box-shadow:0 1px 2px rgba(0,0,0,.03);
 }}
-.tab:hover{{border-color:var(--accent);color:var(--accent)}}
-.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.tab:hover{{background:var(--bg);border-color:var(--accent);color:var(--accent)}}
+.tab.active{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 2px 6px rgba(8,145,178,.15)}}
 .panel{{
   background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;
 }}
@@ -185,13 +186,14 @@ body{{
 }}
 .notice-warn{{border-color:var(--warn);color:var(--warn);background:rgba(251,191,36,.08)}}
 .table-wrap{{overflow-x:auto;margin:0 -4px}}
-table{{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}}
+table{{width:100%;border-collapse:collapse;font-size:13px}}
 th,td{{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}}
 th{{
   font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
   font-weight:600;background:var(--bg);
 }}
 .td-muted{{color:var(--muted);font-size:12px}}
+.portail-serie-sub td{{background:var(--bg);border-top:1px dashed var(--border) !important;padding:6px 8px !important}}
 .notice-danger{{border-color:var(--danger);color:var(--danger)}}
 td input[type="number"],td input[type="text"]{{min-width:88px}}
 input,textarea,select{{
@@ -216,10 +218,28 @@ label.lbl{{
 .btn:hover{{filter:brightness(1.05)}}
 .btn:disabled{{opacity:.5;cursor:not-allowed;filter:none}}
 .btn-ghost{{
-  background:transparent;border:1px solid var(--border);color:var(--text2);
-  font-weight:600;font-size:13px;padding:8px 14px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-weight:600;font-size:13px;padding:8px 14px;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;
 }}
-.btn-ghost:hover{{border-color:var(--accent);color:var(--accent);filter:none}}
+.btn-ghost:hover{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);filter:none}}
+body.light .btn-ghost{{color:var(--text)}}
+body.light .btn-ghost:hover{{color:var(--accent)}}
+.pj-item .btn-ghost{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.pj-item .btn-ghost:hover{{background:var(--accent);color:var(--card);border-color:var(--accent)}}
+/* File input aux couleurs du thème */
+input[type=file]{{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:0;font-family:inherit;color:var(--text2);cursor:pointer;
+  font-size:13px;overflow:hidden;max-width:100%;
+}}
+input[type=file]::file-selector-button{{
+  background:var(--accent-bg);color:var(--accent);border:0;
+  border-right:1px solid var(--border);padding:10px 16px;font-weight:600;
+  font-size:13px;font-family:inherit;cursor:pointer;margin-right:12px;
+  transition:background .15s,color .15s;
+}}
+input[type=file]::file-selector-button:hover{{background:var(--accent);color:var(--card)}}
 .section-title{{
   font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;
   letter-spacing:.5px;margin:0 0 12px;
@@ -383,6 +403,13 @@ async function api(path, options) {{
   return r.json();
 }}
 
+function formatFrInt(n) {{
+  if (n === null || n === undefined || n === "") return "";
+  const num = Number(n);
+  if (isNaN(num)) return String(n);
+  return num.toLocaleString("fr-FR", {{maximumFractionDigits: 0}});
+}}
+
 function formatDate(iso) {{
   if (!iso) return "";
   const s = String(iso).trim();
@@ -435,7 +462,14 @@ function updateBanner() {{
   document.getElementById("banner-meta").innerHTML = meta;
 }}
 
-function setTab(tab) {{
+var AOP_VALID_TABS=['offre','messages','documents'];
+function _readAopTab(){{
+  try{{var h=(location.hash||'').replace(/^#/,'').trim();
+    if(AOP_VALID_TABS.indexOf(h)!==-1)return h;}}catch(e){{}}
+  return 'offre';
+}}
+function setTab(tab, opts) {{
+  var silent=!!(opts&&opts.silent);
   S.tab = tab;
   document.querySelectorAll(".tab").forEach(b => {{
     b.classList.toggle("active", b.dataset.tab === tab);
@@ -443,6 +477,7 @@ function setTab(tab) {{
   ["offre", "messages", "documents"].forEach(t => {{
     document.getElementById("panel-" + t).classList.toggle("hidden", t !== tab);
   }});
+  loadPortailCounts();
   if (tab === "messages") {{
     loadMessages();
     startMsgPolling();
@@ -450,12 +485,38 @@ function setTab(tab) {{
     stopMsgPolling();
   }}
   render();
+  if(!silent){{try{{var target='#'+tab;if(location.hash!==target)history.replaceState(null,'',target);}}catch(e){{}}}}
+}}
+
+async function loadPortailCounts() {{
+  try {{
+    const c = await fetch("/api/portail/ao/" + TOKEN + "/counts").then(r => r.json());
+    updateTabBadge("tab-messages", c.messages_total || 0, c.messages_non_lus || 0);
+    updateTabBadge("tab-documents", c.documents_total || 0, c.documents_nouveaux || 0);
+  }} catch(e) {{ /* silencieux */ }}
+}}
+
+function updateTabBadge(tabId, total, unread) {{
+  const el = document.getElementById(tabId);
+  if (!el) return;
+  // Reset : retire ancien badge si existe
+  const oldBadge = el.querySelector(".tab-badge");
+  if (oldBadge) oldBadge.remove();
+  // Toujours afficher le total (même 0) — accent, et badge rouge si non-lus
+  const badge = document.createElement("span");
+  badge.className = "tab-badge";
+  const bg = (unread > 0) ? "var(--danger,#dc2626)" : "var(--accent-bg)";
+  const col = (unread > 0) ? "#fff" : "var(--accent)";
+  badge.style.cssText = "display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:" + bg + ";color:" + col + ";font-size:10px;font-weight:700;min-width:16px;text-align:center;border:1px solid " + ((unread>0)?"transparent":"var(--accent)");
+  badge.textContent = (unread > 0) ? String(unread) + "/" + String(total) : String(total);
+  el.appendChild(badge);
 }}
 
 function startMsgPolling() {{
   stopMsgPolling();
   S.polling = setInterval(() => {{
     if (S.tab === "messages") loadMessages(true);
+    loadPortailCounts();
   }}, 30000);
 }}
 
@@ -463,6 +524,22 @@ function stopMsgPolling() {{
   if (S.polling) {{
     clearInterval(S.polling);
     S.polling = null;
+  }}
+}}
+
+// Polling permanent des compteurs (indépendant de l'onglet actif) pour
+// que les badges Messages / Documents s'actualisent même si le fournisseur
+// reste sur l'onglet Offre. Fréquence plus lente que le polling messages
+// pour économiser les requêtes.
+function startCountsPolling() {{
+  stopCountsPolling();
+  S.countsPolling = setInterval(loadPortailCounts, 45000);
+}}
+
+function stopCountsPolling() {{
+  if (S.countsPolling) {{
+    clearInterval(S.countsPolling);
+    S.countsPolling = null;
   }}
 }}
 
@@ -516,24 +593,38 @@ function renderOffre() {{
         '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + code + "</option>";
       const uniteSel = (code, label, sel) =>
         '<option value="' + code + '"' + (sel === code ? " selected" : "") + ">" + label + "</option>";
+      const nbSeries = Array.isArray(ln.series) ? ln.series.length : 0;
+      const qtyCell = nbSeries > 0
+        ? "<td><strong>" + escHtml(formatFrInt(ln.quantite)) + "</strong>" +
+          '<div style="font-size:10px;color:var(--muted);margin-top:2px;font-weight:600;letter-spacing:.3px;text-transform:uppercase">' + escHtml(nbSeries + " " + t("seriesShort")) + "</div></td>"
+        : "<td>" + escHtml(formatFrInt(ln.quantite)) + "</td>";
       html += "<tr>" +
         "<td>" + escHtml(ln.client_nom || t("dash")) + "</td>" +
         "<td>" + escHtml(ln.ref_produit) + "</td>" +
         '<td class="td-muted">' + escHtml(ln.frontal || t("dash")) + "</td>" +
         '<td class="td-muted">' + escHtml(ln.adhesif || t("dash")) + "</td>" +
-        "<td>" + escHtml(ln.etiquettes_par_bobine != null ? ln.etiquettes_par_bobine : t("dash")) + "</td>" +
-        "<td>" + escHtml(ln.quantite) + "</td>" +
+        "<td>" + escHtml(ln.etiquettes_par_bobine != null ? formatFrInt(ln.etiquettes_par_bobine) : t("dash")) + "</td>" +
+        qtyCell +
         '<td><input type="number" step="0.0001" min="0" class="inp-quotation" data-lid="' + ln.id + '" value="' + escHtml(qVal) + '"' + dis + "></td>" +
         '<td><select class="inp-devise" data-lid="' + ln.id + '"' + dis + ">" +
           devSel("EUR", dev) + devSel("USD", dev) +
         "</select></td>" +
-        '<td><select class="inp-unite" data-lid="' + ln.id + '"' + dis + ">" +
-          uniteSel("mille", t("unitMille"), unite) +
-          uniteSel("bobine", t("unitBobine"), unite) +
-        "</select></td>" +
+        '<td><div class="unite-radios">' +
+          '<label><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="mille"' + (unite === "mille" ? " checked" : "") + dis + "> " + escHtml(t("unitMille")) + "</label>" +
+          '<label style="margin-left:10px"><input type="radio" class="inp-unite" name="unite-' + ln.id + '" data-lid="' + ln.id + '" value="bobine"' + (unite === "bobine" ? " checked" : "") + dis + "> " + escHtml(t("unitBobine")) + "</label>" +
+        "</div></td>" +
         '<td><input type="number" step="1" min="0" class="inp-delai" data-lid="' + ln.id + '" value="' + escHtml(delaiVal) + '"' + dis + "></td>" +
         '<td><input type="text" class="inp-com" data-lid="' + ln.id + '" value="' + escAttr(r.commentaire || "") + '"' + dis + "></td>" +
         "</tr>";
+      // Séries — sous-lignes descriptives, cotation reste sur la ligne parent
+      if (nbSeries > 0) {{
+        ln.series.forEach(s => {{
+          const notesTxt = s.notes ? ' <span style="color:var(--muted)">· ' + escHtml(s.notes) + "</span>" : "";
+          html += '<tr class="portail-serie-sub"><td></td><td colspan="4" style="padding-left:20px;font-size:12px;color:var(--text2)">↳ <strong>' + escHtml(t("serieLabel")) + " : " + escHtml(s.libelle || "—") + "</strong>" + notesTxt + "</td>" +
+            '<td style="font-size:12px;color:var(--text2)">' + escHtml(formatFrInt(s.quantite)) + "</td>" +
+            '<td colspan="5" style="font-size:11px;color:var(--muted);font-style:italic">' + escHtml(t("seriesInfo")) + "</td></tr>";
+        }});
+      }}
     }});
   }}
   html += "</tbody></table></div>";
@@ -560,7 +651,7 @@ async function submitOffre() {{
     const delaiEl = document.querySelector('.inp-delai[data-lid="' + lid + '"]');
     const comEl = document.querySelector('.inp-com[data-lid="' + lid + '"]');
     const devEl = document.querySelector('.inp-devise[data-lid="' + lid + '"]');
-    const uniteEl = document.querySelector('.inp-unite[data-lid="' + lid + '"]');
+    const uniteEl = document.querySelector('.inp-unite[data-lid="' + lid + '"]:checked') || document.querySelector('.inp-unite[data-lid="' + lid + '"]');
     if (quotation != null && !isNaN(quotation)) hasQuotation = true;
     let delai = null;
     if (delaiEl && delaiEl.value.trim() !== "") {{
@@ -616,25 +707,37 @@ function renderMessagerie(silent) {{
   const d = S.data;
   const cloture = d && d.cloture;
   const msgs = S.messages || [];
-  const list = document.getElementById("msg-list-live");
-  const scrollTop = list ? list.scrollTop : 0;
-  const draft = document.getElementById("msg-text")?.value || "";
+  const existingList = document.getElementById("msg-list-live");
+  const existingCompose = document.getElementById("msg-text");
+  const scrollTop = existingList ? existingList.scrollTop : 0;
 
-  let html = '<div class="msg-list" id="msg-list-live">';
+  // Build list HTML only
+  let listHtml = '<div class="msg-list" id="msg-list-live">';
   if (!msgs.length) {{
-    html += '<p class="empty">' + escHtml(t("noMessages")) + '</p>';
+    listHtml += '<p class="empty">' + escHtml(t("noMessages")) + '</p>';
   }} else {{
     msgs.forEach(m => {{
       const interne = m.expediteur !== "fournisseur";
       const cls = interne ? "interne" : "fournisseur";
       const who = interne ? "SIFA" : escHtml(m.auteur_nom || t("you"));
-      html += '<div class="bubble ' + cls + '">' +
+      listHtml += '<div class="bubble ' + cls + '">' +
         '<div class="meta">' + who + " · " + escHtml(formatDate(m.date)) + "</div>" +
         escHtml(m.message) + "</div>";
     }});
   }}
-  html += "</div>";
+  listHtml += "</div>";
 
+  // If silent refresh and compose already rendered, only update list (preserve textarea state)
+  if (silent && existingList && existingCompose) {{
+    existingList.outerHTML = listHtml;
+    const newList = document.getElementById("msg-list-live");
+    if (newList) newList.scrollTop = scrollTop;
+    return;
+  }}
+
+  // Full render (initial or after send)
+  const draft = existingCompose?.value || "";
+  let html = listHtml;
   if (!cloture) {{
     html += '<div class="msg-compose">' +
       '<textarea id="msg-text" rows="3" placeholder="' + escAttr(t("msgPlaceholder")) + '">' + escHtml(draft) + "</textarea>" +
@@ -672,6 +775,10 @@ function renderMessagerie(silent) {{
 }}
 
 function renderDocuments() {{
+  // Mark all docs as viewed silently
+  fetch("/api/portail/ao/" + TOKEN + "/documents/mark-viewed", {{method:"POST"}})
+    .then(() => loadPortailCounts())
+    .catch(() => {{}});
   const el = document.getElementById("panel-documents");
   const d = S.data;
   if (!d) {{
@@ -712,24 +819,21 @@ function renderDocuments() {{
 
   if (!cloture) {{
     html += '<div style="margin-top:16px">' +
-      '<input type="file" id="pj-file" style="margin-bottom:10px">' +
-      '<button type="button" class="btn" id="btn-pj">' + escHtml(t("attachDoc")) + '</button></div>';
+      '<input type="file" id="pj-file" style="display:none">' +
+      '<button type="button" class="btn" id="btn-pj">' + escHtml(t("attachDoc")) + '</button>' +
+      '<span id="pj-file-name" style="margin-left:12px;font-size:12px;color:var(--muted)"></span></div>';
   }}
 
   el.innerHTML = html;
-  document.getElementById("btn-pj")?.addEventListener("click", async () => {{
-    const input = document.getElementById("pj-file");
-    const f = input?.files?.[0];
-    if (!f) {{
-      showToast(t("toastChooseFile"), "danger");
-      return;
-    }}
+  const pjInput = document.getElementById("pj-file");
+  const pjBtn = document.getElementById("btn-pj");
+  const pjName = document.getElementById("pj-file-name");
+  async function uploadFile(f) {{
     if (f.size > 15 * 1024 * 1024) {{
       showToast(t("toastFileTooBig"), "danger");
       return;
     }}
-    const btn = document.getElementById("btn-pj");
-    if (btn) btn.disabled = true;
+    if (pjBtn) pjBtn.disabled = true;
     const fd = new FormData();
     fd.append("file", f);
     try {{
@@ -737,12 +841,24 @@ function renderDocuments() {{
       showToast(t("toastDocAttached"), "success");
       S.data = await api("/api/portail/ao/" + TOKEN);
       renderDocuments();
-      if (input) input.value = "";
+      if (pjInput) pjInput.value = "";
+      if (pjName) pjName.textContent = "";
     }} catch (e) {{
       showToast(e.message, "danger");
     }} finally {{
-      if (btn) btn.disabled = false;
+      if (pjBtn) pjBtn.disabled = false;
     }}
+  }}
+  pjBtn?.addEventListener("click", async () => {{
+    const f = pjInput?.files?.[0];
+    if (!f) {{ pjInput?.click(); return; }}
+    await uploadFile(f);
+  }});
+  pjInput?.addEventListener("change", async () => {{
+    const f = pjInput?.files?.[0];
+    if (!f) return;
+    if (pjName) pjName.textContent = f.name;
+    await uploadFile(f);
   }});
 }}
 
@@ -758,6 +874,12 @@ async function init() {{
     S.data = await api("/api/portail/ao/" + TOKEN);
     applyI18n();
     render();
+    // Charge les compteurs (badges Messages/Documents) dès l'arrivée,
+    // sans attendre que l'utilisateur clique sur un onglet. Puis démarre
+    // un polling permanent pour capter les nouveaux docs/messages même
+    // si le fournisseur reste sur l'onglet Offre.
+    loadPortailCounts();
+    startCountsPolling();
   }} catch (e) {{
     document.getElementById("panel-offre").innerHTML =
       '<p class="notice notice-danger">' + escHtml(e.message) + "</p>";
@@ -771,7 +893,8 @@ document.getElementById("themeBtn").addEventListener("click", toggleTheme);
 initTheme();
 S.lang = readLang();
 applyI18n();
-init();
+init().then(function(){{try{{var _ht=_readAopTab();if(_ht!=='offre')setTab(_ht,{{silent:true}});}}catch(e){{}}}});
+window.addEventListener('hashchange',function(){{try{{setTab(_readAopTab(),{{silent:true}});}}catch(e){{}}}});
 </script>
 </body>
 </html>"""
@@ -821,7 +944,7 @@ body{{
   font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
   min-height:100vh;line-height:1.5;
 }}
-.wrap{{max-width:860px;margin:0 auto;padding:20px 16px 48px}}
+.wrap{{max-width:1280px;margin:0 auto;padding:20px 20px 48px}}
 .hdr{{
   display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
   margin-bottom:20px;flex-wrap:wrap;
@@ -845,6 +968,8 @@ body{{
   padding:16px 18px;display:flex;flex-direction:column;gap:10px;
 }}
 .d-item.current{{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-bg)}}
+.d-item.d-item-closed{{opacity:.55;background:var(--bg)}}
+.d-item.d-item-closed .d-title,.d-item.d-item-closed .d-ref{{color:var(--muted)}}
 .d-top{{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}}
 .d-ref{{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);font-weight:600}}
 .d-title{{font-size:15px;font-weight:700;color:var(--text);margin-top:4px}}
@@ -865,10 +990,28 @@ body{{
 .btn:hover{{filter:brightness(1.05)}}
 body.light .btn{{color:#fff}}
 .btn-ghost{{
-  background:transparent;border:1px solid var(--border);color:var(--text2);
-  font-weight:600;font-size:13px;padding:8px 14px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-weight:600;font-size:13px;padding:8px 14px;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;
 }}
-.btn-ghost:hover{{border-color:var(--accent);color:var(--accent);filter:none}}
+.btn-ghost:hover{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);filter:none}}
+body.light .btn-ghost{{color:var(--text)}}
+body.light .btn-ghost:hover{{color:var(--accent)}}
+.pj-item .btn-ghost{{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}}
+.pj-item .btn-ghost:hover{{background:var(--accent);color:var(--card);border-color:var(--accent)}}
+/* File input aux couleurs du thème */
+input[type=file]{{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:0;font-family:inherit;color:var(--text2);cursor:pointer;
+  font-size:13px;overflow:hidden;max-width:100%;
+}}
+input[type=file]::file-selector-button{{
+  background:var(--accent-bg);color:var(--accent);border:0;
+  border-right:1px solid var(--border);padding:10px 16px;font-weight:600;
+  font-size:13px;font-family:inherit;cursor:pointer;margin-right:12px;
+  transition:background .15s,color .15s;
+}}
+input[type=file]::file-selector-button:hover{{background:var(--accent);color:var(--card)}}
 .btn-sm{{font-size:13px;padding:8px 14px}}
 .empty{{
   font-size:13px;color:var(--muted);padding:24px;text-align:center;
@@ -1048,11 +1191,14 @@ function renderList(data) {{
       meta += "<span>" + escHtml(t("repliedOn")) + " " + escHtml(formatDateShort(d.date_reponse)) + "</span>";
     }}
     const btnLabel = d.fournisseur_statut === "repondu" ? t("viewEdit") : t("reply");
-    return '<article class="d-item' + cur + '">' +
+    const isClosed = d.ao_statut === "cloturee";
+    const closedCls = isClosed ? " d-item-closed" : "";
+    const btnCls = isClosed ? "btn btn-sm btn-ghost" : "btn btn-sm";
+    return '<article class="d-item' + cur + closedCls + '">' +
       '<div class="d-top">' +
         '<div><div class="d-ref">' + escHtml(d.reference || "") + "</div>" +
         '<div class="d-title">' + escHtml(d.titre || t("defaultRequestTitle")) + "</div></div>" +
-        '<a class="btn btn-sm" href="' + href + '">' + escHtml(btnLabel) + "</a>" +
+        '<a class="' + btnCls + '" href="' + href + '">' + escHtml(isClosed ? t("viewEdit") : btnLabel) + "</a>" +
       "</div>" +
       '<div class="d-meta">' + meta + "</div>" +
       "</article>";
