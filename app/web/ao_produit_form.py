@@ -111,6 +111,9 @@ function defaultProduitFiche() {
     // ou type 'bobine' qté 100). Sert au calcul du prix conditionné dans MyAO.
     // Défaut : au mille d'étiquettes.
     unite_vente: { type: 'mille', quantite: 1 },
+    // Dernier prix de vente connu, exprimé PAR UNITÉ DE VENTE (même base que
+    // le prix d'achat conditionné). Sert au calcul de la marge brute.
+    dernier_prix_vente: '',
     particularites: ''
   };
 }
@@ -294,26 +297,50 @@ function renderProduitForm() {
   pfRow('Cartons / pal.', '<input type="number" step="1" min="0" id="pf-pal-cart" value="'+escAttr(f.conditionnement.palette.cartons_palette)+'">')+
     '</div></div></div>'+
 
-    '<div class="pf-section"><div class="pf-section-title">Unité de vente</div>'+
-    '<div class="pf-card">'+
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.7">'+
-      'Rappel conditionnement — '+
-      'Étiq./bobine : <strong style="color:var(--text2)">'+(f.bobines.nb_etiquettes||'—')+'</strong> · '+
-      'Bobines/carton : <strong style="color:var(--text2)">'+(f.conditionnement.carton.bobines_carton||'—')+'</strong> · '+
-      'Cartons/palette : <strong style="color:var(--text2)">'+(f.conditionnement.palette.cartons_palette||'—')+'</strong>'+
-    '</div>'+
-    pfRow('Vendu par',
-      '<div style="display:flex;gap:8px;align-items:center">'+
-      '<input type="number" min="1" step="1" id="pf-uv-qte" value="'+escAttr((f.unite_vente&&f.unite_vente.quantite)||1)+'" style="max-width:88px">'+
-      '<select id="pf-uv-type">'+
-      ['mille','etiquette','bobine','carton','palette'].map(function(u){var lbl={mille:'Mille (1000 étiq.)',etiquette:'Étiquette',bobine:'Bobine',carton:'Carton',palette:'Palette'}[u];return '<option value="'+u+'"'+(((f.unite_vente&&f.unite_vente.type)||'mille')===u?' selected':'')+'>'+lbl+'</option>';}).join('')+
-      '</select></div>', 'pf-inline-wide')+
-    '<div style="font-size:11px;color:var(--muted);margin-top:8px">Ex. « 1 · Carton », « 100 · Bobine »… Cette unité pilote la colonne <strong>Condi.</strong> des demandes de prix (prix d\'achat conditionné puis prix de vente). Défaut : au mille d\'étiquettes.</div>'+
-    '</div></div>'+
-
     '<div class="pf-section"><div class="pf-section-title">Particularités</div>'+
     '<div class="pf-card">'+
     pfRow('Notes', '<textarea id="pf-part" rows="3" placeholder="Notes spécifiques…">'+escHtml(f.particularites)+'</textarea>', 'pf-inline-wide')+
+    '</div></div>'+
+
+    // ── Unité de vente et historique (tout en bas) ──────────────────────────
+    '<div class="pf-section"><div class="pf-section-title">Unité de vente et historique</div>'+
+    '<div class="pf-card">'+
+    // Rappel conditionnement compact
+    '<div style="font-size:11px;color:var(--muted);margin-bottom:12px">'+
+      'Conditionnement : <strong style="color:var(--text2)">'+(f.bobines.nb_etiquettes||'—')+'</strong> étiq/bobine · '+
+      '<strong style="color:var(--text2)">'+(f.conditionnement.carton.bobines_carton||'—')+'</strong> bobines/carton · '+
+      '<strong style="color:var(--text2)">'+(f.conditionnement.palette.cartons_palette||'—')+'</strong> cartons/palette'+
+    '</div>'+
+    // Vendu par (compact, resserré)
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      '<label style="font-size:12px;color:var(--text);font-weight:600;width:130px;flex-shrink:0">Vendu par</label>'+
+      '<input type="number" min="1" step="1" id="pf-uv-qte" value="'+escAttr((f.unite_vente&&f.unite_vente.quantite)||1)+'" style="width:64px;padding:6px 8px;text-align:center">'+
+      '<select id="pf-uv-type" style="width:auto;min-width:150px;padding:6px 10px">'+
+      ['mille','etiquette','bobine','carton','palette'].map(function(u){var lbl={mille:'Mille (1000 étiq.)',etiquette:'Étiquette',bobine:'Bobine',carton:'Carton',palette:'Palette'}[u];return '<option value="'+u+'"'+(((f.unite_vente&&f.unite_vente.type)||'mille')===u?' selected':'')+'>'+lbl+'</option>';}).join('')+
+      '</select>'+
+    '</div>'+
+    // Dernier prix de vente
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">'+
+      '<label style="font-size:12px;color:var(--text);font-weight:600;width:130px;flex-shrink:0">Dernier prix de vente</label>'+
+      '<input type="number" min="0" step="0.0001" id="pf-dpv" value="'+escAttr(f.dernier_prix_vente!=null?f.dernier_prix_vente:'')+'" placeholder="0.00" style="width:110px;padding:6px 8px;text-align:right">'+
+      '<span style="font-size:11px;color:var(--muted)">€ par unité de vente</span>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--muted);margin:2px 0 14px">Pilote la colonne <strong>Condi.</strong> et le calcul de la <strong>marge brute</strong> dans les demandes de prix. Défaut de vente : au mille d\'étiquettes.</div>'+
+    // Historique : AO contenant ce produit
+    '<div style="font-size:12px;font-weight:600;color:var(--text2);border-top:1px solid var(--border);padding-top:12px;margin-bottom:8px">Appels d\'offres avec ce produit</div>'+
+    '<div id="pf-aos-list" style="display:flex;flex-direction:column;gap:6px">'+
+    (function(){
+      var aos = (d && d._aos !== undefined) ? d._aos : null;
+      if (aos === null) return '<span style="font-size:12px;color:var(--muted)">Chargement…</span>';
+      if (!aos.length) return '<span style="font-size:12px;color:var(--muted)">Aucun appel d\'offres avec ce produit.</span>';
+      return aos.map(function(a){
+        return '<a href="#" class="pf-ao-link" data-ao-id="'+escAttr(a.id)+'" style="font-size:12px;color:var(--accent);text-decoration:none;display:flex;gap:8px;align-items:baseline">'+
+          '<strong>'+escHtml(a.reference||('AO '+a.id))+'</strong>'+
+          (a.titre?'<span style="color:var(--text2)">'+escHtml(a.titre)+'</span>':'')+
+          '<span style="color:var(--muted);font-size:11px">'+escHtml(a.statut||'')+'</span></a>';
+      }).join('');
+    })()+
+    '</div>'+
     '</div>'+
     '<div class="pf-sticky-bar" style="border-top:1px solid var(--border);border-bottom:none;margin-top:14px;padding-top:12px">'+
     '<span></span><button type="button" class="btn btn-accent btn-sm" id="btn-pf-save-bottom">Enregistrer</button></div></div></div>';
@@ -396,6 +423,7 @@ function collectProduitForm() {
     type: document.getElementById('pf-uv-type')?.value || 'mille',
     quantite: pfInt(document.getElementById('pf-uv-qte')?.value) || 1
   };
+  f.dernier_prix_vente = pfNum(document.getElementById('pf-dpv')?.value);
   f.particularites = document.getElementById('pf-part')?.value.trim() || '';
   return {
     ref: document.getElementById('pf-ref')?.value.trim(),
@@ -517,6 +545,16 @@ async function openProduitForm(edit) {
   if (!S.matieres) {
     try { await loadMatieresForProduit(); } catch (e) { /* liste vide */ }
   }
+  // Historique AO : chargé en asynchrone, re-render quand prêt. _aos undefined
+  // tant que non chargé → affiche « Chargement… ».
+  if (S.produitForm && S.produitForm.id) {
+    const pid = S.produitForm.id;
+    api('/api/ao/produits/' + pid + '/aos')
+      .then(r => { if (S.produitForm && S.produitForm.id === pid) { S.produitForm._aos = (r && r.aos) || []; render(); } })
+      .catch(() => { if (S.produitForm && S.produitForm.id === pid) { S.produitForm._aos = []; render(); } });
+  } else if (S.produitForm) {
+    S.produitForm._aos = [];
+  }
   render();
 }
 
@@ -557,6 +595,12 @@ function exportProduitPdf() {
 function bindProduitFormEvents() {
   document.getElementById('btn-pf-back')?.addEventListener('click', closeProduitForm);
   try { bindRefSifaAutocomplete(); } catch(e) { /* no-op */ }
+  // Historique : clic sur un AO → ouvre le détail de cet AO
+  document.querySelectorAll('.pf-ao-link').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    const id = parseInt(a.dataset.aoId, 10);
+    if (!isNaN(id)) { S.section = 'ao'; openDetail(id); }
+  }));
   document.getElementById('btn-pf-save')?.addEventListener('click', () => { saveProduitForm(); });
   document.getElementById('btn-pf-save-bottom')?.addEventListener('click', () => { saveProduitForm(); });
   document.querySelectorAll('.pf-sticky-bar .btn-nav-prev, .pf-sticky-bar .btn-nav-next').forEach(btn => {
