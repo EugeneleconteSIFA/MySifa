@@ -2282,6 +2282,7 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
 
     body = await request.json()
     qte_raw = body.get("qte_etiquettes")
+    cartons_raw = body.get("nb_cartons")
     commentaire = (body.get("commentaire") or "").strip() or None
 
     try:
@@ -2290,6 +2291,15 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
         raise HTTPException(status_code=400, detail="Quantite d'etiquettes invalide")
     if qte is None or qte < 0:
         raise HTTPException(status_code=400, detail="Quantite d'etiquettes invalide")
+
+    cartons = None
+    if cartons_raw not in (None, "", "null"):
+        try:
+            cartons = int(float(str(cartons_raw).replace(",", ".")))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Nombre de cartons invalide")
+        if cartons < 0:
+            raise HTTPException(status_code=400, detail="Nombre de cartons invalide")
 
     with get_db() as conn:
         ex = conn.execute(
@@ -2309,20 +2319,37 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
             raise HTTPException(status_code=403, detail="Non autorise")
 
         now_iso = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
-        conn.execute(
-            """UPDATE production_data
-               SET quantite_traitee=?, commentaire=?,
-                   modifie_par=?, modifie_le=?, modifie_note=?
-               WHERE id=?""",
-            (
-                qte,
-                commentaire,
-                user.get("nom") or user.get("email") or "",
-                now_iso,
-                "Modification saisie repiquage",
-                saisie_id,
-            ),
-        )
+        if cartons is not None:
+            conn.execute(
+                """UPDATE production_data
+                   SET quantite_traitee=?, nb_cartons=?, commentaire=?,
+                       modifie_par=?, modifie_le=?, modifie_note=?
+                   WHERE id=?""",
+                (
+                    qte,
+                    cartons,
+                    commentaire,
+                    user.get("nom") or user.get("email") or "",
+                    now_iso,
+                    "Modification saisie repiquage",
+                    saisie_id,
+                ),
+            )
+        else:
+            conn.execute(
+                """UPDATE production_data
+                   SET quantite_traitee=?, commentaire=?,
+                       modifie_par=?, modifie_le=?, modifie_note=?
+                   WHERE id=?""",
+                (
+                    qte,
+                    commentaire,
+                    user.get("nom") or user.get("email") or "",
+                    now_iso,
+                    "Modification saisie repiquage",
+                    saisie_id,
+                ),
+            )
         conn.commit()
 
     log_action(
@@ -2330,7 +2357,7 @@ async def update_saisie_repiquage(saisie_id: int, request: Request):
         action="UPDATE",
         module="fabrication",
         objet=f"Saisie repiquage #{saisie_id} modifiee",
-        detail={"no_dossier": ex["no_dossier"], "qte_etiquettes": qte},
+        detail={"no_dossier": ex["no_dossier"], "qte_etiquettes": qte, "nb_cartons": cartons},
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
