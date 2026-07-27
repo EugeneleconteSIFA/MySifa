@@ -707,7 +707,20 @@
       // ici, tout est valide. Plus de warning "valider quand même" — les
       // questions non-required peuvent rester vides sans souci.
       if (!_isComplete(wrap, alert)) return;  // sécurité (bouton disabled)
-      const ok = await _submitAck(alert.id, wrap, alert);
+      // v2.4.3 : garde-fou anti double-submit — si l'op clique en rafale, on
+      // ne lance qu'UN seul POST /ack. Sans ça chaque clic crée une ligne
+      // d'historique (bug observé : 20 acks identiques à la même seconde).
+      if (wrap._ackSubmitting) return;
+      wrap._ackSubmitting = true;
+      const btnEl = wrap.querySelector('.ta-validate');
+      if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '.5'; btnEl.style.cursor = 'wait'; }
+      let ok = false;
+      try {
+        ok = await _submitAck(alert.id, wrap, alert);
+      } finally {
+        if (!ok && btnEl) { btnEl.disabled = false; btnEl.style.opacity = ''; btnEl.style.cursor = ''; }
+        if (!ok) wrap._ackSubmitting = false;
+      }
       if (ok) {
         // v2.3.32 : remerciement à l'opérateur (style toast vert
         // "Saisie enregistrée" de fabrication_page.py via showToast).

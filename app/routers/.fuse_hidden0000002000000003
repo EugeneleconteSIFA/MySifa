@@ -1,4 +1,4 @@
-"""MySifa — MyAO (appels d'offres) — API interne.
+"""MySifa — MyAO (appels d'offre) — API interne.
 
 Routes : /api/ao/*
 Rôles : superadmin, direction
@@ -83,7 +83,7 @@ def _require_brouillon(ao: dict) -> None:
     if ao.get("statut") != "brouillon":
         raise HTTPException(
             status_code=400,
-            detail="Modification impossible — l'appel d'offres n'est plus en brouillon.",
+            detail="Modification impossible — l'appel d'offre n'est plus en brouillon.",
         )
 
 
@@ -181,23 +181,7 @@ def list_ao(request: Request, filter: str = ""):
                 WHERE {where_deleted}
                 ORDER BY d.date_creation DESC"""
         ).fetchall()
-        # Enrichit chaque AO avec le résumé de ses lignes (ref + qté) pour affichage
-        # dans la colonne « Titre » de la liste (auto-généré).
-        out: list[dict] = []
-        for r in rows:
-            d = _row_dict(r)
-            lignes = conn.execute(
-                """SELECT ref_produit, quantite FROM ao_lignes
-                   WHERE ao_id=? ORDER BY position, id""",
-                (int(d["id"]),),
-            ).fetchall()
-            d["lignes_summary"] = [
-                {"ref": (l["ref_produit"] or "").strip() or "—",
-                 "qte": (float(l["quantite"]) if l["quantite"] is not None else None)}
-                for l in lignes
-            ]
-            out.append(d)
-    return out
+    return [_row_dict(r) for r in rows]
 
 
 @router.post("")
@@ -1295,59 +1279,7 @@ async def update_produit(request: Request, produit_id: int):
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
-        # Regénère les fiches PDF attachées aux AO ouverts qui utilisent
-        # cette référence (brouillon ou envoyé, pas clôturé) — idempotent.
-        try:
-            _regen_fiches_for_ref(conn, ref)
-            conn.commit()
-        except Exception:
-            logger.exception("Regen fiches PDF sur update produit %s échoué", produit_id)
         return _serialize_produit_row(_row_dict(row), conn)
-
-
-def _regen_fiches_for_ref(conn, ref_produit: str) -> None:
-    """Regénère la fiche PDF fournisseur pour tous les AO ouverts utilisant
-    cette référence. Ne touche pas aux AO clôturés."""
-    if not ref_produit:
-        return
-    aos = conn.execute(
-        """SELECT DISTINCT d.id, d.reference
-           FROM ao_demandes d
-           JOIN ao_lignes l ON l.ao_id = d.id
-           WHERE l.ref_produit = ?
-             AND d.statut IN ('brouillon', 'envoyee')
-             AND d.deleted_at IS NULL""",
-        (ref_produit,),
-    ).fetchall()
-    if not aos:
-        return
-    produits_map = _produits_by_ref_map(conn)
-    now_iso = _now_paris_iso()
-    for ao in aos:
-        # Supprime les PJ auto existantes pour cette ref (nom idempotent)
-        ref_clean = re.sub(r"[^\w\-]+", "_", ref_produit.split(" - ")[0])
-        fname = f"fiche_fournisseur_{ref_clean}.pdf"
-        pjs_to_del = conn.execute(
-            "SELECT id, stored_name FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
-            (int(ao["id"]), fname),
-        ).fetchall()
-        for pj in pjs_to_del:
-            try:
-                path = os.path.join(_ao_upload_dir(int(ao["id"])), pj["stored_name"])
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError:
-                pass
-        if pjs_to_del:
-            conn.execute(
-                "DELETE FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
-                (int(ao["id"]), fname),
-            )
-        _auto_attach_fournisseur_pdfs(
-            conn, int(ao["id"]), ao["reference"],
-            [{"ref_produit": ref_produit}],
-            produits_map, now_iso,
-        )
 
 
 @router.delete("/produits/{produit_id}")
@@ -1604,7 +1536,7 @@ async def cloturer_ao(request: Request, ao_id: int):
         if ao.get("statut") != "envoyee":
             raise HTTPException(
                 status_code=400,
-                detail="Cloture impossible : l'appel d'offres doit etre au statut envoyee.",
+                detail="Cloture impossible : l'appel d'offre doit etre au statut envoyee.",
             )
         fourni_retenu = None
         if fournisseur_retenu_id:
@@ -1903,7 +1835,7 @@ def export_ao_pdf(request: Request, ao_id: int):
 
 @router.post("/{ao_id}/dupliquer")
 async def dupliquer_ao(request: Request, ao_id: int):
-    """Duplique un appel d'offres. Le nouveau AO est en statut 'brouillon'.
+    """Duplique un appel d'offre. Le nouveau AO est en statut 'brouillon'.
 
     Body JSON optionnel :
       - with_fournisseurs (bool, défaut True) : recopie les fournisseurs (sans réponses)
@@ -2054,21 +1986,6 @@ async def dupliquer_ao(request: Request, ao_id: int):
 
 # ─── Lignes ──────────────────────────────────────────────────────
 
-def _regen_titre_ao(conn, ao_id: int) -> None:
-    """Régénère le titre de l'AO à partir de ses lignes (refs concaténées).
-    Appelé après chaque INSERT/UPDATE/DELETE sur ao_lignes."""
-    refs = [
-        (r["ref_produit"] or "").strip()
-        for r in conn.execute(
-            "SELECT ref_produit FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
-            (ao_id,),
-        ).fetchall()
-    ]
-    refs = [r for r in refs if r]
-    titre = " · ".join(refs) if refs else "Nouvel appel d'offres"
-    conn.execute("UPDATE ao_demandes SET titre=? WHERE id=?", (titre, ao_id))
-
-
 @router.post("/{ao_id}/lignes")
 async def add_ligne(request: Request, ao_id: int):
     _require_ao(request)
@@ -2100,24 +2017,10 @@ async def add_ligne(request: Request, ao_id: int):
                VALUES (?,?,?,?,?,?,?)""",
             (ao_id, ref_produit, designation, quantite, unite, notes, position),
         )
-        _regen_titre_ao(conn, ao_id)
         conn.commit()
         ligne = conn.execute(
             "SELECT * FROM ao_lignes WHERE id=?", (cur.lastrowid,)
         ).fetchone()
-        # Auto-attach : génère la fiche PDF fournisseur pour ce produit dès
-        # l'ajout de la ligne (pas seulement à l'envoi).
-        try:
-            now_iso = _now_paris_iso()
-            produits_map = _produits_by_ref_map(conn)
-            _auto_attach_fournisseur_pdfs(
-                conn, ao_id, ao.get("reference"),
-                [{"ref_produit": ref_produit}],
-                produits_map, now_iso,
-            )
-            conn.commit()
-        except Exception:
-            logger.exception("Auto-attach fiche PDF à l'ajout ligne échoué (AO %s)", ao_id)
     return _row_dict(ligne)
 
 
@@ -2153,7 +2056,6 @@ async def update_ligne(request: Request, ao_id: int, ligne_id: int):
                WHERE id=? AND ao_id=?""",
             (ref_produit, designation, quantite, unite, notes, ligne_id, ao_id),
         )
-        _regen_titre_ao(conn, ao_id)
         conn.commit()
         ligne = conn.execute(
             "SELECT * FROM ao_lignes WHERE id=?", (ligne_id,)
@@ -2173,7 +2075,6 @@ def delete_ligne(request: Request, ao_id: int, ligne_id: int):
         )
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Ligne introuvable")
-        _regen_titre_ao(conn, ao_id)
         conn.commit()
     return {"ok": True}
 
@@ -2192,40 +2093,6 @@ def _get_ligne_or_404(conn, ao_id: int, ligne_id: int) -> dict:
     if not row:
         raise HTTPException(status_code=404, detail="Ligne introuvable")
     return _row_dict(row)
-
-
-CONDI_UNITES = frozenset({"mille", "bobine", "carton", "etiquette", "palette"})
-
-
-@router.patch("/{ao_id}/lignes/{ligne_id}/condi")
-async def update_ligne_condi(request: Request, ao_id: int, ligne_id: int):
-    """Met à jour le conditionnement de vente (unité + quantité) sur une ligne."""
-    _require_ao(request)
-    body = await request.json()
-    unite = body.get("condi_unite")
-    qte = body.get("condi_qte")
-    if unite is not None:
-        unite = (unite or "").strip().lower() or None
-        if unite and unite not in CONDI_UNITES:
-            raise HTTPException(status_code=400, detail="Unité condi invalide.")
-    if qte is not None and qte != "":
-        try:
-            qte = float(qte)
-            if qte <= 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="Quantité condi invalide.")
-    else:
-        qte = None
-    with get_db() as conn:
-        _get_ao_or_404(conn, ao_id)
-        _get_ligne_or_404(conn, ao_id, ligne_id)
-        conn.execute(
-            "UPDATE ao_lignes SET condi_unite=?, condi_qte=? WHERE id=? AND ao_id=?",
-            (unite, qte, ligne_id, ao_id),
-        )
-        conn.commit()
-    return {"ok": True, "ligne_id": ligne_id, "condi_unite": unite, "condi_qte": qte}
 
 
 def _load_series_for_ligne(conn, ligne_id: int) -> list[dict]:
@@ -2545,7 +2412,7 @@ def envoyer_ao(request: Request, ao_id: int):
         if ao.get("statut") == "cloturee":
             raise HTTPException(
                 status_code=400,
-                detail="Envoi impossible — l'appel d'offres est clôturé.",
+                detail="Envoi impossible — l'appel d'offre est clôturé.",
             )
         lignes_raw = [
             _row_dict(r)
@@ -2756,7 +2623,7 @@ async def post_message(request: Request, ao_id: int, fourni_id: int):
     lien = f"{BASE_URL.rstrip('/')}/portail/ao/{fourni['token']}"
     subject = f"[MySifa] Nouveau message — {reference}"
     corps_texte = (
-        f"Vous avez reçu un message concernant l'appel d'offres {reference}.\n\n"
+        f"Vous avez reçu un message concernant l'appel d'offre {reference}.\n\n"
         f"{message}\n\n"
         f"Accéder à la demande : {lien}"
     )
@@ -2915,15 +2782,13 @@ def comparaison_ao(request: Request, ao_id: int):
                     })
                 rows_flat.append({
                     "ligne_id": ln["id"],
-                    "condi_unite": ln.get("condi_unite"),
-                    "condi_qte": ln.get("condi_qte"),
                     "reponse_id": rep.get("reponse_id"),
                     "fourni_id": rep.get("fourni_id"),
                     "nom_fournisseur": rep.get("nom_fournisseur"),
                     **ctx,
                     **{k: rep.get(k) for k in (
                         "quotation", "devise", "unite_quotation", "unite_quotation_original", "unite_manuel",
-                        "prix_calcule", "transport_amount", "prix_au_mille", "prix_achat_mille", "coef",
+                        "prix_calcule", "transport_amount", "prix_au_mille", "coef",
                         "devise_prix_devis", "prix_vente",
                         "delai_jours", "commentaire",
                     )},

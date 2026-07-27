@@ -1,21 +1,21 @@
 """
-MySifa â€” moteur de rendu d'Ã©tiquettes pour le module impression cloud.
+MySifa — moteur de rendu d'étiquettes pour le module impression cloud.
 
 Prend un template texte (ZPL, EPL ou ESC-POS) contenant des placeholders
-`{{clef}}` et un dictionnaire de donnÃ©es, retourne les bytes prÃªts Ã  Ãªtre
-envoyÃ©s Ã  l'imprimante par socket TCP:9100.
+`{{clef}}` et un dictionnaire de données, retourne les bytes prêts à être
+envoyés à l'imprimante par socket TCP:9100.
 
-Placeholders spÃ©ciaux (rÃ©solus AVANT les placeholders simples) :
+Placeholders spéciaux (résolus AVANT les placeholders simples) :
   - {{barcode:champ,format}}     ex. {{barcode:lot_numero,CODE128}}
   - {{qrcode:champ}}             ex. {{qrcode:lot_numero}}
   - {{now:strftime}}             ex. {{now:%d/%m/%Y}}
 
-Les placeholders spÃ©ciaux ne sont interprÃ©tÃ©s qu'en ZPL. En EPL et ESC-POS,
-ils sont convertis en Ã©quivalent le plus proche (les templates par dÃ©faut
-livrÃ©s dans les migrations sont Ã©crits en ZPL, langage principal).
+Les placeholders spéciaux ne sont interprétés qu'en ZPL. En EPL et ESC-POS,
+ils sont convertis en équivalent le plus proche (les templates par défaut
+livrés dans les migrations sont écrits en ZPL, langage principal).
 
 Un template ZPL doit contenir sa propre commande ^XA ... ^XZ. Le moteur
-n'ajoute AUCUN wrap : ce que tu Ã©cris est ce qui est envoyÃ© (aprÃ¨s
+n'ajoute AUCUN wrap : ce que tu écris est ce qui est envoyé (après
 substitution). Cela laisse l'admin totalement libre de la mise en page.
 """
 
@@ -26,7 +26,7 @@ from datetime import datetime
 from typing import Any
 
 
-# v1.7 â€” ajout de "pdf" pour l'impression de documents bureautiques (OF, fiches
+# v1.7 — ajout de "pdf" pour l'impression de documents bureautiques (OF, fiches
 # techniques) vers des imprimantes A4/A3 laser/jet. Le langage "pdf" est un
 # passthrough : les bytes du PDF sont stockes tels quels dans print_jobs.payload
 # et transmis a l'agent, qui les envoie a SumatraPDF pour impression sur la
@@ -35,12 +35,12 @@ LANGAGES = ("zpl", "epl", "escpos", "pdf")
 
 # Placeholder simple : {{ clef }} ou {{ clef.sous_clef }} (support dot notation)
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}")
-# Placeholder spÃ©cial : {{barcode:champ}}, {{barcode:champ,CODE128}}, etc.
+# Placeholder spécial : {{barcode:champ}}, {{barcode:champ,CODE128}}, etc.
 _SPECIAL_RE = re.compile(r"\{\{\s*(barcode|qrcode|now)\s*:\s*([^}]+?)\s*\}\}")
 
 
 def _lookup(data: dict, path: str) -> str:
-    """RÃ©sout `a.b.c` en descendant dans le dict imbriquÃ©. Retourne '' si absent."""
+    """Résout `a.b.c` en descendant dans le dict imbriqué. Retourne '' si absent."""
     cur: Any = data
     for part in path.split("."):
         if isinstance(cur, dict):
@@ -53,9 +53,9 @@ def _lookup(data: dict, path: str) -> str:
 
 
 def _zpl_escape(s: str) -> str:
-    """Ã‰chappe les caractÃ¨res spÃ©ciaux ZPL. Le caractÃ¨re `^` ouvre une commande
-    et `~` ouvre une commande hÃ´te. On les remplace par leur code ASCII via ^FH."""
-    # Ordre important : ` ^ ~ sont les mÃ©tacaractÃ¨res ZPL par dÃ©faut.
+    """Échappe les caractères spéciaux ZPL. Le caractère `^` ouvre une commande
+    et `~` ouvre une commande hôte. On les remplace par leur code ASCII via ^FH."""
+    # Ordre important : ` ^ ~ sont les métacaractères ZPL par défaut.
     return (
         str(s)
         .replace("\\", "\\5c")
@@ -85,7 +85,7 @@ def _resolve_special(match: re.Match, data: dict, langage: str) -> str:
             return ""
         val_z = _zpl_escape(val)
         if langage == "zpl":
-            # Barcode128 par dÃ©faut ; sinon C39 (code39) comme fallback simple.
+            # Barcode128 par défaut ; sinon C39 (code39) comme fallback simple.
             if fmt in ("CODE128", "C128", "BARCODE128"):
                 # ^BY2 : module width 2 ; ^BCN,haut,Y,N,N : orientation Normal,
                 # hauteur, human-readable, above=N, check=N
@@ -94,7 +94,7 @@ def _resolve_special(match: re.Match, data: dict, langage: str) -> str:
                 return f"^BY2^B3N,N,{haut},Y,N^FD{val_z}^FS"
             if fmt == "EAN13":
                 return f"^BY2^BEN,{haut},Y,N^FD{val_z}^FS"
-            # DÃ©faut : CODE128
+            # Défaut : CODE128
             return f"^BY2^BCN,{haut},Y,N,N^FD{val_z}^FS"
         # EPL / ESC-POS : on renvoie juste la valeur texte, l'admin doit adapter
         # son template au langage cible.
@@ -112,22 +112,22 @@ def _resolve_special(match: re.Match, data: dict, langage: str) -> str:
 
 
 def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
-    """Rend un template en bytes prÃªts Ã  envoyer Ã  l'imprimante.
+    """Rend un template en bytes prêts à envoyer à l'imprimante.
 
     Passe deux fois :
-      1. RÃ©solution des placeholders spÃ©ciaux ({{barcode:...}}, {{qrcode:...}}, {{now:...}})
-      2. RÃ©solution des placeholders simples ({{champ}}, {{champ.sous_champ}})
+      1. Résolution des placeholders spéciaux ({{barcode:...}}, {{qrcode:...}}, {{now:...}})
+      2. Résolution des placeholders simples ({{champ}}, {{champ.sous_champ}})
 
-    Les valeurs sont automatiquement Ã©chappÃ©es pour ZPL (caractÃ¨res ^, ~, \\,
+    Les valeurs sont automatiquement échappées pour ZPL (caractères ^, ~, \\,
     retours ligne). Pour les autres langages, on renvoie la valeur telle quelle.
     """
     if langage not in LANGAGES:
         raise ValueError(f"Langage inconnu : {langage!r}. Attendu : {LANGAGES}")
-    # v1.7 â€” le langage "pdf" ne rend pas de template : les bytes du PDF sont
+    # v1.7 — le langage "pdf" ne rend pas de template : les bytes du PDF sont
     # fournis directement par l'endpoint POST /api/print/pdf. render_template
     # n'est jamais appele pour un job PDF (l'endpoint stocke directement le
     # blob dans print_jobs.payload). Si on arrive ici avec langage=pdf, c'est
-    # que quelqu'un a mal cable l'appel â€” on remonte une erreur explicite.
+    # que quelqu'un a mal cable l'appel — on remonte une erreur explicite.
     if langage == "pdf":
         raise ValueError(
             "Le langage 'pdf' ne s'utilise pas via render_template. "
@@ -138,10 +138,10 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
     if data is None:
         data = {}
 
-    # Ã‰tape 1 : placeholders spÃ©ciaux
+    # Étape 1 : placeholders spéciaux
     rendered = _SPECIAL_RE.sub(lambda m: _resolve_special(m, data, langage), template)
 
-    # Ã‰tape 2 : placeholders simples
+    # Étape 2 : placeholders simples
     def _repl(m: re.Match) -> str:
         val = _lookup(data, m.group(1))
         if langage == "zpl":
@@ -150,8 +150,8 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
 
     rendered = _PLACEHOLDER_RE.sub(_repl, rendered)
 
-    # Encodage : ZPL et EPL sont ASCII Ã©tendu (CP850), ESC-POS accepte UTF-8 sur
-    # imprimantes modernes. On tolÃ¨re les caractÃ¨res non-reprÃ©sentables.
+    # Encodage : ZPL et EPL sont ASCII étendu (CP850), ESC-POS accepte UTF-8 sur
+    # imprimantes modernes. On tolère les caractères non-représentables.
     if langage == "zpl":
         return rendered.encode("cp850", errors="replace")
     if langage == "epl":
@@ -159,19 +159,19 @@ def render_template(template: str, data: dict, langage: str = "zpl") -> bytes:
     return rendered.encode("utf-8", errors="replace")
 
 
-# â”€â”€ Templates par dÃ©faut livrÃ©s dans la migration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Templates par défaut livrés dans la migration ──────────────────────
 #
-# Template ZPL 4"Ã—6" (102Ã—152mm) 203 dpi pour la rÃ©ception matiÃ¨re SIFA.
-# Dimensions en points : 812 Ã— 1218 (203 dpi Ã— 4" Ã— 6")
-# Placeholders utilisÃ©s :
-#   {{lot_numero}}         â€” numÃ©ro de lot auto-gÃ©nÃ©rÃ©
-#   {{fournisseur}}        â€” nom fournisseur
-#   {{fsc_label}}          â€” libellÃ© statut FSC ("FSC 100%", "Non FSC", â€¦)
-#   {{fsc_banner}}         â€” "MATIERE FSC" ou "MATIERE NON FSC"
-#   {{ref_produit}}        â€” rÃ©fÃ©rence produit (optionnel)
-#   {{code_barre}}         â€” code-barres bobine
-#   {{operateur_nom}}      â€” nom de l'opÃ©rateur qui a validÃ©
-#   {{date_reception}}     â€” date de rÃ©ception format "dd/mm/yyyy"
+# Template ZPL 4"×6" (102×152mm) 203 dpi pour la réception matière SIFA.
+# Dimensions en points : 812 × 1218 (203 dpi × 4" × 6")
+# Placeholders utilisés :
+#   {{lot_numero}}         — numéro de lot auto-généré
+#   {{fournisseur}}        — nom fournisseur
+#   {{fsc_label}}          — libellé statut FSC ("FSC 100%", "Non FSC", …)
+#   {{fsc_banner}}         — "MATIERE FSC" ou "MATIERE NON FSC"
+#   {{ref_produit}}        — référence produit (optionnel)
+#   {{code_barre}}         — code-barres bobine
+#   {{operateur_nom}}      — nom de l'opérateur qui a validé
+#   {{date_reception}}     — date de réception format "dd/mm/yyyy"
 #
 DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 ^CI28
@@ -214,13 +214,13 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 """
 
 
-# Templates prÃ©dÃ©finis complÃ©mentaires (galerie de dÃ©part pour l'admin).
+# Templates prédéfinis complémentaires (galerie de départ pour l'admin).
 # Format : liste de dicts {key, nom, description, langage, contenu}.
 DEFAULT_TEMPLATE_GALLERY = [
     {
         "key": "bobine_full",
-        "nom": "Ã‰tiquette bobine â€” complÃ¨te (FSC + code-barres + QR)",
-        "description": "Format A6 (102Ã—152mm). Header SIFA, badge FSC inversÃ©, rÃ©fÃ©rence produit gros, fournisseur, lot trÃ¨s visible, code-barres CODE128, QR code + traÃ§abilitÃ©.",
+        "nom": "Étiquette bobine — complète (FSC + code-barres + QR)",
+        "description": "Format A6 (102×152mm). Header SIFA, badge FSC inversé, référence produit gros, fournisseur, lot très visible, code-barres CODE128, QR code + traçabilité.",
         "langage": "zpl",
         "usage_key": "reception_matiere",
         "largeur_mm": 102,
@@ -229,8 +229,8 @@ DEFAULT_TEMPLATE_GALLERY = [
     },
     {
         "key": "bobine_compact",
-        "nom": "Ã‰tiquette bobine â€” compacte (petit format 57Ã—32mm)",
-        "description": "Format ticket (57Ã—32mm). Juste l'essentiel : lot + code-barres + FSC.",
+        "nom": "Étiquette bobine — compacte (petit format 57×32mm)",
+        "description": "Format ticket (57×32mm). Juste l'essentiel : lot + code-barres + FSC.",
         "langage": "zpl",
         "usage_key": "reception_matiere",
         "largeur_mm": 57,
@@ -250,8 +250,8 @@ DEFAULT_TEMPLATE_GALLERY = [
     },
     {
         "key": "emplacement_stock",
-        "nom": "Ã‰tiquette emplacement stock (grand)",
-        "description": "Format A5 (102Ã—74mm). Code emplacement en trÃ¨s gros + code-barres pour scan mobile.",
+        "nom": "Étiquette emplacement stock (grand)",
+        "description": "Format A5 (102×74mm). Code emplacement en très gros + code-barres pour scan mobile.",
         "langage": "zpl",
         "usage_key": "reception_matiere",
         "largeur_mm": 102,
@@ -270,8 +270,8 @@ DEFAULT_TEMPLATE_GALLERY = [
     },
     {
         "key": "colis_expedition",
-        "nom": "Ã‰tiquette colis expÃ©dition (100Ã—150mm)",
-        "description": "Format standard colis. Client, adresse, numÃ©ro de commande, code-barres tracking.",
+        "nom": "Étiquette colis expédition (100×150mm)",
+        "description": "Format standard colis. Client, adresse, numéro de commande, code-barres tracking.",
         "langage": "zpl",
         "usage_key": "reception_matiere",
         "largeur_mm": 100,
@@ -303,7 +303,7 @@ DEFAULT_TEMPLATE_GALLERY = [
 
 
 def list_default_templates() -> list[dict]:
-    """Renvoie la galerie de templates prÃ©dÃ©finis pour l'UI (sans le contenu ZPL
+    """Renvoie la galerie de templates prédéfinis pour l'UI (sans le contenu ZPL
     complet dans la liste, juste key + nom + description + dimensions)."""
     return [
         {
@@ -320,7 +320,7 @@ def list_default_templates() -> list[dict]:
 
 
 def get_default_template(key: str) -> dict | None:
-    """Renvoie le template prÃ©dÃ©fini complet (avec contenu) par sa clÃ©."""
+    """Renvoie le template prédéfini complet (avec contenu) par sa clé."""
     for t in DEFAULT_TEMPLATE_GALLERY:
         if t["key"] == key:
             return t
@@ -328,27 +328,27 @@ def get_default_template(key: str) -> dict | None:
 
 
 def default_templates_seed() -> list[dict]:
-    """Liste des templates par dÃ©faut Ã  seeder Ã  la premiÃ¨re configuration
-    d'une imprimante ZPL. Le seed est appliquÃ© depuis app/routers/print.py
-    quand l'admin crÃ©e sa premiÃ¨re imprimante, pas en migration, car il faut
-    connaÃ®tre l'imprimante_id."""
+    """Liste des templates par défaut à seeder à la première configuration
+    d'une imprimante ZPL. Le seed est appliqué depuis app/routers/print.py
+    quand l'admin crée sa première imprimante, pas en migration, car il faut
+    connaître l'imprimante_id."""
     return [
         {
             "usage_key": "reception_matiere",
-            "nom": "Ã‰tiquette rÃ©ception matiÃ¨re (complÃ¨te)",
+            "nom": "Étiquette réception matière (complète)",
             "contenu": DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL,
         },
     ]
 
 
-# â”€â”€ Registre des usages mÃ©tier â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-# Une clÃ© d'usage = un contexte mÃ©tier oÃ¹ on peut imprimer une Ã©tiquette.
-# Les libellÃ©s sont utilisÃ©s dans l'UI (config imprimantes par dÃ©faut et
-# Ã©diteur de template).
+# ── Registre des usages métier ─────────────────────────────────────────
+# Une clé d'usage = un contexte métier où on peut imprimer une étiquette.
+# Les libellés sont utilisés dans l'UI (config imprimantes par défaut et
+# éditeur de template).
 USAGES = [
     {
         "key": "reception_matiere",
-        "label": "RÃ©ception matiÃ¨re â€” identification bobine",
+        "label": "Réception matière — identification bobine",
         "module": "stock",
         "placeholders": [
             "lot_numero", "fournisseur", "fsc_label", "fsc_banner",
@@ -357,7 +357,7 @@ USAGES = [
             "{{qrcode:lot_numero}}", "{{now:%d/%m/%Y}}",
         ],
     },
-    # v1.7 â€” usages "PDF passthrough" pour MyProd. Aucun template n'est
+    # v1.7 — usages "PDF passthrough" pour MyProd. Aucun template n'est
     # applique : c'est le PDF genere/importe qui sert de payload direct
     # (endpoint POST /api/print/pdf). Ces usages doivent etre associes a
     # une imprimante de langage="pdf" (imprimante bureautique via
@@ -374,7 +374,7 @@ USAGES = [
         "module": "prod",
         "placeholders": [],
     },
-    # Ã€ venir : etiquette_colis (MyExpÃ©), etiquette_emplacement (MyStock), etc.
+    # À venir : etiquette_colis (MyExpé), etiquette_emplacement (MyStock), etc.
 ]
 
 

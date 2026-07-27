@@ -1,7 +1,7 @@
 """
 Générateur PDF — Fiche produit FOURNISSEUR (bilingue FR / EN)
 
-Version à destination des fournisseurs SIFA lors des appels d'offres.
+Version à destination des fournisseurs SIFA lors des appels d'offre.
 Reprend la charte graphique du PDF client (fiche_pdf_client) mais avec
 les données brutes de la fiche produit MyAO (ao_produits) — pas de
 classification par dictionnaire, on affiche ce qui est saisi dans la

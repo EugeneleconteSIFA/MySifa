@@ -3008,22 +3008,10 @@ function renderSifaDocDetail(){
         <div class="sd-version-fours">${four_chips}</div>
       </div>
       <div class="sd-version-actions">
-        <a class="sd-version-btn" href="/api/qualite/sifa-docs/versions/${v.id}/pdf?inline=1" target="_blank" title="Prévisualiser le PDF dans un nouvel onglet">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-          Prévisualiser
-        </a>
         <a class="sd-version-btn primary" href="/api/qualite/sifa-docs/versions/${v.id}/pdf" target="_blank" title="Télécharger le PDF">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           PDF
         </a>
-        <a class="sd-version-btn" href="/api/qualite/sifa-docs/versions/${v.id}/docx" title="Télécharger la version éditable Word">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-          DOCX
-        </a>
-        <button class="sd-version-btn" onclick="openSifaDocEdit(${v.id})" title="Modifier cette version (client, fournisseurs, sections, régénère le PDF)">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Modifier
-        </button>
         <button class="sd-version-btn" onclick="duplicateSifaDocVersion(${v.id})" title="Créer une nouvelle version en repartant de celle-ci">Dupliquer</button>
         ${S.isQualiteAdmin?`<button class="sd-version-btn danger" onclick="deleteSifaDocVersion(${v.id})" title="Supprimer">×</button>`:''}
       </div>
@@ -3040,7 +3028,6 @@ function renderSifaDocDetail(){
       </div>
       <div class="sd-detail-head-actions">
         <a class="btn btn-ghost" href="/api/qualite/sifa-docs/templates/${encodeURIComponent(t.code)}/preview" target="_blank" style="padding:10px 14px;font-size:12px">Aperçu template vierge</a>
-        ${S.isQualiteAdmin?`<button class="btn btn-ghost" onclick="openTemplateEditor('${escAttr(t.code)}')" style="padding:10px 14px;font-size:12px" title="Éditer les textes par défaut du template (visible par tous les clients)">Modifier le template</button>`:''}
         <button class="btn btn-accent" onclick="openSifaDocGenerate('${escAttr(t.code)}')" style="padding:10px 16px;font-size:13px">
           + Nouvelle version
         </button>
@@ -3089,26 +3076,6 @@ async function duplicateSifaDocVersion(id){
   });
 }
 
-async function openSifaDocEdit(id){
-  // Édition en place : réutilise le modal de génération avec un flag editVersionId.
-  // Sur enregistrement, submitSifaDocGenerate détecte le mode et PUT au lieu de POST.
-  const versions = (S.currentSifaDoc && S.currentSifaDoc.versions) || [];
-  const v = versions.find(x => x.id === id);
-  if(!v){showToast('Version introuvable','danger'); return;}
-  const code = S.currentSifaDoc.template.code;
-  await openSifaDocGenerate(code, {
-    editVersionId: id,
-    client_nom: v.client_nom,
-    audit_id: v.audit_id,
-    fournisseurs_ids: v.fournisseurs_ids || [],
-    sections_overrides: v.sections_overrides || {},
-    ref_manual: v.ref_document || '',
-    date_emission: v.date_emission || null,
-    notes: v.notes || '',
-    representant: v.representant || '',
-  });
-}
-
 // ─── Modal : génération d'une nouvelle version ─────────────────────
 async function openSifaDocGenerate(code, prefill){
   prefill = prefill || {};
@@ -3133,14 +3100,11 @@ async function openSifaDocGenerate(code, prefill){
   S._sifaGen = {
     templateCode: code,
     templateTitre: template.titre || 'Certification SIFA',
-    editVersionId: prefill.editVersionId || null,
     audit_id: prefill.audit_id || null,
     client_nom: prefill.client_nom || '',
     fournisseurs_ids: new Set(prefill.fournisseurs_ids || []),
-    date_emission: prefill.date_emission || (new Date()).toISOString().slice(0,10),
-    ref_manual: prefill.ref_manual || '',
-    notes: prefill.notes || '',
-    representant: prefill.representant || '',
+    date_emission: (new Date()).toISOString().slice(0,10),
+    ref_manual: '',
     fourSearch: '',
     sections: [],           // meta chargée depuis l'API
     sections_overrides: JSON.parse(JSON.stringify(prefill.sections_overrides || {})), // clone profond
@@ -3169,8 +3133,8 @@ async function openSifaDocGenerate(code, prefill){
   <div class="modal-ov" id="sd-gen-ov" style="display:flex" onclick="if(event.target===this)closeSifaDocGenerate()">
     <div class="modal lg" onclick="event.stopPropagation()" style="max-width:820px">
       <button type="button" class="modal-close" onclick="closeSifaDocGenerate()">×</button>
-      <h3 style="margin:0 0 6px;font-size:20px;color:var(--text);font-weight:800;letter-spacing:-.2px">${S._sifaGen.editVersionId ? 'Modifier la version' : 'Nouvelle version'} — ${escHtml(S._sifaGen.templateTitre)}</h3>
-      <p style="margin:0 0 20px;color:var(--text2);font-size:12.5px;line-height:1.5">${S._sifaGen.editVersionId ? `Édition en place — la référence <b style="color:var(--text)">${escHtml(S._sifaGen.ref_manual||'')}</b> est conservée (modifiable ci-dessous). Le PDF sera régénéré.` : `La référence sera calculée automatiquement (<b style="color:var(--text)">${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…</b>). La date d'émission est celle du jour.`}</p>
+      <h3 style="margin:0 0 6px;font-size:20px;color:var(--text);font-weight:800;letter-spacing:-.2px">Nouvelle version — ${escHtml(S._sifaGen.templateTitre)}</h3>
+      <p style="margin:0 0 20px;color:var(--text2);font-size:12.5px;line-height:1.5">La référence sera calculée automatiquement (<b style="color:var(--text)">${escHtml((template.ref_prefix||'SIFA-DoC'))}-CLIENT-001, 002…</b>). La date d'émission est celle du jour.</p>
 
       <div style="display:grid;gap:16px">
         <div class="sd-gen-section">
@@ -3213,9 +3177,8 @@ async function openSifaDocGenerate(code, prefill){
           <label class="sd-gen-label"><span class="sd-gen-num">4</span>Référence du document</label>
           <input type="text" id="sd-gen-ref" class="sd-gen-input"
                  placeholder="Générée automatiquement"
-                 value="${escAttr(S._sifaGen.ref_manual||'')}"
                  oninput="S._sifaGen.ref_manual=this.value" style="font-family:ui-monospace,'Menlo',monospace;font-size:13px">
-          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">${S._sifaGen.editVersionId ? 'Modifiable : renomme la référence de la version existante (unicité vérifiée).' : 'Laisser vide pour utiliser la référence auto par client (recommandé)'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;font-style:italic">Laisser vide pour utiliser la référence auto par client (recommandé)</div>
         </div>
       </div>
 
@@ -3223,7 +3186,7 @@ async function openSifaDocGenerate(code, prefill){
         <div style="font-size:11px;color:var(--muted)">Validité <b style="color:var(--text)">${template.validite_mois||12} mois</b> à compter de la date d'émission</div>
         <div style="display:flex;gap:8px">
           <button type="button" class="btn btn-ghost" onclick="closeSifaDocGenerate()">Annuler</button>
-          <button type="button" class="btn btn-accent" id="sd-gen-submit" onclick="submitSifaDocGenerate()">${S._sifaGen.editVersionId ? 'Enregistrer les modifications' : 'Générer le PDF'}</button>
+          <button type="button" class="btn btn-accent" id="sd-gen-submit" onclick="submitSifaDocGenerate()">Générer le PDF</button>
         </div>
       </div>
     </div>
@@ -3332,28 +3295,20 @@ async function submitSifaDocGenerate(){
   if(!client){showToast('Nom de client obligatoire','danger'); return;}
   const four_ids = Array.from(st.fournisseurs_ids);
   if(!four_ids.length){showToast('Au moins un fournisseur','danger'); return;}
-  const isEdit = !!st.editVersionId;
-  const defaultBtnLabel = isEdit ? 'Enregistrer les modifications' : 'Générer le PDF';
   const btn = document.getElementById('sd-gen-submit');
-  if(btn){btn.disabled=true; btn.textContent=isEdit?'Enregistrement…':'Génération…';}
+  if(btn){btn.disabled=true; btn.textContent='Génération…';}
   const body = {
+    template_code: st.templateCode,
     audit_id: st.audit_id || null,
     client_nom: client,
     fournisseurs_ids: four_ids,
     date_emission: st.date_emission,
     ref_document: (st.ref_manual||'').trim() || null,
     sections_overrides: st.sections_overrides && Object.keys(st.sections_overrides).length ? st.sections_overrides : null,
-    representant: (st.representant||'').trim() || null,
-    notes: (st.notes||'').trim() || null,
   };
-  if(!isEdit) body.template_code = st.templateCode;
-  const url = isEdit
-    ? '/api/qualite/sifa-docs/versions/'+st.editVersionId
-    : '/api/qualite/sifa-docs/versions';
-  const method = isEdit ? 'PUT' : 'POST';
   try{
-    const r = await api(url,{
-      method, headers:{'Content-Type':'application/json'},
+    const r = await api('/api/qualite/sifa-docs/versions',{
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
     if(!r.ok){
@@ -3361,16 +3316,16 @@ async function submitSifaDocGenerate(){
       try{d = await r.json();}catch(e){}
       // Cas : origines manquantes → ouvrir le modal dédié
       if(d.detail && d.detail.code === 'MISSING_COUNTRIES'){
-        if(btn){btn.disabled=false; btn.textContent=defaultBtnLabel;}
+        if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
         openSifaDocMissingCountries(d.detail.fournisseurs, () => submitSifaDocGenerate());
         return;
       }
-      const msg = (d.detail && (d.detail.message || d.detail)) || (isEdit?'Erreur modification':'Erreur génération');
-      showToast(typeof msg === 'string' ? msg : (isEdit?'Erreur modification':'Erreur génération'),'danger');
-      if(btn){btn.disabled=false; btn.textContent=defaultBtnLabel;}
+      const msg = (d.detail && (d.detail.message || d.detail)) || 'Erreur génération';
+      showToast(typeof msg === 'string' ? msg : 'Erreur génération','danger');
+      if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
       return;
     }
-    const saved = await r.json();
+    const created = await r.json();
     // Si audit lié → sync des fournisseurs vers l'audit
     if(st.audit_id){
       try{
@@ -3381,16 +3336,16 @@ async function submitSifaDocGenerate(){
       }catch(e){}
     }
     closeSifaDocGenerate();
-    showToast(isEdit ? ('Version mise à jour : '+saved.ref_document) : ('PDF généré : '+saved.ref_document),'success');
+    showToast('PDF généré : '+created.ref_document,'success');
     // Recharger le détail du template
     openSifaDoc(st.templateCode);
-    // Ouvrir le PDF dans un nouvel onglet (inline en édition pour éviter le download automatique)
-    window.open('/api/qualite/sifa-docs/versions/'+saved.id+'/pdf'+(isEdit?'?inline=1':''),'_blank');
+    // Ouvrir le PDF dans un nouvel onglet
+    window.open('/api/qualite/sifa-docs/versions/'+created.id+'/pdf','_blank');
     // Vider le cache pickers (fournisseurs peuvent avoir été modifiés)
     S.sifaDocsPickers = null;
   }catch(e){
     if(e.message!=='unauth')showToast('Erreur réseau','danger');
-    if(btn){btn.disabled=false; btn.textContent=defaultBtnLabel;}
+    if(btn){btn.disabled=false; btn.textContent='Générer le PDF';}
   }
 }
 
@@ -3531,144 +3486,6 @@ function _sdSecReset(secId){
     if(Object.keys(ov[secId]).length === 0) delete ov[secId];
   }
   _sdRenderSections();
-}
-
-// ─── Modal admin : éditer les textes par défaut du template ─────────
-// L'admin qualité peut modifier les SEC_*_BODY par défaut au niveau du
-// template. Ces textes s'appliquent à toutes les prochaines versions,
-// sauf si un client override plus prioritaire est défini côté version.
-// Priorité : version.custom_body > template.default_override > défaut usine.
-async function openTemplateEditor(code){
-  if(!S.isQualiteAdmin){showToast('Réservé aux admins qualité','danger'); return;}
-  const wrap = document.getElementById('mroot') || (function(){
-    const d = document.createElement('div'); d.id='mroot'; document.body.appendChild(d); return d;
-  })();
-  try{
-    const r = await api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(code)+'/default-overrides');
-    if(!r.ok){showToast('Erreur chargement template','danger'); return;}
-    const data = await r.json();
-    S._tplEdit = {
-      code: data.template_code,
-      titre: data.template_titre || 'Template',
-      sections: (data.sections || []).filter(s => s.editable),
-      overrides: Object.assign({}, data.overrides || {}),
-    };
-    wrap.innerHTML = `
-    <div class="modal-ov" id="tpl-edit-ov" style="display:flex" onclick="if(event.target===this)closeTemplateEditor()">
-      <div class="modal lg" onclick="event.stopPropagation()" style="max-width:840px">
-        <button type="button" class="modal-close" onclick="closeTemplateEditor()">×</button>
-        <h3 style="margin:0 0 4px;font-size:16px;color:var(--text)">Modifier le template</h3>
-        <div style="margin:0 0 4px;color:var(--text2);font-size:13px;font-weight:600">${escHtml(S._tplEdit.titre)}</div>
-        <p style="margin:0 0 16px;color:var(--muted);font-size:12px;line-height:1.55">
-          Les textes édités ici deviennent le <b>nouveau défaut</b> pour toutes les prochaines versions.
-          Une version peut toujours surcharger localement un texte par client (via « Personnaliser les sections »
-          dans le modal de génération). Laisser vide pour revenir au texte d'usine.
-        </p>
-        <div id="tpl-edit-list" class="sd-sec-list"></div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-          <button type="button" class="btn btn-ghost" onclick="closeTemplateEditor()">Annuler</button>
-          <button type="button" class="btn btn-accent" onclick="submitTemplateEditor()">Enregistrer</button>
-        </div>
-      </div>
-    </div>`;
-    _renderTemplateEditor();
-  }catch(e){
-    if(e.message!=='unauth') showToast('Erreur réseau','danger');
-  }
-}
-
-function _renderTemplateEditor(){
-  if(!S._tplEdit) return;
-  const list = document.getElementById('tpl-edit-list');
-  if(!list) return;
-  const sections = S._tplEdit.sections || [];
-  const overrides = S._tplEdit.overrides || {};
-  if(!sections.length){
-    list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">Aucune section éditable</div>';
-    return;
-  }
-  list.innerHTML = sections.map(s => {
-    const currentOv = overrides[s.id];
-    const hasOv = !!(currentOv && String(currentOv).trim());
-    const defaultTxt = s.default_body || '';
-    const displayed = hasOv ? currentOv : defaultTxt;
-    return `<div class="sd-sec-item editing" id="tpl-sec-${escAttr(s.id)}">
-      <div class="sd-sec-hd">
-        <span class="sd-sec-title">${escHtml(s.title)}</span>
-        <div class="sd-sec-flags">
-          ${hasOv ? '<span class="sd-sec-flag" style="background:var(--accent-bg);color:var(--accent);border-color:var(--accent)">personnalisé</span>' : '<span class="sd-sec-flag">défaut usine</span>'}
-        </div>
-      </div>
-      <div class="sd-sec-editor" style="display:block">
-        <textarea class="sd-sec-textarea" placeholder="Texte par défaut de la section (HTML basique : &lt;b&gt;, &lt;i&gt; autorisés)" oninput="_tplBody('${escAttr(s.id)}', this.value)">${escHtml(displayed)}</textarea>
-        <div class="sd-sec-actions-row">
-          <button type="button" class="sd-sec-reset" onclick="_tplReset('${escAttr(s.id)}')">Réinitialiser au texte d'usine</button>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function _tplBody(secId, txt){
-  if(!S._tplEdit) return;
-  const sec = (S._tplEdit.sections||[]).find(s => s.id === secId);
-  const defaultTxt = sec ? (sec.default_body || '') : '';
-  if(!txt || !txt.trim() || txt.trim() === (defaultTxt||'').trim()){
-    delete S._tplEdit.overrides[secId];
-  } else {
-    S._tplEdit.overrides[secId] = txt;
-  }
-  // Rafraîchir juste le flag du groupe concerné (sans re-rendre le textarea)
-  const item = document.getElementById('tpl-sec-'+secId);
-  if(item){
-    const flag = item.querySelector('.sd-sec-flags');
-    const hasOv = !!S._tplEdit.overrides[secId];
-    if(flag){
-      flag.innerHTML = hasOv
-        ? '<span class="sd-sec-flag" style="background:var(--accent-bg);color:var(--accent);border-color:var(--accent)">personnalisé</span>'
-        : '<span class="sd-sec-flag">défaut usine</span>';
-    }
-  }
-}
-
-function _tplReset(secId){
-  if(!S._tplEdit) return;
-  delete S._tplEdit.overrides[secId];
-  _renderTemplateEditor();
-}
-
-function closeTemplateEditor(){
-  const ov = document.getElementById('tpl-edit-ov');
-  if(ov) ov.remove();
-  S._tplEdit = null;
-}
-
-async function submitTemplateEditor(){
-  if(!S._tplEdit) return;
-  const overrides = {};
-  Object.keys(S._tplEdit.overrides || {}).forEach(k => {
-    const v = S._tplEdit.overrides[k];
-    if(v && String(v).trim()) overrides[k] = String(v);
-  });
-  try{
-    const r = await api('/api/qualite/sifa-docs/templates/'+encodeURIComponent(S._tplEdit.code)+'/default-overrides', {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({overrides})
-    });
-    if(!r.ok){
-      let msg = 'Erreur enregistrement';
-      try{const j = await r.json(); if(j && j.detail) msg = j.detail;}catch(e){}
-      showToast(msg,'danger'); return;
-    }
-    showToast('Template mis à jour','success');
-    const code = S._tplEdit.code;
-    closeTemplateEditor();
-    // Rafraîchir la vue du template pour que le prochain aperçu utilise les nouveaux textes
-    openSifaDoc(code);
-  }catch(e){
-    if(e.message!=='unauth') showToast('Erreur réseau','danger');
-  }
 }
 
 // ─── Modal : renseigner l'origine géographique manquante ────────────
@@ -5518,7 +5335,7 @@ const QUALITE_TASKS_BY_SERVICE = {
     label: "Commercial",
     icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
     tasks: [
-      "Consulter les certifs pour répondre aux appels d'offres",
+      "Consulter les certifs pour répondre aux appels d'offre",
       "Documenter les capacités environnementales en propositions client",
     ]
   },
@@ -5651,7 +5468,7 @@ const QUALITE_TASKS_MODULES = {
       label: "Commercial",
       icon: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
       tasks: [
-        "Consulter les fiches pour répondre aux appels d'offres",
+        "Consulter les fiches pour répondre aux appels d'offre",
         "Copier les réponses type dans les propositions client",
       ]
     },
@@ -5705,7 +5522,7 @@ function _qualiteGuides(){
         {
           icon: `<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
           title: "Ressources & Référentiel",
-          body: `L'onglet <span class="qguide-hl">Ressources fournisseurs</span> centralise <strong>un dossier par fournisseur</strong> avec ses certificats (ISO, FSC, REACH…) et le suivi des expirations. Les fournisseurs d'un même <strong>groupe</strong> (ex. Fedrigoni Italy/France/UK) sont regroupés sous une seule carte. L'onglet <span class="qguide-hl">Référentiel RSE</span> est la <strong>bibliothèque des normes</strong> avec définitions, statut SIFA et réponses type prêtes pour les appels d'offres.`,
+          body: `L'onglet <span class="qguide-hl">Ressources fournisseurs</span> centralise <strong>un dossier par fournisseur</strong> avec ses certificats (ISO, FSC, REACH…) et le suivi des expirations. Les fournisseurs d'un même <strong>groupe</strong> (ex. Fedrigoni Italy/France/UK) sont regroupés sous une seule carte. L'onglet <span class="qguide-hl">Référentiel RSE</span> est la <strong>bibliothèque des normes</strong> avec définitions, statut SIFA et réponses type prêtes pour les appels d'offre.`,
           illu: QUALITE_MOCKUPS.ovResRef
         },
       ]

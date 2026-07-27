@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.4.2"
+APP_VERSION = "2.4.5"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -157,8 +157,8 @@ PROD_STANDALONE = os.getenv("PROD_STANDALONE", "1") in {"1", "true", "True", "ye
 MAINTENANCE_OPEN_BETA = os.getenv("MAINTENANCE_OPEN_BETA", "0") in {"1", "true", "True", "yes", "YES"}
 
 # ─── Support (email) ───────────────────────────────────────────────
-# Objectif: permettre au front d’envoyer un message au support via un endpoint FastAPI.
-# Configuration SMTP via variables d’environnement (prod).
+# Objectif: permettre au front d'envoyer un message au support via un endpoint FastAPI.
+# Configuration SMTP via variables d'environnement (prod).
 SUPPORT_TO_EMAIL = os.getenv("SUPPORT_TO_EMAIL", "eleconte@sifa.pro")
 SUPPORT_EMAIL_PROVIDER = os.getenv("SUPPORT_EMAIL_PROVIDER", "graph")  # graph | smtp
 SUPPORT_EMAIL_DISABLED = os.getenv("SUPPORT_EMAIL_DISABLED", "0") in {"1", "true", "True", "yes", "YES"}

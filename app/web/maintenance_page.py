@@ -846,7 +846,11 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .op-op-card-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
 .op-op-card-status{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
-.op-op-card-cta{margin-top:2px;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+/* v2.4.9 : margin-top:auto pousse le bouton en bas de la carte quand
+   celle-ci est stretchée par le grid parent (op-event-box-cards). Résultat :
+   tous les boutons "Marquer comme terminée" d'une même ligne sont alignés
+   même quand certaines cartes ont "Consignes de l'admin" et d'autres non. */
+.op-op-card-cta{margin-top:auto;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .op-op-card-cta:hover{filter:brightness(1.08)}
 .op-op-card-cta.is-done{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
 .op-op-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:48px 20px;color:var(--muted);font-size:14px}
@@ -1666,44 +1670,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </section>
 
-        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count">0 opération</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
-            </div>
-          </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody class="js-cat-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
         </div><!-- /plan-subview-calendrier -->
+      </div><!-- /view-planning -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
@@ -6559,6 +6527,9 @@ async function loadCtrlAcks(){
       _raw_comment: a.comment || '',
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
+      // v2.4.11 : remonte dismissed pour que ctrlIsAutoClose détecte aussi
+      // les anciennes esquives (comment vide, antérieures à v2.3.30).
+      _dismissed: a.dismissed === 1 || a.dismissed === true,
     }));
     CTRL_STATE.alerts_meta = data.alerts_meta || {};
     CTRL_STATE.known_alerts = Array.isArray(data.known_alerts) ? data.known_alerts : [];
@@ -6657,8 +6628,14 @@ function toggleAutoClose(){
   if(typeof renderCtrl === 'function') renderCtrl();
 }
 function ctrlIsAutoClose(c){
+  // v2.4.11 : double critère.
+  //   1) dismissed=1 → esquive quelle que soit l'époque (couvre les anciennes
+  //      esquives antérieures à v2.3.30 qui ont comment vide).
+  //   2) comment matche "Fermée auto" → auto-close serveur (backend
+  //      _auto_ack_periodic_alerts_on_arret v2.2.65) + esquives récentes
+  //      "Fermée auto (esquive) : <label>" (v2.3.30).
+  if(c && c._dismissed) return true;
   const raw = (c && c._raw_comment) || '';
-  // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
   return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
 }
 
@@ -8000,6 +7977,8 @@ function _alertDefaults(existing) {
         unit: (it && it.unit) || '',
         min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
         max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
+        // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
+        required: !!(it && it.required),
       };
     }
     const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
@@ -8014,6 +7993,8 @@ function _alertDefaults(existing) {
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
       nc_responses: ncResp,
+      // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
+      required: !!(it && it.required),
     };
   });
   return {
@@ -8869,7 +8850,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.3.32"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 
