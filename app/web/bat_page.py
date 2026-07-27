@@ -167,6 +167,23 @@ body.sb-open .sidebar-overlay{display:block}
 .table-wrap tr:hover td{background:rgba(255,255,255,.02)}
 body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 
+/* ── En-têtes triables ── */
+.table-wrap th.th-sort{cursor:pointer;user-select:none;transition:color .15s}
+.table-wrap th.th-sort:hover{color:var(--accent)}
+.table-wrap th.th-sort.is-sorted{color:var(--accent)}
+.sort-ind{display:inline-flex;align-items:center;gap:3px;margin-left:5px;vertical-align:middle}
+.sort-arrow{font-size:11px;line-height:1}
+.sort-rank{background:var(--accent);color:#0a0e17;border-radius:999px;min-width:13px;height:13px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;padding:0 3px;line-height:1}
+.sort-hint{margin-left:5px;font-size:10px;opacity:0;transition:opacity .15s}
+.table-wrap th.th-sort:hover .sort-hint{opacity:.55}
+
+/* ── Barre de tri ── */
+.sort-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:12px;min-height:24px}
+.sort-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:11.5px;font-weight:600}
+.sort-chip-rank{color:var(--accent);font-weight:800}
+.sort-reset{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11.5px;font-family:inherit;text-decoration:underline;padding:2px 4px}
+.sort-reset:hover{color:var(--accent)}
+
 /* ── Badges statut ── */
 .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.2px}
 .badge-afaire{background:rgba(251,191,36,.14);color:var(--warn)}
@@ -313,6 +330,9 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
         </div>
       </div>
 
+      <!-- Résumé du tri actif -->
+      <div class="sort-bar" id="sort-bar"></div>
+
       <!-- Table -->
       <div class="table-wrap" id="table-wrap"></div>
     </div>
@@ -457,11 +477,41 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 // ── Rôle : lecture seule pour le rôle « commercial » ─────────────────
 const IS_READONLY = __IS_BAT_READONLY__;
 
+// ── Tri : définition des colonnes ──────────────────────────────────
+// L'ordre de COLS doit rester strictement identique à l'ordre des <td>
+// générés dans renderTable(). Une colonne sans `key` n'est pas triable.
+const STATUT_RANK = {a_faire:0, en_attente:1, valide:2};   // priorité métier
+const FICHE_RANK  = {a_faire:0, fait:1};
+
+const COLS = [
+  {key:'description',    label:'Description',      type:'text', dir:'asc'},
+  {key:'numero_article', label:'N° Article',       type:'text', dir:'asc'},
+  {key:'statut',         label:'Statut',           type:'rank', dir:'asc', rank:STATUT_RANK, fallback:'a_faire',
+   hint:"Trier par statut (À faire → En attente → Validé)"},
+  {key:'fiche_technique',label:'Fiche technique',  type:'rank', dir:'asc', rank:FICHE_RANK,  fallback:'a_faire',
+   hint:"Trier par fiche technique (À faire → Fait)"},
+  {key:'delai_client',   label:'Délai client',     type:'date', dir:'asc',
+   hint:"Trier par délai client (le plus proche d'abord)"},
+  {key:'notes',          label:'Notes',            type:'text', dir:'asc'},
+  {key:'updated_at',     label:'Mise à jour',      type:'date', dir:'desc',
+   hint:"Trier par date de mise à jour (la plus récente d'abord)"},
+  {key:null,             label:'Actions'},
+];
+const COL_BY_KEY = {};
+COLS.forEach(c=>{if(c.key) COL_BY_KEY[c.key]=c;});
+
+// Tri par défaut : les « à faire » et « en attente » en tête, les « validé »
+// en fond de liste, et à statut égal la mise à jour la plus récente d'abord.
+const DEFAULT_SORT = [{key:'statut',dir:'asc'},{key:'updated_at',dir:'desc'}];
+const MAX_SORT = 2;          // nombre de niveaux de tri empilables
+const SORT_LS_KEY = 'mybat_sort';
+
 // ── État central ───────────────────────────────────────────────────
 const S = {
   entries: [],
   statut: 'all',
   search: '',
+  sort: DEFAULT_SORT.map(s=>({...s})),
   me: null,
   uploadBatId: null,
   uploadFile: null,
@@ -553,6 +603,89 @@ function filteredEntries(){
   return list;
 }
 
+// ── Tri multi-niveaux ─────────────────────────────────────────────
+// Valeur comparable d'une entrée pour une colonne. `null` = valeur vide :
+// ces lignes sont toujours renvoyées en fin de liste, quel que soit le sens.
+function sortValue(e, col){
+  if(col.type==='rank'){
+    const r=col.rank[e[col.key]||col.fallback];
+    return r===undefined?99:r;
+  }
+  const v=e[col.key];
+  if(v===null||v===undefined||v==='') return null;
+  return col.type==='date'?String(v):String(v).trim();
+}
+
+function cmpCol(a, b, s){
+  const col=COL_BY_KEY[s.key];
+  if(!col) return 0;
+  const va=sortValue(a,col), vb=sortValue(b,col);
+  if(va===null&&vb===null) return 0;
+  if(va===null) return 1;                      // vides toujours en bas
+  if(vb===null) return -1;
+  let r;
+  if(col.type==='text') r=va.localeCompare(vb,'fr',{numeric:true,sensitivity:'base'});
+  else r=va<vb?-1:(va>vb?1:0);
+  return s.dir==='desc'?-r:r;
+}
+
+function sortedEntries(list){
+  if(!S.sort.length) return list;
+  // Décoration index → tri stable garanti (les ex æquo gardent l'ordre API).
+  return list
+    .map((e,i)=>[e,i])
+    .sort((x,y)=>{
+      for(const s of S.sort){const r=cmpCol(x[0],y[0],s); if(r) return r;}
+      return x[1]-y[1];
+    })
+    .map(x=>x[0]);
+}
+
+// Clic sur un en-tête : la colonne cliquée devient le tri principal et
+// l'ancien principal glisse en secondaire (2 niveaux max). Recliquer la
+// colonne principale inverse le sens, puis la retire du tri.
+function onHeaderSort(key){
+  const col=COL_BY_KEY[key];
+  if(!col) return;
+  const cur=S.sort[0];
+  if(cur&&cur.key===key){
+    if(cur.dir===col.dir) S.sort[0]={key,dir:cur.dir==='asc'?'desc':'asc'};
+    else S.sort=S.sort.slice(1);
+  } else {
+    const prev=S.sort.find(s=>s.key===key);   // on conserve son sens si déjà utilisée
+    S.sort=[{key,dir:prev?prev.dir:col.dir}]
+      .concat(S.sort.filter(s=>s.key!==key))
+      .slice(0,MAX_SORT);
+  }
+  saveSort();
+  render();
+}
+
+function resetSort(){
+  S.sort=DEFAULT_SORT.map(s=>({...s}));
+  saveSort();
+  render();
+}
+
+function isDefaultSort(){
+  return S.sort.length===DEFAULT_SORT.length
+    && S.sort.every((s,i)=>s.key===DEFAULT_SORT[i].key&&s.dir===DEFAULT_SORT[i].dir);
+}
+
+function saveSort(){try{localStorage.setItem(SORT_LS_KEY,JSON.stringify(S.sort));}catch(e){}}
+function loadSort(){
+  try{
+    const raw=localStorage.getItem(SORT_LS_KEY);
+    if(!raw) return DEFAULT_SORT.map(s=>({...s}));
+    const v=JSON.parse(raw);
+    if(!Array.isArray(v)) return DEFAULT_SORT.map(s=>({...s}));
+    // On revalide : une colonne supprimée du code ne doit pas casser la page.
+    return v.filter(s=>s&&COL_BY_KEY[s.key]&&(s.dir==='asc'||s.dir==='desc'))
+            .map(s=>({key:s.key,dir:s.dir}))
+            .slice(0,MAX_SORT);
+  }catch(e){return DEFAULT_SORT.map(s=>({...s}));}
+}
+
 // ── Formatage date ─────────────────────────────────────────────────
 function fmtDate(s){
   if(!s) return '—';
@@ -580,13 +713,45 @@ function renderTabs(){
     </button>`).join('');
 }
 
+function renderSortBar(){
+  const bar=document.getElementById('sort-bar');
+  if(!bar) return;
+  if(!S.sort.length){
+    bar.innerHTML=`<span>Aucun tri actif — ordre d'origine.</span>
+      <button type="button" class="sort-reset" onclick="resetSort()">Rétablir le tri par défaut</button>`;
+    return;
+  }
+  const chips=S.sort.map((s,i)=>{
+    const col=COL_BY_KEY[s.key];
+    return `<span class="sort-chip"><span class="sort-chip-rank">${i+1}</span>${escHtml(col.label)} ${s.dir==='asc'?'↑':'↓'}</span>`;
+  }).join('<span>puis</span>');
+  bar.innerHTML=`<span>Tri :</span>${chips}`
+    +(isDefaultSort()?'':`<button type="button" class="sort-reset" onclick="resetSort()">Réinitialiser</button>`);
+}
+
+function renderHead(){
+  const ths=COLS.map(c=>{
+    if(!c.key) return `<th>${escHtml(c.label)}</th>`;
+    const idx=S.sort.findIndex(s=>s.key===c.key);
+    const s=idx>=0?S.sort[idx]:null;
+    const rank=(s&&S.sort.length>1)?`<span class="sort-rank">${idx+1}</span>`:'';
+    const ind=s
+      ?`<span class="sort-ind"><span class="sort-arrow">${s.dir==='asc'?'↑':'↓'}</span>${rank}</span>`
+      :`<span class="sort-hint">↕</span>`;
+    const aria=s?(s.dir==='asc'?'ascending':'descending'):'none';
+    const title=c.hint||`Trier par ${c.label.toLowerCase()}`;
+    return `<th class="th-sort${s?' is-sorted':''}" aria-sort="${aria}" title="${escHtml(title)}" onclick="onHeaderSort('${c.key}')">${escHtml(c.label)}${ind}</th>`;
+  }).join('');
+  return `<thead><tr>${ths}</tr></thead>`;
+}
+
 function renderTable(){
   const ae=document.activeElement;
   const focusId=ae?.id;
   const cs=ae?.selectionStart;
   const ce=ae?.selectionEnd;
 
-  const list=filteredEntries();
+  const list=sortedEntries(filteredEntries());
   const wrap=document.getElementById('table-wrap');
 
   if(!list.length){
@@ -639,9 +804,7 @@ function renderTable(){
       </tr>`;
     }).join('');
     wrap.innerHTML=`<table>
-      <thead><tr>
-        <th>Description</th><th>N° Article</th><th>Statut</th><th>Fiche technique</th><th>Délai client</th><th>Notes</th><th>Mise à jour</th><th>Actions</th>
-      </tr></thead>
+      ${renderHead()}
       <tbody>${rows}</tbody>
     </table>`;
   }
@@ -654,6 +817,7 @@ function renderTable(){
 
 function render(){
   renderTabs();
+  renderSortBar();
   renderTable();
 }
 
@@ -1027,6 +1191,8 @@ async function submitPdfDelete(){
     _hide('btn-new-bat');
     _hide('btn-pdf-add');
   }
+
+  S.sort=loadSort();
 
   loadMe();
   loadEntries();
