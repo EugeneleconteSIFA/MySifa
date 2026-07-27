@@ -291,6 +291,17 @@ def enrich_reponse_pricing(
     else:
         out["prix_vente_final"] = None
 
+    # ── Marge brute vs dernier prix de vente (fiche produit) ────────────────
+    # dernier_prix_vente est saisi PAR UNITÉ DE VENTE (même base que le prix
+    # d'achat conditionné) → comparaison directe. Taux de marge = (PV−PA)/PA.
+    out["has_produit"] = bool(ligne_ctx.get("has_produit"))
+    dpv = _float_or_none(ligne_ctx.get("dernier_prix_vente"))
+    out["dernier_prix_vente"] = dpv
+    if dpv is not None and prix_achat_conditionne is not None and prix_achat_conditionne > 0:
+        out["marge_brute_pct"] = (dpv - prix_achat_conditionne) / prix_achat_conditionne * 100.0
+    else:
+        out["marge_brute_pct"] = None
+
     return out
 
 
@@ -307,6 +318,7 @@ def ligne_context_from_produit(
     etiquettes_par_bobine = None
     unite_vente_type = "mille"
     unite_vente_qte = 1.0
+    dernier_prix_vente = None
 
     if produit:
         client_nom = produit.get("client_nom")
@@ -316,6 +328,7 @@ def ligne_context_from_produit(
         uv = fiche.get("unite_vente") or {}
         unite_vente_type = _norm_unite_vente(uv.get("type"))
         unite_vente_qte = _float_or_none(uv.get("quantite")) or 1.0
+        dernier_prix_vente = _float_or_none(fiche.get("dernier_prix_vente"))
 
         def mp_label(mid: Any) -> str | None:
             if mid is None:
@@ -354,5 +367,7 @@ def ligne_context_from_produit(
         "cartons_palette": cartons_palette,
         "unite_vente_type": unite_vente_type,
         "unite_vente_qte": unite_vente_qte,
+        "dernier_prix_vente": dernier_prix_vente,
+        "has_produit": produit is not None,
         "quantite_etiquettes": qte,
     }

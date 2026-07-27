@@ -190,6 +190,11 @@ label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bot
 .comp-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 .comp-scroll{scrollbar-width:thin;scrollbar-color:var(--muted) var(--bg)}
 .comp-condi-label{font-size:11px;font-weight:600;color:var(--text2);white-space:nowrap}
+/* Colonnes Frontal / Adhésif / Fournisseur : étroites, texte sur plusieurs lignes */
+.comp-table th.comp-col-fa,.comp-table td.comp-col-fa{width:72px;min-width:58px;max-width:82px;white-space:normal;word-break:break-word;line-height:1.25}
+.comp-table th.comp-col-fourn,.comp-table td.comp-col-fourn{width:92px;min-width:74px;max-width:104px;white-space:normal;word-break:break-word;line-height:1.25}
+/* Colonne Marge brute : étroite, valeur + dernier prix de vente empilés */
+.comp-table th.comp-col-margeb,.comp-table td.comp-col-margeb{width:80px;min-width:72px;max-width:86px;white-space:normal;word-break:break-word}
 .ao-hdr-btn{background:var(--card);border:1px solid var(--border);color:var(--text);transition:background .15s,border-color .15s}
 .ao-hdr-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .prod-ref-link,.ao-ligne-ref-link{color:var(--accent);text-decoration:none;font-weight:600;border-bottom:1px dashed transparent;transition:border-color .15s}
@@ -1814,8 +1819,8 @@ function renderList() {
     let titreHtml = '';
     const lignes = a.lignes_summary || [];
     if (lignes.length) {
-      titreHtml = '<div style="font-size:12px;line-height:1.4">'+
-        lignes.map(l => '<div>'+escHtml(l.ref||'—')+(l.qte != null ? ' <span style="color:var(--muted)">— '+formatInt(l.qte)+'</span>' : '')+'</div>').join('')+
+      titreHtml = '<div style="font-size:12px;line-height:1.5">'+
+        lignes.map(l => '<div>'+(l.ref ? '<a href="#" class="ao-prod-ref-link" data-ref="'+escAttr(l.ref)+'" style="color:var(--accent);text-decoration:none" title="Ouvrir la fiche produit">'+escHtml(l.ref)+'</a>' : '—')+(l.qte != null ? ' <span style="color:var(--muted)">— '+formatInt(l.qte)+'</span>' : '')+'</div>').join('')+
         '</div>';
     } else {
       titreHtml = '<span style="color:var(--muted)">'+escHtml(a.titre||'—')+'</span>';
@@ -3068,13 +3073,14 @@ function renderComparaison() {
     if (r.prix_au_mille != null && (bestMille == null || r.prix_au_mille < bestMille)) bestMille = r.prix_au_mille;
   });
   const head = '<tr>'+
-    '<th>Réf. produit</th><th>Frontal</th><th>Adhésif</th>'+
-    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Qté étiquettes</th><th>Fournisseur</th>'+
+    '<th>Réf. produit</th><th class="comp-col-fa">Frontal</th><th class="comp-col-fa">Adhésif</th>'+
+    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Qté étiquettes</th><th class="comp-col-fourn">Fournisseur</th>'+
     '<th>Quotation</th><th>Devise</th><th class="comp-col-uquot">Unité</th>'+
     '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th><th class="comp-th-coef">Coef</th>'+
     '<th>Devise devis</th><th>Prix d\'achat</th>'+
-    '<th>Condi.</th><th>Prix achat condi.</th><th class="comp-th-marge">Marge</th><th>Prix de vente</th></tr>';
-  const NB_COLS = 19;
+    '<th>Condi.</th><th>Prix achat condi.</th><th class="comp-th-marge">Marge</th><th>Prix de vente</th>'+
+    '<th class="comp-col-margeb">Marge brute</th></tr>';
+  const NB_COLS = 20;
   // Libellé lisible de l'unité de vente (définie dans la fiche produit).
   const UV_LABELS = {mille:'Au mille', etiquette:'Étiquette', bobine:'Bobine', carton:'Carton', palette:'Palette'};
   function condiLabel(r) {
@@ -3113,13 +3119,30 @@ function renderComparaison() {
     const prixVenteCell = (r.prix_vente_final != null)
       ? '<td class="'+cls.trim()+'" style="font-weight:700">'+formatMoney(r.prix_vente_final, devD)+'</td>'
       : '<td style="color:var(--muted)">—</td>';
+    // Marge brute (%) = (dernier prix de vente − prix d'achat condi.) / prix d'achat condi.
+    // Colonne étroite : texte sur plusieurs lignes. Dernier prix de vente en sous-titre.
+    let margeBruteCell;
+    if (!r.has_produit) {
+      margeBruteCell = '<td class="comp-col-margeb"><span style="font-size:10px;color:var(--warn,#a16207);line-height:1.25;display:inline-block">Produit non existant</span></td>';
+    } else if (r.dernier_prix_vente == null) {
+      margeBruteCell = '<td class="comp-col-margeb"><span style="font-size:10px;color:var(--muted);line-height:1.25;display:inline-block">Dernier prix de vente à renseigner</span></td>';
+    } else if (r.marge_brute_pct == null) {
+      margeBruteCell = '<td class="comp-col-margeb"><span style="color:var(--muted)">—</span><div style="font-size:10px;color:var(--accent);line-height:1.2;margin-top:2px">PV '+formatMoney(r.dernier_prix_vente, devD)+'</div></td>';
+    } else {
+      const pct = r.marge_brute_pct;
+      const col = pct >= 0 ? 'var(--success,#16a34a)' : 'var(--danger)';
+      margeBruteCell = '<td class="comp-col-margeb">'+
+        '<div style="font-size:14px;font-weight:700;color:'+col+';line-height:1.1">'+(pct>=0?'+':'')+pct.toLocaleString('fr-FR',{maximumFractionDigits:1})+'&nbsp;%</div>'+
+        '<div style="font-size:10px;color:var(--accent);margin-top:2px;line-height:1.2">PV '+formatMoney(r.dernier_prix_vente, devD)+'</div>'+
+        '</td>';
+    }
     body += '<tr data-reponse-id="'+escAttr(rid||'')+'">'+
       '<td class="ref">'+escHtml(r.ref_produit)+'</td>'+
-      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
-      '<td class="txt-left" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
+      '<td class="txt-left comp-col-fa" style="font-size:11px;color:var(--text2)">'+escHtml(r.frontal||'—')+'</td>'+
+      '<td class="txt-left comp-col-fa" style="font-size:11px;color:var(--text2)">'+escHtml(r.adhesif||'—')+'</td>'+
       '<td class="comp-col-etiqbob">'+formatInt(r.etiquettes_par_bobine)+'</td>'+
       '<td>'+formatInt(r.quantite_etiquettes)+'</td>'+
-      '<td class="txt-left">'+escHtml(r.nom_fournisseur||'')+'</td>'+
+      '<td class="txt-left comp-col-fourn">'+escHtml(r.nom_fournisseur||'')+'</td>'+
       quotationCell+
       '<td>'+escHtml(devF)+'</td>'+
       '<td class="comp-col-uquot">'+'<select class="inp-unite-quot" data-rep="'+escAttr(rid||'')+'"'+dis+'>'+'<option value="mille"'+(r.unite_quotation==='mille'?' selected':'')+'>Mille</option>'+'<option value="bobine"'+(r.unite_quotation==='bobine'?' selected':'')+'>Bobine</option>'+'</select>'+((r.unite_quotation_original && r.unite_quotation !== r.unite_quotation_original) ? ' <span style="font-size:9px;padding:1px 4px;background:var(--warning-bg,rgba(234,179,8,.15));color:var(--warning,#a16207);border-radius:4px;font-weight:600">m</span>' : '')+'</td>'+
@@ -3136,6 +3159,7 @@ function renderComparaison() {
       condiPrixCell+
       '<td class="comp-td-marge"><input type="number" step="0.01" min="0.01" class="inp-marge" data-rep="'+escAttr(rid||'')+'" value="'+escAttr(r.marge != null ? r.marge : 1)+'"'+dis+'></td>'+
       prixVenteCell+
+      margeBruteCell+
       '</tr>';
     // Détail par série sous la ligne — ligne d'info pleine largeur (robuste au
     // nombre de colonnes) : libellé + qté + prix calculé + prix de vente/mille.
@@ -3199,6 +3223,11 @@ function bindListEvents() {
     render();
   }));
   document.querySelectorAll('.btn-view').forEach(b => b.addEventListener('click', () => openDetail(parseInt(b.dataset.id,10))));
+  // Réf produit cliquable dans le titre → ouvre la fiche produit
+  document.querySelectorAll('.ao-prod-ref-link').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    openProduitByRef(a.dataset.ref);
+  }));
   document.querySelectorAll('.btn-restore-ao').forEach(b => b.addEventListener('click', async () => {
     const id = parseInt(b.dataset.id, 10);
     try {
