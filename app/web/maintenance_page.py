@@ -619,6 +619,8 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-frame.is-overdue .maint-frame-head{border-bottom-color:rgba(248,113,113,.25)}
 .maint-frame.is-overdue .maint-frame-title{color:var(--danger,#f87171)}
 .maint-frame.is-overdue-critical{border-color:var(--danger,#dc2626);box-shadow:0 0 0 2px var(--danger,#dc2626),0 6px 16px rgba(220,38,38,.30);transform:scale(1.01);transform-origin:top center}
+/* v2.4.23 : badge "Excès metrage" — informatif, pas une alerte */
+.maint-wp-badge.maint-wp-badge-info{background:rgba(148,163,184,.15);color:var(--text2);border:1px solid var(--border)}
 /* ── Bande de statut à gauche de chaque carte (v2.4.6) ─────────────── */
 /* Une bande verticale de 4px teintée par statut : rouge (retard), orange (dû bientôt),
    vert (à jour), gris (jamais saisi ou intervalle inconnu). */
@@ -6060,19 +6062,22 @@ function _renderWearPartsGroup(machine, statusFilter){
     const daysSince = _daysSinceFromIso(lastDate);
     // Pour la compat avec le bloc d'affichage plus bas (qui utilise wpItem.last_date)
     if(wpItem){ wpItem.last_date = lastDate; }
-    // Mise en exergue : déclenchée par DÉPASSEMENT DE TEMPS ou DÉPASSEMENT DE
-    // MÉTRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
-    // le dépassement, is-overdue-critical quand on est à >200%.
+    // v2.4.23 : mise en exergue déclenchée UNIQUEMENT par le dépassement de
+    // temps. Le métrage reste informatif (visible via anneau + valeur) mais
+    // n'est plus considéré comme un critère de retard — cf. règle produit :
+    // "le facteur retard est le temps, le métrage est un supplément visuel".
     const refDays   = _parseFrequenceDays(refTemps);
     const refMetres = _parseMetrageRef(refMetrage);
     const timeOver     = (refDays   != null && refDays   > 0 && daysSince    != null && daysSince    > refDays);
-    const timeCritical = (timeOver && daysSince    > refDays   * 2);
+    const timeCritical = (timeOver && daysSince > refDays * 2);
+    // metresOver garde son sens local (utilisé pour afficher un badge d'excès
+    // à côté de la valeur Parcouru), mais ne déclenche plus la bordure rouge.
     const metresOver     = (refMetres != null && refMetres > 0 && metrageSince != null && metrageSince > refMetres);
     const metresCritical = (metresOver && metrageSince > refMetres * 2);
     let frameClsExtra = '';
-    if(timeOver || metresOver){
+    if(timeOver){
       frameClsExtra = ' is-overdue';
-      if(timeCritical || metresCritical) frameClsExtra += ' is-overdue-critical';
+      if(timeCritical) frameClsExtra += ' is-overdue-critical';
     }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
@@ -6159,10 +6164,12 @@ function _renderWearPartsGroup(machine, statusFilter){
         } else {
           mVal = '<span class="val">' + escHtml(_fmtMetres(metrageSince)) + '</span>';
         }
+        // v2.4.23 : badge metrage renomme "Excès" (au lieu de "Retard") pour
+        // eviter la connotation alarme — cf. règle produit metrage = supplement.
         let metresBadge = '';
         if(metresOver){
           const overM = metrageSince - refMetres;
-          metresBadge = '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
+          metresBadge = '<span class="maint-wp-badge maint-wp-badge-info">Excès +' + escHtml(_fmtMetres(overM)) + '</span>';
         }
         // Ratios pour les anneaux (null si pas de référence ou pas de donnée)
         const ratios = {
