@@ -12,7 +12,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
-from config import classify_operation
+from config import classify_operation, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
 from app.routers.stock import (
@@ -856,10 +856,44 @@ def _machine_id_for_ref(conn, ref: Optional[str]) -> Optional[int]:
     return int(r["machine_id"]) if r and r["machine_id"] is not None else None
 
 
-def _hydrate_dossier_row(row) -> dict:
+def _unite_vente_produit(conn, ref_produit) -> tuple:
+    """Unite de vente MyStock d'une reference produit.
+
+    Retourne (unite, connu). `connu=False` quand la reference n'existe pas
+    encore dans `produits` : l'entree Z1 la creera avec l'unite par defaut.
+    """
+    ref = (ref_produit or "").strip().upper()
+    if not ref or conn is None:
+        return None, False
+    try:
+        row = conn.execute(
+            "SELECT unite FROM produits WHERE UPPER(TRIM(reference)) = ? LIMIT 1",
+            (ref,),
+        ).fetchone()
+    except Exception:
+        return None, False
+    if not row:
+        return None, False
+    return ((row["unite"] or "").strip() or STOCK_UNITE_VENTE_DEFAUT), True
+
+
+def _with_unite_vente(d: dict, conn=None) -> dict:
+    """Ajoute l'unite de vente au payload dossier (modale Entree Z1 MyStock).
+
+    L'operateur doit savoir s'il saisit des bobines, des cartons ou des
+    etiquettes : sans cette info la quantite tapee est ambigue.
+    """
+    unite, connu = _unite_vente_produit(conn, d.get("ref_produit"))
+    d["unite_vente"] = unite
+    d["produit_connu"] = connu
+    d["unite_vente_defaut"] = STOCK_UNITE_VENTE_DEFAUT
+    return d
+
+
+def _hydrate_dossier_row(row, conn=None) -> dict:
     d = dict(row)
     d["fictif"] = False
-    return d
+    return _with_unite_vente(d, conn)
 
 
 def _fictif_dossier_payload(ref: str, machine_nom: Optional[str] = None) -> dict:
@@ -872,6 +906,9 @@ def _fictif_dossier_payload(ref: str, machine_nom: Optional[str] = None) -> dict
         "machine_nom": machine_nom,
         "statut_reel": None,
         "fictif": True,
+        "unite_vente": None,
+        "produit_connu": False,
+        "unite_vente_defaut": STOCK_UNITE_VENTE_DEFAUT,
     }
 
 
@@ -955,7 +992,7 @@ def get_dossier_en_cours(request: Request):
                 (active_ref,),
             ).fetchone()
             if row:
-                dossier = _hydrate_dossier_row(row)
+                dossier = _hydrate_dossier_row(row, conn)
             else:
                 dossier = _fictif_dossier_payload(
                     active_ref,
@@ -985,7 +1022,7 @@ def get_dossier_en_cours(request: Request):
                    LIMIT 2""",
                 (mid, excl),
             ).fetchall()
-            precedents = [_hydrate_dossier_row(r) for r in prev_rows]
+            precedents = [_hydrate_dossier_row(r, conn) for r in prev_rows]
 
         return {
             "dossier": dossier,
@@ -1036,7 +1073,7 @@ def search_dossiers(request: Request, q: str = "", limit: int = 20):
                LIMIT ?""",
             (pat, pat, pat, pat, limit),
         ).fetchall()
-        return {"dossiers": [_hydrate_dossier_row(r) for r in rows]}
+        return {"dossiers": [_hydrate_dossier_row(r, conn) for r in rows]}
 
 
 @router.get("/api/fabrication/dossier/{no_dossier}/stats")

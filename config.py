@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.4.5"
+APP_VERSION = "2.4.17"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -224,6 +224,11 @@ STOCK_EMPLACEMENT_AU_SOL = "Z0"
 STOCK_EMPLACEMENT_AU_SOL_LABEL = "Au sol - à expédier"
 STOCK_EMPLACEMENT_SORTIE_PROD = "Z1"
 STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
+
+# MyStock — unité de vente par défaut d'une référence produit fini auto-créée
+# à l'entrée Z1 (aucune fiche produit préexistante). SIFA vend à l'étiquette ;
+# une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
+STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL

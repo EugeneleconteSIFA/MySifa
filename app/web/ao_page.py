@@ -2781,24 +2781,36 @@ async function openAddFournisseurModalV2() {
   await _reloadFournisseursCache(state);
 
   function render() {
-    // Set des (fournisseur_id + contact_id) déjà présents dans l'AO
-    // pour ne pas les auto-sélectionner + les afficher grisés / cochés désactivés.
+    // "Déjà dans l'AO" : on grise (et on n'auto-sélectionne pas) les contacts
+    // déjà invités. Match sur (fournisseur_id:contact_id) EN PREMIER, mais
+    // beaucoup d'entrées AO n'ont pas de fournisseur_contact_id renseigné
+    // (fournisseurs ajoutés en saisie manuelle / carnet, ou avant le lien
+    // contact) → repli sur l'EMAIL, clé métier fiable (1 contact = 1 email
+    // d'invitation). Sans ce repli, des contacts pourtant présents dans l'AO
+    // n'étaient pas grisés (ex. Delia, Cynthia à côté d'Orin Wang).
+    const aoFournis = (S.detail && S.detail.fournisseurs) || [];
     const alreadyInAo = new Set(
-      (S.detail && S.detail.fournisseurs || []).map(af =>
-        (af.fournisseur_id || '') + ':' + (af.fournisseur_contact_id || '')
-      ).filter(k => k !== ':')
+      aoFournis.map(af => (af.fournisseur_id || '') + ':' + (af.fournisseur_contact_id || ''))
+               .filter(k => k !== ':')
     );
+    const alreadyEmails = new Set(
+      aoFournis.map(af => (af.email_contact || '').trim().toLowerCase()).filter(Boolean)
+    );
+    function contactInAo(f, c) {
+      if (alreadyInAo.has(f.id + ':' + c.id)) return true;
+      return (c.emails || []).some(e => alreadyEmails.has((e || '').trim().toLowerCase()));
+    }
     if (!state._autoP && !state.selectedContacts.size) {
       state._autoP = true;
       state.fournisseurs.forEach(f => (f.contacts || []).forEach(c => {
         const key = f.id + ':' + c.id;
         // Auto-sélectionne le contact principal SAUF s'il est déjà dans l'AO
-        if (c.is_principal && !alreadyInAo.has(key)) {
+        if (c.is_principal && !contactInAo(f, c)) {
           state.selectedContacts.add(key);
         }
       }));
     }
-    state._alreadyInAo = alreadyInAo;
+    state._contactInAo = contactInAo;
     let filtered = state.search
       ? state.fournisseurs.filter(f => {
           const q = state.search.toLowerCase();
@@ -2848,7 +2860,7 @@ async function openAddFournisseurModalV2() {
           } else {
             contacts.forEach(c => {
               const key = f.id + ':' + c.id;
-              const alreadyIn = state._alreadyInAo && state._alreadyInAo.has(key);
+              const alreadyIn = state._contactInAo ? state._contactInAo(f, c) : false;
               const emails = (c.emails || []).join(', ');
               const principal = c.is_principal ? '<span style="font-size:10px;background:rgba(34,211,238,.15);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px">★</span>' : '';
               const badgeIn = alreadyIn ? ' <span style="font-size:10px;background:var(--accent-bg);color:var(--accent);padding:1px 6px;border-radius:6px;margin-left:4px;font-weight:600">déjà dans l\'AO</span>' : '';
