@@ -636,6 +636,10 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 /* ── Sous-toolbar Statut + Groupement (v2.4.6) ─────────────────────── */
 .maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
 .maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+/* v2.4.19 : toolbar unifiee Machine + Categorie + Statut sur une ligne */
+.maint-machine-toolbar{display:flex;align-items:center;gap:12px;row-gap:10px;margin:8px 0 20px 0;flex-wrap:wrap}
+.maint-toolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-machine-tabs,.maint-cat-tabs{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip{border:none;background:transparent;color:var(--text2);padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .maint-chip:hover{background:var(--bg);color:var(--text)}
@@ -1608,25 +1612,21 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
              Détermine quelles cartes "code maintenance périodique" s'affichent
              (Cohésio 1 ou Cohésio 2). Les cartes sont vides pour l'instant et
              seront alimentées par les saisies opérations/contrôles. -->
-        <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
-          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+        <!-- Toolbar unifiee (v2.4.19) : Machine + Categorie + Statut sur une seule
+             ligne (wrap responsive). Labels harmonises, toggles avec style
+             coherent (chips), pastilles compteurs sur machine/categorie. -->
+        <div class="maint-machine-toolbar">
+          <label class="maint-toolbar-label">Machine</label>
+          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span></button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span></button>
           </div>
-          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Catégorie</label>
-          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
+          <label class="maint-toolbar-label">Catégorie</label>
+          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span></button>
           </div>
-          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
-        </div>
-
-        <!-- Sous-toolbar (v2.4.6) : filtre par statut + choix du regroupement.
-             Les compteurs à droite de chaque chip statut affichent le nombre
-             d'opérations pour la machine + catégorie sélectionnées. -->
-        <div class="maint-subtoolbar">
-          <span class="maint-subtoolbar-label">Statut</span>
+          <label class="maint-toolbar-label">Statut</label>
           <div class="maint-chip-group" id="maint-status-chips" role="tablist">
             <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="overdue" onclick="setMaintStatusFilter('overdue')">En retard<span class="maint-chip-count" data-status-count="overdue">0</span></button>
