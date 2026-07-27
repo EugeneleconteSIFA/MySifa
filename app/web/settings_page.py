@@ -3902,12 +3902,33 @@ let fourFilterCat = '';
 // Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
 let _cfCatsGetSelected = () => [];
 
+// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down
+// ou pas encore déployée. Doit rester synchro avec FOURNISSEUR_CATEGORIES dans
+// app/routers/settings.py.
+const _FOURNISSEUR_CATS_FALLBACK = [
+  {code:'mandrin', label:'Mandrin'}, {code:'palette', label:'Palette'},
+  {code:'adhesif', label:'Adhésif'}, {code:'carton', label:'Carton'},
+  {code:'frontal', label:'Frontal'}, {code:'glassine', label:'Glassine'},
+  {code:'complexe', label:'Complexe'}, {code:'autre', label:'Autre'},
+  {code:'negoce', label:'Négoce'}, {code:'sous_traitant', label:'Sous-traitant'},
+];
+
 async function _loadFournisseurCategories(){
-  if (window.__FOURNISSEUR_CATS__) return window.__FOURNISSEUR_CATS__;
+  // Skip UNIQUEMENT si déjà chargé ET non-vide — sinon retente à chaque appel.
+  if (window.__FOURNISSEUR_CATS__ && window.__FOURNISSEUR_CATS__.length) {
+    return window.__FOURNISSEUR_CATS__;
+  }
   try {
     const list = await api('/api/fournisseurs/categories');
-    window.__FOURNISSEUR_CATS__ = Array.isArray(list) ? list : [];
-  } catch(e){ window.__FOURNISSEUR_CATS__ = []; }
+    if (Array.isArray(list) && list.length) {
+      window.__FOURNISSEUR_CATS__ = list;
+      return window.__FOURNISSEUR_CATS__;
+    }
+    console.warn('[fournisseurs] /categories a renvoyé vide, fallback hardcodé utilisé');
+  } catch(e) {
+    console.error('[fournisseurs] /categories a échoué :', e && e.message ? e.message : e);
+  }
+  window.__FOURNISSEUR_CATS__ = _FOURNISSEUR_CATS_FALLBACK.slice();
   return window.__FOURNISSEUR_CATS__;
 }
 
@@ -4700,9 +4721,14 @@ function openFournisseurDrawer(id){
   drawer.classList.add('open');
 }
 
-function _fdKV(label, value){
+// _fdKV(label, value, {html:true}) : pass html:true quand value contient déjà
+// du HTML pré-formaté (badges, code, spans). Par défaut la valeur string est
+// escapée pour éviter les XSS.
+function _fdKV(label, value, opts){
   if (value === null || value === undefined || value === '') return '';
-  return '<dt>' + esc(label) + '</dt><dd>' + (typeof value === 'string' ? esc(value) : value) + '</dd>';
+  const useHtml = opts && opts.html;
+  const rendered = (typeof value === 'string' && !useHtml) ? esc(value) : value;
+  return '<dt>' + esc(label) + '</dt><dd>' + rendered + '</dd>';
 }
 
 async function _fourDrawerRenderTab(tab){
@@ -4723,7 +4749,7 @@ async function _fourDrawerRenderTab(tab){
       '<h4>Identité</h4>' +
       '<dl class="kv">' +
         _fdKV('Nom', f.nom) +
-        _fdKV('Statut', f.actif ? '<span class="four-pill fsc">Actif</span>' : '<span class="four-pill nofsc">Inactif</span>') +
+        _fdKV('Statut', (f.actif == null || f.actif) ? '<span class="four-pill fsc">Actif</span>' : '<span class="four-pill nofsc">Inactif</span>', {html:true}) +
         _fdKV('Groupe', f.groupe) +
         _fdKV('Branche', f.branche) +
         _fdKV('SIRET', f.siret) +
@@ -4765,9 +4791,9 @@ async function _fourDrawerRenderTab(tab){
       '<div style="margin-bottom:14px">' + _fscBadgeHTML(f) + '</div>' +
       (hasFsc
         ? '<dl class="kv">' +
-            _fdKV('Licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span style="color:var(--muted)">— manquant</span>') +
-            _fdKV('Certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span style="color:var(--muted)">— manquant</span>') +
-            _fdKV('Expiration', f.fsc_date_expiration || '<span style="color:var(--muted)">— non renseignée</span>') +
+            _fdKV('Licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span style="color:var(--muted)">— manquant</span>', {html:true}) +
+            _fdKV('Certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span style="color:var(--muted)">— manquant</span>', {html:true}) +
+            _fdKV('Expiration', f.fsc_date_expiration ? esc(f.fsc_date_expiration) : '<span style="color:var(--muted)">— non renseignée</span>', {html:true}) +
           '</dl>'
         : '<div class="four-drawer-empty">Ce fournisseur n\'est pas certifié FSC.</div>');
     return;
@@ -4846,8 +4872,8 @@ async function _fourDrawerRenderTab(tab){
       '<h4>Guide traçabilité</h4>' +
       (f.traca_photo_url ? '<div style="margin-bottom:14px"><img src="' + esc(f.traca_photo_url) + '" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--border)"></div>' : '') +
       '<dl class="kv">' +
-        _fdKV('Explication', f.traca_explication || '<span style="color:var(--muted)">—</span>') +
-        _fdKV('Exemple de code', f.traca_exemple_code ? '<code>' + esc(f.traca_exemple_code) + '</code>' : '<span style="color:var(--muted)">—</span>') +
+        _fdKV('Explication', f.traca_explication ? esc(f.traca_explication).replace(/\n/g, '<br>') : '<span style="color:var(--muted)">—</span>', {html:true}) +
+        _fdKV('Exemple de code', f.traca_exemple_code ? '<code>' + esc(f.traca_exemple_code) + '</code>' : '<span style="color:var(--muted)">—</span>', {html:true}) +
       '</dl>';
     return;
   }
