@@ -177,21 +177,23 @@ DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL = """^XA
 ^CI28
 ^PW1188
 ^LL1476
-^LH96,96
-^FO0,0^A0N,68,68^FDSIFA^FS
-^FO660,0^GB336,108,108^FS
-^FO690,30^A0N,48,48^FR^FD{{fsc_banner}}^FS
-^FO0,140^A0N,60,60^FD{{lot_numero}}^FS
-^BY4,3,240
-^FO0,220^BCN,240,N,N,N^FD{{lot_numero}}^FS
-^FO0,500^A0N,42,42^FDReference : {{ref_matiere}}^FS
-^FO0,560^A0N,38,38^FDFournisseur : {{fournisseur}}^FS
-^FO0,615^A0N,38,38^FDCertificat FSC : {{certificat_fsc}}^FS
-^FO0,670^A0N,38,38^FDReception : {{date_reception}}^FS
-^FO0,725^A0N,38,38^FDBobines : {{nb_bobines}} / {{nb_bobines_total}}^FS
-^FO0,800^GB1000,3,3^FS
-^FO0,820^A0N,42,42^FDCODES BOBINES^FS
-^FO0,880^A0N,32,32^FD{{codes_bobines}}^FS
+^LH24,24
+^PR2
+~SD22
+^FO0,20^FB1140,1,0,C,0^A0N,90,90^FDSIFA^FS
+^FO0,140^GB1140,130,130^FS
+^FO0,168^FB1140,1,0,C,0^A0N,72,72^FR^FD{{fsc_banner}}^FS
+^FO0,320^FB1140,1,0,C,0^A0N,70,70^FD{{lot_numero}}^FS
+^BY5,3,320
+^FO60,420^BCN,320,N,N,N^FD{{lot_numero}}^FS
+^FO0,790^FB1140,1,0,C,0^A0N,44,44^FDReference : {{ref_matiere}}^FS
+^FO0,855^FB1140,1,0,C,0^A0N,40,40^FD{{fournisseur}}^FS
+^FO0,915^FB1140,1,0,C,0^A0N,40,40^FDFSC : {{certificat_fsc}}^FS
+^FO0,975^FB1140,1,0,C,0^A0N,40,40^FDReception : {{date_reception}}^FS
+^FO0,1035^FB1140,1,0,C,0^A0N,40,40^FDBobines : {{nb_bobines}}/{{nb_bobines_total}}^FS
+^FO70,1120^GB1000,3,3^FS
+^FO0,1150^FB1140,1,0,C,0^A0N,50,50^FDCODES BOBINES^FS
+^FO60,1230^FB1068,5,4,C,0^A0N,32,32^FD{{codes_bobines}}^FS
 ^XZ
 """
 
