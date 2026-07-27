@@ -9405,22 +9405,32 @@ function _z1UniteVente(d) {
   return { unite: unite, connu: connu };
 }
 
-// Badge a fond plein accent : color:var(--bg) donne un texte contraste
-// dans les deux themes (regle boutons a fond colore, CLAUDE.md).
-function _z1UniteBadge(uv) {
+// L'unite se suffit a elle-meme : pas de libelle prefixe. Le seul ajout est
+// le marqueur 'nouvelle ref' quand la reference n'existe pas encore en base.
+function _z1UniteLabel(uv) {
+  return uv.connu ? uv.unite : uv.unite + ' - nouvelle ref';
+}
+
+// Fond plein + color:var(--bg) : texte contraste dans les deux themes
+// (regle boutons a fond colore, CLAUDE.md). Accent = reference connue,
+// warn = reference qui sera creee a la validation.
+function _z1UniteBadge(uv, opts) {
+  const compact = !!(opts && opts.compact);
   return el('span', {
     style: {
       display: 'inline-block',
-      padding: '3px 10px',
+      padding: compact ? '2px 8px' : '3px 10px',
       borderRadius: '999px',
-      background: 'var(--accent)',
+      background: uv.connu ? 'var(--accent)' : 'var(--warn)',
       color: 'var(--bg)',
-      fontSize: '11px',
+      fontSize: compact ? '10px' : '11px',
       fontWeight: '700',
       textTransform: 'uppercase',
       letterSpacing: '.5px',
+      whiteSpace: 'nowrap',
+      flex: '0 0 auto',
     },
-  }, 'Unite de vente : ' + uv.unite);
+  }, _z1UniteLabel(uv));
 }
 
 function _z1MakeNoteFromDossier(dossier) {
@@ -9492,21 +9502,8 @@ function _renderZ1DossierBanner(container, ctx) {
         'Reference : ' + refLine));
     }
     const uv = _z1UniteVente(dossierSel);
-    if (uv && uv.connu) {
+    if (uv) {
       bodyLines.push(el('div', { style: { marginTop: '8px' } }, _z1UniteBadge(uv)));
-    } else if (uv) {
-      // Reference absente de MyStock : l'entree Z1 va la creer avec l'unite
-      // par defaut de l'instance. On le dit plutot que de laisser deviner.
-      bodyLines.push(el('div', {
-        style: {
-          fontSize: '11px',
-          color: 'var(--warn)',
-          marginTop: '8px',
-          fontWeight: '700',
-          textTransform: 'uppercase',
-          letterSpacing: '.5px',
-        },
-      }, 'Nouvelle reference - unite : ' + uv.unite));
     }
     if (dossierSel.machine_nom) {
       bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
@@ -9593,9 +9590,6 @@ function _z1DossierRow(dossier, opts) {
   const badgeText = opts && opts.badge
     ? opts.badge
     : (termine ? 'Termine' : (dossier.statut_reel === 'reellement_en_saisie' ? 'En cours' : ''));
-  const badgeStyle = termine
-    ? { color: 'var(--warn)', borderColor: 'var(--warn)' }
-    : { color: 'var(--accent)', borderColor: 'var(--accent)' };
 
   const refLine = _z1FormatDossierLine(dossier);
   const cli = dossier.client ? ' - ' + dossier.client : '';
@@ -9628,36 +9622,35 @@ function _z1DossierRow(dossier, opts) {
             style: { fontSize: '11px', color: 'var(--text2)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
           }, refLine)
         : null,
-      uvRow
-        ? el('div', {
-            style: {
-              fontSize: '11px',
-              marginTop: '3px',
-              fontWeight: '700',
-              color: uvRow.connu ? 'var(--accent)' : 'var(--warn)',
-            },
-          }, uvRow.connu
-              ? 'Unite de vente : ' + uvRow.unite
-              : 'Nouvelle reference - unite : ' + uvRow.unite)
-        : null,
       dossier.machine_nom
         ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
             'Machine : ' + dossier.machine_nom)
         : null,
     ),
-    badgeText
-      ? el('span', {
-          style: Object.assign({
-            padding: '2px 8px',
-            fontSize: '10px',
-            fontWeight: '700',
-            textTransform: 'uppercase',
-            letterSpacing: '.5px',
-            borderRadius: '999px',
-            border: '1px solid',
+    (uvRow || badgeText)
+      ? el('div', {
+          style: {
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: '4px',
             flex: '0 0 auto',
-          }, badgeStyle),
-        }, badgeText)
+          },
+        },
+          uvRow ? _z1UniteBadge(uvRow, { compact: true }) : null,
+          badgeText
+            ? el('div', {
+                style: {
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  textTransform: 'uppercase',
+                  letterSpacing: '.5px',
+                  whiteSpace: 'nowrap',
+                  color: termine ? 'var(--warn)' : 'var(--accent)',
+                },
+              }, badgeText)
+            : null,
+        )
       : null,
   );
 }
