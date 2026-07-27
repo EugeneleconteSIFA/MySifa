@@ -6685,7 +6685,382 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=2"></script>
+<script src="/static/mysifa_promote.js?v=2">
+
+// ---- Fonctions restaurees depuis e503c42~1 ----
+function prSetSub(sub) {
+  PR.sub = sub;
+  document.querySelectorAll('.pr-sub').forEach(b => {
+    const on = b.dataset.prsub === sub;
+    b.style.color = on ? 'var(--text)' : 'var(--muted)';
+    b.style.borderBottom = '2px solid ' + (on ? 'var(--accent)' : 'transparent');
+    b.classList.toggle('active', on);
+  });
+  document.getElementById('pr-panel-imp').style.display = (sub === 'imp') ? '' : 'none';
+  document.getElementById('pr-panel-tpl').style.display = (sub === 'tpl') ? '' : 'none';
+  document.getElementById('pr-panel-ag').style.display = (sub === 'ag') ? '' : 'none';
+}
+
+function prWizardStart() {
+  // Réinitialise l'état
+  PR_WIZ.step = 1;
+  PR_WIZ.type = null;
+  PR_WIZ.agentId = null;
+  PR_WIZ.agentToken = null;
+  PR_WIZ.agentName = null;
+  PR_WIZ.imprimanteId = null;
+  PR_WIZ.imprimanteName = null;
+  // Reset UI
+  document.querySelectorAll('.pr-wiz-typebtn').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.background = 'var(--bg)';
+  });
+  document.getElementById('pr-wiz-agent-created').style.display = 'none';
+  document.getElementById('pr-wiz-agent-name').value = '';
+  document.getElementById('pr-wiz-token-display').value = '';
+  document.getElementById('pr-wiz-install-cmd').value = '';
+  document.getElementById('pr-wiz-imp-nom').value = '';
+  document.getElementById('pr-wiz-imp-poste').value = '';
+  document.getElementById('pr-wiz-imp-ip').value = '';
+  document.getElementById('pr-wiz-imp-port').value = '9100';
+  document.getElementById('pr-wiz-imp-queue').value = '';
+  document.getElementById('pr-wiz-test-result').innerHTML = '';
+  // Recharge la liste des agents pour le dropdown (au cas où)
+  prWizPopulateAgents();
+  // Affiche l'étape 1
+  prWizGotoStep(1);
+  document.getElementById('pr-wiz-modal').style.display = 'flex';
+}
+
+function prWizGotoStep(n) {
+  PR_WIZ.step = n;
+  // Cache toutes les pages, affiche celle demandée
+  document.querySelectorAll('.pr-wiz-page').forEach(p => {
+    p.style.display = (parseInt(p.dataset.step, 10) === n) ? '' : 'none';
+  });
+  // Progress bar
+  document.querySelectorAll('.pr-wiz-dot').forEach(d => {
+    const s = parseInt(d.dataset.s, 10);
+    d.style.background = (s <= n) ? 'var(--accent)' : 'var(--border)';
+  });
+  // Label
+  const labels = {
+    1: 'Étape 1 / 4 · Type d\'imprimante',
+    2: 'Étape 2 / 4 · Agent MySifa',
+    3: 'Étape 3 / 4 · Créer l\'imprimante',
+    4: 'Étape 4 / 4 · Test',
+  };
+  document.getElementById('pr-wiz-step-label').textContent = labels[n];
+  // Nav buttons
+  document.getElementById('pr-wiz-back-btn').style.visibility = (n === 1 || n === 4) ? 'hidden' : 'visible';
+  const nextBtn = document.getElementById('pr-wiz-next-btn');
+  if (n === 1) {
+    nextBtn.textContent = 'Continuer →';
+    nextBtn.style.display = PR_WIZ.type ? '' : 'none';
+  } else if (n === 2) {
+    nextBtn.textContent = 'Continuer →';
+    nextBtn.style.display = PR_WIZ.agentId ? '' : 'none';
+  } else if (n === 3) {
+    nextBtn.textContent = 'Créer l\'imprimante';
+    nextBtn.style.display = '';
+    nextBtn.onclick = prWizCreateImprimante;
+  } else if (n === 4) {
+    nextBtn.textContent = 'Terminer';
+    nextBtn.style.display = '';
+    nextBtn.onclick = prWizClose;
+  }
+  if (n !== 3 && n !== 4) nextBtn.onclick = prWizNext;
+}
+
+function prWizSelectType(type) {
+  PR_WIZ.type = type;
+  // Style visuel : highlight le bouton sélectionné
+  document.querySelectorAll('.pr-wiz-typebtn').forEach(b => {
+    b.style.borderColor = 'var(--border)';
+    b.style.background = 'var(--bg)';
+  });
+  const btn = document.querySelector(`.pr-wiz-typebtn[onclick*="${type}"]`);
+  if (btn) {
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.background = 'var(--accent-bg)';
+  }
+  // v2 — auto-advance : petit délai pour que l'utilisateur voie le highlight
+  setTimeout(() => prWizNext(), 250);
+}
+
+async function prWizCreateAgent() {
+  const nom = document.getElementById('pr-wiz-agent-name').value.trim();
+  if (!nom) { prToast('Nom de l\'agent requis.', 'danger'); return; }
+  try {
+    const r = await prFetch('/api/print/agents', {
+      method: 'POST', body: JSON.stringify({ nom }),
+    });
+    PR_WIZ.agentId = r.id;
+    PR_WIZ.agentToken = r.token;
+    PR_WIZ.agentName = nom;
+    // Affiche le bloc token + installer
+    document.getElementById('pr-wiz-token-display').value = r.token;
+    // Génère la commande d'install pré-remplie avec le token
+    const cmd = `powershell -ExecutionPolicy Bypass -File .\\install_agent_windows.ps1 -Token "${r.token}"`;
+    document.getElementById('pr-wiz-install-cmd').value = cmd;
+    document.getElementById('pr-wiz-agent-created').style.display = '';
+    // Cache le bloc install si c'est TCP/IP (l'agent tourne peut-être ailleurs, on ne force pas)
+    document.getElementById('pr-wiz-install-block').style.display = '';
+    // Active le bouton Continuer
+    document.getElementById('pr-wiz-next-btn').style.display = '';
+    // Rafraîchit la liste principale des agents (pour que l'onglet Agents locaux le voie)
+    await initPrintersPanel();
+    // Re-populate le dropdown
+    prWizPopulateAgents();
+    prToast('Agent créé. Token affiché ci-dessous.', 'success');
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prWizCreateImprimante() {
+  const isWin = (PR_WIZ.type === 'windows_local');
+  const body = {
+    nom: document.getElementById('pr-wiz-imp-nom').value.trim(),
+    poste: document.getElementById('pr-wiz-imp-poste').value.trim() || null,
+    agent_id: PR_WIZ.agentId,
+    type_connexion: PR_WIZ.type,
+    ip_locale: isWin ? null : document.getElementById('pr-wiz-imp-ip').value.trim(),
+    port: isWin ? null : (parseInt(document.getElementById('pr-wiz-imp-port').value, 10) || 9100),
+    nom_queue_windows: isWin ? document.getElementById('pr-wiz-imp-queue').value.trim() : null,
+    langage: document.getElementById('pr-wiz-imp-langage').value,
+    dpi: parseInt(document.getElementById('pr-wiz-imp-dpi').value, 10) || 203,
+    largeur_mm: parseInt(document.getElementById('pr-wiz-imp-largeur').value, 10) || 102,
+    hauteur_mm: parseInt(document.getElementById('pr-wiz-imp-hauteur').value, 10) || 152,
+  };
+  if (!body.nom) { prToast('Nom de l\'imprimante requis.', 'danger'); return; }
+  if (!isWin && !body.ip_locale) { prToast('Adresse IP requise.', 'danger'); return; }
+  if (isWin && !body.nom_queue_windows) { prToast('Nom de la queue Windows requis.', 'danger'); return; }
+  try {
+    const r = await prFetch('/api/print/imprimantes', {
+      method: 'POST', body: JSON.stringify(body),
+    });
+    PR_WIZ.imprimanteId = r.id;
+    PR_WIZ.imprimanteName = body.nom;
+    document.getElementById('pr-wiz-created-name').textContent = body.nom;
+    prWizGotoStep(4);
+    // Rafraîchit la liste principale
+    await initPrintersPanel();
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prWizTestPrint() {
+  if (!PR_WIZ.imprimanteId) return;
+  const resultEl = document.getElementById('pr-wiz-test-result');
+  resultEl.textContent = 'Envoi du test…';
+  resultEl.style.color = 'var(--muted)';
+  try {
+    const r = await prFetch('/api/print/test', {
+      method: 'POST', body: JSON.stringify({ imprimante_id: PR_WIZ.imprimanteId }),
+    });
+    resultEl.innerHTML = '✓ ' + (r.message || 'Test envoyé.') + ' — regarde l\'imprimante physique.';
+    resultEl.style.color = 'var(--success)';
+  } catch (e) {
+    resultEl.innerHTML = '⚠ Erreur : ' + e.message + '. Vérifie que l\'agent tourne bien.';
+    resultEl.style.color = 'var(--danger)';
+  }
+}
+
+async function prLoadGallery() {
+  const sel = document.getElementById('pr-tpl-gallery');
+  const desc = document.getElementById('pr-tpl-gallery-desc');
+  if (!sel) return;
+  try {
+    const r = await prFetch('/api/print/templates/defaults');
+    PR_TPL_GALLERY = r.templates || [];
+    const opts = ['<option value="">â Vide (je pars de zÃ©ro) â</option>'];
+    PR_TPL_GALLERY.forEach(t => {
+      opts.push(`<option value="${_escH(t.key)}">${_escH(t.nom)} (${t.largeur_mm}Ã${t.hauteur_mm}mm)</option>`);
+    });
+    sel.innerHTML = opts.join('');
+    sel.value = '';
+    if (desc) desc.textContent = 'Choisis un modÃ¨le pour prÃ©remplir le contenu ci-dessous. Tu peux ensuite l\'adapter Ã  ton usage.';
+  } catch (e) {
+    sel.innerHTML = '<option value="">â Vide â</option>';
+    if (desc) desc.textContent = 'Impossible de charger les modÃ¨les prÃ©dÃ©finis.';
+  }
+}
+
+async function prLoadFromGallery() {
+  const sel = document.getElementById('pr-tpl-gallery');
+  const desc = document.getElementById('pr-tpl-gallery-desc');
+  const key = sel.value;
+  if (!key) {
+    if (desc) desc.textContent = 'Choisis un modÃ¨le pour prÃ©remplir le contenu ci-dessous.';
+    return;
+  }
+  try {
+    const t = await prFetch('/api/print/templates/defaults/' + encodeURIComponent(key));
+    if (!document.getElementById('pr-tpl-nom').value.trim()) {
+      document.getElementById('pr-tpl-nom').value = t.nom;
+    }
+    document.getElementById('pr-tpl-contenu').value = t.contenu;
+    const usel = document.getElementById('pr-tpl-usage');
+    if (t.usage_key) usel.value = t.usage_key;
+    document.getElementById('pr-tpl-prev-w').value = t.largeur_mm || 102;
+    document.getElementById('pr-tpl-prev-h').value = t.hauteur_mm || 152;
+    if (desc) desc.textContent = t.description || '';
+    prRenderPlaceholders(usel.value);
+    setTimeout(() => prTplRefreshPreview(), 100);
+  } catch (e) {
+    prToast('Erreur chargement modÃ¨le : ' + e.message, 'danger');
+  }
+}
+
+async function prTplRefreshPreview() {
+  const contenu = document.getElementById('pr-tpl-contenu').value;
+  const largeur_mm = parseInt(document.getElementById('pr-tpl-prev-w').value, 10) || 102;
+  const hauteur_mm = parseInt(document.getElementById('pr-tpl-prev-h').value, 10) || 152;
+  const dpi = parseInt(document.getElementById('pr-tpl-prev-dpi').value, 10) || 203;
+  const img = document.getElementById('pr-tpl-preview-img');
+  const ph = document.getElementById('pr-tpl-preview-placeholder');
+  const err = document.getElementById('pr-tpl-preview-err');
+  if (!contenu.trim()) {
+    err.textContent = 'Le contenu est vide.';
+    return;
+  }
+  err.textContent = 'GÃ©nÃ©ration de l\'aperÃ§uâ¦';
+  err.style.color = 'var(--muted)';
+  try {
+    const r = await fetch('/api/print/preview', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contenu, langage: 'zpl', largeur_mm, hauteur_mm, dpi }),
+    });
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); if (j.detail) msg = j.detail; } catch(e){}
+      throw new Error(msg);
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    if (img) {
+      img.onload = () => { URL.revokeObjectURL(url); };
+      img.src = url;
+      img.style.display = '';
+    }
+    if (ph) ph.style.display = 'none';
+    err.textContent = `AperÃ§u ${largeur_mm}Ã${hauteur_mm}mm @ ${dpi}dpi (rendu labelary.com)`;
+    err.style.color = 'var(--muted)';
+  } catch (e) {
+    err.textContent = 'Erreur aperÃ§u : ' + e.message;
+    err.style.color = 'var(--danger)';
+  }
+}
+
+function prRenderImprimantes() {
+  const root = document.getElementById('pr-imp-list');
+  if (!root) return;
+  if (!PR.imprimantes.length) {
+    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucune imprimante configurée. Clique sur « Nouvelle imprimante ».</div>';
+    return;
+  }
+  const agentMap = {};
+  PR.agents.forEach(a => { agentMap[a.id] = a; });
+  root.innerHTML = PR.imprimantes.map(i => {
+    const agent = i.agent_id ? agentMap[i.agent_id] : null;
+    const agentLbl = agent ? _escH(agent.nom) : '<em style="color:var(--muted)">Non rattachée</em>';
+    const status = i.actif
+      ? '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:rgba(52,211,153,.15);color:var(--success)">Active</span>'
+      : '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--accent-bg);color:var(--muted)">Inactive</span>';
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:14px;font-weight:700;color:var(--text)">${_escH(i.nom)}</span>
+              ${status}
+              <span style="font-size:11px;background:var(--bg);border:1px solid var(--border);padding:2px 6px;border-radius:5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${_escH(i.langage)}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">
+              ${_escH(i.poste || 'Sans poste')} · ${(i.type_connexion === 'windows_local') ? ('Queue Windows : ' + _escH(i.nom_queue_windows || '?')) : (_escH(i.ip_locale || '?') + ':' + (i.port || 9100))} · ${i.largeur_mm}×${i.hauteur_mm}mm @ ${i.dpi}dpi · Agent : ${agentLbl}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="prTestPrint(${i.id})">Test d'impression</button>
+            <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px" onclick="prEditImprimante(${i.id})">Modifier</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function prRenderTemplates() {
+  const root = document.getElementById('pr-tpl-list');
+  if (!root) return;
+  if (!PR.imprimantes.length) {
+    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Ajoute d\'abord une imprimante.</div>';
+    return;
+  }
+  const impMap = {};
+  PR.imprimantes.forEach(i => { impMap[i.id] = i; });
+  const grouped = {};
+  PR.imprimantes.forEach(i => { grouped[i.id] = { imp: i, templates: [] }; });
+  PR.templates.forEach(t => { if (grouped[t.imprimante_id]) grouped[t.imprimante_id].templates.push(t); });
+  root.innerHTML = Object.values(grouped).map(g => {
+    const tplHtml = g.templates.length
+      ? g.templates.map(t => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-top:6px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">${_escH(t.nom)}</div>
+            <div style="font-size:11px;color:var(--muted)">${_escH(t.usage_label)} — ${t.actif ? 'Actif' : 'Inactif'}</div>
+          </div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prEditTemplate(${t.id})">Modifier</button>
+        </div>`).join('')
+      : '<div style="padding:8px 12px;color:var(--muted);font-size:12px;font-style:italic">Aucun template pour cette imprimante.</div>';
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">${_escH(g.imp.nom)}</div>
+            <div style="font-size:11px;color:var(--muted)">${_escH(g.imp.langage.toUpperCase())} — ${_escH(g.imp.poste || 'Sans poste')}</div>
+          </div>
+          <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prNewTemplate(${g.imp.id})">+ Template</button>
+        </div>
+        ${tplHtml}
+      </div>`;
+  }).join('');
+}
+
+function prRenderAgents() {
+  const root = document.getElementById('pr-ag-list');
+  if (!root) return;
+  if (!PR.agents.length) {
+    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucun agent local configuré. Crée un agent pour connecter un poste de l\'usine.</div>';
+    return;
+  }
+  const now = Date.now();
+  root.innerHTML = PR.agents.map(a => {
+    const hb = a.last_heartbeat ? new Date(a.last_heartbeat) : null;
+    const ageMin = hb ? Math.round((now - hb.getTime()) / 60000) : null;
+    let live;
+    if (!hb) live = '<span style="color:var(--muted);font-size:11px">Jamais connecté</span>';
+    else if (ageMin < 3) live = '<span style="display:inline-flex;align-items:center;gap:6px;color:var(--success);font-size:11px"><span style="width:8px;height:8px;border-radius:50%;background:var(--success);display:inline-block"></span>En ligne</span>';
+    else live = `<span style="color:var(--warn);font-size:11px">Hors ligne (${ageMin}min)</span>`;
+    return `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:14px;font-weight:700;color:var(--text)">${_escH(a.nom)}</span>
+            ${live}
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">
+            ${a.last_ip ? 'IP: ' + _escH(a.last_ip) + ' · ' : ''}Créé le ${_escH((a.created_at || '').slice(0,10))}
+          </div>
+        </div>
+        <button class="btn btn-ghost" style="padding:6px 12px;font-size:12px;color:var(--danger)" onclick="prDeleteAgent(${a.id})">Supprimer</button>
+      </div>`;
+  }).join('');
+}
+</script>
 </body>
 </html>
 """
