@@ -1154,30 +1154,6 @@ def get_produit(request: Request, produit_id: int):
         return _serialize_produit_row(_row_dict(row), conn)
 
 
-@router.get("/produits/{produit_id}/aos")
-def produit_aos(request: Request, produit_id: int):
-    """Liste des appels d'offres (hors corbeille) contenant ce produit — pour
-    la section « historique » de la fiche produit. Match sur ref_produit."""
-    _require_ao(request)
-    with get_db() as conn:
-        prow = conn.execute("SELECT ref FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
-        if not prow:
-            raise HTTPException(status_code=404, detail="Produit introuvable")
-        ref = (prow["ref"] or "").strip()
-        if not ref:
-            return {"aos": []}
-        rows = conn.execute(
-            """SELECT DISTINCT d.id, d.reference, d.titre, d.statut, d.date_limite
-               FROM ao_lignes l
-               JOIN ao_demandes d ON d.id = l.ao_id
-               WHERE LOWER(TRIM(l.ref_produit)) = LOWER(TRIM(?))
-                 AND d.deleted_at IS NULL
-               ORDER BY d.id DESC""",
-            (ref,),
-        ).fetchall()
-    return {"aos": [dict(r) for r in rows]}
-
-
 @router.get("/produits/{produit_id}/export")
 def export_produit_fiche(request: Request, produit_id: int):
     _require_ao(request)
@@ -2951,8 +2927,6 @@ def comparaison_ao(request: Request, ao_id: int):
                         # Nouveau pipeline conditionnement (v217)
                         "prix_achat_mille_dd", "unite_vente_type", "unite_vente_qte",
                         "etiq_par_condi", "prix_achat_conditionne", "prix_vente_final",
-                        # Marge brute vs dernier prix de vente (fiche produit)
-                        "dernier_prix_vente", "has_produit", "marge_brute_pct",
                         "delai_jours", "commentaire",
                     )},
                     "series_breakdown": series_breakdown,
