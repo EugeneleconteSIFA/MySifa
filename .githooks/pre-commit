@@ -1,0 +1,42 @@
+#!/bin/sh
+#
+# MySifa — garde-fou anti-conflit de merge.
+# Refuse tout commit dont le contenu STAGED contient des marqueurs de conflit
+# git non résolus. Objectif : ne plus jamais laisser partir en staging un
+# fichier avec « <<<<<<< », « >>>>>>> » ou « ||||||| » (cause réelle de bugs
+# : JS cassé, migrations perdues, page settings HS…).
+#
+# Installation (une fois par clone, chaque développeur) :
+#     git config core.hooksPath .githooks
+#     chmod +x .githooks/pre-commit
+#
+# Contourner en cas de besoin exceptionnel (déconseillé) :
+#     git commit --no-verify
+#
+# On ne teste QUE les marqueurs à chevrons (<<<<<<<, >>>>>>>, |||||||),
+# jamais « ======= » seul : ça évite les faux positifs (soulignés Markdown/RST,
+# séparateurs décoratifs) tout en attrapant 100 % des vrais conflits, qui
+# contiennent toujours les chevrons.
+marker_re='^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)'
+
+found=0
+# Fichiers ajoutés / copiés / modifiés dans l'index (pas le working tree).
+files=$(git diff --cached --name-only --diff-filter=ACM)
+IFS='
+'
+for file in $files; do
+    # Contenu tel qu'il sera committé (blob de l'index), pas le fichier disque.
+    if git show ":$file" 2>/dev/null | grep -nE "$marker_re" >/dev/null 2>&1; then
+        echo "❌ Marqueur de conflit dans : $file"
+        git show ":$file" 2>/dev/null | grep -nE "$marker_re" | head -5 | sed 's/^/      ligne /'
+        found=1
+    fi
+done
+
+if [ "$found" -ne 0 ]; then
+    echo ""
+    echo "Commit BLOQUÉ : résous les conflits de merge avant de committer."
+    echo "(forcer malgré tout, à éviter : git commit --no-verify)"
+    exit 1
+fi
+exit 0
