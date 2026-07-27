@@ -421,24 +421,38 @@
     return 'mysifa_alert_position_' + String(alertId || '_default');
   }
 
-  function _loadAlertPos(alertId) {
+  // v2.4.17 : loadAlertPos invalide la position stockée si le placement
+  // configuré a changé depuis. Sans ça, une position custom "top-right"
+  // sauvée lors d'un drag écrase le nouveau placement "center" configuré
+  // par l'admin — l'alerte semble ignorer le paramètre.
+  function _loadAlertPos(alertId, currentPlacement) {
     try {
       const raw = localStorage.getItem(_posKey(alertId));
       if (!raw) return null;
       const p = JSON.parse(raw);
-      if (p && typeof p.left === 'number' && typeof p.top === 'number') return p;
+      if (!p || typeof p.left !== 'number' || typeof p.top !== 'number') return null;
+      // Si la position ne stocke PAS son placement d'origine (vieille version
+      // v2.3.25) ou si le placement configuré a changé → on jette la position
+      // sauvée et on repart de zéro sur le nouveau placement.
+      if (currentPlacement != null && p.placement !== currentPlacement) {
+        try { localStorage.removeItem(_posKey(alertId)); } catch(_) {}
+        return null;
+      }
+      return p;
     } catch (e) {}
     return null;
   }
 
-  function _saveAlertPos(alertId, left, top) {
+  function _saveAlertPos(alertId, left, top, placement) {
     try {
-      localStorage.setItem(_posKey(alertId), JSON.stringify({ left: left, top: top }));
+      // v2.4.17 : on mémorise aussi le placement au moment du drag, pour que
+      // _loadAlertPos puisse détecter un changement de placement admin.
+      localStorage.setItem(_posKey(alertId), JSON.stringify({ left: left, top: top, placement: placement || null }));
     } catch (e) {}
   }
 
-  function _applyAlertPos(alertEl, alertId) {
-    const pos = _loadAlertPos(alertId);
+  function _applyAlertPos(alertEl, alertId, currentPlacement) {
+    const pos = _loadAlertPos(alertId, currentPlacement);
     if (!pos) return;
     const w = window.innerWidth || document.documentElement.clientWidth;
     const h = window.innerHeight || document.documentElement.clientHeight;
@@ -462,6 +476,16 @@
 
   // v2.3.25 : récupère l'ID d'alerte depuis le wrapper parent (data-attr posé
   // dans _renderAlert). Utilisé pour sauvegarder la position par alerte.
+  // v2.4.17 : lit le placement mémorisé sur le wrap parent (data-placement),
+  // utile pour que _saveAlertPos puisse stocker le placement d'origine de
+  // la position drag afin d'invalider si placement admin change plus tard.
+  function _placementFromEl(alertEl) {
+    if (!alertEl) return null;
+    const wrap = alertEl.closest('.ta-sim');
+    if (!wrap) return null;
+    return wrap.getAttribute('data-placement') || null;
+  }
+
   function _alertIdFromEl(alertEl) {
     if (!alertEl) return null;
     const wrap = alertEl.closest('.ta-sim');
@@ -514,7 +538,7 @@
     if (!_dragState) return;
     const el = _dragState.alertEl;
     const rect = el.getBoundingClientRect();
-    _saveAlertPos(_dragState.alertId, rect.left, rect.top);
+    _saveAlertPos(_dragState.alertId, rect.left, rect.top, _placementFromEl(el));
     const title = el.querySelector('.ta-sim-title');
     if (title) title.classList.remove('ta-dragging');
     document.removeEventListener('mousemove', _doDrag);
@@ -604,7 +628,7 @@
         _restoreAlert(alertEl);
       } else {
         const r = alertEl.getBoundingClientRect();
-        _saveAlertPos(_alertIdFromEl(alertEl), r.left, r.top);
+        _saveAlertPos(_alertIdFromEl(alertEl), r.left, r.top, _placementFromEl(alertEl));
       }
     }
 
@@ -622,6 +646,9 @@
     const _s = alert.size || _settings.size || 'medium';
     wrap.className = 'ta-sim ta-pl-' + _p + ' ta-sz-' + _s;
     wrap.setAttribute('data-alert-runtime-id', String(alert.id));
+    // v2.4.17 : mémorise le placement sur le wrap pour que les fonctions
+    // drag puissent le passer à _saveAlertPos (invalidation par mismatch).
+    wrap.setAttribute('data-placement', _p);
     // v2.2.88 : bloquant par alerte (défaut) ; fallback sur le réglage global si présent (rétrocompat).
     if (alert.block_production || _settings.block_production) wrap.classList.add('ta-blocking');
     const machines = alert.target.machines || ['*'];
@@ -663,7 +690,7 @@
     // v2.3.25 : position sauvegardée par ID d'alerte (pas de position
     // globale partagée entre toutes les alertes).
     const _isBlocking = !!alert.block_production;
-    if (alertEl && !_isBlocking) _applyAlertPos(alertEl, alert.id);
+    if (alertEl && !_isBlocking) _applyAlertPos(alertEl, alert.id, _p);
 
     const titleEl = wrap.querySelector('.ta-sim-title');
     if (titleEl && alertEl && !_isBlocking) {
