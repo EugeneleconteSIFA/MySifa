@@ -1097,6 +1097,11 @@ let S = {
   showTracaCommentModal: false,
   tracaCommentId: null,
   tracaCommentText: '',
+  showRepiquageEditModal: false,
+  repiquageEditSaisie: null,
+  repiquageEditCartons: '',
+  repiquageEditEtiq: '',
+  repiquageEditCommentaire: '',
   showArret50Modal: false,
   arret50Comment: '',
 
@@ -1263,7 +1268,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showTracaCommentModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -5201,6 +5206,104 @@ async function deleteRepiquageHistoriqueSaisie(saisieId){
   }
 }
 
+function openRepiquageEditModal(row){
+  if(!row) return;
+  set({
+    showRepiquageEditModal: true,
+    repiquageEditSaisie: row,
+    repiquageEditCartons: String(Number(row.nb_cartons)||0),
+    repiquageEditEtiq: String(Number(row.quantite_traitee)||0),
+    repiquageEditCommentaire: row.commentaire||'',
+  });
+}
+
+async function saveRepiquageEditSaisie(){
+  const row = S.repiquageEditSaisie;
+  if(!row || !row.id) return;
+  const cartons = Number(String(S.repiquageEditCartons||'').replace(',', '.'));
+  const etiq = Number(String(S.repiquageEditEtiq||'').replace(',', '.'));
+  if(!Number.isFinite(cartons) || cartons < 0){ showToast('Nombre de cartons invalide','danger'); return; }
+  if(!Number.isFinite(etiq) || etiq < 0){ showToast('Nombre d\'étiquettes invalide','danger'); return; }
+  set({loading:true});
+  try{
+    await apiFetch('/api/fabrication/saisie/'+row.id+'/repiquage', {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        qte_etiquettes: etiq,
+        nb_cartons: cartons,
+        commentaire: S.repiquageEditCommentaire||'',
+      }),
+    });
+    if(S.repiquageDossierActif){
+      await loadRepiquageHistorique(S.repiquageDossierActif);
+      await loadRepiquageEtat(S.repiquageDossierActif);
+    }
+    showToast('Saisie modifiée','success');
+    Object.assign(S, {
+      showRepiquageEditModal:false, repiquageEditSaisie:null,
+      repiquageEditCartons:'', repiquageEditEtiq:'', repiquageEditCommentaire:'',
+      loading:false,
+    });
+    render();
+  }catch(e){
+    showToast(e?.message||'Erreur','danger');
+    set({loading:false});
+  }
+}
+
+function renderRepiquageEditModal(){
+  const row = S.repiquageEditSaisie || {};
+
+  const inpCartons = h('input',{type:'number',min:'0',step:'1',
+    style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'14px',boxSizing:'border-box'}});
+  inpCartons.value = S.repiquageEditCartons||'';
+  inpCartons.addEventListener('input',e=>{ S.repiquageEditCartons = e.target.value; });
+
+  const inpEtiq = h('input',{type:'number',min:'0',step:'1',
+    style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'14px',boxSizing:'border-box'}});
+  inpEtiq.value = S.repiquageEditEtiq||'';
+  inpEtiq.addEventListener('input',e=>{ S.repiquageEditEtiq = e.target.value; });
+
+  const ta = h('textarea',{placeholder:'Commentaire (facultatif)',rows:'3',
+    style:{width:'100%',padding:'10px 12px',border:'1px solid var(--border)',borderRadius:'8px',background:'var(--bg)',color:'var(--text)',fontFamily:'inherit',fontSize:'13px',resize:'vertical',boxSizing:'border-box'}});
+  ta.value = S.repiquageEditCommentaire||'';
+  ta.addEventListener('input',e=>{ S.repiquageEditCommentaire = e.target.value; });
+
+  setTimeout(()=>inpCartons.focus(),50);
+
+  const opNom = row.operateur||'—';
+  const dateStr = String(row.date_operation||'').replace('T',' ').slice(0,16);
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showRepiquageEditModal:false});}},
+    h('div',{className:'fab-modal',style:{maxWidth:'460px'}},
+      h('div',{className:'fab-modal-title'},svgIcon('edit',18),' Modifier la saisie'),
+      h('div',{className:'fab-modal-sub'},
+        'Opérateur : '+opNom+' — '+dateStr
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Cartons'),
+        inpCartons
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Étiquettes'),
+        inpEtiq
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Commentaire'),
+        ta
+      ),
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
+          onClick:()=>set({showRepiquageEditModal:false})},'Annuler'),
+        h('button',{className:'fab-btn fab-btn-primary',
+          onClick:saveRepiquageEditSaisie},
+          svgIcon('check',15),' Enregistrer')
+      )
+    )
+  );
+}
+
 async function loadRepiquageDiscussion(no_dossier){
   if(!no_dossier){
     S.repiquageDiscussion = [];
@@ -6207,12 +6310,20 @@ function renderRepiquageHistoriqueView(){
           h('td',null, r.commentaire
             ? h('span',{className:'fab-comment-cell',title:r.commentaire}, r.commentaire)
             : h('span',{style:{color:'var(--muted)',fontSize:'11px'}},'—')),
-          isAdminUser ? h('td',null, h('button',{
-            className:'fab-comment-btn',
-            title:'Supprimer',
-            onClick:()=>deleteRepiquageHistoriqueSaisie(r.id),
-            style:{color:'var(--danger)'},
-          }, svgIcon('trash',13))) : null
+          isAdminUser ? h('td',{style:{whiteSpace:'nowrap',textAlign:'right'}},
+            h('button',{
+              className:'fab-comment-btn',
+              title:'Modifier la saisie',
+              onClick:()=>openRepiquageEditModal(r),
+              style:{color:'var(--accent)',marginRight:'2px'},
+            }, svgIcon('edit',13)),
+            h('button',{
+              className:'fab-comment-btn',
+              title:'Supprimer',
+              onClick:()=>deleteRepiquageHistoriqueSaisie(r.id),
+              style:{color:'var(--danger)'},
+            }, svgIcon('trash',13))
+          ) : null
         );
       })
     : [h('tr',null,
@@ -6756,6 +6867,7 @@ function render(){
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
   if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());
+  if(S.showRepiquageEditModal) root.appendChild(renderRepiquageEditModal());
   if(S.repiquageAttentionOpen) root.appendChild(renderRepiquageAttentionModal());
   if(S.repiquageEditParamOpen) root.appendChild(renderRepiquageEditParamModal());
   if(S.repiquageAdjustOpen) root.appendChild(renderRepiquageAdjustModal());
