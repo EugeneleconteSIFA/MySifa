@@ -602,9 +602,10 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic;font-size:18px}
 .maint-frame-progress{padding:0 20px 12px}
 .maint-frame-progress-track{height:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
+/* v2.4.24 : classes .warn/.danger retirees (dead code) — la couleur du remplissage
+   est TOUJOURS imposee inline par _ratioColor(ratio), meme systeme que les
+   anneaux circulaires des pieces d'usure. */
 .maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
-.maint-frame-progress-fill.warn{background:var(--warn,#fbbf24)}
-.maint-frame-progress-fill.danger{background:var(--danger,#f87171)}
 .maint-frame-progress-label{display:flex;justify-content:space-between;gap:8px;margin-top:5px;font-size:11px;color:var(--muted);font-weight:500}
 .maint-frame-progress-label .pct{color:var(--text2);font-weight:600}
 .maint-frame-progress.is-empty .maint-frame-progress-track{opacity:.4}
