@@ -8,7 +8,7 @@ Fixes:
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME
+from config import APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -43,6 +43,9 @@ def stock_page(request: Request):
             return access_denied_response("MyStock")
     # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
     html = STOCK_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
+    html = html.replace(
+        "__STOCK_UNITE_VENTE_DEFAUT__", _js_escape(STOCK_UNITE_VENTE_DEFAUT)
+    )
     # Important: prevent iOS/PWA from serving stale HTML/JS.
     return HTMLResponse(
         content=html,
@@ -3137,6 +3140,7 @@ async function submitMouvement(body) {
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'dashboard') await loadDashboard();
     else if (S.tab === 'produits-finis') await loadProduitsFinis();
+    else if (S.tab === 'production') await loadProduction();
     else if (S.tab === 'inventaire') await loadInventaireList();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -3315,6 +3319,7 @@ async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, n
               if (S.selProduit) await loadProduit(S.selProduit.produit.id);
               else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
               else if (S.tab === 'produits-finis') await loadProduitsFinis();
+              else if (S.tab === 'production') await loadProduction();
               else if (S.tab === 'dashboard') await loadDashboard();
             } catch (e) { showToast(e.message, 'error'); }
           }}
@@ -3381,6 +3386,7 @@ async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, 
     if (S.selProduit) await loadProduit(S.selProduit.produit.id);
     else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
     else if (S.tab === 'produits-finis') await loadProduitsFinis();
+    else if (S.tab === 'production') await loadProduction();
     else if (S.tab === 'dashboard') await loadDashboard();
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -3391,6 +3397,9 @@ const STOCK_EMPL_AU_SOL = 'Z0';
 const STOCK_EMPL_AU_SOL_LABEL = 'Au sol - à expédier';
 const STOCK_EMPL_SORTIE_PROD = 'Z1';
 const STOCK_EMPL_SORTIE_PROD_LABEL = 'En attente - sortie de prod';
+// Unite de vente appliquee a une reference produit fini creee automatiquement
+// a l'entree Z1. Valeur SIFA par defaut, surchargeable par instance (config.py).
+const STOCK_UNITE_VENTE_DEFAUT = '__STOCK_UNITE_VENTE_DEFAUT__';
 const LS_STOCK_EMPL_CUSTOM = 'mysifa_stock_empl_custom';
 const STOCK_UNITS_BASE = ['cartons','bobines','étiquettes','palettes','paravents','boîtes'];
 const LS_STOCK_UNITS_CUSTOM = 'mysifa_stock_units_custom_v1';
@@ -9383,6 +9392,37 @@ function _z1FormatDossierLine(d) {
   return refLine;
 }
 
+// Unite de vente du produit du dossier (MyStock, table produits.unite).
+// Sans cette info l'operateur ne sait pas s'il compte en bobines, en cartons
+// ou en etiquettes : la quantite saisie en Z1 devient ininterpretable.
+function _z1UniteVente(d) {
+  if (!d) return null;
+  const ref = String(d.ref_produit || '').trim();
+  if (!ref) return null;
+  const connu = !!d.produit_connu;
+  const unite = String((connu ? d.unite_vente : d.unite_vente_defaut) || '').trim();
+  if (!unite) return null;
+  return { unite: unite, connu: connu };
+}
+
+// Badge a fond plein accent : color:var(--bg) donne un texte contraste
+// dans les deux themes (regle boutons a fond colore, CLAUDE.md).
+function _z1UniteBadge(uv) {
+  return el('span', {
+    style: {
+      display: 'inline-block',
+      padding: '3px 10px',
+      borderRadius: '999px',
+      background: 'var(--accent)',
+      color: 'var(--bg)',
+      fontSize: '11px',
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: '.5px',
+    },
+  }, 'Unite de vente : ' + uv.unite);
+}
+
 function _z1MakeNoteFromDossier(dossier) {
   if (!dossier || !dossier.no_dossier) return '';
   return 'Production dossier ' + dossier.no_dossier + ' - ' + _fmtDateFRz1(new Date());
@@ -9450,6 +9490,23 @@ function _renderZ1DossierBanner(container, ctx) {
     if (refLine) {
       bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
         'Reference : ' + refLine));
+    }
+    const uv = _z1UniteVente(dossierSel);
+    if (uv && uv.connu) {
+      bodyLines.push(el('div', { style: { marginTop: '8px' } }, _z1UniteBadge(uv)));
+    } else if (uv) {
+      // Reference absente de MyStock : l'entree Z1 va la creer avec l'unite
+      // par defaut de l'instance. On le dit plutot que de laisser deviner.
+      bodyLines.push(el('div', {
+        style: {
+          fontSize: '11px',
+          color: 'var(--warn)',
+          marginTop: '8px',
+          fontWeight: '700',
+          textTransform: 'uppercase',
+          letterSpacing: '.5px',
+        },
+      }, 'Nouvelle reference - unite : ' + uv.unite));
     }
     if (dossierSel.machine_nom) {
       bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
@@ -9542,6 +9599,7 @@ function _z1DossierRow(dossier, opts) {
 
   const refLine = _z1FormatDossierLine(dossier);
   const cli = dossier.client ? ' - ' + dossier.client : '';
+  const uvRow = _z1UniteVente(dossier);
 
   return el('button', {
     type: 'button',
@@ -9569,6 +9627,18 @@ function _z1DossierRow(dossier, opts) {
         ? el('div', {
             style: { fontSize: '11px', color: 'var(--text2)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
           }, refLine)
+        : null,
+      uvRow
+        ? el('div', {
+            style: {
+              fontSize: '11px',
+              marginTop: '3px',
+              fontWeight: '700',
+              color: uvRow.connu ? 'var(--accent)' : 'var(--warn)',
+            },
+          }, uvRow.connu
+              ? 'Unite de vente : ' + uvRow.unite
+              : 'Nouvelle reference - unite : ' + uvRow.unite)
         : null,
       dossier.machine_nom
         ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
@@ -10026,7 +10096,7 @@ async function submitPfMouvement() {
     const payload = {
       reference: String(refVal).trim().toUpperCase(),
       designation: String(refVal).trim().toUpperCase(),
-      unite: 'étiquette',
+      unite: STOCK_UNITE_VENTE_DEFAUT,
       emplacement: body.emplacement,
       quantite: body.quantite,
       note: body.note,
