@@ -6035,10 +6035,12 @@ function _renderWearPartsGroup(machine, statusFilter){
     // Garde la position courante si elle est dans le pool, sinon prend la premiere du pool
     const currentPos = getWearPartPos(p.id, machine);
     const forcedPos = (pool.indexOf(currentPos) !== -1) ? currentPos : pool[0];
-    eligible.push({ piece: p, pos: forcedPos });
+    // v2.4.22 : on transporte aussi le pool pour n'afficher que les onglets
+    // Bande/Rive qui matchent le filtre (l'autre est masqué, pas juste inerte).
+    eligible.push({ piece: p, pos: forcedPos, matchingPositions: pool });
   });
   if(eligible.length === 0) return '';  // section vide → caller n'affiche rien
-  const cards = eligible.map(({piece: p, pos}) => {
+  const cards = eligible.map(({piece: p, pos, matchingPositions}) => {
     // Source des références : code Intervention en base, match par label
     // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
     const wpCode = _findWearPartCode(p.id, pos);
@@ -6098,11 +6100,16 @@ function _renderWearPartsGroup(machine, statusFilter){
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
     };
+    // v2.4.22 : ne montrer que les onglets des positions qui matchent le filtre.
+    // Cas typique : Couteaux avec seulement Rive renseigné en filtre "Tous" →
+    // le bouton Bande disparait (avant il était visible mais menait a une vue vide).
+    // Si les 2 positions matchent, on montre les 2 (choix reel entre bande/rive).
+    // Si une seule matche, seul son bouton apparait (agit comme un badge de position).
     const tabsHtml = p.no_position
       ? ''
       : ('<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
-           _b('Bande', 'bande') +
-           _b('Rive', 'rive') +
+           (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
+           (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
          '</div>');
     return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
