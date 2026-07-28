@@ -5324,27 +5324,35 @@ async function loadOpsTypes(){
   }
 }
 
-// Couleur d'un anneau (ou d'une barre de progression) sur l'intervalle [0,200%].
-// Dégradé multi-stops : vert -> jaune -> orange -> rouge.
-// Au-delà de 200% : rouge plein (clamp).
+// v2.4.26 : couleur d'une barre de progression (opérations périodiques) ou
+// d'un anneau (pièces d'usure) en fonction du ratio = jours_écoulés / intervalle.
+// Système à 3 zones :
+//   - 0 à 90 %   : vert franc constant (rien à signaler)
+//   - 90 à 100 % : transition douce vert → début jaune (pré-alerte discrète)
+//   - 100 à 200 %: dégradé jaune → orange → rouge (échéance dépassée, sévérité croissante)
+//   - > 200 %    : rouge plein (clamp)
+// Change par rapport à v1 : le vert restait "trop longtemps" un vert-jaune
+// dès 50 % avant, maintenant il reste pur jusqu'à 90 %.
 function _ratioColor(ratio){
-  // Stops fixés à t = 0 / 0.33 / 0.66 / 1, où t = ratio / 2 (clampé).
+  // Stops en RATIO direct (pas de normalisation t=ratio/2 comme avant).
   const stops = [
-    [0.00, [ 52, 211, 153]],   // vert    #34d399
-    [0.33, [250, 204,  21]],   // jaune   #facc15
-    [0.66, [251, 146,  60]],   // orange  #fb923c
-    [1.00, [220,  38,  38]],   // rouge   #dc2626
+    [0.00, [ 52, 211, 153]],   // vert franc
+    [0.90, [ 52, 211, 153]],   // encore vert franc (fin de la zone safe)
+    [1.00, [180, 208, 100]],   // transition vers jaune (léger warning à échéance)
+    [1.33, [250, 204,  21]],   // jaune franc
+    [1.66, [251, 146,  60]],   // orange
+    [2.00, [220,  38,  38]],   // rouge
   ];
-  const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
+  const r = Math.max(0, Math.min(2, ratio || 0));  // clamp 0..2
   for(let i = 0; i < stops.length - 1; i++){
-    const [ta, ca] = stops[i];
-    const [tb, cb] = stops[i + 1];
-    if(t <= tb){
-      const lt = (tb === ta) ? 0 : (t - ta) / (tb - ta);
-      const r = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
-      const g = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
-      const b = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
-      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    const [ra, ca] = stops[i];
+    const [rb, cb] = stops[i + 1];
+    if(r <= rb){
+      const lt = (rb === ra) ? 0 : (r - ra) / (rb - ra);
+      const red   = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
+      const green = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
+      const blue  = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
+      return 'rgb(' + red + ',' + green + ',' + blue + ')';
     }
   }
   const last = stops[stops.length - 1][1];
