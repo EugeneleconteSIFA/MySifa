@@ -107,6 +107,22 @@
   }
 
   // Helpers generiques : delegues tels quels a la page hote.
+  // Garde-fou : ne ferme la modale que si le geste COMMENCE ET FINIT sur le
+  // fond. Sans ca, un clic-glisse depuis un champ (selection de texte,
+  // curseur relache hors du cadre) fermait la modale et perdait la saisie.
+  function _bindOverlayDismiss(overlay, onDismiss) {
+    let downOnOverlay = false;
+    let upOnOverlay = false;
+    overlay.addEventListener('mousedown', (e) => { downOnOverlay = (e.target === overlay); });
+    overlay.addEventListener('mouseup', (e) => { upOnOverlay = (e.target === overlay); });
+    overlay.addEventListener('click', (e) => {
+      const ok = downOnOverlay && upOnOverlay && e.target === overlay;
+      downOnOverlay = false;
+      upOnOverlay = false;
+      if (ok) onDismiss();
+    });
+  }
+
   function el()         { return (_h().el || _defEl).apply(null, arguments); }
   function api()        { return _h().api.apply(null, arguments); }
   function showToast()  { return _h().showToast.apply(null, arguments); }
@@ -213,7 +229,8 @@
     const locLbl = stockEmplLabel(emplacement);
     const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
   
-    const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
+    const overlay = el('div', { cls: 'modal-overlay' });
+    _bindOverlayDismiss(overlay, closeMroot);
     const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '480px' } });
     sheet.addEventListener('click', e => e.stopPropagation());
   
@@ -697,10 +714,8 @@
     const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
     const mpCat = mat || list.find(x => x.id === S.mpModal.matiereId) || null;
 
-    const overlay = el('div', {
-      cls: 'mp-modal-overlay',
-      on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
-    });
+    const overlay = el('div', { cls: 'mp-modal-overlay' });
+    _bindOverlayDismiss(overlay, closeMroot);
     const headTypeCls = ['entree', 'sortie', 'ajustement', 'transfert'].includes(typeMvt) ? typeMvt : '';
     const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
     box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
@@ -1526,8 +1541,8 @@
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '20px',
       },
-      on: { click: (e) => { if (e.target === overlay) overlay.remove(); } },
     });
+    _bindOverlayDismiss(overlay, () => overlay.remove());
 
     const box = el('div', {
       style: {
@@ -1715,10 +1730,8 @@
     const _isZ1Entree = typeMvt === 'entree'
       && String(defaultEmpl || '').toUpperCase() === 'Z1';
 
-    const overlay = el('div', {
-      cls: 'mp-modal-overlay',
-      on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
-    });
+    const overlay = el('div', { cls: 'mp-modal-overlay' });
+    _bindOverlayDismiss(overlay, closeMroot);
     const headTypeCls = typeMvt === 'entree' ? 'pf-entree' : 'pf-sortie';
     const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
     box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
@@ -1772,7 +1785,8 @@
     if (defaultEmpl) {
       emplInp.value = String(defaultEmpl).toUpperCase();
     }
-    const today = new Date().toISOString().slice(0, 10);
+    // toISOString() renvoie la date UTC : faux jour entre 22h et minuit a Paris.
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
     const dateInp = el('input', { attrs: { type: 'date', value: today } });
     const qInp = el('input', { attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' } });
 
