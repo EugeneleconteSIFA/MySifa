@@ -11061,15 +11061,20 @@ const TEMPLATES_STATE = { list: null };  // null = pas encore chargé
 
 async function loadTemplates(force){
   if(!force && TEMPLATES_STATE.list !== null) return TEMPLATES_STATE.list;
-  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; return []; }
+  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; _maybeRenderTmplPanel(); return []; }
   try{
     const r = await fetch('/api/maintenance/templates?_=' + Date.now(),
                           { credentials:'include', cache: 'no-store' });
-    if(!r.ok){ TEMPLATES_STATE.list = []; return []; }
+    if(!r.ok){ TEMPLATES_STATE.list = []; _maybeRenderTmplPanel(); return []; }
     const d = await r.json();
     TEMPLATES_STATE.list = d.templates || [];
   }catch(e){ TEMPLATES_STATE.list = []; }
+  _maybeRenderTmplPanel();
   return TEMPLATES_STATE.list;
+}
+// v2.4.31 : appelle renderTemplateManagePanel si dispo (safe si div absent).
+function _maybeRenderTmplPanel(){
+  try{ if(typeof renderTemplateManagePanel === 'function') renderTemplateManagePanel(); }catch(e){}
 }
 
 function refreshCaseTemplatePicker(selectedId){
