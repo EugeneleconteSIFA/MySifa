@@ -7,7 +7,7 @@ Page standalone (architecture identique à stock_page.py).
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME
+from config import APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -40,6 +40,9 @@ def fabrication_page(request: Request):
         return access_denied_response("Saisie Production")
     # Substitution du placeholder de branding (org name paramétrable, défaut SIFA).
     html = FABRICATION_HTML.replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
+    html = html.replace(
+        "__STOCK_UNITE_VENTE_DEFAUT__", _js_escape(STOCK_UNITE_VENTE_DEFAUT)
+    )
     return HTMLResponse(
         content=html,
         headers={
@@ -64,6 +67,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -445,6 +449,12 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .cat-production{color:#34d399}
 .cat-personnel{color:#38bdf8}
 .cat-calage{color:#a78bfa}
+/* Saisie neutralisee par une annulation de dossier : lisible mais clairement inactive */
+.fab-row-annule td{opacity:.5}
+.fab-row-annule .fab-op-chip-code,.fab-row-annule .fab-time{text-decoration:line-through}
+.fab-annule-tag{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:4px;
+  background:rgba(248,113,113,.14);color:#f87171;font-size:9px;font-weight:800;
+  letter-spacing:.5px;text-transform:uppercase;vertical-align:middle}
 .cat-arret{color:#fbbf24}
 .cat-appro{color:#22d3ee}
 .cat-nettoyage{color:#2dd4bf}
@@ -971,6 +981,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script>window.__STOCK_UNITE_VENTE_DEFAUT__="__STOCK_UNITE_VENTE_DEFAUT__";</script>
+<script src="/static/mysifa_stock_modals.js"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
@@ -1104,6 +1116,11 @@ let S = {
   repiquageEditCommentaire: '',
   showArret50Modal: false,
   arret50Comment: '',
+  // Annulation de dossier (marche arriere avant production reelle)
+  showAnnulModal: false,
+  annulMotif: '',
+  annulCtx: null,
+  annulLoading: false,
 
   // Form values
   metrageDebut: '',
@@ -1268,7 +1285,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -2057,6 +2074,160 @@ function renderSidebar(){
       h('button',{className:'fab-back-btn',onClick:()=>{window.location.href='/'}},
         '← Retour ',
         h('span',{className:'wm'},'My',h('span',null,'Sifa'))
+      )
+    )
+  );
+}
+
+/* ── Annulation de dossier (marche arriere) ──────────────────── */
+/* L'operateur a demarre un dossier (01) puis enchaine des calages et
+   s'apercoit qu'il n'a pas les elements pour le realiser. Tant qu'aucune
+   saisie de production reelle (03 / 88) n'a ete faite, il peut annuler :
+   toutes les saisies du cycle sont neutralisees et le dossier repart en
+   attente au planning avec le motif saisi. */
+function fabSaisiesProd(){
+  return (S.saisies||[]).filter(s=>(s.kind===undefined||s.kind==='prod'));
+}
+
+function fabAnnulationPossible(){
+  if(isRepiquageMode()) return false;
+  if(S.etat!=='en_cours_production' && S.etat!=='en_arret') return false;
+  const ref = (S.dossier && String(S.dossier.reference||'').trim()) || '';
+  if(!ref) return false;
+  const rows = fabSaisiesProd().filter(s=>!Number(s.est_annule||0));
+  let debutIdx = -1;
+  for(let i=0;i<rows.length;i++){
+    const c = String(rows[i].operation_code||'').trim();
+    const nd = String(rows[i].no_dossier||'').trim();
+    if(nd!==ref) continue;
+    if(c==='01') debutIdx = i;
+    else if(c==='89') debutIdx = -1;
+  }
+  if(debutIdx<0) return false;
+  for(let i=debutIdx+1;i<rows.length;i++){
+    const c = String(rows[i].operation_code||'').trim();
+    if(c==='03'||c==='88') return false;
+  }
+  return true;
+}
+
+function renderAnnulerDossierBtn(){
+  return h('button',{
+    className:'fab-btn fab-btn-danger fab-btn-sm',
+    title:'Annuler ce dossier et le remettre en attente au planning',
+    onClick:openAnnulModal
+  }, svgIcon('refresh-ccw',14),' Annuler le dossier');
+}
+
+async function openAnnulModal(){
+  set({showAnnulModal:true, annulMotif:'', annulCtx:null, annulLoading:true});
+  fabPauseAutoRefresh(60000);
+  try{
+    let url = '/api/fabrication/annulation-contexte';
+    const mid = S.adminMachineId || S.wantedMachineId;
+    if(mid) url += '?machine_id='+encodeURIComponent(mid);
+    const ctx = await apiFetch(url);
+    set({annulCtx:ctx, annulLoading:false});
+  }catch(err){
+    showToast('Erreur : '+err.message,'danger');
+    set({showAnnulModal:false, annulLoading:false});
+  }
+}
+
+async function submitAnnulation(){
+  const motif = String(S.annulMotif||'').trim();
+  if(motif.length<5){
+    showToast('Indiquez la raison de l\'annulation (5 caracteres minimum)','danger');
+    return;
+  }
+  const ctx = S.annulCtx;
+  if(!ctx || !ctx.annulable){
+    showToast(((ctx&&ctx.raison)||'Annulation impossible'),'danger');
+    return;
+  }
+  set({loading:true});
+  try{
+    const body = {motif: motif, no_dossier: ctx.no_dossier, date_operation: nowIsoLocal()};
+    const mid = S.adminMachineId || S.wantedMachineId;
+    if(mid) body.machine_id = mid;
+    const r = await apiFetch('/api/fabrication/annuler-dossier',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    if(r && r.success){
+      showToast('Dossier '+r.no_dossier+' annule — '+r.saisies_annulees+' saisie'
+        +(r.saisies_annulees>1?'s':'')+' annulee'+(r.saisies_annulees>1?'s':''));
+      try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
+    }
+    Object.assign(S,{showAnnulModal:false, annulMotif:'', annulCtx:null});
+  }catch(err){
+    showToast('Erreur : '+err.message,'danger');
+  }finally{
+    fabPauseAutoRefresh(10000);
+    Object.assign(S,{loading:false});
+    await loadSession({noRender:true, silent:true});
+    render();
+  }
+}
+
+function renderAnnulModal(){
+  const ctx = S.annulCtx;
+  const ta = h('textarea',{
+    id:'fab-annul-motif',
+    placeholder:'Ex : bobine matiere manquante, cliche non conforme, OF incomplet...',
+    rows:'3',
+  });
+  ta.value = S.annulMotif||'';
+  ta.addEventListener('input',e=>{ S.annulMotif = e.target.value; });
+  setTimeout(()=>document.getElementById('fab-annul-motif')?.focus(),60);
+
+  const close = ()=>set({showAnnulModal:false, annulMotif:'', annulCtx:null});
+
+  let corps;
+  if(S.annulLoading){
+    corps = h('div',{className:'fab-modal-sub'},'Verification du dossier en cours...');
+  }else if(!ctx || !ctx.annulable){
+    corps = h('div',{className:'fab-alert fab-alert-warn',style:{marginTop:'4px'}},
+      svgIcon('alert',14),
+      ((ctx&&ctx.raison)||'Annulation impossible'));
+  }else{
+    corps = h('div',null,
+      h('div',{className:'fab-modal-sub'},
+        'Dossier : ', h('strong',null, ctx.no_dossier||'—'),
+        ctx.client ? (' — '+ctx.client) : '',
+        ctx.machine ? h('span',{style:{color:'var(--muted)'}}, ' · '+ctx.machine) : null
+      ),
+      h('div',{style:{
+        margin:'10px 0 4px 0',padding:'10px 12px',borderRadius:'10px',
+        background:'rgba(248,113,113,.10)',border:'1px solid rgba(248,113,113,.35)',
+        fontSize:'12.5px',lineHeight:'1.6',color:'var(--text2)',
+      }},
+        h('strong',{style:{color:'var(--text)'}},
+          ctx.nb_saisies+' saisie'+(ctx.nb_saisies>1?'s':'')+' vont etre annulee'
+          +(ctx.nb_saisies>1?'s':'')+'.'),
+        h('br'),
+        'Le dossier repartira en attente dans le planning de production, ',
+        'avec un badge Annule et votre motif. Vos saisies restent consultables ',
+        'dans MyProd mais sortent des statistiques.'
+      ),
+      h('div',{className:'fab-field'},
+        h('label',null,'Raison de l\'annulation (obligatoire)'),
+        ta
+      )
+    );
+  }
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)close();}},
+    h('div',{className:'fab-modal'},
+      h('div',{className:'fab-modal-title'}, svgIcon('refresh-ccw',18),' Annuler le dossier'),
+      corps,
+      h('div',{className:'fab-modal-btns'},
+        h('button',{className:'fab-btn fab-btn-muted fab-btn-sm', onClick:close},'Retour'),
+        h('button',{
+          className:'fab-btn fab-btn-danger',
+          disabled: S.annulLoading || !ctx || !ctx.annulable,
+          onClick: submitAnnulation
+        }, svgIcon('check',15),' Confirmer l\'annulation')
       )
     )
   );
@@ -3779,6 +3950,7 @@ function _fmtU(n, unit){
 }
 async function loadStockProduction(){
   set({stockProdLoading:true});
+  _loadStockEmplacements();
   try{
     const d = await apiFetch('/api/stock/sortie-prod');
     set({stockProdZ1: d || {refs:[],total_unites:0,nb_refs:0}, stockProdLoading:false});
@@ -3787,11 +3959,62 @@ async function loadStockProduction(){
          stockProdLoading:false});
   }
 }
+let _stockModalsWired = false;
+function _wireStockModals(){
+  if(_stockModalsWired) return;
+  if(!window.MySifaStockModals){
+    showToast('Modales de stock indisponibles — rechargez la page.','danger');
+    return;
+  }
+  // Adaptateur : Saisie Prod n'a ni le meme constructeur DOM ni le meme
+  // etat que MyStock. On ne fournit que ce qui est specifique a cette page ;
+  // le module utilise ses helpers de rendu par defaut pour le reste.
+  window.MySifaStockModals.configure({
+    api: (path, opts) => apiFetch(path, opts),
+    showToast: (msg, type) =>
+      showToast(msg, (type === 'error' || type === 'danger') ? 'danger' : 'success'),
+    getStockEmplacements: () => (S.stockEmplacements || []),
+    emplacements: () => (S.stockEmplacements || []),
+    stockAtEmpl: async (produitId, empl) => {
+      if(!produitId || !empl) return 0;
+      try{
+        const d = await apiFetch('/api/stock/produits/' + produitId);
+        const row = (d.emplacements||[]).find(
+          e => String(e.emplacement||'').toUpperCase() === String(empl).toUpperCase());
+        return row ? (parseFloat(row.quantite)||0) : 0;
+      }catch(e){ return 0; }
+    },
+    // Saisie Prod n'expose aucune selection de produit / emplacement :
+    // les champs correspondants restent vides cote modale, ce qui est le
+    // comportement attendu pour une saisie atelier.
+    state: () => ({ tab:'production', matieres: S.stockMatieres || null,
+                    selProduit:null, selEmpl:null, selMatiere:null,
+                    fabStockMode:true }),
+    setMatieres: (v) => { S.stockMatieres = v; },
+    uniteVenteDefaut: (window.__STOCK_UNITE_VENTE_DEFAUT__ || 'étiquette'),
+    emplSortieProd: 'Z1',
+    // Toute ecriture rafraichit la liste Z1 de la page, sans rechargement.
+    reload: async () => { await loadStockProduction(); render(); },
+  });
+  _stockModalsWired = true;
+}
 function _stockGoTo(action){
-  // Redirige vers MyStock avec le sous-onglet Production actif.
+  // Ouvre la modale MyStock correspondante sans quitter Saisie Prod.
   // action = 'entree-mp' | 'sortie-mp' | 'entree-z1' | 'sortie-z1'
-  const url = '/stock?tab=production&auto=' + encodeURIComponent(action||'');
-  window.location.href = url;
+  _wireStockModals();
+  if(!_stockModalsWired) return;
+  try{
+    window.MySifaStockModals.open(action);
+  }catch(e){
+    showToast(e?.message || 'Impossible d ouvrir la saisie.','danger');
+  }
+}
+async function _loadStockEmplacements(){
+  if(S.stockEmplacements) return;
+  try{
+    const d = await apiFetch('/api/stock/emplacements-list');
+    S.stockEmplacements = Array.isArray(d) ? d.map(x => (x && x.emplacement) || x) : [];
+  }catch(e){ S.stockEmplacements = []; }
 }
 function _buildStockActionCard(opts){
   return h('button',{
@@ -4017,10 +4240,12 @@ function renderMain(){
             clientNom = (S.dossier.client||'').trim();
         }
         const fictifRow = isFictifSaisieRow(s);
+        const annuleRow = !!Number(s.est_annule||0);
         const opLblStyle = fictifRow
           ? null
           : {color:isLast?'var(--text)':'var(--text2)',fontWeight:isLast?'700':'500'};
-        return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')+(fictifRow?' fab-row-fictif':'')},
+        return h('tr',{className:'fab-table-row'+(isLast?' fab-row-last':'')+(fictifRow?' fab-row-fictif':'')+(annuleRow?' fab-row-annule':''),
+          title: annuleRow ? ('Saisie annulee avec le dossier'+(s.annule_motif?' — '+s.annule_motif:'')) : undefined},
           h('td',null, h('span',{className:'fab-time'}, fmtTime(s.date_operation))),
           ...(isAdminView ? [h('td',null, h('span',{style:fictifRow?undefined:{fontWeight:'800',color:'var(--text)'}}, opNom))] : []),
           h('td',null, clientNom
@@ -4032,7 +4257,8 @@ function renderMain(){
             )
           ),
           h('td',null, h('span',{...(opLblStyle?{style:opLblStyle}:{})},
-            op.label||s.operation||code)),
+            op.label||s.operation||code),
+            annuleRow ? h('span',{className:'fab-annule-tag'},'Annulé') : null),
           h('td',null, metrageText ? h('span',{className:'fab-metrage'},metrageText) : null),
           h('td',null, s.commentaire
             ? h('span',{className:'fab-comment-cell',title:s.commentaire}, s.commentaire)
@@ -4374,6 +4600,7 @@ function renderFooter(){
       className:'fab-btn fab-btn-warn',
       onClick:()=>handleOpTrigger('89','Fin de production','personnel')
     }, svgIcon('flag',16),' Fin de production'));
+    if(fabAnnulationPossible()) btns.push(renderAnnulerDossierBtn());
   }
 
   // ── État : arrêt en cours ──
@@ -4386,6 +4613,7 @@ function renderFooter(){
       className:'fab-btn fab-btn-warn fab-btn-sm',
       onClick:()=>handleOpTrigger('89','Fin de production','personnel')
     }, svgIcon('flag',14),' Fin de production'));
+    if(fabAnnulationPossible()) btns.push(renderAnnulerDossierBtn());
   }
 
   // ── État : dossier terminé ──
@@ -6866,6 +7094,7 @@ function render(){
   if(S.showDebutModal)    root.appendChild(renderDebutModal());
   if(S.showFinModal)      root.appendChild(renderFinModal());
   if(S.showCommentModal)  root.appendChild(renderCommentModal());
+  if(S.showAnnulModal)    root.appendChild(renderAnnulModal());
   if(S.showTracaCommentModal) root.appendChild(renderTracaCommentModal());
   if(S.showRepiquageEditModal) root.appendChild(renderRepiquageEditModal());
   if(S.repiquageAttentionOpen) root.appendChild(renderRepiquageAttentionModal());

@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from app.services.auth_service import get_current_user
 from app.web.access_denied import access_denied_response
 from config import APP_VERSION
+from app.web.qualite_ged_assets import GED_JS
 
 ROLES_QUALITE = {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
 ROLES_QUALITE_READONLY = {"commercial"}
@@ -38,6 +39,7 @@ def qualite_page(request: Request):
         .replace("__IS_QUALITE_ADMIN__", "true" if is_admin else "false")
         .replace("__IS_QUALITE_READONLY__", "true" if is_readonly else "false")
         .replace("__USER_ROLE__", user.get("role", ""))
+        .replace("__GED_ASSETS__", GED_JS)
     )
     return HTMLResponse(
         content=html,
@@ -900,7 +902,10 @@ function setView(v, opts){
   } else if(v==='sifa-docs-list'){
     const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent='Certifications SIFA';
-    if(typeof loadSifaDocsList==='function') loadSifaDocsList();
+    // Deux sous-onglets : « Documents clients » (historique) et « Explorateur » (GED).
+    // L'onglet actif est memorise dans localStorage, on y revient donc directement.
+    if(typeof gedActiveTab==='function' && gedActiveTab()==='explorer'){ gedEnter(); }
+    else if(typeof loadSifaDocsList==='function') loadSifaDocsList();
   } else if(v==='sifa-docs-detail'){
     const nav=document.getElementById('nav-sifa-docs'); if(nav) nav.classList.add('active');
     document.getElementById('mobile-sub').textContent=S.currentSifaDoc?S.currentSifaDoc.titre:'Certification';
@@ -2936,6 +2941,8 @@ async function loadSifaDocsList(){
 function renderSifaDocsList(){
   const root = document.getElementById('content');
   if(!root) return;
+  // Si l'utilisateur est sur l'onglet Explorateur, c'est lui qui rend la page.
+  if(typeof gedActiveTab==='function' && gedActiveTab()==='explorer'){ gedEnter(); return; }
   const templates = S.sifaDocsTemplates || [];
   const cards = templates.map(t => `
     <div class="sd-card" onclick="openSifaDoc('${escAttr(t.code)}')">
@@ -2957,6 +2964,7 @@ function renderSifaDocsList(){
   `).join('');
 
   root.innerHTML = `
+    ${typeof sifaTabsHtml==='function' ? sifaTabsHtml('docs') : ''}
     <div class="sd-hero">
       <h1>Certifications SIFA</h1>
       <p>Documents officiels SIFA (Déclarations UE de Conformité, attestations) à envoyer aux clients. Un template par type de document, une version par client. Le PDF liste les fournisseurs retenus pour ce client et leur origine géographique.</p>
@@ -7231,6 +7239,7 @@ async function saveMatriceCell(fourId, ficheId){
 
 
 window.addEventListener('hashchange',function(){try{var hv=_readQualiteView();if(hv)setView(hv,{silent:true});}catch(e){}});
+__GED_ASSETS__
 init();
 </script>
 <script src="/static/mysifa_impersonate.js"></script>

@@ -614,6 +614,12 @@ tr.data-row.saisie-row-fictif:hover td{background:rgba(167,139,250,.08) !importa
 body.light tr.data-row.saisie-row-fictif td,
 body.light tr.data-row.saisie-row-fictif td span{color:#7c3aed !important}
 
+/* Saisie annulee avec son dossier — conservee pour l'audit, hors statistiques.
+   Lisible mais clairement inactive : ni cliquable, ni selectionnable. */
+tr.data-row.saisie-row-annule td{text-decoration:line-through;text-decoration-color:rgba(248,113,113,.55)}
+tr.data-row.saisie-row-annule td:nth-last-child(-n+3){text-decoration:none}
+tr.data-row.saisie-row-annule:hover td{background:rgba(248,113,113,.10) !important}
+
 /* Formulaire ajout ligne — modal style */
 .add-row-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center}
 .add-row-form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;width:100%;max-width:540px;box-shadow:0 24px 64px rgba(0,0,0,.4);position:relative}

@@ -4832,7 +4832,18 @@ function renderSaisies(){
  
   rows.forEach(row=>{
     const fictifRow = isFictifSaisieRow(row);
-    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':''),style:{cursor:readOnly?'default':'pointer'}});
+    // Saisie neutralisee par une annulation de dossier (MyProd fabrication) :
+    // conservee pour l'audit, exclue de toutes les statistiques, non modifiable.
+    const annuleRow = !!Number(row.est_annule||0);
+    const annuleTip = annuleRow
+      ? ('Saisie annulée avec le dossier'
+          + (row.annule_motif ? ' — '+row.annule_motif : '')
+          + (row.annule_par ? ' (par '+row.annule_par+')' : '')
+          + (row.annule_le ? ' le '+fD(row.annule_le) : ''))
+      : '';
+    const tr=h('tr',{className:'data-row'+(fictifRow?' saisie-row-fictif':'')+(annuleRow?' saisie-row-annule':''),
+      style:{cursor:(readOnly||annuleRow)?'default':'pointer'}});
+    if(annuleRow) tr.title = annuleTip;
     // PAR — contrastes plus forts + catégorie production en vert
     const opCode = row.operation_code || '';
     const cat    = row.operation_category || '';
@@ -4858,6 +4869,7 @@ function renderSaisies(){
     } else if (cat === 'calage' || opCode === '02') {
       rowBg = 'rgba(251,191,36,.08)';           // jaune doux calage
     }
+    if (annuleRow) { rowBg = 'rgba(248,113,113,.08)'; tr.style.opacity = '.6'; }
     if (rowBg) tr.style.background = rowBg;
     if (S.selectedRows.has(row.id)) tr.style.background = 'rgba(34,211,238,.12)';
 
@@ -4866,12 +4878,12 @@ function renderSaisies(){
     if(isAlertAck){
       tr.style.cursor = 'pointer';
       tr.addEventListener('click',()=>_openAlertAckViewer(row));
-    } else if(!readOnly){
+    } else if(!readOnly && !annuleRow){
       tr.addEventListener('click',()=>{ if(row.kind==='stock_pf'||row.kind==='stock_mp') openEditStockModal(row); else openEditModal(row); });
     }
  
-    // Checkbox ligne — désactivée pour les acks d'alertes (lecture seule)
-    if(isAlertAck){
+    // Checkbox ligne — désactivée pour les acks d'alertes et les saisies annulées
+    if(isAlertAck || annuleRow){
       tr.appendChild(h('td',null));
     } else {
       const chk=h('input',{type:'checkbox'});
@@ -4888,7 +4900,10 @@ function renderSaisies(){
     }
 
     let badge=null;
-    if(isAlertAck) badge=h('span',{className:'badge-alert-ack',title:"Alerte validée par un opérateur — lecture seule",
+    if(annuleRow) badge=h('span',{className:'badge-annule-saisie',title:annuleTip,
+      style:{background:'rgba(248,113,113,.16)',color:'#f87171',border:'1px solid rgba(248,113,113,.45)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
+    },'ANNULÉ');
+    else if(isAlertAck) badge=h('span',{className:'badge-alert-ack',title:"Alerte validée par un opérateur — lecture seule",
       style:{background:'var(--accent-bg)',color:'var(--accent)',border:'1px solid var(--accent)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
     },'ALERTE');
     else if(row.est_manuel) badge=h('span',{className:'badge-manuel'},'+ Manuel');
@@ -4919,7 +4934,14 @@ function renderSaisies(){
         : row.metrage_prevu!=null       ? h('span',{style:{color:'var(--muted)',fontSize:'11px'}},fN(row.metrage_prevu)+' m (déb.)')
         : '-'));
     // v2.3.43 : commentaire toujours lecture seule pour un ack (id string non éditable)
-    if(readOnly || isAlertAck){
+    if(annuleRow){
+      const txt = (row.commentaire||'').trim();
+      const motif = (row.annule_motif||'').trim();
+      tr.appendChild(h('td',{style:{maxWidth:'220px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:annuleTip},
+        txt ? txt+(motif?' · ':'') : '',
+        motif ? h('span',{style:{color:'#f87171',fontStyle:'italic'}},'Motif : '+motif) : null
+      ));
+    }else if(readOnly || isAlertAck){
       tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
@@ -4928,7 +4950,7 @@ function renderSaisies(){
 
     // v2.3.43 : pas de boutons +/- pour un ack — id "ack-<n>" n'est pas
     // un vrai row de production_data (DELETE /api/saisies/ack-42 renverrait 404).
-    if(!readOnly && !isAlertAck){
+    if(!readOnly && !isAlertAck && !annuleRow){
       const addBtn=h('button',{className:'add-row-btn',title:'Insérer une ligne après',onClick:e=>{e.stopPropagation();openAddModal(row);}},'+');
       const delBtn=h('button',{className:'add-row-btn',title:'Supprimer cette ligne',
         style:{left:'calc(50% + 18px)',background:'var(--danger)',borderColor:'var(--bg)'},

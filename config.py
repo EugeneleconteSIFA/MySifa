@@ -661,3 +661,21 @@ DEEPL_API_URL = os.getenv(
     "DEEPL_API_URL",
     "https://api-free.deepl.com/v2" if DEEPL_API_KEY.endswith(":fx") else "https://api.deepl.com/v2",
 )
+
+
+# --- MyQualite > Certifications SIFA > Explorateur de documents (GED) ---
+# Taille maximale d'un document depose dans l'explorateur.
+# Surcharge possible via la variable d'environnement GED_MAX_FILE_MB.
+GED_MAX_FILE_MB = int(os.getenv("GED_MAX_FILE_MB", "20"))
+
+# Liste noire d'extensions : tout est accepte SAUF les executables et les
+# scripts. Une liste noire (et non blanche) est le choix retenu pour ne pas
+# bloquer un format metier inattendu ; l'extension testee est la derniere du
+# nom, donc "facture.pdf.exe" est bien refuse.
+GED_BLOCKED_EXTENSIONS = {
+    "exe", "msi", "com", "scr", "pif", "cpl", "bat", "cmd", "hta", "msc",
+    "vbs", "vbe", "js", "jse", "wsf", "wsh", "ws", "ps1", "psm1", "psc1",
+    "sh", "bash", "zsh", "csh", "run", "bin", "app", "apk", "jar",
+    "dll", "sys", "drv", "ocx", "scf", "lnk", "reg", "gadget",
+    "deb", "rpm", "dmg", "pkg", "iso", "img", "vbscript",
+}
