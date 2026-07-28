@@ -2692,14 +2692,31 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
-    // v2.5.7 : restaure le sous-onglet Planning persiste (Calendrier / Historique)
-    // avant de faire quoi que ce soit — sinon on retombe systematiquement sur
-    // Calendrier apres refresh, meme si l'utilisateur etait sur Historique.
+    // v2.5.8 : restaure le sous-onglet Planning persiste (Calendrier / Historique).
+    // ATTENTION : PLAN_SUBTAB_KEY est un `const` declare APRES cette IIFE init()
+    // dans la source (~ligne 8263). Appeler _getPlanSubtab()/setPlanSubtab() ici
+    // leve une ReferenceError TDZ silencieusement catchee -> defaut calendrier.
+    // On lit et applique le sous-onglet en direct pour bypass le TDZ. Le vrai
+    // helper reprend la main sur les clics utilisateur suivants.
     let _persistedSub = 'calendrier';
-    try{ _persistedSub = (typeof _getPlanSubtab === 'function') ? _getPlanSubtab() : 'calendrier'; }catch(e){}
+    try{ _persistedSub = localStorage.getItem('mysifa_maint_plan_subtab_v1') || 'calendrier'; }catch(e){}
     if(_persistedSub !== 'calendrier' && _persistedSub !== 'historique') _persistedSub = 'calendrier';
-    // Applique l'affichage du bon sous-onglet (boutons + display des containers).
-    if(typeof setPlanSubtab === 'function') setPlanSubtab(_persistedSub);
+    // Applique l'affichage du sous-onglet manuellement (bypass setPlanSubtab TDZ).
+    try{
+      document.querySelectorAll('[data-plan-subtab]').forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-plan-subtab') === _persistedSub);
+      });
+      var _cal  = document.getElementById('plan-subview-calendrier');
+      var _hist = document.getElementById('plan-subview-historique');
+      if(_cal)  _cal.style.display  = (_persistedSub === 'calendrier') ? '' : 'none';
+      if(_hist) _hist.style.display = (_persistedSub === 'historique') ? '' : 'none';
+    }catch(e){}
+    // Si on demarre sur Historique, ne pas gaspiller les cycles sur le calendrier :
+    // charger l'historique + les templates via setPlanSubtab (defer pour eviter TDZ).
+    if(_persistedSub === 'historique'){
+      setTimeout(function(){ try{ if(typeof setPlanSubtab === 'function') setPlanSubtab('historique'); }catch(e){} }, 0);
+      return;
+    }
     // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
     // (cas où le fetch initial a déjà résolu au boot).
     if(typeof setCalView === 'function') setCalView('week');
@@ -2714,10 +2731,6 @@ function switchView(name){
       // layout, pour couvrir les navigateurs qui calculent les
       // dimensions tardivement.
       setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
-      // v2.5.7 : filet supplementaire — certains navigateurs ne stabilisent le
-      // layout du calendrier qu'apres 400-500ms au premier chargement (fonts,
-      // fetches paralleles). Sans ce dernier renderCal, les events ne se
-      // positionnent pas avant que l'utilisateur ne change d'onglet.
       setTimeout(() => { try{ renderCal(); }catch(e){} }, 500);
     })();
   }
