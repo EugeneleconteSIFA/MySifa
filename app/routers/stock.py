@@ -9,6 +9,7 @@ import re
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -29,6 +30,18 @@ from services.auth_service import get_current_user, user_has_app_access
 router = APIRouter()
 
 INVENTAIRE_ALERTE_JOURS = 180  # 6 mois
+
+_PARIS = ZoneInfo("Europe/Paris")
+
+
+def _now_paris() -> datetime:
+    """Heure de Paris en datetime naif.
+
+    Convention MySifa (cf. CLAUDE.md) : tous les horodatages sont stockes en
+    heure de Paris naive, pas en UTC. Le serveur tourne en UTC, donc un
+    appel nu a datetime.now() decalait les mouvements de stock de 1 a 2 heures.
+    """
+    return datetime.now(_PARIS).replace(tzinfo=None)
 
 
 def _normalize_emplacement(code: str) -> str:
@@ -665,7 +678,7 @@ def _parse_snapshot_date(raw: str | None) -> str | None:
         # Validation légère
         if y < 2020 or y > 2100 or m < 1 or m > 12 or d < 1 or d > 31:
             return None
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = _now_paris().strftime("%Y-%m-%d")
         if raw > today:
             return None  # pas d'avenir
     except (TypeError, ValueError):
@@ -865,7 +878,7 @@ def apply_fifo_sortie(
 
     quantite_avant = total_dispo
     restant = quantite
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     for lot in lots:
         if restant <= 0:
@@ -947,7 +960,7 @@ def deplacer_lot_fifo(
     qte_lot = float(lot["quantite_restante"])
     lot_id = lot["id"]
     date_entree = lot["date_entree"]
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     
     # Quantité avant le déplacement
     quantite_avant_source = qte_lot
@@ -1197,7 +1210,7 @@ tr:nth-child(even){{background:#f8fafc}}
 @media print{{body{{margin:12px}}}}
 </style></head><body>
 <h1>Références et unités de vente</h1>
-<p>Export MyStock — {datetime.now().strftime("%d/%m/%Y %H:%M")} — {len(rows)} référence(s)</p>
+<p>Export MyStock — {_now_paris().strftime("%d/%m/%Y %H:%M")} — {len(rows)} référence(s)</p>
 <table><thead><tr><th>Référence</th><th>Unité de vente</th><th>Désignation</th></tr></thead>
 <tbody>{html_rows}</tbody></table>
 <script>window.onload=function(){{window.print();}}</script>
@@ -1255,7 +1268,7 @@ def get_produit(produit_id: int, request: Request):
         ).fetchall()
 
         # Alerte inventaire
-        now = datetime.now()
+        now = _now_paris()
         empl_data = []
         for e in empls:
             d = dict(e)
@@ -1277,7 +1290,7 @@ def get_produit(produit_id: int, request: Request):
     jours_stock = None
     if fifo["date_fifo"]:
         try:
-            jours_stock = (datetime.now() - datetime.fromisoformat(fifo["date_fifo"][:19])).days
+            jours_stock = (_now_paris() - datetime.fromisoformat(fifo["date_fifo"][:19])).days
         except Exception:
             pass
 
@@ -1315,7 +1328,7 @@ async def create_produit(request: Request):
         description = f"Quantité: {str(q).strip()}"
     # Par défaut, l'unité de vente est "étiquette" (singulier ; le pluriel est géré côté frontend).
     unite = (body.get("unite") or "étiquette").strip() or "étiquette"
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     with get_db() as conn:
         try:
             cursor = conn.execute(
@@ -1344,7 +1357,7 @@ async def create_produit(request: Request):
 async def update_produit(produit_id: int, request: Request):
     user = require_stock_write(request)
     body = await request.json()
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     ref_audit = ""
     with get_db() as conn:
         prow = conn.execute(
@@ -1384,7 +1397,7 @@ async def convertir_unite_produit(produit_id: int, request: Request):
         raise HTTPException(400, "Facteur invalide.") from None
     if facteur <= 0:
         raise HTTPException(400, "Facteur doit être strictement positif.")
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     with get_db() as conn:
         prow = conn.execute(
@@ -1528,7 +1541,7 @@ def add_emplacement_plan(payload: _EmplacementPlanAdd, request: Request):
         raise HTTPException(400, "Code emplacement vide.")
     if len(code) > 20:
         raise HTTPException(400, "Code trop long (20 caractères max).")
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     with get_db() as conn:
         conn.execute(
             """CREATE TABLE IF NOT EXISTS emplacements_plan (
@@ -1578,7 +1591,7 @@ def list_emplacements(request: Request):
 def get_emplacement(emplacement: str, request: Request):
     require_stock(request)
     emplacement = emplacement.upper()
-    now = datetime.now()
+    now = _now_paris()
     with get_db() as conn:
         refs = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
@@ -1773,8 +1786,8 @@ def _apply_stock_mouvement(
     no_dossier: Optional[str] = None,
 ) -> tuple[dict, str, str]:
     """Applique un mouvement PF (entree / sortie / inventaire) sur la base existante."""
-    now = datetime.now().isoformat()
-    date_entree = date_entree or datetime.now().strftime("%Y-%m-%d")
+    now = _now_paris().isoformat()
+    date_entree = date_entree or _now_paris().strftime("%Y-%m-%d")
     created_by_name = _resolve_created_by_name(conn, user)
 
     p = conn.execute(
@@ -1914,7 +1927,7 @@ async def mouvement_stock(request: Request):
     type_mvt = body.get("type_mouvement", "entree")
     quantite = float(body.get("quantite", 0))
     note = (body.get("note") or "").strip()
-    date_entree = (body.get("date_entree") or datetime.now().strftime("%Y-%m-%d"))
+    date_entree = (body.get("date_entree") or _now_paris().strftime("%Y-%m-%d"))
     no_dossier = (body.get("no_dossier") or "").strip() or None
     palettes_in = body.get("palettes") or []
 
@@ -1977,7 +1990,7 @@ async def mouvement_stock(request: Request):
         # Insertion des palettes (meme transaction)
         mvt_id = result.get("mouvement_id")
         if palettes_clean and mvt_id:
-            now = datetime.now().isoformat()
+            now = _now_paris().isoformat()
             conn.executemany(
                 """INSERT INTO mouvement_palettes (mouvement_id, matiere_id, nombre, created_at)
                    VALUES (?,?,?,?)""",
@@ -2115,7 +2128,7 @@ def inventaire_priorites(request: Request):
 def produits_a_inventorier(request: Request, jours: int = 180):
     """Produits avec emplacements non inventoriés depuis > jours."""
     require_stock(request)
-    limite = (datetime.now() - timedelta(days=jours)).isoformat()
+    limite = (_now_paris() - timedelta(days=jours)).isoformat()
     with get_db() as conn:
         rows = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
@@ -2165,7 +2178,7 @@ def inventaire_v2_emplacements(request: Request):
     Triés du plus ancien (rouge / jamais) au plus récent (vert).
     """
     require_stock(request)
-    now = datetime.now()
+    now = _now_paris()
     with get_db() as conn:
         rows = conn.execute(
             """SELECT ep.code AS emplacement,
@@ -2331,7 +2344,7 @@ async def inventaire_v2_valider(request: Request):
     if not isinstance(commentaires_in, list):
         commentaires_in = []
 
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     modifs_applied: list[dict] = []
     with get_db() as conn:
         for mod in modifications:
@@ -2538,7 +2551,7 @@ def historique_mouvements(
                 r.get("created_by_name") or "",
             ])
         data = buf.getvalue().encode("utf-8-sig")
-        fname = f"historique_stock_{datetime.now().strftime('%Y%m%d')}.csv"
+        fname = f"historique_stock_{_now_paris().strftime('%Y%m%d')}.csv"
         return StreamingResponse(
             io.BytesIO(data),
             media_type="text/csv; charset=utf-8",
@@ -2554,7 +2567,7 @@ def historique_mouvements(
 @router.get("/api/stock/dashboard")
 def dashboard(request: Request):
     require_stock(request)
-    now = datetime.now()
+    now = _now_paris()
     limite_alerte = (now - timedelta(days=INVENTAIRE_ALERTE_JOURS)).isoformat()
     with get_db() as conn:
         stats = conn.execute(
@@ -2618,7 +2631,7 @@ def dashboard(request: Request):
             (STOCK_EMPLACEMENT_AU_SOL,),
         ).fetchone()
 
-        today_prefix = datetime.now().strftime("%Y-%m-%d")
+        today_prefix = _now_paris().strftime("%Y-%m-%d")
         departs_jour = conn.execute(
             """
             SELECT COUNT(*) AS nb
@@ -2877,7 +2890,7 @@ async def create_reception(request: Request):
             status_code=400,
             detail="Certificat FSC requis pour une reception certifiee FSC.",
         )
-    now_dt = datetime.now()
+    now_dt = _now_paris()
     now = now_dt.isoformat()
     lot_numero = _build_lot_numero(fournisseur, now_dt, fsc_type_claim)
 
@@ -3957,7 +3970,7 @@ def matieres_inventaire_liste(request: Request):
             (_INVMAT_DEFAULT_INTERVAL_DAYS,),
         ).fetchall()
 
-    now = datetime.now()
+    now = _now_paris()
     result = []
     for r in rows:
         d = dict(r)
@@ -4057,7 +4070,7 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
     created_by = user.get("id")
     operateur_email = user.get("email")
     operateur_nom = (user.get("nom") or "").strip() or None
-    now_dt = datetime.now()
+    now_dt = _now_paris()
     now = now_dt.isoformat()
     note_date = now_dt.strftime("%d/%m/%Y")
 
@@ -4376,7 +4389,7 @@ def _pf_list_stock_rows(conn: sqlite3.Connection, produit_type: str = "fabrique"
 
 
 def _pf_kpis(conn: sqlite3.Connection, produit_type: str = "fabrique") -> dict:
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _now_paris().strftime("%Y-%m-%d")
     refs = conn.execute(
         """
         SELECT COUNT(DISTINCT l.produit_id) AS n
@@ -4574,7 +4587,7 @@ async def produit_fini_entree(request: Request):
     body = await request.json()
     reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
     note = _pf_compose_note(body)
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     with get_db() as conn:
         produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now)
@@ -4600,7 +4613,7 @@ async def produit_fini_sortie(request: Request):
     body = await request.json()
     reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
     note = _pf_compose_note(body)
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     with get_db() as conn:
         produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now)
@@ -4749,7 +4762,7 @@ async def negoce_entree(request: Request):
     if not (body.get("unite") or "").strip():
         unite = "rouleau"
     note = _pf_compose_note(body)
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     with get_db() as conn:
         produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now, produit_type="negoce")
@@ -4775,7 +4788,7 @@ async def negoce_sortie(request: Request):
     body = await request.json()
     reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
     note = _pf_compose_note(body)
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     with get_db() as conn:
         produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now, produit_type="negoce")
@@ -4815,7 +4828,7 @@ async def upsert_negoce_produit(request: Request):
     unite = (body.get("unite") or "rouleau").strip() or "rouleau"
     if not reference:
         raise HTTPException(400, "Référence obligatoire.")
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     with get_db() as conn:
         existing = conn.execute(
             "SELECT id, type FROM produits WHERE reference=?", (reference,)
@@ -4895,7 +4908,7 @@ async def confirm_produits_import(request: Request):
     rows = body.get("rows") or []
     if not isinstance(rows, list) or not rows:
         raise HTTPException(400, "Aucune ligne à importer.")
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     applied = {"create": 0, "update": 0, "skipped": 0, "error": 0}
     with get_db() as conn:
         for item in rows:
@@ -5597,7 +5610,7 @@ def get_valorisation(request: Request, date: str | None = None):
 async def update_valorisation(matiere_id: int, request: Request):
     user = require_stock_matieres_admin(request)
     body = await request.json()
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
     user_id = user.get("id")
     with get_db() as conn:
@@ -5751,7 +5764,7 @@ async def toggle_valorisation_cout_transport(matiere_id: int, request: Request):
     body = await request.json() if request.headers.get("content-length") else {}
     requested = body.get("cout_transport_inclus") if isinstance(body, dict) else None
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
         mat = conn.execute(
             "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
@@ -5815,7 +5828,7 @@ async def toggle_valorisation_taxe_importation(matiere_id: int, request: Request
     body = await request.json() if request.headers.get("content-length") else {}
     requested = body.get("taxe_importation") if isinstance(body, dict) else None
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
         mat = conn.execute(
             "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
@@ -5869,7 +5882,7 @@ async def toggle_valorisation_prix_en_usd(matiere_id: int, request: Request):
     body = await request.json() if request.headers.get("content-length") else {}
     requested = body.get("prix_en_usd") if isinstance(body, dict) else None
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
         mat = conn.execute(
             "SELECT id FROM matieres_premieres WHERE id=?", (matiere_id,)
@@ -6069,7 +6082,7 @@ def export_valorisation(request: Request):
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = _now_paris().strftime("%Y-%m-%d")
     filename = f"valorisation-stock-{date_str}.xlsx"
     return StreamingResponse(
         buf,
@@ -6306,7 +6319,7 @@ async def update_valorisation_pf(produit_id: int, request: Request):
         raise HTTPException(400, "Prix négatif.")
     if new_price > 1_000_000:
         raise HTTPException(400, "Prix hors limites.")
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
     user_id = user.get("id")
     with get_db() as conn:
@@ -6500,7 +6513,7 @@ async def import_valorisation_pf(request: Request, file: UploadFile = File(...))
     rows, warnings = _pf_valo_parse_excel(content)
     if not rows:
         raise HTTPException(400, "Aucune ligne exploitable dans la feuille Valorisation.")
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    now = _now_paris().strftime("%Y-%m-%dT%H:%M:%S")
     user_name = (user.get("nom") or user.get("email") or "").strip() or None
     user_id = user.get("id")
     created = 0
@@ -6634,7 +6647,7 @@ def export_valorisation_pdf(
         )
     except Exception as e:
         raise HTTPException(500, f"Erreur génération PDF : {e}") from None
-    date_slug = snapshot_date or datetime.now().strftime("%Y-%m-%d")
+    date_slug = snapshot_date or _now_paris().strftime("%Y-%m-%d")
     filename = f"valorisation_{type_vue}_{date_slug}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
@@ -6690,7 +6703,7 @@ def export_valorisation_pf(request: Request):
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = _now_paris().strftime("%Y-%m-%d")
     filename = f"valorisation-pf-{date_str}.xlsx"
     return StreamingResponse(
         buf,

@@ -1288,9 +1288,10 @@ def export_produit_bat(
     """
     from app.services.bat_etiquette import (
         build_bat_spec, render_bat_svg, render_bat_pdf, bat_filename,
+        translate_spec_fields,
     )
 
-    _require_ao(request)
+    user = _require_ao(request)
     fmt = "pdf" if str(fmt).lower() == "pdf" else "svg"
     lang = "en" if str(lang).lower() == "en" else "fr"
 
@@ -1343,6 +1344,14 @@ def export_produit_bat(
         date_bat="/".join(reversed(_now_paris_iso()[:10].split("-"))),
         lang=lang,
     )
+
+    # Champs libres (support, adhesif, couleurs) : saisis en francais en base,
+    # traduits a la volee pour le BAT anglais. Connexion dediee et courte : le
+    # cache DeepL ecrit, on ne veut pas tenir la connexion du rendu pendant un
+    # appel reseau.
+    if lang == "en":
+        with get_db() as conn:
+            translate_spec_fields(spec, conn, lang="en", user_id=user.get("id"))
 
     if fmt == "pdf":
         return Response(

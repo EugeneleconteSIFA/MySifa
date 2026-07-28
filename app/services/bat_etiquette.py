@@ -28,6 +28,8 @@ import base64
 import io
 import math
 import os
+import re
+import unicodedata
 from typing import Any, Dict, List, Optional, Sequence, Tuple
  
 # ---------------------------------------------------------------------------
@@ -139,70 +141,109 @@ def exit_direction_choices(lang: str = "fr") -> List[Dict[str, Any]]:
  
 TEXTS: Dict[str, Dict[str, Any]] = {
     "fr": {
-        "customer": "CLIENT",
+        "customer": "Client",
         "our_ref": "Notre référence :",
         "your_ref": "Votre référence :",
         "produced": "BAT établi le {date}",
-        "without_printing": "SANS IMPRESSION",
-        "with_printing": "AVEC IMPRESSION",
-        "format": "FORMAT",
-        "radius": "RAYON",
-        "adhesive": "ADHÉSIF",
-        "roll_of": "BOBINE DE {n} ÉTIQUETTES",
-        "core": "MANDRIN",
-        "outer_dia": "Ø EXTÉRIEUR",
-        "perf_full": "PERFORATION INTER-ÉTIQUETTE {a}/{b} mm",
-        "perf_l1": "PERFORATION",
-        "perf_l2": "INTER-ÉTIQUETTE {a}/{b} mm",
-        "vperf": "PERFORATION VERTICALE",
-        "exit_dir": "SENS DE SORTIE",
-        "cust_exit_1": "SENS DE SORTIE",
-        "cust_exit_2": "CLIENT",
+        "without_printing": "Sans impression",
+        "with_printing": "Avec impression",
+        "format": "Format",
+        "radius": "Rayon",
+        "adhesive": "Adhésif",
+        "roll_of": "Bobine de {n} étiquettes",
+        "core": "Mandrin",
+        "outer_dia": "Ø extérieur",
+        "perf_full": "Perforation inter-étiquette {a}/{b} mm",
+        "perf_full_plain": "Perforation inter-étiquette",
+        "perf_l1": "Perforation",
+        "perf_l2": "Inter-étiquette {a}/{b} mm",
+        "perf_l2_plain": "Inter-étiquette",
+        "vperf": "Perforation verticale",
+        "exit_dir": "Sens de sortie",
+        "cust_exit_1": "Sens de sortie",
+        "cust_exit_2": "Client",
         "cutting": "Découpe",
         "glassine": "Glassine",
-        "signature": "SIGNATURE",
+        "signature": "Signature",
         "disc_1": "Vous êtes seul responsable",
         "disc_2": "des erreurs non signalées.",
-        "pitch": "PAS",
-        "gap": "AVANCE",
-        "scale": "ÉCHELLE {ratio}",
-        "title": "BON À TIRER",
+        "pitch": "Pas",
+        "gap": "Avance",
+        "scale": "Échelle {ratio}",
+        "title": "Bon à tirer",
     },
     "en": {
-        "customer": "CUSTOMER",
+        "customer": "Customer",
         "our_ref": "Our reference :",
         "your_ref": "Your reference :",
         "produced": "This proof was produced on {date}",
-        "without_printing": "WITHOUT PRINTING",
-        "with_printing": "WITH PRINTING",
-        "format": "FORMAT",
-        "radius": "RADIUS",
-        "adhesive": "ADHESIVE",
-        "roll_of": "ROLL OF {n} LABELS",
-        "core": "CORE",
-        "outer_dia": "OUTER Ø",
-        "perf_full": "INTER-LABEL PERFORATION {a}/{b} mm",
-        "perf_l1": "INTER-LABEL",
-        "perf_l2": "PERFORATION {a}/{b} mm",
-        "vperf": "VERTICAL PERFORATION",
-        "exit_dir": "EXIT DIRECTION",
-        "cust_exit_1": "CUSTOMER EXIT",
-        "cust_exit_2": "DIRECTION",
+        "without_printing": "Without printing",
+        "with_printing": "With printing",
+        "format": "Format",
+        "radius": "Radius",
+        "adhesive": "Adhesive",
+        "roll_of": "Roll of {n} labels",
+        "core": "Core",
+        "outer_dia": "Outer Ø",
+        "perf_full": "Inter-label perforation {a}/{b} mm",
+        "perf_full_plain": "Inter-label perforation",
+        "perf_l1": "Inter-label",
+        "perf_l2": "Perforation {a}/{b} mm",
+        "perf_l2_plain": "Perforation",
+        "vperf": "Vertical perforation",
+        "exit_dir": "Exit direction",
+        "cust_exit_1": "Customer exit",
+        "cust_exit_2": "Direction",
         "cutting": "Cutting",
         "glassine": "Glassine",
-        "signature": "SIGNATURE",
+        "signature": "Signature",
         "disc_1": "You are solely responsible for",
         "disc_2": "any errors that are not reported.",
-        "pitch": "PITCH",
-        "gap": "GAP",
-        "scale": "SCALE {ratio}",
-        "title": "PROOF",
+        "pitch": "Pitch",
+        "gap": "Gap",
+        "scale": "Scale {ratio}",
+        "title": "Proof",
     },
 }
  
  
 def _t(lang: str) -> Dict[str, Any]:
     return TEXTS.get(lang, TEXTS["fr"])
+
+
+# Sigles conserves tels quels par _sentence_case. Liste explicite et non
+# heuristique : une regle du type "tout mot court en capitales" garderait
+# aussi les mots outils ("BOBINE DE 1000" -> "Bobine DE 1000").
+_KEEP_UPPER = {
+    "PP", "PE", "PET", "PVC", "PS", "OPP", "BOPP", "PAP",
+    "FSC", "PEFC", "ISO", "UV", "QR", "EAN", "GS1", "SIFA", "BAT",
+    "CMJN", "CMYK", "RVB", "RGB", "Ø",
+}
+
+
+def _sentence_case(text: str) -> str:
+    """Premiere lettre en capitale, le reste en minuscules.
+
+    Deux exceptions, sinon on falsifierait la fiche : tout jeton contenant un
+    chiffre (485C, 80g, 20/2, 76x51) garde sa casse, et les sigles listes
+    dans _KEEP_UPPER restent en capitales.
+    """
+    s = str(text or "")
+    if not s.strip():
+        return text
+    parts = []
+    for tok in re.split(r"(\s+)", s):
+        if not tok.strip():
+            parts.append(tok)
+        elif any(c.isdigit() for c in tok) or tok.strip(".,;:()").upper() in _KEEP_UPPER:
+            parts.append(tok)
+        else:
+            parts.append(tok.lower())
+    out = "".join(parts)
+    for i, ch in enumerate(out):
+        if ch.isalpha():
+            return out[:i] + ch.upper() + out[i + 1:]
+    return out
  
  
 # ---------------------------------------------------------------------------
@@ -346,7 +387,11 @@ def build_bat_spec(
         "echen_droite": _f(ft.get("lateral_ext"), _f(echen.get("droite"))),
         "avance": _f(ft.get("horizontal"), _f(echen.get("avance"))),
         # perforations
-        "perfo_active": bool(perfo_text) and perf_cut > 0,
+        # Une perforation peut etre saisie en texte libre ("inter-etiquette",
+        # "perfo standard") sans aucune cote. Elle existe quand meme : le BAT
+        # doit la montrer, sans inventer de valeurs numeriques.
+        "perfo_active": bool(perfo_text),
+        "perfo_cotee": perf_cut > 0,
         "perfo_coupe": perf_cut,
         "perfo_pont": perf_bridge,
         "perfo_texte": perfo_text,
@@ -650,29 +695,17 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
     ops.append(_rect(lx, g["y_main"], lw, lh, **label_kwargs))
     ops.append(_rect(lx, g["y_next_top"], lw, lh, **label_kwargs))
  
-    # zones d'impression schematiques
-    if spec.get("imprime") and spec.get("couleurs"):
-        pad = max(3.0 * scale, 1.5)
-        zones = spec["couleurs"][:3]
-        heights = [0.22, 0.34, 0.18]
-        cursor = g["y_main"] + pad
-        for idx, color in enumerate(zones):
-            frac = heights[idx] if idx < len(heights) else 0.18
-            zh = lh * frac
-            if cursor + zh > g["y_main"] + lh - pad:
-                break
-            ink = color.get("hex") or _PANTONE_FALLBACK
-            ops.append(_rect(lx + pad, cursor, lw - 2 * pad, zh, rx=rs * 0.4,
-                             fill=ink, stroke=ink, sw=0.2, dash=(0.8, 0.8),
-                             fill_opacity=0.15))
-            cursor += zh + pad * 0.8
- 
     # perforations
     perf_on = bool(spec.get("perfo_active")) and avance > 0
     dash = None
     if perf_on:
-        cut = max(_f(spec.get("perfo_coupe")) * scale, 0.4)
-        bridge = max(_f(spec.get("perfo_pont")) * scale, 0.25)
+        if spec.get("perfo_cotee"):
+            cut = max(_f(spec.get("perfo_coupe")) * scale, 0.4)
+            bridge = max(_f(spec.get("perfo_pont")) * scale, 0.25)
+        else:
+            # Perforation sans cotes : tirete generique et lisible, plutot
+            # qu'un trait plein qu'on confondrait avec la decoupe.
+            cut, bridge = 2.0, 0.8
         dash = (cut, bridge)
         for y in (g["gap_top_mid"], g["gap_bottom_mid"]):
             ops.append(_line(x0, y, x0 + gw_s, y, stroke=COLOR_CUT, sw=0.45, dash=dash))
@@ -721,10 +754,11 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
         ax = x0 + gw_s + 5
         ops.append(_line(x0 + gw_s, g["gap_top_mid"], ax - 1, y0 + 4,
                          stroke=COLOR_CUT, sw=0.2))
+        l2 = (t["perf_l2"].format(a=fmt_mm(_f(spec.get("perfo_coupe"))),
+                                  b=fmt_mm(_f(spec.get("perfo_pont"))))
+              if spec.get("perfo_cotee") else t["perf_l2_plain"])
         ops.append(_text(ax, y0 + 3.5, t["perf_l1"], size=2.9, fill=COLOR_CUT, bold=True))
-        ops.append(_text(ax, y0 + 7, t["perf_l2"].format(
-            a=fmt_mm(_f(spec.get("perfo_coupe"))), b=fmt_mm(_f(spec.get("perfo_pont")))),
-            size=2.9, fill=COLOR_CUT, bold=True))
+        ops.append(_text(ax, y0 + 7, l2, size=2.9, fill=COLOR_CUT, bold=True))
     if spec.get("perfo_verticale"):
         # sous le plan, hors de la colonne de cote d'avance
         ops.append(_text(x0 + gw_s + 5, y0 + th_s + 3.5, t["vperf"], size=2.5,
@@ -783,18 +817,19 @@ def _build_cartouche(ops, spec, g, t, perf_on):
     if _f(spec.get("rayon")) > 0:
         rows.append((f"{t['radius']} {fmt_mm(_f(spec['rayon']))} mm", COLOR_INK))
     if spec.get("support"):
-        rows.append((str(spec["support"]).upper(), COLOR_INK))
+        rows.append((str(spec["support"]), COLOR_INK))
     if spec.get("adhesif"):
-        rows.append((f"{t['adhesive']} {str(spec['adhesif']).upper()}", COLOR_INK))
+        rows.append((f"{t['adhesive']} {spec['adhesif']}", COLOR_INK))
     if _i(spec.get("nb_etiquettes")) > 0:
         rows.append((t["roll_of"].format(n=_i(spec["nb_etiquettes"])), COLOR_INK))
     if perf_on:
         rows.append((t["perf_full"].format(a=fmt_mm(_f(spec.get("perfo_coupe"))),
-                                           b=fmt_mm(_f(spec.get("perfo_pont")))), COLOR_CUT))
+                                           b=fmt_mm(_f(spec.get("perfo_pont"))))
+                     if spec.get("perfo_cotee") else t["perf_full_plain"], COLOR_CUT))
     if spec.get("perfo_verticale"):
         rows.append((t["vperf"], COLOR_CUT))
     for color in (spec.get("couleurs") or [])[:3]:
-        rows.append((str(color.get("label") or "").upper(), COLOR_INK))
+        rows.append((str(color.get("label") or ""), COLOR_INK))
     if spec.get("show_core") and _f(spec.get("mandrin")) > 0:
         rows.append((f"{t['core']} {fmt_mm(_f(spec['mandrin']))} mm", COLOR_INK))
     if spec.get("show_core") and _f(spec.get("diametre_bobine")) > 0:
@@ -809,7 +844,8 @@ def _build_cartouche(ops, spec, g, t, perf_on):
     step = 4.3 if len(visible) <= 1 else min(4.3, avail / (len(visible) - 1))
     size = 2.9 if step >= 3.6 else 2.5
     for idx, (label, color) in enumerate(visible):
-        ops.append(_text(bx + 5, top + idx * step, label, size=size, bold=True, fill=color))
+        ops.append(_text(bx + 5, top + idx * step, _sentence_case(label),
+                         size=size, bold=True, fill=color))
  
     # colonne milieu : grille sens de sortie
     ops.append(_text(bx + 97, by + 25, t["exit_dir"], size=2.7, anchor="middle", bold=True))
@@ -819,7 +855,10 @@ def _build_cartouche(ops, spec, g, t, perf_on):
         _picto(ops, bx + 84.5 + col * 8.5, by + 31.5 + row * 8.5, i, i == selected)
  
     # colonne droite : legende, signature, mention
-    ops.append(_rect(bx + 120, by + 22, 7, 3, fill=COLOR_CUT))
+    # Decoupe : meme tirete rouge que le contour des etiquettes sur le plan,
+    # pour que la legende decrive ce qu'on voit et pas un aplat.
+    ops.append(_line(bx + 120, by + 23.5, bx + 127, by + 23.5,
+                     stroke=COLOR_CUT, sw=0.5, dash=(1.6, 1.1)))
     ops.append(_text(bx + 129, by + 24.7, t["cutting"], size=2.4))
     ops.append(_rect(bx + 120, by + 27, 7, 3, fill=COLOR_GLASSINE))
     ops.append(_text(bx + 129, by + 29.7, t["glassine"], size=2.4))
@@ -829,6 +868,215 @@ def _build_cartouche(ops, spec, g, t, perf_on):
     ops.append(_text(bx + 131, by + 55.8, t["disc_2"], size=1.75, anchor="middle", italic=True))
  
  
+# ---------------------------------------------------------------------------
+# Traduction des champs libres du cartouche (MyTraduction / DeepL)
+# ---------------------------------------------------------------------------
+
+# Les libelles metier (FORMAT, ADHESIF, SENS DE SORTIE...) sont traduits par
+# TEXTS. Restent les champs variables issus de la base, saisis en francais :
+# le support, l'adhesif et les libelles couleur. On les passe par DeepL via
+# MyTraduction, qui met en cache dans translations_cache : seul le premier
+# BAT d'une matiere donnee consomme du quota.
+_TRANSLATABLE_KEYS = ("support", "adhesif")
+
+# Filet de securite hors ligne. DeepL n'est pas configure sur toutes les
+# instances : sans lui, un BAT anglais partirait chez le client avec le
+# support et l'adhesif en francais. Le vocabulaire etiquette est borne, donc
+# un glossaire le couvre. Les expressions completes passent avant les mots
+# isoles : le francais postpose l'adjectif ("papier couche brillant"),
+# l'anglais l'antepose ("gloss coated paper") — seule une entree de phrase
+# remet les mots dans le bon ordre.
+_GLOSSARY_PHRASES: Dict[str, str] = {
+    # supports
+    "papier couche brillant": "gloss coated paper",
+    "papier couche mat": "matt coated paper",
+    "papier couche": "coated paper",
+    "papier thermique protege": "protected thermal paper",
+    "papier thermique direct": "direct thermal paper",
+    "papier thermique": "thermal paper",
+    "transfert thermique": "thermal transfer",
+    "papier velin": "vellum paper",
+    "papier kraft": "kraft paper",
+    "papier recycle": "recycled paper",
+    "papier blanc": "white paper",
+    "papier mat": "matt paper",
+    "polypropylene blanc": "white polypropylene",
+    "polypropylene transparent": "clear polypropylene",
+    "polypropylene metallise": "metallised polypropylene",
+    "polyethylene blanc": "white polyethylene",
+    "film transparent": "clear film",
+    "film blanc": "white film",
+    "qualite alimentaire": "food grade",
+    "contact alimentaire": "food contact",
+    # adhesifs
+    "acrylique permanent": "permanent acrylic",
+    "acrylique enlevable": "removable acrylic",
+    "acrylique repositionnable": "repositionable acrylic",
+    "adhesif permanent": "permanent adhesive",
+    "adhesif enlevable": "removable adhesive",
+    "adhesif renforce": "high-tack adhesive",
+    "forte adherence": "high tack",
+    "basse temperature": "low temperature",
+    "sans solvant": "solvent-free",
+    "base eau": "water-based",
+    "hydrosoluble": "water-soluble",
+    "grand froid": "deep-freeze",
+    # couleurs composees
+    "bleu marine": "navy blue",
+    "bleu clair": "light blue",
+    "bleu fonce": "dark blue",
+    "vert clair": "light green",
+    "vert fonce": "dark green",
+    "gris clair": "light grey",
+    "gris fonce": "dark grey",
+    "vernis mat": "matt varnish",
+    "vernis brillant": "gloss varnish",
+}
+
+_GLOSSARY_WORDS: Dict[str, str] = {
+    # matieres
+    "papier": "paper", "carton": "board", "film": "film", "kraft": "kraft",
+    "velin": "vellum", "couche": "coated", "thermique": "thermal",
+    "polypropylene": "polypropylene", "polyester": "polyester",
+    "polyethylene": "polyethylene", "pp": "PP", "pe": "PE", "pet": "PET",
+    "glassine": "glassine", "siliconne": "silicone-coated",
+    "silicone": "silicone-coated", "pellicule": "laminated",
+    "vernis": "varnish", "recycle": "recycled", "metallise": "metallised",
+    "autocollant": "self-adhesive", "support": "face stock",
+    # adhesifs
+    "adhesif": "adhesive", "acrylique": "acrylic", "caoutchouc": "rubber",
+    "hotmelt": "hotmelt", "permanent": "permanent", "enlevable": "removable",
+    "repositionnable": "repositionable", "renforce": "high-tack",
+    "congelation": "deep-freeze", "surgelation": "deep-freeze",
+    # etats / adjectifs
+    "brillant": "gloss", "mat": "matt", "satine": "satin",
+    "transparent": "clear", "opaque": "opaque", "protege": "protected",
+    "lisse": "smooth", "rugueux": "rough", "souple": "flexible",
+    "rigide": "rigid", "resistant": "resistant", "epais": "thick",
+    "fin": "thin", "clair": "light", "fonce": "dark", "neutre": "neutral",
+    "special": "special", "renforcee": "reinforced", "imprime": "printed",
+    "alimentaire": "food-grade", "humide": "damp", "froid": "cold",
+    # couleurs
+    "noir": "black", "noire": "black", "blanc": "white", "blanche": "white",
+    "rouge": "red", "bleu": "blue", "bleue": "blue", "vert": "green",
+    "verte": "green", "jaune": "yellow", "orange": "orange",
+    "violet": "purple", "rose": "pink", "gris": "grey", "grise": "grey",
+    "marron": "brown", "brun": "brown", "beige": "beige", "cyan": "cyan",
+    "magenta": "magenta", "argent": "silver", "argente": "silver",
+    "or": "gold", "dore": "gold", "doree": "gold",
+}
+
+_WORD_RE = re.compile(r"[A-Za-z\u00C0-\u024F]+")
+
+
+def _strip_accents(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", s)
+                   if unicodedata.category(c) != "Mn")
+
+
+def _match_case(src_word: str, out: str) -> str:
+    """Rend la casse du mot source : SUPPORT -> ADHESIVE, Support -> Adhesive."""
+    if src_word.isupper() and len(src_word) > 1:
+        return out.upper()
+    if src_word[:1].isupper():
+        return out[:1].upper() + out[1:]
+    return out
+
+
+def glossary_translate(text: str) -> str:
+    """Traduit FR->EN mot a mot via le glossaire. Inconnu = laisse tel quel.
+
+    Volontairement conservateur : une reference fournisseur (RAFLATAC RP37),
+    un grammage (80g) ou un pantone (485C) ne contiennent aucun terme du
+    glossaire et ressortent intacts.
+    """
+    s = str(text or "")
+    if not s.strip():
+        return text
+
+    tokens = _WORD_RE.split(s)          # separateurs (espaces, chiffres, /)
+    words = _WORD_RE.findall(s)         # mots
+    norm = [_strip_accents(w).lower() for w in words]
+
+    out: List[Optional[str]] = [None] * len(words)
+    i = 0
+    hit = False
+    while i < len(words):
+        matched = False
+        for span in (4, 3, 2):          # phrases d'abord, de la plus longue
+            if i + span > len(words):
+                continue
+            key = " ".join(norm[i:i + span])
+            if key in _GLOSSARY_PHRASES:
+                out[i] = _match_case(words[i], _GLOSSARY_PHRASES[key])
+                for k in range(i + 1, i + span):
+                    out[k] = ""
+                i += span
+                matched = hit = True
+                break
+        if matched:
+            continue
+        rep = _GLOSSARY_WORDS.get(norm[i])
+        if rep:
+            out[i] = _match_case(words[i], rep)
+            hit = True
+        else:
+            out[i] = words[i]
+        i += 1
+
+    if not hit:                         # rien de reconnu : on ne touche a rien
+        return text
+
+    parts = [tokens[0]]
+    for idx, w in enumerate(out):
+        parts.append(w or "")
+        parts.append(tokens[idx + 1])
+    return re.sub(r"\s{2,}", " ", "".join(parts)).strip()
+
+
+def translate_spec_fields(spec: Dict[str, Any], conn=None, lang: str = "en",
+                          user_id: Optional[int] = None) -> Dict[str, Any]:
+    """Traduit sur place les champs libres du cartouche. Retourne spec.
+
+    DeepL d'abord quand une connexion est fournie (meilleure qualite, cache
+    SQLite), glossaire ensuite. Aucune des deux voies ne peut faire echouer
+    le BAT : cle absente, quota atteint ou reseau coupe retombent sur le
+    glossaire, et un terme hors glossaire reste en francais. Un BAT en
+    franglais reste livrable ; un BAT qui repond 502 ne l'est pas.
+    """
+    if (lang or "fr").lower() != "en":
+        return spec
+
+    _deepl = None
+    if conn is not None:
+        try:
+            from app.services.translate_service import translate as _deepl
+        except Exception:
+            _deepl = None
+
+    def _one(txt: Any) -> Any:
+        s = str(txt or "").strip()
+        if not s:
+            return txt
+        if _deepl is not None:
+            try:
+                res = _deepl(conn, text=s, target_lang="EN", source_lang="FR",
+                             user_id=user_id)
+                if res.get("translated"):
+                    return res["translated"]
+            except Exception:
+                pass
+        return glossary_translate(s)
+
+    for key in _TRANSLATABLE_KEYS:
+        if spec.get(key):
+            spec[key] = _one(spec[key])
+    for color in (spec.get("couleurs") or []):
+        if color.get("label"):
+            color["label"] = _one(color["label"])
+    return spec
+
+
 # ---------------------------------------------------------------------------
 # Rendu SVG
 # ---------------------------------------------------------------------------

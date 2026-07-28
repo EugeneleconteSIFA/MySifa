@@ -468,6 +468,44 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-item-btn:hover{background:var(--bg);border-color:var(--border)}
 .tmpl-item-btn.edit:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
 .tmpl-item-btn.del:hover{color:var(--danger);border-color:var(--danger);background:rgba(248,113,113,.10)}
+/* v2.4.29 — Bloc récurrence dans la modale template + panel Gestion des modèles */
+.tmpl-recur-block{margin-top:14px;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:10px}
+.tmpl-recur-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.tmpl-recur-title{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+.tmpl-recur-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none}
+.tmpl-recur-toggle input{margin:0;cursor:pointer}
+.tmpl-recur-fields{display:none;gap:10px;flex-wrap:wrap}
+.tmpl-recur-fields.open{display:flex}
+.tmpl-recur-field{display:flex;flex-direction:column;gap:4px;min-width:130px;flex:1}
+.tmpl-recur-field label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.tmpl-recur-field select,.tmpl-recur-field input{padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-family:inherit;font-size:13px}
+.tmpl-recur-field select:focus,.tmpl-recur-field input:focus{border-color:var(--accent);outline:none}
+/* Panel "Gestion des modèles" sous l'historique — style aligné sur Gestion des alertes */
+.tmpl-manage-panel .tmpl-manage-item{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--card);margin-bottom:10px;transition:border-color .12s}
+.tmpl-manage-panel .tmpl-manage-item:hover{border-color:var(--accent)}
+.tmpl-manage-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tmpl-manage-name{font-size:14px;font-weight:700;color:var(--text)}
+.tmpl-manage-desc{font-size:12px;color:var(--muted);margin-top:2px}
+.tmpl-manage-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px}
+.tmpl-manage-badge{padding:3px 9px;border-radius:6px;background:var(--bg);color:var(--text2);font-weight:600}
+.tmpl-manage-badge.recur-on{background:rgba(52,211,153,.15);color:var(--ok,#34d399);border:1px solid rgba(52,211,153,.35)}
+.tmpl-manage-badge.recur-off{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
+.tmpl-manage-badge.stat{background:var(--accent-bg);color:var(--accent);font-family:ui-monospace,monospace}
+.tmpl-manage-actions{display:flex;gap:6px;flex-wrap:wrap}
+.tmpl-manage-actions button{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;transition:all .12s;display:inline-flex;align-items:center;gap:5px}
+.tmpl-manage-actions button:hover{border-color:var(--accent);color:var(--accent)}
+.tmpl-manage-actions button.danger:hover{border-color:var(--danger);color:var(--danger)}
+.tmpl-manage-actions button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+.tmpl-manage-actions button.primary:hover{filter:brightness(1.08);color:var(--bg)}
+/* Badge visuel sur créneaux calendrier issus d'un template */
+.cal-event.is-from-template::after{content:"↻";position:absolute;top:2px;right:4px;font-size:11px;color:var(--accent);opacity:.8;font-weight:900;pointer-events:none}
+.cal-event.is-from-template{border-left:3px solid var(--accent)}
+/* v2.5.6 : historique des creneaux -- scrollbar bornee, alignee sur .ops-table-wrap */
+.plan-hist-scroll{max-height:min(60vh,720px);overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.plan-hist-scroll::-webkit-scrollbar{width:8px}
+.plan-hist-scroll::-webkit-scrollbar-track{background:transparent}
+.plan-hist-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.plan-hist-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 .tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
 /* Sélecteur de modèle dans le modal Nouveau créneau */
@@ -1675,10 +1713,20 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </button>
         </div>
         <div id="plan-subview-historique" style="display:none">
-          <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+          <!-- v2.5.6 : Gestion des modeles placee AU-DESSUS de l'historique des creneaux. -->
+          <div class="tmpl-manage-panel" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:var(--text)">Gestion des modèles</h2>
+              <button type="button" class="btn" style="background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer" onclick="openTemplateEditor(null)">+ Nouveau modèle</button>
+            </div>
+            <p class="sub" style="margin-top:-4px;margin-bottom:14px;font-size:13px;color:var(--muted)">Modèles de créneau réutilisables. Active la récurrence pour que les occurrences futures se génèrent automatiquement dans le calendrier (3 mois glissants).</p>
+            <div id="tmpl-manage-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div>
+          <!-- v2.5.6 : Historique des creneaux avec scrollbar (aligne sur .ops-table-wrap). -->
+          <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
             <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
             <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l'avancement, réutilise les tâches en modèle.</p>
-            <div id="plan-hist-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+            <div id="plan-hist-list" class="plan-hist-scroll"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
         <div id="plan-subview-calendrier">
@@ -2425,6 +2473,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         </div>
       </div>
       <div class="modal-foot">
+        <!-- v2.4.29 : bouton "Enregistrer comme modele" visible uniquement en edition (CASE_EDITING_ID non null) -->
+        <button type="button" class="modal-btn-ghost" id="case-mod-save-as-tmpl" onclick="saveEventAsTemplate(CASE_EDITING_ID)" style="display:none;margin-right:auto">💾 Enregistrer comme modèle</button>
         <button type="button" class="modal-btn-ghost" onclick="closeCaseModal()">Annuler</button>
         <button type="submit" class="ops-btn-add">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -2480,6 +2530,63 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <label class="ops-field-label" for="tmpl-ed-desc">Description</label>
             <input type="text" id="tmpl-ed-desc" class="ops-input" maxlength="200" placeholder="Ex. Vidange bacs + graissage roulements">
           </div>
+        </div>
+        <!-- v2.4.29 : bloc récurrence — permet de planifier automatiquement des créneaux futurs -->
+        <div class="tmpl-recur-block">
+          <div class="tmpl-recur-head">
+            <span class="tmpl-recur-title">Récurrence automatique</span>
+            <label class="tmpl-recur-toggle">
+              <input type="checkbox" id="tmpl-ed-recur-active" onchange="onTmplRecurToggle(this)">
+              <span>Activer</span>
+            </label>
+          </div>
+          <div class="tmpl-recur-fields" id="tmpl-ed-recur-fields">
+            <div class="tmpl-recur-field">
+              <label for="tmpl-ed-recur-type">Fréquence</label>
+              <select id="tmpl-ed-recur-type" onchange="onTmplRecurTypeChange()">
+                <option value="weekly">Hebdomadaire</option>
+                <option value="monthly">Mensuelle</option>
+                <option value="quarterly">Trimestrielle</option>
+                <option value="yearly">Annuelle</option>
+              </select>
+            </div>
+            <div class="tmpl-recur-field" id="tmpl-ed-recur-dow-wrap">
+              <label for="tmpl-ed-recur-dow">Jour de la semaine</label>
+              <select id="tmpl-ed-recur-dow">
+                <option value="0">Lundi</option><option value="1">Mardi</option>
+                <option value="2">Mercredi</option><option value="3">Jeudi</option>
+                <option value="4">Vendredi</option><option value="5">Samedi</option>
+                <option value="6">Dimanche</option>
+              </select>
+            </div>
+            <div class="tmpl-recur-field" id="tmpl-ed-recur-dom-wrap" style="display:none">
+              <label for="tmpl-ed-recur-dom">Jour du mois</label>
+              <input type="number" id="tmpl-ed-recur-dom" min="1" max="31" value="1">
+            </div>
+            <div class="tmpl-recur-field" id="tmpl-ed-recur-month-wrap" style="display:none">
+              <label for="tmpl-ed-recur-month">Mois</label>
+              <select id="tmpl-ed-recur-month">
+                <option value="1">Janvier</option><option value="2">Février</option>
+                <option value="3">Mars</option><option value="4">Avril</option>
+                <option value="5">Mai</option><option value="6">Juin</option>
+                <option value="7">Juillet</option><option value="8">Août</option>
+                <option value="9">Septembre</option><option value="10">Octobre</option>
+                <option value="11">Novembre</option><option value="12">Décembre</option>
+              </select>
+            </div>
+            <div class="tmpl-recur-field" style="min-width:100px;flex:0 0 100px">
+              <label for="tmpl-ed-recur-start">Début</label>
+              <input type="time" id="tmpl-ed-recur-start" value="08:00">
+            </div>
+            <div class="tmpl-recur-field" style="min-width:100px;flex:0 0 100px">
+              <label for="tmpl-ed-recur-end">Fin</label>
+              <input type="time" id="tmpl-ed-recur-end" value="09:00">
+            </div>
+          </div>
+          <p style="margin:10px 0 0;font-size:11px;color:var(--muted);line-height:1.4">
+            Les créneaux sont générés automatiquement pour les 3 prochains mois.
+            Les weekends/fériés ne sont pas exclus (déplace manuellement si besoin).
+          </p>
         </div>
         <div class="case-ops-section">
           <div class="case-ops-head">
@@ -2585,6 +2692,31 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
+    // v2.5.8 : restaure le sous-onglet Planning persiste (Calendrier / Historique).
+    // ATTENTION : PLAN_SUBTAB_KEY est un `const` declare APRES cette IIFE init()
+    // dans la source (~ligne 8263). Appeler _getPlanSubtab()/setPlanSubtab() ici
+    // leve une ReferenceError TDZ silencieusement catchee -> defaut calendrier.
+    // On lit et applique le sous-onglet en direct pour bypass le TDZ. Le vrai
+    // helper reprend la main sur les clics utilisateur suivants.
+    let _persistedSub = 'calendrier';
+    try{ _persistedSub = localStorage.getItem('mysifa_maint_plan_subtab_v1') || 'calendrier'; }catch(e){}
+    if(_persistedSub !== 'calendrier' && _persistedSub !== 'historique') _persistedSub = 'calendrier';
+    // Applique l'affichage du sous-onglet manuellement (bypass setPlanSubtab TDZ).
+    try{
+      document.querySelectorAll('[data-plan-subtab]').forEach(function(btn){
+        btn.classList.toggle('active', btn.getAttribute('data-plan-subtab') === _persistedSub);
+      });
+      var _cal  = document.getElementById('plan-subview-calendrier');
+      var _hist = document.getElementById('plan-subview-historique');
+      if(_cal)  _cal.style.display  = (_persistedSub === 'calendrier') ? '' : 'none';
+      if(_hist) _hist.style.display = (_persistedSub === 'historique') ? '' : 'none';
+    }catch(e){}
+    // Si on demarre sur Historique, ne pas gaspiller les cycles sur le calendrier :
+    // charger l'historique + les templates via setPlanSubtab (defer pour eviter TDZ).
+    if(_persistedSub === 'historique'){
+      setTimeout(function(){ try{ if(typeof setPlanSubtab === 'function') setPlanSubtab('historique'); }catch(e){} }, 0);
+      return;
+    }
     // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
     // (cas où le fetch initial a déjà résolu au boot).
     if(typeof setCalView === 'function') setCalView('week');
@@ -2599,6 +2731,7 @@ function switchView(name){
       // layout, pour couvrir les navigateurs qui calculent les
       // dimensions tardivement.
       setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
+      setTimeout(() => { try{ renderCal(); }catch(e){} }, 500);
     })();
   }
   // Vues opérateur : recharge la liste à l'arrivée.
@@ -3191,7 +3324,7 @@ function _makeEventBlock(item){
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
-  div.className = 'cal-event';
+  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '');
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
@@ -3279,7 +3412,7 @@ function _makeClusterBlock(cluster){
   const height = Math.max(28, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
   const div = document.createElement('div');
   const single = (cluster.items.length === 1);
-  div.className = 'cal-event' + (single ? '' : ' cal-event-merged');
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (ev.template_id ? ' is-from-template' : '');
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -3859,6 +3992,9 @@ function _openCaseModalInner(opts){
   const nomEl = document.getElementById('case-mod-nom');
   const ttlEl = document.getElementById('case-mod-title');
   const lblEl = document.getElementById('case-mod-submit-label');
+  // v2.4.29 : visibilite du bouton "Enregistrer comme modele" (edit only)
+  const saveTmplBtn = document.getElementById('case-mod-save-as-tmpl');
+  if(saveTmplBtn) saveTmplBtn.style.display = (typeof CASE_EDITING_ID !== 'undefined' && CASE_EDITING_ID) ? 'inline-block' : 'none';
   const isEdit = !!opts.editId;
   if(ttlEl) ttlEl.textContent = isEdit ? 'Modifier le créneau' : 'Nouveau créneau de maintenance';
   if(lblEl) lblEl.textContent = isEdit ? 'Enregistrer' : 'Créer';
@@ -8152,7 +8288,13 @@ function setPlanSubtab(name){
   const hist = document.getElementById('plan-subview-historique');
   if(cal) cal.style.display = (name === 'calendrier') ? '' : 'none';
   if(hist) hist.style.display = (name === 'historique') ? '' : 'none';
-  if(name === 'historique') loadPlanningHistorique();
+  if(name === 'historique'){
+    loadPlanningHistorique();
+    // v2.4.30 : panel "Gestion des modeles" -- charge + rend explicitement.
+    if(typeof loadTemplates === 'function' && typeof renderTemplateManagePanel === 'function'){
+      loadTemplates(true).then(renderTemplateManagePanel).catch(function(){});
+    }
+  }
   else if(name === 'calendrier'){ try { renderCal(); } catch(e){} }
 }
 async function loadPlanningHistorique(){
@@ -10952,15 +11094,20 @@ const TEMPLATES_STATE = { list: null };  // null = pas encore chargé
 
 async function loadTemplates(force){
   if(!force && TEMPLATES_STATE.list !== null) return TEMPLATES_STATE.list;
-  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; return []; }
+  if(MAINT_ROLE !== 'admin'){ TEMPLATES_STATE.list = []; _maybeRenderTmplPanel(); return []; }
   try{
     const r = await fetch('/api/maintenance/templates?_=' + Date.now(),
                           { credentials:'include', cache: 'no-store' });
-    if(!r.ok){ TEMPLATES_STATE.list = []; return []; }
+    if(!r.ok){ TEMPLATES_STATE.list = []; _maybeRenderTmplPanel(); return []; }
     const d = await r.json();
     TEMPLATES_STATE.list = d.templates || [];
   }catch(e){ TEMPLATES_STATE.list = []; }
+  _maybeRenderTmplPanel();
   return TEMPLATES_STATE.list;
+}
+// v2.4.31 : appelle renderTemplateManagePanel si dispo (safe si div absent).
+function _maybeRenderTmplPanel(){
+  try{ if(typeof renderTemplateManagePanel === 'function') renderTemplateManagePanel(); }catch(e){}
 }
 
 function refreshCaseTemplatePicker(selectedId){
@@ -11053,27 +11200,329 @@ function renderTemplatesList(){
     </div>`).join('');
 }
 
+// v2.4.32 : suppression modele -- modal stylise MySifa (remplace le confirm() natif).
 async function confirmDeleteTemplate(templateId){
   const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
   if(!t) return;
-  const msg = `Supprimer le modèle « ${t.name} » ?\n\nATTENTION : cela supprime aussi tous les créneaux futurs (à partir d'aujourd'hui) créés depuis ce modèle. Les créneaux passés seront conservés (mais détachés du modèle).`;
-  if(!confirm(msg)) return;
+  _openDeleteTemplateModal(t);
+}
+
+function _openDeleteTemplateModal(t){
+  const existing = document.getElementById('del-tmpl-modal-overlay');
+  if(existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'del-tmpl-modal-overlay';
+  wrap.className = 'op-modal-overlay';
+  wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center';
+  wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeDeleteTemplateModal(); });
+  const escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeDeleteTemplateModal(); } };
+  document.addEventListener('keydown', escHandler, true);
+  wrap._escHandler = escHandler;
+
+  const opsCount = (t.ops_count != null ? t.ops_count : (t.ops ? t.ops.length : 0)) || 0;
+  const evCount  = t.events_count || 0;
+  const recurLine = t.recurrence_active
+    ? '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--warn);margin-top:6px"><span>\u26a0\ufe0f</span><span>Recurrence active -- les prochaines occurrences ne se genereront plus.</span></div>'
+    : '';
+
+  wrap.innerHTML = ''
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+    +   '<div style="color:var(--danger);font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+    +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>'
+    +     'Supprimer le modele ?'
+    +   '</div>'
+    +   '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">'
+    +     '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(t.name) + '</div>'
+    +     (t.description ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + escHtml(t.description) + '</div>' : '')
+    +     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:11px">'
+    +       '<span style="padding:3px 9px;border-radius:6px;background:var(--card);color:var(--text2);font-weight:600">' + opsCount + ' op.</span>'
+    +       '<span style="padding:3px 9px;border-radius:6px;background:var(--card);color:var(--text2);font-weight:600">' + evCount + ' creneau' + (evCount > 1 ? 'x' : '') + ' cree' + (evCount > 1 ? 's' : '') + '</span>'
+    +     '</div>'
+    +     recurLine
+    +   '</div>'
+    +   '<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:16px">'
+    +     'Cela supprime aussi <strong>tous les creneaux futurs</strong> (a partir d\'aujourd\'hui) crees depuis ce modele. Les creneaux passes seront conserves (mais detaches du modele).'
+    +   '</div>'
+    +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+    +     '<button type="button" id="del-tmpl-cancel-btn" class="btn" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>'
+    +     '<button type="button" id="del-tmpl-confirm-btn" class="btn btn-danger" style="background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Supprimer</button>'
+    +   '</div>'
+    + '</div>';
+
+  document.body.appendChild(wrap);
+  const cancelBtn  = document.getElementById('del-tmpl-cancel-btn');
+  const confirmBtn = document.getElementById('del-tmpl-confirm-btn');
+  if(cancelBtn)  cancelBtn.addEventListener('click', _closeDeleteTemplateModal);
+  if(confirmBtn) confirmBtn.addEventListener('click', () => {
+    if(confirmBtn.dataset._busy === '1') return;
+    confirmBtn.dataset._busy = '1';
+    confirmBtn.disabled = true;
+    _doDeleteTemplate(t.id, confirmBtn);
+  });
+  requestAnimationFrame(() => { if(cancelBtn) cancelBtn.focus(); });
+}
+
+function _closeDeleteTemplateModal(){
+  const w = document.getElementById('del-tmpl-modal-overlay');
+  if(!w) return;
+  try{ if(w._escHandler) document.removeEventListener('keydown', w._escHandler, true); }catch(_){}
+  w.remove();
+}
+
+async function _doDeleteTemplate(templateId, btn){
   try{
     const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId),
                           { method:'DELETE', credentials:'include' });
     if(!r.ok){
       const err = await r.json().catch(()=>({}));
-      throw new Error(err.detail || 'Suppression refusée');
+      throw new Error(err.detail || 'Suppression refusee');
     }
     const d = await r.json();
     const n = d.deleted_future_events || 0;
-    showToast('Modèle supprimé' + (n ? ` — ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
+    showToast('Modele supprime' + (n ? ' -- ' + n + ' creneau' + (n > 1 ? 'x' : '') + ' futur' + (n > 1 ? 's' : '') + ' nettoye' + (n > 1 ? 's' : '') + '.' : '.'), 'info');
+    _closeDeleteTemplateModal();
     await loadTemplates(true);
     renderTemplatesList();
     refreshCaseTemplatePicker();
     await refreshPlanning(); renderCal();
+  }catch(e){
+    showToast('Erreur : ' + e.message, 'danger');
+    if(btn){ btn.dataset._busy = ''; btn.disabled = false; }
+  }
+}
+
+/* ── v2.4.29 : Helpers récurrence + panel Gestion des modèles ────── */
+
+function onTmplRecurToggle(el){
+  const wrap = document.getElementById('tmpl-ed-recur-fields');
+  if(!wrap) return;
+  wrap.classList.toggle('open', !!el.checked);
+}
+
+function onTmplRecurTypeChange(){
+  const type = document.getElementById('tmpl-ed-recur-type')?.value || 'weekly';
+  document.getElementById('tmpl-ed-recur-dow-wrap').style.display   = (type === 'weekly') ? '' : 'none';
+  document.getElementById('tmpl-ed-recur-dom-wrap').style.display   = (type === 'weekly') ? 'none' : '';
+  document.getElementById('tmpl-ed-recur-month-wrap').style.display = (type === 'yearly') ? '' : 'none';
+}
+
+function _setRecurInForm(t){
+  const cb = document.getElementById('tmpl-ed-recur-active');
+  if(cb) cb.checked = !!t.recurrence_active;
+  const wrap = document.getElementById('tmpl-ed-recur-fields');
+  if(wrap) wrap.classList.toggle('open', !!t.recurrence_active);
+  const typeEl = document.getElementById('tmpl-ed-recur-type');
+  if(typeEl) typeEl.value = t.recurrence_type || 'weekly';
+  const dowEl = document.getElementById('tmpl-ed-recur-dow');
+  if(dowEl && t.recurrence_dow != null) dowEl.value = String(t.recurrence_dow);
+  const domEl = document.getElementById('tmpl-ed-recur-dom');
+  if(domEl && t.recurrence_dom != null) domEl.value = String(t.recurrence_dom);
+  const monthEl = document.getElementById('tmpl-ed-recur-month');
+  if(monthEl && t.recurrence_month != null) monthEl.value = String(t.recurrence_month);
+  const startEl = document.getElementById('tmpl-ed-recur-start');
+  if(startEl) startEl.value = t.recurrence_time_start || '08:00';
+  const endEl = document.getElementById('tmpl-ed-recur-end');
+  if(endEl) endEl.value = t.recurrence_time_end || '09:00';
+  onTmplRecurTypeChange();
+}
+
+function _readRecurFromForm(){
+  const active = !!document.getElementById('tmpl-ed-recur-active')?.checked;
+  if(!active){
+    return { recurrence_active: false };
+  }
+  const type = document.getElementById('tmpl-ed-recur-type')?.value || 'weekly';
+  const out = {
+    recurrence_active: true,
+    recurrence_type: type,
+    recurrence_time_start: document.getElementById('tmpl-ed-recur-start')?.value || '08:00',
+    recurrence_time_end:   document.getElementById('tmpl-ed-recur-end')?.value || '09:00',
+  };
+  if(type === 'weekly'){
+    out.recurrence_dow = parseInt(document.getElementById('tmpl-ed-recur-dow')?.value || '0', 10);
+  } else {
+    out.recurrence_dom = parseInt(document.getElementById('tmpl-ed-recur-dom')?.value || '1', 10);
+    if(type === 'yearly'){
+      out.recurrence_month = parseInt(document.getElementById('tmpl-ed-recur-month')?.value || '1', 10);
+    }
+  }
+  return out;
+}
+
+// Format lisible d'une règle de récurrence pour l'affichage
+function _fmtRecurRule(t){
+  if(!t.recurrence_active || !t.recurrence_type) return '';
+  const dowLbl = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+  const monthLbl = ['','Janv.','Févr.','Mars','Avril','Mai','Juin','Juil.','Août','Sept.','Oct.','Nov.','Déc.'];
+  const time = (t.recurrence_time_start || '') + '–' + (t.recurrence_time_end || '');
+  if(t.recurrence_type === 'weekly'){
+    return 'Hebdo · ' + (dowLbl[t.recurrence_dow] || '?') + ' · ' + time;
+  }
+  if(t.recurrence_type === 'monthly'){
+    return 'Mensuel · le ' + (t.recurrence_dom || '?') + ' · ' + time;
+  }
+  if(t.recurrence_type === 'quarterly'){
+    return 'Trimestriel · le ' + (t.recurrence_dom || '?') + ' (Jan/Avr/Jul/Oct) · ' + time;
+  }
+  if(t.recurrence_type === 'yearly'){
+    return 'Annuel · ' + (t.recurrence_dom || '?') + ' ' + (monthLbl[t.recurrence_month] || '?') + ' · ' + time;
+  }
+  return '';
+}
+
+// Format date FR courte pour "prochaine occurrence" et "dernière utilisation"
+function _fmtDateFR(iso){
+  if(!iso) return '—';
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '—';
+    return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
+  }catch(e){ return '—'; }
+}
+
+function renderTemplateManagePanel(){
+  const box = document.getElementById('tmpl-manage-list');
+  if(!box) return;
+  const items = TEMPLATES_STATE.list || [];
+  if(!items.length){
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun modèle pour l\'instant. Clique sur « + Nouveau modèle » pour en créer un.</p>';
+    return;
+  }
+  box.innerHTML = items.map(t => {
+    const recurLbl = _fmtRecurRule(t);
+    const recurBadge = t.recurrence_active
+      ? '<span class="tmpl-manage-badge recur-on" title="' + escAttr(recurLbl) + '">🔁 ' + escHtml(recurLbl) + '</span>'
+      : '<span class="tmpl-manage-badge recur-off">Non récurrent</span>';
+    const nextOcc = t.recurrence_active && t.next_occurrence
+      ? '<span class="tmpl-manage-badge">Prochaine : ' + _fmtDateFR(t.next_occurrence) + '</span>'
+      : '';
+    const stats = '<span class="tmpl-manage-badge stat">' + (t.events_count || 0) + ' créneau' +
+                  ((t.events_count || 0) > 1 ? 'x' : '') + ' créés</span>';
+    const lastUsed = t.last_event_date
+      ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
+      : '';
+    const toggleLbl = t.recurrence_active ? 'Désactiver' : 'Activer';
+    return '<div class="tmpl-manage-item" data-tmpl-id="' + escAttr(t.id) + '">' +
+      '<div class="tmpl-manage-row">' +
+        '<div>' +
+          '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
+          (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
+        '</div>' +
+        '<div class="tmpl-manage-meta">' +
+          '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>' +
+          recurBadge + nextOcc + stats + lastUsed +
+        '</div>' +
+      '</div>' +
+      '<div class="tmpl-manage-row" style="justify-content:flex-end">' +
+        '<div class="tmpl-manage-actions">' +
+          '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">Éditer</button>' +
+          '<button type="button" onclick="duplicateTemplate(' + escAttr(t.id) + ')">Dupliquer</button>' +
+          '<button type="button" onclick="toggleTemplateRecurrence(' + escAttr(t.id) + ',' + (!t.recurrence_active) + ')">' + toggleLbl + ' récurrence</button>' +
+          (t.recurrence_active
+            ? '<button type="button" onclick="generateTemplateNow(' + escAttr(t.id) + ')">Générer maintenant</button>'
+            : '') +
+          '<button type="button" class="danger" onclick="confirmDeleteTemplate(' + escAttr(t.id) + ')">Supprimer</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function toggleTemplateRecurrence(templateId, activate){
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId), {
+      method:'PATCH', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ recurrence_active: !!activate }),
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Modification refusée');
+    }
+    showToast(activate ? 'Récurrence activée.' : 'Récurrence désactivée.', 'info');
+    await loadTemplates(true);
+    renderTemplatesList();
+    renderTemplateManagePanel();
+    if(activate){ await refreshPlanning(); renderCal(); }
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
+
+async function generateTemplateNow(templateId){
+  try{
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
+                          '/generate-now', { method:'POST', credentials:'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Génération refusée');
+    }
+    const d = await r.json();
+    showToast(`${d.created} créneau${d.created > 1 ? 'x' : ''} créé${d.created > 1 ? 's' : ''}.`, 'info');
+    await loadTemplates(true);
+    renderTemplateManagePanel();
+    await refreshPlanning();
+    renderCal();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+async function duplicateTemplate(templateId){
+  try{
+    // Récupère le modèle source
+    const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId), { credentials:'include' });
+    if(!r.ok) throw new Error('Modèle introuvable');
+    const d = await r.json();
+    const src = d.template;
+    // Duplique avec un nom incrémenté
+    let newName = src.name + ' (copie)';
+    // Envoie
+    const r2 = await fetch('/api/maintenance/templates', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        name: newName,
+        description: src.description,
+        ops: (src.ops || []).map(o => ({ code: o.code, machines: o.machines || [] })),
+        // Récurrence copiée mais DÉSACTIVÉE par défaut (l'utilisateur active si voulu)
+        recurrence_type: src.recurrence_type,
+        recurrence_dow: src.recurrence_dow,
+        recurrence_dom: src.recurrence_dom,
+        recurrence_month: src.recurrence_month,
+        recurrence_time_start: src.recurrence_time_start,
+        recurrence_time_end: src.recurrence_time_end,
+        recurrence_active: false,
+      }),
+    });
+    if(!r2.ok){
+      const err = await r2.json().catch(()=>({}));
+      throw new Error(err.detail || 'Duplication refusée');
+    }
+    showToast('Modèle dupliqué (récurrence désactivée).', 'info');
+    await loadTemplates(true);
+    renderTemplatesList();
+    renderTemplateManagePanel();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
+async function saveEventAsTemplate(eventId){
+  const name = prompt('Nom du nouveau modèle :');
+  if(!name || !name.trim()) return;
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/save-as-template', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Sauvegarde refusée');
+    }
+    const d = await r.json();
+    showToast('Modèle « ' + d.name + ' » créé depuis ce créneau.', 'info');
+    await loadTemplates(true);
+    renderTemplateManagePanel();
+    refreshCaseTemplatePicker();
+  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+}
+
 
 /* ── Éditeur de modèle (création + édition) ──────────────────────── */
 
@@ -11092,6 +11541,10 @@ async function openTemplateEditor(templateId){
   if(nameEl) nameEl.value = '';
   if(descEl) descEl.value = '';
   if(warnEl){ warnEl.style.display = 'none'; warnEl.innerHTML = ''; }
+  // v2.4.29 : reset recurrence fields
+  _setRecurInForm({ recurrence_active:false, recurrence_type:'weekly',
+                    recurrence_dow:0, recurrence_dom:1, recurrence_month:1,
+                    recurrence_time_start:'08:00', recurrence_time_end:'09:00' });
   if(templateId){
     try{
       const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
@@ -11101,6 +11554,8 @@ async function openTemplateEditor(templateId){
       const t = d.template;
       if(nameEl) nameEl.value = t.name || '';
       if(descEl) descEl.value = t.description || '';
+      // v2.4.29 : populate recurrence fields depuis le template charge
+      _setRecurInForm(t);
       _TMPL_OPS = (t.ops || []).map(o => {
         const meta = OPS_TYPES_STATE.list.find(x => x.id === o.code);
         return {
@@ -11226,17 +11681,20 @@ async function submitTemplateEditor(e){
   if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
   try{
     let r;
+    // v2.4.29 : fusion avec les champs recurrence
+    const recur = _readRecurFromForm();
+    const payload = Object.assign({ name, description: desc, ops }, recur);
     if(_TMPL_EDIT_ID){
       r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
         method:'PATCH', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name, description: desc, ops }),
+        body: JSON.stringify(payload),
       });
     } else {
       r = await fetch('/api/maintenance/templates', {
         method:'POST', credentials:'include',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name, description: desc, ops }),
+        body: JSON.stringify(payload),
       });
     }
     if(!r.ok){
