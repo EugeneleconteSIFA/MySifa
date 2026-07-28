@@ -4,14 +4,16 @@ Accès : superadmin, direction, administration
 """
 from __future__ import annotations
 
+import io
 import os
 import re
 import shutil
+import zipfile
 from datetime import datetime
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -2915,6 +2917,133 @@ def ressources_download_certificat(cert_id: int, request: Request):
     media = d.get("mime_type") or "application/octet-stream"
     return FileResponse(path, media_type=media, filename=d["original_name"],
                         headers={"Content-Disposition": f'inline; filename="{d["original_name"]}"'})
+
+
+# ─── Téléchargement groupé des certificats (ZIP) ─────────────────────
+
+def _cert_zip_name(row: dict, used: set) -> str:
+    """Nom de fichier lisible et unique à l'intérieur de l'archive."""
+    original = (row.get("original_name") or "").strip()
+    ext = ""
+    if "." in original:
+        ext = "." + original.rsplit(".", 1)[1].lower()[:10]
+    base = (row.get("titre") or "").strip() or (original.rsplit(".", 1)[0] if original else "")
+    # Les noms internes a l'archive peuvent garder les accents (ZIP UTF-8) :
+    # on retire uniquement les caracteres interdits par les systemes de fichiers.
+    base = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", base or "").strip(" .")
+    base = (base or ("certificat_%s" % row.get("id")))[:120]
+    if ext and base.lower().endswith(ext):
+        base = base[: -len(ext)]
+    name = base + ext
+    if name.lower() in used:
+        i = 2
+        while ("%s (%d)%s" % (base, i, ext)).lower() in used:
+            i += 1
+        name = "%s (%d)%s" % (base, i, ext)
+    used.add(name.lower())
+    return name
+
+
+@router.get("/api/qualite/ressources/certificats.zip")
+def ressources_download_certificats_zip(
+    request: Request,
+    four_id: Optional[int] = None,
+    groupe: Optional[str] = None,
+    ids: Optional[str] = None,
+):
+    """Archive ZIP des documents d'un fournisseur ou d'un groupe.
+
+    - four_id : tous les certificats du fournisseur
+    - groupe  : tous les certificats de toutes les branches du groupe
+    - ids     : ids séparés par des virgules pour restreindre à une sélection
+    """
+    _require_qualite_view(request)
+
+    id_list: List[int] = []
+    if ids:
+        for part in str(ids).split(","):
+            part = part.strip()
+            if part.isdigit():
+                id_list.append(int(part))
+        if not id_list:
+            raise HTTPException(status_code=400, detail="Sélection invalide")
+
+    label = "certificats"
+    with get_db() as conn:
+        if four_id is not None:
+            four = conn.execute(
+                "SELECT id, nom, branche FROM fournisseurs_fsc WHERE id=?", (four_id,)
+            ).fetchone()
+            if not four:
+                raise HTTPException(status_code=404, detail="Fournisseur introuvable")
+            label = four["nom"] or ("fournisseur_%s" % four_id)
+            rows = conn.execute(
+                """SELECT * FROM qualite_fournisseur_certificats
+                   WHERE fournisseur_id=?
+                   ORDER BY COALESCE(date_expiration, uploaded_at) DESC, id DESC""",
+                (four_id,),
+            ).fetchall()
+        elif groupe:
+            g = (groupe or "").strip()
+            branches = conn.execute(
+                "SELECT id FROM fournisseurs_fsc WHERE LOWER(TRIM(groupe)) = LOWER(?)", (g,)
+            ).fetchall()
+            if not branches:
+                raise HTTPException(status_code=404, detail="Groupe introuvable")
+            label = g
+            b_ids = [b["id"] for b in branches]
+            qmarks = ",".join(["?"] * len(b_ids))
+            rows = conn.execute(
+                f"""SELECT * FROM qualite_fournisseur_certificats
+                    WHERE fournisseur_id IN ({qmarks})
+                    ORDER BY COALESCE(date_expiration, uploaded_at) DESC, id DESC""",
+                b_ids,
+            ).fetchall()
+        elif id_list:
+            qmarks = ",".join(["?"] * len(id_list))
+            rows = conn.execute(
+                f"SELECT * FROM qualite_fournisseur_certificats WHERE id IN ({qmarks})",
+                id_list,
+            ).fetchall()
+        else:
+            raise HTTPException(status_code=400, detail="Paramètre four_id ou groupe requis")
+
+    certs = [dict(r) for r in rows]
+    if id_list:
+        wanted = set(id_list)
+        certs = [c for c in certs if c["id"] in wanted]
+    if not certs:
+        raise HTTPException(status_code=404, detail="Aucun document à télécharger")
+
+    buf = io.BytesIO()
+    used = set()
+    manquants = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for c in certs:
+            fname = c.get("filename") or ""
+            path = os.path.join(RESSOURCES_UPLOAD_DIR, fname)
+            if not fname or not os.path.exists(path):
+                manquants.append(c.get("titre") or c.get("original_name") or ("id %s" % c.get("id")))
+                continue
+            zf.write(path, _cert_zip_name(c, used))
+        if manquants:
+            zf.writestr(
+                "documents_manquants.txt",
+                "Documents référencés dans MyQualité mais absents du serveur :\n\n"
+                + "\n".join("- %s" % m for m in manquants) + "\n",
+            )
+    if not used:
+        raise HTTPException(status_code=404, detail="Aucun fichier disponible sur le serveur")
+
+    buf.seek(0)
+    zip_name = _sanitize_filename(
+        "%s certificats %s" % (label, datetime.now().strftime("%Y-%m-%d"))
+    ).replace(" ", "_") + ".zip"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="%s"' % zip_name},
+    )
 
 
 # ─── Alertes expiration (liste + scan pour annonces auto) ────────────
