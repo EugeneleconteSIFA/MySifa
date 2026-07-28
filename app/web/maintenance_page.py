@@ -8117,7 +8117,16 @@ async function loadMe(){
   try{
     const h = (location.hash || '').replace('#','').trim();
     const target = (h === 'historique') ? 'controles' : h;
-    if(target && VIEW_META[target]) switchView(target);
+    if(target && VIEW_META[target]){
+      switchView(target);
+    } else if(MAINT_ROLE === 'operator'){
+      // v2.5.4 : la vue par défaut op-tasks est marquée .active dans le HTML
+      // statique, mais aucun loader n'était déclenché au boot — l'opérateur
+      // arrivait sur un écran vide et devait changer d'onglet puis revenir
+      // pour voir ses tâches. On force switchView pour passer par le hook
+      // de chargement (opLoadTasks) existant.
+      switchView('op-tasks');
+    }
   }catch(e){}
 })();
 
