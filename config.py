@@ -34,13 +34,8 @@ os.makedirs(DATA_DIR,   exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
-<<<<<<< HEAD
-# â”€â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-APP_VERSION = "2.5"
-=======
 # ─── App ──────────────────────────────────────────────────────────
 APP_VERSION = "2.4.18"
->>>>>>> origin/staging
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
