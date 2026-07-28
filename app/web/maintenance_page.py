@@ -3496,8 +3496,10 @@ async function confirmDeleteCase(id){
   _openDeleteCaseModal({ mode: 'standard', ev: ev });
 }
 
-// Effectue le DELETE avec ou sans token. Sur 409, rouvre le même modal en
-// mode 'forced' avec les données du serveur (liste ops effectuées + token).
+// Effectue le DELETE avec ou sans token. Sur 409, remplace le contenu du
+// même modal (mode 'forced') sans fermeture visible. Sur succès, ferme
+// tout et rafraîchit. Sur autre erreur, laisse le modal ouvert et débloque
+// le bouton pour retenter.
 async function _doDeletePlanningEvent(ev, token){
   const id = ev && ev.id;
   if(id == null){ showToast('Créneau introuvable.', 'danger'); return; }
@@ -3506,34 +3508,55 @@ async function _doDeletePlanningEvent(ev, token){
   let r;
   try{
     r = await fetch(url, { method: 'DELETE', credentials: 'include' });
-  }catch(e){ showToast('Erreur réseau — suppression impossible.', 'danger'); return; }
+  }catch(e){
+    showToast('Erreur réseau — suppression impossible.', 'danger');
+    _unlockDeleteCaseConfirmBtn();
+    return;
+  }
   if(r.status === 409){
     let payload = null;
     try{ payload = await r.json(); }catch(_){}
     const detail = payload && payload.detail ? payload.detail : null;
     if(detail && detail.requires_confirmation && Array.isArray(detail.done_ops) && detail.confirm_token){
+      // v2.5.3 : remplace le contenu du modal existant (pas de fermeture visible).
       _openDeleteCaseModal({ mode: 'forced', ev: ev, doneOps: detail.done_ops, token: detail.confirm_token });
       return;
     }
     showToast('Suppression refusée par le serveur.', 'danger');
+    _unlockDeleteCaseConfirmBtn();
     return;
   }
   if(!r.ok){
     let msg = 'Erreur suppression.';
     try{ const j = await r.json(); if(j && j.detail){ msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } }catch(_){}
     showToast(msg, 'danger');
+    _unlockDeleteCaseConfirmBtn();
     return;
   }
+  _closeDeleteCaseModal();
   await refreshPlanning();
   closePlanningDetailsModal();
   renderCal();
   showToast('Créneau supprimé.', 'info');
 }
 
+// v2.5.3 : ré-active le bouton "Supprimer" du modal (utilisé en cas d'erreur
+// serveur pour permettre à l'admin de retenter sans devoir rouvrir le modal).
+function _unlockDeleteCaseConfirmBtn(){
+  const btn = document.getElementById('del-case-confirm-btn');
+  if(!btn) return;
+  btn.disabled = false;
+  try{ delete btn.dataset._busy; }catch(_){ btn.dataset._busy = ''; }
+}
+
 // Le container statique #mroot n'existe pas sur maintenance_page — on crée
 // le modal à la volée dans <body> et on le retire à la fermeture.
+//
+// v2.5.3 : idempotent. Si un modal est déjà ouvert (cas du switch
+// standard → forced après un 409), on réutilise le wrap existant et on
+// remplace juste son innerHTML — pas de fade out/in visible entre les
+// deux étapes.
 function _openDeleteCaseModal(opts){
-  _closeDeleteCaseModal();
   const ev = opts.ev || {};
   const mode = opts.mode || 'standard';
   const isForced = (mode === 'forced');
@@ -3596,19 +3619,31 @@ function _openDeleteCaseModal(opts){
     : 'La suppression retire le créneau du planning. Cette action ne peut pas être annulée.';
   const confirmLabel = isForced ? 'Supprimer quand même' : 'Supprimer';
 
-  const wrap = document.createElement('div');
-  wrap.id = 'del-case-modal-overlay';
-  wrap.className = 'op-modal-overlay';
-  wrap.style.display = 'flex';
-  wrap.style.position = 'fixed';
-  wrap.style.top = '0';
-  wrap.style.left = '0';
-  wrap.style.width = '100%';
-  wrap.style.height = '100%';
-  wrap.style.background = 'rgba(0,0,0,0.55)';
-  wrap.style.zIndex = '9999';
-  wrap.style.alignItems = 'center';
-  wrap.style.justifyContent = 'center';
+  // v2.5.3 : réutilise le wrap si déjà ouvert (switch standard → forced).
+  let wrap = document.getElementById('del-case-modal-overlay');
+  const isNew = !wrap;
+  if(isNew){
+    wrap = document.createElement('div');
+    wrap.id = 'del-case-modal-overlay';
+    wrap.className = 'op-modal-overlay';
+    wrap.style.display = 'flex';
+    wrap.style.position = 'fixed';
+    wrap.style.top = '0';
+    wrap.style.left = '0';
+    wrap.style.width = '100%';
+    wrap.style.height = '100%';
+    wrap.style.background = 'rgba(0,0,0,0.55)';
+    wrap.style.zIndex = '9999';
+    wrap.style.alignItems = 'center';
+    wrap.style.justifyContent = 'center';
+    wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeDeleteCaseModal(); });
+    document.body.appendChild(wrap);
+    // Escape ferme (une seule fois par ouverture, retiré au close).
+    const _escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeDeleteCaseModal(); } };
+    document.addEventListener('keydown', _escHandler, true);
+    wrap._escHandler = _escHandler;
+  }
+
   wrap.innerHTML = ''
     + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:560px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
     +   '<div class="op-modal-title" style="color:' + titleColor + ';font-size:16px;font-weight:700;margin-bottom:10px">' + escHtml(titleText) + '</div>'
@@ -3620,8 +3655,6 @@ function _openDeleteCaseModal(opts){
     +     '<button type="button" id="del-case-confirm-btn" class="btn btn-danger" style="background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer">' + escHtml(confirmLabel) + '</button>'
     +   '</div>'
     + '</div>';
-  wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeDeleteCaseModal(); });
-  document.body.appendChild(wrap);
 
   const cancelBtn  = document.getElementById('del-case-cancel-btn');
   const confirmBtn = document.getElementById('del-case-confirm-btn');
@@ -3631,15 +3664,14 @@ function _openDeleteCaseModal(opts){
     if(confirmBtn.dataset._busy === '1') return;
     confirmBtn.dataset._busy = '1';
     confirmBtn.disabled = true;
-    _closeDeleteCaseModal();
+    // v2.5.3 : NE PAS fermer ici. Le modal reste ouvert :
+    //   - succès (200) → _closeDeleteCaseModal() dans _doDeletePlanningEvent
+    //   - 409          → _openDeleteCaseModal() rebâtit le contenu (mode forced)
+    //   - erreur       → bouton ré-activé par _unlockDeleteCaseConfirmBtn
     _doDeletePlanningEvent(ev, token);
   });
   // Focus par défaut sur Annuler (moindre risque).
   requestAnimationFrame(() => { if(cancelBtn) cancelBtn.focus(); });
-  // Escape ferme.
-  const _escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeDeleteCaseModal(); } };
-  document.addEventListener('keydown', _escHandler, true);
-  wrap._escHandler = _escHandler;
 }
 
 function _closeDeleteCaseModal(){
