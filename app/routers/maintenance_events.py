@@ -17,7 +17,7 @@ Contrôle d'accès :
   - Créer un event `source=non_planifie` avec lui-même comme seul opérateur.
 """
 import hashlib
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
 
@@ -355,6 +355,9 @@ def list_events(
            + ("WHERE " + " AND ".join(where) if where else "")
            + " ORDER BY date_prevue ASC, heure_debut ASC, id ASC")
     with get_db() as conn:
+        # v2.4.28 : lazy trigger — genere les occurrences des templates recurrents
+        # actifs jusqu'a today+90j. Idempotent, cout negligeable si a jour.
+        _ensure_recurring_events_generated(conn, horizon_days=90)
         ids = [r["id"] for r in conn.execute(sql, params).fetchall()]
         events = [_load_event_full(conn, eid) for eid in ids]
     return {"events": events}
@@ -864,12 +867,32 @@ class TemplateCreateBody(BaseModel):
     name: str
     description: Optional[str] = None
     ops: List[TemplateOpSpec] = []
+    # v2.4.28 : recurrence
+    recurrence_type: Optional[str] = None       # 'weekly' | 'monthly' | 'quarterly' | 'yearly' | None
+    recurrence_dow: Optional[int] = None        # 0-6 (0=lundi)
+    recurrence_dom: Optional[int] = None        # 1-31
+    recurrence_month: Optional[int] = None      # 1-12 (yearly)
+    recurrence_time_start: Optional[str] = None # 'HH:MM'
+    recurrence_time_end: Optional[str] = None
+    recurrence_active: Optional[bool] = False
 
 
 class TemplateUpdateBody(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     ops: Optional[List[TemplateOpSpec]] = None
+    recurrence_type: Optional[str] = None
+    recurrence_dow: Optional[int] = None
+    recurrence_dom: Optional[int] = None
+    recurrence_month: Optional[int] = None
+    recurrence_time_start: Optional[str] = None
+    recurrence_time_end: Optional[str] = None
+    recurrence_active: Optional[bool] = None
+
+
+class SaveAsTemplateBody(BaseModel):
+    name: str
+    description: Optional[str] = None
 
 
 
@@ -970,9 +993,9 @@ def get_history(
 
 
 def _load_template_full(conn, template_id: int) -> Optional[dict]:
+    # v2.4.28 : SELECT * pour recuperer aussi les colonnes recurrence
     row = conn.execute(
-        """SELECT id, name, description, created_by, created_at, updated_at
-           FROM maintenance_templates WHERE id = ?""",
+        "SELECT * FROM maintenance_templates WHERE id = ?",
         (template_id,),
     ).fetchone()
     if not row:
@@ -991,15 +1014,141 @@ def _load_template_full(conn, template_id: int) -> Optional[dict]:
         d = dict(o)
         d["machines"] = _machines_csv_to_list(d.get("machines_csv"))
         ops_out.append(d)
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "description": row["description"],
-        "created_by": row["created_by"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-        "ops": ops_out,
-    }
+    d = dict(row)
+    d["ops"] = ops_out
+    # Assure la presence des champs recurrence meme si l'ancien schema n'a pas encore les colonnes
+    for f in ("recurrence_type","recurrence_dow","recurrence_dom","recurrence_month",
+              "recurrence_time_start","recurrence_time_end"):
+        d.setdefault(f, None)
+    d["recurrence_active"] = bool(d.get("recurrence_active"))
+    return d
+
+
+# ── v2.4.28 — Helpers de recurrence ─────────────────────────────────
+# Convention interne : recurrence_dow 0=lundi..6=dimanche (ISO/Python weekday).
+# Les cas edge (day-of-month inexistant type 31 fevrier) sont skip silencieusement.
+
+def _add_months(year: int, month: int, delta: int):
+    total = (year * 12 + month - 1) + delta
+    return total // 12, (total % 12) + 1
+
+
+def _compute_next_occurrence(tmpl: dict, from_date=None):
+    """Retourne la date de la prochaine occurrence >= from_date (ou date.today())
+    pour un template donne. None si pas recurrent ou parametres invalides."""
+    if not tmpl.get("recurrence_type") or not tmpl.get("recurrence_active"):
+        return None
+    rtype = tmpl["recurrence_type"]
+    today = from_date or date.today()
+
+    if rtype == "weekly":
+        dow = tmpl.get("recurrence_dow")
+        if dow is None or not (0 <= dow <= 6):
+            return None
+        # Python weekday(): 0=lundi..6=dimanche → match notre convention
+        days_ahead = (dow - today.weekday()) % 7
+        return today + timedelta(days=days_ahead)
+
+    dom = tmpl.get("recurrence_dom")
+    if dom is None or not (1 <= dom <= 31):
+        return None
+
+    if rtype == "monthly":
+        valid_months = tuple(range(1, 13))
+    elif rtype == "quarterly":
+        # Cycle Jan / Avr / Jul / Oct (mois 1, 4, 7, 10)
+        valid_months = (1, 4, 7, 10)
+    elif rtype == "yearly":
+        month = tmpl.get("recurrence_month")
+        if month is None or not (1 <= month <= 12):
+            return None
+        valid_months = (month,)
+    else:
+        return None
+
+    # Cherche la prochaine date dom @ mois valide, dans les 24 prochains mois max
+    for offset in range(24):
+        y, m = _add_months(today.year, today.month, offset)
+        if m not in valid_months:
+            continue
+        try:
+            candidate = date(y, m, dom)
+        except ValueError:
+            continue  # jour inexistant dans ce mois (ex. 31 fevrier)
+        if candidate >= today:
+            return candidate
+    return None
+
+
+def _generate_events_for_template(conn, template_id: int, until_date) -> int:
+    """Genere toutes les occurrences futures (aujourd'hui..until_date incluse)
+    pour un template recurrent. Idempotent : skip si event existe deja pour
+    (template_id, date_prevue). Retourne le nombre d'events crees."""
+    tmpl = _load_template_full(conn, template_id)
+    if not tmpl or not tmpl.get("recurrence_active") or not tmpl.get("recurrence_type"):
+        return 0
+
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    heure_debut = tmpl.get("recurrence_time_start") or ""
+    heure_fin = tmpl.get("recurrence_time_end") or ""
+
+    # CSV machines = union de toutes les machines des ops du template
+    all_machines = []
+    for op in tmpl["ops"]:
+        for m in op.get("machines") or []:
+            if m not in all_machines:
+                all_machines.append(m)
+    machine_csv = " · ".join(all_machines) if all_machines else ""
+
+    count = 0
+    cursor = date.today()
+    # Safety : 500 iterations max (largement suffisant pour 3 mois meme en hebdo)
+    for _ in range(500):
+        nxt = _compute_next_occurrence(tmpl, cursor)
+        if nxt is None or nxt > until_date:
+            break
+        exists = conn.execute(
+            "SELECT 1 FROM maintenance_events WHERE template_id=? AND date_prevue=? LIMIT 1",
+            (template_id, nxt.isoformat())
+        ).fetchone()
+        if not exists:
+            cur = conn.execute(
+                "INSERT INTO maintenance_events "
+                "(machine, date_prevue, heure_debut, heure_fin, source, created_at, template_id) "
+                "VALUES (?, ?, ?, ?, 'planifie', ?, ?)",
+                (machine_csv, nxt.isoformat(), heure_debut, heure_fin, now_iso, template_id)
+            )
+            event_id = cur.lastrowid
+            for op in tmpl["ops"]:
+                op_machines_csv = (" · ".join(op["machines"]) if op.get("machines")
+                                   else machine_csv)
+                conn.execute(
+                    "INSERT OR IGNORE INTO maintenance_event_ops "
+                    "(event_id, code, machines_csv, updated_at) VALUES (?, ?, ?, ?)",
+                    (event_id, op["code"], op_machines_csv, now_iso)
+                )
+            count += 1
+        cursor = nxt + timedelta(days=1)
+    if count:
+        conn.commit()
+    return count
+
+
+def _ensure_recurring_events_generated(conn, horizon_days: int = 90) -> int:
+    """Pour chaque template recurrent actif, genere les occurrences futures
+    dans une fenetre glissante de horizon_days (defaut 90 = 3 mois).
+    Idempotent. Appele en lazy trigger au load des events."""
+    until = date.today() + timedelta(days=horizon_days)
+    total = 0
+    tmpl_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM maintenance_templates WHERE recurrence_active=1 AND recurrence_type IS NOT NULL"
+    ).fetchall()]
+    for tid in tmpl_ids:
+        try:
+            total += _generate_events_for_template(conn, tid, until)
+        except Exception:
+            pass  # ne pas bloquer le chargement de la page si un template foire
+    return total
 
 
 def _resync_future_events_from_template(conn, template_id: int) -> int:
@@ -1033,18 +1182,31 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
 
 @router.get("/api/maintenance/templates")
 def list_templates(request: Request):
-    """Liste tous les templates (nom, description, nb d'ops). Admin only."""
+    """Liste tous les templates avec metadonnees enrichies (v2.4.28) :
+    nb d'ops, recurrence, prochaine occurrence prevue, stats d'utilisation
+    (nb d'events crees, derniere date d'utilisation).
+    Admin only."""
     _require_admin(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT t.id, t.name, t.description, t.created_at, t.updated_at,
-                      COUNT(o.id) AS ops_count
+                      t.recurrence_type, t.recurrence_dow, t.recurrence_dom,
+                      t.recurrence_month, t.recurrence_time_start, t.recurrence_time_end,
+                      t.recurrence_active,
+                      (SELECT COUNT(*) FROM maintenance_template_ops o WHERE o.template_id=t.id) AS ops_count,
+                      (SELECT COUNT(*) FROM maintenance_events e WHERE e.template_id=t.id) AS events_count,
+                      (SELECT MAX(date_prevue) FROM maintenance_events e WHERE e.template_id=t.id) AS last_event_date
                FROM maintenance_templates t
-               LEFT JOIN maintenance_template_ops o ON o.template_id = t.id
-               GROUP BY t.id
                ORDER BY t.name""",
         ).fetchall()
-    return {"templates": [dict(r) for r in rows]}
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["recurrence_active"] = bool(d.get("recurrence_active"))
+            nxt = _compute_next_occurrence(d)
+            d["next_occurrence"] = nxt.isoformat() if nxt else None
+            out.append(d)
+    return {"templates": out}
 
 
 @router.get("/api/maintenance/templates/{template_id}")
@@ -1085,9 +1247,19 @@ def create_template(body: TemplateCreateBody, request: Request):
                 raise HTTPException(status_code=400, detail=f"L'opération {code} doit être attribuée à au moins une machine")
         now = _now_paris_iso()
         cur = conn.execute(
-            """INSERT INTO maintenance_templates (name, description, created_by, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (name, body.description, user["id"], now),
+            """INSERT INTO maintenance_templates
+                (name, description, created_by, created_at,
+                 recurrence_type, recurrence_dow, recurrence_dom, recurrence_month,
+                 recurrence_time_start, recurrence_time_end, recurrence_active)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (name, body.description, user["id"], now,
+             (body.recurrence_type or None),
+             body.recurrence_dow,
+             body.recurrence_dom,
+             body.recurrence_month,
+             (body.recurrence_time_start or None),
+             (body.recurrence_time_end or None),
+             1 if body.recurrence_active else 0),
         )
         template_id = cur.lastrowid
         for code, mcsv in seen.items():
@@ -1128,6 +1300,21 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                 meta_updates["name"] = new_name
         if body.description is not None:
             meta_updates["description"] = body.description
+        # v2.4.28 : champs recurrence
+        if body.recurrence_type is not None:
+            meta_updates["recurrence_type"] = body.recurrence_type or None
+        if body.recurrence_dow is not None:
+            meta_updates["recurrence_dow"] = body.recurrence_dow
+        if body.recurrence_dom is not None:
+            meta_updates["recurrence_dom"] = body.recurrence_dom
+        if body.recurrence_month is not None:
+            meta_updates["recurrence_month"] = body.recurrence_month
+        if body.recurrence_time_start is not None:
+            meta_updates["recurrence_time_start"] = body.recurrence_time_start or None
+        if body.recurrence_time_end is not None:
+            meta_updates["recurrence_time_end"] = body.recurrence_time_end or None
+        if body.recurrence_active is not None:
+            meta_updates["recurrence_active"] = 1 if body.recurrence_active else 0
         if meta_updates:
             meta_updates["updated_at"] = now
             set_clause = ", ".join(f"{k}=?" for k in meta_updates)
@@ -1197,3 +1384,70 @@ def delete_template(template_id: int, request: Request):
         conn.execute("DELETE FROM maintenance_templates WHERE id = ?", (template_id,))
         conn.commit()
     return {"deleted": template_id, "deleted_future_events": len(future_ids)}
+
+
+# ── v2.4.28 — Nouveaux endpoints : generate-now + save-as-template ──
+
+@router.post("/api/maintenance/templates/{template_id}/generate-now")
+def template_generate_now(template_id: int, request: Request):
+    """Force la generation immediate des occurrences futures d'un template
+    recurrent, dans la fenetre glissante par defaut (90 jours).
+    Admin only. Retourne le nombre d'events crees."""
+    _require_admin(request)
+    with get_db() as conn:
+        tmpl = _load_template_full(conn, template_id)
+        if not tmpl:
+            raise HTTPException(status_code=404, detail="Modèle introuvable")
+        if not tmpl.get("recurrence_active") or not tmpl.get("recurrence_type"):
+            raise HTTPException(status_code=400,
+                                detail="Ce modèle n'a pas de récurrence active.")
+        until = date.today() + timedelta(days=90)
+        n = _generate_events_for_template(conn, template_id, until)
+    return {"created": n}
+
+
+@router.post("/api/maintenance/events/{event_id}/save-as-template")
+def save_event_as_template(event_id: int, body: SaveAsTemplateBody, request: Request):
+    """Sauvegarde les operations d'un creneau existant sous forme de nouveau
+    template (sans recurrence — a activer dans la modale template si besoin).
+    Admin only."""
+    user = _require_admin(request)
+    name = (body.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nom du modèle requis")
+    now = _now_paris_iso()
+    with get_db() as conn:
+        event = _load_event_full(conn, event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if not event.get("ops"):
+            raise HTTPException(status_code=400, detail="Ce créneau n'a aucune opération à sauvegarder.")
+        if conn.execute("SELECT 1 FROM maintenance_templates WHERE name = ?", (name,)).fetchone():
+            raise HTTPException(status_code=409, detail=f"Un modèle nommé « {name} » existe déjà.")
+        user_id = user.get("id") if isinstance(user, dict) else None
+        cur = conn.execute(
+            "INSERT INTO maintenance_templates (name, description, created_by, created_at, recurrence_active) "
+            "VALUES (?, ?, ?, ?, 0)",
+            (name, (body.description or None), user_id, now),
+        )
+        template_id = cur.lastrowid
+        # Copie des ops (dedup par code, union des machines)
+        seen = {}
+        for op in event["ops"]:
+            code = op.get("code")
+            if not code:
+                continue
+            machines = op.get("machines") or []
+            if code in seen:
+                for m in machines:
+                    if m not in seen[code]:
+                        seen[code].append(m)
+            else:
+                seen[code] = list(machines)
+        for code, machines in seen.items():
+            conn.execute(
+                "INSERT INTO maintenance_template_ops (template_id, code, machines_csv) VALUES (?, ?, ?)",
+                (template_id, code, " · ".join(machines) if machines else None),
+            )
+        conn.commit()
+    return {"template_id": template_id, "name": name}

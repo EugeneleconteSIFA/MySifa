@@ -562,7 +562,6 @@ def list_fictif_dossier_sources(request: Request):
                FROM production_data
                WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                  AND UPPER(no_dossier) LIKE 'FICTIF:%'
-                 AND COALESCE(est_annule, 0) = 0
                GROUP BY no_dossier
                ORDER BY no_dossier"""
         ).fetchall()
@@ -647,7 +646,6 @@ def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
                    FROM production_data
                    WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                      AND UPPER(no_dossier) NOT LIKE 'FICTIF:%'
-                     AND COALESCE(est_annule, 0) = 0
                      AND LOWER(no_dossier) LIKE LOWER(?)
                    ORDER BY no_dossier
                    LIMIT ?""",

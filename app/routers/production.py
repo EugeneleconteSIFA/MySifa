@@ -469,8 +469,7 @@ def machine_status(request: Request):
             """SELECT operation_code, operation_category, machine,
                       no_dossier, client, designation, operateur, date_operation
                FROM production_data
-               WHERE (date_operation LIKE ? OR date_operation LIKE ?)
-                 AND COALESCE(est_annule, 0) = 0
+               WHERE date_operation LIKE ? OR date_operation LIKE ?
                ORDER BY date_operation ASC""",
             (iso_today + '%', old_today + '%'),
         ).fetchall()
@@ -545,7 +544,6 @@ def machine_status(request: Request):
         "     OR lower(trim(COALESCE(pd.machine,''))) LIKE 'rep %') "
         "AND (pd.date_operation LIKE ? OR pd.date_operation LIKE ?) "
         "AND TRIM(COALESCE(pd.no_dossier,'')) != '' "
-        "AND COALESCE(pd.est_annule, 0) = 0 "
         "GROUP BY pd.no_dossier, pd.client, pd.designation "
         "HAVING cartons != 0 "
         "ORDER BY cartons DESC"
@@ -603,9 +601,10 @@ def dashboard_production(
     dossiers   = [d for d in (no_dossier or []) if d]
     machines   = [m for m in (machine or []) if m]
 
-    # Les saisies neutralisees par une annulation de dossier sortent de tous
-    # les agregats (KPI, metrage, temps calage/prod/arret).
-    where, params = ["1=1", "COALESCE(est_annule, 0) = 0"], []
+    # Les saisies d'un cycle annule restent dans les agregats machine :
+    # la matiere et le temps ont ete reellement consommes. Elles portent
+    # est_annule=1 et la session correspondante est marquee `annule`.
+    where, params = ["1=1"], []
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
@@ -707,7 +706,6 @@ def dashboard_production(
                        FROM production_data
                        WHERE operateur=? AND trim(no_dossier)=trim(?)
                          AND operation_code='01'
-                         AND COALESCE(est_annule, 0) = 0
                          AND date_operation <= ?
                          AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
                        ORDER BY date_operation DESC, id DESC LIMIT 1""",
@@ -732,7 +730,10 @@ def dashboard_production(
             ctr = float(r["metrage_prevu"]) if r.get("metrage_prevu") is not None else 0.0
             debut_entries.setdefault((op, dos), []).append((_norm_dt(dt_op), ctr))
 
-        elif code == "89" and r.get("metrage_reel") is not None:
+        elif code in ("89", "90") and r.get("metrage_reel") is not None:
+            # 90 = annulation de dossier. Le compteur de fin saisi par
+            # l'operateur borne la session exactement comme un 89 : le metrage
+            # consomme avant l'annulation entre bien dans les KPI.
             fin_dt   = _norm_dt(dt_op)
             jour_iso = _norm_date(dt_op)
             key      = (op, jour_iso, dos)

@@ -18,6 +18,7 @@ import secrets
 
 # ─── Chemins ──────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+BAT_LOGO_PATH = os.path.join(BASE_DIR, "static", "sifa_logo.png")
 DATA_DIR   = os.path.join(BASE_DIR, "data")
 # Une seule base applicative : défaut data/production.db. Surcharge : variable d'environnement DB_PATH.
 # Sauvegarde : copier ce fichier + data/uploads/ ; optionnel : operations.json, data/emplacements_plan.csv
@@ -35,7 +36,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.5.5"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -503,6 +504,10 @@ CODE_FIN_DOS    = "89"
 CODE_CALAGE     = "02"
 CODE_PRODUCTION = "03"
 CODE_REPRISE    = "88"
+# 90 = annulation d'un dossier par l'operateur. Cloture la session au meme
+# titre que 89 pour le calcul du temps et du metrage : la matiere et le temps
+# ont ete reellement consommes, seule la LIVRAISON du dossier n'a pas eu lieu.
+CODE_ANNUL_DOS  = "90"
 
 # Ensemble complet des codes traités comme du temps de calage
 # (02 calage, 10-12 réglages, 58-60 préparations, 67 vidange, 74-75 essais)

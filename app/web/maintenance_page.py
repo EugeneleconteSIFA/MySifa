@@ -3480,125 +3480,202 @@ async function deletePlanningEvent(id){
   await refreshPlanning();
   renderCal();
 }
-// v2.4.19 : suppression créneau avec confirmation renforcée si des ops sont
-// déjà 'termine'. Le backend renvoie HTTP 409 avec la liste des ops effectuées
-// et un token déterministe. On affiche un modal explicite listant ce qui va
-// être perdu, puis on rappelle DELETE avec ?confirm_token=<hash>.
+// v2.5.2 : suppression créneau, un seul modal, deux modes.
+//   - 'standard' : header neutre, liste des ops planifiées, boutons Annuler
+//     / Supprimer. C'est le remplacement du confirm() natif moche.
+//   - 'forced'   : header rouge, warning irréversible, liste UNIQUEMENT des
+//     ops déjà 'termine' + méta (date + opérateur), boutons Annuler /
+//     Supprimer quand même. Bascule automatique quand le backend renvoie 409.
+//
+// v2.4.19 : côté backend, DELETE /api/maintenance/events/{id} renvoie 409
+// avec un confirm_token déterministe si des ops sont 'termine'. On rappelle
+// DELETE avec ?confirm_token=<hash> pour finaliser.
 async function confirmDeleteCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
   if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
-  const opsTxt = (ev.operations || []).map(o => '• ' + (o.opName||'—')).join('\n');
-  if(!confirm('Supprimer ce créneau ?\n\n' + (ev.machine || '') + ' · ' + ev.date + '\n' + ev.start + ' – ' + ev.end + (opsTxt ? '\n\n' + opsTxt : ''))) return;
-  await _doDeletePlanningEvent(id, null, ev);
+  _openDeleteCaseModal({ mode: 'standard', ev: ev });
 }
 
-// v2.4.19 : effectue le DELETE avec ou sans token. Gère le 409
-// (requires_confirmation) en ouvrant le modal renforcé, puis rappelle avec
-// le token pour finaliser.
-async function _doDeletePlanningEvent(id, token, ev){
+// Effectue le DELETE avec ou sans token. Sur 409, remplace le contenu du
+// même modal (mode 'forced') sans fermeture visible. Sur succès, ferme
+// tout et rafraîchit. Sur autre erreur, laisse le modal ouvert et débloque
+// le bouton pour retenter.
+async function _doDeletePlanningEvent(ev, token){
+  const id = ev && ev.id;
+  if(id == null){ showToast('Créneau introuvable.', 'danger'); return; }
   let url = '/api/maintenance/events/' + encodeURIComponent(id);
   if(token){ url += '?confirm_token=' + encodeURIComponent(token); }
   let r;
   try{
     r = await fetch(url, { method: 'DELETE', credentials: 'include' });
-  }catch(e){ showToast('Erreur réseau — suppression impossible.', 'danger'); return; }
+  }catch(e){
+    showToast('Erreur réseau — suppression impossible.', 'danger');
+    _unlockDeleteCaseConfirmBtn();
+    return;
+  }
   if(r.status === 409){
     let payload = null;
     try{ payload = await r.json(); }catch(_){}
     const detail = payload && payload.detail ? payload.detail : null;
     if(detail && detail.requires_confirmation && Array.isArray(detail.done_ops) && detail.confirm_token){
-      _openDeleteCaseConfirmModal(id, detail.done_ops, detail.confirm_token, ev);
+      // v2.5.3 : remplace le contenu du modal existant (pas de fermeture visible).
+      _openDeleteCaseModal({ mode: 'forced', ev: ev, doneOps: detail.done_ops, token: detail.confirm_token });
       return;
     }
     showToast('Suppression refusée par le serveur.', 'danger');
+    _unlockDeleteCaseConfirmBtn();
     return;
   }
   if(!r.ok){
     let msg = 'Erreur suppression.';
     try{ const j = await r.json(); if(j && j.detail){ msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail); } }catch(_){}
     showToast(msg, 'danger');
+    _unlockDeleteCaseConfirmBtn();
     return;
   }
+  _closeDeleteCaseModal();
   await refreshPlanning();
   closePlanningDetailsModal();
   renderCal();
   showToast('Créneau supprimé.', 'info');
 }
 
-// v2.4.19 : modal de confirmation renforcée listant les ops déjà effectuées
-// qui seront perdues. Bouton "Supprimer quand même" en rouge, "Annuler" par
-// défaut (focus). Pattern proche du modal détails créneau existant.
-function _openDeleteCaseConfirmModal(eventId, doneOps, token, ev){
-  // v2.4.19 : le container statique #mroot n'existe pas sur maintenance_page.
-  // On crée le modal à la volée dans <body> et on le retire à la fermeture.
-  _closeDeleteCaseConfirmModal();  // nettoyage si déjà ouvert
+// v2.5.3 : ré-active le bouton "Supprimer" du modal (utilisé en cas d'erreur
+// serveur pour permettre à l'admin de retenter sans devoir rouvrir le modal).
+function _unlockDeleteCaseConfirmBtn(){
+  const btn = document.getElementById('del-case-confirm-btn');
+  if(!btn) return;
+  btn.disabled = false;
+  try{ delete btn.dataset._busy; }catch(_){ btn.dataset._busy = ''; }
+}
+
+// Le container statique #mroot n'existe pas sur maintenance_page — on crée
+// le modal à la volée dans <body> et on le retire à la fermeture.
+//
+// v2.5.3 : idempotent. Si un modal est déjà ouvert (cas du switch
+// standard → forced après un 409), on réutilise le wrap existant et on
+// remplace juste son innerHTML — pas de fade out/in visible entre les
+// deux étapes.
+function _openDeleteCaseModal(opts){
+  const ev = opts.ev || {};
+  const mode = opts.mode || 'standard';
+  const isForced = (mode === 'forced');
+  const doneOps = Array.isArray(opts.doneOps) ? opts.doneOps : [];
+  const token = opts.token || null;
+
   const _fmtDoneAt = (iso) => {
     if(!iso) return '';
     const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
     return m ? (m[3]+'/'+m[2]+' à '+m[4]+':'+m[5]) : String(iso).slice(0,16).replace('T',' ');
   };
+
+  // Bandeau récapitulatif du créneau (identique dans les 2 modes).
+  const evHead = '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'
+    + escHtml(ev.machine || '—') + ' · ' + escHtml(ev.date || '') + ' · '
+    + escHtml(ev.start || '') + ' – ' + escHtml(ev.end || '')
+    + '</div>';
+
+  // Corps : en mode 'standard' on liste toutes les ops planifiées (puce +
+  // libellé). En mode 'forced' on liste UNIQUEMENT les ops termine, avec la
+  // coche verte + la date + le nom de l'opérateur.
+  let bodyRows = '';
+  if(isForced){
+    bodyRows = doneOps.map(op => {
+      const mach = Array.isArray(op.machines) && op.machines.length ? op.machines.join(' · ') : '';
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--border);margin-bottom:6px">'
+        +   '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0;margin-top:1px">'
+        +     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        +   '</span>'
+        +   '<div style="flex:1;min-width:0">'
+        +     '<div style="font-weight:600;color:var(--text);font-size:13px">' + escHtml(op.label || op.code) + (mach ? ' <span style="color:var(--muted);font-weight:400">— ' + escHtml(mach) + '</span>' : '') + '</div>'
+        +     '<div style="font-size:12px;color:var(--text2);margin-top:2px">Effectuée' + (op.done_at ? ' le ' + escHtml(_fmtDoneAt(op.done_at)) : '') + (op.done_by_name ? ' par ' + escHtml(op.done_by_name) : '') + '</div>'
+        +   '</div>'
+        + '</div>';
+    }).join('');
+  } else {
+    const ops = Array.isArray(ev.operations) ? ev.operations : [];
+    if(ops.length){
+      bodyRows = ops.map(op => {
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--border);margin-bottom:6px">'
+          +   '<span style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>'
+          +   '<span style="font-size:13px;color:var(--text)">' + escHtml(op.opName || '—') + '</span>'
+          + '</div>';
+      }).join('');
+    } else {
+      bodyRows = '<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:6px">Aucune opération sur ce créneau.</div>';
+    }
+  }
+
+  // Header + phrase d'intro selon le mode.
+  const titleColor = isForced ? 'var(--danger)' : 'var(--text)';
+  const titleText  = isForced
+    ? 'Créneau contenant des opérations effectuées'
+    : 'Supprimer ce créneau ?';
   const n = doneOps.length;
-  const rows = doneOps.map(op => {
-    const mach = Array.isArray(op.machines) && op.machines.length ? op.machines.join(' · ') : '';
-    return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--border);margin-bottom:6px">'
-      +   '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0;margin-top:1px">'
-      +     '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-      +   '</span>'
-      +   '<div style="flex:1;min-width:0">'
-      +     '<div style="font-weight:600;color:var(--text);font-size:13px">' + escHtml(op.label || op.code) + (mach ? ' <span style="color:var(--muted);font-weight:400">— ' + escHtml(mach) + '</span>' : '') + '</div>'
-      +     '<div style="font-size:12px;color:var(--text2);margin-top:2px">Effectuée' + (op.done_at ? ' le ' + escHtml(_fmtDoneAt(op.done_at)) : '') + (op.done_by_name ? ' par ' + escHtml(op.done_by_name) : '') + '</div>'
-      +   '</div>'
-      + '</div>';
-  }).join('');
-  const evHead = ev
-    ? '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">'
-      + escHtml(ev.machine || '') + ' · ' + escHtml(ev.date || '') + ' · ' + escHtml(ev.start || '') + ' – ' + escHtml(ev.end || '')
-      + '</div>'
-    : '';
-  const wrap = document.createElement('div');
-  wrap.id = 'del-case-confirm-overlay';
-  wrap.className = 'op-modal-overlay';
-  wrap.style.display = 'flex';
-  wrap.style.position = 'fixed';
-  wrap.style.top = '0';
-  wrap.style.left = '0';
-  wrap.style.width = '100%';
-  wrap.style.height = '100%';
-  wrap.style.background = 'rgba(0,0,0,0.55)';
-  wrap.style.zIndex = '9999';
-  wrap.style.alignItems = 'center';
-  wrap.style.justifyContent = 'center';
+  const introText = isForced
+    ? ('<strong>' + n + ' opération' + (n>1?'s':'') + ' déjà saisie' + (n>1?'s':'') + '</strong> sur ce créneau. '
+       + 'La suppression effacera <strong>définitivement</strong> la traçabilité de ' + (n>1?'ces interventions':'cette intervention')
+       + ' (date, opérateur, observations, photos). Action irréversible.')
+    : 'La suppression retire le créneau du planning. Cette action ne peut pas être annulée.';
+  const confirmLabel = isForced ? 'Supprimer quand même' : 'Supprimer';
+
+  // v2.5.3 : réutilise le wrap si déjà ouvert (switch standard → forced).
+  let wrap = document.getElementById('del-case-modal-overlay');
+  const isNew = !wrap;
+  if(isNew){
+    wrap = document.createElement('div');
+    wrap.id = 'del-case-modal-overlay';
+    wrap.className = 'op-modal-overlay';
+    wrap.style.display = 'flex';
+    wrap.style.position = 'fixed';
+    wrap.style.top = '0';
+    wrap.style.left = '0';
+    wrap.style.width = '100%';
+    wrap.style.height = '100%';
+    wrap.style.background = 'rgba(0,0,0,0.55)';
+    wrap.style.zIndex = '9999';
+    wrap.style.alignItems = 'center';
+    wrap.style.justifyContent = 'center';
+    wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeDeleteCaseModal(); });
+    document.body.appendChild(wrap);
+    // Escape ferme (une seule fois par ouverture, retiré au close).
+    const _escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeDeleteCaseModal(); } };
+    document.addEventListener('keydown', _escHandler, true);
+    wrap._escHandler = _escHandler;
+  }
+
   wrap.innerHTML = ''
-    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:560px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
-    +   '<div class="op-modal-title" style="color:var(--danger);font-size:16px;font-weight:700;margin-bottom:10px">Créneau contenant des opérations effectuées</div>'
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:560px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+    +   '<div class="op-modal-title" style="color:' + titleColor + ';font-size:16px;font-weight:700;margin-bottom:10px">' + escHtml(titleText) + '</div>'
     +   evHead
-    +   '<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:12px">'
-    +     '<strong>' + n + ' opération' + (n>1?'s':'') + ' déjà saisie' + (n>1?'s':'') + '</strong> sur ce créneau. '
-    +     'La suppression effacera <strong>définitivement</strong> la traçabilité de ' + (n>1?'ces interventions':'cette intervention') + ' (date, opérateur, observations, photos). Action irréversible.'
-    +   '</div>'
-    +   '<div style="max-height:280px;overflow-y:auto;margin-bottom:14px">' + rows + '</div>'
+    +   '<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:12px">' + introText + '</div>'
+    +   '<div style="max-height:280px;overflow-y:auto;margin-bottom:14px">' + bodyRows + '</div>'
     +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
     +     '<button type="button" id="del-case-cancel-btn" class="btn" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer">Annuler</button>'
-    +     '<button type="button" id="del-case-confirm-btn" class="btn btn-danger" style="background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer">Supprimer quand même</button>'
+    +     '<button type="button" id="del-case-confirm-btn" class="btn btn-danger" style="background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer">' + escHtml(confirmLabel) + '</button>'
     +   '</div>'
     + '</div>';
-  wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeDeleteCaseConfirmModal(); });
-  document.body.appendChild(wrap);
-  // Handlers boutons (évite d'inline JSON.stringify dans le HTML)
+
   const cancelBtn  = document.getElementById('del-case-cancel-btn');
   const confirmBtn = document.getElementById('del-case-confirm-btn');
-  if(cancelBtn)  cancelBtn.addEventListener('click', _closeDeleteCaseConfirmModal);
-  if(confirmBtn) confirmBtn.addEventListener('click', () => { _closeDeleteCaseConfirmModal(); const _ev = PLANNING_STATE.list.find(x => String(x.id) === String(eventId)); _doDeletePlanningEvent(eventId, token, _ev); });
-  // Focus par défaut sur Annuler (moindre risque)
+  if(cancelBtn)  cancelBtn.addEventListener('click', _closeDeleteCaseModal);
+  if(confirmBtn) confirmBtn.addEventListener('click', () => {
+    // Anti double-clic pendant que la requête part.
+    if(confirmBtn.dataset._busy === '1') return;
+    confirmBtn.dataset._busy = '1';
+    confirmBtn.disabled = true;
+    // v2.5.3 : NE PAS fermer ici. Le modal reste ouvert :
+    //   - succès (200) → _closeDeleteCaseModal() dans _doDeletePlanningEvent
+    //   - 409          → _openDeleteCaseModal() rebâtit le contenu (mode forced)
+    //   - erreur       → bouton ré-activé par _unlockDeleteCaseConfirmBtn
+    _doDeletePlanningEvent(ev, token);
+  });
+  // Focus par défaut sur Annuler (moindre risque).
   requestAnimationFrame(() => { if(cancelBtn) cancelBtn.focus(); });
-  // Escape ferme
-  const _escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeDeleteCaseConfirmModal(); document.removeEventListener('keydown', _escHandler, true); } };
-  document.addEventListener('keydown', _escHandler, true);
-  wrap._escHandler = _escHandler;
 }
 
-function _closeDeleteCaseConfirmModal(){
-  const w = document.getElementById('del-case-confirm-overlay');
+function _closeDeleteCaseModal(){
+  const w = document.getElementById('del-case-modal-overlay');
   if(!w) return;
   try{ if(w._escHandler) document.removeEventListener('keydown', w._escHandler, true); }catch(_){}
   w.remove();
@@ -8018,7 +8095,9 @@ async function loadMe(){
     else document.body.classList.remove('light');
     updateThemeBtn();
   }catch(e){}
-  loadMe();
+  // v2.5.5 : on garde la promise pour l'attendre avant switchView opérateur
+  // (opLoadTasks / opLoadPlanning lisent S.me.id — sans ça, filtre vide au boot).
+  const _initMePromise = loadMe();
   loadOps();
   // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
   loadOpsTypes().then(() => {
@@ -8040,7 +8119,18 @@ async function loadMe(){
   try{
     const h = (location.hash || '').replace('#','').trim();
     const target = (h === 'historique') ? 'controles' : h;
-    if(target && VIEW_META[target]) switchView(target);
+    const initialView = (target && VIEW_META[target]) ? target
+                        : (MAINT_ROLE === 'operator' ? 'op-tasks' : null);
+    if(initialView){
+      if(MAINT_ROLE === 'operator'){
+        // v2.5.5 : pour opérateur, attendre S.me avant switchView. opLoadTasks
+        // et opLoadPlanning filtrent les events par S.me.id — appelées avant
+        // que loadMe() résolve, elles produisent un state vide (bug v2.5.4).
+        _initMePromise.finally(() => { try{ switchView(initialView); }catch(e){} });
+      } else {
+        switchView(initialView);
+      }
+    }
   }catch(e){}
 })();
 

@@ -353,8 +353,9 @@ def _get_active_dossier(saisies: list):
 # 86/87 = pointage personnel (arrivee/depart), 90 = trace d'annulation.
 # Ils ne decrivent pas le travail sur le dossier et doivent survivre.
 _CODES_HORS_ANNULATION = ("86", "87", "90")
-# Une fois la production reelle demarree (03 Production / 88 Reprise), le
-# dossier ne peut plus etre annule : il doit etre cloture par 89.
+# Codes de production reelle. Ils ne bloquent PAS l'annulation (un manque
+# de matiere ou de mandrins peut survenir en pleine production), mais on
+# les compte pour prevenir l'operateur dans la modal de confirmation.
 _CODES_PRODUCTION_REELLE = ("03", "88")
 _CODE_ANNULATION = "90"
 
@@ -1218,7 +1219,6 @@ def list_saisies_jour_all(request: Request):
                 OR trim(lower(u.nom)) = trim(lower(pd.operateur))
               )
             WHERE (date_operation LIKE ? OR date_operation LIKE ?)
-              AND COALESCE(pd.est_annule, 0) = 0
             ORDER BY trim(COALESCE(pd.machine,'')) COLLATE NOCASE ASC,
                      pd.date_operation ASC, pd.id ASC
             """,
@@ -1632,8 +1632,9 @@ async def create_saisie(request: Request):
 def annulation_contexte(request: Request, machine_id: int = None):
     """Peut-on annuler le dossier en cours ? (aperçu affiché dans la modal)
 
-    Renvoie le dossier actif, le nombre de saisies qui seraient neutralisées et
-    la raison d'un éventuel blocage. Aucune écriture.
+    Renvoie le dossier actif, le nombre de saisies qui seraient neutralisées,
+    le compteur machine relevé au début du cycle et le dernier compteur connu
+    (pour pré-remplir et borner la saisie du métrage). Aucune écriture.
     """
     user = get_current_user(request)
     _check_fab_access(user)
@@ -1649,7 +1650,10 @@ def annulation_contexte(request: Request, machine_id: int = None):
         "designation": ctx["designation"],
         "machine": ctx["machine_nom"],
         "nb_saisies": len(ctx["rows"]),
+        "nb_production": ctx["nb_production"],
         "debut": ctx["debut_iso"],
+        "metrage_debut": ctx["metrage_debut"],
+        "dernier_metrage": ctx["dernier_metrage"],
     }
 
 
@@ -1672,6 +1676,11 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
         "rows": [],
         "debut_iso": None,
         "planning_entry": None,
+        # Metrage : compteur machine au debut du cycle annule, et dernier
+        # compteur connu de la machine (borne basse de la saisie operateur).
+        "metrage_debut": None,
+        "dernier_metrage": None,
+        "nb_production": 0,
     }
 
     today = _today_prefix()
@@ -1703,7 +1712,7 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
     machine_row = None
     if mid is not None:
         machine_row = conn.execute(
-            "SELECT id, nom, code FROM machines WHERE id=?", (mid,)
+            "SELECT id, nom, code, dernier_metrage FROM machines WHERE id=?", (mid,)
         ).fetchone()
     if not machine_row:
         out["raison"] = "Machine introuvable — annulation impossible"
@@ -1711,6 +1720,13 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
     out["machine_id"] = int(machine_row["id"])
     out["machine_nom"] = machine_row["nom"]
     out["machine_code"] = (machine_row["code"] or "").strip()
+    try:
+        out["dernier_metrage"] = (
+            float(machine_row["dernier_metrage"])
+            if machine_row["dernier_metrage"] is not None else None
+        )
+    except (TypeError, ValueError):
+        out["dernier_metrage"] = None
 
     # Début du cycle courant : dernier 01 non annulé de ce dossier sur la machine.
     mn, mc, mc2 = _machine_sql_match_params(out["machine_nom"], out["machine_code"])
@@ -1727,6 +1743,26 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
         out["raison"] = "Début de production introuvable pour ce dossier"
         return out
     out["debut_iso"] = debut_iso
+
+    # Compteur machine releve au « Début de production » de ce cycle. C'est la
+    # borne basse du metrage de fin, et la reference du metrage consomme.
+    ctr_row = conn.execute(
+        """SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr
+           FROM production_data
+           WHERE trim(no_dossier) = trim(?)
+             AND operation_code = '01'
+             AND COALESCE(est_annule, 0) = 0
+             AND date_operation = ?
+             AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
+             AND (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
+           ORDER BY id DESC LIMIT 1""",
+        (active_ref, debut_iso, mn, mc, mc2),
+    ).fetchone()
+    if ctr_row and ctr_row["ctr"] is not None:
+        try:
+            out["metrage_debut"] = float(ctr_row["ctr"])
+        except (TypeError, ValueError):
+            out["metrage_debut"] = None
 
     placeholders = ",".join("?" * len(_CODES_HORS_ANNULATION))
     cycle = conn.execute(
@@ -1752,15 +1788,14 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
         out["raison"] = "Aucune saisie à annuler pour ce dossier"
         return out
 
-    deja_produit = [
+    # L'annulation reste possible a tout moment du cycle (calage, production,
+    # arret...) : un manque de matiere ou de mandrins peut survenir en pleine
+    # production. On compte simplement les saisies de production reelle pour
+    # avertir l'operateur avant de confirmer.
+    out["nb_production"] = len([
         r for r in out["rows"]
         if str(r["operation_code"] or "").strip() in _CODES_PRODUCTION_REELLE
-    ]
-    if deja_produit:
-        out["raison"] = (
-            "Production déjà démarrée sur ce dossier — clôturez par « Fin de production »"
-        )
-        return out
+    ])
 
     out["planning_entry"] = conn.execute(
         """SELECT id, statut, statut_reel, annule_count
@@ -1777,13 +1812,20 @@ def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> 
 
 @router.post("/api/fabrication/annuler-dossier")
 async def annuler_dossier(request: Request):
-    """Annule le dossier en cours (marche arrière avant production réelle).
+    """Annule le dossier en cours, à n'importe quel stade du cycle.
 
-    Toutes les saisies du cycle (01 + calages, arrêts, appro…) passent en
-    `est_annule=1` : elles restent en base pour l'audit et restent visibles,
-    barrées, dans MyProd > Saisies, mais sortent de toutes les statistiques.
-    Une saisie « 90 - Annulation saisie » portant le motif est ajoutée à la
-    timeline, et le dossier repart en « attente » au planning avec le motif.
+    Toutes les saisies du cycle (01 + calages, production, arrêts, appro…)
+    passent en `est_annule=1` : elles restent en base, visibles et barrées dans
+    MyProd > Saisies, et sortent des lectures DOSSIER (rentabilité, comparaison
+    devis) — mais PAS des agrégats machine : le temps passé et la matière
+    engagée sont réels.
+
+    L'opérateur relève le compteur machine comme pour une fin de production.
+    La trace « 90 - Annulation dossier » porte le compteur de début du cycle et
+    ce compteur de fin : le métrage consommé reste mesurable, et la session
+    apparaît dans les KPI marquée comme annulée.
+
+    Le dossier repart ensuite en « attente » au planning, avec le motif.
     """
     user = get_current_user(request)
     _check_fab_access(user)
@@ -1803,6 +1845,14 @@ async def annuler_dossier(request: Request):
         machine_id_param = int(machine_id_param) if machine_id_param is not None else None
     except (TypeError, ValueError):
         machine_id_param = None
+
+    def _to_float(v):
+        try:
+            return float(str(v).replace(",", ".")) if v not in (None, "", "null") else None
+        except (TypeError, ValueError):
+            return None
+
+    m_fin = _to_float(body.get("metrage_fin"))
 
     operateur = user.get("operateur_lie") or user.get("nom") or ""
     date_op = _resolve_date_operation(body.get("date_operation"))
@@ -1824,6 +1874,37 @@ async def annuler_dossier(request: Request):
                 detail=f"Le dossier en cours a changé ({ref}) — rechargez la page.",
             )
 
+        # ── Métrage : mêmes garde-fous que la saisie « Fin de production » ──
+        m_debut = ctx["metrage_debut"]
+        dernier = ctx["dernier_metrage"]
+        if m_fin is None and (m_debut is not None or dernier is not None):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Relevé du compteur machine requis — la matière consommée "
+                    "avant l'annulation doit être enregistrée."
+                ),
+            )
+        if m_fin is not None:
+            if m_fin < 0:
+                raise HTTPException(status_code=400, detail="Métrage invalide.")
+            if dernier is not None and m_fin < dernier:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Métrage invalide : le compteur était à "
+                        f"{int(dernier):,} m — valeur saisie trop petite."
+                    ).replace(",", " "),
+                )
+            if m_debut is not None and m_fin < m_debut:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Métrage fin ({int(m_fin):,} m) inférieur au début de "
+                        f"production ({int(m_debut):,} m)."
+                    ).replace(",", " "),
+                )
+
         ids = [int(r["id"]) for r in ctx["rows"]]
         placeholders = ",".join("?" * len(ids))
         conn.execute(
@@ -1838,26 +1919,39 @@ async def annuler_dossier(request: Request):
 
         # Trace visible dans la timeline opérateur et dans MyProd > Saisies.
         cl = classify_operation(f"{_CODE_ANNULATION} - Annulation dossier")
+        metrage_consomme = (
+            max(0.0, m_fin - m_debut)
+            if (m_fin is not None and m_debut is not None) else None
+        )
         trace_dict = {
             "no_dossier": ref,
             "motif": motif,
             "saisies_annulees": ids,
             "machine": ctx["machine_nom"],
+            "metrage_debut": m_debut,
+            "metrage_fin": m_fin,
+            "metrage_consomme": metrage_consomme,
+            "nb_saisies_production": ctx["nb_production"],
         }
         cur = conn.execute(
             """INSERT INTO production_data
                  (import_id, operateur, date_operation, operation, operation_code,
                   operation_severity, operation_category, service, machine, no_dossier,
                   client, designation, quantite_a_traiter, quantite_traitee,
+                  metrage_prevu, metrage_reel, metrage_total_debut, metrage_total_fin,
                   commentaire, data, est_manuel, modifie_par, modifie_le, modifie_note,
                   est_annule, annule_le, annule_par, annule_motif)
-               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,0,NULL,NULL,?,0,?,?,?)""",
+               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,0,NULL,NULL,?,0,?,?,?)""",
             (
                 operateur, date_op,
                 f"{_CODE_ANNULATION} - Annulation dossier", _CODE_ANNULATION,
                 cl["severity"], cl["category"],
                 "fabrication", ctx["machine_nom"], ref,
                 ctx["client"], ctx["designation"],
+                m_debut,          # metrage_prevu       (compat historique)
+                m_fin,            # metrage_reel        (compat historique)
+                m_debut,          # metrage_total_debut
+                m_fin,            # metrage_total_fin
                 f"Dossier annulé — {motif}",
                 json.dumps(trace_dict, default=str),
                 "Annulation dossier opérateur",
@@ -1865,6 +1959,13 @@ async def annuler_dossier(request: Request):
             ),
         )
         trace_id = cur.lastrowid
+
+        # Compteur machine : l'annulation fait foi comme une fin de production.
+        if m_fin is not None and ctx["machine_id"] is not None:
+            conn.execute(
+                "UPDATE machines SET dernier_metrage=? WHERE id=?",
+                (m_fin, ctx["machine_id"]),
+            )
 
         # ── Retour du dossier au planning, en attente, avec le motif ──────────
         pe = ctx["planning_entry"]
@@ -1905,6 +2006,9 @@ async def annuler_dossier(request: Request):
         detail={
             "motif": motif,
             "saisies_annulees": len(ids),
+            "metrage_debut": m_debut,
+            "metrage_fin": m_fin,
+            "metrage_consomme": metrage_consomme,
             "planning_entry_id": pe_id,
         },
         ip=request.client.host if request.client else None,
@@ -1914,6 +2018,7 @@ async def annuler_dossier(request: Request):
         "success": True,
         "no_dossier": ref,
         "saisies_annulees": len(ids),
+        "metrage_consomme": metrage_consomme,
         "trace_id": trace_id,
         "planning_entry_id": pe_id,
     }

@@ -1012,9 +1012,12 @@
       S.mpModal.validate = () => 'Type de mouvement non reconnu.';
     }
 
+    const mpBtnCls = ['entree', 'sortie', 'ajustement', 'transfert'].includes(typeMvt)
+      ? ' btn-mvt-' + typeMvt
+      : '';
     body.appendChild(el('div', { cls: 'mp-modal-actions' },
       el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
-      el('button', { cls: 'btn', type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
+      el('button', { cls: 'btn' + mpBtnCls, type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
     ));
     box.appendChild(body);
     overlay.appendChild(box);
@@ -1210,6 +1213,33 @@
     }, _z1UniteLabel(uv));
   }
 
+  function _z1MachineChip(nom, opts) {
+    const compact = !!(opts && opts.compact);
+    return el('span', {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        padding: compact ? '2px 8px' : '3px 10px',
+        borderRadius: '999px',
+        background: 'var(--card)',
+        border: '1px solid var(--border)',
+        color: 'var(--text)',
+        fontSize: compact ? '10px' : '11px',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: '.4px',
+        whiteSpace: 'nowrap',
+        flex: '0 0 auto',
+      },
+    },
+      el('span', {
+        style: { color: 'var(--muted)', fontWeight: '600', letterSpacing: '.4px' },
+      }, 'Machine'),
+      el('span', null, String(nom)),
+    );
+  }
+
   function _z1MakeNoteFromDossier(dossier) {
     if (!dossier || !dossier.no_dossier) return '';
     return 'Production dossier ' + dossier.no_dossier + ' - ' + _fmtDateFRz1(new Date());
@@ -1268,24 +1298,39 @@
     const bodyLines = [];
     if (hasSel) {
       const refLine = _z1FormatDossierLine(dossierSel);
-      bodyLines.push(el('div', { style: { fontWeight: '700', fontSize: '14px' } },
-        (dossierSel.fictif ? '(hors planning) ' : '') + (dossierSel.no_dossier || '')));
-      if (dossierSel.client) {
-        bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
-          'Client : ' + dossierSel.client));
-      }
-      if (refLine) {
-        bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
-          'Reference : ' + refLine));
-      }
+
+      // Colonne gauche : identification du dossier.
+      const leftCol = el('div', { style: { flex: '1', minWidth: 0 } },
+        el('div', { style: { fontWeight: '700', fontSize: '14px' } },
+          (dossierSel.fictif ? '(hors planning) ' : '') + (dossierSel.no_dossier || '')),
+        dossierSel.client
+          ? el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
+              'Client : ' + dossierSel.client)
+          : null,
+        refLine
+          ? el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
+              'Reference : ' + refLine)
+          : null,
+      );
+
+      // Colonne droite : unite de vente + machine, alignees a droite et lisibles.
       const uv = _z1UniteVente(dossierSel);
-      if (uv) {
-        bodyLines.push(el('div', { style: { marginTop: '8px' } }, _z1UniteBadge(uv)));
-      }
-      if (dossierSel.machine_nom) {
-        bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-          'Machine : ' + dossierSel.machine_nom));
-      }
+      const rightCol = (uv || dossierSel.machine_nom)
+        ? el('div', {
+            style: {
+              display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+              gap: '6px', flex: '0 0 auto',
+            },
+          },
+            uv ? _z1UniteBadge(uv) : null,
+            dossierSel.machine_nom ? _z1MachineChip(dossierSel.machine_nom) : null,
+          )
+        : null;
+
+      bodyLines.push(el('div', {
+        style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' },
+      }, leftCol, rightCol));
+
       if (termine) {
         bodyLines.push(el('div', {
           style: {
@@ -1388,6 +1433,7 @@
         textAlign: 'left',
         color: 'var(--text)',
         width: '100%',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
       },
       on: { click: opts && opts.onClick },
     },
@@ -1399,12 +1445,8 @@
               style: { fontSize: '11px', color: 'var(--text2)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
             }, refLine)
           : null,
-        dossier.machine_nom
-          ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-              'Machine : ' + dossier.machine_nom)
-          : null,
       ),
-      (uvRow || badgeText)
+      (uvRow || badgeText || dossier.machine_nom)
         ? el('div', {
             style: {
               display: 'flex',
@@ -1415,6 +1457,7 @@
             },
           },
             uvRow ? _z1UniteBadge(uvRow, { compact: true }) : null,
+            dossier.machine_nom ? _z1MachineChip(dossier.machine_nom, { compact: true }) : null,
             badgeText
               ? el('div', {
                   style: {
@@ -1432,7 +1475,45 @@
     );
   }
 
+  function _z1SectionTitle(text) {
+    return el('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '8px',
+        marginTop: '8px', marginBottom: '2px',
+      },
+    },
+      el('span', {
+        style: {
+          width: '3px', height: '14px', borderRadius: '2px',
+          background: 'var(--accent)', flex: '0 0 auto',
+        },
+      }),
+      el('span', {
+        style: {
+          fontSize: '12px', fontWeight: '800', color: 'var(--text)',
+          textTransform: 'uppercase', letterSpacing: '.8px', whiteSpace: 'nowrap',
+        },
+      }, text),
+      el('span', { style: { flex: '1', height: '1px', background: 'var(--border)' } }),
+    );
+  }
+
+  function _ensureZ1PickerStyles() {
+    if (document.getElementById('z1-picker-styles')) return;
+    const st = document.createElement('style');
+    st.id = 'z1-picker-styles';
+    st.textContent = [
+      '.z1-picker-item{transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease;}',
+      '.z1-picker-item:hover{border-color:var(--accent);box-shadow:0 3px 10px rgba(0,0,0,0.18);transform:translateY(-1px);}',
+      '.z1-picker-input{background:var(--card) !important;border:1.5px solid var(--border) !important;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.10);transition:border-color .12s ease, box-shadow .12s ease;}',
+      '.z1-picker-input::placeholder{color:var(--muted);opacity:1;}',
+      '.z1-picker-input:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-bg);}',
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+
   function _openZ1DossierPicker(bannerContainer, ctx) {
+    _ensureZ1PickerStyles();
     // Ferme l'eventuel picker precedent.
     const prev = document.getElementById('z1-picker-overlay');
     if (prev) prev.remove();
@@ -1453,6 +1534,7 @@
         background: 'var(--card)', border: '1px solid var(--border)',
         borderRadius: '12px', width: 'min(520px, 100%)', maxHeight: '80vh',
         display: 'flex', flexDirection: 'column',
+        overflow: 'hidden',
         boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
       },
     });
@@ -1471,8 +1553,14 @@
       }, 'x'),
     ));
 
+    // Fond distinct de celui du modal : les cartes de dossiers (var(--card))
+    // ressortent nettement sur la zone de liste (var(--bg)).
     const listWrap = el('div', {
-      style: { padding: '14px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' },
+      style: {
+        padding: '14px 16px', overflowY: 'auto',
+        display: 'flex', flexDirection: 'column', gap: '8px',
+        background: 'var(--bg)',
+      },
     });
 
     const pick = (dossier) => {
@@ -1482,9 +1570,7 @@
 
     // Dossier en cours (accent)
     if (ctx && ctx.dossier) {
-      listWrap.appendChild(el('div', {
-        style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600' },
-      }, 'Dossier en cours'));
+      listWrap.appendChild(_z1SectionTitle('Dossier en cours'));
       listWrap.appendChild(_z1DossierRow(ctx.dossier, {
         badge: 'En cours', onClick: () => pick(ctx.dossier),
       }));
@@ -1493,28 +1579,24 @@
     // Precedents (2 max)
     const precedents = (ctx && ctx.precedents) || [];
     if (precedents.length) {
-      listWrap.appendChild(el('div', {
-        style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-      }, 'Precedents (' + (ctx.machine ? ctx.machine.nom : 'meme machine') + ')'));
+      listWrap.appendChild(_z1SectionTitle('Precedents (' + (ctx.machine ? ctx.machine.nom : 'meme machine') + ')'));
       precedents.forEach(d => {
         listWrap.appendChild(_z1DossierRow(d, { badge: 'Termine', onClick: () => pick(d) }));
       });
     }
 
     // Saisie libre
-    listWrap.appendChild(el('div', {
-      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-    }, 'Saisie libre'));
+    listWrap.appendChild(_z1SectionTitle('Saisie libre'));
 
     const manualInp = el('input', {
-      cls: 'field-input',
+      cls: 'field-input z1-picker-input',
       attrs: {
         type: 'text',
         placeholder: 'No de dossier (ex : 12345-01)',
         autocomplete: 'off',
         value: S.pfModal._noDossierManual || '',
       },
-      style: { textTransform: 'uppercase', flex: '1' },
+      style: { textTransform: 'uppercase', flex: '1', fontWeight: '600' },
     });
     const manualBtn = el('button', {
       cls: 'btn btn-accent', type: 'button',
@@ -1532,12 +1614,10 @@
 
     // Recherche globale (chef d'atelier / admin)
     if (ctx && ctx.canSearchAll) {
-      listWrap.appendChild(el('div', {
-        style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-      }, 'Recherche libre (toutes machines)'));
+      listWrap.appendChild(_z1SectionTitle('Recherche libre (toutes machines)'));
 
       const searchInp = el('input', {
-        cls: 'field-input',
+        cls: 'field-input z1-picker-input',
         attrs: {
           type: 'text',
           placeholder: 'Reference, client, description...',

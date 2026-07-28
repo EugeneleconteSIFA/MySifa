@@ -186,7 +186,6 @@ def _saisies_semaine(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
                   metrage_prevu, metrage_reel, metrage_total_debut, metrage_total_fin
              FROM production_data
             WHERE date_operation >= ? AND date_operation <= ?
-              AND COALESCE(est_annule, 0) = 0
             ORDER BY date_operation ASC""",
         (wstart, wend),
     ).fetchall()
@@ -276,7 +275,6 @@ def _prod_par_machine_dossier_by_dossier(
                                LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                           FROM production_data
                          WHERE no_dossier = ?
-                           AND COALESCE(est_annule, 0) = 0
                      ) WHERE operation_code IN ('03','88')""",
                 (no_d,),
             ).fetchone()

@@ -88,6 +88,52 @@ align-items:center}
 .pf-inline,.pf-inline-wide{grid-template-columns:1fr;gap:4px}
 .pf-imp-row{grid-template-columns:1fr 1fr}
 }
+/* Modale apercu BAT etiquette (SVG inline, meme geometrie que le PDF) */
+.pf-bat-ov{--pf-bat-vh:94vh;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:600;
+display:flex;align-items:center;justify-content:center;padding:16px}
+.pf-bat-box{background:var(--card);border:1px solid var(--border);border-radius:14px;
+width:min(1000px,100%);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;
+box-shadow:0 18px 48px rgba(0,0,0,.30)}
+.pf-bat-hdr{display:flex;align-items:center;gap:12px;padding:10px 14px;
+border-bottom:1px solid var(--border);
+background:linear-gradient(135deg, var(--card) 0%, var(--accent-bg) 100%)}
+.pf-bat-hdr h3{margin:0;font-size:15px;font-weight:800;color:var(--text);line-height:1.2}
+.pf-bat-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:1px}
+.pf-bat-push{margin-left:auto}
+.pf-bat-lang{display:inline-flex;border:1px solid var(--border);border-radius:8px;
+overflow:hidden;background:var(--card)}
+.pf-bat-lang button{border:0;background:transparent;color:var(--text2);font-size:12px;
+font-weight:700;padding:5px 12px;cursor:pointer;transition:background .12s,color .12s}
+.pf-bat-lang button:hover{background:var(--accent-bg);color:var(--accent)}
+.pf-bat-lang button.on{background:var(--accent);color:#fff}
+.pf-bat-x{border:1px solid var(--border);background:var(--card);color:var(--text2);
+width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:15px;line-height:1;
+display:inline-flex;align-items:center;justify-content:center}
+.pf-bat-x:hover{border-color:var(--accent);color:var(--accent)}
+.pf-bat-body{flex:1;overflow:auto;padding:16px;background:var(--bg);
+display:flex;justify-content:center;align-items:flex-start}
+/* A4 = 210x297 : on borne la LARGEUR par la hauteur dispo (ratio .7071)
+   pour que la planche entiere tienne a l'ecran sans scroll. */
+.pf-bat-stage{background:#fff;border:1px solid var(--border);border-radius:6px;
+box-shadow:0 2px 12px rgba(15,23,42,.12);overflow:hidden;flex:0 0 auto;width:100%;
+max-width:min(800px, calc((var(--pf-bat-vh) - 152px) * 0.7071))}
+.pf-bat-stage.zoom{max-width:800px}
+.pf-bat-stage svg{display:block;width:100%;height:auto}
+.pf-bat-msg{text-align:center;color:var(--muted);font-size:13px;padding:70px 16px;font-weight:600}
+.pf-bat-msg.err{color:var(--danger,#dc2626)}
+.pf-bat-ftr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;
+border-top:1px solid var(--border);background:var(--card)}
+.pf-bat-refcli{display:flex;align-items:center;gap:7px;font-size:12px;
+color:var(--text2);font-weight:600}
+.pf-bat-refcli input{width:180px;padding:5px 9px;border:1px solid var(--border);
+border-radius:8px;background:var(--card);color:var(--text);font-size:12px}
+.pf-bat-refcli input:focus{outline:0;border-color:var(--accent)}
+@media(max-width:640px){
+.pf-bat-ov{padding:0;--pf-bat-vh:100vh}
+.pf-bat-box{border-radius:0;max-height:100vh;height:100vh;width:100%}
+.pf-bat-body{padding:8px}
+.pf-bat-refcli input{width:120px}
+}
 """
 
 AO_PRODUIT_FORM_JS = r"""
@@ -98,7 +144,7 @@ function defaultProduitFiche() {
     etiquette: { laize: '', longueur: '', rayon: '', perforation: '' },
     echenillage: { droite: '', gauche: '', avance: '' },
     matiere: { frontal_id: '', adhesif_id: '', grammage_adhesif: '', glassine_id: '', couleur_glassine: '' },
-    bobines: { diametre_mandrin: '', enroulement: 'exterieur', diametre_bobine: '', nb_etiquettes: '' },
+    bobines: { diametre_mandrin: '', sens_sortie: 1, enroulement: 'exterieur', diametre_bobine: '', nb_etiquettes: '' },
     impressions_detail: {
       aplat: false, aplat_pourcent: '', recto: 0, verso: 0,
       recto_details: [], verso_details: []
@@ -216,6 +262,9 @@ function renderProduitForm() {
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+
     ' title="'+escAttr(d.id ? 'Exporter la fiche PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
     icon('file-text',14)+' PDF</button>'+
+    '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-bat"'+(d.id?'':' disabled')+
+    ' title="'+escAttr(d.id ? 'Générer le BAT étiquette' : 'Enregistrez le produit pour activer le BAT')+'">'+
+    icon('file-text',14)+' BAT</button>'+
     '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
     '<div class="pf-page-hdr">'+
@@ -262,8 +311,7 @@ function renderProduitForm() {
     '</div>'+
     '<div class="pf-block"><div class="pf-block-title">Bobines</div>'+
   pfRow('Mandrin mm', '<input type="number" step="any" id="pf-bob-mand" value="'+escAttr(f.bobines.diametre_mandrin)+'">')+
-  pfRow('Enroulement', '<select id="pf-bob-enr"><option value="interieur"'+(f.bobines.enroulement==='interieur'?' selected':'')+'>Intérieur</option>'+
-    '<option value="exterieur"'+(f.bobines.enroulement==='exterieur'?' selected':'')+'>Extérieur</option></select>')+
+  pfRow('Sens de sortie', '<select id="pf-bob-sens">'+pfSensSortieOptions(f.bobines)+'</select>')+
   pfRow('Ø bobine mm', '<input type="number" step="any" id="pf-bob-diam" value="'+escAttr(f.bobines.diametre_bobine)+'">')+
   pfRow('Étiq. / bobine', '<input type="number" step="1" min="0" id="pf-bob-nb" value="'+escAttr(f.bobines.nb_etiquettes)+'">')+
     '</div></div>'+
@@ -346,6 +394,141 @@ function renderProduitForm() {
     '<button type="button" class="btn btn-accent" id="btn-pf-save-bottom" style="min-width:240px;padding:12px 32px;font-size:15px;font-weight:700">Enregistrer</button></div></div></div>';
 }
 
+function pfSensSortieOptions(bob) {
+  const FAM = ['Bobine, sortie extérieure', 'Bobine, sortie intérieure', 'Paravent'];
+  let cur = parseInt(bob && bob.sens_sortie, 10);
+  if (!(cur >= 1 && cur <= 12)) cur = (bob && bob.enroulement === 'interieur') ? 5 : 1;
+  let out = '';
+  for (let i = 1; i <= 12; i++) {
+    const rot = ((i - 1) % 4) * 90;
+    const lbl = i + ' — ' + FAM[i <= 4 ? 0 : (i <= 8 ? 1 : 2)] + (rot ? ' (rotation ' + rot + '°)' : '');
+    out += '<option value="' + i + '"' + (i === cur ? ' selected' : '') + '>' + escHtml(lbl) + '</option>';
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------------
+   Apercu BAT etiquette - modale SVG.
+   Le SVG rendu par /api/ao/produits/{id}/bat?fmt=svg est autonome (unites
+   mm, viewBox A4, couleurs en dur) : on l'injecte inline pour qu'il suive
+   la largeur de la modale. Le PDF reste le livrable client.
+--------------------------------------------------------------------- */
+let pfBat = null;
+
+function pfBatUrl(fmt) {
+  if (!pfBat) return '';
+  const p = new URLSearchParams({ fmt: fmt, lang: pfBat.lang });
+  if (pfBat.refClient) p.set('ref_client', pfBat.refClient);
+  return '/api/ao/produits/' + pfBat.id + '/bat?' + p.toString();
+}
+
+function pfBatKeydown(e) {
+  if (e.key === 'Escape') closeBatPreview();
+}
+
+function closeBatPreview() {
+  pfBat = null;
+  document.removeEventListener('keydown', pfBatKeydown);
+  document.getElementById('pf-bat-ov')?.remove();
+}
+
+async function pfBatLoad() {
+  if (!pfBat) return;
+  const stage = document.getElementById('pf-bat-stage');
+  if (!stage) return;
+  const seq = ++pfBat.seq;
+  stage.innerHTML = '<div class="pf-bat-msg">Génération de l\'aperçu…</div>';
+  try {
+    const res = await fetch(pfBatUrl('svg'), { credentials: 'same-origin' });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.detail || ''; } catch (_) {}
+      throw new Error(detail || ('erreur ' + res.status));
+    }
+    const svg = await res.text();
+    if (!pfBat || pfBat.seq !== seq) return;
+    stage.innerHTML = svg;
+  } catch (e) {
+    if (!pfBat || pfBat.seq !== seq) return;
+    stage.innerHTML = '<div class="pf-bat-msg err">Aperçu indisponible — ' +
+      escHtml(e.message || 'erreur inconnue') + '</div>';
+  }
+}
+
+function openBatPreview(produitId, ref) {
+  closeBatPreview();
+  pfBat = { id: produitId, ref: ref || '', lang: 'fr', refClient: '', seq: 0 };
+
+  const ov = document.createElement('div');
+  ov.className = 'pf-bat-ov';
+  ov.id = 'pf-bat-ov';
+  ov.innerHTML =
+    '<div class="pf-bat-box" role="dialog" aria-modal="true" aria-label="Aperçu du BAT étiquette">' +
+      '<div class="pf-bat-hdr">' +
+        '<div><h3>BAT étiquette</h3>' +
+        (ref ? '<div class="pf-bat-sub">' + escHtml(ref) + '</div>' : '') + '</div>' +
+        '<div class="pf-bat-push"></div>' +
+        '<div class="pf-bat-lang" id="pf-bat-lang">' +
+          '<button type="button" data-lang="fr" class="on">FR</button>' +
+          '<button type="button" data-lang="en">EN</button>' +
+        '</div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="pf-bat-zoom" '+
+          'title="Afficher la planche en pleine largeur">100 %</button>' +
+        '<button type="button" class="pf-bat-x" id="pf-bat-x" title="Fermer (Échap)" aria-label="Fermer">&#10005;</button>' +
+      '</div>' +
+      '<div class="pf-bat-body">' +
+        '<div class="pf-bat-stage" id="pf-bat-stage">' +
+          '<div class="pf-bat-msg">Génération de l\'aperçu…</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pf-bat-ftr">' +
+        '<label class="pf-bat-refcli">Réf. client' +
+          '<input type="text" id="pf-bat-refcli" placeholder="optionnel" autocomplete="off">' +
+        '</label>' +
+        '<div class="pf-bat-push"></div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="pf-bat-close">Fermer</button>' +
+        '<button type="button" class="btn btn-accent btn-sm" id="pf-bat-pdf">' +
+          icon('file-text', 14) + ' Télécharger le PDF</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+
+  ov.addEventListener('click', (e) => { if (e.target === ov) closeBatPreview(); });
+  document.getElementById('pf-bat-x').onclick = closeBatPreview;
+  document.getElementById('pf-bat-close').onclick = closeBatPreview;
+  document.getElementById('pf-bat-zoom').onclick = (e) => {
+    const st = document.getElementById('pf-bat-stage');
+    const on = st.classList.toggle('zoom');
+    e.currentTarget.textContent = on ? 'Ajuster' : '100 %';
+    e.currentTarget.title = on ? 'Ajuster la planche a la hauteur' : 'Afficher la planche en pleine largeur';
+  };
+  document.getElementById('pf-bat-pdf').onclick = () => {
+    const u = pfBatUrl('pdf');
+    if (u) window.open(u, '_blank');
+  };
+  document.getElementById('pf-bat-lang').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-lang]');
+    if (!b || !pfBat || pfBat.lang === b.dataset.lang) return;
+    pfBat.lang = b.dataset.lang;
+    document.querySelectorAll('#pf-bat-lang button').forEach(x => {
+      x.classList.toggle('on', x.dataset.lang === pfBat.lang);
+    });
+    pfBatLoad();
+  });
+  const refIn = document.getElementById('pf-bat-refcli');
+  refIn.addEventListener('change', () => {
+    if (!pfBat) return;
+    const v = refIn.value.trim();
+    if (v === pfBat.refClient) return;
+    pfBat.refClient = v;
+    pfBatLoad();
+  });
+  refIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); refIn.blur(); } });
+
+  document.addEventListener('keydown', pfBatKeydown);
+  pfBatLoad();
+}
+
 function pfNum(v) {
   if (v === '' || v == null) return null;
   const n = parseFloat(v);
@@ -392,9 +575,11 @@ function collectProduitForm() {
     glassine_id: document.getElementById('pf-mat-glassine')?.value || null,
     couleur_glassine: document.getElementById('pf-mat-couleur')?.value.trim() || ''
   };
+  const pfSens = parseInt(document.getElementById('pf-bob-sens')?.value, 10) || 1;
   f.bobines = {
     diametre_mandrin: pfNum(document.getElementById('pf-bob-mand')?.value),
-    enroulement: document.getElementById('pf-bob-enr')?.value || 'interieur',
+    sens_sortie: pfSens,
+    enroulement: (pfSens >= 5 && pfSens <= 8) ? 'interieur' : 'exterieur',
     diametre_bobine: pfNum(document.getElementById('pf-bob-diam')?.value),
     nb_etiquettes: pfInt(document.getElementById('pf-bob-nb')?.value)
   };
@@ -617,6 +802,13 @@ function bindProduitFormEvents() {
   const exportBtn = document.getElementById('btn-pf-export');
   if (exportBtn && !exportBtn.disabled) {
     exportBtn.addEventListener('click', exportProduitPdf);
+  }
+  const batBtn = document.getElementById('btn-pf-bat');
+  if (batBtn && !batBtn.disabled) {
+    batBtn.addEventListener('click', () => {
+      const id = S.produitForm?.id;
+      if (id) openBatPreview(id, S.produitForm?.ref || '');
+    });
   }
   document.getElementById('btn-pf-client-pick')?.addEventListener('click', () => {
     openModalPickClient((cli) => {

@@ -14,8 +14,8 @@ def dashboard_stats(request: Request):
         tr = conn.execute("SELECT COALESCE(SUM(row_count),0) as c FROM imports").fetchone()["c"]
         li = conn.execute("SELECT * FROM imports ORDER BY imported_at DESC LIMIT 1").fetchone()
         td = conn.execute("SELECT COUNT(*) as c FROM dossiers").fetchone()["c"]
-        cr = conn.execute("SELECT COUNT(*) as c FROM production_data WHERE operation_severity='critique' AND COALESCE(est_annule, 0) = 0").fetchone()["c"]
-        at = conn.execute("SELECT COUNT(*) as c FROM production_data WHERE operation_severity='attention' AND COALESCE(est_annule, 0) = 0").fetchone()["c"]
+        cr = conn.execute("SELECT COUNT(*) as c FROM production_data WHERE operation_severity='critique'").fetchone()["c"]
+        at = conn.execute("SELECT COUNT(*) as c FROM production_data WHERE operation_severity='attention'").fetchone()["c"]
     return {"total_imports":ti,"total_rows":tr,"total_dossiers":td,
             "last_import":dict(li) if li else None,"critiques":cr,"attentions":at}
 
