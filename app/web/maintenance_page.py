@@ -500,6 +500,12 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 /* Badge visuel sur créneaux calendrier issus d'un template */
 .cal-event.is-from-template::after{content:"↻";position:absolute;top:2px;right:4px;font-size:11px;color:var(--accent);opacity:.8;font-weight:900;pointer-events:none}
 .cal-event.is-from-template{border-left:3px solid var(--accent)}
+/* v2.5.6 : historique des creneaux -- scrollbar bornee, alignee sur .ops-table-wrap */
+.plan-hist-scroll{max-height:min(60vh,720px);overflow-y:auto;overflow-x:hidden;padding-right:4px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.plan-hist-scroll::-webkit-scrollbar{width:8px}
+.plan-hist-scroll::-webkit-scrollbar-track{background:transparent}
+.plan-hist-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.plan-hist-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
 .tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
 /* Sélecteur de modèle dans le modal Nouveau créneau */
@@ -1707,19 +1713,20 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </button>
         </div>
         <div id="plan-subview-historique" style="display:none">
-          <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
-            <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
-            <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l'avancement, réutilise les tâches en modèle.</p>
-            <div id="plan-hist-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
-          </div>
-          <!-- v2.4.29 : Gestion des modèles (aligné sur style Gestion des alertes) -->
-          <div class="tmpl-manage-panel" style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+          <!-- v2.5.6 : Gestion des modeles placee AU-DESSUS de l'historique des creneaux. -->
+          <div class="tmpl-manage-panel" style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
               <h2 style="margin:0;font-size:15px;font-weight:700;color:var(--text)">Gestion des modèles</h2>
               <button type="button" class="btn" style="background:var(--accent);color:var(--bg);border:none;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer" onclick="openTemplateEditor(null)">+ Nouveau modèle</button>
             </div>
             <p class="sub" style="margin-top:-4px;margin-bottom:14px;font-size:13px;color:var(--muted)">Modèles de créneau réutilisables. Active la récurrence pour que les occurrences futures se génèrent automatiquement dans le calendrier (3 mois glissants).</p>
             <div id="tmpl-manage-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div>
+          <!-- v2.5.6 : Historique des creneaux avec scrollbar (aligne sur .ops-table-wrap). -->
+          <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
+            <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
+            <p class="sub" style="margin-top:0;margin-bottom:16px;font-size:13px;color:var(--muted)">Créneaux planifiés passés — vérifie l'avancement, réutilise les tâches en modèle.</p>
+            <div id="plan-hist-list" class="plan-hist-scroll"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
         </div>
         <div id="plan-subview-calendrier">
