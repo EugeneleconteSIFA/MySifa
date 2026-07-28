@@ -11167,26 +11167,95 @@ function renderTemplatesList(){
     </div>`).join('');
 }
 
+// v2.4.32 : suppression modele -- modal stylise MySifa (remplace le confirm() natif).
 async function confirmDeleteTemplate(templateId){
   const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
   if(!t) return;
-  const msg = `Supprimer le modèle « ${t.name} » ?\n\nATTENTION : cela supprime aussi tous les créneaux futurs (à partir d'aujourd'hui) créés depuis ce modèle. Les créneaux passés seront conservés (mais détachés du modèle).`;
-  if(!confirm(msg)) return;
+  _openDeleteTemplateModal(t);
+}
+
+function _openDeleteTemplateModal(t){
+  const existing = document.getElementById('del-tmpl-modal-overlay');
+  if(existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'del-tmpl-modal-overlay';
+  wrap.className = 'op-modal-overlay';
+  wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center';
+  wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeDeleteTemplateModal(); });
+  const escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeDeleteTemplateModal(); } };
+  document.addEventListener('keydown', escHandler, true);
+  wrap._escHandler = escHandler;
+
+  const opsCount = (t.ops_count != null ? t.ops_count : (t.ops ? t.ops.length : 0)) || 0;
+  const evCount  = t.events_count || 0;
+  const recurLine = t.recurrence_active
+    ? '<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--warn);margin-top:6px"><span>\u26a0\ufe0f</span><span>Recurrence active -- les prochaines occurrences ne se genereront plus.</span></div>'
+    : '';
+
+  wrap.innerHTML = ''
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+    +   '<div style="color:var(--danger);font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+    +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>'
+    +     'Supprimer le modele ?'
+    +   '</div>'
+    +   '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">'
+    +     '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(t.name) + '</div>'
+    +     (t.description ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + escHtml(t.description) + '</div>' : '')
+    +     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:11px">'
+    +       '<span style="padding:3px 9px;border-radius:6px;background:var(--card);color:var(--text2);font-weight:600">' + opsCount + ' op.</span>'
+    +       '<span style="padding:3px 9px;border-radius:6px;background:var(--card);color:var(--text2);font-weight:600">' + evCount + ' creneau' + (evCount > 1 ? 'x' : '') + ' cree' + (evCount > 1 ? 's' : '') + '</span>'
+    +     '</div>'
+    +     recurLine
+    +   '</div>'
+    +   '<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:16px">'
+    +     'Cela supprime aussi <strong>tous les creneaux futurs</strong> (a partir d\'aujourd\'hui) crees depuis ce modele. Les creneaux passes seront conserves (mais detaches du modele).'
+    +   '</div>'
+    +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+    +     '<button type="button" id="del-tmpl-cancel-btn" class="btn" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>'
+    +     '<button type="button" id="del-tmpl-confirm-btn" class="btn btn-danger" style="background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Supprimer</button>'
+    +   '</div>'
+    + '</div>';
+
+  document.body.appendChild(wrap);
+  const cancelBtn  = document.getElementById('del-tmpl-cancel-btn');
+  const confirmBtn = document.getElementById('del-tmpl-confirm-btn');
+  if(cancelBtn)  cancelBtn.addEventListener('click', _closeDeleteTemplateModal);
+  if(confirmBtn) confirmBtn.addEventListener('click', () => {
+    if(confirmBtn.dataset._busy === '1') return;
+    confirmBtn.dataset._busy = '1';
+    confirmBtn.disabled = true;
+    _doDeleteTemplate(t.id, confirmBtn);
+  });
+  requestAnimationFrame(() => { if(cancelBtn) cancelBtn.focus(); });
+}
+
+function _closeDeleteTemplateModal(){
+  const w = document.getElementById('del-tmpl-modal-overlay');
+  if(!w) return;
+  try{ if(w._escHandler) document.removeEventListener('keydown', w._escHandler, true); }catch(_){}
+  w.remove();
+}
+
+async function _doDeleteTemplate(templateId, btn){
   try{
     const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId),
                           { method:'DELETE', credentials:'include' });
     if(!r.ok){
       const err = await r.json().catch(()=>({}));
-      throw new Error(err.detail || 'Suppression refusée');
+      throw new Error(err.detail || 'Suppression refusee');
     }
     const d = await r.json();
     const n = d.deleted_future_events || 0;
-    showToast('Modèle supprimé' + (n ? ` — ${n} créneau${n > 1 ? 'x' : ''} futur${n > 1 ? 's' : ''} nettoyé${n > 1 ? 's' : ''}.` : '.'), 'info');
+    showToast('Modele supprime' + (n ? ' -- ' + n + ' creneau' + (n > 1 ? 'x' : '') + ' futur' + (n > 1 ? 's' : '') + ' nettoye' + (n > 1 ? 's' : '') + '.' : '.'), 'info');
+    _closeDeleteTemplateModal();
     await loadTemplates(true);
     renderTemplatesList();
     refreshCaseTemplatePicker();
     await refreshPlanning(); renderCal();
-  }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
+  }catch(e){
+    showToast('Erreur : ' + e.message, 'danger');
+    if(btn){ btn.dataset._busy = ''; btn.disabled = false; }
+  }
 }
 
 /* ── v2.4.29 : Helpers récurrence + panel Gestion des modèles ────── */
