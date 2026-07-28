@@ -8095,7 +8095,9 @@ async function loadMe(){
     else document.body.classList.remove('light');
     updateThemeBtn();
   }catch(e){}
-  loadMe();
+  // v2.5.5 : on garde la promise pour l'attendre avant switchView opérateur
+  // (opLoadTasks / opLoadPlanning lisent S.me.id — sans ça, filtre vide au boot).
+  const _initMePromise = loadMe();
   loadOps();
   // loadOpsTypes() et loadCtrlTypes() sont async (fetch /api/maintenance/codes).
   loadOpsTypes().then(() => {
@@ -8117,15 +8119,17 @@ async function loadMe(){
   try{
     const h = (location.hash || '').replace('#','').trim();
     const target = (h === 'historique') ? 'controles' : h;
-    if(target && VIEW_META[target]){
-      switchView(target);
-    } else if(MAINT_ROLE === 'operator'){
-      // v2.5.4 : la vue par défaut op-tasks est marquée .active dans le HTML
-      // statique, mais aucun loader n'était déclenché au boot — l'opérateur
-      // arrivait sur un écran vide et devait changer d'onglet puis revenir
-      // pour voir ses tâches. On force switchView pour passer par le hook
-      // de chargement (opLoadTasks) existant.
-      switchView('op-tasks');
+    const initialView = (target && VIEW_META[target]) ? target
+                        : (MAINT_ROLE === 'operator' ? 'op-tasks' : null);
+    if(initialView){
+      if(MAINT_ROLE === 'operator'){
+        // v2.5.5 : pour opérateur, attendre S.me avant switchView. opLoadTasks
+        // et opLoadPlanning filtrent les events par S.me.id — appelées avant
+        // que loadMe() résolve, elles produisent un state vide (bug v2.5.4).
+        _initMePromise.finally(() => { try{ switchView(initialView); }catch(e){} });
+      } else {
+        switchView(initialView);
+      }
     }
   }catch(e){}
 })();
