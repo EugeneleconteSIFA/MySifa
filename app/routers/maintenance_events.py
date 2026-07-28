@@ -16,6 +16,7 @@ Contrôle d'accès :
   - Mettre à jour statut/saisie d'une op **si** il est dans le groupe.
   - Créer un event `source=non_planifie` avec lui-même comme seul opérateur.
 """
+import hashlib
 from datetime import datetime
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
@@ -540,8 +541,19 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
 
 
 @router.delete("/api/maintenance/events/{event_id}")
-def delete_event(event_id: int, request: Request):
-    """Admin : suppression libre. Opérateur : uniquement ses propres non_planifie."""
+def delete_event(event_id: int, request: Request, confirm_token: Optional[str] = None):
+    """Admin : suppression libre. Opérateur : uniquement ses propres non_planifie.
+
+    v2.4.19 : garde-fou anti-destruction de traçabilité. Si le créneau contient
+    des ops déjà 'termine', premier appel → HTTP 409 avec la liste des ops
+    effectuées et un token déterministe `sha256(sorted(op_ids))[:16]`. Second
+    appel avec `?confirm_token=<hash>` → suppression autorisée. Le token étant
+    dérivé de l'état, il s'invalide automatiquement si une op change de statut
+    entre les 2 appels (protection anti-race, aucun stockage serveur).
+
+    Comportement inchangé si le créneau n'a aucune op 'termine' (suppression
+    directe, comme avant v2.4.19).
+    """
     user, maint_role = _require_access(request)
     with get_db() as conn:
         ev = _load_event_full(conn, event_id)
@@ -550,6 +562,41 @@ def delete_event(event_id: int, request: Request):
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
+
+        # v2.4.19 : lister les ops termine + métadonnées pour l'écran de
+        # confirmation renforcée. Jointure sur maintenance_codes pour le
+        # libellé lisible, et sur users pour le nom de l'opérateur qui a saisi.
+        done_rows = conn.execute("""
+            SELECT eo.id, eo.code, eo.done_at, eo.done_by, eo.machines_csv,
+                   mc.label AS code_label,
+                   u.nom AS done_by_name
+            FROM maintenance_event_ops eo
+            LEFT JOIN maintenance_codes mc ON mc.code = eo.code
+            LEFT JOIN users u ON u.id = eo.done_by
+            WHERE eo.event_id = ? AND eo.statut = 'termine'
+            ORDER BY eo.done_at ASC, eo.id ASC
+        """, (event_id,)).fetchall()
+
+        if done_rows:
+            op_ids_sorted = sorted(int(r["id"]) for r in done_rows)
+            token_source = ",".join(str(i) for i in op_ids_sorted)
+            expected_token = hashlib.sha256(token_source.encode("utf-8")).hexdigest()[:16]
+            if confirm_token != expected_token:
+                done_ops_payload = [{
+                    "id": r["id"],
+                    "code": r["code"],
+                    "label": r["code_label"] or r["code"],
+                    "done_at": r["done_at"],
+                    "done_by_name": r["done_by_name"] or "opérateur inconnu",
+                    "machines": _machines_csv_to_list(r["machines_csv"]),
+                } for r in done_rows]
+                raise HTTPException(status_code=409, detail={
+                    "requires_confirmation": True,
+                    "done_ops": done_ops_payload,
+                    "confirm_token": expected_token,
+                    "n_done": len(done_ops_payload),
+                })
+
         # v2.2.11 : cleanup manuel — get_db() n'active pas PRAGMA foreign_keys,
         # donc le CASCADE des FK est INACTIF. Sans ces DELETE explicites, les
         # rows dans maintenance_event_ops et maintenance_event_operators
