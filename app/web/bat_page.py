@@ -68,11 +68,16 @@ BAT_HTML = r"""<!DOCTYPE html>
   --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
   --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
   --sidebar-w:220px;
+  /* Couleur du texte posé SUR un aplat --accent.
+     Thème sombre : les accents de palette sont clairs (ambre, cyan, vert vif)
+     → texte quasi-noir. Thème clair : ils sont foncés → texte blanc. */
+  --on-accent:#0a0e17;
 }
 html.light-pre body,body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
   --ok:#059669;--danger:#dc2626;--warn:#d97706;
+  --on-accent:#fff;
 }
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
@@ -137,7 +142,7 @@ body.sb-open .sidebar-overlay{display:block}
 /* ── Boutons ── */
 .btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .btn:hover{filter:brightness(1.08)}
-.btn-accent{background:var(--accent);color:#fff}
+.btn-accent{background:var(--accent);color:var(--on-accent)}
 .btn-danger{background:var(--danger);color:#fff}
 .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
@@ -156,7 +161,7 @@ body.sb-open .sidebar-overlay{display:block}
 .stat-tab:hover{border-color:var(--accent);color:var(--accent)}
 .stat-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .stat-count{background:var(--border);color:var(--muted);border-radius:999px;padding:1px 7px;font-size:11px;font-weight:700}
-.stat-tab.active .stat-count{background:var(--accent);color:#0a0e17}
+.stat-tab.active .stat-count{background:var(--accent);color:var(--on-accent)}
 
 /* ── Table ── */
 .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -173,7 +178,7 @@ body.light .table-wrap tr:hover td{background:rgba(0,0,0,.02)}
 .table-wrap th.th-sort.is-sorted{color:var(--accent)}
 .sort-ind{display:inline-flex;align-items:center;gap:3px;margin-left:5px;vertical-align:middle}
 .sort-arrow{font-size:11px;line-height:1}
-.sort-rank{background:var(--accent);color:#0a0e17;border-radius:999px;min-width:13px;height:13px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;padding:0 3px;line-height:1}
+.sort-rank{background:var(--accent);color:var(--on-accent);border-radius:999px;min-width:13px;height:13px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;padding:0 3px;line-height:1}
 .sort-hint{margin-left:5px;font-size:10px;opacity:0;transition:opacity .15s}
 .table-wrap th.th-sort:hover .sort-hint{opacity:.55}
 

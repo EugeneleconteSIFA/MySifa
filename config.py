@@ -35,7 +35,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.4.17"
+APP_VERSION = "2.5"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -76,6 +76,8 @@ APP_LOGIN_HINT = os.getenv(
 )
 
 # Grand titre affiché sur la login DA Kernse (KERNSE_THEME=1 uniquement).
+# Ex. « Bienvenue. » suivi de « Portail interne Kernse. » — split en 2 lignes
+# pour la mise en page grande typo Poppins de la maquette.
 APP_WELCOME_TITLE = os.getenv("APP_WELCOME_TITLE", "Bienvenue.")
 APP_WELCOME_SUB = os.getenv(
     "APP_WELCOME_SUB",
@@ -86,7 +88,7 @@ APP_WELCOME_SUB = os.getenv(
 # APP_TAGLINE reste utilisée pour le sous-titre court MySifa historique.
 APP_TAGLINE_RICH = os.getenv(
     "APP_TAGLINE_RICH",
-    "Production, stocks, planning, comptabilité, appels d\'offre — "
+    "Production, stocks, planning, comptabilité, appels d'offre — "
     "tous les outils métier au même endroit, avec la palette de "
     "commandes ⌘K pour aller vite.",
 )
@@ -659,3 +661,21 @@ DEEPL_API_URL = os.getenv(
     "DEEPL_API_URL",
     "https://api-free.deepl.com/v2" if DEEPL_API_KEY.endswith(":fx") else "https://api.deepl.com/v2",
 )
+
+
+# --- MyQualite > Certifications SIFA > Explorateur de documents (GED) ---
+# Taille maximale d'un document depose dans l'explorateur.
+# Surcharge possible via la variable d'environnement GED_MAX_FILE_MB.
+GED_MAX_FILE_MB = int(os.getenv("GED_MAX_FILE_MB", "20"))
+
+# Liste noire d'extensions : tout est accepte SAUF les executables et les
+# scripts. Une liste noire (et non blanche) est le choix retenu pour ne pas
+# bloquer un format metier inattendu ; l'extension testee est la derniere du
+# nom, donc "facture.pdf.exe" est bien refuse.
+GED_BLOCKED_EXTENSIONS = {
+    "exe", "msi", "com", "scr", "pif", "cpl", "bat", "cmd", "hta", "msc",
+    "vbs", "vbe", "js", "jse", "wsf", "wsh", "ws", "ps1", "psm1", "psc1",
+    "sh", "bash", "zsh", "csh", "run", "bin", "app", "apk", "jar",
+    "dll", "sys", "drv", "ocx", "scf", "lnk", "reg", "gadget",
+    "deb", "rpm", "dmg", "pkg", "iso", "img", "vbscript",
+}

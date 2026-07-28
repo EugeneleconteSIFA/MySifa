@@ -36,14 +36,16 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
     qte_reel = conn.execute(
         f"""SELECT COALESCE(SUM(quantite_traitee), 0) as qte
             FROM production_data
-            WHERE no_dossier IN ({placeholders}) AND operation_code='89'""",
+            WHERE no_dossier IN ({placeholders}) AND operation_code='89'
+              AND COALESCE(est_annule, 0) = 0""",
         no_dossiers,
     ).fetchone()["qte"]
 
     metrage_reel = conn.execute(
         f"""SELECT COALESCE(SUM(metrage_reel), 0) as met
             FROM production_data
-            WHERE no_dossier IN ({placeholders}) AND operation_code='89'""",
+            WHERE no_dossier IN ({placeholders}) AND operation_code='89'
+              AND COALESCE(est_annule, 0) = 0""",
         no_dossiers,
     ).fetchone()["met"]
 
@@ -59,6 +61,7 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
                    LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
             FROM production_data
             WHERE no_dossier IN ({placeholders})
+              AND COALESCE(est_annule, 0) = 0
         ) WHERE operation_code='02'
         """,
         no_dossiers,
@@ -76,6 +79,7 @@ def _comparaison_from_no_dossiers(conn, devis_row, no_dossiers: list[str]) -> di
                    LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
             FROM production_data
             WHERE no_dossier IN ({placeholders})
+              AND COALESCE(est_annule, 0) = 0
         ) WHERE operation_code IN ('03','88')
         """,
         no_dossiers,
@@ -272,6 +276,7 @@ def suggest_no_dossiers(request: Request, q: str = "", limit: int = 12):
                 SELECT DISTINCT no_dossier
                 FROM production_data
                 WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+                  AND COALESCE(est_annule, 0) = 0
                   AND LOWER(no_dossier) LIKE LOWER(?)
                 ORDER BY no_dossier
                 LIMIT ?
@@ -284,6 +289,7 @@ def suggest_no_dossiers(request: Request, q: str = "", limit: int = 12):
                 SELECT DISTINCT no_dossier
                 FROM production_data
                 WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
+                  AND COALESCE(est_annule, 0) = 0
                 ORDER BY no_dossier
                 LIMIT ?
                 """,
@@ -470,14 +476,16 @@ def comparaison(devis_id: int, request: Request):
         qte_reel = conn.execute(
             f"""SELECT COALESCE(SUM(quantite_traitee), 0) as qte
                 FROM production_data
-                WHERE no_dossier IN ({placeholders}) AND operation_code='89'""",
+                WHERE no_dossier IN ({placeholders}) AND operation_code='89'
+                  AND COALESCE(est_annule, 0) = 0""",
             no_dossiers,
         ).fetchone()["qte"]
 
         metrage_reel = conn.execute(
             f"""SELECT COALESCE(SUM(metrage_reel), 0) as met
                 FROM production_data
-                WHERE no_dossier IN ({placeholders}) AND operation_code='89'""",
+                WHERE no_dossier IN ({placeholders}) AND operation_code='89'
+                  AND COALESCE(est_annule, 0) = 0""",
             no_dossiers,
         ).fetchone()["met"]
 
@@ -493,6 +501,7 @@ def comparaison(devis_id: int, request: Request):
                        LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
                 FROM production_data
                 WHERE no_dossier IN ({placeholders})
+                  AND COALESCE(est_annule, 0) = 0
             ) WHERE operation_code='02'
             """,
             no_dossiers,
@@ -510,6 +519,7 @@ def comparaison(devis_id: int, request: Request):
                        LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) as lead_date
                 FROM production_data
                 WHERE no_dossier IN ({placeholders})
+                  AND COALESCE(est_annule, 0) = 0
             ) WHERE operation_code IN ('03','88')
             """,
             no_dossiers,

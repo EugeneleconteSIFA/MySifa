@@ -253,6 +253,24 @@ body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a0
 .slot .line-no-of{display:block;width:calc(100% - 4px);max-width:100%;margin-top:4px;padding:3px 5px;border-radius:5px;
   font-size:10px;font-style:italic;color:var(--muted);background:rgba(148,163,184,.12);
   border:1px solid rgba(148,163,184,.25);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+/* Dossier annule en production : signal fort, visible d'un coup d'oeil sur
+   la timeline. On passe par border + box-shadow (et pas outline) pour ne
+   pas entrer en conflit avec le surlignage de recherche, qui utilise
+   outline. Les !important battent le style inline du slot (border/shadow
+   couleur machine) : c'est voulu, l'annulation prime sur la couleur. */
+.slot.slot-annule{border:2px solid #ef4444!important;
+  box-shadow:0 0 0 2px rgba(239,68,68,.55),0 3px 14px rgba(239,68,68,.5)!important;z-index:9}
+.slot.slot-annule:hover{box-shadow:0 0 0 3px rgba(239,68,68,.85),0 5px 20px rgba(239,68,68,.62)!important}
+body.light .slot.slot-annule{border-color:#dc2626!important;
+  box-shadow:0 0 0 2px rgba(220,38,38,.45),0 3px 14px rgba(220,38,38,.38)!important}
+.badge-annule{background:#ef4444;color:#fff;font-size:10px;font-weight:800;
+  padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;letter-spacing:.4px;
+  text-transform:uppercase;border:1px solid rgba(255,255,255,.35);
+  box-shadow:0 1px 4px rgba(239,68,68,.55)}
+body.light .badge-annule{background:#dc2626;color:#fff;border-color:rgba(255,255,255,.5)}
+.tip-annule{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(248,113,113,.16);
+  border:1.5px solid var(--danger);font-size:12px;font-weight:700;color:var(--danger);line-height:1.4}
+.tip-annule .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px;font-weight:600}
 .tip-exig{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(251,191,36,.18);border:1.5px solid var(--warn);
   font-size:12px;font-weight:700;color:var(--warn);line-height:1.4}
 .tip-exig .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px;font-weight:600}
@@ -516,6 +534,14 @@ body.light .btn-p{color:#fff}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
+/* Un dossier trouve par la recherche redevient pleinement lisible, meme
+   s'il est termine (sinon l'attenuation .55 + grayscale le rend illisible
+   pile au moment ou on le cherche). */
+.slot.slot-reel-termine.tl-match{opacity:1!important;filter:none!important}
+.slot.tl-match-current{z-index:25;transform:scale(1.045)}
+.slot.tl-match-current .line1{font-weight:800}
+.slot.slot-reel-termine.tl-match-current{opacity:1!important;filter:none!important}
+#tbody.has-search .tr.tr-reel-termine{opacity:1;filter:none}
 .slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* À placer au planning — zébré */
 .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
@@ -1300,6 +1326,11 @@ function renderEntries(){
   if(!tbody) return;
   const sl=S.timeline;
   const filtered=filterEntries(S.entries,S.searchQuery);
+  // Recherche active : on retire l'attenuation des lignes terminees (CSS)
+  // et on leve le plafond TERMINE_KEEP, sinon un dossier termine qu'on
+  // cherche explicitement peut ne pas apparaitre du tout dans la liste.
+  const hasSearchQ=!!(S.searchQuery&&S.searchQuery.trim());
+  tbody.classList.toggle("has-search", hasSearchQ);
 
   // ── Sauvegarde du scroll courant (avant toute modification du DOM) ────────
   const prevScroll=tbody.scrollTop;
@@ -1316,8 +1347,9 @@ function renderEntries(){
   const active=filtered.filter(e=>e.statut!=="termine");
   const activeRun=active.filter(e=>e.statut==="en_cours");
   const activeWait=active.filter(e=>e.statut!=="en_cours");
-  const hiddenCount=_showAllTermine?0:Math.max(0,terminated.length-TERMINE_KEEP);
-  const visibleTerminated=_showAllTermine?terminated:terminated.slice(-TERMINE_KEEP);
+  const showAllTerm=_showAllTermine||hasSearchQ;
+  const hiddenCount=showAllTerm?0:Math.max(0,terminated.length-TERMINE_KEEP);
+  const visibleTerminated=showAllTerm?terminated:terminated.slice(-TERMINE_KEEP);
   // Ordre UX attendu : "En cours" puis "En attente", puis les derniers "Terminé" en bas.
   // Ne pas trier S.entries : on reconstruit uniquement l'ordre d'affichage (data-idx reste cohérent).
   const visible=[...activeRun,...activeWait,...visibleTerminated];
@@ -2034,10 +2066,13 @@ function updateTlMatchInfo(){
   if(navEl) navEl.style.display=(q&&n>0)?"flex":"none";
   // Highlight : cyan sur le courant, blanc atténué sur les autres visibles
   const curId=n>0?String(_allTlMatches[S.tlSearchIdx].entry_id):"";
-  document.querySelectorAll("#tl-blocks-container .slot.tl-match").forEach(el=>{
-    const isCur=el.dataset.eid===curId;
-    el.style.outline=isCur?"3px solid var(--accent)":"3px solid rgba(255,255,255,.7)";
-    el.style.outlineOffset="2px";
+  document.querySelectorAll("#tl-blocks-container .slot").forEach(el=>{
+    const isMatch=el.classList.contains("tl-match");
+    const isCur=isMatch && el.dataset.eid===curId;
+    el.classList.toggle("tl-match-current", isCur);
+    if(!isMatch) return;
+    el.style.outline=isCur?"4px solid var(--accent)":"3px solid rgba(255,255,255,.7)";
+    el.style.outlineOffset=isCur?"3px":"2px";
   });
   // Scroll vers le slot courant (s'il est dans le DOM)
   if(curId){
@@ -2426,6 +2461,8 @@ function mkTL(mon,slots){
     const canDragSlot=CAN_EDIT&&s.statut!=="en_cours"&&s.statut!=="termine"&&reelForDrag;
     const canResizeSlot=CAN_EDIT&&s.statut!=="termine"&&(s.statut==="en_cours"||(s.statut==="attente"&&reelForDrag));
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
+    const annuleSlot=isAnnuleEntry(s);
+    const annuleCls=annuleSlot?"slot-annule":"";
     const resizeHint="Bord droit : ajuster la durée. Reste du créneau : réordonner (si disponible).";
     const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
@@ -2458,16 +2495,17 @@ function mkTL(mon,slots){
       line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
     }
 
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
       ` data-prise-rdv="${s.prise_rdv?'1':'0'}" data-dept="${escAttr(s.departement_livraison||"")}" data-dl-imp="${dlImp?'1':'0'}" data-support="${escAttr(s.ft_support||"")}" data-adhesif="${escAttr(s.ft_adhesif||"")}" data-palette-type="${escAttr(s.ft_palette_type||"")}" data-mandrin="${escAttr(s.ft_mandrin_dia||"")}" data-cond="${escAttr(s.ft_conditionnement_phrase||"")}" data-laize="${escAttr(s.laize?String(s.laize)+' mm':"")}"`+
+      ` data-annule="${annuleSlot?'1':'0'}" data-annule-motif="${escAttr(s.annule_motif||"")}" data-annule-par="${escAttr(s.annule_par||"")}" data-annule-count="${escAttr(String(s.annule_count||0))}"`+
       ` data-planned-start="${escAttr(String(s.start||""))}" data-planned-end="${escAttr(String(s.end||""))}"
       data-deb="${escAttr(fdt(ss))}" data-fin="${escAttr(fdt(se))}" data-st="${escAttr(st)}" data-co="${escAttr(co)}"${termineTitle?` title="${escAttr(termineTitle)}"`:""}>
       ${destock?`<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:rgba(71,85,105,.9);pointer-events:none;z-index:5;flex-shrink:0"></div>`:""}
       ${resizeHandle}
-      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
+      ${w>5?`<div class="slot-inner"><span class="line1">${escAttr(cli)}${fscBadgeHtml(s)}${annuleBadgeHtml(s)}</span>${line2SlotHtml?`<span class="line2">${line2SlotHtml}</span>`:""}${line3SlotHtml?`<span class="line3">${line3SlotHtml}</span>`:""}${(()=>{const _isExpe=(S.planningVue==="expe"||S.planningVue==="prod_expe");if(_isExpe){return qteEtiq==null?`<span class="line-no-of">pas d'OF lié</span>`:"";}return exig?`<span class="line-exig" title="${escAttr(exig)}">${escAttr(exig)}</span>`:"";})()}</div>`:w>1.8?`<div style="overflow:hidden;height:100%;display:flex;align-items:center;justify-content:center"><div class="slot-vert-txt" style="writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg)">${escAttr((cli.slice(0,6)+(cli.length>6?".":"")).toUpperCase())}</div></div>`:""}</div>`;
   });
 
   const np=gp(now);
@@ -2527,7 +2565,7 @@ function mkRow(e,i,slots){
     style="animation:slideIn .3s ease ${i*.03}s both;${i===0?`border-left:3px solid ${co}`:"border-left:3px solid transparent"};${isLocked?"cursor:not-allowed;opacity:.9":""}">
     <span class="dh-handle">⠿</span>
     <div><div class="cd" style="background:${co}"></div></div>
-    <span class="lbl-main">${escAttr(cli)}${fscBadgeHtml(e)}${reelBadge?`<br><span style="display:inline-block;margin-top:2px">${reelBadge}</span>`:""}</span>
+    <span class="lbl-main">${escAttr(cli)}${fscBadgeHtml(e)}${annuleBadgeHtml(e)}${reelBadge?`<br><span style="display:inline-block;margin-top:2px">${reelBadge}</span>`:""}</span>
     <span class="cell-mini">${escAttr(fm)}${fm!=="—"?" mm":""}</span>
     <span class="cell-mini">${of}</span>
     <span class="cell-mini">${rfp}</span>
@@ -2659,6 +2697,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
     : `<div class="tip-grid">${colGen}${qteTxt?`<span class="k">Qté étiquettes</span><span class="v" style="color:var(--accent);font-weight:600">${escHtml(qteTxt)}</span>`:""}</div>`;
   tipEl.innerHTML=`<div class="tip-hdr"><div class="tip-bar" style="background:${d.co||"#888"}"></div><div><div class="tip-ref">${d.ref||"—"}</div>${sub}</div></div>
     ${liv?`<div class="tip-livraison" style="${livStyle}">Livraison : ${escHtml(liv)}${livSuffix}</div>`:""}
+    ${d.annule==="1"?`<div class="tip-annule"><span class="k">Dossier annulé en production${(d.annuleCount&&+d.annuleCount>1)?" (×"+escHtml(d.annuleCount)+")":""}</span>${escHtml((d.annuleMotif||"").trim()||"Motif non renseigné")}${(d.annulePar||"").trim()?`<div style="margin-top:4px;font-size:10px;font-weight:600;color:var(--text2)">par ${escHtml(d.annulePar)}</div>`:""}</div>`:""}
     ${(exigTip && !isExpeVueTip)?`<div class="tip-exig"><span class="k">Exigences de production</span>${escHtml(exigTip)}</div>`:""}
     ${bodyHtml}
     ${CAN_EDIT&&d.st!=="Terminé"?`<div style="margin-top:10px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px">↵ Entrée · double-clic pour modifier</div>`:""}`
@@ -3135,6 +3174,31 @@ function onFscRequisChange(){
   wrap.style.display=chk.checked?"block":"none";
 }
 
+/* Dossier annule par un operateur depuis MyProd : le badge n'apparait que
+   tant que le dossier est reparti en attente (aucune saisie reelle en cours).
+   Le motif reste consultable dans le tooltip et la modal d'edition. */
+function isAnnuleEntry(e){
+  if(!e) return false;
+  if(!(e.annule_le||"").toString().trim()) return false;
+  if(e.statut==="termine") return false;
+  const r=e.statut_reel||"reellement_en_attente";
+  return r==="reellement_en_attente";
+}
+function annuleTitle(e){
+  if(!e) return "";
+  const nb=Number(e.annule_count||0);
+  let t="Dossier annule en production";
+  if(nb>1) t+=" ("+nb+" fois)";
+  if((e.annule_motif||"").trim()) t+=" — "+e.annule_motif;
+  if((e.annule_par||"").trim()) t+=" (par "+e.annule_par+")";
+  return t;
+}
+function annuleBadgeHtml(e){
+  if(!isAnnuleEntry(e)) return "";
+  const nb=Number(e.annule_count||0);
+  const lbl=nb>1?("Annulé ×"+nb):"Annulé";
+  return `<span class="badge-annule" title="${escAttr(annuleTitle(e))}">${lbl}</span>`;
+}
 function fscBadgeHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
   const typ=(e.fsc_type_requis||"").trim();
@@ -3559,6 +3623,14 @@ function openEdit(id){
   const destockIcon=destockDone?`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`:`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>`;
   const reelNonDefault=hasSaisieReelle() && e.statut_reel && e.statut_reel!=="reellement_en_attente";
   const resetBlock=(hasSaisieReelle() && IS_DIR_OR_SUPER && reelNonDefault)?`<button type="button" class="btn-reset-saisie" data-eid="${id}" onclick="resetSaisieFromModal(${id})" style="margin-top:8px;width:100%;padding:7px;border-radius:6px;border:1px solid rgba(248,113,113,.4);background:rgba(248,113,113,.08);color:var(--danger);font-size:11px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">${icon('repeat',12)} Réinitialiser la saisie réelle</button>`:"";
+  const annuleBlock=((e.annule_le||"").toString().trim())?`<div style="margin-bottom:12px;padding:9px 12px;border-radius:8px;
+    background:rgba(248,113,113,.10);border:1px solid rgba(248,113,113,.40);font-size:11.5px;line-height:1.55;color:var(--text2)">
+    <div style="font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--danger);margin-bottom:3px">
+      ${isAnnuleEntry(e)?"Dossier annulé en production":"Déjà annulé en production"}${Number(e.annule_count||0)>1?` — ${Number(e.annule_count)} fois`:""}
+    </div>
+    <div style="color:var(--text);font-weight:600">${escAttr((e.annule_motif||"").trim()||"Motif non renseigné")}</div>
+    <div style="margin-top:3px;font-size:10.5px;color:var(--muted)">${escAttr(e.annule_par||"—")}${(e.annule_le||"")?" · "+escAttr(String(e.annule_le).slice(0,16).replace("T"," ")):""}</div>
+  </div>`:"";
   const statsBtn=isTermine?`<button type="button" onclick="openDossierStatsModal(${id})" title="Statistiques de production"
     style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">${icon('bar-chart-2',16)}</button>`:"";
@@ -3630,7 +3702,7 @@ function openEdit(id){
 
   document.getElementById("mroot").innerHTML=modalHTML(
     `${titlePrefix}${(e.numero_of||e.reference)||''}`,
-    fieldsHtml+traceHtml+resetBlock,
+    annuleBlock+fieldsHtml+traceHtml+resetBlock,
     submitLabel, submitFn,
     headerAction,
     delBtn,

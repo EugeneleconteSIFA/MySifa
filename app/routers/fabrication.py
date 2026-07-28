@@ -349,6 +349,21 @@ def _get_active_dossier(saisies: list):
     return active
 
 
+# Codes exclus du perimetre d'annulation d'un dossier :
+# 86/87 = pointage personnel (arrivee/depart), 90 = trace d'annulation.
+# Ils ne decrivent pas le travail sur le dossier et doivent survivre.
+_CODES_HORS_ANNULATION = ("86", "87", "90")
+# Une fois la production reelle demarree (03 Production / 88 Reprise), le
+# dossier ne peut plus etre annule : il doit etre cloture par 89.
+_CODES_PRODUCTION_REELLE = ("03", "88")
+_CODE_ANNULATION = "90"
+
+
+def _saisies_non_annulees(saisies: list) -> list:
+    """Filtre les saisies neutralisees par une annulation de dossier."""
+    return [s for s in saisies if not int(s.get("est_annule") or 0)]
+
+
 def _is_fictif_dossier(no_dossier: Optional[str]) -> bool:
     ref = (no_dossier or "").strip()
     return ref.upper().startswith(_FICTIF_PREFIX)
@@ -583,6 +598,7 @@ def _first_01_date_iso_for_dossier_on_machine(
            FROM production_data pd
            WHERE trim(pd.no_dossier) = trim(?)
              AND pd.operation_code = '01'
+             AND COALESCE(pd.est_annule, 0) = 0
              AND (trim(pd.machine) = trim(?) OR (trim(?) != '' AND trim(pd.machine) = trim(?)))""",
         (no_dossier, mn, mc, mc2),
     ).fetchone()
@@ -778,8 +794,11 @@ def get_session(request: Request, machine_id: int = None):
             s["kind"] = "prod"
         _enrich_saisies_client(conn, saisies)
         # Etat et dossier actif : uniquement sur les saisies production_data
-        etat = _compute_etat(saisies)
-        active_ref = _get_active_dossier(saisies)
+        # NON annulees. Les saisies annulees restent dans la timeline (barrees
+        # cote UI) mais ne pilotent plus la machine a etats du footer.
+        saisies_actives = _saisies_non_annulees(saisies)
+        etat = _compute_etat(saisies_actives)
+        active_ref = _get_active_dossier(saisies_actives)
         # Mouvements stock du jour de l'operateur (EP/SP/EM/SM)
         user_email_scope = (user.get("email") or "").strip() or None
         user_id_scope = user.get("id")
@@ -952,6 +971,7 @@ def get_dossier_en_cours(request: Request):
             ).fetchall()
             saisies = [dict(r) for r in rows]
 
+        saisies = _saisies_non_annulees(saisies)
         active_ref = _get_active_dossier(saisies)
         fallback_ref = _last_dossier_ref_today(saisies) if not active_ref else None
 
@@ -1198,6 +1218,7 @@ def list_saisies_jour_all(request: Request):
                 OR trim(lower(u.nom)) = trim(lower(pd.operateur))
               )
             WHERE (date_operation LIKE ? OR date_operation LIKE ?)
+              AND COALESCE(pd.est_annule, 0) = 0
             ORDER BY trim(COALESCE(pd.machine,'')) COLLATE NOCASE ASC,
                      pd.date_operation ASC, pd.id ASC
             """,
@@ -1344,6 +1365,7 @@ async def create_saisie(request: Request):
                     """SELECT COALESCE(metrage_total_debut, metrage_prevu) AS ctr_debut
                        FROM production_data
                        WHERE trim(no_dossier) = trim(?) AND operation_code = '01'
+                         AND COALESCE(est_annule, 0) = 0
                          AND (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
                          AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
                        ORDER BY date_operation ASC, id ASC LIMIT 1""",
@@ -1602,6 +1624,299 @@ async def create_saisie(request: Request):
         ip=request.client.host if request.client else None,
     )
     return {"success": True, "id": new_id, "saisie": dict(row)}
+
+
+# ─── Annulation d'un dossier de production ────────────────────────────────────
+
+@router.get("/api/fabrication/annulation-contexte")
+def annulation_contexte(request: Request, machine_id: int = None):
+    """Peut-on annuler le dossier en cours ? (aperçu affiché dans la modal)
+
+    Renvoie le dossier actif, le nombre de saisies qui seraient neutralisées et
+    la raison d'un éventuel blocage. Aucune écriture.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    operateur = user.get("operateur_lie") or user.get("nom") or ""
+    with get_db() as conn:
+        ctx = _build_annulation_contexte(conn, user, operateur, machine_id)
+    return {
+        "annulable": ctx["annulable"],
+        "raison": ctx["raison"],
+        "no_dossier": ctx["no_dossier"],
+        "client": ctx["client"],
+        "designation": ctx["designation"],
+        "machine": ctx["machine_nom"],
+        "nb_saisies": len(ctx["rows"]),
+        "debut": ctx["debut_iso"],
+    }
+
+
+def _build_annulation_contexte(conn, user: dict, operateur: str, machine_id) -> dict:
+    """Contexte partagé entre l'aperçu (GET) et l'annulation (POST).
+
+    Le « cycle » annulable = toutes les saisies du dossier actif sur la machine
+    courante, depuis le dernier « Début de production » (01) non annulé, hors
+    pointage personnel (86/87) et hors traces d'annulation (90).
+    """
+    out = {
+        "annulable": False,
+        "raison": "",
+        "no_dossier": None,
+        "client": None,
+        "designation": None,
+        "machine_nom": None,
+        "machine_id": None,
+        "machine_code": "",
+        "rows": [],
+        "debut_iso": None,
+        "planning_entry": None,
+    }
+
+    today = _today_prefix()
+    today_fr = date.today().strftime("%d/%m/%Y")
+
+    if not operateur:
+        out["raison"] = "Compte sans opérateur lié — annulation impossible"
+        return out
+
+    rows_today = conn.execute(
+        """SELECT * FROM production_data
+           WHERE (operateur = ? OR operateur = ?) AND (
+             date_operation LIKE ? OR date_operation LIKE ?
+           )
+           ORDER BY date_operation ASC, id ASC""",
+        (operateur, user.get("nom") or operateur, today + "%", today_fr + "%"),
+    ).fetchall()
+    saisies = _saisies_non_annulees([dict(r) for r in rows_today])
+
+    active_ref = _get_active_dossier(saisies)
+    if not active_ref:
+        out["raison"] = "Aucun dossier en cours"
+        return out
+    out["no_dossier"] = active_ref
+
+    mid = _pick_machine_id_for_read(user, machine_id, conn)
+    if mid is None:
+        mid = _machine_id_for_ref(conn, active_ref)
+    machine_row = None
+    if mid is not None:
+        machine_row = conn.execute(
+            "SELECT id, nom, code FROM machines WHERE id=?", (mid,)
+        ).fetchone()
+    if not machine_row:
+        out["raison"] = "Machine introuvable — annulation impossible"
+        return out
+    out["machine_id"] = int(machine_row["id"])
+    out["machine_nom"] = machine_row["nom"]
+    out["machine_code"] = (machine_row["code"] or "").strip()
+
+    # Début du cycle courant : dernier 01 non annulé de ce dossier sur la machine.
+    mn, mc, mc2 = _machine_sql_match_params(out["machine_nom"], out["machine_code"])
+    debut_row = conn.execute(
+        """SELECT MAX(date_operation) AS dt FROM production_data
+           WHERE trim(no_dossier) = trim(?)
+             AND operation_code = '01'
+             AND COALESCE(est_annule, 0) = 0
+             AND (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))""",
+        (active_ref, mn, mc, mc2),
+    ).fetchone()
+    debut_iso = str(debut_row["dt"]).strip() if debut_row and debut_row["dt"] else None
+    if not debut_iso:
+        out["raison"] = "Début de production introuvable pour ce dossier"
+        return out
+    out["debut_iso"] = debut_iso
+
+    placeholders = ",".join("?" * len(_CODES_HORS_ANNULATION))
+    cycle = conn.execute(
+        f"""SELECT id, operation_code, operation, client, designation, date_operation
+            FROM production_data
+            WHERE trim(no_dossier) = trim(?)
+              AND COALESCE(est_annule, 0) = 0
+              AND date_operation >= ?
+              AND operation_code NOT IN ({placeholders})
+              AND (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
+            ORDER BY date_operation ASC, id ASC""",
+        (active_ref, debut_iso, *_CODES_HORS_ANNULATION, mn, mc, mc2),
+    ).fetchall()
+    out["rows"] = [dict(r) for r in cycle]
+
+    for r in out["rows"]:
+        if not out["client"] and (r["client"] or "").strip():
+            out["client"] = r["client"]
+        if not out["designation"] and (r["designation"] or "").strip():
+            out["designation"] = r["designation"]
+
+    if not out["rows"]:
+        out["raison"] = "Aucune saisie à annuler pour ce dossier"
+        return out
+
+    deja_produit = [
+        r for r in out["rows"]
+        if str(r["operation_code"] or "").strip() in _CODES_PRODUCTION_REELLE
+    ]
+    if deja_produit:
+        out["raison"] = (
+            "Production déjà démarrée sur ce dossier — clôturez par « Fin de production »"
+        )
+        return out
+
+    out["planning_entry"] = conn.execute(
+        """SELECT id, statut, statut_reel, annule_count
+           FROM planning_entries
+           WHERE machine_id = ? AND statut != 'termine'
+             AND (trim(reference) = trim(?) OR trim(COALESCE(numero_of,'')) = trim(?))
+           ORDER BY position ASC LIMIT 1""",
+        (out["machine_id"], active_ref, active_ref),
+    ).fetchone()
+
+    out["annulable"] = True
+    return out
+
+
+@router.post("/api/fabrication/annuler-dossier")
+async def annuler_dossier(request: Request):
+    """Annule le dossier en cours (marche arrière avant production réelle).
+
+    Toutes les saisies du cycle (01 + calages, arrêts, appro…) passent en
+    `est_annule=1` : elles restent en base pour l'audit et restent visibles,
+    barrées, dans MyProd > Saisies, mais sortent de toutes les statistiques.
+    Une saisie « 90 - Annulation saisie » portant le motif est ajoutée à la
+    timeline, et le dossier repart en « attente » au planning avec le motif.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    motif = (body.get("motif") or body.get("commentaire") or "").strip()
+    if len(motif) < 5:
+        raise HTTPException(
+            status_code=400,
+            detail="Motif d'annulation requis — 5 caractères minimum.",
+        )
+    if len(motif) > 500:
+        motif = motif[:500]
+
+    machine_id_param = body.get("machine_id")
+    try:
+        machine_id_param = int(machine_id_param) if machine_id_param is not None else None
+    except (TypeError, ValueError):
+        machine_id_param = None
+
+    operateur = user.get("operateur_lie") or user.get("nom") or ""
+    date_op = _resolve_date_operation(body.get("date_operation"))
+    now_iso = datetime.now().isoformat()
+
+    with get_db() as conn:
+        ctx = _build_annulation_contexte(conn, user, operateur, machine_id_param)
+        if not ctx["annulable"]:
+            raise HTTPException(
+                status_code=409,
+                detail=ctx["raison"] or "Annulation impossible",
+            )
+
+        ref = ctx["no_dossier"]
+        attendu = (body.get("no_dossier") or "").strip()
+        if attendu and attendu != ref:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Le dossier en cours a changé ({ref}) — rechargez la page.",
+            )
+
+        ids = [int(r["id"]) for r in ctx["rows"]]
+        placeholders = ",".join("?" * len(ids))
+        conn.execute(
+            f"""UPDATE production_data
+                   SET est_annule = 1,
+                       annule_le = ?,
+                       annule_par = ?,
+                       annule_motif = ?
+                 WHERE id IN ({placeholders})""",
+            (now_iso, operateur, motif, *ids),
+        )
+
+        # Trace visible dans la timeline opérateur et dans MyProd > Saisies.
+        cl = classify_operation(f"{_CODE_ANNULATION} - Annulation dossier")
+        trace_dict = {
+            "no_dossier": ref,
+            "motif": motif,
+            "saisies_annulees": ids,
+            "machine": ctx["machine_nom"],
+        }
+        cur = conn.execute(
+            """INSERT INTO production_data
+                 (import_id, operateur, date_operation, operation, operation_code,
+                  operation_severity, operation_category, service, machine, no_dossier,
+                  client, designation, quantite_a_traiter, quantite_traitee,
+                  commentaire, data, est_manuel, modifie_par, modifie_le, modifie_note,
+                  est_annule, annule_le, annule_par, annule_motif)
+               VALUES (NULL,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,0,NULL,NULL,?,0,?,?,?)""",
+            (
+                operateur, date_op,
+                f"{_CODE_ANNULATION} - Annulation dossier", _CODE_ANNULATION,
+                cl["severity"], cl["category"],
+                "fabrication", ctx["machine_nom"], ref,
+                ctx["client"], ctx["designation"],
+                f"Dossier annulé — {motif}",
+                json.dumps(trace_dict, default=str),
+                "Annulation dossier opérateur",
+                now_iso, operateur, motif,
+            ),
+        )
+        trace_id = cur.lastrowid
+
+        # ── Retour du dossier au planning, en attente, avec le motif ──────────
+        pe = ctx["planning_entry"]
+        pe_id = None
+        if pe:
+            pe_id = int(pe["id"])
+            conn.execute(
+                """UPDATE planning_entries
+                      SET statut             = 'attente',
+                          statut_force       = 0,
+                          statut_reel        = 'reellement_en_attente',
+                          planned_start      = NULL,
+                          planned_end        = NULL,
+                          planned_end_manual = 0,
+                          annule_count       = COALESCE(annule_count, 0) + 1,
+                          annule_motif       = ?,
+                          annule_par         = ?,
+                          annule_le          = ?,
+                          updated_at         = ?
+                    WHERE id = ?""",
+                (motif, operateur, now_iso, now_iso, pe_id),
+            )
+        conn.commit()
+
+        if pe_id is not None:
+            try:
+                from app.routers.planning import _invalidate_attente_plans
+                _invalidate_attente_plans(conn, ctx["machine_id"])
+                conn.commit()
+            except Exception:
+                pass  # replanification best-effort, ne bloque jamais l'annulation
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Annulation dossier {ref} · {ctx['machine_nom']}",
+        detail={
+            "motif": motif,
+            "saisies_annulees": len(ids),
+            "planning_entry_id": pe_id,
+        },
+        ip=request.client.host if request.client else None,
+    )
+
+    return {
+        "success": True,
+        "no_dossier": ref,
+        "saisies_annulees": len(ids),
+        "trace_id": trace_id,
+        "planning_entry_id": pe_id,
+    }
 
 
 # ─── Traçabilité matières ─────────────────────────────────────────────────────
@@ -2172,7 +2487,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 """SELECT operateur, date_operation, operation_code, machine,
                           metrage_prevu, metrage_reel, quantite_traitee
                    FROM production_data
-                   WHERE no_dossier = ?
+                   WHERE no_dossier = ? AND COALESCE(est_annule, 0) = 0
                    ORDER BY date_operation ASC, id ASC""",
                 (no_dossier,),
             ).fetchall()
@@ -2201,7 +2516,8 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                            (SELECT COUNT(*) FROM fab_matieres_utilisees fmu
                             WHERE fmu.no_dossier = pe.reference) AS nb_matieres,
                            (SELECT COUNT(*) FROM production_data pd
-                            WHERE pd.no_dossier = pe.reference AND pd.operation_code='89') AS nb_fins
+                            WHERE pd.no_dossier = pe.reference AND pd.operation_code='89'
+                              AND COALESCE(pd.est_annule, 0) = 0) AS nb_fins
                     FROM planning_entries pe
                     LEFT JOIN machines m ON m.id = pe.machine_id
                     WHERE {where}

@@ -267,7 +267,8 @@ def list_saisies(
                        operation_severity,operation_category,machine,no_dossier,client,designation,
                        quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,
                        metrage_total_debut,metrage_total_fin,
-                       commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note
+                       commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note,
+                       COALESCE(est_annule,0) AS est_annule,annule_le,annule_par,annule_motif
                 FROM production_data WHERE {wc}
                 ORDER BY date_operation ASC, id ASC LIMIT ? OFFSET ?""",
             params + [limit, offset]
@@ -561,6 +562,7 @@ def list_fictif_dossier_sources(request: Request):
                FROM production_data
                WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                  AND UPPER(no_dossier) LIKE 'FICTIF:%'
+                 AND COALESCE(est_annule, 0) = 0
                GROUP BY no_dossier
                ORDER BY no_dossier"""
         ).fetchall()
@@ -645,6 +647,7 @@ def suggest_target_dossiers(request: Request, q: str = "", limit: int = 20):
                    FROM production_data
                    WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                      AND UPPER(no_dossier) NOT LIKE 'FICTIF:%'
+                     AND COALESCE(est_annule, 0) = 0
                      AND LOWER(no_dossier) LIKE LOWER(?)
                    ORDER BY no_dossier
                    LIMIT ?""",
@@ -787,6 +790,11 @@ async def update_saisie(row_id: int, request: Request):
     with get_db() as conn:
         ex = conn.execute("SELECT * FROM production_data WHERE id=?", (row_id,)).fetchone()
         if not ex: raise HTTPException(status_code=404, detail="Ligne non trouvée")
+        if int(ex["est_annule"] or 0):
+            raise HTTPException(
+                status_code=409,
+                detail="Saisie annulée avec le dossier — modification impossible.",
+            )
         # Pour fabrication: utiliser nom si operateur_lie n'est pas défini
         user_operateur = user.get("operateur_lie") or user.get("nom") or ""
         if not is_admin(user) and ex["operateur"] != user_operateur:
@@ -918,6 +926,8 @@ async def bulk_delete(request: Request):
         for row_id in ids:
             ex = conn.execute("SELECT * FROM production_data WHERE id=?", (row_id,)).fetchone()
             if not ex: continue
+            if int(ex["est_annule"] or 0):
+                continue
             if not is_admin(user) and (not ex["est_manuel"] or ex["modifie_par"] != user["email"]):
                 continue
             conn.execute("DELETE FROM production_data WHERE id=?", (row_id,))
@@ -934,6 +944,11 @@ def delete_saisie(row_id: int, request: Request):
     with get_db() as conn:
         ex = conn.execute("SELECT * FROM production_data WHERE id=?", (row_id,)).fetchone()
         if not ex: raise HTTPException(status_code=404, detail="Ligne non trouvée")
+        if int(ex["est_annule"] or 0):
+            raise HTTPException(
+                status_code=409,
+                detail="Saisie annulée avec le dossier — suppression impossible.",
+            )
         if not is_admin(user) and (not ex["est_manuel"] or ex["modifie_par"] != user["email"]):
             raise HTTPException(status_code=403, detail="Suppression non autorisée")
         conn.execute("DELETE FROM production_data WHERE id=?", (row_id,))
@@ -1031,7 +1046,8 @@ def export_saisies(
                        operation_severity,operation_category,machine,no_dossier,client,designation,
                        quantite_a_traiter,quantite_traitee,metrage_prevu,metrage_reel,
                        metrage_total_debut,metrage_total_fin,
-                       commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note
+                       commentaire,service,est_manuel,modifie_par,modifie_le,modifie_note,
+                       COALESCE(est_annule,0) AS est_annule,annule_le,annule_par,annule_motif
                 FROM production_data WHERE {wc}
                 ORDER BY date_operation ASC, id ASC""",
             params
@@ -1051,6 +1067,8 @@ def export_saisies(
         "commentaire":"Commentaire","service":"Service",
         "est_manuel":"Ajout manuel","modifie_par":"Modifié par",
         "modifie_le":"Modifié le","modifie_note":"Note",
+        "est_annule":"Annulée","annule_le":"Annulée le",
+        "annule_par":"Annulée par","annule_motif":"Motif d'annulation",
     }, inplace=True)
 
     buf = io.BytesIO()
