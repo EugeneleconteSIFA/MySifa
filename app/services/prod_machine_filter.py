@@ -46,8 +46,7 @@ def resolve_machine_values(conn, selected: List[str]) -> List[str]:
         return []
     rows = conn.execute(
         """SELECT DISTINCT machine FROM production_data
-           WHERE machine IS NOT NULL AND TRIM(machine) != ''
-             AND COALESCE(est_annule, 0) = 0"""
+           WHERE machine IS NOT NULL AND TRIM(machine) != ''"""
     ).fetchall()
     out = set(wanted)
     for r in rows:

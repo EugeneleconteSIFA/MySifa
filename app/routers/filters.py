@@ -13,7 +13,7 @@ def get_filters(request: Request):
             # Direction, commercial, expédition : tous les opérateurs ayant saisi
             ops = conn.execute("""
                 SELECT DISTINCT operateur FROM production_data
-                WHERE operateur IS NOT NULL AND operateur!='' AND COALESCE(est_annule, 0) = 0
+                WHERE operateur IS NOT NULL AND operateur!=''
                 ORDER BY operateur
             """).fetchall()
         elif is_fabrication(user):
@@ -22,7 +22,7 @@ def get_filters(request: Request):
             user_operateur = user.get("operateur_lie") or user.get("nom") or ""
             rows = conn.execute("""
                 SELECT DISTINCT operateur FROM production_data
-                WHERE operateur=? AND COALESCE(est_annule, 0) = 0 ORDER BY operateur
+                WHERE operateur=? ORDER BY operateur
             """, (user_operateur,)).fetchall()
             # S'assurer que le nom de l'utilisateur est toujours dans la liste
             # même s'il n'a pas encore de données en production
@@ -54,7 +54,6 @@ def get_filters(request: Request):
         dos = conn.execute("""
             SELECT DISTINCT no_dossier FROM production_data
             WHERE no_dossier IS NOT NULL AND no_dossier!='' AND no_dossier!='0'
-              AND COALESCE(est_annule, 0) = 0
             ORDER BY no_dossier
         """).fetchall()
         machine_list = list_filter_machines(conn)

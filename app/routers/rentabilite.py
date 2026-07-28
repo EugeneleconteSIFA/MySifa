@@ -276,7 +276,6 @@ def suggest_no_dossiers(request: Request, q: str = "", limit: int = 12):
                 SELECT DISTINCT no_dossier
                 FROM production_data
                 WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
-                  AND COALESCE(est_annule, 0) = 0
                   AND LOWER(no_dossier) LIKE LOWER(?)
                 ORDER BY no_dossier
                 LIMIT ?
@@ -289,7 +288,6 @@ def suggest_no_dossiers(request: Request, q: str = "", limit: int = 12):
                 SELECT DISTINCT no_dossier
                 FROM production_data
                 WHERE no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
-                  AND COALESCE(est_annule, 0) = 0
                 ORDER BY no_dossier
                 LIMIT ?
                 """,

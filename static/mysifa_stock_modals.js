@@ -1012,9 +1012,12 @@
       S.mpModal.validate = () => 'Type de mouvement non reconnu.';
     }
 
+    const mpBtnCls = ['entree', 'sortie', 'ajustement', 'transfert'].includes(typeMvt)
+      ? ' btn-mvt-' + typeMvt
+      : '';
     body.appendChild(el('div', { cls: 'mp-modal-actions' },
       el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
-      el('button', { cls: 'btn', type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
+      el('button', { cls: 'btn' + mpBtnCls, type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
     ));
     box.appendChild(body);
     overlay.appendChild(box);
@@ -1472,6 +1475,29 @@
     );
   }
 
+  function _z1SectionTitle(text) {
+    return el('div', {
+      style: {
+        display: 'flex', alignItems: 'center', gap: '8px',
+        marginTop: '8px', marginBottom: '2px',
+      },
+    },
+      el('span', {
+        style: {
+          width: '3px', height: '14px', borderRadius: '2px',
+          background: 'var(--accent)', flex: '0 0 auto',
+        },
+      }),
+      el('span', {
+        style: {
+          fontSize: '12px', fontWeight: '800', color: 'var(--text)',
+          textTransform: 'uppercase', letterSpacing: '.8px', whiteSpace: 'nowrap',
+        },
+      }, text),
+      el('span', { style: { flex: '1', height: '1px', background: 'var(--border)' } }),
+    );
+  }
+
   function _ensureZ1PickerStyles() {
     if (document.getElementById('z1-picker-styles')) return;
     const st = document.createElement('style');
@@ -1479,6 +1505,9 @@
     st.textContent = [
       '.z1-picker-item{transition:border-color .12s ease, box-shadow .12s ease, transform .12s ease;}',
       '.z1-picker-item:hover{border-color:var(--accent);box-shadow:0 3px 10px rgba(0,0,0,0.18);transform:translateY(-1px);}',
+      '.z1-picker-input{background:var(--card) !important;border:1.5px solid var(--border) !important;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.10);transition:border-color .12s ease, box-shadow .12s ease;}',
+      '.z1-picker-input::placeholder{color:var(--muted);opacity:1;}',
+      '.z1-picker-input:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-bg);}',
     ].join('\n');
     document.head.appendChild(st);
   }
@@ -1541,9 +1570,7 @@
 
     // Dossier en cours (accent)
     if (ctx && ctx.dossier) {
-      listWrap.appendChild(el('div', {
-        style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600' },
-      }, 'Dossier en cours'));
+      listWrap.appendChild(_z1SectionTitle('Dossier en cours'));
       listWrap.appendChild(_z1DossierRow(ctx.dossier, {
         badge: 'En cours', onClick: () => pick(ctx.dossier),
       }));
@@ -1552,28 +1579,24 @@
     // Precedents (2 max)
     const precedents = (ctx && ctx.precedents) || [];
     if (precedents.length) {
-      listWrap.appendChild(el('div', {
-        style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-      }, 'Precedents (' + (ctx.machine ? ctx.machine.nom : 'meme machine') + ')'));
+      listWrap.appendChild(_z1SectionTitle('Precedents (' + (ctx.machine ? ctx.machine.nom : 'meme machine') + ')'));
       precedents.forEach(d => {
         listWrap.appendChild(_z1DossierRow(d, { badge: 'Termine', onClick: () => pick(d) }));
       });
     }
 
     // Saisie libre
-    listWrap.appendChild(el('div', {
-      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-    }, 'Saisie libre'));
+    listWrap.appendChild(_z1SectionTitle('Saisie libre'));
 
     const manualInp = el('input', {
-      cls: 'field-input',
+      cls: 'field-input z1-picker-input',
       attrs: {
         type: 'text',
         placeholder: 'No de dossier (ex : 12345-01)',
         autocomplete: 'off',
         value: S.pfModal._noDossierManual || '',
       },
-      style: { textTransform: 'uppercase', flex: '1' },
+      style: { textTransform: 'uppercase', flex: '1', fontWeight: '600' },
     });
     const manualBtn = el('button', {
       cls: 'btn btn-accent', type: 'button',
@@ -1591,12 +1614,10 @@
 
     // Recherche globale (chef d'atelier / admin)
     if (ctx && ctx.canSearchAll) {
-      listWrap.appendChild(el('div', {
-        style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-      }, 'Recherche libre (toutes machines)'));
+      listWrap.appendChild(_z1SectionTitle('Recherche libre (toutes machines)'));
 
       const searchInp = el('input', {
-        cls: 'field-input',
+        cls: 'field-input z1-picker-input',
         attrs: {
           type: 'text',
           placeholder: 'Reference, client, description...',

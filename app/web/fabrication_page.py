@@ -1119,6 +1119,7 @@ let S = {
   // Annulation de dossier (marche arriere avant production reelle)
   showAnnulModal: false,
   annulMotif: '',
+  annulMetrage: '',
   annulCtx: null,
   annulLoading: false,
 
@@ -2103,12 +2104,9 @@ function fabAnnulationPossible(){
     if(c==='01') debutIdx = i;
     else if(c==='89') debutIdx = -1;
   }
-  if(debutIdx<0) return false;
-  for(let i=debutIdx+1;i<rows.length;i++){
-    const c = String(rows[i].operation_code||'').trim();
-    if(c==='03'||c==='88') return false;
-  }
-  return true;
+  // Pas de restriction sur l'avancement : un manque de matiere ou de
+  // mandrins peut survenir en plein calage comme en pleine production.
+  return debutIdx >= 0;
 }
 
 function renderAnnulerDossierBtn(){
@@ -2120,7 +2118,7 @@ function renderAnnulerDossierBtn(){
 }
 
 async function openAnnulModal(){
-  set({showAnnulModal:true, annulMotif:'', annulCtx:null, annulLoading:true});
+  set({showAnnulModal:true, annulMotif:'', annulMetrage:'', annulCtx:null, annulLoading:true});
   fabPauseAutoRefresh(60000);
   try{
     let url = '/api/fabrication/annulation-contexte';
@@ -2145,9 +2143,32 @@ async function submitAnnulation(){
     showToast(((ctx&&ctx.raison)||'Annulation impossible'),'danger');
     return;
   }
+  // Metrage : memes garde-fous que la saisie Fin de production.
+  const rawM = String(S.annulMetrage||'').trim().replace(',','.');
+  const mFin = rawM ? parseFloat(rawM) : null;
+  const attenduM = (ctx.metrage_debut!=null || ctx.dernier_metrage!=null);
+  if(attenduM && (mFin===null || isNaN(mFin))){
+    showToast('Relevez le compteur machine avant de confirmer','danger');
+    return;
+  }
+  if(mFin!==null && !isNaN(mFin)){
+    if(ctx.dernier_metrage!=null && mFin < ctx.dernier_metrage){
+      showToast('Metrage invalide : le compteur etait a '
+        +Math.round(ctx.dernier_metrage).toLocaleString('fr-FR')
+        +' m — valeur saisie trop petite','danger');
+      return;
+    }
+    if(ctx.metrage_debut!=null && mFin < ctx.metrage_debut){
+      showToast('Metrage fin ('+Math.round(mFin).toLocaleString('fr-FR')
+        +' m) inferieur au debut de production ('
+        +Math.round(ctx.metrage_debut).toLocaleString('fr-FR')+' m)','danger');
+      return;
+    }
+  }
   set({loading:true});
   try{
     const body = {motif: motif, no_dossier: ctx.no_dossier, date_operation: nowIsoLocal()};
+    if(mFin!==null && !isNaN(mFin)) body.metrage_fin = mFin;
     const mid = S.adminMachineId || S.wantedMachineId;
     if(mid) body.machine_id = mid;
     const r = await apiFetch('/api/fabrication/annuler-dossier',{
@@ -2155,11 +2176,14 @@ async function submitAnnulation(){
       body: JSON.stringify(body),
     });
     if(r && r.success){
-      showToast('Dossier '+r.no_dossier+' annule — '+r.saisies_annulees+' saisie'
-        +(r.saisies_annulees>1?'s':'')+' annulee'+(r.saisies_annulees>1?'s':''));
+      let msg = 'Dossier '+r.no_dossier+' annule — '+r.saisies_annulees+' saisie'
+        +(r.saisies_annulees>1?'s':'')+' annulee'+(r.saisies_annulees>1?'s':'');
+      if(r.metrage_consomme!=null)
+        msg += ' · '+Math.round(r.metrage_consomme).toLocaleString('fr-FR')+' m consommes';
+      showToast(msg);
       try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
     }
-    Object.assign(S,{showAnnulModal:false, annulMotif:'', annulCtx:null});
+    Object.assign(S,{showAnnulModal:false, annulMotif:'', annulMetrage:'', annulCtx:null});
   }catch(err){
     showToast('Erreur : '+err.message,'danger');
   }finally{
@@ -2181,7 +2205,12 @@ function renderAnnulModal(){
   ta.addEventListener('input',e=>{ S.annulMotif = e.target.value; });
   setTimeout(()=>document.getElementById('fab-annul-motif')?.focus(),60);
 
-  const close = ()=>set({showAnnulModal:false, annulMotif:'', annulCtx:null});
+  const close = ()=>set({showAnnulModal:false, annulMotif:'', annulMetrage:'', annulCtx:null});
+
+  const metInp = h('input',{type:'number',placeholder:'Ex: 15200',step:'1',min:'0',
+    id:'fab-annul-metrage',style:{textAlign:'right'}});
+  metInp.value = S.annulMetrage||'';
+  metInp.addEventListener('input',e=>{ S.annulMetrage = e.target.value; });
 
   let corps;
   if(S.annulLoading){
@@ -2207,9 +2236,29 @@ function renderAnnulModal(){
           +(ctx.nb_saisies>1?'s':'')+'.'),
         h('br'),
         'Le dossier repartira en attente dans le planning de production, ',
-        'avec un badge Annule et votre motif. Vos saisies restent consultables ',
-        'dans MyProd mais sortent des statistiques.'
+        'avec un badge Annule et votre motif. Le temps passe et le metrage ',
+        'consomme restent comptes dans les statistiques machine.'
       ),
+      (ctx.nb_production>0) ? h('div',{className:'fab-alert fab-alert-warn',
+        style:{marginBottom:'10px'}},
+        svgIcon('alert',14),
+        ctx.nb_production+' saisie'+(ctx.nb_production>1?'s':'')+' de production reelle'
+        +(ctx.nb_production>1?' ont':' a')+' deja ete enregistree'
+        +(ctx.nb_production>1?'s':'')+' sur ce dossier.'
+      ) : null,
+      (ctx.metrage_debut!=null || ctx.dernier_metrage!=null) ? h('div',{className:'fab-field'},
+        h('label',null,(function(){
+          let lbl = 'Metrage total de la machine — compteur a l\'annulation, en metres';
+          if(ctx.metrage_debut!=null)
+            lbl += '  (debut du dossier : '
+              +Math.round(ctx.metrage_debut).toLocaleString('fr-FR')+' m)';
+          else if(ctx.dernier_metrage!=null)
+            lbl += '  (dernier enregistre : '
+              +Math.round(ctx.dernier_metrage).toLocaleString('fr-FR')+' m)';
+          return lbl;
+        })()),
+        metInp
+      ) : null,
       h('div',{className:'fab-field'},
         h('label',null,'Raison de l\'annulation (obligatoire)'),
         ta
@@ -4224,6 +4273,10 @@ function renderMain(){
         const mFin = s.metrage_total_fin   ?? s.metrage_reel;
         if(mDeb!=null) metrageText += 'Déb. '+fN(mDeb)+' m';
         if(mFin!=null) metrageText += (metrageText?' | ':'')+' Fin '+fN(mFin)+' m';
+        // Annulation de dossier : on affiche directement la matière consommée
+        // avant l'annulation, c'est l'info utile pour l'opérateur.
+        if(code==='90' && mDeb!=null && mFin!=null)
+          metrageText += (metrageText?' | ':'')+'⇒ '+fN(Math.max(0,mFin-mDeb))+' m consommés';
         if(s.quantite_traitee&&Number(s.quantite_traitee)>0) metrageText += (metrageText?' | ':'')+fN(s.quantite_traitee)+' étiq.';
 
         const commentBtn = isAdminView ? null : h('button',{

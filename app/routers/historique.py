@@ -398,8 +398,7 @@ def dashboard_historique(
     machines   = [m for m in (machine or []) if m]
 
     # ── Filtre principal (avec dossiers) ──────────────────────────
-    # Saisies annulees (annulation de dossier MyProd) exclues des agregats.
-    where, params = ["1=1", "COALESCE(est_annule, 0) = 0"], []
+    where, params = ["1=1"], []
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
@@ -414,7 +413,7 @@ def dashboard_historique(
     if date_to:   where.append("date_operation <= ?"); params.append(date_to+'T23:59:59')
 
     # ── Filtre Sanity (sans filtre dossier) ───────────────────────
-    ws, ps = ["1=1", "COALESCE(est_annule, 0) = 0"], []
+    ws, ps = ["1=1"], []
     if can_view_all_prod(user):
         if operateurs:
             ws.append(f"operateur IN ({','.join('?'*len(operateurs))})")

@@ -107,7 +107,6 @@ def fabrication_planning_machine_ids(conn, user: dict) -> set[int]:
                 )
               )
             WHERE lower(trim(pd.operateur)) = ?
-              AND COALESCE(pd.est_annule, 0) = 0
             """,
             (op_key,),
         ).fetchall()
@@ -295,8 +294,7 @@ def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str)
     rows = conn.execute(
         """SELECT id, no_dossier, date_operation
            FROM production_data
-           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
-             AND COALESCE(est_annule, 0) = 0""",
+           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))""",
         (mnom, mcode, mcode),
     ).fetchall()
     if not rows:
@@ -2468,7 +2466,6 @@ def list_orphan_dossiers(machine_id: int, request: Request):
                WHERE pd.no_dossier IS NOT NULL
                  AND pd.no_dossier != ''
                  AND (pd.machine = ? OR pd.machine = ?)
-                 AND COALESCE(pd.est_annule, 0) = 0
                  AND pd.no_dossier NOT IN (
                      SELECT pe.reference FROM planning_entries pe WHERE pe.machine_id = ?
                  )
@@ -2529,7 +2526,6 @@ async def import_orphan_dossier(machine_id: int, request: Request):
                       metrage_total_debut, metrage_total_fin
                FROM production_data
                WHERE no_dossier = ? AND (machine = ? OR machine = ?)
-                 AND COALESCE(est_annule, 0) = 0
                ORDER BY date_operation ASC""",
             (no_dossier, mnom, mcode),
         ).fetchall()
@@ -3781,8 +3777,7 @@ def get_active_dossier(machine_id: int, request: Request):
         rows = conn.execute(
             """SELECT operation_code, no_dossier, client, designation, machine, date_operation
                FROM production_data
-               WHERE (date_operation LIKE ? OR date_operation LIKE ?)
-                 AND COALESCE(est_annule, 0) = 0
+               WHERE date_operation LIKE ? OR date_operation LIKE ?
                ORDER BY date_operation ASC""",
             (iso_today + "%", old_today + "%"),
         ).fetchall()

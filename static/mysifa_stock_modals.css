@@ -109,12 +109,12 @@ body.light .mp-search-wrap:focus-within{
 .mp-modal-mvt-head-sortie{background:color-mix(in srgb,var(--danger) 16%,transparent);
   border-bottom:1px solid color-mix(in srgb,var(--danger) 32%,transparent)}
 .mp-modal-mvt-head-sortie h3{color:var(--danger)}
-.mp-modal-mvt-head-pf-entree{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--pf-entree) 35%,transparent)}
-.mp-modal-mvt-head-pf-entree h3{color:var(--pf-entree)}
-.mp-modal-mvt-head-pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--pf-sortie) 35%,transparent)}
-.mp-modal-mvt-head-pf-sortie h3{color:var(--pf-sortie)}
+.mp-modal-mvt-head-pf-entree{background:color-mix(in srgb,var(--pf-entree,var(--success)) 18%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--pf-entree,var(--success)) 35%,transparent)}
+.mp-modal-mvt-head-pf-entree h3{color:var(--pf-entree,var(--success))}
+.mp-modal-mvt-head-pf-sortie{background:color-mix(in srgb,var(--pf-sortie,var(--danger)) 18%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--pf-sortie,var(--danger)) 35%,transparent)}
+.mp-modal-mvt-head-pf-sortie h3{color:var(--pf-sortie,var(--danger))}
 .mp-modal-mvt-head-ajustement{background:color-mix(in srgb,var(--warn) 14%,transparent);
   border-bottom:1px solid color-mix(in srgb,var(--warn) 28%,transparent)}
 .mp-modal-mvt-head-ajustement h3{color:var(--warn)}
@@ -134,10 +134,10 @@ body.light .mp-modal-mvt-head-inventaire h3{color:#7c3aed}
   display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
   border-radius:8px;flex-shrink:0;font-family:inherit;transition:background .15s,color .15s}
 .mp-modal-close:hover{color:var(--text);background:color-mix(in srgb,var(--text) 10%,transparent)}
-.mp-modal-mvt-head-pf-entree .mp-modal-close{color:color-mix(in srgb,var(--pf-entree) 75%,var(--text))}
-.mp-modal-mvt-head-pf-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);color:var(--pf-entree)}
-.mp-modal-mvt-head-pf-sortie .mp-modal-close{color:color-mix(in srgb,var(--pf-sortie) 75%,var(--text))}
-.mp-modal-mvt-head-pf-sortie .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);color:var(--pf-sortie)}
+.mp-modal-mvt-head-pf-entree .mp-modal-close{color:color-mix(in srgb,var(--pf-entree,var(--success)) 75%,var(--text))}
+.mp-modal-mvt-head-pf-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-entree,var(--success)) 18%,transparent);color:var(--pf-entree,var(--success))}
+.mp-modal-mvt-head-pf-sortie .mp-modal-close{color:color-mix(in srgb,var(--pf-sortie,var(--danger)) 75%,var(--text))}
+.mp-modal-mvt-head-pf-sortie .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-sortie,var(--danger)) 18%,transparent);color:var(--pf-sortie,var(--danger))}
 .mp-modal-mvt-head-entree .mp-modal-close{color:color-mix(in srgb,var(--success) 70%,var(--text))}
 .mp-modal-mvt-head-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success)}
 .mp-modal-mvt-head-sortie .mp-modal-close{color:color-mix(in srgb,var(--danger) 70%,var(--text))}
@@ -177,6 +177,42 @@ body.light .mp-field input:focus:not([type=checkbox]):not([type=radio]),body.lig
 @media(max-width:640px){
   .mp-drawer{max-width:100%}
 }
-.mp-modal-actions .btn.btn-pf-entree{background:var(--pf-entree);color:#0a0e17;border:none;font-weight:700}
-.mp-modal-actions .btn.btn-pf-sortie{background:var(--pf-sortie);color:#fff;border:none;font-weight:700}
+.mp-modal-actions .btn.btn-pf-entree{background:var(--pf-entree,var(--success));color:#fff;border:none;font-weight:700}
+.mp-modal-actions .btn.btn-pf-sortie{background:var(--pf-sortie,var(--danger));color:#fff;border:none;font-weight:700}
 body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
+
+/* ── Footer des modales : Annuler / Valider ──────────────────────────────
+ * .btn-cancel / .modal-actions / .btn-confirm n'etaient definis que dans
+ * app/web/stock_page.py : sur /fabrication les boutons tombaient sur le
+ * rendu natif du navigateur. Definitions partagees ici.
+ */
+.mp-modal-actions{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.modal-actions{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:16px}
+
+.btn-cancel{background:transparent;border:1.5px solid var(--border);border-radius:10px;
+  padding:11px 18px;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;
+  font-family:inherit;line-height:1.2;
+  transition:border-color .15s,color .15s,background .15s}
+.btn-cancel:hover{border-color:var(--text2);color:var(--text);
+  background:color-mix(in srgb,var(--text) 6%,transparent)}
+.btn-cancel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mp-modal-actions .btn-cancel{min-width:110px}
+
+.btn-confirm{border:none;border-radius:10px;padding:11px 18px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;line-height:1.2;color:#fff}
+.btn-confirm.entree{background:var(--success)}
+.btn-confirm.sortie{background:var(--danger)}
+.btn-confirm.pf-entree{background:var(--pf-entree,var(--success))}
+.btn-confirm.pf-sortie{background:var(--pf-sortie,var(--danger))}
+
+/* Bouton de validation : couleur par defaut si aucune classe typee */
+.mp-modal-actions .btn{background:var(--accent);color:var(--bg);border:none;font-weight:700;
+  border-radius:10px;padding:11px 18px;font-size:13px;line-height:1.2;min-width:130px}
+.mp-modal-actions .btn:hover:not(:disabled){filter:brightness(1.06)}
+.mp-modal-actions .btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* Validation typee : reprend la couleur de l'en-tete du modal */
+.mp-modal-actions .btn.btn-mvt-entree{background:var(--success);color:#fff}
+.mp-modal-actions .btn.btn-mvt-sortie{background:var(--danger);color:#fff}
+.mp-modal-actions .btn.btn-mvt-ajustement{background:var(--warn);color:#1a1200}
+.mp-modal-actions .btn.btn-mvt-transfert{background:var(--accent);color:var(--bg)}

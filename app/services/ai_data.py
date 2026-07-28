@@ -58,7 +58,6 @@ def fetch_anomalies(conn) -> str:
                   OR (TRIM(COALESCE(pe.numero_of, '')) != ''
                       AND TRIM(pd.no_dossier) = TRIM(pe.numero_of))
                 )
-                AND COALESCE(pd.est_annule, 0) = 0
           )
         ORDER BY pe.updated_at ASC
         LIMIT 15
@@ -88,7 +87,6 @@ def fetch_anomalies(conn) -> str:
                       OR (TRIM(COALESCE(m.code, '')) != ''
                           AND TRIM(pd.machine) = TRIM(m.code))
                     )
-                    AND COALESCE(pd.est_annule, 0) = 0
               )
             ORDER BY m.nom
             """
@@ -210,7 +208,7 @@ def _production_today(conn) -> str:
         SELECT COALESCE(NULLIF(TRIM(machine), ''), '(sans machine)') AS machine,
                COUNT(*) AS nb_saisies
         FROM production_data
-        WHERE date(date_operation) = ? AND COALESCE(est_annule, 0) = 0
+        WHERE date(date_operation) = ?
         GROUP BY TRIM(COALESCE(machine, ''))
         ORDER BY machine
         """,
@@ -335,7 +333,6 @@ def tool_production_detail(conn, inp: dict) -> str:
                    COUNT(DISTINCT NULLIF(TRIM(no_dossier), '')) AS dossiers
             FROM production_data
             WHERE date(date_operation) >= ?
-              AND COALESCE(est_annule, 0) = 0
               AND (
                 TRIM(machine) = TRIM(?)
                 OR TRIM(machine) LIKE '%' || TRIM(?) || '%'
@@ -359,7 +356,7 @@ def tool_production_detail(conn, inp: dict) -> str:
         SELECT COALESCE(NULLIF(TRIM(machine), ''), '(sans machine)') AS machine,
                COUNT(*) AS nb_saisies
         FROM production_data
-        WHERE date(date_operation) >= ? AND COALESCE(est_annule, 0) = 0
+        WHERE date(date_operation) >= ?
         GROUP BY TRIM(COALESCE(machine, ''))
         ORDER BY nb_saisies DESC, machine
         LIMIT 20

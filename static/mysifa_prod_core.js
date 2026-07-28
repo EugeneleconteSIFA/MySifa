@@ -4783,6 +4783,16 @@ function renderSaisies(){
         }
         // Si metrage_total_fin absent et metrage_reel = valeur directe produite : pas de calcul
       }
+      if(r.operation_code==='90' && r.no_dossier){
+        // Annulation de dossier : la trace porte elle-meme le compteur de
+        // debut du cycle annule et celui releve a l'annulation. Le metrage
+        // consomme avant l'annulation reste donc mesurable.
+        const finCtr   = r.metrage_total_fin ?? r.metrage_reel ?? null;
+        const debutCtr = r.metrage_total_debut ?? r.metrage_prevu ?? debutByDossier[r.no_dossier] ?? null;
+        if(finCtr!=null && debutCtr!=null){
+          r._metrage_dossier = parseFloat(finCtr) - parseFloat(debutCtr);
+        }
+      }
     });
   })();
 
@@ -4900,7 +4910,11 @@ function renderSaisies(){
     }
 
     let badge=null;
-    if(annuleRow) badge=h('span',{className:'badge-annule-saisie',title:annuleTip,
+    if(!annuleRow && opCode==='90') badge=h('span',{className:'badge-annulation-trace',
+      title:(row.annule_motif?('Motif : '+row.annule_motif):'Annulation de dossier'),
+      style:{background:'rgba(251,191,36,.16)',color:'#fbbf24',border:'1px solid rgba(251,191,36,.45)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
+    },'ANNULATION');
+    else if(annuleRow) badge=h('span',{className:'badge-annule-saisie',title:annuleTip,
       style:{background:'rgba(248,113,113,.16)',color:'#f87171',border:'1px solid rgba(248,113,113,.45)',padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:'700',letterSpacing:'.3px',whiteSpace:'nowrap'}
     },'ANNULÉ');
     else if(isAlertAck) badge=h('span',{className:'badge-alert-ack',title:"Alerte validée par un opérateur — lecture seule",
