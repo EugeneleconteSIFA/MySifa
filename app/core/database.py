@@ -7575,6 +7575,38 @@ Ressources :
         conn.execute("ALTER TABLE ao_reponses ADD COLUMN marge REAL NOT NULL DEFAULT 1.0")
     conn.commit()
 
+    # ── v2.4.28 — Récurrence sur les modèles + tracking template_id ─────────
+    # Pattern colonne-existence (idempotent, insensible aux collisions de version).
+    # Objectif produit : rendre les modèles de créneau récurrents (hebdo/mensuel/
+    # trimestriel/annuel) et tracer sur chaque créneau son template d'origine.
+    # Champs récurrence sur maintenance_templates :
+    #   recurrence_type    : NULL | 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+    #   recurrence_dow     : 0-6 (0=lundi..6=dimanche) pour weekly
+    #   recurrence_dom     : 1-31 pour monthly/quarterly/yearly
+    #   recurrence_month   : 1-12 pour yearly (mois de l'année), sinon NULL
+    #   recurrence_time_start / _end : 'HH:MM' pour les créneaux auto-générés
+    #   recurrence_active  : 0/1 flag on/off (masque temporairement sans supprimer)
+    # Sur maintenance_events : template_id (nullable, ON DELETE SET NULL logique
+    #   côté API — SQLite n'a pas SET NULL déclaratif sur les FK, on gère au code).
+    _tmpl_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_templates)").fetchall()}
+    for col, ddl in [
+        ("recurrence_type",       "TEXT"),
+        ("recurrence_dow",        "INTEGER"),
+        ("recurrence_dom",        "INTEGER"),
+        ("recurrence_month",      "INTEGER"),
+        ("recurrence_time_start", "TEXT"),
+        ("recurrence_time_end",   "TEXT"),
+        ("recurrence_active",     "INTEGER NOT NULL DEFAULT 0"),
+    ]:
+        if col not in _tmpl_cols:
+            conn.execute(f"ALTER TABLE maintenance_templates ADD COLUMN {col} {ddl}")
+    _ev_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+    if "template_id" not in _ev_cols:
+        conn.execute("ALTER TABLE maintenance_events ADD COLUMN template_id INTEGER")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_events_template_id "
+                     "ON maintenance_events(template_id)")
+    conn.commit()
+
 
 
 
