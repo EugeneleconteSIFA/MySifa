@@ -9,30 +9,34 @@ expe_assets.py et portal_assets.py.
 Le bloc est injecte a l'interieur du <script> existant, juste avant init() :
 les declarations de fonctions sont donc hoistees et visibles depuis le reste
 de la page (notamment sifaTabsHtml(), appelee par renderSifaDocsList).
+
+Navigation : colonnes horizontales facon Finder (Miller columns). Chaque niveau
+de l'arborescence est une colonne ; cliquer un dossier ouvre son contenu dans la
+colonne suivante a droite, sans recharger la page. Le detail d'un document
+s'ouvre en tiroir superpose, pour ne pas manger la largeur des colonnes.
 """
 
 GED_JS = r"""
 // ══════════════════════════════════════════════════════════════════════
 // Certifications SIFA - onglet 2 : Explorateur de documents (GED)
+// Navigation en colonnes horizontales (Miller columns, facon Finder).
 // ══════════════════════════════════════════════════════════════════════
 
 S.ged = {
   tab: 'docs',        // 'docs' = documents clients (existant) | 'explorer'
-  tree: [],           // dossiers a plat, le front reconstruit la hierarchie
-  rootFiles: 0,
+  path: [0],          // chemin courant : [0, id1, id2, ...] - 0 = racine
+  cols: [],           // contenu de chaque niveau, aligne sur path
   trashCount: 0,
-  cwd: 0,             // dossier courant (0 = racine)
-  content: null,      // {folder, breadcrumb, folders, files}
-  expanded: {},       // {folderId:true} etat de l'arbre
   q: '',              // recherche en cours
-  results: null,      // resultats de recherche (null = navigation normale)
-  detail: null,       // document ouvert dans le panneau lateral
+  results: null,      // resultats de recherche
+  detail: null,       // document ouvert dans le tiroir
   trash: null,        // vue corbeille
   mode: 'browse',     // 'browse' | 'search' | 'trash'
-  busy: false,
+  selFile: null,      // id du fichier selectionne (surlignage colonne)
   _focusQ: false,
   _searchTimer: null,
   _drag: null,        // {kind:'file'|'folder', id}
+  _escBound: false,
 };
 
 try{ var _gt = localStorage.getItem('mysifa_sifa_tab'); if(_gt) S.ged.tab = _gt; }catch(e){}
@@ -58,6 +62,9 @@ function setSifaTab(k){
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
+function gedCwd(){ return S.ged.path[S.ged.path.length - 1] || 0; }
+function gedCurCol(){ return S.ged.cols[S.ged.cols.length - 1] || null; }
+
 function gedFmtSize(b){
   if(b === null || b === undefined) return '';
   if(b < 1024) return b + ' o';
@@ -81,57 +88,97 @@ function gedFileIco(ext){
   const e = (ext||'').toUpperCase().slice(0,4) || '?';
   return `<span class="ged-ext ged-ext-${gedExtClass(ext)}">${escHtml(e)}</span>`;
 }
-const GED_FOLDER_SVG = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+const GED_FOLDER_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+const GED_CHEVRON_SVG = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
 
-function gedLinkBadge(t, id){
+function gedLinkBadge(t){
   if(!t) return '';
   const lbl = {client:'Client', fournisseur:'Fournisseur', norme:'Norme'}[t] || t;
-  return `<span class="ged-link-badge ged-link-${escAttr(t)}">${escHtml(lbl)}</span>`;
+  return `<span class="ged-link-badge">${escHtml(lbl)}</span>`;
 }
 
-// ─── Chargement ──────────────────────────────────────────────────────
-async function gedEnter(){
-  await gedLoadTree();
-  await gedOpen(S.ged.cwd || 0, {silent:true});
+// ─── Chargement des colonnes ─────────────────────────────────────────
+async function gedFetchCol(folderId){
+  const r = await api('/api/qualite/ged/folders/' + (folderId||0));
+  if(!r.ok) return null;
+  return await r.json();
 }
 
-async function gedLoadTree(){
+async function gedLoadTrashCount(){
   try{
     const r = await api('/api/qualite/ged/tree');
-    if(!r.ok){ showToast('Erreur chargement arborescence','danger'); return; }
-    const d = await r.json();
-    S.ged.tree = d.folders || [];
-    S.ged.rootFiles = d.root_files || 0;
-    S.ged.trashCount = d.trash_count || 0;
-  }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
+    if(r.ok){ const d = await r.json(); S.ged.trashCount = d.trash_count || 0; }
+  }catch(e){}
 }
 
-async function gedOpen(folderId, opts){
-  const silent = !!(opts && opts.silent);
+async function gedEnter(){
+  S.ged.mode = 'browse';
+  if(!S.ged.cols.length){
+    const c0 = await gedFetchCol(0);
+    if(!c0) return;
+    S.ged.path = [0];
+    S.ged.cols = [c0];
+  }
+  await gedLoadTrashCount();
+  gedRender();
+}
+
+// Clic sur un dossier dans la colonne d'index colIndex
+async function gedSelectFolder(colIndex, folderId){
+  const c = await gedFetchCol(folderId);
+  if(!c){ showToast('Dossier introuvable','danger'); return gedRefresh(); }
+  S.ged.path = S.ged.path.slice(0, colIndex + 1).concat([folderId]);
+  S.ged.cols = S.ged.cols.slice(0, colIndex + 1).concat([c]);
+  S.ged.mode = 'browse';
+  S.ged.selFile = null;
+  gedRender();
+}
+
+// Remonter a un niveau du fil d'Ariane
+function gedGoToDepth(i){
+  S.ged.path = S.ged.path.slice(0, i + 1);
+  S.ged.cols = S.ged.cols.slice(0, i + 1);
+  S.ged.mode = 'browse';
+  S.ged.selFile = null;
+  gedRender();
+}
+
+// Ouvrir un dossier par son id, d'ou qu'on vienne (resultat de recherche,
+// panneau detail...). On reconstruit tout le chemin depuis son fil d'Ariane.
+async function gedOpen(folderId){
   S.ged.mode = 'browse';
   S.ged.results = null;
   S.ged.trash = null;
-  try{
-    const r = await api('/api/qualite/ged/folders/' + (folderId||0));
-    if(!r.ok){
-      showToast('Dossier introuvable','danger');
-      if(folderId){ S.ged.cwd = 0; return gedOpen(0); }
-      return;
-    }
-    S.ged.content = await r.json();
-    S.ged.cwd = folderId || 0;
-    // On deplie le chemin courant dans l'arbre : l'utilisateur doit toujours
-    // voir ou il se trouve, meme apres une recherche ou un deplacement.
-    (S.ged.content.breadcrumb || []).forEach(b => { S.ged.expanded[b.id] = true; });
-    gedRender();
-  }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
+  const target = await gedFetchCol(folderId || 0);
+  if(!target){
+    showToast('Dossier introuvable','danger');
+    S.ged.path = [0]; S.ged.cols = [];
+    return gedEnter();
+  }
+  const ids = [0].concat((target.breadcrumb||[]).map(b => b.id));
+  const cols = await Promise.all(ids.map(id =>
+    id === (folderId||0) ? Promise.resolve(target) : gedFetchCol(id)));
+  S.ged.path = ids;
+  S.ged.cols = cols.map((c,i) => c || {folder:null, breadcrumb:[], folders:[], files:[]});
+  gedRender();
 }
 
+// Recharge toutes les colonnes du chemin courant (apres upload, suppression...)
 async function gedRefresh(){
-  await gedLoadTree();
+  await gedLoadTrashCount();
   if(S.ged.mode === 'search') return gedRunSearch();
   if(S.ged.mode === 'trash')  return gedOpenTrash();
-  return gedOpen(S.ged.cwd, {silent:true});
+
+  const cols = [];
+  const path = [];
+  for(const id of S.ged.path){
+    const c = await gedFetchCol(id);
+    if(!c) break;              // dossier disparu : on s'arrete a ce niveau
+    path.push(id); cols.push(c);
+  }
+  S.ged.path = path.length ? path : [0];
+  S.ged.cols = cols.length ? cols : [await gedFetchCol(0)];
+  gedRender();
 }
 
 // ─── Rendu principal ─────────────────────────────────────────────────
@@ -154,150 +201,57 @@ function gedRender(){
              onkeydown="if(event.key==='Escape'){gedClearSearch();}">
       ${S.ged.q ? `<button class="ged-search-x" onclick="gedClearSearch()" title="Effacer">&times;</button>` : ''}
     </div>
-    <div class="ged-body">
-      <aside class="ged-side">${gedTreeHtml()}</aside>
-      <section class="ged-main">${main}</section>
-      ${S.ged.detail ? `<aside class="ged-detail">${gedDetailHtml()}</aside>` : ''}
-    </div>
+    <div class="ged-shell">${main}</div>
+    ${S.ged.detail ? `<div class="ged-drawer-backdrop" onclick="gedCloseDetail()"></div>
+                      <aside class="ged-drawer">${gedDetailHtml()}</aside>` : ''}
     <input type="file" id="ged-file-input" multiple style="display:none"
-           onchange="gedUpload(this.files, S.ged.cwd); this.value='';">
+           onchange="gedUpload(this.files, gedCwd()); this.value='';">
     <input type="file" id="ged-version-input" style="display:none"
            onchange="gedUploadVersion(this.files); this.value='';">
   `;
+
+  // La colonne la plus a droite est celle qui vient d'etre ouverte : on la
+  // ramene dans le champ de vision plutot que de laisser l'utilisateur
+  // chercher ou son clic a atterri.
+  const wrap = document.getElementById('ged-cols');
+  if(wrap) wrap.scrollLeft = wrap.scrollWidth;
 
   if(S.ged._focusQ){
     const inp = document.getElementById('ged-q');
     if(inp){ inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
     S.ged._focusQ = false;
   }
+
+  if(!S.ged._escBound){
+    document.addEventListener('keydown', function(e){
+      if(e.key !== 'Escape' || !S.ged.detail) return;
+      // Une modale ouverte par-dessus (apercu, edition) a la priorite sur le
+      // tiroir : Echap la ferme d'abord. #mroot est cree a la demande, donc
+      // il peut ne pas exister du tout.
+      const mr = document.getElementById('mroot');
+      if(mr && mr.innerHTML.trim()) return;
+      gedCloseDetail();
+    });
+    S.ged._escBound = true;
+  }
 }
 
-// ─── Panneau gauche : arbre ──────────────────────────────────────────
-function gedTreeHtml(){
-  const byParent = {};
-  (S.ged.tree || []).forEach(f => {
-    const k = f.parent_id || 0;
-    (byParent[k] = byParent[k] || []).push(f);
-  });
-
-  const node = (f, depth) => {
-    const kids = byParent[f.id] || [];
-    const open = !!S.ged.expanded[f.id];
-    const cur  = S.ged.cwd === f.id && S.ged.mode === 'browse';
-    const caret = kids.length
-      ? `<span class="ged-caret${open?' open':''}" onclick="event.stopPropagation();gedToggle(${f.id})">
-           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-         </span>`
-      : `<span class="ged-caret empty"></span>`;
-    return `
-      <div class="ged-tree-node${cur?' cur':''}" style="padding-left:${6 + depth*13}px"
-           onclick="gedOpen(${f.id})"
-           ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
-           ondrop="gedDrop(event, ${f.id}, this)">
-        ${caret}
-        <svg class="ged-tree-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span class="ged-tree-name" title="${escAttr(f.nom)}">${escHtml(f.nom)}</span>
-        ${f.nb_files ? `<span class="ged-tree-n">${f.nb_files}</span>` : ''}
-      </div>
-      ${open && kids.length ? kids.map(k => node(k, depth+1)).join('') : ''}
-    `;
-  };
-
-  const roots = byParent[0] || [];
-  const isRoot = S.ged.cwd === 0 && S.ged.mode === 'browse';
-  return `
-    <div class="ged-tree-hd">Arborescence</div>
-    <div class="ged-tree-node root${isRoot?' cur':''}" onclick="gedOpen(0)"
-         ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
-         ondrop="gedDrop(event, 0, this)">
-      <span class="ged-caret empty"></span>
-      <svg class="ged-tree-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-      <span class="ged-tree-name">Racine</span>
-      ${S.ged.rootFiles ? `<span class="ged-tree-n">${S.ged.rootFiles}</span>` : ''}
-    </div>
-    ${roots.map(f => node(f, 1)).join('')}
-    ${roots.length ? '' : '<div class="ged-tree-empty">Aucun dossier.<br>Commencez par en creer un.</div>'}
-    <div class="ged-tree-sep"></div>
-    <div class="ged-tree-node${S.ged.mode==='trash'?' cur':''}" onclick="gedOpenTrash()">
-      <span class="ged-caret empty"></span>
-      <svg class="ged-tree-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-      <span class="ged-tree-name">Corbeille</span>
-      ${S.ged.trashCount ? `<span class="ged-tree-n">${S.ged.trashCount}</span>` : ''}
-    </div>
-  `;
-}
-
-function gedToggle(id){
-  S.ged.expanded[id] = !S.ged.expanded[id];
-  gedRender();
-}
-
-// ─── Vue navigation ──────────────────────────────────────────────────
+// ─── Vue navigation : colonnes horizontales ──────────────────────────
 function gedBrowseHtml(){
-  const c = S.ged.content;
-  if(!c) return '<div class="ged-empty">Chargement...</div>';
+  if(!S.ged.cols.length) return '<div class="ged-empty">Chargement...</div>';
 
-  const bc = [`<span class="ged-bc-item${S.ged.cwd?'':' cur'}" onclick="gedOpen(0)">Racine</span>`];
-  (c.breadcrumb||[]).forEach((b, i, arr) => {
-    const last = i === arr.length - 1;
-    bc.push('<span class="ged-bc-sep">/</span>');
-    bc.push(`<span class="ged-bc-item${last?' cur':''}" onclick="gedOpen(${b.id})">${escHtml(b.nom)}</span>`);
-  });
+  // Fil d'Ariane : miroir du chemin, permet de remonter d'un clic
+  const bcParts = S.ged.path.map((id, i) => {
+    const nom = i === 0 ? 'Racine'
+      : ((S.ged.cols[i] && S.ged.cols[i].folder && S.ged.cols[i].folder.nom) || '...');
+    const last = i === S.ged.path.length - 1;
+    return `${i ? '<span class="ged-bc-sep">/</span>' : ''}<span class="ged-bc-item${last?' cur':''}" onclick="gedGoToDepth(${i})">${escHtml(nom)}</span>`;
+  }).join('');
 
-  const folders = (c.folders||[]).map(f => `
-    <div class="ged-tile ged-tile-folder" draggable="true"
-         ondragstart="gedDragStart(event,'folder',${f.id})"
-         ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
-         ondrop="gedDrop(event, ${f.id}, this)"
-         ondblclick="gedOpen(${f.id})" onclick="gedOpen(${f.id})">
-      <div class="ged-tile-actions">
-        <span class="ged-tile-act" title="Renommer" onclick="event.stopPropagation();gedRenameFolder(${f.id})">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-        </span>
-        <span class="ged-tile-act" title="Telecharger en ZIP" onclick="event.stopPropagation();gedZip(${f.id})">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </span>
-        <span class="ged-tile-act del" title="Mettre a la corbeille" onclick="event.stopPropagation();gedDeleteFolder(${f.id})">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
-        </span>
-      </div>
-      <div class="ged-tile-ico folder">${GED_FOLDER_SVG}</div>
-      <div class="ged-tile-name" title="${escAttr(f.nom)}">${escHtml(f.nom)}</div>
-      <div class="ged-tile-meta">${f.nb_folders||0} dossier${(f.nb_folders||0)>1?'s':''} - ${f.nb_files||0} fichier${(f.nb_files||0)>1?'s':''}</div>
-      ${gedLinkBadge(f.link_type, f.link_id)}
-    </div>
-  `).join('');
-
-  const files = (c.files||[]).map(f => `
-    <div class="ged-tile ged-tile-file${S.ged.detail && S.ged.detail.id===f.id?' sel':''}"
-         draggable="true" ondragstart="gedDragStart(event,'file',${f.id})"
-         onclick="gedOpenFile(${f.id})">
-      <div class="ged-tile-actions">
-        ${gedIsPreviewable(f.ext) ? `<span class="ged-tile-act" title="Apercu" onclick="event.stopPropagation();gedPreview(${f.id})">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </span>` : ''}
-        <a class="ged-tile-act" title="Telecharger" href="/api/qualite/ged/files/${f.id}/download" onclick="event.stopPropagation()">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </a>
-        <span class="ged-tile-act del" title="Mettre a la corbeille" onclick="event.stopPropagation();gedDeleteFile(${f.id})">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
-        </span>
-      </div>
-      <div class="ged-tile-ico">${gedFileIco(f.ext)}</div>
-      <div class="ged-tile-name" title="${escAttr(f.nom)}">${escHtml(f.nom)}</div>
-      <div class="ged-tile-meta">
-        ${gedFmtSize(f.size_bytes)}${(f.version||1)>1?` - v${f.version}`:''}
-        ${f.index_status && f.index_status!=='ok' ? ' - <span class="ged-warn-dot" title="Contenu non indexe : ce document ne sortira pas sur une recherche par mot du texte. Ajoutez des tags.">non indexe</span>' : ''}
-      </div>
-      ${f.tags ? `<div class="ged-tile-tags">${f.tags.split(',').slice(0,3).map(t=>`<span class="ged-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
-      ${gedLinkBadge(f.link_type, f.link_id)}
-    </div>
-  `).join('');
-
-  const empty = !(c.folders||[]).length && !(c.files||[]).length;
+  const cols = S.ged.cols.map((c, i) => gedColumnHtml(c, i)).join('');
 
   return `
-    <div class="ged-bc">${bc.join('')}</div>
+    <div class="ged-bc">${bcParts}</div>
     <div class="ged-toolbar">
       <button class="btn btn-ghost ged-btn" onclick="gedNewFolder()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -307,25 +261,90 @@ function gedBrowseHtml(){
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         Envoyer des fichiers
       </button>
-      <button class="btn btn-ghost ged-btn" onclick="gedZip(${S.ged.cwd})" title="Telecharger ce dossier et son contenu en ZIP">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        ZIP
+      <button class="btn btn-ghost ged-btn" onclick="gedZip(gedCwd())" title="Telecharger ce dossier et son contenu en ZIP">ZIP</button>
+      ${gedCwd() ? `<button class="btn btn-ghost ged-btn" onclick="gedFolderProps(gedCwd())">Proprietes</button>` : ''}
+      <div class="ged-toolbar-sp"></div>
+      <button class="btn btn-ghost ged-btn" onclick="gedOpenTrash()" title="Corbeille - rien n'est purge automatiquement">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Corbeille${S.ged.trashCount ? ` <span class="ged-count">${S.ged.trashCount}</span>` : ''}
       </button>
-      ${S.ged.cwd ? `<button class="btn btn-ghost ged-btn" onclick="gedFolderProps(${S.ged.cwd})" title="Description et rattachement de ce dossier">Proprietes</button>` : ''}
     </div>
-    <div class="ged-drop" id="ged-drop"
+    <div class="ged-cols" id="ged-cols">${cols}</div>
+    <div class="ged-hint-bar">Glisser-deposer des fichiers dans une colonne pour les ajouter - glisser une ligne sur un dossier pour la deplacer</div>
+  `;
+}
+
+function gedColumnHtml(c, i){
+  const fid = S.ged.path[i] || 0;
+  const nextId = S.ged.path[i+1] || null;   // dossier ouvert dans la colonne suivante
+  const titre = i === 0 ? 'Racine' : ((c.folder && c.folder.nom) || '...');
+
+  const folders = (c.folders||[]).map(f => `
+    <div class="ged-row ged-row-folder${nextId===f.id?' open':''}"
+         draggable="true" ondragstart="gedDragStart(event,'folder',${f.id})"
          ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
-         ondrop="gedDrop(event, ${S.ged.cwd}, this)">
-      Glisser-deposer des fichiers ici pour les ajouter a ce dossier
+         ondrop="gedDrop(event, ${f.id}, this)"
+         onclick="gedSelectFolder(${i}, ${f.id})">
+      <span class="ged-row-ico folder">${GED_FOLDER_SVG}</span>
+      <span class="ged-row-name" title="${escAttr(f.nom)}">${escHtml(f.nom)}</span>
+      ${f.link_type ? gedLinkBadge(f.link_type) : ''}
+      <span class="ged-row-acts">
+        <span class="ged-row-act" title="Renommer" onclick="event.stopPropagation();gedRenameFolder(${i},${f.id})">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+        </span>
+        <span class="ged-row-act" title="ZIP" onclick="event.stopPropagation();gedZip(${f.id})">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </span>
+        <span class="ged-row-act del" title="Corbeille" onclick="event.stopPropagation();gedDeleteFolder(${i},${f.id})">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+        </span>
+      </span>
+      <span class="ged-row-chev">${GED_CHEVRON_SVG}</span>
     </div>
-    <div class="ged-grid">
-      ${folders}${files}
-      ${empty ? '<div class="ged-empty-folder">Ce dossier est vide.</div>' : ''}
+  `).join('');
+
+  const files = (c.files||[]).map(f => `
+    <div class="ged-row ged-row-file${S.ged.selFile===f.id?' sel':''}"
+         draggable="true" ondragstart="gedDragStart(event,'file',${f.id})"
+         onclick="gedOpenFile(${f.id})">
+      <span class="ged-row-ico">${gedFileIco(f.ext)}</span>
+      <span class="ged-row-body">
+        <span class="ged-row-name" title="${escAttr(f.nom)}">${escHtml(f.nom)}</span>
+        <span class="ged-row-meta">${gedFmtSize(f.size_bytes)}${(f.version||1)>1?` - v${f.version}`:''}${f.index_status && f.index_status!=='ok' ? ' - <span class="ged-warn-dot" title="Contenu non indexe : ce document ne ressortira pas sur une recherche par mot du texte. Ajoutez des tags.">non indexe</span>' : ''}</span>
+      </span>
+      <span class="ged-row-acts">
+        ${gedIsPreviewable(f.ext) ? `<span class="ged-row-act" title="Apercu" onclick="event.stopPropagation();gedPreview(${f.id})">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </span>` : ''}
+        <a class="ged-row-act" title="Telecharger" href="/api/qualite/ged/files/${f.id}/download" onclick="event.stopPropagation()">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <span class="ged-row-act del" title="Corbeille" onclick="event.stopPropagation();gedDeleteFile(${f.id})">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+        </span>
+      </span>
+    </div>
+  `).join('');
+
+  const n = (c.folders||[]).length + (c.files||[]).length;
+
+  return `
+    <div class="ged-col${i === S.ged.cols.length-1 ? ' last' : ''}"
+         ondragover="gedDragOver(event,this)" ondragleave="gedDragLeave(this)"
+         ondrop="gedDrop(event, ${fid}, this)">
+      <div class="ged-col-hd">
+        <span class="ged-col-title" title="${escAttr(titre)}">${escHtml(titre)}</span>
+        <span class="ged-col-n">${n}</span>
+      </div>
+      <div class="ged-col-bd">
+        ${folders}${files}
+        ${n ? '' : '<div class="ged-col-empty">Dossier vide<br><span>Deposez des fichiers ici</span></div>'}
+      </div>
     </div>
   `;
 }
 
-// ─── Vue recherche ───────────────────────────────────────────────────
+// ─── Recherche ───────────────────────────────────────────────────────
 function gedOnSearch(v){
   S.ged.q = v;
   clearTimeout(S.ged._searchTimer);
@@ -349,8 +368,7 @@ async function gedRunSearch(){
   try{
     const r = await api('/api/qualite/ged/search?q=' + encodeURIComponent(q));
     if(!r.ok){ showToast('Erreur recherche','danger'); return; }
-    const d = await r.json();
-    S.ged.results = d;
+    S.ged.results = await r.json();
     S.ged.mode = 'search';
     S.ged._focusQ = true;
     gedRender();
@@ -360,7 +378,7 @@ async function gedRunSearch(){
 function gedResultsHtml(){
   const d = S.ged.results || {results:[]};
   const rows = (d.results||[]).map(f => `
-    <div class="ged-res${S.ged.detail && S.ged.detail.id===f.id?' sel':''}" onclick="gedOpenFile(${f.id})">
+    <div class="ged-res" onclick="gedOpenFile(${f.id})">
       <div class="ged-res-ico">${gedFileIco(f.ext)}</div>
       <div class="ged-res-body">
         <div class="ged-res-name">${escHtml(f.nom)}</div>
@@ -368,14 +386,14 @@ function gedResultsHtml(){
           ${escHtml(f.path||'/')}
         </div>
         ${f.extrait ? `<div class="ged-res-snip">${f.extrait}</div>` : ''}
-        ${f.tags ? `<div class="ged-tile-tags">${f.tags.split(',').map(t=>`<span class="ged-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
+        ${f.tags ? `<div class="ged-tags">${f.tags.split(',').map(t=>`<span class="ged-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
       </div>
       <div class="ged-res-actions">
-        ${gedIsPreviewable(f.ext) ? `<button class="ged-tile-act" title="Apercu" onclick="event.stopPropagation();gedPreview(${f.id})">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        ${gedIsPreviewable(f.ext) ? `<button class="ged-row-act" title="Apercu" onclick="event.stopPropagation();gedPreview(${f.id})">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>` : ''}
-        <a class="ged-tile-act" title="Telecharger" href="/api/qualite/ged/files/${f.id}/download" onclick="event.stopPropagation()">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <a class="ged-row-act" title="Telecharger" href="/api/qualite/ged/files/${f.id}/download" onclick="event.stopPropagation()">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </a>
       </div>
     </div>
@@ -391,12 +409,13 @@ function gedResultsHtml(){
   `;
 }
 
-// ─── Panneau detail ──────────────────────────────────────────────────
+// ─── Tiroir de detail (superpose) ────────────────────────────────────
 async function gedOpenFile(id){
   try{
     const r = await api('/api/qualite/ged/files/' + id);
     if(!r.ok){ showToast('Document introuvable','danger'); return; }
     S.ged.detail = await r.json();
+    S.ged.selFile = id;
     if(S.ged.detail.link_type && S.ged.detail.link_id){
       try{
         const lr = await api('/api/qualite/ged/link-label?type=' + encodeURIComponent(S.ged.detail.link_type)
@@ -408,7 +427,7 @@ async function gedOpenFile(id){
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
 }
 
-function gedCloseDetail(){ S.ged.detail = null; gedRender(); }
+function gedCloseDetail(){ S.ged.detail = null; S.ged.selFile = null; gedRender(); }
 
 function gedDetailHtml(){
   const f = S.ged.detail;
@@ -427,12 +446,22 @@ function gedDetailHtml(){
     </div>
   `).join('');
 
+  const apercu = gedIsPreviewable(f.ext)
+    ? `<div class="ged-d-thumb" onclick="gedPreview(${f.id})" title="Agrandir">
+         ${['png','jpg','jpeg','gif','webp','svg','bmp'].indexOf((f.ext||'').toLowerCase())!==-1
+           ? `<img src="/api/qualite/ged/files/${f.id}/preview" alt="">`
+           : `<iframe src="/api/qualite/ged/files/${f.id}/preview#toolbar=0" title="Apercu"></iframe><span class="ged-d-thumb-ov">Agrandir</span>`}
+       </div>`
+    : '';
+
   return `
-    <div class="ged-detail-hd">
-      <div class="ged-detail-title" title="${escAttr(f.nom)}">${escHtml(f.nom)}</div>
-      <button class="ged-detail-x" onclick="gedCloseDetail()" title="Fermer">&times;</button>
+    <div class="ged-drawer-hd">
+      <div class="ged-drawer-ico">${gedFileIco(f.ext)}</div>
+      <div class="ged-drawer-title" title="${escAttr(f.nom)}">${escHtml(f.nom)}</div>
+      <button class="ged-drawer-x" onclick="gedCloseDetail()" title="Fermer (Echap)">&times;</button>
     </div>
-    <div class="ged-detail-bd">
+    <div class="ged-drawer-bd">
+      ${apercu}
       <div class="ged-d-row"><span class="ged-d-lbl">Emplacement</span>
         <span class="ged-d-val ged-d-link" onclick="gedOpen(${f.folder_id||0})">${escHtml(f.path||'/')}</span></div>
       <div class="ged-d-row"><span class="ged-d-lbl">Taille</span>
@@ -440,20 +469,20 @@ function gedDetailHtml(){
       <div class="ged-d-row"><span class="ged-d-lbl">Depose</span>
         <span class="ged-d-val">${escHtml(fmtDateTime(f.created_at))}${f.created_by_nom?' par '+escHtml(f.created_by_nom):''}</span></div>
       ${f.link_type?`<div class="ged-d-row"><span class="ged-d-lbl">Rattachement</span>
-        <span class="ged-d-val">${gedLinkBadge(f.link_type,f.link_id)} ${escHtml(f.link_label||('#'+f.link_id))}</span></div>`:''}
+        <span class="ged-d-val">${gedLinkBadge(f.link_type)} ${escHtml(f.link_label||('#'+f.link_id))}</span></div>`:''}
       <div class="ged-d-row"><span class="ged-d-lbl">Indexation</span>
         <span class="ged-d-val">${f.index_status==='ok'
           ? '<span class="ged-ok-dot">contenu indexe</span>'
           : '<span class="ged-warn-dot" title="Aucun texte extrait : PDF scanne, image, ou format non supporte. Ajoutez des tags pour pouvoir le retrouver.">contenu non indexe</span>'}</span></div>
       ${f.description?`<div class="ged-d-block"><div class="ged-d-lbl">Description</div><div class="ged-d-desc">${escHtml(f.description)}</div></div>`:''}
       ${f.tags?`<div class="ged-d-block"><div class="ged-d-lbl">Tags</div>
-        <div class="ged-tile-tags">${f.tags.split(',').map(t=>`<span class="ged-tag">${escHtml(t)}</span>`).join('')}</div></div>`:''}
+        <div class="ged-tags">${f.tags.split(',').map(t=>`<span class="ged-tag">${escHtml(t)}</span>`).join('')}</div></div>`:''}
 
       <div class="ged-d-acts">
-        ${gedIsPreviewable(f.ext)?`<button class="btn btn-ghost ged-btn" onclick="gedPreview(${f.id})">Apercu</button>`:''}
         <a class="btn btn-accent ged-btn" href="/api/qualite/ged/files/${f.id}/download">Telecharger</a>
         <button class="btn btn-ghost ged-btn" onclick="gedEditMeta(${f.id})">Modifier</button>
         <button class="btn btn-ghost ged-btn" onclick="gedAskVersion(${f.id})">Nouvelle version</button>
+        <button class="btn btn-ghost ged-btn ged-btn-danger" onclick="gedDeleteFile(${f.id})">Corbeille</button>
       </div>
 
       <div class="ged-d-block">
@@ -472,17 +501,21 @@ async function gedNewFolder(){
   try{
     const r = await api('/api/qualite/ged/folders', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({parent_id: S.ged.cwd || null, nom: nom.trim()})
+      body: JSON.stringify({parent_id: gedCwd() || null, nom: nom.trim()})
     });
     if(!r.ok){ showToast('Erreur creation dossier','danger'); return; }
-    if(S.ged.cwd) S.ged.expanded[S.ged.cwd] = true;
     await gedRefresh();
     showToast('Dossier cree.','success');
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
 }
 
-async function gedRenameFolder(id){
-  const cur = (S.ged.content.folders||[]).find(x => x.id === id) || {};
+function _gedFolderIn(colIndex, id){
+  const c = S.ged.cols[colIndex];
+  return (c && (c.folders||[]).find(x => x.id === id)) || {};
+}
+
+async function gedRenameFolder(colIndex, id){
+  const cur = _gedFolderIn(colIndex, id);
   const nom = prompt('Renommer le dossier :', cur.nom || '');
   if(nom === null || !nom.trim()) return;
   try{
@@ -495,22 +528,25 @@ async function gedRenameFolder(id){
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
 }
 
-async function gedDeleteFolder(id){
-  const cur = (S.ged.content.folders||[]).find(x => x.id === id) || {};
+async function gedDeleteFolder(colIndex, id){
+  const cur = _gedFolderIn(colIndex, id);
   const n = (cur.nb_files||0) + (cur.nb_folders||0);
   const msg = n
-    ? `Mettre &laquo; ${cur.nom} &raquo; et son contenu (${n} element${n>1?'s':''}) a la corbeille ?`
-    : `Mettre &laquo; ${cur.nom} &raquo; a la corbeille ?`;
-  if(!confirm(msg.replace(/&laquo;|&raquo;/g,'"'))) return;
+    ? 'Mettre "' + (cur.nom||'ce dossier') + '" et son contenu (' + n + ' element' + (n>1?'s':'') + ') a la corbeille ?'
+    : 'Mettre "' + (cur.nom||'ce dossier') + '" a la corbeille ?';
+  if(!confirm(msg)) return;
   try{
     const r = await api('/api/qualite/ged/folders/' + id, {method:'DELETE'});
     if(!r.ok){ showToast('Erreur suppression','danger'); return; }
+    // Si on supprime un dossier ouvert plus a droite, on remonte au niveau du clic
+    const at = S.ged.path.indexOf(id);
+    if(at !== -1){ S.ged.path = S.ged.path.slice(0, at); S.ged.cols = S.ged.cols.slice(0, at); }
     await gedRefresh();
     showToast('Deplace dans la corbeille.','success');
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
 }
 
-async function gedZip(folderId){
+function gedZip(folderId){
   showToast('Preparation du ZIP...','info');
   window.location.href = '/api/qualite/ged/folders/' + (folderId||0) + '/zip';
 }
@@ -540,7 +576,7 @@ async function gedDeleteFile(id){
   try{
     const r = await api('/api/qualite/ged/files/' + id, {method:'DELETE'});
     if(!r.ok){ showToast('Erreur suppression','danger'); return; }
-    if(S.ged.detail && S.ged.detail.id === id) S.ged.detail = null;
+    if(S.ged.detail && S.ged.detail.id === id){ S.ged.detail = null; S.ged.selFile = null; }
     await gedRefresh();
     showToast('Deplace dans la corbeille.','success');
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
@@ -557,15 +593,14 @@ async function gedUploadVersion(fileList){
   const fd = new FormData();
   fd.append('file', fileList[0]);
   fd.append('commentaire', com || '');
+  const id = _gedVersionTarget;
   try{
-    const r = await api('/api/qualite/ged/files/' + _gedVersionTarget + '/version',
-                        {method:'POST', body: fd});
+    const r = await api('/api/qualite/ged/files/' + id + '/version', {method:'POST', body: fd});
     if(!r.ok){
       let msg = 'Erreur envoi version';
       try{ const j = await r.json(); if(j && j.detail) msg = j.detail; }catch(e){}
       showToast(msg,'danger'); return;
     }
-    const id = _gedVersionTarget;
     await gedRefresh();
     await gedOpenFile(id);
     showToast('Nouvelle version enregistree.','success');
@@ -585,14 +620,19 @@ async function gedRestoreVersion(fileId, version){
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
 }
 
-// ─── Apercu ──────────────────────────────────────────────────────────
+// ─── Apercu plein ecran ──────────────────────────────────────────────
 function gedPreview(id){
   const wrap = _refMroot();
   const src = '/api/qualite/ged/files/' + id + '/preview';
-  const f = (S.ged.content && (S.ged.content.files||[]).find(x => x.id === id))
-            || (S.ged.detail && S.ged.detail.id === id ? S.ged.detail : null)
-            || (S.ged.results && (S.ged.results.results||[]).find(x => x.id === id))
-            || {};
+  let f = (S.ged.detail && S.ged.detail.id === id) ? S.ged.detail : null;
+  if(!f){
+    for(const c of (S.ged.cols||[])){
+      const hit = (c.files||[]).find(x => x.id === id);
+      if(hit){ f = hit; break; }
+    }
+  }
+  if(!f && S.ged.results) f = (S.ged.results.results||[]).find(x => x.id === id);
+  f = f || {};
   const isImg = ['png','jpg','jpeg','gif','webp','svg','bmp'].indexOf((f.ext||'').toLowerCase()) !== -1;
   wrap.innerHTML = `
     <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
@@ -613,16 +653,15 @@ function gedPreview(id){
     </div>`;
 }
 
-// ─── Modale metadonnees (nom, description, tags, rattachement) ───────
+// ─── Modales metadonnees ─────────────────────────────────────────────
 async function gedEditMeta(id){
-  let f = S.ged.detail && S.ged.detail.id === id ? S.ged.detail : null;
+  let f = (S.ged.detail && S.ged.detail.id === id) ? S.ged.detail : null;
   if(!f){
     const r = await api('/api/qualite/ged/files/' + id);
     if(!r.ok){ showToast('Document introuvable','danger'); return; }
     f = await r.json();
   }
-  const wrap = _refMroot();
-  wrap.innerHTML = `
+  _refMroot().innerHTML = `
     <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
       <div class="modal" style="max-width:520px">
         <div class="modal-hd"><h3>Modifier le document</h3>
@@ -703,8 +742,7 @@ async function gedFolderProps(id){
   const r0 = await api('/api/qualite/ged/folders/' + id);
   if(!r0.ok){ showToast('Dossier introuvable','danger'); return; }
   const f = (await r0.json()).folder || {};
-  const wrap = _refMroot();
-  wrap.innerHTML = `
+  _refMroot().innerHTML = `
     <div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
       <div class="modal" style="max-width:480px">
         <div class="modal-hd"><h3>Proprietes du dossier</h3>
@@ -798,6 +836,9 @@ async function gedDrop(ev, targetFolderId, el){
         try{ const j = await r.json(); if(j && j.detail) msg = j.detail; }catch(e){}
         showToast(msg,'danger'); return;
       }
+      // Le dossier deplace peut avoir quitte le chemin ouvert : on le tronque
+      const at = S.ged.path.indexOf(d.id);
+      if(at !== -1){ S.ged.path = S.ged.path.slice(0, at); S.ged.cols = S.ged.cols.slice(0, at); }
     } else {
       const r = await api('/api/qualite/ged/files/' + d.id, {
         method:'PUT', headers:{'Content-Type':'application/json'},
@@ -843,7 +884,7 @@ function gedTrashHtml(){
   return `
     <div class="ged-res-hd">
       <div><b>Corbeille</b> <span class="ged-empty-hint">- rien n'est purge automatiquement</span></div>
-      <button class="btn btn-ghost ged-btn" onclick="gedOpen(S.ged.cwd)">Retour a l'arborescence</button>
+      <button class="btn btn-ghost ged-btn" onclick="S.ged.mode='browse';gedRender()">Retour a l'arborescence</button>
     </div>
     ${groups.length ? `<div class="ged-trash-list">${rows}</div>`
                     : '<div class="ged-empty">La corbeille est vide.</div>'}
@@ -854,7 +895,7 @@ async function gedTrashRestore(tid){
   try{
     const r = await api('/api/qualite/ged/trash/' + tid + '/restore', {method:'POST'});
     if(!r.ok){ showToast('Erreur restauration','danger'); return; }
-    await gedLoadTree();
+    await gedLoadTrashCount();
     await gedOpenTrash();
     showToast('Restaure.','success');
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
@@ -865,7 +906,7 @@ async function gedTrashPurge(tid){
   try{
     const r = await api('/api/qualite/ged/trash/' + tid, {method:'DELETE'});
     if(!r.ok){ showToast('Erreur purge','danger'); return; }
-    await gedLoadTree();
+    await gedLoadTrashCount();
     await gedOpenTrash();
     showToast('Supprime definitivement.','success');
   }catch(e){ if(e.message !== 'unauth') showToast('Erreur reseau','danger'); }
@@ -894,31 +935,7 @@ async function gedTrashPurge(tid){
     color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0 4px}
   .ged-search-x:hover{color:var(--danger)}
 
-  .ged-body{display:flex;gap:14px;align-items:flex-start}
-  .ged-side{flex:0 0 220px;background:var(--card);border:1px solid var(--border);border-radius:12px;
-    padding:10px 6px;max-height:calc(100vh - 220px);overflow-y:auto}
-  .ged-main{flex:1;min-width:0;background:var(--card);border:1px solid var(--border);border-radius:12px;
-    overflow:hidden}
-  .ged-detail{flex:0 0 300px;background:var(--card);border:1px solid var(--border);border-radius:12px;
-    max-height:calc(100vh - 220px);overflow-y:auto}
-
-  .ged-tree-hd{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);
-    font-weight:700;padding:2px 10px 8px}
-  .ged-tree-node{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:7px;cursor:pointer;
-    color:var(--text2);font-size:12.5px;transition:.12s;user-select:none}
-  .ged-tree-node:hover{background:var(--accent-bg);color:var(--accent)}
-  .ged-tree-node.cur{background:var(--accent-bg);color:var(--accent);font-weight:700}
-  .ged-tree-node.over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px}
-  .ged-tree-ico{flex:0 0 auto;opacity:.85}
-  .ged-tree-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ged-tree-n{flex:0 0 auto;font-size:10px;color:var(--muted);background:var(--bg);border-radius:999px;
-    padding:1px 6px}
-  .ged-caret{flex:0 0 12px;display:flex;align-items:center;justify-content:center;color:var(--muted);
-    transition:transform .15s}
-  .ged-caret.open{transform:rotate(90deg)}
-  .ged-caret.empty{visibility:hidden}
-  .ged-tree-empty{padding:14px 10px;font-size:11px;color:var(--muted);line-height:1.5;text-align:center}
-  .ged-tree-sep{height:1px;background:var(--border);margin:10px 8px}
+  .ged-shell{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 
   .ged-bc{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:12px 16px;
     border-bottom:1px solid var(--border);font-size:12.5px}
@@ -927,40 +944,59 @@ async function gedTrashPurge(tid){
   .ged-bc-item.cur{color:var(--text);font-weight:700}
   .ged-bc-sep{color:var(--muted)}
 
-  .ged-toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px 0}
+  .ged-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 16px;
+    border-bottom:1px solid var(--border)}
+  .ged-toolbar-sp{flex:1}
   .ged-btn{padding:7px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;
-    text-decoration:none}
+    text-decoration:none;white-space:nowrap}
   .ged-btn-danger:hover{color:var(--danger);border-color:var(--danger)}
+  .ged-count{font-size:10px;background:var(--accent-bg);color:var(--accent);border-radius:999px;
+    padding:1px 6px;font-weight:800}
 
-  .ged-drop{margin:12px 16px 0;padding:12px;border:2px dashed var(--border);border-radius:10px;
-    text-align:center;color:var(--muted);font-size:11.5px;transition:.12s}
-  .ged-drop.over{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+  /* ── Colonnes horizontales (Miller columns) ── */
+  .ged-cols{display:flex;overflow-x:auto;overflow-y:hidden;height:calc(100vh - 340px);min-height:320px;
+    scroll-behavior:smooth}
+  .ged-col{flex:0 0 246px;display:flex;flex-direction:column;min-width:0;
+    border-right:1px solid var(--border);background:var(--card);transition:background .12s}
+  .ged-col.last{background:var(--card)}
+  .ged-col.over{background:var(--accent-bg)}
+  .ged-col-hd{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);
+    background:var(--bg);position:sticky;top:0;z-index:1}
+  .ged-col-title{flex:1;min-width:0;font-size:10.5px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ged-col-n{font-size:10px;color:var(--muted);background:var(--card);border:1px solid var(--border);
+    border-radius:999px;padding:0 6px}
+  .ged-col-bd{flex:1;overflow-y:auto;padding:5px 5px 12px}
+  .ged-col-empty{padding:26px 12px;text-align:center;color:var(--muted);font-size:11.5px;line-height:1.6}
+  .ged-col-empty span{font-size:10.5px;opacity:.7}
 
-  .ged-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;padding:14px 16px 18px}
-  .ged-tile{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
-    gap:2px;padding:16px 10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);
-    cursor:pointer;transition:.14s;text-align:center;min-height:118px}
-  .ged-tile:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-1px)}
-  .ged-tile.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
-  .ged-tile.over{border-color:var(--accent);outline:2px dashed var(--accent);outline-offset:-3px}
-  .ged-tile-ico{margin-bottom:6px;color:var(--accent);display:flex;align-items:center;justify-content:center;
-    height:32px}
-  .ged-tile-name{font-size:12px;font-weight:600;color:var(--text);word-break:break-word;line-height:1.3;
-    max-width:100%}
-  .ged-tile-meta{font-size:10px;color:var(--muted);margin-top:3px}
-  .ged-tile-tags{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:5px}
-  .ged-tag{font-size:9.5px;padding:1px 6px;border-radius:999px;background:var(--accent-bg);
-    color:var(--accent);border:1px solid var(--border)}
-  .ged-tile-actions{position:absolute;top:6px;right:6px;display:none;gap:4px}
-  .ged-tile:hover .ged-tile-actions{display:flex}
-  .ged-tile-act{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:6px;
-    background:var(--card);color:var(--text2);border:1px solid var(--border);cursor:pointer;transition:.12s}
-  .ged-tile-act:hover{color:var(--accent);border-color:var(--accent)}
-  .ged-tile-act.del:hover{color:var(--danger);border-color:var(--danger)}
-  .ged-empty-folder{grid-column:1/-1;padding:44px 16px;text-align:center;color:var(--muted);font-size:12px}
+  .ged-row{position:relative;display:flex;align-items:center;gap:7px;padding:7px 8px;border-radius:7px;
+    cursor:pointer;color:var(--text2);font-size:12.5px;transition:.12s;user-select:none}
+  .ged-row:hover{background:var(--accent-bg);color:var(--accent)}
+  .ged-row.open{background:var(--accent-bg);color:var(--accent);font-weight:700}
+  .ged-row.sel{background:var(--accent-bg);color:var(--accent);box-shadow:inset 2px 0 0 var(--accent)}
+  .ged-row.over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px}
+  .ged-row-ico{flex:0 0 auto;display:flex;align-items:center}
+  .ged-row-ico.folder{color:var(--accent)}
+  .ged-row-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .ged-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ged-row-meta{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ged-row-chev{flex:0 0 auto;color:var(--muted);opacity:.6}
+  .ged-row.open .ged-row-chev{color:var(--accent);opacity:1}
+  .ged-row-acts{position:absolute;right:24px;top:50%;transform:translateY(-50%);display:none;gap:3px;
+    background:var(--card);border-radius:6px;padding:1px}
+  .ged-row-file .ged-row-acts{right:5px}
+  .ged-row:hover .ged-row-acts{display:flex}
+  .ged-row-act{width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:5px;
+    background:var(--bg);color:var(--text2);border:1px solid var(--border);cursor:pointer;transition:.12s}
+  .ged-row-act:hover{color:var(--accent);border-color:var(--accent)}
+  .ged-row-act.del:hover{color:var(--danger);border-color:var(--danger)}
 
-  .ged-ext{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:30px;
-    padding:0 7px;border-radius:7px;font-size:10px;font-weight:800;letter-spacing:.4px;
+  .ged-hint-bar{padding:9px 16px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted);
+    background:var(--bg)}
+
+  .ged-ext{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:20px;
+    padding:0 5px;border-radius:5px;font-size:9px;font-weight:800;letter-spacing:.3px;
     background:var(--border);color:var(--text2)}
   .ged-ext-pdf{background:rgba(248,113,113,.16);color:#f87171}
   .ged-ext-doc{background:rgba(96,165,250,.16);color:#60a5fa}
@@ -969,35 +1005,55 @@ async function gedTrashPurge(tid){
   .ged-ext-img{background:rgba(167,139,250,.16);color:#a78bfa}
   .ged-ext-zip{background:rgba(251,191,36,.16);color:#fbbf24}
 
-  .ged-link-badge{position:absolute;top:6px;left:6px;font-size:9px;font-weight:700;padding:1px 6px;
-    border-radius:999px;background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+  .ged-link-badge{flex:0 0 auto;font-size:8.5px;font-weight:700;padding:1px 5px;border-radius:999px;
+    background:var(--bg);border:1px solid var(--border);color:var(--muted)}
+  .ged-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px}
+  .ged-tag{font-size:9.5px;padding:1px 6px;border-radius:999px;background:var(--accent-bg);
+    color:var(--accent);border:1px solid var(--border)}
 
   .ged-empty{padding:56px 20px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6}
   .ged-empty-hint{font-size:11.5px;color:var(--muted);opacity:.85}
 
   .ged-res-hd{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;
     border-bottom:1px solid var(--border);font-size:13px;color:var(--text2);flex-wrap:wrap}
-  .ged-res-list{display:flex;flex-direction:column}
+  .ged-res-list{display:flex;flex-direction:column;max-height:calc(100vh - 300px);overflow-y:auto}
   .ged-res{display:flex;gap:12px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid var(--border);
     cursor:pointer;transition:.12s}
   .ged-res:hover{background:var(--accent-bg)}
-  .ged-res.sel{background:var(--accent-bg)}
   .ged-res-ico{flex:0 0 auto;padding-top:2px}
   .ged-res-body{flex:1;min-width:0}
   .ged-res-name{font-size:13px;font-weight:700;color:var(--text);word-break:break-word}
-  .ged-res-path{font-size:11px;color:var(--muted);margin-top:2px;cursor:pointer}
+  .ged-res-path{font-size:11px;color:var(--muted);margin-top:2px;cursor:pointer;display:inline-block}
   .ged-res-path:hover{color:var(--accent);text-decoration:underline}
   .ged-res-snip{font-size:11.5px;color:var(--text2);margin-top:5px;line-height:1.5;
     background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:6px 9px}
   .ged-res-snip mark{background:var(--accent-bg);color:var(--accent);font-weight:700;padding:0 2px;border-radius:3px}
   .ged-res-actions{flex:0 0 auto;display:flex;gap:5px}
 
-  .ged-detail-hd{display:flex;align-items:flex-start;gap:8px;padding:14px 14px 10px;
+  /* ── Tiroir de detail, superpose ── */
+  .ged-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;
+    animation:gedFade .16s ease-out}
+  .ged-drawer{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:92vw;z-index:901;
+    background:var(--card);border-left:1px solid var(--border);box-shadow:-16px 0 40px rgba(0,0,0,.28);
+    display:flex;flex-direction:column;animation:gedSlide .18s cubic-bezier(.32,.72,0,1)}
+  @keyframes gedFade{from{opacity:0}to{opacity:1}}
+  @keyframes gedSlide{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
+  .ged-drawer-hd{display:flex;align-items:flex-start;gap:9px;padding:16px 14px 12px;
     border-bottom:1px solid var(--border)}
-  .ged-detail-title{flex:1;font-size:13px;font-weight:700;color:var(--text);word-break:break-word;line-height:1.35}
-  .ged-detail-x{background:none;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;padding:0 2px}
-  .ged-detail-x:hover{color:var(--danger)}
-  .ged-detail-bd{padding:12px 14px 18px}
+  .ged-drawer-ico{flex:0 0 auto;padding-top:1px}
+  .ged-drawer-title{flex:1;font-size:13.5px;font-weight:700;color:var(--text);word-break:break-word;line-height:1.35}
+  .ged-drawer-x{background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:0 2px}
+  .ged-drawer-x:hover{color:var(--danger)}
+  .ged-drawer-bd{flex:1;overflow-y:auto;padding:14px 14px 24px}
+
+  .ged-d-thumb{position:relative;height:170px;border:1px solid var(--border);border-radius:9px;overflow:hidden;
+    margin-bottom:14px;background:var(--bg);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .ged-d-thumb img{max-width:100%;max-height:100%;object-fit:contain}
+  .ged-d-thumb iframe{width:100%;height:100%;border:none;pointer-events:none}
+  .ged-d-thumb-ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.32);color:#fff;font-size:11px;font-weight:700;opacity:0;transition:.15s}
+  .ged-d-thumb:hover .ged-d-thumb-ov{opacity:1}
+
   .ged-d-row{display:flex;gap:8px;font-size:11.5px;margin-bottom:8px;align-items:baseline}
   .ged-d-lbl{flex:0 0 92px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
   .ged-d-val{flex:1;min-width:0;color:var(--text2);word-break:break-word}
@@ -1022,7 +1078,7 @@ async function gedTrashPurge(tid){
     text-decoration:none;font-family:inherit}
   .ged-mini:hover{text-decoration:underline}
 
-  .ged-trash-list{display:flex;flex-direction:column}
+  .ged-trash-list{display:flex;flex-direction:column;max-height:calc(100vh - 300px);overflow-y:auto}
   .ged-trash-row{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)}
   .ged-trash-ico{flex:0 0 auto;color:var(--muted)}
   .ged-trash-body{flex:1;min-width:0}
@@ -1042,12 +1098,11 @@ async function gedTrashPurge(tid){
   .modal-bd input[type=text]:focus, .modal-bd select:focus, .modal-bd textarea:focus{
     border-color:var(--accent);outline:none}
 
-  @media(max-width:1200px){ .ged-detail{flex:0 0 260px} }
-  @media(max-width:980px){
-    .ged-body{flex-direction:column}
-    .ged-side{flex:1 1 auto;width:100%;max-height:220px}
-    .ged-detail{flex:1 1 auto;width:100%;max-height:none}
-    .ged-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  @media(max-width:900px){
+    .ged-cols{height:auto;max-height:none;flex-direction:column;overflow-x:hidden}
+    .ged-col{flex:1 1 auto;border-right:none;border-bottom:1px solid var(--border);max-height:260px}
+    .ged-col-bd{max-height:210px}
+    .ged-drawer{width:100%;max-width:100%}
   }
   `;
   document.head.appendChild(st);
