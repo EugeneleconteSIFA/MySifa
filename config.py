@@ -18,6 +18,7 @@ import secrets
 
 # ─── Chemins ──────────────────────────────────────────────────────
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+BAT_LOGO_PATH = os.path.join(BASE_DIR, "static", "sifa_logo.png")
 DATA_DIR   = os.path.join(BASE_DIR, "data")
 # Une seule base applicative : défaut data/production.db. Surcharge : variable d'environnement DB_PATH.
 # Sauvegarde : copier ce fichier + data/uploads/ ; optionnel : operations.json, data/emplacements_plan.csv
