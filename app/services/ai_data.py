@@ -5,8 +5,20 @@ import json
 import re
 from datetime import date, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.services.ai_context import ANOMALY_ROLES, get_user_scope
+
+_PARIS = ZoneInfo("Europe/Paris")
+
+
+def _now_paris() -> datetime:
+    """Heure de Paris en datetime naif (convention MySifa, cf. CLAUDE.md).
+
+    Le serveur tourne en UTC : un appel nu a datetime.now() decalait de 1 a 2 h
+    les lignes ecrites dans mouvements_stock / lots_stock par l'agent IA.
+    """
+    return datetime.now(_PARIS).replace(tzinfo=None)
 
 
 def fetch_context_for_role(conn, user: dict) -> str:
@@ -40,7 +52,7 @@ def fetch_anomalies(conn) -> str:
     """Détection d'anomalies — string vide si aucune."""
     sections: list[str] = []
 
-    cutoff_48h = (datetime.now() - timedelta(hours=48)).isoformat()
+    cutoff_48h = (_now_paris() - timedelta(hours=48)).isoformat()
     stale = conn.execute(
         """
         SELECT pe.id,
@@ -948,7 +960,7 @@ def execute_planning_close_dossier(conn, user: dict, payload: dict) -> str:
         return f"Dossier #{entry_id} introuvable."
     if row["statut"] == "termine":
         return f"Dossier #{payload.get('reference', entry_id)} déjà terminé."
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
     conn.execute(
         """
         UPDATE planning_entries
@@ -1017,7 +1029,7 @@ def execute_stock_adjust(conn, user: dict, payload: dict) -> str:
     raison = payload.get("raison") or "Ajustement agent IA"
     email = str(user.get("email") or "agent-ia")
     nom = str(user.get("nom") or "").strip() or None
-    now = datetime.now().isoformat()
+    now = _now_paris().isoformat()
 
     ex = conn.execute(
         "SELECT quantite FROM stock_emplacements WHERE produit_id = ? AND emplacement = ?",
