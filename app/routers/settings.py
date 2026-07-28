@@ -3316,6 +3316,7 @@ def _check_blocking_alert_due(conn, user, machine: str) -> list:
                     """SELECT no_dossier, operation_code, operation_category, date_operation
                        FROM production_data
                        WHERE machine=? AND date_operation >= ?
+                         AND COALESCE(est_annule, 0) = 0
                        ORDER BY date_operation DESC LIMIT 1""",
                     (machine, _window),
                 ).fetchone()
@@ -3338,7 +3339,8 @@ def _check_blocking_alert_due(conn, user, machine: str) -> list:
                     continue
                 _last_89 = conn.execute(
                     """SELECT MAX(date_operation) AS m FROM production_data
-                       WHERE no_dossier=? AND machine=? AND operation_code='89'""",
+                       WHERE no_dossier=? AND machine=? AND operation_code='89'
+                         AND COALESCE(est_annule, 0) = 0""",
                     (_dos, machine),
                 ).fetchone()
                 _last_89_at = _last_89["m"] if _last_89 else None
@@ -3432,6 +3434,7 @@ def _blocking_for_machine_impl(request: Request, machine: str = ""):
                         """SELECT no_dossier, operation_code, operation_category, date_operation
                            FROM production_data
                            WHERE machine=? AND date_operation >= ?
+                             AND COALESCE(est_annule, 0) = 0
                            ORDER BY date_operation DESC LIMIT 1""",
                         (machine, _window),
                     ).fetchone()
@@ -3449,7 +3452,8 @@ def _blocking_for_machine_impl(request: Request, machine: str = ""):
                         if not _ack_check:
                             _last_89 = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
+                                   WHERE no_dossier=? AND machine=? AND operation_code='89'
+                                     AND COALESCE(est_annule, 0) = 0""",
                                 (_dos, machine),
                             ).fetchone()
                             _last_89_at = _last_89["m"] if _last_89 else None
@@ -3902,7 +3906,7 @@ def _machine_name_from_user(conn, user: dict) -> Optional[str]:
     today_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d")
     row = conn.execute(
         "SELECT machine FROM production_data "
-        "WHERE operateur=? AND date_operation LIKE ? "
+        "WHERE operateur=? AND date_operation LIKE ? AND COALESCE(est_annule, 0) = 0 "
         "ORDER BY date_operation DESC, id DESC LIMIT 1",
         (user_label, today_paris + "%"),
     ).fetchone()
@@ -3922,13 +3926,15 @@ def _is_machine_in_production(conn, machine: str, exclude_saisie_id: int = None)
     if exclude_saisie_id is None:
         row = conn.execute(
             "SELECT operation_code FROM production_data "
-            "WHERE machine=? ORDER BY date_operation DESC, id DESC LIMIT 1",
+            "WHERE machine=? AND COALESCE(est_annule, 0) = 0 "
+            "ORDER BY date_operation DESC, id DESC LIMIT 1",
             (machine,)
         ).fetchone()
     else:
         row = conn.execute(
             "SELECT operation_code FROM production_data "
-            "WHERE machine=? AND id<>? ORDER BY date_operation DESC, id DESC LIMIT 1",
+            "WHERE machine=? AND id<>? AND COALESCE(est_annule, 0) = 0 "
+            "ORDER BY date_operation DESC, id DESC LIMIT 1",
             (machine, int(exclude_saisie_id))
         ).fetchone()
     if not row:
@@ -3984,7 +3990,8 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     last_stop_row = conn.execute(
         """SELECT MAX(date_operation) AS m FROM production_data
            WHERE machine=? AND operation_code NOT IN ('03', '88')
-           AND operation_code IS NOT NULL AND operation_code != ''""" + _excl_sql,
+           AND operation_code IS NOT NULL AND operation_code != ''
+           AND COALESCE(est_annule, 0) = 0""" + _excl_sql,
         (machine,) + _excl_params,
     ).fetchone()
     last_stop_iso = last_stop_row["m"] if last_stop_row else None
@@ -3995,13 +4002,15 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
                WHERE machine=? AND operation_code IN ('03', '88')
+               AND COALESCE(est_annule, 0) = 0
                AND date_operation > ?""" + _excl_sql,
             (machine, last_stop_iso) + _excl_params,
         ).fetchone()
     else:
         session_row = conn.execute(
             """SELECT MIN(date_operation) AS m FROM production_data
-               WHERE machine=? AND operation_code IN ('03', '88')""" + _excl_sql,
+               WHERE machine=? AND operation_code IN ('03', '88')
+               AND COALESCE(est_annule, 0) = 0""" + _excl_sql,
             (machine,) + _excl_params,
         ).fetchone()
     session_start_dt = _parse_paris_dt(session_row["m"]) if session_row else None
@@ -4175,6 +4184,7 @@ def maintenance_alerts_active(request: Request):
                         """SELECT no_dossier, operation_code, operation_category, date_operation
                            FROM production_data
                            WHERE machine=? AND date_operation >= ?
+                             AND COALESCE(est_annule, 0) = 0
                            ORDER BY date_operation DESC LIMIT 1""",
                         (effective_machine, _window),
                     ).fetchone()
@@ -4201,7 +4211,8 @@ def maintenance_alerts_active(request: Request):
                             # postérieur au dernier code 89 du dossier.
                             _last_89 = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
-                                   WHERE no_dossier=? AND machine=? AND operation_code='89'""",
+                                   WHERE no_dossier=? AND machine=? AND operation_code='89'
+                                     AND COALESCE(est_annule, 0) = 0""",
                                 (_dos, effective_machine),
                             ).fetchone()
                             _last_89_at = _last_89["m"] if _last_89 else None
@@ -4220,6 +4231,7 @@ def maintenance_alerts_active(request: Request):
                     # "un autre op a fait le 89 → alerte chez tout le monde".
                     q = ("SELECT no_dossier FROM production_data "
                          "WHERE machine=? AND operation_code=? "
+                         "  AND COALESCE(est_annule, 0) = 0 "
                          "  AND (operateur=? OR operateur=?)")
                     p = [user_machine, op_code, operateur, user_nom or operateur]
                     if last_ack_at_str:
@@ -4301,6 +4313,7 @@ def maintenance_alerts_active(request: Request):
                         """SELECT no_dossier FROM production_data
                            WHERE machine=?
                              AND date_operation >= ?
+                             AND COALESCE(est_annule, 0) = 0
                              AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                            ORDER BY date_operation DESC LIMIT 1""",
                         (user_machine, now_paris.strftime("%Y-%m-%dT00:00:00")),
@@ -4732,6 +4745,7 @@ async def maintenance_alerts_ack(alert_id: int, request: Request):
                 """SELECT no_dossier FROM production_data
                    WHERE machine=?
                      AND date_operation >= ?
+                     AND COALESCE(est_annule, 0) = 0
                      AND no_dossier IS NOT NULL AND TRIM(no_dossier) != ''
                    ORDER BY date_operation DESC LIMIT 1""",
                 (machine, window_start),
@@ -4858,7 +4872,9 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
         ).fetchone()
         current_metrage = m_row["dernier_metrage"] if m_row else None
         for key, pat, exclude in queries:
-            sql = "SELECT date_operation FROM production_data WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
+            sql = ("SELECT date_operation FROM production_data "
+                   "WHERE machine=? AND COALESCE(est_annule, 0) = 0 "
+                   "AND LOWER(operation) LIKE LOWER(?)")
             params = [machine, pat]
             if exclude:
                 sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
@@ -4871,7 +4887,8 @@ def maintenance_wearparts_last(request: Request, machine: str = ""):
             change_date = row["date_operation"]
             m_at_row = conn.execute(
                 "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
-                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
+                "WHERE machine=? AND operation_code IN ('01','89') AND COALESCE(est_annule, 0) = 0 "
+                "AND date_operation <= ? "
                 "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
                 "ORDER BY date_operation DESC, id DESC LIMIT 1",
                 (machine, change_date),
@@ -4914,7 +4931,8 @@ async def maintenance_wearparts_info(request: Request):
             change_date = str(change_date)
             m_at_row = conn.execute(
                 "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
-                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
+                "WHERE machine=? AND operation_code IN ('01','89') AND COALESCE(est_annule, 0) = 0 "
+                "AND date_operation <= ? "
                 "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
                 "ORDER BY date_operation DESC, id DESC LIMIT 1",
                 (machine, change_date),
