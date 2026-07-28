@@ -504,6 +504,10 @@ CODE_FIN_DOS    = "89"
 CODE_CALAGE     = "02"
 CODE_PRODUCTION = "03"
 CODE_REPRISE    = "88"
+# 90 = annulation d'un dossier par l'operateur. Cloture la session au meme
+# titre que 89 pour le calcul du temps et du metrage : la matiere et le temps
+# ont ete reellement consommes, seule la LIVRAISON du dossier n'a pas eu lieu.
+CODE_ANNUL_DOS  = "90"
 
 # Ensemble complet des codes traités comme du temps de calage
 # (02 calage, 10-12 réglages, 58-60 préparations, 67 vidange, 74-75 essais)

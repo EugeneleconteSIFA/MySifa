@@ -1,7 +1,10 @@
 from datetime import datetime
 from collections import defaultdict
 from database import parse_datetime
-from config import CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE, CODE_DEBUT_DOS, CODE_FIN_DOS
+from config import (
+    CODES_CALAGE, CODE_PRODUCTION, CODE_REPRISE, CODE_DEBUT_DOS, CODE_FIN_DOS,
+    CODE_ANNUL_DOS,
+)
 
 # ─── Calcul temps par dossier ─────────────────────────────────────
 def compute_dossier_times(rows):
@@ -11,6 +14,10 @@ def compute_dossier_times(rows):
     - temps_prod     : durée cumulée des codes 03 + 88 (reprise)
     - temps_total    : de Début dossier (01) à Fin dossier (89), hors calage
     - temps_total_avec_calage : de 01 à 89 calage compris
+
+    Une annulation de dossier (90) borne la session exactement comme un 89 :
+    le temps passé et la matière engagée sont réels, seule la livraison du
+    dossier n'a pas eu lieu. La session est alors marquée `annule=True`.
     La durée d'une opération = écart jusqu'à l'opération suivante du même opérateur/jour.
     """
     # Grouper par opérateur + jour, trier
@@ -38,6 +45,7 @@ def compute_dossier_times(rows):
         "designation": None,
         "quantite_a_traiter": 0,
         "quantite_traitee": 0,
+        "annule": False,
     })
 
     for (operateur, jour), items in by_op_day.items():
@@ -78,9 +86,11 @@ def compute_dossier_times(rows):
             if code == CODE_DEBUT_DOS and dt:
                 if acc["debut_ts"] is None or dt < acc["debut_ts"]:
                     acc["debut_ts"] = dt
-            if code == CODE_FIN_DOS and dt:
+            if code in (CODE_FIN_DOS, CODE_ANNUL_DOS) and dt:
                 if acc["fin_ts"] is None or dt > acc["fin_ts"]:
                     acc["fin_ts"] = dt
+                if code == CODE_ANNUL_DOS:
+                    acc["annule"] = True
 
             # Durée de cette opération = écart avec la suivante du même opérateur/jour
             if dt is None:
