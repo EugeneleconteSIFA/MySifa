@@ -6318,12 +6318,18 @@ function renderRessourcesDetail(){
             <button class="btn btn-ghost four-nav-btn" onclick="navNextFournisseur()" ${nextId?'':'disabled'} title="Fournisseur suivant">→</button>
           </div>
         </div>
-        <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-ghost" onclick="openCertsZipModal('fournisseur')" style="padding:8px 12px;font-size:12px" title="Télécharger les documents en ZIP" ${certs.length?'':'disabled'}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Télécharger (ZIP)
+          </button>
+          <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btn-ghost" onclick="openFournisseurSettingsModal(${f.id})" style="padding:8px 12px;font-size:12px" title="Paramètres du fournisseur">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             Paramètres
           </button>
           <button class="btn btn-accent" onclick="openAddCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+          </div>
         </div>
       </div>
       <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:10px">
@@ -6334,6 +6340,88 @@ function renderRessourcesDetail(){
     </div>
     <div class="res-cert-list">${certsHtml}</div>
   `;
+}
+
+// ─── Telechargement ZIP des documents (modal de selection) ────────────────
+function _zipScopeData(scope){
+  if(scope==='groupe'){
+    const dg = S.currentGroupe;
+    if(!dg) return null;
+    return { certs: dg.certificats||[], titre: dg.groupe||'', param: 'groupe='+encodeURIComponent(dg.groupe||'') };
+  }
+  const d = S.currentRes;
+  if(!d || !d.fournisseur) return null;
+  return { certs: d.certificats||[], titre: d.fournisseur.nom||'', param: 'four_id='+encodeURIComponent(d.fournisseur.id) };
+}
+
+function openCertsZipModal(scope){
+  const sc = _zipScopeData(scope);
+  if(!sc || !sc.certs.length){ showToast('Aucun document a telecharger','info'); return; }
+  const rows = sc.certs.map(c=>{
+    const meta = [certKindLabel(c.statut)];
+    if(c.date_expiration) meta.push('expire le '+fmtDate(c.date_expiration));
+    if(c.groupe_ref) meta.push('niveau groupe');
+    else if(c.fournisseur_branche) meta.push(c.fournisseur_branche);
+    if(c.size_bytes) meta.push((c.size_bytes/1024).toFixed(0)+' Ko');
+    return `<label style="display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer">
+      <input type="checkbox" class="zip-chk" value="${c.id}" checked onchange="_zipSyncCount()" style="accent-color:var(--accent);width:15px;height:15px;margin-top:2px;flex:none">
+      <span style="min-width:0;flex:1">
+        <span style="display:block;font-size:13px;font-weight:600;color:var(--text)">${escHtml(c.titre||c.original_name||'Certificat')}</span>
+        <span style="display:block;font-size:11px;color:var(--muted);margin-top:3px">${escHtml(meta.join(' · '))}</span>
+      </span>
+    </label>`;
+  }).join('');
+
+  const n = sc.certs.length;
+  const html = `<div class="modal-backdrop" onclick="if(event.target===this)closeMroot()">
+    <div class="modal" style="max-width:560px" onclick="event.stopPropagation()">
+      <div class="modal-hd"><h3>Télécharger les documents</h3><button class="modal-x" onclick="closeMroot()">×</button></div>
+      <div class="modal-bd" style="max-height:70vh;overflow:auto">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">${escHtml(sc.titre)} · ${n} document${n>1?'s':''}. Les documents cochés seront réunis dans une archive ZIP.</div>
+        <label style="display:flex;gap:10px;align-items:center;padding:8px 11px;border-bottom:1px solid var(--border);margin-bottom:10px;cursor:pointer">
+          <input type="checkbox" id="zip-all" checked onchange="_zipToggleAll(this)" style="accent-color:var(--accent);width:15px;height:15px">
+          <span style="font-size:12px;font-weight:700;color:var(--text)">Tout sélectionner</span>
+        </label>
+        <div style="display:flex;flex-direction:column;gap:8px">${rows}</div>
+      </div>
+      <div class="modal-ft">
+        <button class="btn btn-ghost" onclick="closeMroot()">Annuler</button>
+        <button class="btn btn-accent" id="zip-dl-btn" onclick="submitCertsZip('${scope}')">Télécharger (${n})</button>
+      </div>
+    </div>
+  </div>`;
+  _refMroot().innerHTML = html;
+}
+
+function _zipSyncCount(){
+  const chks = Array.from(document.querySelectorAll('.zip-chk'));
+  const n = chks.filter(x=>x.checked).length;
+  const btn = document.getElementById('zip-dl-btn');
+  if(btn){ btn.textContent = n ? 'Télécharger ('+n+')' : 'Télécharger'; btn.disabled = !n; }
+  const all = document.getElementById('zip-all');
+  if(all){ all.checked = n>0 && n===chks.length; all.indeterminate = n>0 && n<chks.length; }
+}
+
+function _zipToggleAll(el){
+  document.querySelectorAll('.zip-chk').forEach(x=>{ x.checked = el.checked; });
+  _zipSyncCount();
+}
+
+function submitCertsZip(scope){
+  const sc = _zipScopeData(scope);
+  if(!sc) return;
+  const chks = Array.from(document.querySelectorAll('.zip-chk'));
+  const sel = chks.filter(x=>x.checked).map(x=>x.value);
+  if(!sel.length){ showToast('Sélectionnez au moins un document','info'); return; }
+  let url = '/api/qualite/ressources/certificats.zip?'+sc.param;
+  if(sel.length !== chks.length) url += '&ids='+sel.join(',');
+  const a = document.createElement('a');
+  a.href = url; a.rel = 'noopener'; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ try{ a.remove(); }catch(e){} }, 2000);
+  closeMroot();
+  showToast(sel.length+' document'+(sel.length>1?'s':'')+' — préparation de l archive ZIP','success');
 }
 
 // ─── Navigation prev/next fournisseur ──────────────────────────────────────
@@ -6701,8 +6789,14 @@ function renderGroupeDetail(){
           <span class="res-group-badge">Groupe · ${branches.length} branche${branches.length>1?'s':''}</span>
         </div>
       </div>
-      <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-accent" onclick="openAddGroupeCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-ghost" onclick="openCertsZipModal('groupe')" style="padding:8px 12px;font-size:12px" title="Télécharger les documents en ZIP" ${certs.length?'':'disabled'}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Télécharger (ZIP)
+        </button>
+        <div class="qual-write" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-accent" onclick="openAddGroupeCertModal()" style="padding:8px 14px;font-size:12px">+ Ajouter un certificat</button>
+        </div>
       </div>
     </div>
 

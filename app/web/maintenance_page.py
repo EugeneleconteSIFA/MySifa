@@ -1716,44 +1716,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </section>
 
-        <!-- Liste d'opérations de maintenance (catalogue) — copie synchronisée avec l'onglet Opérations -->
-        <!-- Source : table maintenance_codes (Paramètres → Maintenance), filtre periodique=OUI. -->
-        <div class="ops-list">
-          <div class="ops-list-head">
-            <div class="ops-list-title">Liste d'opérations de maintenance</div>
-            <div class="ops-list-head-right">
-              <div class="ops-list-count js-cat-count">0 opération</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-                <select class="ops-select js-ops-cat-machine" onchange="setOpsCatMachine(this.value)" style="min-width:120px;font-size:13px;padding:6px 10px">
-                  <option value="Cohésio 1">Cohésio 1</option>
-                  <option value="Cohésio 2">Cohésio 2</option>
-                  <option value="DSI">DSI</option>
-                  <option value="Repiquage">Repiquage</option>
-                </select>
-              </div>
-              <span class="ops-list-hint" style="font-size:12px;color:var(--muted)">Gestion : Paramètres → Maintenance</span>
-            </div>
-          </div>
-          <div class="ops-table-wrap">
-            <table class="ops-table">
-              <thead>
-                <tr>
-                  <th data-sort-cat="nom" onclick="sortOpsTypes('nom')">Nom<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="niveau" onclick="sortOpsTypes('niveau')">Niveau<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="categorie" onclick="sortOpsTypes('categorie')">Catégorie<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="intervalle" onclick="sortOpsTypes('intervalle')">Intervalle de temps<span class="sort-ico">↕</span></th>
-                  <th data-sort-cat="derniere_intervention" onclick="sortOpsTypes('derniere_intervention')">Dernière intervention<span class="sort-ico">↕</span></th>
-                  <th aria-label="Actions"></th>
-                </tr>
-              </thead>
-              <tbody class="js-cat-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
         </div><!-- /plan-subview-calendrier -->
+      </div><!-- /view-planning -->
 
       <!-- View : Contrôles -->
       <div class="view adm-only" id="view-controles" style="display:none">
@@ -5909,12 +5873,27 @@ function _wearPartStatusFor(pieceId, machine){
 }
 // Compte les pieces qualifiantes pour les filtres 'all' et 'never', pour
 // alimenter les compteurs des chips statut de la sous-toolbar.
+// Status d'une position (overdue/soon/ok/never/unknown), meme logique que
+// _maintComputeStatus pour les operations periodiques mais sur le temps
+// UNIQUEMENT — cf. regle produit v2.4.23 : metrage n'est pas un facteur retard.
+function _wearPartPositionStatus(pieceId, pos, machine){
+  const wpCode = _findWearPartCode(pieceId, pos);
+  if(!wpCode) return 'unknown';
+  const refDays = _parseFrequenceDays(wpCode.intervalle || '');
+  const lastDate = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  const daysSince = _daysSinceFromIso(lastDate);
+  return _maintComputeStatus(refDays, daysSince);
+}
+// Compte chaque POSITION comme une operation distincte, ventilee par statut.
+// Une piece Couteaux avec Bande faite hier + Rive faite aujourd'hui = 2 dans .ok
+// (et non 1 dans .all comme avant v2.4.25).
 function _wearPartsCounts(machine){
-  const c = { all: 0, never: 0 };
+  const c = { overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
   WEARPART_PIECES.forEach(p => {
-    const st = _wearPartStatusFor(p.id, machine);
-    if(st.hasData.length > 0) c.all++;
-    if(st.noData.length  > 0) c.never++;
+    _wearPartPositionsOf(p).forEach(pos => {
+      const st = _wearPartPositionStatus(p.id, pos, machine);
+      if(c[st] !== undefined) c[st]++;
+    });
   });
   return c;
 }
@@ -6024,23 +6003,24 @@ function _renderWearPartsGroup(machine, statusFilter){
   if(WEARPART_LAST_DATES_STATE.machine !== machine){
     loadWearPartLastDates(machine);
   }
-  // v2.4.21 : filtre les pieces selon le statusFilter et force la position
-  // affichee sur une position qui matche le filtre (renseignee pour 'all',
-  // vide pour 'never'). Pour tout autre filtre, on ne montre pas les pieces
-  // d'usure (elles ont leur propre logique de retard, hors du systeme
-  // overdue/soon/ok des cartes periodiques).
-  const filter = (statusFilter === 'never') ? 'never' : 'all';
+  // v2.4.25 : filtre les positions par statut fin (overdue/soon/ok/never).
+  // - 'all'   : positions renseignees (overdue + soon + ok)
+  // - 'never' : positions jamais saisies + statut unknown
+  // - autre   : positions dont le statut match exactement (ex. 'ok' → toutes
+  //             les positions actuellement à jour, jamais celles en retard).
+  // Les onglets Bande/Rive n'affichent que les positions matchantes.
   const eligible = [];
   WEARPART_PIECES.forEach(p => {
-    const st = _wearPartStatusFor(p.id, machine);
-    const pool = (filter === 'never') ? st.noData : st.hasData;
-    if(pool.length === 0) return;  // pas de position matchant le filtre
-    // Garde la position courante si elle est dans le pool, sinon prend la premiere du pool
+    const matchingPositions = _wearPartPositionsOf(p).filter(pos => {
+      const st = _wearPartPositionStatus(p.id, pos, machine);
+      if(statusFilter === 'all')   return (st !== 'never' && st !== 'unknown');
+      if(statusFilter === 'never') return (st === 'never' || st === 'unknown');
+      return st === statusFilter;
+    });
+    if(matchingPositions.length === 0) return;
     const currentPos = getWearPartPos(p.id, machine);
-    const forcedPos = (pool.indexOf(currentPos) !== -1) ? currentPos : pool[0];
-    // v2.4.22 : on transporte aussi le pool pour n'afficher que les onglets
-    // Bande/Rive qui matchent le filtre (l'autre est masqué, pas juste inerte).
-    eligible.push({ piece: p, pos: forcedPos, matchingPositions: pool });
+    const forcedPos = (matchingPositions.indexOf(currentPos) !== -1) ? currentPos : matchingPositions[0];
+    eligible.push({ piece: p, pos: forcedPos, matchingPositions });
   });
   if(eligible.length === 0) return '';  // section vide → caller n'affiche rien
   const cards = eligible.map(({piece: p, pos, matchingPositions}) => {
@@ -6266,15 +6246,12 @@ function renderMaintCards(){
   _refreshMaintChipState();
   _refreshMaintCounters();
   const showWearParts = (catFilter === 'remplacements');
-  // La section "Pièces d'usure" est rendue quand :
-  //   - le toggle catégorie est sur "Remplacements"
-  //   - ET le filtre statut est 'all' (pièces avec donnees) ou 'never' (pièces
-  //     sans donnees). Pour 'overdue' / 'soon' / 'ok', on n'affiche pas les
-  //     pièces d'usure (leur logique de retard est indépendante).
-  // v2.4.21 : _renderWearPartsGroup renvoie '' si aucune piece ne matche →
-  // la section entière (titre inclus) disparait automatiquement.
-  const wpFilterActive = (statusFilter === 'all' || statusFilter === 'never');
-  const wearPartsHtml = (showWearParts && wpFilterActive)
+  // v2.4.25 : les pieces d'usure sont maintenant comptees + affichees dans
+  // TOUS les filtres statut (leur logique de retard temps est integree au
+  // systeme unifie overdue/soon/ok/never). _renderWearPartsGroup renvoie ''
+  // si aucune position ne matche → section entiere (titre inclus) masquee
+  // automatiquement.
+  const wearPartsHtml = showWearParts
     ? _renderWearPartsGroup(machine, statusFilter) : '';
   // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
   // exclure des sections par intervalle (sinon les changements couteaux/
@@ -6345,23 +6322,25 @@ function renderMaintCards(){
   // proches — les deux = "pas de donnée exploitable").
   const statusCounts = { overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
   enriched.forEach(e => { statusCounts[e.status] = (statusCounts[e.status] || 0) + 1; });
+  // v2.4.25 : en categorie "Remplacements", chaque POSITION de piece d'usure
+  // est une operation independante, comptee dans son statut propre. On ajoute
+  // les 5 buckets aux compteurs avant de calculer neverAndUnknown / all.
+  if(showWearParts){
+    const wpc = _wearPartsCounts(machine);
+    statusCounts.overdue += wpc.overdue;
+    statusCounts.soon    += wpc.soon;
+    statusCounts.ok      += wpc.ok;
+    statusCounts.never   += wpc.never;
+    statusCounts.unknown += wpc.unknown;
+  }
   const neverAndUnknown = statusCounts.never + statusCounts.unknown;
   // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
   statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
-  // v2.4.21 : quand on est en catégorie "Remplacements", les pieces d'usure
-  // affichees s'ajoutent aux compteurs "Tous" et "Jamais saisi" pour rester
-  // coherent avec ce qui est reellement rendu a l'ecran.
-  if(showWearParts){
-    const wpc = _wearPartsCounts(machine);
-    statusCounts.all += wpc.all;
-    // neverAndUnknown est deja calcule, on ajoute directement pour l'affichage
-  }
-  const wpCountsForNever = showWearParts ? _wearPartsCounts(machine).never : 0;
   document.querySelectorAll('[data-status-count]').forEach(el => {
     const key = el.getAttribute('data-status-count');
     if(key === 'never'){
-      // Le chip "Jamais saisi" englobe unknown ET les pieces d'usure sans données.
-      el.textContent = String(neverAndUnknown + wpCountsForNever);
+      // Le chip "Jamais saisi" englobe never + unknown.
+      el.textContent = String(neverAndUnknown);
     } else {
       el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
     }
