@@ -371,9 +371,6 @@ body.light .btn:not(.btn-ghost):not(.btn-soft){color:#fff}
 .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
 body.light .btn.btn-ghost{color:var(--text2)}
 body.light .btn.btn-ghost:hover{color:var(--accent)}
-.btn-ghost.mp-back-btn{background:var(--accent-bg);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:700}
-.btn-ghost.mp-back-btn:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);border-color:var(--accent);color:var(--accent)}
-body.light .btn-ghost.mp-back-btn{color:var(--accent)}
 .btn-sm{background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:7px 14px;
   font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s,box-shadow .15s,transform .05s}
 body.light .btn-sm{color:#fff}
@@ -736,96 +733,6 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-mat-item:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
 .bes-mat-item-ref{font-weight:600;color:var(--text);font-size:13px}
 .bes-mat-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
-
-/* ── Matières premières ── */
-.mp-page{padding:0 0 24px}
-.mp-pills{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-.mp-pill{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:6px 14px;
-  font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .15s}
-.mp-pill:hover{border-color:var(--accent);color:var(--accent)}
-.mp-pill.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-/* Pills frontal éclatées par sous-section — teintes bleues distinctes */
-.mp-pill-frontal-couche:hover{border-color:#0284c7;color:#0284c7}
-.mp-pill-frontal-couche.active{background:rgba(125,211,252,.22);border-color:#0284c7;color:#0284c7}
-.mp-pill-frontal-synthetique:hover{border-color:#0891b2;color:#0891b2}
-.mp-pill-frontal-synthetique.active{background:rgba(34,211,238,.18);border-color:#0891b2;color:#0891b2}
-.mp-pill-frontal-thermiques:hover{border-color:#4f46e5;color:#4f46e5}
-.mp-pill-frontal-thermiques.active{background:rgba(99,102,241,.20);border-color:#4f46e5;color:#4f46e5}
-.mp-pill-frontal-velin:hover{border-color:#1e3a8a;color:#1e3a8a}
-.mp-pill-frontal-velin.active{background:rgba(30,58,138,.22);border-color:#1e3a8a;color:#1e3a8a}
-.mp-search-wrap{
-  margin-bottom:18px;position:relative;display:flex;align-items:center;
-  background:var(--card);border:1.5px solid var(--accent);border-radius:12px;
-  box-shadow:0 0 0 3px var(--accent-bg);transition:border-color .15s,box-shadow .15s
-}
-.mp-search-wrap:focus-within{
-  border-color:var(--accent);
-  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)
-}
-body.light .mp-search-wrap:focus-within{
-  box-shadow:0 0 0 4px rgba(8,145,178,.14)
-}
-.mp-search-icon{
-  position:absolute;left:14px;top:50%;transform:translateY(-50%);
-  display:flex;align-items:center;color:var(--accent);pointer-events:none;z-index:1
-}
-.mp-search{
-  width:100%;background:transparent;border:none;border-radius:12px;
-  padding:14px 16px 14px 46px;color:var(--text);font-size:15px;font-weight:500;
-  font-family:inherit
-}
-.mp-search::placeholder{color:var(--muted);font-weight:500;opacity:1}
-.mp-search:focus{outline:none}
-.mp-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start}
-.mp-list > .mp-section-head,.mp-list > .mp-subsection-head,.mp-list > .mp-empty{grid-column:1/-1}
-@media (max-width:780px){.mp-list{grid-template-columns:1fr}}
-.mp-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s}
-.mp-card:hover{border-color:var(--accent)}
-.mp-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.mp-card-ref{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text);flex:1;min-width:0}
-.mp-card-top-end{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto}
-.mp-card-stock-total{
-  font-family:ui-monospace,monospace;font-size:13px;font-weight:700;color:var(--accent);
-  white-space:nowrap;line-height:1.2
-}
-.mp-card-stock-total.alert{color:var(--warn)}
-.mp-card-mid{display:flex;align-items:flex-end;gap:12px;margin-top:8px}
-.mp-card-info{flex:1;min-width:0}
-.mp-card-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
-.mp-card-stock-mini{font-size:12px;font-weight:600;color:var(--muted);margin-top:4px;line-height:1.3}
-.mp-card-stock-mini.alert{color:var(--warn)}
-.mp-act-icon{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;
-  border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:8px;
-  background:var(--accent-bg);color:var(--accent);cursor:pointer;
-  flex-shrink:0;transition:border-color .15s,color .15s,background .15s,filter .15s;font-family:inherit}
-.mp-act-icon:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 22%,transparent);filter:brightness(1.05)}
-.action-bar .mp-act-icon{height:auto;min-height:44px;width:44px}
-.mp-card-des{font-size:13px;color:var(--text2);line-height:1.4}
-.mp-card-meta{font-size:12px;color:var(--muted);margin-top:4px}
-.mp-card-warn{font-size:12px;color:var(--warn);margin-top:4px}
-.mp-card-actions-inline{display:flex;gap:6px;flex-wrap:nowrap}
-.mp-card-actions-inline .mp-act-btn{flex:none;min-width:0;padding:6px 10px;font-size:11px;border-radius:8px;white-space:nowrap}
-.action-bar .mp-act-btn{flex:1;min-width:90px;padding:12px 8px;border-radius:12px;font-size:13px;font-weight:700;
-  display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid transparent;
-  transition:border-color .15s,opacity .15s,filter .15s}
-.action-bar .mp-act-btn:hover{filter:brightness(1.05)}
-.action-bar .mp-act-btn.mp-act-entree:hover{border-color:var(--success)}
-.action-bar .mp-act-btn.mp-act-sortie:hover{border-color:var(--danger)}
-.mp-act-btn{border:1px solid transparent;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;
-  font-family:inherit;transition:border-color .15s,opacity .15s,filter .15s}
-.mp-act-btn:hover{filter:brightness(1.05)}
-.mp-act-entree{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
-.mp-act-entree:hover{border-color:var(--success)}
-.mp-act-sortie{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
-.mp-act-sortie:hover{border-color:var(--danger)}
-.mp-act-edit{background:color-mix(in srgb,var(--muted) 18%,transparent);color:var(--text2)}
-.mp-act-ajust{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
-.mp-act-transf{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
-.mp-menu-btn{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:16px;cursor:pointer;color:var(--text2)}
-.mp-menu-drop{position:absolute;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--border);
-  border-radius:10px;padding:6px;min-width:140px;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-.mp-menu-drop button{display:block;width:100%;text-align:left;margin-bottom:4px}
-.mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
 /* ── Convertir une unité de vente (référentiel) ── */
 .ref-convert-unite-card .cu-sugg-empty{padding:14px;color:var(--muted);font-size:13px;text-align:center}
 .cu-sugg-list{margin-top:8px;border:1px solid var(--border);border-radius:10px;overflow:hidden}
@@ -1038,92 +945,12 @@ body.light .mp-search-wrap:focus-within{
 #mroot>*{pointer-events:auto}
 body.sb-open #mroot{pointer-events:none!important;z-index:50!important}
 body.sb-open #mroot>*{pointer-events:none!important}
-.mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
-.mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
-.mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
-.mp-modal.mp-modal-mvt{padding:0;overflow:visible;display:flex;flex-direction:column}
-.mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}
-.mp-modal-mvt-head h3{margin:0;font-size:16px;font-weight:700}
-.mp-modal-mvt-head-entree{background:color-mix(in srgb,var(--success) 16%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--success) 32%,transparent)}
-.mp-modal-mvt-head-entree h3{color:var(--success)}
-.mp-modal-mvt-head-sortie{background:color-mix(in srgb,var(--danger) 16%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--danger) 32%,transparent)}
-.mp-modal-mvt-head-sortie h3{color:var(--danger)}
-.mp-modal-mvt-head-pf-entree{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--pf-entree) 35%,transparent)}
-.mp-modal-mvt-head-pf-entree h3{color:var(--pf-entree)}
-.mp-modal-mvt-head-pf-sortie{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--pf-sortie) 35%,transparent)}
-.mp-modal-mvt-head-pf-sortie h3{color:var(--pf-sortie)}
-.mp-modal-mvt-head-ajustement{background:color-mix(in srgb,var(--warn) 14%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--warn) 28%,transparent)}
-.mp-modal-mvt-head-ajustement h3{color:var(--warn)}
-.mp-modal-mvt-head-inventaire{background:rgba(139,92,246,.14);
-  border-bottom:1px solid rgba(139,92,246,.32)}
-.mp-modal-mvt-head-inventaire h3{color:#a78bfa}
-body.light .mp-modal-mvt-head-inventaire h3{color:#7c3aed}
-.mp-modal-mvt-head-transfert{background:color-mix(in srgb,var(--accent) 14%,transparent);
-  border-bottom:1px solid color-mix(in srgb,var(--accent) 28%,transparent)}
-.mp-modal-mvt-head-transfert h3{color:var(--accent)}
-.mp-modal-mvt-body{padding:16px 20px 20px;overflow-y:auto;overflow-x:visible;flex:1}
-.mp-field.empl-field-wrap,.mp-field.ref-field-wrap{position:relative;overflow:visible}
-.mp-modal-mvt-body .mp-field.empl-field-wrap:focus-within,.mp-modal-mvt-body .mp-field.ref-field-wrap:focus-within{z-index:30}
 .empl-combo-wrap .empl-suggestions{
   position:absolute;top:100%;left:0;right:0;z-index:400;display:block;
   margin-top:4px;max-height:200px;overflow-y:auto;
   background:var(--card);border:1px solid var(--border);border-radius:8px;
   box-shadow:0 8px 24px rgba(0,0,0,.28)}
 body.light .empl-combo-wrap .empl-suggestions{box-shadow:0 8px 20px rgba(15,23,42,.12)}
-.mp-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
-.mp-modal-head h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
-.mp-modal-close{background:transparent;border:none;color:var(--text2);font-size:22px;line-height:1;cursor:pointer;
-  display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;
-  border-radius:8px;flex-shrink:0;font-family:inherit;transition:background .15s,color .15s}
-.mp-modal-close:hover{color:var(--text);background:color-mix(in srgb,var(--text) 10%,transparent)}
-.mp-modal-mvt-head-pf-entree .mp-modal-close{color:color-mix(in srgb,var(--pf-entree) 75%,var(--text))}
-.mp-modal-mvt-head-pf-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-entree) 18%,transparent);color:var(--pf-entree)}
-.mp-modal-mvt-head-pf-sortie .mp-modal-close{color:color-mix(in srgb,var(--pf-sortie) 75%,var(--text))}
-.mp-modal-mvt-head-pf-sortie .mp-modal-close:hover{background:color-mix(in srgb,var(--pf-sortie) 18%,transparent);color:var(--pf-sortie)}
-.mp-modal-mvt-head-entree .mp-modal-close{color:color-mix(in srgb,var(--success) 70%,var(--text))}
-.mp-modal-mvt-head-entree .mp-modal-close:hover{background:color-mix(in srgb,var(--success) 18%,transparent);color:var(--success)}
-.mp-modal-mvt-head-sortie .mp-modal-close{color:color-mix(in srgb,var(--danger) 70%,var(--text))}
-.mp-modal-mvt-head-sortie .mp-modal-close:hover{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
-.mp-modal-sub{font-size:12px;color:var(--muted);margin:-8px 0 14px;line-height:1.5}
-.mp-field{margin-bottom:12px}
-.mp-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.mp-field input:not([type=checkbox]):not([type=radio]),.mp-field select,.mp-field textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
-.mp-field input:focus:not([type=checkbox]):not([type=radio]),.mp-field select:focus,.mp-field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
-body.light .mp-field input:focus:not([type=checkbox]):not([type=radio]),body.light .mp-field select:focus,body.light .mp-field textarea:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
-.mp-field input[type=checkbox],.mp-field input[type=radio]{width:auto;padding:0;margin:0;flex-shrink:0;accent-color:var(--accent)}
-.mp-field textarea{min-height:72px;resize:vertical}
-.mp-readonly{padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2)}
-.mp-hint{font-size:12px;color:var(--muted);margin-top:4px}
-.mp-hint.err{color:var(--danger)}
-.mp-modal-actions{display:flex;gap:10px;margin-top:16px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
-.mp-modal-actions .btn-ghost{min-width:96px}
-.mp-modal-actions .btn{min-width:120px}
-.mp-modal-actions .btn-ghost:hover{border-color:var(--text2);color:var(--text);background:color-mix(in srgb,var(--text) 6%,transparent)}
-.mp-modal-actions-right{display:flex;gap:10px;margin-left:auto}
-.mp-btn-icon-danger{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
-  border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);border-radius:10px;
-  background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);cursor:pointer;font-family:inherit;
-  transition:border-color .15s,background .15s}
-.mp-btn-icon-danger:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 22%,transparent)}
-.mp-btn-icon-danger:disabled{opacity:.4;cursor:not-allowed}
-.mp-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;justify-content:flex-end}
-.mp-drawer{background:var(--card);border-left:1px solid var(--border);width:100%;max-width:480px;height:100%;display:flex;flex-direction:column}
-.mp-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--border);flex-shrink:0}
-.mp-drawer-body{flex:1 1 0;min-height:80px;overflow-y:auto;padding:16px 18px}
-.mp-drawer-foot{padding:16px 18px;border-top:1px solid var(--border);flex:0 1 auto;max-height:70vh;overflow-y:auto}
-.mp-admin-row{padding:12px 0;border-bottom:1px solid var(--border)}
-.mp-admin-row:last-child{border-bottom:none}
-.mp-admin-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-.mp-admin-edit{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:10px}
-.mp-admin-err{font-size:12px;color:var(--danger);margin-top:8px}
-@media(max-width:640px){
-  .mp-drawer{max-width:100%}
-}
 /* ── Historique mouvements ── */
 .hist-page{padding:0 0 24px}
 .hist-title{font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--text);margin:0 0 4px}
@@ -1690,9 +1517,6 @@ body:not(.light) .plan-pill-tip-jours.plan-pill-c-rouge{color:#f87171}
 .btn-confirm.pf-entree{background:var(--pf-entree)}
 .btn-confirm.pf-sortie{background:var(--pf-sortie)}
 .btn-confirm.inventaire{background:var(--c2)}
-.mp-modal-actions .btn.btn-pf-entree{background:var(--pf-entree);color:#0a0e17;border:none;font-weight:700}
-.mp-modal-actions .btn.btn-pf-sortie{background:var(--pf-sortie);color:#fff;border:none;font-weight:700}
-body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 
 /* ── Toast ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:600;
@@ -1938,6 +1762,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
+<script src="/static/mysifa_stock_modals.js"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -2105,6 +1931,94 @@ let S = {
   // Compteur matières incomplètes (frontal/glassine/complexe sans laize/prix/métrage)
   matieresIncompleteCount: 0,
 };
+// --- Modales de mouvement de stock ---------------------------------------
+// Le code de ces modales vit dans /static/mysifa_stock_modals.js, partage
+// avec Saisie Production (/fabrication). On alias ici les points d'entree et
+// les utilitaires : aucune copie locale, donc aucune divergence possible.
+const _SM = window.MySifaStockModals;
+const _fetchPaletteTypes = _SM.utils._fetchPaletteTypes;
+const _fetchZ1DossierContext = _SM.utils._fetchZ1DossierContext;
+const _fmtDateFRz1 = _SM.utils._fmtDateFRz1;
+const _initZ1Enrichment = _SM.utils._initZ1Enrichment;
+const _openZ1DossierPicker = _SM.utils._openZ1DossierPicker;
+const _renderZ1DossierBanner = _SM.utils._renderZ1DossierBanner;
+const _renderZ1PalettesBlock = _SM.utils._renderZ1PalettesBlock;
+const _z1DossierRow = _SM.utils._z1DossierRow;
+const _z1FormatDossierLine = _SM.utils._z1FormatDossierLine;
+const _z1IsTermine = _SM.utils._z1IsTermine;
+const _z1MakeNoteFromDossier = _SM.utils._z1MakeNoteFromDossier;
+const _z1SetDossier = _SM.utils._z1SetDossier;
+const _z1UniteBadge = _SM.utils._z1UniteBadge;
+const _z1UniteLabel = _SM.utils._z1UniteLabel;
+const _z1UniteVente = _SM.utils._z1UniteVente;
+const allPageEmplacementChoices = _SM.utils.allPageEmplacementChoices;
+const buildMpEmplacementField = _SM.utils.buildMpEmplacementField;
+const fmtStockParisNow = _SM.utils.fmtStockParisNow;
+const isStockEmplacementAuSol = _SM.utils.isStockEmplacementAuSol;
+const isStockEmplacementCode = _SM.utils.isStockEmplacementCode;
+const isStockEmplacementSortieProd = _SM.utils.isStockEmplacementSortieProd;
+const isStockZoneSpeciale = _SM.utils.isStockZoneSpeciale;
+const mpCategorieKey = _SM.utils.mpCategorieKey;
+const mpCtx = _SM.utils.mpCtx;
+const mpEmplacementValue = _SM.utils.mpEmplacementValue;
+const mpIsBobineCategory = _SM.utils.mpIsBobineCategory;
+const mpIsLaizeeCategory = _SM.utils.mpIsLaizeeCategory;
+const mpIsPaletteCategory = _SM.utils.mpIsPaletteCategory;
+const mpQuantiteFieldLabel = _SM.utils.mpQuantiteFieldLabel;
+const mpQuantiteInputAttrs = _SM.utils.mpQuantiteInputAttrs;
+const mpStockLine = _SM.utils.mpStockLine;
+const mpUniteNom = _SM.utils.mpUniteNom;
+const mpUniteShort = _SM.utils.mpUniteShort;
+const renderMpMouvementModal = _SM.utils.renderMpMouvementModal;
+const resolvePfProduitByRef = _SM.utils.resolvePfProduitByRef;
+const stockEmplLabel = _SM.utils.stockEmplLabel;
+const submitMpMouvement = _SM.utils.submitMpMouvement;
+const submitPfMouvement = _SM.utils.submitPfMouvement;
+const validateMpEmplacement = _SM.utils.validateMpEmplacement;
+const wireStockEmplSearch = _SM.utils.wireStockEmplSearch;
+const wireStockProduitSearch = _SM.utils.wireStockProduitSearch;
+const MP_CAT_LABELS = _SM.constants.MP_CAT_LABELS;
+const MP_MVT_TITLES = _SM.constants.MP_MVT_TITLES;
+const PF_MVT_TITLES = _SM.constants.PF_MVT_TITLES;
+const MP_CATEGORIES_LAIZEES = _SM.constants.MP_CATEGORIES_LAIZEES;
+const _STOCK_ZONES_SPECIALES = _SM.constants._STOCK_ZONES_SPECIALES;
+function openModalMouvement() { return _SM.openMp.apply(null, arguments); }
+function renderPfMouvementModal() { return _SM.openPf.apply(null, arguments); }
+function submitMouvement() { return _SM.submitMouvement.apply(null, arguments); }
+function sortirLot() { return _SM.sortirLot.apply(null, arguments); }
+function openMoveLotModal() { return _SM.openMoveLot.apply(null, arguments); }
+function configureStockModals() {
+  _SM.configure({
+    el: el, api: api, showToast: showToast, closeMroot: closeMroot,
+    fN: fN, fDateTime: fDateTime, fU: fU,
+    // getStockEmplacements() etait appelee sans jamais etre definie :
+    // ReferenceError avale par le setTimeout, autocompletion de l'emplacement
+    // de destination morte dans « Deplacer le lot ». C'est bien la liste des
+    // emplacements de la page qui etait attendue.
+    getStockEmplacements: allPageEmplacementChoices,
+    stockAtEmpl: fetchPfStockAtEmpl,
+    emplacements: () => _emplListFromDB,
+    uniteVenteDefaut: STOCK_UNITE_VENTE_DEFAUT,
+    emplAuSol: STOCK_EMPL_AU_SOL, emplAuSolLabel: STOCK_EMPL_AU_SOL_LABEL,
+    emplSortieProd: STOCK_EMPL_SORTIE_PROD,
+    emplSortieProdLabel: STOCK_EMPL_SORTIE_PROD_LABEL,
+    state: () => ({ tab: S.tab, matieres: S.matieres, selProduit: S.selProduit,
+                    selEmpl: S.selEmpl, selMatiere: S.selMatiere,
+                    fabStockMode: S.fabStockMode }),
+    setMatieres: (v) => { S.matieres = v; },
+    reload: async (quoi, arg) => {
+      if (quoi === 'dashboard')      return loadDashboard();
+      if (quoi === 'matieres')       return loadMatieres();
+      if (quoi === 'produits-finis') return loadProduitsFinis();
+      if (quoi === 'production')     return loadProduction();
+      if (quoi === 'inventaire')     return loadInventaireList();
+      if (quoi === 'produit')        return loadProduit(arg);
+      if (quoi === 'emplacement')    return loadEmplacement(arg);
+      if (quoi === 'sel-matiere')    return refreshSelMatiere();
+      if (quoi === 'empl-custom')    return loadPageEmplCustom();
+    },
+  });
+}
 
 const HIST_PAGE_SIZE = 50;
 
@@ -3127,38 +3041,7 @@ function invV2ValidateFullInventaire() {
   document.getElementById('mroot').appendChild(overlay);
 }
 
-async function submitMouvement(body) {
-  try {
-    const r = await api('/api/stock/mouvement', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-    if (!r) return;
-    showToast('Stock mis à jour → ' + fN(r.quantite_apres));
-    S.modalMvt = null;
-    S.pfModal = null;
-    document.querySelector('.modal-overlay')?.remove();
-    closeMroot();
-    if (S.selProduit) await loadProduit(S.selProduit.produit.id);
-    else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
-    else if (S.tab === 'dashboard') await loadDashboard();
-    else if (S.tab === 'produits-finis') await loadProduitsFinis();
-    else if (S.tab === 'production') await loadProduction();
-    else if (S.tab === 'inventaire') await loadInventaireList();
-  } catch(e) { showToast(e.message, 'error'); }
-}
 
-function fmtStockParisNow() {
-  const d = new Date();
-  try {
-    const parts = new Intl.DateTimeFormat('fr-FR', {
-      timeZone: 'Europe/Paris',
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    }).formatToParts(d);
-    const g = (t) => (parts.find(p => p.type === t) || {}).value || '';
-    return g('day') + '/' + g('month') + '/' + g('year') + ' ' + g('hour') + ':' + g('minute');
-  } catch (e) {
-    return fDateTime(d.toISOString().slice(0, 16));
-  }
-}
 
 function buildLotTransporteurBtn(produitId, emplacement, row) {
   const qLot = row.quantite_lot_fifo != null ? row.quantite_lot_fifo : row.quantite;
@@ -3217,179 +3100,7 @@ function buildLotActionBtns(produitId, emplacement, row) {
   );
 }
 
-async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, nbLots) {
-  document.querySelector('.modal-overlay')?.remove();
-  
-  const qLabel = fU(qLot, unite || '');
-  const locLbl = stockEmplLabel(emplacement);
-  const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
-  
-  const overlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===overlay) closeMroot(); }}});
-  const sheet = el('div', { cls:'modal-sheet', style: { maxWidth: '480px' } });
-  sheet.addEventListener('click', e => e.stopPropagation());
-  
-  // Destination emplacement input with suggestions
-  const destEmplInp = el('input', { 
-    cls:'field-input', 
-    type:'text', 
-    placeholder:'Emplacement destination (ex. A001)', 
-    autocomplete:'off',
-    style:{direction:'ltr', textTransform:'uppercase'}
-  });
-  const suggWrap = el('div', { cls:'empl-suggestions', style:{position:'absolute', top:'100%', left:'0', right:'0', zIndex:'120'} });
-  const destError = el('div', { cls:'field-error', style:{color:'var(--danger)',fontSize:'12px',marginTop:'4px',display:'none'} });
-  
-  let destTimer = null;
-  let selectedDestEmpl = null;
-  
-  destEmplInp.addEventListener('input', () => {
-    selectedDestEmpl = null;
-    destError.style.display = 'none';
-    clearTimeout(destTimer);
-    const q = destEmplInp.value.trim().toUpperCase();
-    if (!q) { suggWrap.innerHTML = ''; suggWrap.style.display = 'none'; return; }
-    destTimer = setTimeout(() => {
-      const empls = getStockEmplacements();
-      const filtered = empls.filter(e => e.includes(q)).slice(0, 8);
-      suggWrap.innerHTML = '';
-      if (!filtered.length) { suggWrap.style.display = 'none'; return; }
-      filtered.forEach(code => {
-        const _dCls = 'empl-suggest-item' + (isStockEmplacementAuSol(code) ? ' empl-suggest-au-sol' : isStockEmplacementSortieProd(code) ? ' empl-suggest-sortie-prod' : '');
-        const _dTxt = isStockEmplacementAuSol(code) ? (STOCK_EMPL_AU_SOL_LABEL + ' — stock à expédier') : isStockEmplacementSortieProd(code) ? STOCK_EMPL_SORTIE_PROD_LABEL : code;
-        const row = el('div', { cls: _dCls,
-          on:{ click: () => {
-            destEmplInp.value = code;
-            selectedDestEmpl = code;
-            suggWrap.innerHTML = '';
-            suggWrap.style.display = 'none';
-          }}
-        }, _dTxt);
-        suggWrap.appendChild(row);
-      });
-      suggWrap.style.display = '';
-    }, 150);
-  });
-  
-  const confirmBtn = el('button', { 
-    cls:'btn-confirm', 
-    style:{background:'var(--violet)', color:'#fff'},
-    on:{ click: async () => {
-      const destEmpl = (destEmplInp.value.trim().toUpperCase() || selectedDestEmpl);
-      if (!destEmpl) { showToast('Emplacement destination requis', 'error'); return; }
-      if (destEmpl === emplacement) { showToast('Même emplacement que la source', 'error'); return; }
-      
-      // Confirmation modal
-      const confirmOverlay = el('div', { cls:'modal-overlay', on:{ click: e => { if(e.target===confirmOverlay) closeMroot(); }}});
-      const confirmSheet = el('div', { cls:'modal-sheet', style: { maxWidth: '420px' } });
-      confirmSheet.addEventListener('click', e => e.stopPropagation());
-      
-      const qtyHighlight = el('span', { style:{fontWeight:'800', fontSize:'18px', color:'var(--violet)'} }, qLabel);
-      const destHighlight = el('span', { style:{fontWeight:'700', color:'var(--violet)'} }, stockEmplLabel(destEmpl));
-      
-      confirmSheet.appendChild(el('div', { cls:'modal-title' }, 'Confirmer le déplacement'));
-      confirmSheet.appendChild(el('div', { cls:'modal-sub' }, 
-        'Déplacer ', qtyHighlight, ' vers ', destHighlight, ' ?'
-      ));
-      if (nbLots > 1) {
-        confirmSheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} }, 
-          nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera déplacé.'
-        ));
-      }
-      
-      confirmSheet.appendChild(el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
-        el('button', { cls:'btn-cancel', type:'button', on:{ click:() => confirmOverlay.remove() } }, 'Annuler'),
-        el('button', {
-          cls:'btn-confirm',
-          style:{background:'var(--violet)', color:'#fff'},
-          on:{ click: async () => {
-            try {
-              const r = await api('/api/stock/deplacer-lot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  produit_id: produitId,
-                  emplacement_source: emplacement,
-                  emplacement_destination: destEmpl,
-                }),
-              });
-              if (!r) return;
-              showToast('Lot déplacé — stock : ' + fN(r.quantite_apres));
-              confirmOverlay.remove();
-              overlay.remove();
-              if (S.selProduit) await loadProduit(S.selProduit.produit.id);
-              else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
-              else if (S.tab === 'produits-finis') await loadProduitsFinis();
-              else if (S.tab === 'production') await loadProduction();
-              else if (S.tab === 'dashboard') await loadDashboard();
-            } catch (e) { showToast(e.message, 'error'); }
-          }}
-        }, 'Faire le déplacement')
-      ));
-      
-      confirmOverlay.appendChild(confirmSheet);
-      document.body.appendChild(confirmOverlay);
-    }}
-  }, 'Déplacer');
-  
-  const destField = el('div', { cls:'modal-field', style:{position:'relative'} },
-    el('label', { cls:'field-label' }, 'Emplacement destination'),
-    destEmplInp,
-    suggWrap,
-    destError
-  );
-  
-  sheet.appendChild(el('div', { cls:'modal-title' }, 'Déplacer le lot'));
-  sheet.appendChild(el('div', { cls:'modal-sub' }, 
-    'Déplacer ', el('span', { style:{fontWeight:'700', fontSize:'16px', color:'var(--violet)'} }, qLabel), 
-    ' depuis ', el('span', { style:{fontWeight:'600'} }, loc)
-  ));
-  if (nbLots > 1) {
-    sheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} }, 
-      nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera déplacé.'
-    ));
-  }
-  sheet.appendChild(destField);
-  sheet.appendChild(el('div', { cls:'modal-actions', style:{marginTop:'20px'} },
-    el('button', { cls:'btn-cancel', type:'button', on:{ click:() => overlay.remove() } }, 'Annuler'),
-    confirmBtn
-  ));
-  
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
-  destEmplInp.focus();
-}
 
-async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, opts) {
-  const expedition = !!(opts && opts.expedition);
-  const qLabel = fU(qLot, unite || '');
-  const locLbl = stockEmplLabel(emplacement);
-  const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
-  let msg = expedition
-    ? ('Expédition transporteur — sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?')
-    : ('Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?');
-  if (nbLots > 1) {
-    msg += '\n\n' + nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera retiré.';
-  }
-  if (!confirm(msg)) return;
-  const payload = { produit_id: produitId, emplacement };
-  if (expedition) {
-    payload.note = 'Expédition transporteur — ' + fmtStockParisNow();
-  }
-  try {
-    const r = await api('/api/stock/sortir-lot', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r) return;
-    showToast(expedition ? 'Lot expédié — stock : ' + fN(r.quantite_apres) : 'Lot sorti — stock : ' + fN(r.quantite_apres));
-    if (S.selProduit) await loadProduit(S.selProduit.produit.id);
-    else if (S.selEmpl) await loadEmplacement(S.selEmpl.emplacement);
-    else if (S.tab === 'produits-finis') await loadProduitsFinis();
-    else if (S.tab === 'production') await loadProduction();
-    else if (S.tab === 'dashboard') await loadDashboard();
-  } catch (e) { showToast(e.message, 'error'); }
-}
 
 // Emplacements chargés depuis /api/stock/emplacements-list (plan + stock réel)
 let _emplListFromDB = [];
@@ -3430,39 +3141,6 @@ function addPageCustomEmplacement(code) {
   const cur = loadPageEmplCustom();
   if (cur.includes(t)) return false;
   cur.push(t); savePageEmplCustom(cur); return true;
-}
-const _STOCK_ZONES_SPECIALES = [STOCK_EMPL_AU_SOL, STOCK_EMPL_SORTIE_PROD];
-function allPageEmplacementChoices() {
-  const base = [...new Set([..._emplListFromDB, ...loadPageEmplCustom()])]
-    .filter(c => !_STOCK_ZONES_SPECIALES.includes(c))
-    .sort();
-  return [..._STOCK_ZONES_SPECIALES, ...base];
-}
-function isStockEmplacementAuSol(code) {
-  return String(code || '').trim().toUpperCase() === STOCK_EMPL_AU_SOL;
-}
-function isStockEmplacementSortieProd(code) {
-  return String(code || '').trim().toUpperCase() === STOCK_EMPL_SORTIE_PROD;
-}
-function isStockZoneSpeciale(code) {
-  return _STOCK_ZONES_SPECIALES.includes(String(code || '').trim().toUpperCase());
-}
-function isStockEmplacementCode(s) {
-  if (isStockZoneSpeciale(s)) return true;
-  const t = String(s || '').trim().toUpperCase();
-  if (t.length < 2) return false;
-  const c0 = t.charCodeAt(0);
-  if (c0 < 65 || c0 > 90) return false;
-  for (let i = 1; i < t.length; i++) {
-    const c = t.charCodeAt(i);
-    if (c < 48 || c > 57) return false;
-  }
-  return true;
-}
-function stockEmplLabel(code) {
-  if (isStockEmplacementAuSol(code)) return STOCK_EMPL_AU_SOL_LABEL;
-  if (isStockEmplacementSortieProd(code)) return STOCK_EMPL_SORTIE_PROD_LABEL;
-  return String(code || '').trim().toUpperCase();
 }
 function stockEmplCodeClass(code) {
   if (isStockEmplacementAuSol(code)) return 'empl-code empl-au-sol';
@@ -4172,142 +3850,8 @@ function openMvtModal(produit_id, ref, emplacement, type='entree') {
 let emplTimer = null;
 let emplInpRef = null;
 
-async function resolvePfProduitByRef(ref) {
-  const term = String(ref || '').trim();
-  if (!term) return null;
-  const upper = term.toUpperCase();
-  try {
-    const r = await api('/api/stock/search?q=' + encodeURIComponent(term) + '&limit=15');
-    const list = (r && r.produits) ? r.produits : [];
-    let found = list.find(p => String(p.reference || '').toUpperCase() === upper);
-    if (found) return found;
-    if (list.length === 1) return list[0];
-    const rows = await api('/api/stock/produits?q=' + encodeURIComponent(term) + '&limit=15');
-    const arr = Array.isArray(rows) ? rows : [];
-    found = arr.find(p => String(p.reference || '').toUpperCase() === upper);
-    if (found) return found;
-    return arr.length === 1 ? arr[0] : null;
-  } catch (e) {
-    return null;
-  }
-}
 
-function wireStockProduitSearch(refInp, suggWrap, onSelect) {
-  let timer = null;
-  const runSearch = async (q) => {
-    if (!q || q.length < 1) {
-      suggWrap.innerHTML = '';
-      return;
-    }
-    try {
-      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
-      const list = (r && r.produits) ? r.produits : [];
-      suggWrap.innerHTML = '';
-      if (!list.length) {
-        suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun résultat pour « ' + q + ' »'));
-        suggWrap.style.display = 'block';
-        return;
-      }
-      list.forEach(p => {
-        const label = (p.reference || '') + (p.designation ? ' — ' + p.designation : '');
-        const unite = String(p.unite || '').trim();
-        const row = el('div', {
-          cls: 'empl-sugg-item empl-sugg-item-with-unit',
-          on: { mousedown: (e) => { e.preventDefault(); onSelect(p); } },
-        },
-          el('span', { cls: 'empl-sugg-item-label' }, label),
-          unite ? el('span', { cls: 'empl-sugg-item-unit-badge' }, unite) : null,
-        );
-        suggWrap.appendChild(row);
-      });
-      suggWrap.style.display = 'block';
-    } catch (e) {
-      suggWrap.innerHTML = '';
-      suggWrap.style.display = 'none';
-    }
-  };
-  refInp.addEventListener('input', () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => runSearch(refInp.value.trim()), 220);
-  });
-  refInp.addEventListener('focus', () => {
-    runSearch(refInp.value.trim());
-  });
-  refInp.addEventListener('keydown', async (e) => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const p = await resolvePfProduitByRef(refInp.value);
-    if (p) onSelect(p);
-    else showToast('Référence introuvable.', 'error');
-  });
-  refInp.addEventListener('blur', () => {
-    setTimeout(() => {
-      if (document.activeElement === refInp) return;
-      suggWrap.innerHTML = '';
-      suggWrap.style.display = 'none';
-    }, 220);
-  });
-}
 
-function wireStockEmplSearch(emplInp, suggWrap) {
-  let timer = null;
-  const pick = (code) => {
-    emplInp.value = String(code || '').toUpperCase();
-    suggWrap.innerHTML = '';
-    suggWrap.style.display = 'none';
-  };
-  const renderList = (codes) => {
-    suggWrap.innerHTML = '';
-    if (!codes.length) {
-      suggWrap.appendChild(el('div', { cls: 'empl-sugg-item muted' }, 'Aucun emplacement'));
-      suggWrap.style.display = 'block';
-      return;
-    }
-    codes.forEach(code => {
-      suggWrap.appendChild(el('div', {
-        cls: 'empl-sugg-item',
-        on: { mousedown: (e) => { e.preventDefault(); pick(code); } },
-      }, stockEmplLabel(code)));
-    });
-    suggWrap.style.display = 'block';
-  };
-  const runLocal = (q) => {
-    const qq = String(q || '').trim().toUpperCase();
-    if (!qq) return allPageEmplacementChoices().slice(0, 12);
-    return allPageEmplacementChoices().filter(c => c.includes(qq)).slice(0, 12);
-  };
-  const runSearch = async (q) => {
-    const local = runLocal(q);
-    if (!q) {
-      renderList(local);
-      return;
-    }
-    renderList(local);
-    try {
-      const r = await api('/api/stock/search?q=' + encodeURIComponent(q) + '&limit=8');
-      const fromApi = (r?.emplacements || []).map(e => e.emplacement);
-      renderList([...new Set([...local, ...fromApi])].slice(0, 12));
-    } catch (e) {
-      renderList(local);
-    }
-  };
-  emplInp.addEventListener('focus', () => {
-    runSearch(emplInp.value.trim());
-  });
-  emplInp.addEventListener('input', () => {
-    emplInp.value = emplInp.value.toUpperCase();
-    const q = emplInp.value.trim();
-    clearTimeout(timer);
-    timer = setTimeout(() => runSearch(q), 180);
-  });
-  emplInp.addEventListener('blur', () => {
-    setTimeout(() => {
-      if (document.activeElement === emplInp) return;
-      suggWrap.innerHTML = '';
-      suggWrap.style.display = 'none';
-    }, 220);
-  });
-}
 
 function searchEmplSugg(q, suggWrap, emplInp) {
   const inp = emplInp || emplInpRef;
@@ -5209,49 +4753,9 @@ function renderImportRefsModal() {
   document.body.appendChild(ov);
 }
 
-const MP_CAT_LABELS = { mandrin: 'Mandrin', palette: 'Palette', adhesif: 'Adhésif', carton: 'Carton', frontal: 'Frontal', glassine: 'Glassine', complexe: 'Complexe', autre: 'Autre' };
 
-function mpCategorieKey(cat) {
-  return String(cat || '').trim().toLowerCase();
-}
-function mpCtx(catOrMatiere) {
-  if (catOrMatiere && typeof catOrMatiere === 'object') {
-    return {
-      categorie: mpCategorieKey(catOrMatiere.categorie),
-      palettes_par_pile: parseFloat(catOrMatiere.palettes_par_pile) || 0,
-      couleur: (catOrMatiere.couleur || '').trim(),
-    };
-  }
-  return { categorie: mpCategorieKey(catOrMatiere), palettes_par_pile: 0, couleur: '' };
-}
-function mpIsBobineCategory(catOrMatiere) {
-  const c = mpCtx(catOrMatiere).categorie;
-  return c === 'frontal' || c === 'glassine' || c === 'complexe';
-}
 function mpIsGlassineCategory(catOrMatiere) {
   return mpCtx(catOrMatiere).categorie === 'glassine';
-}
-function mpUniteNom(catOrMatiere) {
-  const c = mpCtx(catOrMatiere).categorie;
-  if (mpIsBobineCategory(c)) return 'bobine';
-  if (c === 'carton') return 'palette';
-  if (c === 'palette') return 'palette';
-  if (c === 'autre') return 'unite';
-  return 'palette';
-}
-function mpUniteShort(catOrMatiere) {
-  const u = mpUniteNom(catOrMatiere);
-  if (u === 'bobine') return 'bob.';
-  if (u === 'palette') return 'pal.';
-  if (u === 'unite') return 'u.';
-  return 'pal.';
-}
-function mpQuantiteFieldLabel(catOrMatiere) {
-  const u = mpUniteNom(catOrMatiere);
-  if (u === 'bobine') return 'Quantité (bobines)';
-  if (u === 'palette') return 'Quantité (palettes)';
-  if (u === 'unite') return 'Quantité (unités)';
-  return 'Quantité (palettes)';
 }
 function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
@@ -5263,21 +4767,8 @@ function mpSeuilFieldLabel(catOrMatiere) {
 function mpStockMini(qty, catOrMatiere) {
   return fN(qty) + ' ' + mpUniteShort(mpCtx(catOrMatiere));
 }
-function mpStockLine(qty, catOrMatiere) {
-  const ctx = mpCtx(catOrMatiere);
-  return fN(qty) + ' ' + mpUniteShort(ctx);
-}
 function mpStockTotalLabel(catOrMatiere) {
   return 'Stock';
-}
-function mpQuantiteInputAttrs(catOrMatiere) {
-  const c = mpCtx(catOrMatiere).categorie;
-  if (c === 'palette') return { type: 'number', min: '40', step: '1' };
-  if (mpIsBobineCategory(c) || c === 'mandrin' || c === 'carton') {
-    return { type: 'number', min: '1', step: '1' };
-  }
-  if (c === 'autre') return { type: 'number', min: '0', step: '1' };
-  return { type: 'number', min: '0.5', step: '0.5' };
 }
 function mpAdminHint(cat) {
   if (cat === 'palette') return 'Stock géré en palettes. Quantité minimale par saisie : 40.';
@@ -5286,9 +4777,6 @@ function mpAdminHint(cat) {
   if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
   if (cat === 'autre') return 'Stock géré en unités. Une sous-section permet de regrouper des références par usage.';
   return 'Stock géré en palettes (pal.).';
-}
-function mpIsPaletteCategory(catOrMatiere) {
-  return mpCtx(catOrMatiere).categorie === 'palette';
 }
 const MVT_TYPE_LABELS = {
   entree: 'Entrée', sortie: 'Sortie', ajustement: 'Ajustement',
@@ -5313,16 +4801,6 @@ function timeAgo(iso) {
   return dd + '/' + mm;
 }
 
-const MP_MVT_TITLES = {
-  entree: 'Entrée en stock',
-  sortie: 'Sortie de stock',
-  ajustement: 'Ajustement d\'inventaire',
-  transfert: 'Transfert',
-};
-const PF_MVT_TITLES = {
-  entree: 'Entrée produit fini',
-  sortie: 'Sortie produit fini',
-};
 const MP_PILL_CATS = [
   { id: 'tout', label: 'Tout' },
   { id: 'mandrin', label: 'Mandrins' },
@@ -5372,10 +4850,6 @@ function mpFrontalSousSections(matieres) {
   return out;
 }
 
-const MP_CATEGORIES_LAIZEES = new Set(['frontal', 'glassine', 'complexe']);
-function mpIsLaizeeCategory(cat) {
-  return MP_CATEGORIES_LAIZEES.has((cat || '').toLowerCase());
-}
 
 // Catégories qui ont la notion d'unité d'achat + conditionnement (unités/palette)
 const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'adhesif', 'mandrin']);
@@ -8631,39 +8105,8 @@ function buildMatieres() {
     el('div', { cls: 'hist-page' }, head, banner, searchWrap, pills, subPills, list));
 }
 
-function buildMpEmplacementField() {
-  const emplInp = el('input', {
-    cls: 'field-input empl-upper',
-    attrs: {
-      type: 'text',
-      placeholder: 'Emplacement (ex. A121, ' + STOCK_EMPL_AU_SOL + ', ' + STOCK_EMPL_SORTIE_PROD + ')…',
-      autocomplete: 'off',
-    },
-    style: { direction: 'ltr' },
-  });
-  const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
-  wireStockEmplSearch(emplInp, suggWrap);
-  const combo = el('div', { cls: 'empl-combo-wrap' }, emplInp, suggWrap);
-  const wrap = el('div', { cls: 'mp-field empl-field-wrap' },
-    el('label', null, 'Emplacement'),
-    combo,
-  );
-  return { wrap, emplInp };
-}
 
-function mpEmplacementValue(emplInp) {
-  return String(emplInp?.value || '').trim().toUpperCase();
-}
 
-function validateMpEmplacement(empl) {
-  // Emplacement optionnel pour toutes les matières premières : vide = OK.
-  // Si présent, on vérifie le format (grille A121, zone au sol ou sortie prod).
-  if (!empl) return null;
-  if (!isStockEmplacementCode(empl)) {
-    return 'Format invalide — grille (ex. A123), « ' + STOCK_EMPL_AU_SOL_LABEL + ' » (' + STOCK_EMPL_AU_SOL + ') ou « ' + STOCK_EMPL_SORTIE_PROD_LABEL + ' » (' + STOCK_EMPL_SORTIE_PROD + ').';
-  }
-  return null;
-}
 
 // ── Inventaire matière (par référence) ─────────────────────────────
 function openModalInventaireMatiere(matiere) {
@@ -8850,408 +8293,8 @@ function renderModalInventaireMatiere(data) {
 }
 
 
-function openModalMouvement(type, matiere) {
-  (async () => {
-    if (!S.matieres) {
-      try {
-        const d = await api('/api/stock/matieres');
-        S.matieres = Array.isArray(d) ? d : [];
-      } catch (e) {
-        S.matieres = [];
-      }
-    }
-    renderMpMouvementModal(type, matiere);
-  })();
-}
 
-function renderMpMouvementModal(type, matiere, categorieFilter) {
-  const typeMvt = (type || 'entree').toLowerCase();
-  const allList = (S.matieres || []).filter(m => m.actif !== 0);
-  let mat = matiere || null;
-  // Catégorie du filtre : priorité au paramètre, sinon catégorie de la matière sélectionnée
-  let cat = (categorieFilter != null) ? String(categorieFilter || '').toLowerCase() : null;
-  if (cat == null && mat) cat = mpCategorieKey(mat.categorie);
-  if (cat == null) cat = '';
-  // Liste filtrée par catégorie (vide = toutes)
-  const list = cat
-    ? allList.filter(m => mpCategorieKey(m.categorie) === cat)
-    : allList;
-  // Si la matière courante ne matche plus le filtre, on la désélectionne
-  if (mat && cat && mpCategorieKey(mat.categorie) !== cat) mat = null;
-  if (!mat && list.length === 1) mat = list[0];
-  closeMroot();
-  const mroot = document.getElementById('mroot');
-  if (!mroot) return;
-  S.mpModal = {
-    type: typeMvt, matiere: mat, matiereId: mat ? mat.id : null,
-    categorie: cat || (mat ? mpCategorieKey(mat.categorie) : ''),
-    laizeId: null,
-  };
-  const stockActuel = mat ? (parseFloat(mat.quantite) || 0) : 0;
-  const mpCat = mat || list.find(x => x.id === S.mpModal.matiereId) || null;
 
-  const overlay = el('div', {
-    cls: 'mp-modal-overlay',
-    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
-  });
-  const headTypeCls = ['entree', 'sortie', 'ajustement', 'transfert'].includes(typeMvt) ? typeMvt : '';
-  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
-  box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
-    el('h3', null, MP_MVT_TITLES[typeMvt] || typeMvt),
-    el('button', {
-      cls: 'mp-modal-close',
-      type: 'button',
-      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
-      on: { click: closeMroot },
-    }, '×'),
-  ));
-  const body = el('div', { cls: 'mp-modal-mvt-body' });
-
-  // Sélecteur de type de MP (catégorie) — toujours présent
-  const catSel = el('select', { id: 'mp-modal-categorie-select' });
-  catSel.appendChild(el('option', { value: '' }, '— Tous les types —'));
-  const CAT_ORDER = ['frontal', 'glassine', 'mandrin', 'adhesif', 'carton', 'palette'];
-  CAT_ORDER.forEach(c => {
-    catSel.appendChild(el('option', {
-      value: c,
-      selected: S.mpModal.categorie === c ? true : null,
-    }, MP_CAT_LABELS[c] || c));
-  });
-  catSel.addEventListener('change', () => {
-    renderMpMouvementModal(typeMvt, null, catSel.value || '');
-  });
-  body.appendChild(el('div', { cls: 'mp-field' },
-    el('label', null, 'Type de matière'),
-    catSel,
-  ));
-
-  if (mat) {
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Matière'),
-      el('div', { cls: 'mp-readonly' }, (mat.reference || '') + ' — ' + (mat.designation || '')),
-      el('div', { style: { marginTop: '6px' } },
-        el('button', {
-          cls: 'btn-ghost', type: 'button',
-          style: { fontSize: '11px', padding: '4px 8px', border: '1px solid var(--border)',
-                   borderRadius: '6px', background: 'transparent', color: 'var(--muted)',
-                   cursor: 'pointer', fontFamily: 'inherit' },
-          on: { click: () => renderMpMouvementModal(typeMvt, null, S.mpModal.categorie || '') },
-        }, '× Changer de matière'),
-      ),
-    ));
-    // Sélecteur de laize pour les matières laizées
-    if (mpIsLaizeeCategory(mat.categorie) && Array.isArray(mat.stock_par_laize) && mat.stock_par_laize.length > 0) {
-      const laizeSel = el('select', { id: 'mp-modal-laize-select' });
-      laizeSel.appendChild(el('option', { value: '' }, '— Choisir la laize —'));
-      mat.stock_par_laize.forEach(spl => {
-        laizeSel.appendChild(el('option', {
-          value: String(spl.laize_id),
-          selected: S.mpModal.laizeId === spl.laize_id ? true : null,
-        }, (spl.label || (spl.valeur_mm + ' mm')) + ' (stock ' + fN(spl.quantite) + ' bob.)'));
-      });
-      laizeSel.addEventListener('change', () => {
-        const v = parseInt(laizeSel.value, 10);
-        S.mpModal.laizeId = v || null;
-      });
-      body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Laize'), laizeSel));
-    } else if (mpIsLaizeeCategory(mat.categorie)) {
-      body.appendChild(el('div', {
-        cls: 'mp-hint err',
-        style: 'background:rgba(251,146,60,0.10);border:1px solid rgba(251,146,60,0.4);padding:8px 10px;border-radius:8px;color:var(--text)' },
-        'Aucune laize associée à cette matière. Édite-la pour ajouter ses laizes avant de saisir un mouvement.'));
-    }
-  } else {
-    const sel = el('select', { id: 'mp-modal-matiere-select' });
-    const placeholder = list.length
-      ? '— Choisir une matière —'
-      : (cat ? 'Aucune matière dans cette catégorie' : '— Choisir une matière —');
-    sel.appendChild(el('option', { value: '' }, placeholder));
-    // Pour les matières laizées, on déplie chaque référence par laize associée
-    list.forEach(item => {
-      if (item.laizee && Array.isArray(item.stock_par_laize) && item.stock_par_laize.length > 0) {
-        item.stock_par_laize.forEach(spl => {
-          const val = String(item.id) + ':' + String(spl.laize_id);
-          const isSel = (S.mpModal.matiereId === item.id && S.mpModal.laizeId === spl.laize_id);
-          sel.appendChild(el('option', { value: val, selected: isSel ? true : null },
-            item.reference + ' — ' + (spl.label || (spl.valeur_mm + ' mm')) + ' (' + fN(spl.quantite) + ' bob.)',
-          ));
-        });
-      } else {
-        sel.appendChild(el('option', {
-          value: String(item.id),
-          selected: S.mpModal.matiereId === item.id ? true : null,
-        }, item.reference + ' — ' + item.designation));
-      }
-    });
-    sel.addEventListener('change', () => {
-      const raw = sel.value;
-      if (!raw) { renderMpMouvementModal(typeMvt, null, S.mpModal.categorie || ''); return; }
-      const parts = raw.split(':');
-      const id = parseInt(parts[0], 10);
-      const laizeId = parts.length > 1 ? parseInt(parts[1], 10) : null;
-      const found = list.find(x => x.id === id);
-      if (found && laizeId) {
-        S.mpModal.laizeId = laizeId;
-        renderMpMouvementModal(typeMvt, found || null, S.mpModal.categorie || '');
-        if (S.mpModal) S.mpModal.laizeId = laizeId;
-      } else {
-        S.mpModal.laizeId = null;
-        renderMpMouvementModal(typeMvt, found || null, S.mpModal.categorie || '');
-      }
-    });
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière / laize'), sel));
-  }
-
-  const hintEl = el('div', { cls: 'mp-hint' }, '');
-  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
-
-  if (typeMvt === 'entree') {
-    const isLaizeeCat = mpIsLaizeeCategory(S.mpModal.categorie) || (mat && mpIsLaizeeCategory(mat.categorie));
-    const hideEmpl = !!S.fabStockMode || isLaizeeCat;
-    const emplField = hideEmpl ? null : buildMpEmplacementField();
-    const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
-    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
-    // Prix €/m² de la réception — uniquement pour bobines laizées
-    const showPrix = isLaizeeCat && !!mat;
-    const prixInp = showPrix ? el('input', {
-      attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' }
-    }) : null;
-    const prixHint = showPrix ? el('div', { cls: 'mp-hint',
-      style: 'font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4' }, '') : null;
-    function computeCurrentPrix() {
-      if (!mat) return 0;
-      const parLaize = !!mat.prix_par_laize;
-      if (parLaize && S.mpModal.laizeId && Array.isArray(mat.stock_par_laize)) {
-        const spl = mat.stock_par_laize.find(s => s.laize_id === S.mpModal.laizeId);
-        return spl && spl.prix_eur_m2 != null ? parseFloat(spl.prix_eur_m2) : 0;
-      }
-      return parseFloat(mat.prix_eur_m2 || 0);
-    }
-    function refreshPrixHint() {
-      if (!prixHint) return;
-      const p = computeCurrentPrix();
-      const modeTxt = mat.prix_par_laize ? ' (par laize)' : ' (matière)';
-      if (p > 0) {
-        prixHint.textContent = 'Prix courant' + modeTxt + ' : ' + p.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
-          + ' €/m². Laisser vide pour le conserver, sinon le PMP sera recalculé automatiquement.';
-      } else {
-        prixHint.textContent = 'Aucun prix courant enregistré. Si tu saisis un prix, il devient le prix de référence.';
-      }
-    }
-    if (emplField) body.appendChild(emplField.wrap);
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Référence BL / Fournisseur'),
-      blInp,
-    ));
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, mpQuantiteFieldLabel(mpCat)),
-      qInp,
-    ));
-    if (prixInp) {
-      body.appendChild(el('div', { cls: 'mp-field' },
-        el('label', null, 'Prix €/m² de cette réception'),
-        prixInp,
-        prixHint,
-      ));
-      refreshPrixHint();
-      // Le hint dépend de la laize choisie — on la met à jour au change
-      const laizeSelEl = body.querySelector('#mp-modal-laize-select');
-      if (laizeSelEl) laizeSelEl.addEventListener('change', refreshPrixHint);
-    }
-    S.mpModal.getBody = () => {
-      const b = {
-        matiere_id: S.mpModal.matiereId,
-        type_mouvement: 'entree',
-        quantite: parseFloat(qInp.value),
-        ref_bl: (blInp.value || '').trim() || null,
-        note: null,
-        emplacement_source: null,
-        emplacement_dest: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
-      };
-      if (prixInp) {
-        const raw = (prixInp.value || '').replace(',', '.').trim();
-        if (raw !== '') {
-          const v = parseFloat(raw);
-          if (!isNaN(v) && v >= 0) b.prix_eur_m2 = v;
-        }
-      }
-      return b;
-    };
-    S.mpModal.validate = () => {
-      const q = parseFloat(qInp.value);
-      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-      if (emplField) {
-        const emplErr = validateMpEmplacement(mpEmplacementValue(emplField.emplInp));
-        if (emplErr) return emplErr;
-      }
-      if (!q || q <= 0) return 'Quantité invalide.';
-      if (prixInp && prixInp.value) {
-        const raw = prixInp.value.replace(',', '.').trim();
-        const v = parseFloat(raw);
-        if (isNaN(v) || v < 0) return 'Prix €/m² invalide.';
-      }
-      return null;
-    };
-  } else if (typeMvt === 'sortie') {
-    const isLaizeeCat = mpIsLaizeeCategory(S.mpModal.categorie) || (mat && mpIsLaizeeCategory(mat.categorie));
-    const hideEmpl = !!S.fabStockMode || isLaizeeCat;
-    const emplField = hideEmpl ? null : buildMpEmplacementField();
-    hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
-    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
-    const checkQ = () => {
-      const q = parseFloat(qInp.value);
-      if (q > stockActuel) {
-        errEl.style.display = '';
-        errEl.textContent = 'Stock insuffisant.';
-      } else {
-        errEl.style.display = 'none';
-      }
-    };
-    qInp.addEventListener('input', checkQ);
-    if (emplField) body.appendChild(emplField.wrap);
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, mpQuantiteFieldLabel(mpCat)),
-      qInp,
-      hintEl,
-      errEl,
-    ));
-    S.mpModal.getBody = () => ({
-      matiere_id: S.mpModal.matiereId,
-      type_mouvement: 'sortie',
-      quantite: parseFloat(qInp.value),
-      ref_bl: null,
-      note: null,
-      emplacement_source: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
-      emplacement_dest: null,
-    });
-    S.mpModal.validate = () => {
-      const q = parseFloat(qInp.value);
-      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-      if (emplField) {
-        const emplErr = validateMpEmplacement(mpEmplacementValue(emplField.emplInp));
-        if (emplErr) return emplErr;
-      }
-      if (!q || q <= 0) return 'Quantité invalide.';
-      if (q > stockActuel) return 'Stock insuffisant.';
-      return null;
-    };
-  } else if (typeMvt === 'ajustement') {
-    hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
-    const stepAdj = mpIsPaletteCategory(mpCat) || ['carton', 'mandrin'].includes(mpCategorieKey(mpCat?.categorie)) ? '1' : '0.5';
-    const qInp = el('input', { attrs: { type: 'number', min: '0', step: stepAdj } });
-    body.appendChild(el('div', { cls: 'mp-field' },
-      hintEl,
-      el('label', null, 'Nouveau stock (' + mpUniteNom(mpCat) + 's)'),
-      qInp,
-    ));
-    S.mpModal.getBody = () => ({
-      matiere_id: S.mpModal.matiereId,
-      type_mouvement: 'ajustement',
-      quantite: parseFloat(qInp.value),
-      ref_bl: null,
-      note: null,
-      emplacement_source: null,
-      emplacement_dest: null,
-    });
-    S.mpModal.validate = () => {
-      const q = parseFloat(qInp.value);
-      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-      if (Number.isNaN(q) || q < 0) return 'Quantité invalide.';
-      return null;
-    };
-  } else if (typeMvt === 'transfert') {
-    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
-    const srcInp = el('input', { attrs: { type: 'text' } });
-    const dstInp = el('input', { attrs: { type: 'text' } });
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, mpQuantiteFieldLabel(mpCat)), qInp));
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement source'), srcInp));
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Emplacement destination'), dstInp));
-    S.mpModal.getBody = () => ({
-      matiere_id: S.mpModal.matiereId,
-      type_mouvement: 'transfert',
-      quantite: parseFloat(qInp.value),
-      ref_bl: null,
-      note: null,
-      emplacement_source: (srcInp.value || '').trim() || null,
-      emplacement_dest: (dstInp.value || '').trim() || null,
-    });
-    S.mpModal.validate = () => {
-      const q = parseFloat(qInp.value);
-      if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-      if (!q || q <= 0) return 'Quantité invalide.';
-      return null;
-    };
-  }
-
-  const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
-  const prevGetBody = S.mpModal.getBody;
-  if (prevGetBody) {
-    S.mpModal.getBody = () => {
-      const b = prevGetBody();
-      b.note = (noteTa.value || '').trim() || null;
-      return b;
-    };
-  } else {
-    S.mpModal.getBody = () => ({
-      matiere_id: S.mpModal.matiereId,
-      type_mouvement: typeMvt,
-      quantite: 0,
-      ref_bl: null,
-      note: (noteTa.value || '').trim() || null,
-      emplacement_source: null,
-      emplacement_dest: null,
-    });
-    S.mpModal.validate = () => 'Type de mouvement non reconnu.';
-  }
-
-  body.appendChild(el('div', { cls: 'mp-modal-actions' },
-    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
-    el('button', { cls: 'btn', type: 'button', on: { click: submitMpMouvement } }, 'Valider'),
-  ));
-  box.appendChild(body);
-  overlay.appendChild(box);
-  mroot.appendChild(overlay);
-}
-
-async function submitMpMouvement() {
-  if (!S.mpModal) return;
-  const err = S.mpModal.validate ? S.mpModal.validate() : null;
-  if (err) { showToast(err, 'error'); return; }
-  const body = S.mpModal.getBody();
-  // Injecte la laize pour les matières laizées (frontal/glassine/complexe)
-  const mat = S.mpModal.matiere;
-  if (mat && mpIsLaizeeCategory(mat.categorie)) {
-    if (!S.mpModal.laizeId) {
-      showToast('Laize obligatoire pour cette catégorie.', 'error');
-      return;
-    }
-    body.laize_id = S.mpModal.laizeId;
-  }
-  try {
-    const res = await api('/api/stock/matieres/mouvement', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (res && res.ok) {
-      closeMroot();
-      showToast('Mouvement enregistré.', 'success');
-      if (S.selMatiere) {
-        try {
-          const d = await api('/api/stock/matieres');
-          S.matieres = Array.isArray(d) ? d : [];
-        } catch (e) { /* refreshSelMatiere affichera l'erreur */ }
-        await refreshSelMatiere();
-      } else {
-        await loadMatieres();
-        if (S.tab === 'dashboard') await loadDashboard();
-      }
-    }
-  } catch (e) {
-    showToast(e.message || 'Erreur lors de l\'enregistrement.', 'error');
-  }
-}
 
 async function fetchPfStockAtEmpl(produitId, empl) {
   if (!produitId || !empl) return 0;
@@ -9269,25 +8312,7 @@ function openModalPfMouvement(type, produit) {
 }
 
 // Z1 enrichi : dossier de prod + palettes
-function _fmtDateFRz1(d) {
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return dd + '/' + mm + '/' + d.getFullYear();
-}
 
-async function _fetchZ1DossierContext() {
-  try {
-    const r = await api('/api/fabrication/dossier-en-cours');
-    return {
-      dossier: (r && r.dossier) || null,
-      precedents: Array.isArray(r && r.precedents) ? r.precedents : [],
-      machine: (r && r.machine) || null,
-      canSearchAll: !!(r && r.can_search_all),
-    };
-  } catch (e) {
-    return { dossier: null, precedents: [], machine: null, canSearchAll: false };
-  }
-}
 
 // Retro-compat : garde l'ancien nom si un consommateur externe l'utilise.
 async function _fetchDossierEnCours() {
@@ -9295,824 +8320,28 @@ async function _fetchDossierEnCours() {
   return ctx.dossier;
 }
 
-async function _fetchPaletteTypes() {
-  try {
-    const r = await api('/api/stock/matieres');
-    if (!Array.isArray(r)) return [];
-    return r.filter(m => (m.categorie || '').toLowerCase() === 'palette')
-            .sort((a, b) => {
-              const ea = a.is_europe ? 0 : 1;
-              const eb = b.is_europe ? 0 : 1;
-              if (ea !== eb) return ea - eb;
-              return String(a.reference || '').localeCompare(String(b.reference || ''));
-            });
-  } catch (e) { return []; }
-}
 
-function _renderZ1PalettesBlock(container) {
-  if (!container) return;
-  container.innerHTML = '';
-  const types = (S.pfModal && S.pfModal._paletteTypes) || [];
-  const lines = (S.pfModal && S.pfModal.palettesLines) || [];
 
-  const head = el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' } },
-    el('label', { style: { margin: 0, flex: '1' } }, 'Palettes utilisees'),
-    el('button', {
-      cls: 'btn btn-ghost',
-      type: 'button',
-      style: { padding: '4px 10px', fontSize: '12px' },
-      on: { click: () => {
-        S.pfModal.palettesLines.push({ matiere_id: null, nombre: 1 });
-        _renderZ1PalettesBlock(container);
-      } },
-    }, '+ Ajouter'),
-  );
-  container.appendChild(head);
 
-  if (!types.length) {
-    container.appendChild(el('div', { cls: 'mp-hint' },
-      'Aucune palette referencee dans matieres premieres.'));
-    return;
-  }
-  if (!lines.length) {
-    container.appendChild(el('div', { cls: 'mp-hint' },
-      'Aucune palette. Cliquez sur + Ajouter pour en saisir.'));
-    return;
-  }
-
-  lines.forEach((line, idx) => {
-    const row = el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' } });
-    const sel = el('select', { style: { flex: '1', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' } });
-    sel.appendChild(el('option', { attrs: { value: '' } }, 'Choisir une palette'));
-    types.forEach(t => {
-      const opt = el('option', { attrs: { value: String(t.id) } },
-        (t.reference || '') + ' ' + (t.designation || '') + (t.is_europe ? ' (EUROPE)' : ''));
-      if (line.matiere_id != null && Number(line.matiere_id) === Number(t.id)) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    sel.addEventListener('change', () => {
-      const v = sel.value;
-      S.pfModal.palettesLines[idx].matiere_id = v ? Number(v) : null;
-    });
-
-    const nbInp = el('input', {
-      attrs: { type: 'number', min: '1', step: '1', value: String(line.nombre || 1) },
-      style: { width: '80px', padding: '8px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' },
-    });
-    nbInp.addEventListener('input', () => {
-      const v = parseInt(nbInp.value, 10);
-      S.pfModal.palettesLines[idx].nombre = Number.isFinite(v) && v > 0 ? v : 1;
-    });
-
-    const del = el('button', {
-      cls: 'btn btn-ghost',
-      type: 'button',
-      style: { padding: '4px 10px', fontSize: '12px', color: 'var(--danger)' },
-      attrs: { title: 'Supprimer cette palette', 'aria-label': 'Supprimer' },
-      on: { click: () => {
-        S.pfModal.palettesLines.splice(idx, 1);
-        _renderZ1PalettesBlock(container);
-      } },
-    }, 'X');
-
-    row.appendChild(sel);
-    row.appendChild(nbInp);
-    row.appendChild(del);
-    container.appendChild(row);
-  });
-}
-
-function _z1IsTermine(d) {
-  return !!(d && String(d.statut_reel || '') === 'reellement_termine');
-}
-
-function _z1FormatDossierLine(d) {
-  if (!d) return '';
-  const refLine = (d.ref_produit || '') + (d.description ? ' - ' + d.description : '');
-  return refLine;
-}
 
 // Unite de vente du produit du dossier (MyStock, table produits.unite).
 // Sans cette info l'operateur ne sait pas s'il compte en bobines, en cartons
 // ou en etiquettes : la quantite saisie en Z1 devient ininterpretable.
-function _z1UniteVente(d) {
-  if (!d) return null;
-  const ref = String(d.ref_produit || '').trim();
-  if (!ref) return null;
-  const connu = !!d.produit_connu;
-  const unite = String((connu ? d.unite_vente : d.unite_vente_defaut) || '').trim();
-  if (!unite) return null;
-  return { unite: unite, connu: connu };
-}
 
 // L'unite se suffit a elle-meme : pas de libelle prefixe. Le seul ajout est
 // le marqueur 'nouvelle ref' quand la reference n'existe pas encore en base.
-function _z1UniteLabel(uv) {
-  return uv.connu ? uv.unite : uv.unite + ' - nouvelle ref';
-}
 
 // Fond plein + color:var(--bg) : texte contraste dans les deux themes
 // (regle boutons a fond colore, CLAUDE.md). Accent = reference connue,
 // warn = reference qui sera creee a la validation.
-function _z1UniteBadge(uv, opts) {
-  const compact = !!(opts && opts.compact);
-  return el('span', {
-    style: {
-      display: 'inline-block',
-      padding: compact ? '2px 8px' : '3px 10px',
-      borderRadius: '999px',
-      background: uv.connu ? 'var(--accent)' : 'var(--warn)',
-      color: 'var(--bg)',
-      fontSize: compact ? '10px' : '11px',
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: '.5px',
-      whiteSpace: 'nowrap',
-      flex: '0 0 auto',
-    },
-  }, _z1UniteLabel(uv));
-}
 
-function _z1MakeNoteFromDossier(dossier) {
-  if (!dossier || !dossier.no_dossier) return '';
-  return 'Production dossier ' + dossier.no_dossier + ' - ' + _fmtDateFRz1(new Date());
-}
 
-function _renderZ1DossierBanner(container, ctx) {
-  if (!container) return;
-  container.innerHTML = '';
-  container.style.display = '';
 
-  const dossierSel = (S.pfModal && S.pfModal.dossier) || null;
-  const hasSel = !!(dossierSel && dossierSel.no_dossier);
-  const canPick = !!ctx && (
-    !!ctx.dossier
-    || (Array.isArray(ctx.precedents) && ctx.precedents.length > 0)
-    || !!ctx.canSearchAll
-    || !!S.pfModal._noDossierManual
-  );
 
-  // Cas "aucun dossier detecte ET pas selectionne" -> champ libre en direct.
-  if (!hasSel && (!ctx || (!ctx.dossier && !(ctx.precedents || []).length && !ctx.canSearchAll))) {
-    const inp = el('input', {
-      cls: 'field-input',
-      attrs: {
-        type: 'text',
-        placeholder: 'No de dossier (optionnel)',
-        autocomplete: 'off',
-        value: S.pfModal._noDossierManual || '',
-      },
-      style: { textTransform: 'uppercase' },
-    });
-    inp.addEventListener('input', () => {
-      inp.value = inp.value.toUpperCase();
-      S.pfModal._noDossierManual = inp.value.trim();
-    });
-    container.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Dossier de production (libre)'),
-      inp,
-      el('div', { cls: 'mp-hint' },
-        'Aucun dossier detecte sur votre profil. Vous pouvez saisir le no manuellement.'),
-    ));
-    return;
-  }
 
-  const termine = _z1IsTermine(dossierSel);
-  const bandeauStyle = termine
-    ? { background: 'rgba(251,191,36,0.10)', borderColor: 'var(--warn)', color: 'var(--text)' }
-    : { background: 'var(--accent-bg)', borderColor: 'var(--accent)', color: 'var(--text)' };
 
-  const label = hasSel
-    ? (termine ? 'Dossier selectionne (rattrapage)' : 'Dossier de production en cours')
-    : (S.pfModal._noDossierManual
-        ? 'Dossier de production (libre)'
-        : 'Aucun dossier selectionne');
 
-  const bodyLines = [];
-  if (hasSel) {
-    const refLine = _z1FormatDossierLine(dossierSel);
-    bodyLines.push(el('div', { style: { fontWeight: '700', fontSize: '14px' } },
-      (dossierSel.fictif ? '(hors planning) ' : '') + (dossierSel.no_dossier || '')));
-    if (dossierSel.client) {
-      bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
-        'Client : ' + dossierSel.client));
-    }
-    if (refLine) {
-      bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--text2)', marginTop: '2px' } },
-        'Reference : ' + refLine));
-    }
-    const uv = _z1UniteVente(dossierSel);
-    if (uv) {
-      bodyLines.push(el('div', { style: { marginTop: '8px' } }, _z1UniteBadge(uv)));
-    }
-    if (dossierSel.machine_nom) {
-      bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-        'Machine : ' + dossierSel.machine_nom));
-    }
-    if (termine) {
-      bodyLines.push(el('div', {
-        style: {
-          fontSize: '11px',
-          color: 'var(--warn)',
-          marginTop: '6px',
-          fontWeight: '600',
-          textTransform: 'uppercase',
-          letterSpacing: '.5px',
-        },
-      }, 'Dossier termine - entree rattrapee'));
-    }
-  } else if (S.pfModal._noDossierManual) {
-    bodyLines.push(el('div', { style: { fontWeight: '700', fontSize: '14px' } },
-      String(S.pfModal._noDossierManual).toUpperCase()));
-    bodyLines.push(el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-      'Saisie libre'));
-  } else {
-    bodyLines.push(el('div', { style: { fontSize: '12px', color: 'var(--muted)' } },
-      'Cliquez sur "Choisir un autre dossier" pour en selectionner un.'));
-  }
 
-  const pickerLink = canPick
-    ? el('button', {
-        cls: 'btn btn-ghost',
-        type: 'button',
-        style: {
-          padding: '4px 10px',
-          fontSize: '11px',
-          color: 'var(--accent)',
-          background: 'transparent',
-          border: '1px solid var(--border)',
-          alignSelf: 'flex-start',
-        },
-        on: { click: (e) => {
-          e.preventDefault();
-          _openZ1DossierPicker(container, ctx);
-        } },
-      }, 'Choisir un autre dossier')
-    : null;
-
-  const bandeau = el('div', {
-    cls: 'mp-readonly',
-    style: bandeauStyle,
-  }, ...bodyLines);
-
-  container.appendChild(el('div', { cls: 'mp-field' },
-    el('div', {
-      style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' },
-    },
-      el('label', { style: { margin: 0 } }, label),
-      pickerLink,
-    ),
-    bandeau,
-  ));
-}
-
-function _z1SetDossier(container, ctx, dossier, manualRef) {
-  if (!S.pfModal) return;
-  const noteTa = S.pfModal._noteTa || null;
-  const prevAuto = S.pfModal._noteAutoLast || '';
-  S.pfModal.dossier = dossier || null;
-  S.pfModal._noDossierManual = (manualRef || '').trim();
-  _renderZ1DossierBanner(container, ctx);
-
-  // Note auto : ne l'ecrase que si vide OU si elle correspond a la note auto precedente.
-  if (noteTa) {
-    const cur = (noteTa.value || '').trim();
-    if (!cur || cur === prevAuto) {
-      const newAuto = dossier ? _z1MakeNoteFromDossier(dossier) : '';
-      noteTa.value = newAuto;
-      S.pfModal._noteAutoLast = newAuto;
-    }
-  }
-}
-
-function _z1DossierRow(dossier, opts) {
-  const termine = _z1IsTermine(dossier);
-  const badgeText = opts && opts.badge
-    ? opts.badge
-    : (termine ? 'Termine' : (dossier.statut_reel === 'reellement_en_saisie' ? 'En cours' : ''));
-
-  const refLine = _z1FormatDossierLine(dossier);
-  const cli = dossier.client ? ' - ' + dossier.client : '';
-  const uvRow = _z1UniteVente(dossier);
-
-  return el('button', {
-    type: 'button',
-    cls: 'z1-picker-item',
-    style: {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: '10px',
-      padding: '10px 12px',
-      background: 'var(--card)',
-      border: '1px solid var(--border)',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      textAlign: 'left',
-      color: 'var(--text)',
-      width: '100%',
-    },
-    on: { click: opts && opts.onClick },
-  },
-    el('div', { style: { flex: '1', minWidth: 0 } },
-      el('div', { style: { fontWeight: '700', fontSize: '13px' } },
-        (dossier.no_dossier || '') + cli),
-      refLine
-        ? el('div', {
-            style: { fontSize: '11px', color: 'var(--text2)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-          }, refLine)
-        : null,
-      dossier.machine_nom
-        ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } },
-            'Machine : ' + dossier.machine_nom)
-        : null,
-    ),
-    (uvRow || badgeText)
-      ? el('div', {
-          style: {
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: '4px',
-            flex: '0 0 auto',
-          },
-        },
-          uvRow ? _z1UniteBadge(uvRow, { compact: true }) : null,
-          badgeText
-            ? el('div', {
-                style: {
-                  fontSize: '10px',
-                  fontWeight: '700',
-                  textTransform: 'uppercase',
-                  letterSpacing: '.5px',
-                  whiteSpace: 'nowrap',
-                  color: termine ? 'var(--warn)' : 'var(--accent)',
-                },
-              }, badgeText)
-            : null,
-        )
-      : null,
-  );
-}
-
-function _openZ1DossierPicker(bannerContainer, ctx) {
-  // Ferme l'eventuel picker precedent.
-  const prev = document.getElementById('z1-picker-overlay');
-  if (prev) prev.remove();
-
-  const overlay = el('div', {
-    attrs: { id: 'z1-picker-overlay' },
-    style: {
-      position: 'fixed', inset: '0', zIndex: '10001',
-      background: 'rgba(0,0,0,0.55)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '20px',
-    },
-    on: { click: (e) => { if (e.target === overlay) overlay.remove(); } },
-  });
-
-  const box = el('div', {
-    style: {
-      background: 'var(--card)', border: '1px solid var(--border)',
-      borderRadius: '12px', width: 'min(520px, 100%)', maxHeight: '80vh',
-      display: 'flex', flexDirection: 'column',
-      boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
-    },
-  });
-
-  box.appendChild(el('div', {
-    style: {
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '14px 16px', borderBottom: '1px solid var(--border)',
-    },
-  },
-    el('div', { style: { fontWeight: '700', fontSize: '14px' } }, 'Choisir un autre dossier'),
-    el('button', {
-      cls: 'mp-modal-close', type: 'button',
-      attrs: { 'aria-label': 'Fermer' },
-      on: { click: () => overlay.remove() },
-    }, 'x'),
-  ));
-
-  const listWrap = el('div', {
-    style: { padding: '14px 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' },
-  });
-
-  const pick = (dossier) => {
-    _z1SetDossier(bannerContainer, ctx, dossier, '');
-    overlay.remove();
-  };
-
-  // Dossier en cours (accent)
-  if (ctx && ctx.dossier) {
-    listWrap.appendChild(el('div', {
-      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600' },
-    }, 'Dossier en cours'));
-    listWrap.appendChild(_z1DossierRow(ctx.dossier, {
-      badge: 'En cours', onClick: () => pick(ctx.dossier),
-    }));
-  }
-
-  // Precedents (2 max)
-  const precedents = (ctx && ctx.precedents) || [];
-  if (precedents.length) {
-    listWrap.appendChild(el('div', {
-      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-    }, 'Precedents (' + (ctx.machine ? ctx.machine.nom : 'meme machine') + ')'));
-    precedents.forEach(d => {
-      listWrap.appendChild(_z1DossierRow(d, { badge: 'Termine', onClick: () => pick(d) }));
-    });
-  }
-
-  // Saisie libre
-  listWrap.appendChild(el('div', {
-    style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-  }, 'Saisie libre'));
-
-  const manualInp = el('input', {
-    cls: 'field-input',
-    attrs: {
-      type: 'text',
-      placeholder: 'No de dossier (ex : 12345-01)',
-      autocomplete: 'off',
-      value: S.pfModal._noDossierManual || '',
-    },
-    style: { textTransform: 'uppercase', flex: '1' },
-  });
-  const manualBtn = el('button', {
-    cls: 'btn btn-accent', type: 'button',
-    style: { padding: '8px 14px', fontSize: '12px' },
-    on: { click: () => {
-      const v = (manualInp.value || '').trim().toUpperCase();
-      if (!v) { manualInp.focus(); return; }
-      _z1SetDossier(bannerContainer, ctx, null, v);
-      overlay.remove();
-    } },
-  }, 'Valider');
-  listWrap.appendChild(el('div', {
-    style: { display: 'flex', gap: '8px', alignItems: 'center' },
-  }, manualInp, manualBtn));
-
-  // Recherche globale (chef d'atelier / admin)
-  if (ctx && ctx.canSearchAll) {
-    listWrap.appendChild(el('div', {
-      style: { fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: '600', marginTop: '4px' },
-    }, 'Recherche libre (toutes machines)'));
-
-    const searchInp = el('input', {
-      cls: 'field-input',
-      attrs: {
-        type: 'text',
-        placeholder: 'Reference, client, description...',
-        autocomplete: 'off',
-      },
-    });
-    const results = el('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: '6px' },
-    });
-    let searchDebounce = null;
-    const runSearch = async () => {
-      const q = (searchInp.value || '').trim();
-      results.innerHTML = '';
-      if (q.length < 2) return;
-      try {
-        const r = await api('/api/fabrication/dossiers-search?q=' + encodeURIComponent(q));
-        const list = (r && r.dossiers) || [];
-        if (!list.length) {
-          results.appendChild(el('div', { cls: 'mp-hint' }, 'Aucun resultat pour "' + q + '"'));
-          return;
-        }
-        list.forEach(d => results.appendChild(_z1DossierRow(d, { onClick: () => pick(d) })));
-      } catch (e) {
-        results.appendChild(el('div', { cls: 'mp-hint err' }, 'Erreur de recherche.'));
-      }
-    };
-    searchInp.addEventListener('input', () => {
-      clearTimeout(searchDebounce);
-      searchDebounce = setTimeout(runSearch, 220);
-    });
-    listWrap.appendChild(searchInp);
-    listWrap.appendChild(results);
-    requestAnimationFrame(() => searchInp.focus());
-  } else {
-    requestAnimationFrame(() => manualInp.focus());
-  }
-
-  box.appendChild(listWrap);
-  overlay.appendChild(box);
-  document.body.appendChild(overlay);
-}
-
-async function _initZ1Enrichment(dossierBanner, palettesBlock, noteTa) {
-  const [ctx, types] = await Promise.all([_fetchZ1DossierContext(), _fetchPaletteTypes()]);
-  if (!S.pfModal) return;
-  S.pfModal._z1Ctx = ctx;
-  S.pfModal._paletteTypes = types || [];
-  S.pfModal._noteTa = noteTa || null;
-  // Selection par defaut : dossier actif s'il existe.
-  S.pfModal.dossier = ctx.dossier || null;
-
-  _renderZ1DossierBanner(dossierBanner, ctx);
-  _renderZ1PalettesBlock(palettesBlock);
-
-  if (ctx.dossier && ctx.dossier.no_dossier && noteTa && !((noteTa.value || '').trim())) {
-    const auto = _z1MakeNoteFromDossier(ctx.dossier);
-    noteTa.value = auto;
-    S.pfModal._noteAutoLast = auto;
-  }
-
-  // Pre-remplit la reference produit depuis le dossier actif.
-  if (ctx.dossier && ctx.dossier.ref_produit && S.pfModal.refInp
-      && !((S.pfModal.refInp.value || '').trim())) {
-    const refDossier = String(ctx.dossier.ref_produit).trim();
-    S.pfModal.refInp.value = refDossier;
-    try {
-      const p = await resolvePfProduitByRef(refDossier);
-      if (p && S.pfModal && S.pfModal.refInp
-          && String(S.pfModal.refInp.value || '').trim().toUpperCase()
-              === refDossier.toUpperCase()) {
-        renderPfMouvementModal('entree', p, 'Z1');
-      }
-    } catch (e) {}
-  }
-}
-
-function renderPfMouvementModal(type, produit, defaultEmpl) {
-  const typeMvt = (type || 'entree').toLowerCase();
-  if (!['entree', 'sortie'].includes(typeMvt)) return;
-  closeMroot();
-  const mroot = document.getElementById('mroot');
-  if (!mroot) return;
-  let prod = produit || null;
-  S.pfModal = {
-    type: typeMvt,
-    produit: prod,
-    produitId: prod ? prod.id : null,
-    refInp: null,
-    defaultEmpl: defaultEmpl || null,
-    dossier: null,
-    palettesLines: [],
-    _paletteTypes: [],
-    _noDossierManual: '',
-  };
-  const _isZ1Entree = typeMvt === 'entree'
-    && String(defaultEmpl || '').toUpperCase() === 'Z1';
-
-  const overlay = el('div', {
-    cls: 'mp-modal-overlay',
-    on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
-  });
-  const headTypeCls = typeMvt === 'entree' ? 'pf-entree' : 'pf-sortie';
-  const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
-  box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
-    el('h3', null, PF_MVT_TITLES[typeMvt] || typeMvt),
-    el('button', {
-      cls: 'mp-modal-close',
-      type: 'button',
-      attrs: { title: 'Fermer', 'aria-label': 'Fermer' },
-      on: { click: closeMroot },
-    }, '×'),
-  ));
-  const body = el('div', { cls: 'mp-modal-mvt-body' });
-  const hintEl = el('div', { cls: 'mp-hint' }, '');
-  const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
-  const dossierBanner = el('div', { cls: 'z1-dossier-banner', style: { display: 'none' } });
-  if (_isZ1Entree) body.appendChild(dossierBanner);
-
-  if (prod) {
-    const unit = (prod.unite || '').trim();
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Produit fini'),
-      el('div', { cls: 'mp-readonly' },
-        (prod.reference || '') + (prod.designation ? ' — ' + prod.designation : '')
-        + (unit ? ' (' + unit + ')' : ''),
-      ),
-    ));
-  } else {
-    const refInp = el('input', {
-      cls: 'field-input',
-      attrs: {
-        type: 'text',
-        placeholder: 'Référence produit (comme la recherche en haut)…',
-        autocomplete: 'off',
-      },
-      style: { direction: 'ltr' },
-    });
-    const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
-    S.pfModal.refInp = refInp;
-    wireStockProduitSearch(refInp, suggWrap, (p) => {
-      renderPfMouvementModal(typeMvt, p, S.pfModal && S.pfModal.defaultEmpl);
-    });
-    const refCombo = el('div', { cls: 'empl-combo-wrap' }, refInp, suggWrap);
-    body.appendChild(el('div', { cls: 'mp-field ref-field-wrap' },
-      el('label', null, 'Produit fini'),
-      refCombo,
-    ));
-    requestAnimationFrame(() => refInp.focus());
-  }
-
-  const { wrap: emplWrap, emplInp } = buildMpEmplacementField();
-  if (defaultEmpl) {
-    emplInp.value = String(defaultEmpl).toUpperCase();
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const dateInp = el('input', { attrs: { type: 'date', value: today } });
-  const qInp = el('input', { attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' } });
-
-  let stockEmpl = 0;
-  const refreshStockHint = async () => {
-    if (typeMvt !== 'sortie' || !S.pfModal.produitId) return;
-    const empl = mpEmplacementValue(emplInp);
-    if (!empl || !isStockEmplacementCode(empl)) {
-      hintEl.textContent = '';
-      errEl.style.display = 'none';
-      return;
-    }
-    stockEmpl = await fetchPfStockAtEmpl(S.pfModal.produitId, empl);
-    const unit = (S.pfModal.produit?.unite || prod?.unite || '').trim();
-    hintEl.textContent = 'Stock à cet emplacement : ' + (unit ? fU(stockEmpl, unit) : fN(stockEmpl));
-    checkSortieQte();
-  };
-
-  const checkSortieQte = () => {
-    if (typeMvt !== 'sortie') return;
-    const q = parseFloat(qInp.value);
-    if (q > stockEmpl) {
-      errEl.style.display = '';
-      errEl.textContent = 'Stock insuffisant.';
-    } else {
-      errEl.style.display = 'none';
-    }
-  };
-
-  emplInp.addEventListener('input', () => {
-    emplInp.value = emplInp.value.toUpperCase();
-    refreshStockHint();
-  });
-  emplInp.addEventListener('change', refreshStockHint);
-
-  if (typeMvt === 'entree') {
-    body.appendChild(emplWrap);
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Quantité'),
-      qInp,
-    ));
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Date du stock'),
-      dateInp,
-    ));
-    S.pfModal.validate = () => {
-      if (!S.pfModal.produitId) return 'Produit obligatoire.';
-      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
-      if (emplErr) return emplErr;
-      const q = parseFloat(qInp.value);
-      if (!q || q <= 0) return 'Quantité invalide.';
-      return null;
-    };
-    S.pfModal.getBody = () => ({
-      produit_id: S.pfModal.produitId,
-      emplacement: mpEmplacementValue(emplInp),
-      type_mouvement: 'entree',
-      quantite: parseFloat(qInp.value),
-      date_entree: dateInp.value || today,
-      note: null,
-    });
-  } else {
-    qInp.addEventListener('input', checkSortieQte);
-    body.appendChild(emplWrap);
-    body.appendChild(el('div', { cls: 'mp-field' },
-      el('label', null, 'Quantité'),
-      qInp,
-      hintEl,
-      errEl,
-    ));
-    if (S.pfModal.produitId) refreshStockHint();
-    S.pfModal.validate = () => {
-      if (!S.pfModal.produitId) return 'Produit obligatoire.';
-      const emplErr = validateMpEmplacement(mpEmplacementValue(emplInp));
-      if (emplErr) return emplErr;
-      const q = parseFloat(qInp.value);
-      if (!q || q <= 0) return 'Quantité invalide.';
-      if (q > stockEmpl) return 'Stock insuffisant.';
-      return null;
-    };
-    S.pfModal.getBody = () => ({
-      produit_id: S.pfModal.produitId,
-      emplacement: mpEmplacementValue(emplInp),
-      type_mouvement: 'sortie',
-      quantite: parseFloat(qInp.value),
-      date_entree: today,
-      note: null,
-    });
-  }
-
-  const palettesBlock = el('div', { cls: 'z1-palettes-block' });
-  if (_isZ1Entree) {
-    body.appendChild(el('div', { cls: 'mp-field' }, palettesBlock));
-  }
-  const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
-  body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
-  const prevGetBody = S.pfModal.getBody;
-  S.pfModal.getBody = () => {
-    const b = prevGetBody();
-    b.note = (noteTa.value || '').trim() || null;
-    if (_isZ1Entree) {
-      const noDos = (S.pfModal.dossier && S.pfModal.dossier.no_dossier)
-        || S.pfModal._noDossierManual
-        || null;
-      b.no_dossier = noDos ? (String(noDos).trim() || null) : null;
-      const cleanPalettes = (S.pfModal.palettesLines || [])
-        .filter(l => l && l.matiere_id && Number(l.nombre) > 0)
-        .map(l => ({ matiere_id: Number(l.matiere_id), nombre: Number(l.nombre) }));
-      if (cleanPalettes.length) b.palettes = cleanPalettes;
-    }
-    return b;
-  };
-
-  const pfBtnCls = typeMvt === 'entree' ? 'btn-pf-entree' : 'btn-pf-sortie';
-  body.appendChild(el('div', { cls: 'mp-modal-actions' },
-    el('button', { cls: 'btn-cancel', type: 'button', on: { click: closeMroot } }, 'Annuler'),
-    el('button', { cls: 'btn ' + pfBtnCls, type: 'button', on: { click: submitPfMouvement } }, 'Valider'),
-  ));
-  box.appendChild(body);
-  overlay.appendChild(box);
-  mroot.appendChild(overlay);
-
-  if (_isZ1Entree) {
-    requestAnimationFrame(() => {
-      _initZ1Enrichment(dossierBanner, palettesBlock, noteTa);
-    });
-  }
-}
-
-async function submitPfMouvement() {
-  if (!S.pfModal) return;
-  const typeMvt = (S.pfModal.type || 'entree').toLowerCase();
-  // Si pas de produit_id mais on a une référence saisie, on tente la résolution.
-  // En entrée Z1, on autorise l'auto-création de la référence (unité = étiquette).
-  if (!S.pfModal.produitId) {
-    const refVal = (S.pfModal.refInp ? S.pfModal.refInp.value : '') || '';
-    const refClean = String(refVal).trim().toUpperCase();
-    if (!refClean) {
-      showToast('Référence obligatoire.', 'error');
-      return;
-    }
-    const p = await resolvePfProduitByRef(refVal);
-    if (p) {
-      S.pfModal.produitId = p.id;
-      S.pfModal.produit = p;
-    } else if (typeMvt === 'sortie') {
-      showToast('Référence introuvable — sélectionnez un produit dans la liste ou vérifiez la saisie.', 'error');
-      return;
-    }
-    // En entrée : on continuera avec la référence brute → l'endpoint auto-crée le produit.
-  }
-  // Validation (sauf produitId obligatoire si entrée + auto-create)
-  let err = null;
-  if (S.pfModal.validate) {
-    const origErr = S.pfModal.validate();
-    // En entrée auto-create, ignorer l'erreur "Produit obligatoire."
-    if (origErr && !(typeMvt === 'entree' && !S.pfModal.produitId && /[Pp]roduit/.test(origErr))) {
-      err = origErr;
-    }
-  }
-  if (!err && typeMvt === 'sortie' && S.pfModal.getBody) {
-    const b = S.pfModal.getBody();
-    const stock = await fetchPfStockAtEmpl(b.produit_id, b.emplacement);
-    if (b.quantite > stock) err = 'Stock insuffisant.';
-  }
-  if (err) { showToast(err, 'error'); return; }
-  const body = S.pfModal.getBody();
-  // Si entrée sans produit_id : passer par l'endpoint produits-finis/entree qui auto-crée.
-  if (typeMvt === 'entree' && !S.pfModal.produitId) {
-    const refVal = (S.pfModal.refInp ? S.pfModal.refInp.value : '') || '';
-    const payload = {
-      reference: String(refVal).trim().toUpperCase(),
-      designation: String(refVal).trim().toUpperCase(),
-      unite: STOCK_UNITE_VENTE_DEFAUT,
-      emplacement: body.emplacement,
-      quantite: body.quantite,
-      note: body.note,
-    };
-    try {
-      await api('/api/stock/produits-finis/entree', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      showToast('Entrée enregistrée — référence créée.', 'success');
-      S.pfModal = null;
-      closeMroot();
-      if (S.tab === 'production') await loadProduction();
-      else if (S.tab === 'produits-finis') await loadProduitsFinis();
-      else if (S.tab === 'dashboard') await loadDashboard();
-    } catch (e) {
-      showToast(e.message || 'Erreur lors de l\'enregistrement.', 'error');
-    }
-    return;
-  }
-  await submitMouvement(body);
-}
 
 async function loadMpSousSections() {
   // Charge les sous-sections en isolant par catégorie pour éviter tout mélange
@@ -19202,6 +17431,9 @@ async function init() {
   loadMatieresIncompleteCount();
   // Charger la liste complète des emplacements depuis la base de données
   await fetchEmplacementsFromDB();
+  // Branche les modales de mouvement partagees avec Saisie Production.
+  // Apres fetchEmplacementsFromDB() : la liste des emplacements est prete.
+  configureStockModals();
   // Onglet initial via URL param ?tab=...
   const urlParams = new URLSearchParams(window.location.search);
   const urlTab = urlParams.get('tab');

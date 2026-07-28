@@ -107,6 +107,7 @@ def fabrication_planning_machine_ids(conn, user: dict) -> set[int]:
                 )
               )
             WHERE lower(trim(pd.operateur)) = ?
+              AND COALESCE(pd.est_annule, 0) = 0
             """,
             (op_key,),
         ).fetchall()
@@ -294,7 +295,8 @@ def _prod_run_start_for_machine(conn, machine_id: int, m: dict, no_dossier: str)
     rows = conn.execute(
         """SELECT id, no_dossier, date_operation
            FROM production_data
-           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))""",
+           WHERE (trim(machine) = trim(?) OR (trim(?) != '' AND trim(machine) = trim(?)))
+             AND COALESCE(est_annule, 0) = 0""",
         (mnom, mcode, mcode),
     ).fetchall()
     if not rows:
@@ -1006,6 +1008,12 @@ def _slot_payload(e: dict, start_iso: str, end_iso: str) -> dict:
         "valide": int(e.get("valide") or 0),
         "destockage": e.get("destockage") or "todo",
         "statut_reel": e.get("statut_reel") or "reellement_en_attente",
+        # Annulation operateur (MyProd) : le badge n'est affiche que tant que
+        # le dossier est reparti en attente ; le motif reste consultable apres.
+        "annule_count": int(e.get("annule_count") or 0),
+        "annule_motif": (e.get("annule_motif") or "").strip(),
+        "annule_par": (e.get("annule_par") or "").strip(),
+        "annule_le": (e.get("annule_le") or "").strip(),
         "duree_heures": e["duree_heures"],
         # Un dossier terminé en DB reste terminé même si planned_end est dans le futur
         # (cas : durée modifiée → planned_end recalculé en heures ouvrées machine)
@@ -1722,7 +1730,7 @@ async def force_statut(machine_id: int, entry_id: int, request: Request):
             if reference:
                 saisie_row = conn.execute(
                     """SELECT id FROM production_data
-                       WHERE no_dossier = ?
+                       WHERE no_dossier = ? AND COALESCE(est_annule, 0) = 0
                        ORDER BY date_operation DESC LIMIT 1""",
                     (reference,),
                 ).fetchone()
@@ -2208,6 +2216,7 @@ def entry_production_stats(machine_id: int, entry_id: int, request: Request):
                       COALESCE(metrage_total_fin, metrage_reel) AS metrage_reel
                FROM production_data
                WHERE trim(no_dossier) = trim(?)
+                 AND COALESCE(est_annule, 0) = 0
                  AND (
                    trim(machine) = trim(?)
                    OR (trim(?) != '' AND trim(machine) = trim(?))
@@ -2459,6 +2468,7 @@ def list_orphan_dossiers(machine_id: int, request: Request):
                WHERE pd.no_dossier IS NOT NULL
                  AND pd.no_dossier != ''
                  AND (pd.machine = ? OR pd.machine = ?)
+                 AND COALESCE(pd.est_annule, 0) = 0
                  AND pd.no_dossier NOT IN (
                      SELECT pe.reference FROM planning_entries pe WHERE pe.machine_id = ?
                  )
@@ -2519,6 +2529,7 @@ async def import_orphan_dossier(machine_id: int, request: Request):
                       metrage_total_debut, metrage_total_fin
                FROM production_data
                WHERE no_dossier = ? AND (machine = ? OR machine = ?)
+                 AND COALESCE(est_annule, 0) = 0
                ORDER BY date_operation ASC""",
             (no_dossier, mnom, mcode),
         ).fetchall()
@@ -3770,7 +3781,8 @@ def get_active_dossier(machine_id: int, request: Request):
         rows = conn.execute(
             """SELECT operation_code, no_dossier, client, designation, machine, date_operation
                FROM production_data
-               WHERE date_operation LIKE ? OR date_operation LIKE ?
+               WHERE (date_operation LIKE ? OR date_operation LIKE ?)
+                 AND COALESCE(est_annule, 0) = 0
                ORDER BY date_operation ASC""",
             (iso_today + "%", old_today + "%"),
         ).fetchall()

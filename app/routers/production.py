@@ -469,7 +469,8 @@ def machine_status(request: Request):
             """SELECT operation_code, operation_category, machine,
                       no_dossier, client, designation, operateur, date_operation
                FROM production_data
-               WHERE date_operation LIKE ? OR date_operation LIKE ?
+               WHERE (date_operation LIKE ? OR date_operation LIKE ?)
+                 AND COALESCE(est_annule, 0) = 0
                ORDER BY date_operation ASC""",
             (iso_today + '%', old_today + '%'),
         ).fetchall()
@@ -544,6 +545,7 @@ def machine_status(request: Request):
         "     OR lower(trim(COALESCE(pd.machine,''))) LIKE 'rep %') "
         "AND (pd.date_operation LIKE ? OR pd.date_operation LIKE ?) "
         "AND TRIM(COALESCE(pd.no_dossier,'')) != '' "
+        "AND COALESCE(pd.est_annule, 0) = 0 "
         "GROUP BY pd.no_dossier, pd.client, pd.designation "
         "HAVING cartons != 0 "
         "ORDER BY cartons DESC"
@@ -601,7 +603,9 @@ def dashboard_production(
     dossiers   = [d for d in (no_dossier or []) if d]
     machines   = [m for m in (machine or []) if m]
 
-    where, params = ["1=1"], []
+    # Les saisies neutralisees par une annulation de dossier sortent de tous
+    # les agregats (KPI, metrage, temps calage/prod/arret).
+    where, params = ["1=1", "COALESCE(est_annule, 0) = 0"], []
     if can_view_all_prod(user):
         if operateurs:
             where.append(f"operateur IN ({','.join('?'*len(operateurs))})")
@@ -703,6 +707,7 @@ def dashboard_production(
                        FROM production_data
                        WHERE operateur=? AND trim(no_dossier)=trim(?)
                          AND operation_code='01'
+                         AND COALESCE(est_annule, 0) = 0
                          AND date_operation <= ?
                          AND COALESCE(metrage_total_debut, metrage_prevu) IS NOT NULL
                        ORDER BY date_operation DESC, id DESC LIMIT 1""",

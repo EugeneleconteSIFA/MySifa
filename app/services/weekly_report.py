@@ -186,6 +186,7 @@ def _saisies_semaine(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
                   metrage_prevu, metrage_reel, metrage_total_debut, metrage_total_fin
              FROM production_data
             WHERE date_operation >= ? AND date_operation <= ?
+              AND COALESCE(est_annule, 0) = 0
             ORDER BY date_operation ASC""",
         (wstart, wend),
     ).fetchall()
@@ -275,6 +276,7 @@ def _prod_par_machine_dossier_by_dossier(
                                LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                           FROM production_data
                          WHERE no_dossier = ?
+                           AND COALESCE(est_annule, 0) = 0
                      ) WHERE operation_code IN ('03','88')""",
                 (no_d,),
             ).fetchone()
@@ -356,7 +358,8 @@ def _score_devis_based(conn, no_dossier: str, devis_row: Dict[str, Any]) -> Dict
         """SELECT COALESCE(SUM(metrage_reel),0) AS met,
                   COALESCE(SUM(quantite_traitee),0) AS qte
              FROM production_data
-            WHERE no_dossier = ? AND operation_code='89'""",
+            WHERE no_dossier = ? AND operation_code='89'
+              AND COALESCE(est_annule, 0) = 0""",
         (no_d,),
     ).fetchone()
     metrage_reel = float(row_mq["met"] or 0)
@@ -374,6 +377,7 @@ def _score_devis_based(conn, no_dossier: str, devis_row: Dict[str, Any]) -> Dict
                        LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                   FROM production_data
                  WHERE no_dossier = ?
+                   AND COALESCE(est_annule, 0) = 0
              ) WHERE operation_code='02'""",
         (no_d,),
     ).fetchone()["tps"] or 0)
@@ -390,6 +394,7 @@ def _score_devis_based(conn, no_dossier: str, devis_row: Dict[str, Any]) -> Dict
                        LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                   FROM production_data
                  WHERE no_dossier = ?
+                   AND COALESCE(est_annule, 0) = 0
              ) WHERE operation_code IN ('03','88')""",
         (no_d,),
     ).fetchone()["tps"] or 0)
@@ -557,6 +562,7 @@ def _dossiers_fab_detail(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
         """SELECT no_dossier, machine, client, metrage_reel, date_operation
              FROM production_data
             WHERE operation_code = ?
+              AND COALESCE(est_annule, 0) = 0
               AND date_operation >= ? AND date_operation <= ?""",
         (CODE_FIN_DOS, wstart, wend),
     ).fetchall()
@@ -621,6 +627,7 @@ def _dossiers_fab_detail(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
                                LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                           FROM production_data
                          WHERE no_dossier = ?
+                           AND COALESCE(est_annule, 0) = 0
                      ) WHERE operation_code='02'""",
                 (no_d,),
             ).fetchone()["tps"] or 0)
@@ -640,6 +647,7 @@ def _dossiers_fab_detail(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
                                LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                           FROM production_data
                          WHERE no_dossier = ?
+                           AND COALESCE(est_annule, 0) = 0
                      ) WHERE operation_code IN ('03','88')""",
                 (no_d,),
             ).fetchone()["tps"] or 0)
@@ -661,6 +669,7 @@ def _dossiers_fab_detail(conn, wstart: str, wend: str) -> List[Dict[str, Any]]:
                                    LEAD(date_operation) OVER (PARTITION BY operateur ORDER BY date_operation) AS lead_date
                               FROM production_data
                              WHERE no_dossier = ?
+                               AND COALESCE(est_annule, 0) = 0
                          ) WHERE operation_code IN ({arret_placeholders})"""
                 )
                 tps_arret = float(conn.execute(
@@ -1031,6 +1040,7 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
             """SELECT no_dossier, operateur, machine, date_operation, operation_code, client
                  FROM production_data
                 WHERE date_operation >= ?
+                  AND COALESCE(est_annule, 0) = 0
                 ORDER BY date_operation ASC""",
             ((date.today() - timedelta(days=45)).strftime("%Y-%m-%dT%H:%M:%S"),),
         ).fetchall()

@@ -7575,9 +7575,152 @@ Ressources :
         conn.execute("ALTER TABLE ao_reponses ADD COLUMN marge REAL NOT NULL DEFAULT 1.0")
     conn.commit()
 
+    # ── Annulation d'un dossier de production — garde-fou sur COLONNE ────────
+    # Meme choix delibere que le bloc AO ci-dessus : pas de numero de version
+    # dans schema_migrations (collisions de numerotation entre branches deja
+    # constatees). Le PRAGMA est quasi gratuit et ne tourne qu'au boot.
+    #
+    # Cas metier : l'operateur demarre un dossier (code 01) puis enchaine des
+    # calages, et s'apercoit qu'il n'a pas les elements pour le realiser. Il
+    # annule le dossier : toutes ses saisies du cycle passent en est_annule=1
+    # (conservees pour l'audit, exclues de toutes les statistiques) et le
+    # dossier repart en « attente » au planning avec un badge « Annule ».
+    #
+    # production_data :
+    #   est_annule   0/1 — saisie neutralisee par une annulation de dossier
+    #   annule_le    horodatage ISO de l'annulation
+    #   annule_par   nom de l'operateur qui a annule
+    #   annule_motif motif saisi par l'operateur (obligatoire cote endpoint)
+    # planning_entries :
+    #   annule_count nombre d'annulations cumulees sur ce dossier
+    #   annule_motif motif de la DERNIERE annulation
+    #   annule_par / annule_le  auteur et horodatage de la derniere annulation
+    _pd_annul_cols = {r["name"] for r in conn.execute("PRAGMA table_info(production_data)").fetchall()}
+    if "est_annule" not in _pd_annul_cols:
+        conn.execute("ALTER TABLE production_data ADD COLUMN est_annule INTEGER DEFAULT 0")
+    if "annule_le" not in _pd_annul_cols:
+        conn.execute("ALTER TABLE production_data ADD COLUMN annule_le TEXT")
+    if "annule_par" not in _pd_annul_cols:
+        conn.execute("ALTER TABLE production_data ADD COLUMN annule_par TEXT")
+    if "annule_motif" not in _pd_annul_cols:
+        conn.execute("ALTER TABLE production_data ADD COLUMN annule_motif TEXT")
+    conn.execute("UPDATE production_data SET est_annule=0 WHERE est_annule IS NULL")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prod_est_annule ON production_data(est_annule)"
+    )
+
+    _pe_annul_cols = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)").fetchall()}
+    if "annule_count" not in _pe_annul_cols:
+        conn.execute("ALTER TABLE planning_entries ADD COLUMN annule_count INTEGER DEFAULT 0")
+    if "annule_motif" not in _pe_annul_cols:
+        conn.execute("ALTER TABLE planning_entries ADD COLUMN annule_motif TEXT")
+    if "annule_par" not in _pe_annul_cols:
+        conn.execute("ALTER TABLE planning_entries ADD COLUMN annule_par TEXT")
+    if "annule_le" not in _pe_annul_cols:
+        conn.execute("ALTER TABLE planning_entries ADD COLUMN annule_le TEXT")
+    conn.execute("UPDATE planning_entries SET annule_count=0 WHERE annule_count IS NULL")
+    conn.commit()
 
 
 
+
+
+
+    # ══════════════════════════════════════════════════════════════════
+    # MyQualité › Certifications SIFA › Explorateur de documents (GED)
+    # ══════════════════════════════════════════════════════════════════
+    # Choix délibéré : PAS de numéro dans schema_migrations. Le commentaire
+    # de la migration 215 ci-dessus documente pourquoi — le versionnage
+    # séquentiel a déjà provoqué une collision de numéro entre branches
+    # parallèles, et une 2e migration portant le même numéro est
+    # silencieusement ignorée. Ici tout est en CREATE ... IF NOT EXISTS :
+    # idempotent, auto-réparateur, insensible à l'ordre de merge.
+    #
+    # - qualite_ged_folders       : arborescence récursive (parent_id NULL = racine)
+    # - qualite_ged_files         : le document « logique » (emplacement, tags, lien)
+    # - qualite_ged_file_versions : les fichiers physiques successifs du document
+    # - qualite_ged_fts           : index plein texte FTS5 (rowid = files.id)
+    #
+    # Corbeille : deleted_at + trash_id (uuid commun à tout ce qui a été
+    # supprimé dans le même geste) → restauration exacte d'un dossier entier.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS qualite_ged_folders (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_id   INTEGER REFERENCES qualite_ged_folders(id) ON DELETE CASCADE,
+            nom         TEXT NOT NULL,
+            description TEXT,
+            link_type   TEXT,
+            link_id     INTEGER,
+            created_at  TEXT NOT NULL,
+            created_by  INTEGER REFERENCES users(id),
+            updated_at  TEXT,
+            updated_by  INTEGER REFERENCES users(id),
+            deleted_at  TEXT,
+            deleted_by  INTEGER REFERENCES users(id),
+            trash_id    TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ged_folders_parent ON qualite_ged_folders(parent_id, deleted_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ged_folders_trash  ON qualite_ged_folders(trash_id)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS qualite_ged_files (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            folder_id    INTEGER REFERENCES qualite_ged_folders(id) ON DELETE CASCADE,
+            nom          TEXT NOT NULL,
+            ext          TEXT,
+            mime_type    TEXT,
+            description  TEXT,
+            tags         TEXT NOT NULL DEFAULT '',
+            link_type    TEXT,
+            link_id      INTEGER,
+            contenu_txt  TEXT,
+            index_status TEXT NOT NULL DEFAULT 'pending',
+            created_at   TEXT NOT NULL,
+            created_by   INTEGER REFERENCES users(id),
+            updated_at   TEXT,
+            updated_by   INTEGER REFERENCES users(id),
+            deleted_at   TEXT,
+            deleted_by   INTEGER REFERENCES users(id),
+            trash_id     TEXT
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ged_files_folder ON qualite_ged_files(folder_id, deleted_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ged_files_trash  ON qualite_ged_files(trash_id)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS qualite_ged_file_versions (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id       INTEGER NOT NULL REFERENCES qualite_ged_files(id) ON DELETE CASCADE,
+            version       INTEGER NOT NULL,
+            storage_path  TEXT NOT NULL,
+            size_bytes    INTEGER,
+            sha256        TEXT,
+            original_name TEXT,
+            is_current    INTEGER NOT NULL DEFAULT 1,
+            commentaire   TEXT,
+            uploaded_at   TEXT NOT NULL,
+            uploaded_by   INTEGER REFERENCES users(id)
+        )
+    """)
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ged_ver_uniq ON qualite_ged_file_versions(file_id, version)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ged_ver_cur ON qualite_ged_file_versions(file_id, is_current)")
+
+    # FTS5 est compilé par défaut dans SQLite sur Debian/Ubuntu, mais on ne
+    # parie pas dessus : si la table virtuelle ne peut pas être créée, la
+    # recherche du module bascule automatiquement sur un LIKE contenu_txt.
+    # remove_diacritics 2 : « déclaration » trouve « declaration » et inversement.
+    try:
+        conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS qualite_ged_fts USING fts5(
+                nom, description, tags, contenu,
+                tokenize="unicode61 remove_diacritics 2"
+            )
+        """)
+    except Exception:
+        pass
+
+    conn.commit()
 
 
 def create_default_admin():
