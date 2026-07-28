@@ -8255,7 +8255,13 @@ function setPlanSubtab(name){
   const hist = document.getElementById('plan-subview-historique');
   if(cal) cal.style.display = (name === 'calendrier') ? '' : 'none';
   if(hist) hist.style.display = (name === 'historique') ? '' : 'none';
-  if(name === 'historique') loadPlanningHistorique();
+  if(name === 'historique'){
+    loadPlanningHistorique();
+    // v2.4.30 : panel "Gestion des modeles" -- charge + rend explicitement.
+    if(typeof loadTemplates === 'function' && typeof renderTemplateManagePanel === 'function'){
+      loadTemplates(true).then(renderTemplateManagePanel).catch(function(){});
+    }
+  }
   else if(name === 'calendrier'){ try { renderCal(); } catch(e){} }
 }
 async function loadPlanningHistorique(){
