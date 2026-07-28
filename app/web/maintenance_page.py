@@ -602,9 +602,10 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-frame-stat-value.muted{color:var(--muted);font-weight:500;font-style:italic;font-size:18px}
 .maint-frame-progress{padding:0 20px 12px}
 .maint-frame-progress-track{height:14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative}
+/* v2.4.24 : classes .warn/.danger retirees (dead code) — la couleur du remplissage
+   est TOUJOURS imposee inline par _ratioColor(ratio), meme systeme que les
+   anneaux circulaires des pieces d'usure. */
 .maint-frame-progress-fill{height:100%;border-radius:4px;transition:width .35s ease,background-color .15s;background:var(--ok,#34d399)}
-.maint-frame-progress-fill.warn{background:var(--warn,#fbbf24)}
-.maint-frame-progress-fill.danger{background:var(--danger,#f87171)}
 .maint-frame-progress-label{display:flex;justify-content:space-between;gap:8px;margin-top:5px;font-size:11px;color:var(--muted);font-weight:500}
 .maint-frame-progress-label .pct{color:var(--text2);font-weight:600}
 .maint-frame-progress.is-empty .maint-frame-progress-track{opacity:.4}
@@ -619,6 +620,53 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-frame.is-overdue .maint-frame-head{border-bottom-color:rgba(248,113,113,.25)}
 .maint-frame.is-overdue .maint-frame-title{color:var(--danger,#f87171)}
 .maint-frame.is-overdue-critical{border-color:var(--danger,#dc2626);box-shadow:0 0 0 2px var(--danger,#dc2626),0 6px 16px rgba(220,38,38,.30);transform:scale(1.01);transform-origin:top center}
+/* v2.4.23 : badge "Excès metrage" — informatif, pas une alerte */
+.maint-wp-badge.maint-wp-badge-info{background:rgba(148,163,184,.15);color:var(--text2);border:1px solid var(--border)}
+/* ── Bande de statut à gauche de chaque carte (v2.4.6) ─────────────── */
+/* Une bande verticale de 4px teintée par statut : rouge (retard), orange (dû bientôt),
+   vert (à jour), gris (jamais saisi ou intervalle inconnu). */
+.maint-frame{position:relative}
+.maint-frame::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:transparent;border-top-left-radius:14px;border-bottom-left-radius:14px;transition:background-color .15s}
+.maint-frame[data-status="overdue"]::before{background:var(--danger,#f87171)}
+.maint-frame[data-status="soon"]::before{background:#fb923c}
+.maint-frame[data-status="ok"]::before{background:var(--ok,#34d399)}
+.maint-frame[data-status="never"]::before{background:var(--muted)}
+.maint-frame[data-status="unknown"]::before{background:var(--border)}
+/* Statut "à jour" volontairement plus discret : opacity légère pour amplifier
+   le contraste avec les cartes en alerte. */
+.maint-frame[data-status="ok"]{opacity:.85}
+.maint-frame[data-status="ok"]:hover{opacity:1}
+/* ── Sous-toolbar Statut + Groupement (v2.4.6) ─────────────────────── */
+.maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
+.maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+/* v2.4.19 : toolbar unifiee Machine + Categorie + Statut sur une ligne */
+.maint-machine-toolbar{display:flex;align-items:center;gap:12px;row-gap:10px;margin:8px 0 20px 0;flex-wrap:wrap}
+.maint-toolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.maint-machine-tabs,.maint-cat-tabs{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
+.maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
+.maint-chip{border:none;background:transparent;color:var(--text2);padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.maint-chip:hover{background:var(--bg);color:var(--text)}
+.maint-chip.active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.maint-chip[data-status-filter="overdue"].active{background:var(--danger,#f87171);color:#fff}
+.maint-chip[data-status-filter="soon"].active{background:#fb923c;color:#fff}
+.maint-chip[data-status-filter="ok"].active{background:var(--ok,#34d399);color:#0a0e17}
+.maint-chip[data-status-filter="never"].active{background:var(--muted);color:#fff}
+/* ── Pastilles compteur sur onglets Machine et Catégorie (v2.4.6) ──── */
+.maint-tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--danger,#f87171);color:#fff;font-size:10px;font-weight:700;line-height:1;vertical-align:middle}
+.maint-tab-badge.hidden{display:none}
+.maint-machine-btn.active .maint-tab-badge,.maint-cat-btn.active .maint-tab-badge{background:#fff;color:var(--danger,#f87171)}
+/* v2.4.27 : variante orange pour "Dû bientôt" — s'affiche à côté de la pastille rouge */
+.maint-tab-badge.maint-tab-badge-soon{background:#fb923c;margin-left:4px}
+.maint-machine-btn.active .maint-tab-badge.maint-tab-badge-soon,
+.maint-cat-btn.active .maint-tab-badge.maint-tab-badge-soon{background:#fff;color:#fb923c}
+/* v2.4.27 : pastille rouge sur l'item sidebar Maintenance = total retards toutes machines */
+.nav-btn-badge{margin-left:auto;min-width:20px;height:18px;padding:0 6px;border-radius:999px;background:var(--danger,#f87171);color:#fff;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.nav-btn-badge.hidden{display:none}
+.nav-btn.active .nav-btn-badge{background:#fff;color:var(--danger,#f87171)}
+/* Petite pastille "count" à côté des chips statut (info neutre, non alerte) */
+.maint-chip-count{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;margin-left:2px;border-radius:999px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:700;line-height:1}
+.maint-chip.active .maint-chip-count{background:rgba(255,255,255,.25);color:#fff}
+.maint-chip[data-status-filter="ok"].active .maint-chip-count{background:rgba(10,14,23,.25);color:#0a0e17}
 .ops-subtabs{display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--border)}
 .ops-subtab{padding:10px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text2);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;transition:all .15s;margin-bottom:-1px;display:inline-flex;align-items:center;gap:6px}
 .ops-subtab:hover{color:var(--text);background:var(--accent-bg)}
@@ -846,10 +894,6 @@ body.light .op-toggle-count{background:rgba(5,150,105,.14);color:#059669}
 .op-op-card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .op-op-card-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4}
 .op-op-card-status{font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px}
-/* v2.4.9 : margin-top:auto pousse le bouton en bas de la carte quand
-   celle-ci est stretchée par le grid parent (op-event-box-cards). Résultat :
-   tous les boutons "Marquer comme terminée" d'une même ligne sont alignés
-   même quand certaines cartes ont "Consignes de l'admin" et d'autres non. */
 .op-op-card-cta{margin-top:auto;padding:8px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg);border:none;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .op-op-card-cta:hover{filter:brightness(1.08)}
 .op-op-card-cta.is-done{background:var(--bg);color:var(--text2);border:1px solid var(--border)}
@@ -1502,6 +1546,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     <button type="button" class="nav-btn adm-only active" data-view="maintenance" onclick="switchView('maintenance')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
+      <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
     </button>
     <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -1579,18 +1624,28 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
              Détermine quelles cartes "code maintenance périodique" s'affichent
              (Cohésio 1 ou Cohésio 2). Les cartes sont vides pour l'instant et
              seront alimentées par les saisies opérations/contrôles. -->
-        <div class="maint-machine-toolbar" style="display:flex;align-items:center;gap:12px;margin:8px 0 18px 0;flex-wrap:wrap">
-          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Machine</label>
-          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1</button>
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2</button>
+        <!-- Toolbar unifiee (v2.4.19) : Machine + Categorie + Statut sur une seule
+             ligne (wrap responsive). Labels harmonises, toggles avec style
+             coherent (chips), pastilles compteurs sur machine/categorie. -->
+        <div class="maint-machine-toolbar">
+          <label class="maint-toolbar-label">Machine</label>
+          <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 1" title="Opérations dû bientôt sur cette machine">0</span></button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 2" title="Opérations dû bientôt sur cette machine">0</span></button>
           </div>
-          <label style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-left:8px">Catégorie</label>
-          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist" style="display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px">
-            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien</button>
-            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions</button>
+          <label class="maint-toolbar-label">Catégorie</label>
+          <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
+            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
-          <span style="font-size:12px;color:var(--muted)">Gestion des codes : Paramètres → Maintenance</span>
+          <label class="maint-toolbar-label">Statut</label>
+          <div class="maint-chip-group" id="maint-status-chips" role="tablist">
+            <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="overdue" onclick="setMaintStatusFilter('overdue')">En retard<span class="maint-chip-count" data-status-count="overdue">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
+            <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
+          </div>
         </div>
 
         <!-- Cartes des opérations de maintenance périodiques.
@@ -5278,27 +5333,35 @@ async function loadOpsTypes(){
   }
 }
 
-// Couleur d'un anneau (ou d'une barre de progression) sur l'intervalle [0,200%].
-// Dégradé multi-stops : vert -> jaune -> orange -> rouge.
-// Au-delà de 200% : rouge plein (clamp).
+// v2.4.26 : couleur d'une barre de progression (opérations périodiques) ou
+// d'un anneau (pièces d'usure) en fonction du ratio = jours_écoulés / intervalle.
+// Système à 3 zones :
+//   - 0 à 90 %   : vert franc constant (rien à signaler)
+//   - 90 à 100 % : transition douce vert → début jaune (pré-alerte discrète)
+//   - 100 à 200 %: dégradé jaune → orange → rouge (échéance dépassée, sévérité croissante)
+//   - > 200 %    : rouge plein (clamp)
+// Change par rapport à v1 : le vert restait "trop longtemps" un vert-jaune
+// dès 50 % avant, maintenant il reste pur jusqu'à 90 %.
 function _ratioColor(ratio){
-  // Stops fixés à t = 0 / 0.33 / 0.66 / 1, où t = ratio / 2 (clampé).
+  // Stops en RATIO direct (pas de normalisation t=ratio/2 comme avant).
   const stops = [
-    [0.00, [ 52, 211, 153]],   // vert    #34d399
-    [0.33, [250, 204,  21]],   // jaune   #facc15
-    [0.66, [251, 146,  60]],   // orange  #fb923c
-    [1.00, [220,  38,  38]],   // rouge   #dc2626
+    [0.00, [ 52, 211, 153]],   // vert franc
+    [0.90, [ 52, 211, 153]],   // encore vert franc (fin de la zone safe)
+    [1.00, [180, 208, 100]],   // transition vers jaune (léger warning à échéance)
+    [1.33, [250, 204,  21]],   // jaune franc
+    [1.66, [251, 146,  60]],   // orange
+    [2.00, [220,  38,  38]],   // rouge
   ];
-  const t = Math.max(0, Math.min(1, (ratio || 0) / 2));
+  const r = Math.max(0, Math.min(2, ratio || 0));  // clamp 0..2
   for(let i = 0; i < stops.length - 1; i++){
-    const [ta, ca] = stops[i];
-    const [tb, cb] = stops[i + 1];
-    if(t <= tb){
-      const lt = (tb === ta) ? 0 : (t - ta) / (tb - ta);
-      const r = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
-      const g = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
-      const b = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
-      return 'rgb(' + r + ',' + g + ',' + b + ')';
+    const [ra, ca] = stops[i];
+    const [rb, cb] = stops[i + 1];
+    if(r <= rb){
+      const lt = (rb === ra) ? 0 : (r - ra) / (rb - ra);
+      const red   = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
+      const green = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
+      const blue  = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
+      return 'rgb(' + red + ',' + green + ',' + blue + ')';
     }
   }
   const last = stops[stops.length - 1][1];
@@ -5558,6 +5621,139 @@ function setMaintMachine(m){
   WEARPART_LAST_DATES_STATE._cacheKey = null;
   renderMaintCards();
 }
+
+// --- v2.4.6 : filtre par statut ---------------------------------------
+// Statuts : 'all' (défaut) · 'overdue' · 'soon' · 'ok' · 'never'
+// Le regroupement est fixe (par statut) — le toggle a été retiré car
+// redondant avec le filtre statut et le sélecteur machine du haut.
+const MAINT_STATUS_FILTER_KEY = 'mysifa_maint_home_status_filter_v1';
+
+function getMaintStatusFilter(){
+  try{
+    const v = localStorage.getItem(MAINT_STATUS_FILTER_KEY);
+    if(v === 'overdue' || v === 'soon' || v === 'ok' || v === 'never') return v;
+    return 'all';
+  }catch(e){ return 'all'; }
+}
+function setMaintStatusFilter(s){
+  if(s !== 'all' && s !== 'overdue' && s !== 'soon' && s !== 'ok' && s !== 'never') return;
+  try{ localStorage.setItem(MAINT_STATUS_FILTER_KEY, s); }catch(e){}
+  renderMaintCards();
+}
+// Statut d'une opération à partir de son intervalle (jours) et du nombre de
+// jours depuis la dernière saisie. Seuils :
+//   - 'overdue' : ratio > 1 (retard, dès dépassement)
+//   - 'soon'    : ratio >= 0.8 (dû dans les 20 % derniers de l'intervalle)
+//   - 'ok'      : ratio < 0.8 (à jour)
+//   - 'never'   : intervalle défini mais aucune saisie
+//   - 'unknown' : intervalle non reconnu
+function _maintComputeStatus(freqDays, daysSince){
+  if(freqDays == null || freqDays <= 0) return 'unknown';
+  if(daysSince == null) return 'never';
+  const ratio = daysSince / freqDays;
+  if(ratio > 1) return 'overdue';
+  if(ratio >= 0.8) return 'soon';
+  return 'ok';
+}
+
+// Libellés + ordre de tri des groupes "par statut" (retards en tête, jamais en bas).
+const MAINT_STATUS_ORDER = ['overdue','soon','ok','unknown','never'];
+const MAINT_STATUS_LABELS = {
+  overdue: 'En retard',
+  soon:    'Dû bientôt',
+  ok:      'À jour',
+  unknown: 'Intervalle non reconnu',
+  never:   'Jamais saisi',
+};
+// Liste des machines exposées dans la vue Maintenance (accueil).
+const MAINT_HOME_MACHINES = ['Cohésio 1', 'Cohésio 2'];
+
+// v2.4.27 : refonte — pastilles Machine et Catégorie affichent maintenant
+// 2 pastilles chacune (rouge = retards, orange = dû bientôt), et incluent les
+// pièces d'usure (par POSITION, comme le comptage des chips Statut v2.4.25).
+// En bonus : pastille rouge globale sur l'item sidebar "Maintenance" =
+// somme des retards toutes machines confondues (visible depuis les autres
+// vues internes Planning / Alertes / Opérations).
+function _refreshMaintCounters(){
+  const items = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
+  // Helper : status d'un item périodique pour une machine donnée.
+  const periodicStatus = (it, machine) => {
+    const freqDays = _parseFrequenceDays(it.intervalle);
+    if(freqDays == null || freqDays <= 0) return 'unknown';
+    const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
+    if(!last) return 'never';
+    try{
+      const d = new Date(last);
+      const today = new Date();
+      const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
+      return _maintComputeStatus(freqDays, daysSince);
+    }catch(e){ return 'unknown'; }
+  };
+  // Helper : maj DOM d'une pastille — text = count si >0, sinon hidden.
+  const setBadge = (el, count) => {
+    if(!el) return;
+    if(count > 0){ el.textContent = String(count); el.classList.remove('hidden'); }
+    else { el.classList.add('hidden'); }
+  };
+  let globalOverdue = 0;
+  // ── Compteurs par MACHINE (toutes catégories + pièces d'usure) ─────
+  MAINT_HOME_MACHINES.forEach(machine => {
+    let overdue = 0, soon = 0;
+    items.forEach(it => {
+      const st = periodicStatus(it, machine);
+      if(st === 'overdue') overdue++;
+      else if(st === 'soon') soon++;
+    });
+    WEARPART_PIECES.forEach(p => {
+      _wearPartPositionsOf(p).forEach(pos => {
+        const st = _wearPartPositionStatus(p.id, pos, machine);
+        if(st === 'overdue') overdue++;
+        else if(st === 'soon') soon++;
+      });
+    });
+    globalOverdue += overdue;
+    const esc = machine.replace(/"/g, '\\"');
+    setBadge(document.querySelector('[data-maint-machine-badge="' + esc + '"]'), overdue);
+    setBadge(document.querySelector('[data-maint-machine-badge-soon="' + esc + '"]'), soon);
+  });
+  // ── Compteurs par CATÉGORIE (sur la machine active) ────────────────
+  const machine = getMaintMachine();
+  const cats = { entretien: {o:0, s:0}, remplacements: {o:0, s:0} };
+  items.forEach(it => {
+    const cat = it.categorie;
+    let bucket = null;
+    if(cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi') bucket = 'entretien';
+    else if(cat === 'remplacements') bucket = 'remplacements';
+    if(!bucket) return;
+    const st = periodicStatus(it, machine);
+    if(st === 'overdue') cats[bucket].o++;
+    else if(st === 'soon') cats[bucket].s++;
+  });
+  // Pièces d'usure = catégorie "remplacements"
+  WEARPART_PIECES.forEach(p => {
+    _wearPartPositionsOf(p).forEach(pos => {
+      const st = _wearPartPositionStatus(p.id, pos, machine);
+      if(st === 'overdue') cats.remplacements.o++;
+      else if(st === 'soon') cats.remplacements.s++;
+    });
+  });
+  Object.keys(cats).forEach(cat => {
+    setBadge(document.querySelector('[data-maint-cat-badge="' + cat + '"]'), cats[cat].o);
+    setBadge(document.querySelector('[data-maint-cat-badge-soon="' + cat + '"]'), cats[cat].s);
+  });
+  // ── Pastille sidebar globale (retards toutes machines) ─────────────
+  setBadge(document.getElementById('nav-maint-badge'), globalOverdue);
+}
+
+// Applique l'état actif visuel sur les chips statut + groupement.
+function _refreshMaintChipState(){
+  const status = getMaintStatusFilter();
+  document.querySelectorAll('[data-status-filter]').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-status-filter') === status);
+  });
+}
 // --- Dernières opérations couteaux/contre-couteaux (source : MyProd) ---
 // On interroge /api/maintenance/wearparts/last qui scanne production_data
 // pour la machine sélectionnée. Réponse : { items: { "couteaux_bande": {
@@ -5675,6 +5871,61 @@ const WEARPART_PIECES = [
   { id: 'cutters',          label: 'Cutters',           no_position: true },
   { id: 'couteaux_landberg',label: 'Couteaux Landberg', no_position: true },
 ];
+
+// --- v2.4.21 : filtrage pieces d'usure par statut ("Tous" / "Jamais saisi") -
+// Une position est "renseignee" si _lastInterventionFor renvoie une date non
+// nulle pour son code+machine. Une piece a 1 ou 2 positions (bande/rive ou
+// single). Le rendu doit :
+//   - En 'all'   : montrer seulement les pieces avec >=1 position renseignee,
+//                  et forcer la position affichee sur une renseignee.
+//   - En 'never' : montrer seulement les pieces avec >=1 position vide,
+//                  et forcer la position affichee sur une vide.
+function _wearPartPositionsOf(piece){
+  return piece.no_position ? ['single'] : ['bande', 'rive'];
+}
+function _wearPartHasData(pieceId, pos, machine){
+  const wpCode = _findWearPartCode(pieceId, pos);
+  if(!wpCode) return false;
+  const last = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  return last != null;
+}
+// Retourne pour chaque piece : positions renseignees / non renseignees.
+function _wearPartStatusFor(pieceId, machine){
+  const p = _wearPartDef(pieceId);
+  if(!p) return { hasData: [], noData: [] };
+  const hasData = [], noData = [];
+  _wearPartPositionsOf(p).forEach(pos => {
+    if(_wearPartHasData(pieceId, pos, machine)) hasData.push(pos);
+    else noData.push(pos);
+  });
+  return { hasData, noData };
+}
+// Compte les pieces qualifiantes pour les filtres 'all' et 'never', pour
+// alimenter les compteurs des chips statut de la sous-toolbar.
+// Status d'une position (overdue/soon/ok/never/unknown), meme logique que
+// _maintComputeStatus pour les operations periodiques mais sur le temps
+// UNIQUEMENT — cf. regle produit v2.4.23 : metrage n'est pas un facteur retard.
+function _wearPartPositionStatus(pieceId, pos, machine){
+  const wpCode = _findWearPartCode(pieceId, pos);
+  if(!wpCode) return 'unknown';
+  const refDays = _parseFrequenceDays(wpCode.intervalle || '');
+  const lastDate = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  const daysSince = _daysSinceFromIso(lastDate);
+  return _maintComputeStatus(refDays, daysSince);
+}
+// Compte chaque POSITION comme une operation distincte, ventilee par statut.
+// Une piece Couteaux avec Bande faite hier + Rive faite aujourd'hui = 2 dans .ok
+// (et non 1 dans .all comme avant v2.4.25).
+function _wearPartsCounts(machine){
+  const c = { overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
+  WEARPART_PIECES.forEach(p => {
+    _wearPartPositionsOf(p).forEach(pos => {
+      const st = _wearPartPositionStatus(p.id, pos, machine);
+      if(c[st] !== undefined) c[st]++;
+    });
+  });
+  return c;
+}
 // Retourne le descripteur d'une pièce d'usure par id (utile pour tester no_position)
 function _wearPartDef(pieceId){
   return WEARPART_PIECES.find(p => p.id === pieceId) || null;
@@ -5775,14 +6026,33 @@ function setWearPartRef(pieceId, kind, value){
   // de perdre le focus pendant que l'utilisateur tape.
 }
 
-function _renderWearPartsGroup(machine){
+function _renderWearPartsGroup(machine, statusFilter){
   // Déclenche le fetch des dernières dates si la machine a changé
   // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
   if(WEARPART_LAST_DATES_STATE.machine !== machine){
     loadWearPartLastDates(machine);
   }
-  const cards = WEARPART_PIECES.map(p => {
-    const pos = getWearPartPos(p.id, machine);
+  // v2.4.25 : filtre les positions par statut fin (overdue/soon/ok/never).
+  // - 'all'   : positions renseignees (overdue + soon + ok)
+  // - 'never' : positions jamais saisies + statut unknown
+  // - autre   : positions dont le statut match exactement (ex. 'ok' → toutes
+  //             les positions actuellement à jour, jamais celles en retard).
+  // Les onglets Bande/Rive n'affichent que les positions matchantes.
+  const eligible = [];
+  WEARPART_PIECES.forEach(p => {
+    const matchingPositions = _wearPartPositionsOf(p).filter(pos => {
+      const st = _wearPartPositionStatus(p.id, pos, machine);
+      if(statusFilter === 'all')   return (st !== 'never' && st !== 'unknown');
+      if(statusFilter === 'never') return (st === 'never' || st === 'unknown');
+      return st === statusFilter;
+    });
+    if(matchingPositions.length === 0) return;
+    const currentPos = getWearPartPos(p.id, machine);
+    const forcedPos = (matchingPositions.indexOf(currentPos) !== -1) ? currentPos : matchingPositions[0];
+    eligible.push({ piece: p, pos: forcedPos, matchingPositions });
+  });
+  if(eligible.length === 0) return '';  // section vide → caller n'affiche rien
+  const cards = eligible.map(({piece: p, pos, matchingPositions}) => {
     // Source des références : code Intervention en base, match par label
     // (ex. "Changement couteaux bande" → carte Couteaux + Bande).
     const wpCode = _findWearPartCode(p.id, pos);
@@ -5802,19 +6072,22 @@ function _renderWearPartsGroup(machine){
     const daysSince = _daysSinceFromIso(lastDate);
     // Pour la compat avec le bloc d'affichage plus bas (qui utilise wpItem.last_date)
     if(wpItem){ wpItem.last_date = lastDate; }
-    // Mise en exergue : déclenchée par DÉPASSEMENT DE TEMPS ou DÉPASSEMENT DE
-    // MÉTRAGE (peu importe lequel) par rapport à la référence. is-overdue dès
-    // le dépassement, is-overdue-critical quand on est à >200%.
+    // v2.4.23 : mise en exergue déclenchée UNIQUEMENT par le dépassement de
+    // temps. Le métrage reste informatif (visible via anneau + valeur) mais
+    // n'est plus considéré comme un critère de retard — cf. règle produit :
+    // "le facteur retard est le temps, le métrage est un supplément visuel".
     const refDays   = _parseFrequenceDays(refTemps);
     const refMetres = _parseMetrageRef(refMetrage);
     const timeOver     = (refDays   != null && refDays   > 0 && daysSince    != null && daysSince    > refDays);
-    const timeCritical = (timeOver && daysSince    > refDays   * 2);
+    const timeCritical = (timeOver && daysSince > refDays * 2);
+    // metresOver garde son sens local (utilisé pour afficher un badge d'excès
+    // à côté de la valeur Parcouru), mais ne déclenche plus la bordure rouge.
     const metresOver     = (refMetres != null && refMetres > 0 && metrageSince != null && metrageSince > refMetres);
     const metresCritical = (metresOver && metrageSince > refMetres * 2);
     let frameClsExtra = '';
-    if(timeOver || metresOver){
+    if(timeOver){
       frameClsExtra = ' is-overdue';
-      if(timeCritical || metresCritical) frameClsExtra += ' is-overdue-critical';
+      if(timeCritical) frameClsExtra += ' is-overdue-critical';
     }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
@@ -5842,11 +6115,16 @@ function _renderWearPartsGroup(machine){
       const active = (pos === value) ? ' active' : '';
       return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
     };
+    // v2.4.22 : ne montrer que les onglets des positions qui matchent le filtre.
+    // Cas typique : Couteaux avec seulement Rive renseigné en filtre "Tous" →
+    // le bouton Bande disparait (avant il était visible mais menait a une vue vide).
+    // Si les 2 positions matchent, on montre les 2 (choix reel entre bande/rive).
+    // Si une seule matche, seul son bouton apparait (agit comme un badge de position).
     const tabsHtml = p.no_position
       ? ''
       : ('<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
-           _b('Bande', 'bande') +
-           _b('Rive', 'rive') +
+           (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
+           (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
          '</div>');
     return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
       '<div class="maint-frame-head">' +
@@ -5896,10 +6174,12 @@ function _renderWearPartsGroup(machine){
         } else {
           mVal = '<span class="val">' + escHtml(_fmtMetres(metrageSince)) + '</span>';
         }
+        // v2.4.23 : badge metrage renomme "Excès" (au lieu de "Retard") pour
+        // eviter la connotation alarme — cf. règle produit metrage = supplement.
         let metresBadge = '';
         if(metresOver){
           const overM = metrageSince - refMetres;
-          metresBadge = '<span class="maint-wp-badge">Retard ' + escHtml(_fmtMetres(overM)) + '</span>';
+          metresBadge = '<span class="maint-wp-badge maint-wp-badge-info">Excès +' + escHtml(_fmtMetres(overM)) + '</span>';
         }
         // Ratios pour les anneaux (null si pas de référence ou pas de donnée)
         const ratios = {
@@ -5938,10 +6218,11 @@ function _renderWearPartsGroup(machine){
       '</section>';
       })();
   }).join('');
+  const nb = eligible.length;
   return '<div class="maint-group">' +
            '<div class="maint-group-head">' +
              '<h3 class="maint-group-title">Pièces d\'usure</h3>' +
-             '<span class="maint-group-count">' + WEARPART_PIECES.length + ' pièces</span>' +
+             '<span class="maint-group-count">' + nb + ' pièce' + (nb > 1 ? 's' : '') + '</span>' +
            '</div>' +
            '<div class="maint-wearparts-stack">' + cards + '</div>' +
          '</div>';
@@ -5988,10 +6269,19 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-cat-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-cat') === catFilter);
   });
+  // v2.4.6 : nouveau filtre statut + choix du regroupement.
+  const statusFilter = getMaintStatusFilter();
+  const grouping = 'status';  // v2.4.6 : toggle retire, groupement fixe par statut
+  _refreshMaintChipState();
+  _refreshMaintCounters();
   const showWearParts = (catFilter === 'remplacements');
-  // La section "Pièces d'usure" est rendue uniquement quand le toggle est
-  // sur "Remplacements" — les pièces d'usure sont par nature des remplacements.
-  const wearPartsHtml = showWearParts ? _renderWearPartsGroup(machine) : '';
+  // v2.4.25 : les pieces d'usure sont maintenant comptees + affichees dans
+  // TOUS les filtres statut (leur logique de retard temps est integree au
+  // systeme unifie overdue/soon/ok/never). _renderWearPartsGroup renvoie ''
+  // si aucune position ne matche → section entiere (titre inclus) masquee
+  // automatiquement.
+  const wearPartsHtml = showWearParts
+    ? _renderWearPartsGroup(machine, statusFilter) : '';
   // Récupère les IDs des codes utilisés par les cartes Pièces d'usure pour les
   // exclure des sections par intervalle (sinon les changements couteaux/
   // contre-couteaux apparaîtraient deux fois). Utile seulement quand la
@@ -6007,18 +6297,14 @@ function renderMaintCards(){
     });
   }
   // Filtre les codes avec periodique=OUI, exclus ceux déjà affichés dans la
-  // section Pièces d'usure. Toggle Entretien : cartes Nettoyage (DB: entretien
-  // / legacy) + Contrôles périodiques. Toggle Interventions : cartes
-  // Interventions (DB: remplacements) + Pièces d'usure (rendues à part).
+  // section Pièces d'usure.
   const baseItems = (OPS_TYPES_STATE.list || []).filter(it => {
     if(!it.periodique) return false;
     if(wearPartCodeIds.has(String(it.id))) return false;
     const cat = it.categorie;
     if(catFilter === 'entretien'){
-      // Nettoyage (DB: entretien / legacy interventions / suivi) + Contrôles périodiques
       return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
     }
-    // catFilter === 'remplacements' : uniquement les cartes Interventions (DB: remplacements)
     return cat === 'remplacements';
   });
   if(!baseItems.length){
@@ -6026,19 +6312,12 @@ function renderMaintCards(){
       '<div class="maint-frames-empty" style="margin-top:24px">Aucune opération périodique configurée. Ajoutez des codes avec Périodique=OUI dans Paramètres → Maintenance.</div>';
     return;
   }
-  // Pour chaque carte, calcule : freqDays (depuis intervalle), dernière intervention
-  // sur la machine sélectionnée, et infos de retard.
-  //
-  // Source des saisies : TOUJOURS OPS_STATE.
-  // Les cartes affichent les codes periodique=OUI (interventions + controles).
-  // Le select de la modale Contrôles ne propose que les controles periodique=NON,
-  // donc un code controle periodique=OUI ne peut être saisi que via la modale
-  // Opérations -> il atterrit dans OPS_STATE. Si on lit CTRL_STATE pour les
-  // controles, on rate ces saisies (bug observé : cartes restant à "Jamais"
-  // alors que des entrées existent dans l'historique des opérations).
-  const enriched = baseItems.map(it => {
+  // Enrichit chaque item pour une machine donnée : freqDays, last, daysSince,
+  // daysOverdue, status. On extrait dans une fonction pour pouvoir enrichir
+  // plusieurs machines à la fois quand grouping === 'machine'.
+  const enrichFor = (machineName) => baseItems.map(it => {
     const freqDays = _parseFrequenceDays(it.intervalle);
-    const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
+    const last = _lastInterventionFor(it.nom, machineName, OPS_STATE.list);
     let daysSince = null;
     if(last){
       try{
@@ -6051,33 +6330,137 @@ function renderMaintCards(){
     }
     const daysOverdue = (freqDays != null && daysSince != null) ? (daysSince - freqDays) : null;
     const overdue = (daysOverdue != null && daysOverdue > 0);
-    return { it, freqDays, last, daysSince, daysOverdue, overdue };
+    const status = _maintComputeStatus(freqDays, daysSince);
+    return { it, machine: machineName, freqDays, last, daysSince, daysOverdue, overdue, status };
   });
-  // Calcule le plus grand retard (toutes catégories) pour mettre en exergue
-  let maxOverdue = 0;
-  enriched.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
-  // Groupement par intervalle (en jours). Items sans intervalle reconnu -> groupe "null".
-  const groups = new Map();  // key = freqDays (number) ou 'unknown'
-  enriched.forEach(e => {
-    const key = (e.freqDays == null) ? 'unknown' : e.freqDays;
+
+  // Selon le regroupement, on enrichit sur 1 machine (statut/fréquence) ou
+  // sur toutes les machines de la vue (regroupement par machine).
+  let enriched;
+  if(grouping === 'machine'){
+    enriched = [];
+    MAINT_HOME_MACHINES.forEach(m => { enriched = enriched.concat(enrichFor(m)); });
+  } else {
+    enriched = enrichFor(machine);
+  }
+
+  // Compteurs par statut, calculés sur l'ensemble non filtré.
+  // Règle produit (v2.4.20) : "Tous" exclut les jamais saisi + unknown pour
+  // dédensifier la vue ; ces opérations restent accessibles via le chip
+  // "Jamais saisi" (qui remonte à la fois never et unknown, sémantiquement
+  // proches — les deux = "pas de donnée exploitable").
+  const statusCounts = { overdue: 0, soon: 0, ok: 0, never: 0, unknown: 0 };
+  enriched.forEach(e => { statusCounts[e.status] = (statusCounts[e.status] || 0) + 1; });
+  // v2.4.25 : en categorie "Remplacements", chaque POSITION de piece d'usure
+  // est une operation independante, comptee dans son statut propre. On ajoute
+  // les 5 buckets aux compteurs avant de calculer neverAndUnknown / all.
+  if(showWearParts){
+    const wpc = _wearPartsCounts(machine);
+    statusCounts.overdue += wpc.overdue;
+    statusCounts.soon    += wpc.soon;
+    statusCounts.ok      += wpc.ok;
+    statusCounts.never   += wpc.never;
+    statusCounts.unknown += wpc.unknown;
+  }
+  const neverAndUnknown = statusCounts.never + statusCounts.unknown;
+  // Le compteur "Tous" reflète ce qui sera VU (donc sans never/unknown).
+  statusCounts.all = statusCounts.overdue + statusCounts.soon + statusCounts.ok;
+  document.querySelectorAll('[data-status-count]').forEach(el => {
+    const key = el.getAttribute('data-status-count');
+    if(key === 'never'){
+      // Le chip "Jamais saisi" englobe never + unknown.
+      el.textContent = String(neverAndUnknown);
+    } else {
+      el.textContent = String(statusCounts[key] != null ? statusCounts[key] : 0);
+    }
+  });
+
+  // Applique le filtre statut.
+  const filtered = enriched.filter(e => {
+    if(statusFilter === 'all')   return (e.status !== 'never' && e.status !== 'unknown');
+    if(statusFilter === 'never') return (e.status === 'never' || e.status === 'unknown');
+    return e.status === statusFilter;
+  });
+
+  if(!filtered.length){
+    // v2.4.21 : si les pieces d'usure remplissent la section (wearPartsHtml
+    // non vide), on renvoie juste wearPartsHtml sans message vide — sinon on
+    // afficherait "aucune op à afficher" avec des cartes visibles en dessous.
+    if(wearPartsHtml){
+      grid.innerHTML = wearPartsHtml;
+      return;
+    }
+    let emptyMsg;
+    if(statusFilter === 'all' && neverAndUnknown > 0){
+      // Cas particulier : il y a des ops "jamais saisi" mais on les a masquées.
+      // Explique le pourquoi + bouton implicite (le chip "Jamais saisi" est
+      // déjà là, il suffit de basculer).
+      const s = neverAndUnknown > 1 ? 's' : '';
+      emptyMsg = neverAndUnknown + ' opération' + s + ' jamais saisie' + s +
+                 ' masquée' + s + ' — bascule sur le filtre « Jamais saisi » pour les voir.';
+    } else {
+      const msgs = {
+        overdue: 'Aucune opération en retard. 🎉',
+        soon:    'Aucune opération à faire dans les prochains jours.',
+        ok:      'Aucune opération à jour à afficher.',
+        never:   'Toutes les opérations ont déjà été saisies au moins une fois.',
+        all:     'Aucune opération à afficher.',
+      };
+      emptyMsg = msgs[statusFilter] || msgs.all;
+    }
+    grid.innerHTML = wearPartsHtml +
+      '<div class="maint-frames-empty" style="margin-top:24px">' + emptyMsg + '</div>';
+    return;
+  }
+
+  // Poids de tri par statut pour le tri par urgence (Jamais tout en bas).
+  const statusWeight = { overdue: 0, soon: 1, ok: 2, unknown: 3, never: 4 };
+
+  // Groupement dynamique.
+  const groups = new Map();
+  filtered.forEach(e => {
+    let key;
+    if(grouping === 'status') key = e.status;
+    else if(grouping === 'machine') key = e.machine;
+    else /* freq */             key = (e.freqDays == null) ? 'unknown' : e.freqDays;
     if(!groups.has(key)) groups.set(key, []);
     groups.get(key).push(e);
   });
-  // Tri des groupes : plus petit intervalle en premier, 'unknown' à la fin
-  const sortedKeys = Array.from(groups.keys()).sort((a, b) => {
-    if(a === 'unknown') return 1;
-    if(b === 'unknown') return -1;
-    return a - b;
-  });
-  // Tri à l'intérieur de chaque groupe : retard décroissant, puis alphabétique
+
+  // Tri des clés de groupe selon le mode.
+  let sortedKeys;
+  if(grouping === 'status'){
+    sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+      return (statusWeight[a] != null ? statusWeight[a] : 99)
+           - (statusWeight[b] != null ? statusWeight[b] : 99);
+    });
+  } else if(grouping === 'machine'){
+    sortedKeys = MAINT_HOME_MACHINES.filter(m => groups.has(m));
+  } else {
+    // freq : plus petit intervalle en premier, 'unknown' à la fin
+    sortedKeys = Array.from(groups.keys()).sort((a, b) => {
+      if(a === 'unknown') return 1;
+      if(b === 'unknown') return -1;
+      return a - b;
+    });
+  }
+
+  // Tri intra-groupe : par urgence globale (statut asc puis retard décroissant
+  // puis alphabétique). "Jamais" est ainsi toujours en bas, sauf dans son
+  // propre groupe où il ne reste que du "never" — dans ce cas c'est l'alpha
+  // qui départage.
   groups.forEach((arr) => {
     arr.sort((a, b) => {
+      const wa = statusWeight[a.status] != null ? statusWeight[a.status] : 99;
+      const wb = statusWeight[b.status] != null ? statusWeight[b.status] : 99;
+      if(wa !== wb) return wa - wb;
       const oa = a.daysOverdue || 0;
       const ob = b.daysOverdue || 0;
       if(ob !== oa) return ob - oa;
       return (a.it.nom || '').localeCompare(b.it.nom || '', 'fr');
     });
   });
+
   const _fmtDateTime = (iso) => {
     if(!iso) return '—';
     try{
@@ -6088,22 +6471,35 @@ function renderMaintCards(){
              ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
     }catch(e){ return '—'; }
   };
-  // Construit le HTML : pièces d'usure d'abord, puis sections par intervalle.
+
+  // Libellé de groupe selon le mode.
+  const groupLabelFor = (key) => {
+    if(grouping === 'status') return MAINT_STATUS_LABELS[key] || String(key);
+    if(grouping === 'machine') return String(key);
+    return (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
+  };
+
+  // Construit le HTML : pièces d'usure d'abord (si applicable), puis groupes.
   let html = wearPartsHtml;
   sortedKeys.forEach(key => {
     const groupItems = groups.get(key);
-    const groupLabel = (key === 'unknown') ? 'Sans intervalle reconnu' : _freqDaysToLabel(key);
-    const cards = groupItems.map(({it, freqDays, last, daysSince, daysOverdue, overdue}) => {
+    const groupLabel = groupLabelFor(key);
+    const cards = groupItems.map(({it, machine: itemMachine, freqDays, last, daysSince, daysOverdue, overdue, status}) => {
       const catLabel = _maintCatLabelFront(it.categorie);
       let frameCls = 'maint-frame';
-      if(overdue){
-        frameCls += ' is-overdue';
+      if(overdue) frameCls += ' is-overdue';
+      // On garde is-overdue-critical uniquement quand on n'est pas en groupement
+      // par statut (sinon toute la section "En retard" scale, ce qui casse le layout).
+      if(overdue && grouping !== 'status'){
+        // Recalcule maxOverdue à la volée sur les items filtrés
+        let maxOverdue = 0;
+        filtered.forEach(e => { if(e.daysOverdue && e.daysOverdue > maxOverdue) maxOverdue = e.daysOverdue; });
         if(maxOverdue > 0 && daysOverdue === maxOverdue) frameCls += ' is-overdue-critical';
       }
       const lastHtml = last
         ? '<span class="maint-frame-stat-value">' + escHtml(_fmtDateTime(last)) + '</span>'
         : '<span class="maint-frame-stat-value muted">Jamais</span>';
-      // Statut de retard
+      // Badge textuel de retard (bas de carte).
       let badgeCls = 'unknown';
       let badgeLbl = '';
       let detailLbl = '';
@@ -6115,7 +6511,7 @@ function renderMaintCards(){
         } else {
           badgeCls = 'ok';
           const remaining = -daysOverdue;
-          badgeLbl = 'OK · J-' + remaining;
+          badgeLbl = (status === 'soon' ? 'Bientôt · J-' + remaining : 'OK · J-' + remaining);
           detailLbl = remaining + ' j avant prochaine échéance';
         }
       } else if(daysSince != null && freqDays == null){
@@ -6130,10 +6526,7 @@ function renderMaintCards(){
         badgeCls = 'unknown';
         badgeLbl = 'Aucune donnée';
       }
-      // Barre de progression : pourcentage écoulé depuis la dernière intervention
-      // sur l'intervalle. Largeur clampée à 100% visuellement. Couleur via
-      // _ratioColor (dégradé vert -> jaune -> orange -> rouge sur [0, 200%]),
-      // identique au code couleur des anneaux des pièces d'usure.
+      // Barre de progression : identique à l'existant.
       let progressHtml = '';
       if(freqDays != null && freqDays > 0 && daysSince != null){
         const ratio = daysSince / freqDays;
@@ -6149,7 +6542,6 @@ function renderMaintCards(){
             '</div>' +
           '</div>';
       } else if(freqDays != null && freqDays > 0 && daysSince == null){
-        // Intervalle défini mais jamais saisi : barre vide grisée
         progressHtml =
           '<div class="maint-frame-progress is-empty" title="' + escAttr('Aucune saisie pour cette opération sur cette machine. Intervalle prévu : ' + freqDays + ' jour(s).') + '">' +
             '<div class="maint-frame-progress-track"><div class="maint-frame-progress-fill" style="width:0%"></div></div>' +
@@ -6159,10 +6551,15 @@ function renderMaintCards(){
             '</div>' +
           '</div>';
       }
-      // Si freqDays est null (intervalle non reconnu), pas de barre.
       const catCls = _maintCatCssFront(it.categorie);
       const nivNum = parseInt(it.niveau, 10) || 1;
-      return '<section class="' + frameCls + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(machine) + '">' +
+      // Étiquette machine visible uniquement quand on regroupe par statut/fréquence
+      // et qu'on affiche plusieurs machines simultanément (grouping=machine gère
+      // ça via le titre du groupe).
+      const machineChip = (grouping === 'machine')
+        ? ''
+        : '<span class="maint-frame-cat-pill" style="background:var(--bg);border-color:var(--border);color:var(--muted)">' + escHtml(itemMachine) + '</span>';
+      return '<section class="' + frameCls + '" data-status="' + status + '" data-maint-code="' + escAttr(it.id) + '" data-maint-machine="' + escAttr(itemMachine) + '">' +
         '<div class="maint-frame-head">' +
           '<div class="maint-frame-title">' + escHtml(it.nom) + '</div>' +
           '<div class="maint-frame-badges">' +
@@ -6527,9 +6924,6 @@ async function loadCtrlAcks(){
       _raw_comment: a.comment || '',
       _no_dossier: a.no_dossier || '',
       _dossier_info: a.dossier_info || null,
-      // v2.4.11 : remonte dismissed pour que ctrlIsAutoClose détecte aussi
-      // les anciennes esquives (comment vide, antérieures à v2.3.30).
-      _dismissed: a.dismissed === 1 || a.dismissed === true,
     }));
     CTRL_STATE.alerts_meta = data.alerts_meta || {};
     CTRL_STATE.known_alerts = Array.isArray(data.known_alerts) ? data.known_alerts : [];
@@ -6628,14 +7022,8 @@ function toggleAutoClose(){
   if(typeof renderCtrl === 'function') renderCtrl();
 }
 function ctrlIsAutoClose(c){
-  // v2.4.11 : double critère.
-  //   1) dismissed=1 → esquive quelle que soit l'époque (couvre les anciennes
-  //      esquives antérieures à v2.3.30 qui ont comment vide).
-  //   2) comment matche "Fermée auto" → auto-close serveur (backend
-  //      _auto_ack_periodic_alerts_on_arret v2.2.65) + esquives récentes
-  //      "Fermée auto (esquive) : <label>" (v2.3.30).
-  if(c && c._dismissed) return true;
   const raw = (c && c._raw_comment) || '';
+  // Match tolérant : "Fermée auto" avec ou sans accents / espaces autour
   return /^\s*Ferm[eé]e\s+auto\b/i.test(raw);
 }
 
@@ -7800,14 +8188,6 @@ function _fmtAlertDate(s) {
 
 let _alertsFilterKind = 'all';
 
-function _alertIsConfigured(a) {
-  // Une alerte est "configurée" dès qu'elle a au moins une clé de paramètre
-  // (trigger / target / validation / checklist) renseignée par l'admin.
-  // Les alertes auto-créées par la migration v133 démarrent avec params={}.
-  if (!a || !a.params || typeof a.params !== 'object') return false;
-  return Object.keys(a.params).length > 0;
-}
-
 function renderAlertsList() {
   const box = document.getElementById('alerts-list');
   if (!box) return;
@@ -7922,528 +8302,11 @@ document.addEventListener('click', (ev) => {
 });
 
 // Référentiels pour les formulaires d'alerte
-const _ALERT_TRIGGER_TYPES = [
-  { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
-  { v: 'periodic', l: 'Périodique — toutes les X minutes' },
-  { v: 'calendar', l: 'Calendaire — à heure fixe' },
-  { v: 'event',    l: 'Événementiel — sur action métier' },
-];
-const _ALERT_TRIGGER_EVENTS = [
-  { v: 'dossier_start',  l: 'Début de dossier' },
-  { v: 'dossier_end',    l: 'Fin de dossier' },
-  // v2.3.28 : after_calage manquait — le select forcait tout return à
-  // 'dossier_start' au save via /maintenance (les alertes réglées sur
-  // 'après calage' basculaient silencieusement à 'début de dossier').
-  { v: 'after_calage',   l: 'Après calage (fin de calage → reprise prod)' },
-];
-const _ALERT_MACHINES = ['*', 'Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
-const _ALERT_ROLES = ['*', 'fabrication', 'logistique', 'expedition', 'comptabilite', 'commercial', 'administration', 'administration_ventes', 'administration_technique', 'direction', 'superadmin'];
-const _ALERT_DAYS = [
-  { v: 'mon', l: 'Lun' }, { v: 'tue', l: 'Mar' }, { v: 'wed', l: 'Mer' },
-  { v: 'thu', l: 'Jeu' }, { v: 'fri', l: 'Ven' }, { v: 'sat', l: 'Sam' }, { v: 'sun', l: 'Dim' },
-];
-
-function _alertDefaults(existing) {
-  const p = existing || {};
-  const trig = Object.assign({}, p.trigger || {});
-  // Compat rétro : si seul interval_hours est présent, on convertit en minutes.
-  if (trig.interval_minutes == null && trig.interval_hours != null) {
-    trig.interval_minutes = Math.round(Number(trig.interval_hours) * 60);
-    delete trig.interval_hours;
-  }
-  // Target : nouveau format = { machines: [...] }. Compat avec ancien { machine, role }.
-  const rawTarget = p.target || {};
-  let machines = rawTarget.machines;
-  if (!Array.isArray(machines)) {
-    if (typeof rawTarget.machine === 'string' && rawTarget.machine) {
-      machines = [rawTarget.machine];
-    } else {
-      machines = ['*'];
-    }
-  }
-  // Checklist : normalisation des items pour inclure le champ type (choice/value)
-  // et la conversion des anciens items "string" en objets.
-  const cl = Object.assign({ enabled: false, items: [] }, p.checklist || {});
-  if (!Array.isArray(cl.items)) cl.items = [];
-  cl.items = cl.items.map(it => {
-    if (typeof it === 'string') {
-      return { type: 'choice', label: it, responses: ['Conforme'] };
-    }
-    const t = (it && it.type) || 'choice';
-    if (t === 'value') {
-      return {
-        type: 'value',
-        label: (it && it.label) || '',
-        unit: (it && it.unit) || '',
-        min: (it && it.min != null && it.min !== '') ? Number(it.min) : null,
-        max: (it && it.max != null && it.max !== '') ? Number(it.max) : null,
-        // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
-        required: !!(it && it.required),
-      };
-    }
-    const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
-    const ncResp = (it && Array.isArray(it.nc_responses))
-      ? it.nc_responses.filter(r => typeof r === 'string' && r.trim())
-      : [];
-    return {
-      type: 'choice',
-      label: (it && it.label) || '',
-      responses: responses.length ? responses : ['Conforme'],
-      multi: (it && it.multi === false) ? false : true,
-      allow_other: !!(it && it.allow_other),
-      other_is_nc: !!(it && it.other_is_nc),
-      nc_responses: ncResp,
-      // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
-      required: !!(it && it.required),
-    };
-  });
-  return {
-    description: (typeof p.description === 'string') ? p.description : '',
-    trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
-    target: { machines: machines },
-    validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
-    dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
-    checklist: cl,
-    placement: (p && ['top-right','center'].indexOf(p.placement) >= 0) ? p.placement : 'top-right',  // v2.3.12
-    size: (p && ['small','medium','large'].indexOf(p.size) >= 0) ? p.size : 'medium',  // v2.3.12
-    block_production: !!(p && p.block_production),  // v2.3.22 : persistance à la ré-ouverture
-  };
-}
-
-function _renderAlertFormFields(params, opts) {
-  opts = opts || {};
-  const d = _alertDefaults(params);
-  // Machines (multi-sélection via dropdown)
-  const machineList = _ALERT_MACHINES.filter(m => m !== '*');
-  const selectedMachines = (d.target && Array.isArray(d.target.machines)) ? d.target.machines : ['*'];
-  const isAllMachines = selectedMachines.includes('*');
-  const machineCheckboxes = machineList.map(m => {
-    const checked = (!isAllMachines && selectedMachines.includes(m)) ? 'checked' : '';
-    const disabled = isAllMachines ? ' disabled' : '';
-    const rowCls = isAllMachines ? 'af-md-row is-disabled' : 'af-md-row';
-    const safeM = escAttr(m);
-    return '<div class="' + rowCls + '" onclick="_afRowClickByValue(event, \'' + safeM + '\')">'
-      + '<input type="checkbox" class="af-machine" value="' + safeM + '"' + (checked ? ' ' + checked : '') + disabled + ' onchange="_afOnMachineChange()">'
-      + '<div class="af-md-row-text">' + esc(m) + '</div>'
-      + '</div>';
-  }).join('');
-  let machinesInitialLabel;
-  if (isAllMachines) {
-    machinesInitialLabel = 'Toutes les machines';
-  } else if (selectedMachines.length === 0) {
-    machinesInitialLabel = 'Aucune machine sélectionnée';
-  } else if (selectedMachines.length === 1) {
-    machinesInitialLabel = selectedMachines[0];
-  } else if (selectedMachines.length <= 3) {
-    machinesInitialLabel = selectedMachines.join(', ');
-  } else {
-    machinesInitialLabel = selectedMachines.length + ' machines';
-  }
-  const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
-    '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
-  ).join('');
-  const eventOpts = _ALERT_TRIGGER_EVENTS.map(e =>
-    '<option value="' + e.v + '"' + (e.v === d.trigger.event ? ' selected' : '') + '>' + esc(e.l) + '</option>'
-  ).join('');
-  const daysHtml = _ALERT_DAYS.map(day => {
-    const checked = (d.trigger.days || []).indexOf(day.v) >= 0 ? 'checked' : '';
-    return '<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px"><input type="checkbox" class="af-day" value="' + day.v + '" ' + checked + ' style="margin:0">' + day.l + '</label>';
-  }).join(' ');
-
-  const nomBlock = opts.nomReadonly
-    ? '<div class="alert-field"><label class="alert-field-label">Titre <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— synchronisé avec le code</span></label><input type="text" class="alert-field-input" value="' + escAttr(opts.nomValue || '') + '" disabled></div>'
-    : '<div class="alert-field"><label class="alert-field-label">Titre de l\'alerte <span style="color:var(--danger)">*</span></label><input type="text" id="af-nom" class="alert-field-input" maxlength="120" placeholder="Ex. Contrôle qualité Cohésio 1" value="' + escAttr(opts.nomValue || '') + '"></div>';
-
-  const descBlock = '<div class="alert-field">'
-    +   '<label class="alert-field-label">Description <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">— contexte affiché à l\'opérateur</span></label>'
-    +   '<textarea id="af-description" class="alert-field-input" rows="2" maxlength="800" placeholder="Ex. Vérifier la tension Errepi et le serrage de la bobine — noter la valeur exacte pour analyse.">' + esc(d.description || '') + '</textarea>'
-    +   '<div class="alert-field-help">Optionnel. Affiché sous le titre de l\'alerte quand elle apparaît chez l\'opérateur.</div>'
-    + '</div>';
-  return nomBlock
-    + descBlock
-    // v2.3.33 : questionnaire remonté juste après la description (l'admin
-    // pense d'abord au contenu, ensuite au paramétrage technique)
-    + '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +     '<div>'
-    +       '<label class="alert-field-label" style="margin-bottom:2px">Questionnaire (points de contrôle)</label>'
-    +       '<span style="font-size:11px;color:var(--muted)">Ex. découpe nette, colle conforme, centrage OK… L\'opérateur cochera chaque point lors de la validation.</span>'
-    +     '</div>'
-    +     '<label class="toggle"><input type="checkbox" id="af-checklist-enabled" ' + (d.checklist.enabled ? 'checked' : '') + ' onchange="_afOnChecklistToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +   '</div>'
-    +   '<div id="af-checklist-wrap" style="' + (d.checklist.enabled ? '' : 'display:none;') + '">'
-    +     '<div id="af-checklist-items" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">' + _afRenderChecklistItems(d.checklist.items) + '</div>'
-    +     '<button type="button" class="btn-sm btn-ghost" onclick="_afAddChecklistItem()" style="margin-bottom:10px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter un point de contrôle</button>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="alert-field-sub" style="border-style:solid;background:var(--accent-bg);border-color:var(--accent);margin-top:14px">'
-    +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Zone de commentaires</strong> — toujours disponible pour l\'opérateur (champ texte libre, optionnel, joint à chaque acquittement).</p>'
-    + '</div>'
-    // v2.3.33 : bouton de bascule pour la section Paramètres (repliable in-place)
-    + '<button type="button" id="af-settings-toggle" class="btn btn-sec" onclick="_afToggleSettings()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;padding:12px 16px;text-align:left;background:var(--bg);border:1px solid var(--border)">'
-    +   '<span style="display:flex;flex-direction:column;gap:2px">'
-    +     '<span style="font-weight:700;font-size:14px">Paramètres</span>'
-    +     '<span style="font-size:11px;color:var(--muted);font-weight:400">Déclencheur · Machines · Affichage · Blocage · Esquive</span>'
-    +   '</span>'
-    +   '<span id="af-settings-caret" style="transition:transform .18s ease;font-size:12px;color:var(--muted)">▼</span>'
-    + '</button>'
-    + '<div id="af-settings-wrap" style="display:none;margin-top:12px">'
-    +   '<div class="alert-field">'
-    +     '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
-    +     '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
-    +     '<div id="af-trigger-sub" class="alert-field-sub">'
-    +       '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
-    +       '<div data-trigger-for="periodic">'
-    +         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-    +           '<div>'
-    +             '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Intervalle entre alertes (min)</label>'
-    +             '<input type="number" id="af-trigger-interval-minutes" class="alert-field-input" min="1" max="10080" step="1" value="' + d.trigger.interval_minutes + '">'
-    +           '</div>'
-    +           '<div>'
-    +             '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Délai avant 1ère alerte (min)</label>'
-    +             '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
-    +           '</div>'
-    +         '</div>'
-    +         '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
-    +       '</div>'
-    +       '<div data-trigger-for="calendar">'
-    +         '<div class="alert-field-row">'
-    +           '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Heure</label><input type="time" id="af-trigger-time" class="alert-field-input" value="' + esc(d.trigger.time) + '"></div>'
-    +           '<div></div>'
-    +         '</div>'
-    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
-    +         '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
-    +       '</div>'
-    +       '<div data-trigger-for="event">'
-    +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
-    +         '<select id="af-trigger-event" class="alert-field-input" onchange="_afOnTriggerEventChange()">' + eventOpts + '</select>'
-    +       '</div>'
-    +     '</div>'
-    +   '</div>'
-    +   '<div class="alert-field">'
-    +     '<label class="alert-field-label">Machines ciblées <span style="color:var(--danger)">*</span></label>'
-    +     '<div class="af-md-wrap">'
-    +       '<button type="button" class="af-md-trigger" onclick="_afToggleMachinesPanel(event)">'
-    +         '<span id="af-md-label" class="af-md-trigger-label">' + esc(machinesInitialLabel) + '</span>'
-    +         '<span class="af-md-trigger-caret">▼</span>'
-    +       '</button>'
-    +       '<div id="af-md-panel" class="af-md-panel">'
-    +         '<div class="af-md-row" onclick="_afRowClick(event, \'af-target-all\')">'
-    +           '<input type="checkbox" id="af-target-all" ' + (isAllMachines ? 'checked' : '') + ' onchange="_afOnAllMachinesToggle()">'
-    +           '<div class="af-md-row-text"><strong>Toutes les machines</strong><span class="af-md-row-hint">présentes et futures</span></div>'
-    +         '</div>'
-    +         '<div class="af-md-sep"></div>'
-    +         machineCheckboxes
-    +       '</div>'
-    +     '</div>'
-    +     '<div class="alert-field-help">Les alertes sont toujours visibles par les opérateurs <strong>fabrication</strong> ainsi que par le super administrateur (pour les tests).</div>'
-    +   '</div>'
-    // v2.3.33 : section Affichage — Placement + Taille uniquement
-    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +     '<div style="font-size:11px;font-weight:800;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">Affichage</div>'
-    +     '<div class="alert-field-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
-    +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Placement à l\'écran</label>'
-    +         '<select id="af-placement" class="alert-field-input">'
-    +           '<option value="top-right"' + (d.placement === 'top-right' ? ' selected' : '') + '>Coin haut droit</option>'
-    +           '<option value="center"' + (d.placement === 'center' ? ' selected' : '') + '>Centre</option>'
-    +         '</select>'
-    +       '</div>'
-    +       '<div><label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Taille</label>'
-    +         '<select id="af-size" class="alert-field-input">'
-    +           '<option value="small"' + (d.size === 'small' ? ' selected' : '') + '>Petite</option>'
-    +           '<option value="medium"' + (d.size === 'medium' ? ' selected' : '') + '>Moyenne</option>'
-    +           '<option value="large"' + (d.size === 'large' ? ' selected' : '') + '>Grande</option>'
-    +         '</select>'
-    +       '</div>'
-    +     '</div>'
-    +   '</div>'
-    // v2.3.33 : Bloquer la production — section séparée d'Affichage
-    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +     '<div style="display:flex;align-items:center;gap:12px;justify-content:space-between">'
-    +       '<div>'
-    +         '<label class="alert-field-label" style="margin-bottom:2px">Bloque la production</label>'
-    +         '<span style="font-size:11px;color:var(--muted)">Quand activé, l\'opérateur ne peut plus saisir la moindre opération de production tant que cette alerte n\'a pas été validée. Backdrop bloquant côté opérateur + refus HTTP 423 côté serveur.</span>'
-    +       '</div>'
-    +       '<label class="toggle"><input type="checkbox" id="af-block-production"' + (d.block_production ? ' checked' : '') + '><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +     '</div>'
-    +   '</div>'
-    +   '<div class="alert-field" style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">'
-    +     '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px">'
-    +       '<div>'
-    +         '<label class="alert-field-label" style="margin-bottom:2px">Autoriser la fermeture sans saisie</label>'
-    +         '<span style="font-size:11px;color:var(--muted)">Ajoute un 2e bouton pour esquiver l\'alerte. Une trace est conservée dans l\'historique sous "Fermetures auto".</span>'
-    +       '</div>'
-    +       '<label class="toggle"><input type="checkbox" id="af-dismiss-enabled" ' + (d.dismiss_button.enabled ? 'checked' : '') + ' onchange="_afOnDismissToggle()"><span class="toggle-track"><span class="toggle-thumb"></span></span></label>'
-    +     '</div>'
-    +     '<div id="af-dismiss-wrap" style="' + (d.dismiss_button.enabled ? '' : 'display:none;') + '">'
-    +       '<input type="text" id="af-dismiss-label" class="alert-field-input" maxlength="40" value="' + escAttr(d.dismiss_button.label) + '" placeholder="Fermer l\'alerte">'
-    +       '<div class="alert-field-help">Libellé du bouton d\'esquive (bouton orange à côté du bouton principal Valider). Ce libellé apparaît aussi dans l\'historique (ex. « Fermée auto (esquive) : Pas d\'Errepi »).</div>'
-    +     '</div>'
-    +   '</div>'
-    + '</div>';
-}
-
-
 // v2.3.33 : bascule la section Paramètres (déclencheur / machines / affichage / …)
-function _afToggleSettings(){
-  const w = document.getElementById('af-settings-wrap');
-  const c = document.getElementById('af-settings-caret');
-  if(!w) return;
-  const open = w.style.display !== 'none';
-  if(open){
-    w.style.display = 'none';
-    if(c) c.style.transform = 'rotate(0deg)';
-  } else {
-    w.style.display = 'block';
-    if(c) c.style.transform = 'rotate(180deg)';
-  }
-}
 // Force l'ouverture de la section Paramètres — appelé par _afReadParams pour
 // que les erreurs de validation portant sur des champs planqués soient visibles.
-function _afOpenSettings(){
-  const w = document.getElementById('af-settings-wrap');
-  const c = document.getElementById('af-settings-caret');
-  if(w && w.style.display === 'none'){
-    w.style.display = 'block';
-    if(c) c.style.transform = 'rotate(180deg)';
-  }
-}
-
-function _afResponseRow(value, isNc) {
-  const safeVal = (value || '').replace(/"/g, '&quot;');
-  const ncChecked = isNc ? ' checked' : '';
-  return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
-    + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
-    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
-    +   '<input type="checkbox" class="af-cl-resp-nc"' + ncChecked + ' style="width:12px;height:12px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>NC</span>'
-    + '</label>'
-    + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
-    + '</div>';
-}
-
-function _afChecklistCardBody(item) {
-  const type = (item && item.type) || 'choice';
-  if (type === 'value') {
-    const safeUnit = ((item && item.unit) || '').replace(/"/g, '&quot;');
-    const safeMin = (item && item.min != null && item.min !== '') ? String(item.min) : '';
-    const safeMax = (item && item.max != null && item.max !== '') ? String(item.max) : '';
-    return '<div class="af-cl-body" data-type="value">'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Unité</div><input type="text" class="alert-field-input af-cl-unit" maxlength="20" placeholder="bar, °C, mm…" value="' + safeUnit + '" style="padding:6px 10px;font-size:13px"></div>'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Min</div><input type="number" step="any" class="alert-field-input af-cl-min" placeholder="2.5" value="' + safeMin + '" style="padding:6px 10px;font-size:13px"></div>'
-      +   '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max</div><input type="number" step="any" class="alert-field-input af-cl-max" placeholder="3.2" value="' + safeMax + '" style="padding:6px 10px;font-size:13px"></div>'
-      + '</div>'
-      + '<div class="alert-field-help" style="margin-top:6px">Pour pression, température, dimension… L\'opérateur saisira une valeur. Min/Max sont optionnels (vide = pas de borne).</div>'
-      + '</div>';
-  }
-  // type "choice"
-  const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
-  const ncList = (item && Array.isArray(item.nc_responses)) ? item.nc_responses.map(String) : [];
-  const responsesHtml = responses.map((r) => _afResponseRow(r, ncList.indexOf(String(r)) !== -1)).join('');
-  const multi = (item && item.multi === false) ? false : true;
-  return '<div class="af-cl-body" data-type="choice">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
-    +   '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Réponses possibles</div>'
-    +   '<select class="alert-field-input af-cl-multi-sel" style="flex:0 0 auto;width:auto;padding:5px 8px;font-size:12px">'
-    +     '<option value="multi"' + (multi ? ' selected' : '') + '>Plusieurs réponses (cases)</option>'
-    +     '<option value="single"' + (!multi ? ' selected' : '') + '>Une seule réponse (radio)</option>'
-    +   '</select>'
-    + '</div>'
-    + '<div class="af-cl-responses" style="display:flex;flex-direction:column;gap:4px">' + responsesHtml + '</div>'
-    + '<button type="button" class="btn-sm btn-ghost" onclick="_afAddResponse(this)" style="margin-top:6px;font-size:12px"><span style="font-weight:700;margin-right:4px">+</span> Ajouter une réponse</button>'
-    + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-toggle"' + ((item && item.allow_other) ? ' checked' : '') + ' onchange="_afOnOtherToggle(this)" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer">'
-    +   '<span>Ajouter une réponse <strong style="color:var(--text)">« Autre »</strong> avec zone d\'explication optionnelle</span>'
-    + '</label>'
-    + '<label class="af-cl-other-nc-lbl" style="display:' + ((item && item.allow_other) ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:4px;margin-left:22px;cursor:pointer;font-size:12px;color:var(--text2)">'
-    +   '<input type="checkbox" class="af-cl-other-nc"' + ((item && item.other_is_nc) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Traiter <strong style="color:var(--text)">« Autre »</strong> comme une <strong style="color:var(--danger)">non-conformité</strong></span>'
-    + '</label>'
-    + '</div>';
-}
-
-function _afOnOtherToggle(cb){
-  const body = cb.closest('.af-cl-body');
-  if(!body) return;
-  const ncLbl = body.querySelector('.af-cl-other-nc-lbl');
-  if(!ncLbl) return;
-  if(cb.checked){ ncLbl.style.display = 'flex'; }
-  else {
-    ncLbl.style.display = 'none';
-    const inp = ncLbl.querySelector('.af-cl-other-nc');
-    if(inp) inp.checked = false;
-  }
-}
-
-function _afChecklistCard(item) {
-  const safeLabel = ((item && item.label) || '').replace(/"/g, '&quot;');
-  const type = (item && item.type) || 'choice';
-  // v2.3.28 : case "Obligatoire" — manquait dans maintenance_page.py, la
-  // valeur ne pouvait donc jamais être true côté /maintenance. Elle
-  // s'affiche à la lecture (checked selon item.required) et son état
-  // est envoyé au backend par _afReadParams.
-  const isRequired = !!(item && item.required);
-  const typeOpts = '<option value="choice"' + (type === 'choice' ? ' selected' : '') + '>Cases à cocher</option>'
-                 + '<option value="value"' + (type === 'value' ? ' selected' : '') + '>Valeur à saisir</option>';
-  return '<div class="af-cl-card" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">'
-    + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
-    +   '<input type="text" class="alert-field-input af-cl-label" maxlength="200" placeholder="Ex. Découpe" value="' + safeLabel + '" style="flex:1;min-width:140px;font-weight:500">'
-    +   '<select class="alert-field-input af-cl-type" onchange="_afOnTypeChange(this)" style="flex:0 0 auto;width:auto;padding:8px 10px;font-size:13px">' + typeOpts + '</select>'
-    +   '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveItem(this)" title="Supprimer ce point de contrôle" style="flex:0 0 auto">×</button>'
-    + '</div>'
-    + '<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);cursor:pointer;padding:4px 2px">'
-    +   '<input type="checkbox" class="af-cl-required"' + (isRequired ? ' checked' : '') + ' style="width:14px;height:14px;accent-color:var(--danger);cursor:pointer">'
-    +   '<span>Obligatoire <span style="color:var(--muted);font-weight:500">(l\'opérateur ne peut pas valider tant que cette question n\'est pas répondue)</span></span>'
-    + '</label>'
-    + _afChecklistCardBody(item)
-    + '</div>';
-}
-
-function _afOnTypeChange(sel) {
-  const card = sel.closest('.af-cl-card');
-  if (!card) return;
-  const oldBody = card.querySelector('.af-cl-body');
-  if (!oldBody) return;
-  const newType = sel.value;
-  const defaultItem = (newType === 'value')
-    ? { type: 'value', label: '', unit: '', min: null, max: null }
-    : { type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false };
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCardBody(defaultItem);
-  const newBody = tmp.firstElementChild;
-  if (newBody) oldBody.replaceWith(newBody);
-}
-
-function _afRenderChecklistItems(items) {
-  const list = (items && items.length) ? items : [{ label: '', responses: ['Conforme'] }];
-  return list.map(_afChecklistCard).join('');
-}
-
-function _afAddChecklistItem() {
-  const wrap = document.getElementById('af-checklist-items');
-  if (!wrap) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afChecklistCard({ type: 'choice', label: '', responses: ['Conforme'], multi: true, allow_other: false });
-  const card = tmp.firstElementChild;
-  wrap.appendChild(card);
-  card.querySelector('.af-cl-label')?.focus();
-}
-
-function _afAddResponse(btn) {
-  const card = btn.closest('.af-cl-card');
-  if (!card) return;
-  const list = card.querySelector('.af-cl-responses');
-  if (!list) return;
-  const tmp = document.createElement('div');
-  tmp.innerHTML = _afResponseRow('');
-  const row = tmp.firstElementChild;
-  list.appendChild(row);
-  row.querySelector('.af-cl-resp-input')?.focus();
-}
-
-function _afRemoveResponse(btn) {
-  const row = btn.closest('.af-cl-resp-row');
-  if (!row) return;
-  const list = row.parentElement;
-  if (!list) { row.remove(); return; }
-  // Garde au moins une réponse par point
-  if (list.querySelectorAll('.af-cl-resp-row').length <= 1) {
-    toast('Un point doit garder au moins une réponse', true);
-    return;
-  }
-  row.remove();
-}
-
-function _afRemoveItem(btn) {
-  const card = btn.closest('.af-cl-card');
-  if (card) card.remove();
-}
-
-function _afOnChecklistToggle() {
-  const enabled = document.getElementById('af-checklist-enabled')?.checked;
-  const wrap = document.getElementById('af-checklist-wrap');
-  if (wrap) wrap.style.display = enabled ? '' : 'none';
-  if (enabled) {
-    const cards = document.querySelectorAll('.af-cl-card');
-    if (!cards.length) _afAddChecklistItem();
-  }
-}
-
 // v164 : toggle du bouton dismiss (fermeture sans saisie)
-function _afOnDismissToggle() {
-  const en = document.getElementById('af-dismiss-enabled')?.checked;
-  const wrap = document.getElementById('af-dismiss-wrap');
-  if (wrap) wrap.style.display = en ? '' : 'none';
-}
-
 // v2.2.42 : no-op depuis le retrait du filtre produit.
-function _afOnTriggerEventChange() { /* no-op */ }
-
-function _afRowClick(ev, inputId) {
-  // Click n'importe où sur la ligne → toggle l'input. On ignore le click direct
-  // sur l'input pour éviter le double toggle (l'input gère son propre click).
-  if (ev.target.tagName === 'INPUT') return;
-  const inp = document.getElementById(inputId);
-  if (!inp || inp.disabled) return;
-  inp.checked = !inp.checked;
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function _afRowClickByValue(ev, value) {
-  if (ev.target.tagName === 'INPUT') return;
-  const row = ev.currentTarget;
-  const inp = row.querySelector('input.af-machine');
-  if (!inp || inp.disabled) return;
-  inp.checked = !inp.checked;
-  inp.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function _afOnAllMachinesToggle() {
-  const allChk = document.getElementById('af-target-all');
-  if (!allChk) return;
-  document.querySelectorAll('.af-machine').forEach(el => {
-    el.disabled = allChk.checked;
-    if (allChk.checked) el.checked = false;
-    const row = el.closest('.af-md-row');
-    if (row) row.classList.toggle('is-disabled', allChk.checked);
-  });
-  _afUpdateMachinesLabel();
-}
-
-function _afOnMachineChange() {
-  const allChk = document.getElementById('af-target-all');
-  if (allChk && allChk.checked) {
-    const anyIndividual = Array.from(document.querySelectorAll('.af-machine:checked')).length > 0;
-    if (anyIndividual) allChk.checked = false;
-  }
-  _afUpdateMachinesLabel();
-}
-
-function _afUpdateMachinesLabel() {
-  const lbl = document.getElementById('af-md-label');
-  if (!lbl) return;
-  const all = !!document.getElementById('af-target-all')?.checked;
-  lbl.style.color = '';
-  if (all) { lbl.textContent = 'Toutes les machines'; return; }
-  const selected = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
-  if (!selected.length) {
-    lbl.textContent = 'Aucune machine sélectionnée';
-    lbl.style.color = 'var(--danger)';
-    return;
-  }
-  if (selected.length === 1) lbl.textContent = selected[0];
-  else if (selected.length <= 3) lbl.textContent = selected.join(', ');
-  else lbl.textContent = selected.length + ' machines';
-}
-
-function _afToggleMachinesPanel(ev) {
-  if (ev) ev.stopPropagation();
-  const panel = document.getElementById('af-md-panel');
-  if (!panel) return;
-  panel.classList.toggle('open');
-}
-
 // Fermeture du dropdown sur clic à l'extérieur (un seul listener global, idempotent)
 if (!window._afMachinesDropdownInit) {
   window._afMachinesDropdownInit = true;
@@ -8453,124 +8316,6 @@ if (!window._afMachinesDropdownInit) {
     if (ev.target.closest('.af-md-wrap')) return;
     panel.classList.remove('open');
   });
-}
-
-function _afOnTriggerChange() {
-  const t = document.getElementById('af-trigger-type')?.value || 'manual';
-  document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
-    el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
-  });
-}
-
-function _afReadParams() {
-  // v2.3.33 : force l'ouverture de la section Paramètres pour que les
-  // erreurs de validation portant sur des champs cachés soient visibles.
-  try { _afOpenSettings(); } catch(_) {}
-  const t = document.getElementById('af-trigger-type').value || 'manual';
-  const trig = { type: t };
-  if (t === 'periodic') {
-    const mInp = document.getElementById('af-trigger-interval-minutes');
-    const m = parseInt(mInp.value, 10);
-    if (!(m >= 1 && m <= 10080)) { toast('Intervalle invalide (1 ≤ minutes ≤ 10080)', true); return null; }
-    trig.interval_minutes = m;
-    const gInp = document.getElementById('af-trigger-grace-minutes');
-    if (gInp) {
-      const g = parseInt(gInp.value, 10);
-      if (isNaN(g) || g < 0 || g > 120) { toast('Délai avant 1ère alerte invalide (0 à 120 min)', true); return null; }
-      trig.grace_minutes = g;
-    }
-  } else if (t === 'calendar') {
-    const tm = document.getElementById('af-trigger-time').value || '';
-    if (!/^\d{2}:\d{2}$/.test(tm)) { toast('Heure invalide (HH:MM)', true); return null; }
-    trig.time = tm;
-    const days = Array.from(document.querySelectorAll('.af-day:checked')).map(el => el.value);
-    if (!days.length) { toast('Au moins un jour requis', true); return null; }
-    trig.days = days;
-  } else if (t === 'event') {
-    trig.event = document.getElementById('af-trigger-event').value || 'dossier_start';
-    // v2.2.42 : filter_conditionnement (Filtre produit) retiré.
-    delete trig.filter_conditionnement;
-  }
-  // Lecture du questionnaire (cartes : label + réponses possibles)
-  const clEnabled = !!document.getElementById('af-checklist-enabled')?.checked;
-  const items = [];
-  if (clEnabled) {
-    document.querySelectorAll('.af-cl-card').forEach(card => {
-      const label = (card.querySelector('.af-cl-label')?.value || '').trim();
-      if (!label) return;
-      const type = card.querySelector('.af-cl-type')?.value || 'choice';
-      if (type === 'value') {
-        const unit = (card.querySelector('.af-cl-unit')?.value || '').trim();
-        const minStr = (card.querySelector('.af-cl-min')?.value || '').trim();
-        const maxStr = (card.querySelector('.af-cl-max')?.value || '').trim();
-        const item = { type: 'value', label: label };
-        if (unit) item.unit = unit;
-        if (minStr !== '' && !isNaN(parseFloat(minStr))) item.min = parseFloat(minStr);
-        if (maxStr !== '' && !isNaN(parseFloat(maxStr))) item.max = parseFloat(maxStr);
-        // v2.3.28 : required manquait — les items marqués obligatoires
-        // repassaient optionnels à chaque save via /maintenance.
-        if (card.querySelector('.af-cl-required')?.checked) item.required = true;
-        items.push(item);
-        return;
-      }
-      const responses = [];
-      const ncResponses = [];
-      card.querySelectorAll('.af-cl-resp-row').forEach(row => {
-        const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
-        if (!r) return;
-        responses.push(r);
-        if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
-      });
-      if (!responses.length) return;
-      const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
-      const multi = (multiSel === 'single') ? false : true;
-      const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
-      const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
-      // v2.3.28 : required manquait — les items requis repassaient
-      // optionnels à chaque save via /maintenance.
-      const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
-      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
-      if (_reqCk) _choiceItem.required = true;
-      items.push(_choiceItem);
-    });
-  }
-  // Cible (lue en premier — interrompt si rien sélectionné)
-  let _tgt;
-  {
-    const all = !!document.getElementById('af-target-all')?.checked;
-    if (all) {
-      _tgt = { machines: ['*'] };
-    } else {
-      const ms = Array.from(document.querySelectorAll('.af-machine:checked')).map(el => el.value);
-      if (!ms.length) { toast('Sélectionne au moins une machine', true); return null; }
-      _tgt = { machines: ms };
-    }
-  }
-  const descEl = document.getElementById('af-description');
-  const descVal = descEl ? (descEl.value || '').trim() : '';
-  return {
-    description: descVal.slice(0, 800),
-    trigger: trig,
-    target: _tgt,
-    // v2.3.33 : validation.button_label figée à 'Valider' côté backend,
-    // plus de champ front. On garde l'objet pour éviter un 422 sur rétro-compat.
-    validation: {},
-    // v2.3.21 : placement + size par alerte (dans maintenance_page.py aussi)
-    placement: (document.getElementById('af-placement')?.value || 'top-right'),
-    size: (document.getElementById('af-size')?.value || 'medium'),
-    // v2.3.22 : block_production par alerte — sinon la valeur en base est écrasée à False à chaque save via /maintenance
-    block_production: !!document.getElementById('af-block-production')?.checked,
-    dismiss_button: (function(){
-      const en = !!document.getElementById('af-dismiss-enabled')?.checked;
-      if(!en) return { enabled: false, label: '' };
-      const lbl = (document.getElementById('af-dismiss-label').value || 'Fermer l\'alerte').trim() || 'Fermer l\'alerte';
-      return { enabled: true, label: lbl };
-    })(),
-    checklist: {
-      enabled: clEnabled && items.length > 0,
-      items: items,
-    },
-  };
 }
 
 function openNewAlertModal() {
@@ -8746,22 +8491,6 @@ function _stripAutoPrefix(nom) {
   return String(nom).replace(/^Contr[oôö]le\s*:\s*\d+\s*[–\-]\s*/i, '');
 }
 
-function _alertTriggerLabel(t) {
-  if (!t || !t.type) return 'Manuel';
-  if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
-  if (t.type === 'periodic') {
-    const m = (t.interval_minutes != null) ? t.interval_minutes
-              : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
-    return 'Périodique — toutes les ' + m + ' min';
-  }
-  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
-  if (t.type === 'event') {
-    const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
-    return 'Événementiel — ' + ev;
-  }
-  return t.type;
-}
-
 async function previewAlert(id) {
   // v2.3.13 : refactor — appelle directement MysifaAlerts.simulate() au lieu
   // de dupliquer la logique de rendu. Toute évolution du runtime bénéficie
@@ -8850,7 +8579,9 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
-<script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
+<script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 
@@ -11468,84 +11199,12 @@ window.opSetPlanTab = opSetPlanTabWithCal;
 // Réutilise les adapters esc/toast/api de v2.2.19 (déjà en place).
 // ═══════════════════════════════════════════════════════════════════
 // v2.2.29 fix : déclarations globales oubliées (lignes 4587-4588 de settings_page.py)
-let _maintItems = [];
-let _maintEditCode = null;
 
-async function loadMaintCodes() {
-  try {
-    const r = await api('/api/maintenance/codes');
-    _maintItems = (r && Array.isArray(r.items)) ? r.items : [];
-  } catch (e) {
-    toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
-    _maintItems = [];
-  }
-  // Migration one-shot : si la liste serveur est vide ET qu'on a des codes en
-  // localStorage (heritage de l'ancienne implementation), on propose l'import.
-  if (_maintItems.length === 0) {
-    try {
-      const raw = localStorage.getItem(MAINT_CODES_STORAGE_KEY);
-      const local = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(local) && local.length > 0) {
-        if (confirm(local.length + ' code(s) maintenance trouve(s) dans le stockage local du navigateur.\n\nLes importer dans la base de donnees ? (recommande, ils seront ensuite disponibles sur tous les navigateurs et synchronises v2 -> v1)')) {
-          try {
-            const res = await api('/api/maintenance/codes/bulk-import', {
-              method: 'POST',
-              body: JSON.stringify({ items: local }),
-            });
-            toast((res?.imported || 0) + ' code(s) importe(s)');
-            try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
-            const r2 = await api('/api/maintenance/codes');
-            _maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
-          } catch (e) {
-            toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-  renderMaintList();
-}
 // ─── Interventions libres (Lot 2) ────────────────────────────────
 // Curation admin des codes libre=1 : lister, renommer, archiver, fusionner.
-let _libresItems = [];
-let _libresSelection = new Set();
 
-async function loadLibres() {
-  const listEl = document.getElementById('libres-list');
-  if (!listEl) return;
-  try {
-    const r = await api('/api/maintenance/codes/libres');
-    _libresItems = (r && Array.isArray(r.items)) ? r.items : [];
-  } catch (e) {
-    _libresItems = [];
-  }
-  _libresSelection.clear();
-  _updateLibresSelectionUI();
-  renderLibresList();
-}
 
-function _fmtLibreDate(iso) {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '—';
-    const pad = n => (n < 10 ? '0' + n : '' + n);
-    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
-  } catch (e) { return '—'; }
-}
 
-function _updateLibresSelectionUI() {
-  const btn = document.getElementById('libres-merge-btn');
-  const cnt = document.getElementById('libres-selection-count');
-  const n = _libresSelection.size;
-  if (btn) btn.disabled = (n !== 2);
-  if (cnt) {
-    if (n === 0) cnt.textContent = '';
-    else if (n === 1) cnt.textContent = '1 titre selectionne - coche un 2e pour fusionner';
-    else if (n === 2) cnt.textContent = '2 titres selectionnes - pret a fusionner';
-    else cnt.textContent = n + ' selectionnes (max 2)';
-  }
-}
 
 function libresToggleSelection(code, checked) {
   if (checked) {
@@ -11561,79 +11220,6 @@ function libresToggleSelection(code, checked) {
   _updateLibresSelectionUI();
 }
 
-function renderLibresList() {
-  const el = document.getElementById('libres-list');
-  if (!el) return;
-  const q = (document.getElementById('libres-filter') && document.getElementById('libres-filter').value || '').trim().toLowerCase();
-  let items = _libresItems.slice();
-  if (q) {
-    items = items.filter(o =>
-      String(o.label || '').toLowerCase().includes(q) ||
-      String(o.code || '').toLowerCase().includes(q)
-    );
-  }
-  if (!items.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">' +
-      (q ? 'Aucun titre pour ce filtre.' : 'Aucune intervention libre saisie pour l\u2019instant.') + '</p>';
-    return;
-  }
-  const rows = items.map(o => {
-    const codeEsc = esc(String(o.code));
-    const labelEsc = esc(String(o.label || ''));
-    const checked = _libresSelection.has(o.code) ? ' checked' : '';
-    const usage = o.usage_count;
-    const usageChip = usage > 0
-      ? '<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700">' + usage + ' saisie' + (usage > 1 ? 's' : '') + '</span>'
-      : '<span style="color:var(--muted);font-size:11px;font-style:italic">Jamais utilise</span>';
-    // v2.2.41 : bouton Archiver retiré — un libre est créé au moment de sa 1ère
-    // utilisation, donc usage_count >= 1 dès la naissance, le bouton était mort.
-    // Nettoyage désormais uniquement via Fusion.
-    const delBtn = '';
-    return '<tr>' +
-      '<td style="width:34px;padding:4px 8px"><input type="checkbox" data-libre-sel="' + codeEsc + '"' + checked + '></td>' +
-      '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + codeEsc + '</td>' +
-      '<td><span style="color:var(--text);font-weight:500">' + labelEsc + '</span></td>' +
-      '<td>' + usageChip + '</td>' +
-      '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + _fmtLibreDate(o.last_used_at) + '</td>' +
-      '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
-      '<td style="text-align:right;white-space:nowrap">' +
-        '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
-        delBtn +
-      '</td>' +
-    '</tr>';
-  }).join('');
-  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table">' +
-    '<thead><tr>' +
-      '<th></th>' +
-      '<th>Code</th>' +
-      '<th>Titre</th>' +
-      '<th>Usage</th>' +
-      '<th>Derniere utilisation</th>' +
-      '<th>Cree le</th>' +
-      '<th style="text-align:right">Actions</th>' +
-    '</tr></thead>' +
-    '<tbody>' + rows + '</tbody></table></div>';
-  // Bind event delegation (checkbox + rename + delete)
-  el.querySelectorAll('[data-libre-sel]').forEach(cb => {
-    cb.addEventListener('change', () => {
-      libresToggleSelection(cb.getAttribute('data-libre-sel'), cb.checked);
-    });
-  });
-  el.querySelectorAll('[data-libre-rename]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-libre-rename');
-      const it = _libresItems.find(x => x.code === code);
-      if (it) libresRename(code, it.label);
-    });
-  });
-  el.querySelectorAll('[data-libre-del]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const code = btn.getAttribute('data-libre-del');
-      const it = _libresItems.find(x => x.code === code);
-      if (it) libresDelete(code, it.label);
-    });
-  });
-}
 
 async function libresRename(code, currentLabel) {
   const newLabel = prompt('Nouveau titre pour l\u2019intervention libre :', currentLabel || '');
@@ -11698,423 +11284,21 @@ async function libresMergeSelected() {
   }
 }
 
-function _maintCatLabel(cat) {
-  // Depuis v178 : "interventions" est scindée en "entretien" (UI: Nettoyage)
-  // et "remplacements" (UI: Interventions). Labels renommés v179.
-  // 'interventions' et 'suivi' (legacy) sont remappés vers Nettoyage à l'affichage.
-  if (cat === 'remplacements') return 'Interventions';
-  if (cat === 'entretien' || cat === 'interventions' || cat === 'suivi') return 'Nettoyage';
-  return 'Contrôles';
-}
-let _lastAckByCode = {};
-function renderMaintList() {
-  const el = document.getElementById('maint-list');
-  if (!el) return;
-  // Reconstruire la map code -> dernière intervention depuis les alertes auto.
-  _lastAckByCode = {};
-  if (Array.isArray(_alertsData)) {
-    _alertsData.forEach(a => {
-      if (a && a.linked_maint_code) {
-        _lastAckByCode[String(a.linked_maint_code)] = a.last_ack_at || '';
-      }
-    });
-  }
-  const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
-  let items = _maintItems.slice();
-  // Normaliser la catégorie sur les anciens enregistrements
-  items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
-  if (q) {
-    items = items.filter(o => {
-      const periodLbl = (o.periodique ? 'oui' : 'non');
-      return String(o.code || '').toLowerCase().includes(q) ||
-        String(o.label || '').toLowerCase().includes(q) ||
-        ('n' + (o.niveau || '')).toLowerCase().includes(q) ||
-        _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
-        // v2.2.17 — periodique retiré du filtre
-        String(o.intervalle || '').toLowerCase().includes(q) ||
-        String(o.metrage_ref || '').toLowerCase().includes(q);
-    });
-  }
-  // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
-  // legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'affichage.
-  const _normCat = (c) => {
-    if (c === 'remplacements') return 'remplacements';
-    if (c === 'entretien' || c === 'interventions' || c === 'suivi') return 'entretien';
-    return 'controles';
-  };
-  const _catOrder = (c) => {
-    const n = _normCat(c);
-    return n === 'controles' ? 0 : (n === 'entretien' ? 1 : 2);
-  };
-  items.sort((a, b) => {
-    const da = _catOrder(a.categorie);
-    const db = _catOrder(b.categorie);
-    if (da !== db) return da - db;
-    const ac = String(a.code || '').padStart(6, '0');
-    const bc = String(b.code || '').padStart(6, '0');
-    return ac.localeCompare(bc, 'fr');
-  });
-  if (!items.length) {
-    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun code' + (q ? ' pour ce filtre' : '') + '.</p>';
-    return;
-  }
-  const byCat = { controles: [], entretien: [], remplacements: [] };
-  items.forEach(o => { byCat[_normCat(o.categorie)].push(o); });
-  let body = '';
-  ['controles', 'entretien', 'remplacements'].forEach(cat => {
-    if (!byCat[cat].length) return;
-    body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
-    byCat[cat].forEach(o => {
-      const c = esc(String(o.code));
-      const niv = parseInt(o.niveau, 10) || 1;
-      const catCls = cat;
-      // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
-      const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-      const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-      body += '<tr>'
-        + '<td class="op-code-cell">' + c + '</td>'
-        + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
-        + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
-        + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
-        + '<td>' + intervalleDisplay + '</td>'
-        + '<td>' + metrageDisplay + '</td>'
-        + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
-        +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
-        +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
-        + '</button></td>'
-        + '<td><div class="op-act">'
-        + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
-        + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
-        + '</div></td></tr>';
-    });
-  });
-  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-    + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
-    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
-  el.querySelectorAll('[data-maint-edit]').forEach(btn => {
-    btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
-  });
-  el.querySelectorAll('[data-maint-del]').forEach(btn => {
-    btn.addEventListener('click', () => deleteMaintCode(btn.getAttribute('data-maint-del')));
-  });
-  el.querySelectorAll('[data-maint-docs]').forEach(btn => {
-    btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
-  });
-}
 
 // ── Documents attaches aux codes maintenance ─────────────────────────────
-async function openMaintDocsModal(code) {
-  const item = _maintItems.find(x => String(x.code) === String(code));
-  const label = item ? item.label : '';
-  const overlay = document.createElement('div');
-  overlay.className = 'alert-modal-overlay';
-  overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
-    + '<div class="alert-modal-head"><h3>Documents · ' + esc(code) + (label ? ' – ' + esc(label) : '') + '</h3><button type="button" class="btn-sm btn-ghost" data-close>×</button></div>'
-    + '<div class="alert-modal-body">'
-    +   '<div id="maint-docs-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"><p style="color:var(--muted);font-size:12px">Chargement…</p></div>'
-    +   '<input type="file" id="maint-doc-file" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">'
-    +   '<button type="button" class="maint-doc-add-btn" id="maint-doc-add-btn">'
-    +     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
-    +     '<span>Ajouter un fichier</span>'
-    +   '</button>'
-    +   '<div style="font-size:11px;color:var(--muted);margin-top:8px">20 Mo max par fichier.</div>'
-    + '</div>'
-    + '<div class="alert-modal-foot">'
-    +   '<button type="button" class="btn btn-sec" data-close>Fermer</button>'
-    + '</div></div>';
-  document.body.appendChild(overlay);
-  const close = () => overlay.remove();
-  overlay.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', close));
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
-  const listEl = overlay.querySelector('#maint-docs-list');
-  const renderDocs = (items) => {
-    if (!items.length) {
-      listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document pour l\'instant.</p>';
-      return;
-    }
-    listEl.innerHTML = items.map(d => {
-      const sz = d.size_bytes != null ? (Math.round(d.size_bytes / 1024) + ' Ko') : '';
-      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0, 16).replace('T', ' ')) : '';
-      return '<div class="maint-doc-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card)">'
-        +   '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(d.filename) + '">' + esc(d.filename) + '</div>'
-        +   '<div style="font-size:10px;color:var(--muted)">' + sz + (dt ? ' · ' + dt : '') + (d.uploaded_by ? ' · ' + esc(d.uploaded_by) : '') + '</div></div>'
-        +   '<a class="btn-sm btn-ghost" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener" style="text-decoration:none">Telecharger</a>'
-        +   '<button type="button" class="btn-sm btn-ghost danger" data-doc-del="' + d.id + '">Supprimer</button>'
-        + '</div>';
-    }).join('');
-    listEl.querySelectorAll('[data-doc-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Supprimer ce document ?')) return;
-        try {
-          await api('/api/maintenance/docs/' + b.getAttribute('data-doc-del'), { method: 'DELETE' });
-          toast('Document supprime');
-          await refresh();
-          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
-      });
-    });
-  };
-  const refresh = async () => {
-    try {
-      const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
-      renderDocs(Array.isArray(r.items) ? r.items : []);
-    } catch(e) {
-      listEl.innerHTML = '<p style="color:var(--danger);font-size:12px">' + esc(e.message || 'Erreur') + '</p>';
-    }
-  };
-  await refresh();
-
-  const fileInp = overlay.querySelector('#maint-doc-file');
-  const addBtn = overlay.querySelector('#maint-doc-add-btn');
-  addBtn.addEventListener('click', () => fileInp.click());
-  fileInp.addEventListener('change', async () => {
-    const f = fileInp.files && fileInp.files[0];
-    if (!f) return;
-    if (f.size > 20 * 1024 * 1024) { toast('Fichier trop volumineux (max 20 Mo)', true); fileInp.value=''; return; }
-    addBtn.disabled = true;
-    const fd = new FormData();
-    fd.append('file', f);
-    try {
-      const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs', {
-        method: 'POST', credentials: 'same-origin', body: fd
-      });
-      if (!res.ok) {
-        let msg = 'Upload echoue';
-        try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
-        toast(msg, true); return;
-      }
-      toast('Document ajoute');
-      fileInp.value = '';
-      await refresh();
-      if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-    } catch(e) { toast('Erreur reseau', true); } finally { addBtn.disabled = false; }
-  });
-}
-function openMaintForm(code) {
-  _maintEditCode = code || null;
-  const wrap = document.getElementById('maint-form-wrap');
-  const title = document.getElementById('maint-form-title');
-  const codeInp = document.getElementById('maint-code');
-  if (!wrap) return;
-  wrap.classList.remove('hidden');
-  const catSel = document.getElementById('maint-categorie');
-  // v2.2.17 — perSel retiré (périodicité cachée).
-  const intInp = document.getElementById('maint-intervalle');
-  const mInp   = document.getElementById('maint-metrage-ref');
-  if (code) {
-    const o = _maintItems.find(x => String(x.code) === String(code));
-    if (!o) return;
-    title.textContent = 'Modifier le code ' + code;
-    codeInp.value = o.code;
-    codeInp.disabled = true;
-    document.getElementById('maint-label').value = o.label || '';
-    document.getElementById('maint-niveau').value = String(o.niveau || 1);
-    if (catSel) {
-      // Depuis v178 : 3 catégories ('controles', 'entretien', 'remplacements').
-      // Codes legacy ('interventions', 'suivi') sont remappés vers 'entretien' à l'édition.
-      let c;
-      if (o.categorie === 'remplacements') c = 'remplacements';
-      else if (o.categorie === 'entretien' || o.categorie === 'interventions' || o.categorie === 'suivi') c = 'entretien';
-      else c = 'controles';
-      catSel.value = c;
-    }
-    if (intInp) intInp.value = o.intervalle || '';
-    if (mInp)   mInp.value   = o.metrage_ref || '';
-  } else {
-    title.textContent = 'Nouveau code';
-    codeInp.value = '';
-    codeInp.disabled = false;
-    document.getElementById('maint-label').value = '';
-    document.getElementById('maint-niveau').value = '1';
-    if (catSel) catSel.value = 'controles';
-    if (intInp) intInp.value = '';
-    if (mInp)   mInp.value   = '';
-  }
-  // Section Documents : visible dans les 2 modes.
-  // En creation : la liste est masquee (aucun doc encore), l'upload est
-  // possible des que le code est saisi. En edition : la liste est chargee
-  // et l'upload attache directement au code existant.
-  const docsWrap = document.getElementById('maint-form-docs');
-  const docsList = document.getElementById('maint-form-docs-list');
-  const docsHint = document.getElementById('maint-form-docs-hint');
-  if (docsWrap) {
-    docsWrap.style.display = '';
-    _maintResetDocPicker();
-    _bindMaintFormDocUpload(code);
-    if (code) {
-      if (docsHint) docsHint.textContent = 'Fichiers explicatifs consultes par les operateurs quand ils executent l\'operation.';
-      if (docsList) docsList.style.display = '';
-      _renderMaintFormDocs(code);
-    } else {
-      if (docsHint) docsHint.textContent = 'Saisis le code puis attache un document. L\'envoi cree le code s\'il n\'existe pas encore.';
-      if (docsList) docsList.style.display = 'none';
-    }
-  }
-  // v2.2.34 : le scroller varie selon la page (window en Paramètres, .main en MyMaintenance).
-  // On tente les 2 : celui qui n'est pas le vrai scroller no-op silencieusement.
-  try {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    const m = document.querySelector('.main');
-    if (m) { if (m.scrollTo) m.scrollTo({ top: 0, behavior: 'smooth' }); else m.scrollTop = 0; }
-  } catch(e) {
-    try { window.scrollTo(0, 0); } catch(e2) {}
-    try { document.querySelector('.main').scrollTop = 0; } catch(e3) {}
-  }
-  codeInp.focus();
-}
-
-async function _renderMaintFormDocs(code) {
-  const list = document.getElementById('maint-form-docs-list');
-  if (!list) return;
-  list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Chargement…</p>';
-  try {
-    const r = await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/docs');
-    const items = Array.isArray(r.items) ? r.items : [];
-    if (!items.length) {
-      list.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>';
-      return;
-    }
-    list.innerHTML = items.map(d => {
-      const sz = d.size_bytes != null ? (Math.round(d.size_bytes/1024) + ' Ko') : '';
-      const dt = d.uploaded_at ? esc(d.uploaded_at.slice(0,16).replace('T',' ')) : '';
-      const meta = [sz, dt, d.uploaded_by ? esc(d.uploaded_by) : ''].filter(Boolean).join(' · ');
-      return '<div class="maint-doc-row">'
-        + '<div class="maint-doc-row-info">'
-        +   '<span class="maint-doc-row-name" title="' + esc(d.filename) + '">' + esc(d.filename) + '</span>'
-        +   '<span class="maint-doc-row-meta">' + meta + '</span>'
-        + '</div>'
-        + '<a class="maint-doc-row-link" href="/api/maintenance/docs/' + d.id + '/download" target="_blank" rel="noopener">Telecharger</a>'
-        + '<button type="button" class="maint-doc-row-del" data-form-doc-del="' + d.id + '">Supprimer</button>'
-        + '</div>';
-    }).join('');
-    list.querySelectorAll('[data-form-doc-del]').forEach(b => {
-      b.addEventListener('click', async () => {
-        if (!confirm('Supprimer ce document ?')) return;
-        try {
-          await api('/api/maintenance/docs/' + b.getAttribute('data-form-doc-del'), { method: 'DELETE' });
-          toast('Document supprime');
-          await _renderMaintFormDocs(code);
-          if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-        } catch(e) { toast(e && e.message ? e.message : 'Erreur', true); }
-      });
-    });
-  } catch(e) {
-    list.innerHTML = '<p style="color:var(--danger);font-size:12px">Impossible de charger les documents.</p>';
-  }
-}
 
 // Clic sur le bouton "+ Ajouter un fichier" -> ouvre le picker natif cache.
-async function _maintTriggerDocPicker() {
-  const codeInp = document.getElementById('maint-code');
-  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
-  if (!codeNow) { toast('Renseigne d\'abord le code', true); return; }
-  // En creation : sauvegarde le code en base avant l'upload, pour eviter
-  // a l'utilisateur de devoir fermer le form et rouvrir en Modifier.
-  const codeExists = Array.isArray(_maintItems) && _maintItems.some(x => String(x.code) === String(codeNow));
-  if (!codeExists) {
-    const labelInp = document.getElementById('maint-label');
-    const labelNow = labelInp ? (labelInp.value || '').trim() : '';
-    if (!labelNow) { toast('Renseigne le libelle avant d\'attacher un fichier', true); return; }
-    const niveau = parseInt(document.getElementById('maint-niveau').value, 10) || 1;
-    const rawCat = (document.getElementById('maint-categorie')?.value || '').trim();
-    const categorie = (rawCat === 'entretien' || rawCat === 'remplacements' || rawCat === 'controles')
-      ? rawCat
-      : (rawCat === 'interventions' ? 'entretien' : 'controles');
-    // v2.2.17 — periodique forcé à true (concept retiré côté UI).
-    const periodique = true;
-    const intervalle  = (document.getElementById('maint-intervalle')?.value  || '').trim();
-    const metrage_ref = (document.getElementById('maint-metrage-ref')?.value || '').trim();
-    const payload = { code: codeNow, label: labelNow, niveau, categorie, periodique, intervalle, metrage_ref };
-    try {
-      await api('/api/maintenance/codes', { method: 'POST', body: JSON.stringify(payload) });
-      toast('Code enregistre - upload en cours');
-      _maintEditCode = codeNow;
-      codeInp.disabled = true;
-      await loadMaintCodes();
-      const listEl = document.getElementById('maint-form-docs-list');
-      if (listEl) { listEl.style.display = ''; listEl.innerHTML = '<p style="color:var(--muted);font-size:12px;font-style:italic">Aucun document attache pour l\'instant.</p>'; }
-    } catch(e) {
-      toast(e && e.message ? e.message : 'Impossible d\'enregistrer le code', true);
-      return;
-    }
-  }
-  const inp = document.getElementById('maint-form-doc-file');
-  if (inp) inp.click();
-}
 
 // Compat : appele par openMaintForm, mais l'upload est declenche directement
 // par onchange du <input type=file>. No-op.
-function _bindMaintFormDocUpload(code) { /* upload direct via _maintOnDocFileChange */ }
 
 // Picker onchange -> upload immediat (pas de bouton Envoyer intermediaire).
-async function _maintOnDocFileChange() {
-  const inp = document.getElementById('maint-form-doc-file');
-  const f = inp && inp.files && inp.files[0];
-  if (!f) return;
-  if (f.size > 20 * 1024 * 1024) {
-    toast('Fichier trop volumineux (max 20 Mo)', true);
-    inp.value = '';
-    return;
-  }
-  const codeInp = document.getElementById('maint-code');
-  const codeNow = codeInp ? (codeInp.value || '').trim() : '';
-  if (!codeNow) {
-    toast('Renseigne d\'abord le code', true);
-    inp.value = '';
-    return;
-  }
-  const btn = document.getElementById('maint-form-doc-add-btn');
-  if (btn) btn.disabled = true;
-  const fd = new FormData();
-  fd.append('file', f);
-  try {
-    const res = await fetch('/api/maintenance/codes/' + encodeURIComponent(codeNow) + '/docs', {
-      method: 'POST', credentials: 'same-origin', body: fd
-    });
-    if (!res.ok) {
-      let msg = 'Upload echoue';
-      try { const j = await res.json(); msg = j.detail || msg; } catch(e){}
-      toast(msg, true); return;
-    }
-    toast('Document ajoute');
-    inp.value = '';
-    const listEl = document.getElementById('maint-form-docs-list');
-    if (listEl) listEl.style.display = '';
-    await _renderMaintFormDocs(codeNow);
-    if (typeof loadMaintCodes === 'function') await loadMaintCodes();
-  } catch(e) {
-    toast('Erreur reseau', true);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
 
-function _maintResetDocPicker() {
-  const inp = document.getElementById('maint-form-doc-file');
-  if (inp) inp.value = '';
-}
 // Active/désactive Intervalle et Réf. métrage selon Périodique :
 //   - Périodique = OUI : les deux champs sont actifs (l'utilisateur peut
 //     remplir l'intervalle de temps et/ou la référence métrage).
 //   - Périodique = NON : les deux champs sont vidés et grisés.
-function _maintTogglePeriodiqueUI(){
-  // v2.2.17 — perSel retiré (périodicité cachée).
-  const intInp = document.getElementById('maint-intervalle');
-  const mInp   = document.getElementById('maint-metrage-ref');
-  if (!perSel || !intInp || !mInp) return;
-  perSel.disabled = false;
-  const isPeriodic = (perSel.value === 'oui');
-  intInp.disabled = !isPeriodic;
-  intInp.style.opacity = isPeriodic ? '1' : '0.5';
-  mInp.disabled   = !isPeriodic;
-  mInp.style.opacity = isPeriodic ? '1' : '0.5';
-  mInp.style.display = '';
-  if (!isPeriodic) {
-    intInp.value = '';
-    mInp.value   = '';
-  }
-}
 function closeMaintForm() {
   _maintEditCode = null;
   const wrap = document.getElementById('maint-form-wrap');

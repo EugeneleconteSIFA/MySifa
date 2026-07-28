@@ -597,7 +597,7 @@ def emit_label(payload: LabelRequest, request: Request):
                             f"sur l'imprimante « {imp['nom']} ». À configurer dans /settings > Imprimantes."),
                 )
             tpl_content = tpl["contenu"]
-            tpl_id = tpl_id
+            tpl_id = tpl["id"]
         # Rendu + insertion des jobs
         try:
             payload_bytes = render_template(tpl_content, payload.data or {}, imp["langage"])
