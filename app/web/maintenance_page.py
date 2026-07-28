@@ -2692,6 +2692,14 @@ function switchView(name){
     b.classList.toggle('active', b.getAttribute('data-view') === name);
   });
   if(name === 'planning'){
+    // v2.5.7 : restaure le sous-onglet Planning persiste (Calendrier / Historique)
+    // avant de faire quoi que ce soit — sinon on retombe systematiquement sur
+    // Calendrier apres refresh, meme si l'utilisateur etait sur Historique.
+    let _persistedSub = 'calendrier';
+    try{ _persistedSub = (typeof _getPlanSubtab === 'function') ? _getPlanSubtab() : 'calendrier'; }catch(e){}
+    if(_persistedSub !== 'calendrier' && _persistedSub !== 'historique') _persistedSub = 'calendrier';
+    // Applique l'affichage du bon sous-onglet (boutons + display des containers).
+    if(typeof setPlanSubtab === 'function') setPlanSubtab(_persistedSub);
     // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
     // (cas où le fetch initial a déjà résolu au boot).
     if(typeof setCalView === 'function') setCalView('week');
@@ -2706,6 +2714,11 @@ function switchView(name){
       // layout, pour couvrir les navigateurs qui calculent les
       // dimensions tardivement.
       setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
+      // v2.5.7 : filet supplementaire — certains navigateurs ne stabilisent le
+      // layout du calendrier qu'apres 400-500ms au premier chargement (fonts,
+      // fetches paralleles). Sans ce dernier renderCal, les events ne se
+      // positionnent pas avant que l'utilisateur ne change d'onglet.
+      setTimeout(() => { try{ renderCal(); }catch(e){} }, 500);
     })();
   }
   // Vues opérateur : recharge la liste à l'arrivée.
