@@ -655,6 +655,14 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;margin-left:6px;border-radius:999px;background:var(--danger,#f87171);color:#fff;font-size:10px;font-weight:700;line-height:1;vertical-align:middle}
 .maint-tab-badge.hidden{display:none}
 .maint-machine-btn.active .maint-tab-badge,.maint-cat-btn.active .maint-tab-badge{background:#fff;color:var(--danger,#f87171)}
+/* v2.4.27 : variante orange pour "Dû bientôt" — s'affiche à côté de la pastille rouge */
+.maint-tab-badge.maint-tab-badge-soon{background:#fb923c;margin-left:4px}
+.maint-machine-btn.active .maint-tab-badge.maint-tab-badge-soon,
+.maint-cat-btn.active .maint-tab-badge.maint-tab-badge-soon{background:#fff;color:#fb923c}
+/* v2.4.27 : pastille rouge sur l'item sidebar Maintenance = total retards toutes machines */
+.nav-btn-badge{margin-left:auto;min-width:20px;height:18px;padding:0 6px;border-radius:999px;background:var(--danger,#f87171);color:#fff;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.nav-btn-badge.hidden{display:none}
+.nav-btn.active .nav-btn-badge{background:#fff;color:var(--danger,#f87171)}
 /* Petite pastille "count" à côté des chips statut (info neutre, non alerte) */
 .maint-chip-count{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 5px;margin-left:2px;border-radius:999px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:700;line-height:1}
 .maint-chip.active .maint-chip-count{background:rgba(255,255,255,.25);color:#fff}
@@ -1538,6 +1546,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     <button type="button" class="nav-btn adm-only active" data-view="maintenance" onclick="switchView('maintenance')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
       Maintenance
+      <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
     </button>
     <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -1621,13 +1630,13 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="maint-machine-toolbar">
           <label class="maint-toolbar-label">Machine</label>
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span></button>
-            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span></button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 1" title="Opérations dû bientôt sur cette machine">0</span></button>
+            <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 2" title="Opérations dû bientôt sur cette machine">0</span></button>
           </div>
           <label class="maint-toolbar-label">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
-            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span></button>
-            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span></button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
+            <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
           <label class="maint-toolbar-label">Statut</label>
           <div class="maint-chip-group" id="maint-status-chips" role="tablist">
@@ -5659,71 +5668,83 @@ const MAINT_STATUS_LABELS = {
 // Liste des machines exposées dans la vue Maintenance (accueil).
 const MAINT_HOME_MACHINES = ['Cohésio 1', 'Cohésio 2'];
 
-// Recalcule et injecte les pastilles compteur retard sur les onglets Machine
-// et Catégorie, plus les compteurs par statut dans la sous-toolbar.
-// Note : ne dépend pas de l'onglet actif — on scanne l'ensemble pour que la
-// pastille "Cohésio 2" reste visible même en visualisant Cohésio 1.
+// v2.4.27 : refonte — pastilles Machine et Catégorie affichent maintenant
+// 2 pastilles chacune (rouge = retards, orange = dû bientôt), et incluent les
+// pièces d'usure (par POSITION, comme le comptage des chips Statut v2.4.25).
+// En bonus : pastille rouge globale sur l'item sidebar "Maintenance" =
+// somme des retards toutes machines confondues (visible depuis les autres
+// vues internes Planning / Alertes / Opérations).
 function _refreshMaintCounters(){
   const items = (OPS_TYPES_STATE.list || []).filter(it => !!it.periodique);
-  // Compteurs de retards par machine (toutes catégories confondues)
-  MAINT_HOME_MACHINES.forEach(machine => {
-    let overdueCount = 0;
-    items.forEach(it => {
-      const freqDays = _parseFrequenceDays(it.intervalle);
-      if(freqDays == null || freqDays <= 0) return;
-      const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
-      if(!last) return;
-      try{
-        const d = new Date(last);
-        const today = new Date();
-        const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-        const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
-        if(daysSince > freqDays) overdueCount++;
-      }catch(e){}
-    });
-    const badge = document.querySelector('[data-maint-machine-badge="' + machine.replace(/"/g,'\\"') + '"]');
-    if(badge){
-      if(overdueCount > 0){
-        badge.textContent = String(overdueCount);
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
-      }
-    }
-  });
-  // Compteurs de retards par catégorie (sur la machine actuellement sélectionnée)
-  const machine = getMaintMachine();
-  const catMap = { entretien: 0, remplacements: 0 };
-  items.forEach(it => {
-    const cat = it.categorie;
-    let bucket = null;
-    if(cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi') bucket = 'entretien';
-    else if(cat === 'remplacements') bucket = 'remplacements';
-    if(!bucket) return;
+  // Helper : status d'un item périodique pour une machine donnée.
+  const periodicStatus = (it, machine) => {
     const freqDays = _parseFrequenceDays(it.intervalle);
-    if(freqDays == null || freqDays <= 0) return;
+    if(freqDays == null || freqDays <= 0) return 'unknown';
     const last = _lastInterventionFor(it.nom, machine, OPS_STATE.list);
-    if(!last) return;
+    if(!last) return 'never';
     try{
       const d = new Date(last);
       const today = new Date();
       const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const tMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const daysSince = Math.floor((tMid - dMid) / (1000 * 60 * 60 * 24));
-      if(daysSince > freqDays) catMap[bucket]++;
-    }catch(e){}
+      return _maintComputeStatus(freqDays, daysSince);
+    }catch(e){ return 'unknown'; }
+  };
+  // Helper : maj DOM d'une pastille — text = count si >0, sinon hidden.
+  const setBadge = (el, count) => {
+    if(!el) return;
+    if(count > 0){ el.textContent = String(count); el.classList.remove('hidden'); }
+    else { el.classList.add('hidden'); }
+  };
+  let globalOverdue = 0;
+  // ── Compteurs par MACHINE (toutes catégories + pièces d'usure) ─────
+  MAINT_HOME_MACHINES.forEach(machine => {
+    let overdue = 0, soon = 0;
+    items.forEach(it => {
+      const st = periodicStatus(it, machine);
+      if(st === 'overdue') overdue++;
+      else if(st === 'soon') soon++;
+    });
+    WEARPART_PIECES.forEach(p => {
+      _wearPartPositionsOf(p).forEach(pos => {
+        const st = _wearPartPositionStatus(p.id, pos, machine);
+        if(st === 'overdue') overdue++;
+        else if(st === 'soon') soon++;
+      });
+    });
+    globalOverdue += overdue;
+    const esc = machine.replace(/"/g, '\\"');
+    setBadge(document.querySelector('[data-maint-machine-badge="' + esc + '"]'), overdue);
+    setBadge(document.querySelector('[data-maint-machine-badge-soon="' + esc + '"]'), soon);
   });
-  Object.keys(catMap).forEach(cat => {
-    const badge = document.querySelector('[data-maint-cat-badge="' + cat + '"]');
-    if(!badge) return;
-    if(catMap[cat] > 0){
-      badge.textContent = String(catMap[cat]);
-      badge.classList.remove('hidden');
-    } else {
-      badge.classList.add('hidden');
-    }
+  // ── Compteurs par CATÉGORIE (sur la machine active) ────────────────
+  const machine = getMaintMachine();
+  const cats = { entretien: {o:0, s:0}, remplacements: {o:0, s:0} };
+  items.forEach(it => {
+    const cat = it.categorie;
+    let bucket = null;
+    if(cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi') bucket = 'entretien';
+    else if(cat === 'remplacements') bucket = 'remplacements';
+    if(!bucket) return;
+    const st = periodicStatus(it, machine);
+    if(st === 'overdue') cats[bucket].o++;
+    else if(st === 'soon') cats[bucket].s++;
   });
+  // Pièces d'usure = catégorie "remplacements"
+  WEARPART_PIECES.forEach(p => {
+    _wearPartPositionsOf(p).forEach(pos => {
+      const st = _wearPartPositionStatus(p.id, pos, machine);
+      if(st === 'overdue') cats.remplacements.o++;
+      else if(st === 'soon') cats.remplacements.s++;
+    });
+  });
+  Object.keys(cats).forEach(cat => {
+    setBadge(document.querySelector('[data-maint-cat-badge="' + cat + '"]'), cats[cat].o);
+    setBadge(document.querySelector('[data-maint-cat-badge-soon="' + cat + '"]'), cats[cat].s);
+  });
+  // ── Pastille sidebar globale (retards toutes machines) ─────────────
+  setBadge(document.getElementById('nav-maint-badge'), globalOverdue);
 }
 
 // Applique l'état actif visuel sur les chips statut + groupement.
