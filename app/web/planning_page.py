@@ -253,11 +253,21 @@ body.light .slot .line-exig{background:#fef9c3;color:#713f12;border-color:#ca8a0
 .slot .line-no-of{display:block;width:calc(100% - 4px);max-width:100%;margin-top:4px;padding:3px 5px;border-radius:5px;
   font-size:10px;font-style:italic;color:var(--muted);background:rgba(148,163,184,.12);
   border:1px solid rgba(148,163,184,.25);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
-.slot-annule{outline:1.5px dashed rgba(248,113,113,.75);outline-offset:-3px}
-.badge-annule{background:rgba(248,113,113,.16);color:#f87171;font-size:10px;font-weight:800;
-  padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle;letter-spacing:.3px;
-  border:1px solid rgba(248,113,113,.45)}
-body.light .badge-annule{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
+/* Dossier annule en production : signal fort, visible d'un coup d'oeil sur
+   la timeline. On passe par border + box-shadow (et pas outline) pour ne
+   pas entrer en conflit avec le surlignage de recherche, qui utilise
+   outline. Les !important battent le style inline du slot (border/shadow
+   couleur machine) : c'est voulu, l'annulation prime sur la couleur. */
+.slot.slot-annule{border:2px solid #ef4444!important;
+  box-shadow:0 0 0 2px rgba(239,68,68,.55),0 3px 14px rgba(239,68,68,.5)!important;z-index:9}
+.slot.slot-annule:hover{box-shadow:0 0 0 3px rgba(239,68,68,.85),0 5px 20px rgba(239,68,68,.62)!important}
+body.light .slot.slot-annule{border-color:#dc2626!important;
+  box-shadow:0 0 0 2px rgba(220,38,38,.45),0 3px 14px rgba(220,38,38,.38)!important}
+.badge-annule{background:#ef4444;color:#fff;font-size:10px;font-weight:800;
+  padding:1px 6px;border-radius:4px;margin-left:4px;vertical-align:middle;letter-spacing:.4px;
+  text-transform:uppercase;border:1px solid rgba(255,255,255,.35);
+  box-shadow:0 1px 4px rgba(239,68,68,.55)}
+body.light .badge-annule{background:#dc2626;color:#fff;border-color:rgba(255,255,255,.5)}
 .tip-annule{margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(248,113,113,.16);
   border:1.5px solid var(--danger);font-size:12px;font-weight:700;color:var(--danger);line-height:1.4}
 .tip-annule .k{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px;font-weight:600}
@@ -524,6 +534,14 @@ body.light .btn-p{color:#fff}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
+/* Un dossier trouve par la recherche redevient pleinement lisible, meme
+   s'il est termine (sinon l'attenuation .55 + grayscale le rend illisible
+   pile au moment ou on le cherche). */
+.slot.slot-reel-termine.tl-match{opacity:1!important;filter:none!important}
+.slot.tl-match-current{z-index:25;transform:scale(1.045)}
+.slot.tl-match-current .line1{font-weight:800}
+.slot.slot-reel-termine.tl-match-current{opacity:1!important;filter:none!important}
+#tbody.has-search .tr.tr-reel-termine{opacity:1;filter:none}
 .slot.tl-drop-over{outline:3px solid var(--accent);outline-offset:3px;z-index:30;filter:brightness(1.15)}
 /* À placer au planning — zébré */
 .tr.tr-aplacer{background:repeating-linear-gradient(135deg,var(--bg-dark),var(--bg-dark) 10px,rgba(34,211,238,.07) 10px,rgba(34,211,238,.07) 20px)!important}
@@ -1308,6 +1326,11 @@ function renderEntries(){
   if(!tbody) return;
   const sl=S.timeline;
   const filtered=filterEntries(S.entries,S.searchQuery);
+  // Recherche active : on retire l'attenuation des lignes terminees (CSS)
+  // et on leve le plafond TERMINE_KEEP, sinon un dossier termine qu'on
+  // cherche explicitement peut ne pas apparaitre du tout dans la liste.
+  const hasSearchQ=!!(S.searchQuery&&S.searchQuery.trim());
+  tbody.classList.toggle("has-search", hasSearchQ);
 
   // ── Sauvegarde du scroll courant (avant toute modification du DOM) ────────
   const prevScroll=tbody.scrollTop;
@@ -1324,8 +1347,9 @@ function renderEntries(){
   const active=filtered.filter(e=>e.statut!=="termine");
   const activeRun=active.filter(e=>e.statut==="en_cours");
   const activeWait=active.filter(e=>e.statut!=="en_cours");
-  const hiddenCount=_showAllTermine?0:Math.max(0,terminated.length-TERMINE_KEEP);
-  const visibleTerminated=_showAllTermine?terminated:terminated.slice(-TERMINE_KEEP);
+  const showAllTerm=_showAllTermine||hasSearchQ;
+  const hiddenCount=showAllTerm?0:Math.max(0,terminated.length-TERMINE_KEEP);
+  const visibleTerminated=showAllTerm?terminated:terminated.slice(-TERMINE_KEEP);
   // Ordre UX attendu : "En cours" puis "En attente", puis les derniers "Terminé" en bas.
   // Ne pas trier S.entries : on reconstruit uniquement l'ordre d'affichage (data-idx reste cohérent).
   const visible=[...activeRun,...activeWait,...visibleTerminated];
@@ -2042,10 +2066,13 @@ function updateTlMatchInfo(){
   if(navEl) navEl.style.display=(q&&n>0)?"flex":"none";
   // Highlight : cyan sur le courant, blanc atténué sur les autres visibles
   const curId=n>0?String(_allTlMatches[S.tlSearchIdx].entry_id):"";
-  document.querySelectorAll("#tl-blocks-container .slot.tl-match").forEach(el=>{
-    const isCur=el.dataset.eid===curId;
-    el.style.outline=isCur?"3px solid var(--accent)":"3px solid rgba(255,255,255,.7)";
-    el.style.outlineOffset="2px";
+  document.querySelectorAll("#tl-blocks-container .slot").forEach(el=>{
+    const isMatch=el.classList.contains("tl-match");
+    const isCur=isMatch && el.dataset.eid===curId;
+    el.classList.toggle("tl-match-current", isCur);
+    if(!isMatch) return;
+    el.style.outline=isCur?"4px solid var(--accent)":"3px solid rgba(255,255,255,.7)";
+    el.style.outlineOffset=isCur?"3px":"2px";
   });
   // Scroll vers le slot courant (s'il est dans le DOM)
   if(curId){
