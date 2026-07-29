@@ -480,6 +480,17 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-recur-field label{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
 .tmpl-recur-field select,.tmpl-recur-field input{padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-family:inherit;font-size:13px}
 .tmpl-recur-field select:focus,.tmpl-recur-field input:focus{border-color:var(--accent);outline:none}
+/* v2.5.13 : toggle switch pour l'activation de la recurrence (remplace la checkbox) */
+.tmpl-recur-switch{display:inline-flex;align-items:center;gap:10px;cursor:pointer;user-select:none;font-size:12px;color:var(--text2);font-weight:600}
+.tmpl-recur-switch input{position:absolute;opacity:0;width:0;height:0}
+.tmpl-recur-slider{position:relative;display:inline-block;width:38px;height:20px;background:var(--border);border-radius:20px;transition:background .18s}
+.tmpl-recur-slider::before{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:var(--card);border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .18s,background .18s}
+.tmpl-recur-switch input:checked ~ .tmpl-recur-slider{background:var(--accent)}
+.tmpl-recur-switch input:checked ~ .tmpl-recur-slider::before{transform:translateX(18px);background:#fff}
+.tmpl-recur-switch input:focus-visible ~ .tmpl-recur-slider{box-shadow:0 0 0 3px rgba(34,211,238,.25)}
+.tmpl-recur-switch:hover .tmpl-recur-slider{filter:brightness(1.08)}
+.tmpl-recur-switch-lbl{transition:color .12s}
+.tmpl-recur-switch input:checked ~ .tmpl-recur-switch-lbl{color:var(--accent)}
 /* Panel "Gestion des modèles" sous l'historique — style aligné sur Gestion des alertes */
 .tmpl-manage-panel .tmpl-manage-item{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--card);margin-bottom:10px;transition:border-color .12s}
 .tmpl-manage-panel .tmpl-manage-item:hover{border-color:var(--accent)}
@@ -2542,9 +2553,10 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="tmpl-recur-block">
           <div class="tmpl-recur-head">
             <span class="tmpl-recur-title">Récurrence automatique</span>
-            <label class="tmpl-recur-toggle">
+            <label class="tmpl-recur-switch" title="Activer / désactiver la récurrence">
               <input type="checkbox" id="tmpl-ed-recur-active" onchange="onTmplRecurToggle(this)">
-              <span>Activer</span>
+              <span class="tmpl-recur-slider" aria-hidden="true"></span>
+              <span class="tmpl-recur-switch-lbl">Activer</span>
             </label>
           </div>
           <div class="tmpl-recur-fields" id="tmpl-ed-recur-fields">
@@ -11728,7 +11740,6 @@ function renderTemplateManagePanel(){
     const lastUsed = t.last_event_date
       ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
       : '';
-    const toggleLbl = t.recurrence_active ? 'Désactiver' : 'Activer';
     return '<div class="tmpl-manage-item" data-tmpl-id="' + escAttr(t.id) + '">' +
       '<div class="tmpl-manage-row">' +
         '<div>' +
@@ -11742,12 +11753,10 @@ function renderTemplateManagePanel(){
       '</div>' +
       '<div class="tmpl-manage-row" style="justify-content:flex-end">' +
         '<div class="tmpl-manage-actions">' +
+          // v2.5.13 : toggle recurrence + generate-now retires -- l'utilisateur
+          // active/desactive la recurrence via Editer (toggle switch dans la modale).
           '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">Éditer</button>' +
           '<button type="button" onclick="duplicateTemplate(' + escAttr(t.id) + ')">Dupliquer</button>' +
-          '<button type="button" onclick="toggleTemplateRecurrence(' + escAttr(t.id) + ',' + (!t.recurrence_active) + ')">' + toggleLbl + ' récurrence</button>' +
-          (t.recurrence_active
-            ? '<button type="button" onclick="generateTemplateNow(' + escAttr(t.id) + ')">Générer maintenant</button>'
-            : '') +
           '<button type="button" class="danger" onclick="confirmDeleteTemplate(' + escAttr(t.id) + ')">Supprimer</button>' +
         '</div>' +
       '</div>' +
@@ -12030,14 +12039,24 @@ async function submitTemplateEditor(e){
     }
     const d = await r.json();
     const resynced = d.resynced_events || 0;
-    showToast(_TMPL_EDIT_ID
-      ? ('Modèle enregistré' + (resynced ? ` — ${resynced} créneau${resynced > 1 ? 'x' : ''} futur${resynced > 1 ? 's' : ''} resynchronisé${resynced > 1 ? 's' : ''}.` : '.'))
-      : 'Modèle créé.', 'info');
+    // v2.5.13 : mention les creneaux futurs supprimes si la recurrence a ete desactivee.
+    const deletedFuture = d && d.deleted_future_events ? d.deleted_future_events : 0;
+    let toastMsg;
+    if(!_TMPL_EDIT_ID){
+      toastMsg = 'Mod\u00e8le cr\u00e9\u00e9.';
+    } else {
+      const parts = ['Mod\u00e8le enregistr\u00e9'];
+      if(resynced) parts.push(resynced + ' cr\u00e9neau' + (resynced > 1 ? 'x' : '') + ' futur' + (resynced > 1 ? 's' : '') + ' resynchronis' + (resynced > 1 ? '\u00e9s' : '\u00e9'));
+      if(deletedFuture) parts.push(deletedFuture + ' cr\u00e9neau' + (deletedFuture > 1 ? 'x' : '') + ' futur' + (deletedFuture > 1 ? 's' : '') + ' nettoy' + (deletedFuture > 1 ? '\u00e9s' : '\u00e9') + ' (r\u00e9currence d\u00e9sactiv\u00e9e)');
+      toastMsg = parts.join(' \u2014 ') + '.';
+    }
+    showToast(toastMsg, 'info');
     closeTemplateEditor();
     await loadTemplates(true);
     renderTemplatesList();
     refreshCaseTemplatePicker();
-    if(resynced > 0){ await refreshPlanning(); renderCal(); }
+    // v2.5.13 : refresh calendrier si des events ont bouge (resync OU purge desactivation)
+    if(resynced > 0 || deletedFuture > 0){ await refreshPlanning(); renderCal(); }
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 

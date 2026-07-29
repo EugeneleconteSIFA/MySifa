@@ -1383,8 +1383,22 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
             meta_updates["recurrence_time_start"] = body.recurrence_time_start or None
         if body.recurrence_time_end is not None:
             meta_updates["recurrence_time_end"] = body.recurrence_time_end or None
+        # v2.5.13 : si la recurrence est desactivee, purge les creneaux FUTURS
+        # generes depuis ce template (les passes restent, comme dans delete_template).
+        deleted_future = 0
         if body.recurrence_active is not None:
             meta_updates["recurrence_active"] = 1 if body.recurrence_active else 0
+            if not body.recurrence_active:
+                today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+                future_ids = [r["id"] for r in conn.execute(
+                    "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ?",
+                    (template_id, today),
+                ).fetchall()]
+                for eid in future_ids:
+                    conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+                    conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+                    conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
+                deleted_future = len(future_ids)
         if meta_updates:
             meta_updates["updated_at"] = now
             set_clause = ", ".join(f"{k}=?" for k in meta_updates)
@@ -1423,7 +1437,7 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
             resynced = _resync_future_events_from_template(conn, template_id)
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
-    return {"template": tmpl, "resynced_events": resynced}
+    return {"template": tmpl, "resynced_events": resynced, "deleted_future_events": deleted_future}
 
 
 @router.delete("/api/maintenance/templates/{template_id}")
