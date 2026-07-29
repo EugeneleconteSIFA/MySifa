@@ -7621,12 +7621,16 @@ Ressources :
     _me_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
     if "template_origin_date" not in _me_cols:
         conn.execute("ALTER TABLE maintenance_events ADD COLUMN template_origin_date TEXT")
-        # Backfill : pour tous les creneaux recurrents existants, on considere
-        # que leur date_prevue actuelle EST leur date d'origine (pas encore deplaces).
         conn.execute(
             "UPDATE maintenance_events SET template_origin_date = date_prevue "
             "WHERE template_id IS NOT NULL AND template_origin_date IS NULL"
         )
+    # v2.5.25 : maintenance_templates.default_operators_csv -- liste CSV des user_id
+    # affectés par défaut aux creneaux generes par la recurrence de ce template.
+    # Traite le probleme des creneaux recurrents orphelins (sans operateur).
+    _mt_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_templates)").fetchall()}
+    if "default_operators_csv" not in _mt_cols:
+        conn.execute("ALTER TABLE maintenance_templates ADD COLUMN default_operators_csv TEXT")
     conn.commit()
 
 

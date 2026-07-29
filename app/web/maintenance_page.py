@@ -362,6 +362,9 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
+/* v2.5.25 : badge warning si aucun operateur assigne -- coin haut-droit */
+.cal-event .cal-event-noop{position:absolute;top:3px;right:3px;width:16px;height:16px;background:var(--warn,#f59e0b);color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.35);cursor:help;z-index:6;border:1.5px solid var(--card,#111827)}
+.cal-event .cal-event-noop:hover{filter:brightness(1.1);transform:scale(1.1)}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
 /* v2.5.16 : drag live -- le bloc reste visible et bouge vraiment (comme Google Calendar).
    La bordure et l'ombre appuyees signalent l'etat 'drag actif'. */
@@ -2545,7 +2548,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         </div>
         <div class="case-ops-section">
           <div class="case-ops-head">
-            <label class="ops-field-label">Opérateurs assignés</label>
+            <label class="ops-field-label">Opérateurs assignés<span class="req" title="Au moins un opérateur recommandé">*</span></label>
             <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:220px" onchange="addCaseOperatorFromPicker(this)">
               <option value="">Ajouter un opérateur…</option>
             </select>
@@ -2679,6 +2682,16 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </button>
           </div>
           <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
+        </div>
+        <!-- v2.5.25 : operateurs par defaut pour la recurrence -->
+        <div class="case-ops-section" style="margin-top:14px">
+          <div class="case-ops-head">
+            <label class="ops-field-label">Opérateurs par défaut <span style="font-size:11px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:normal">— appliqués automatiquement aux créneaux générés par la récurrence</span></label>
+            <select class="ops-select" id="tmpl-ed-default-op-picker" style="width:auto;min-width:220px" onchange="addTmplDefaultOpFromPicker(this)">
+              <option value="">Ajouter un opérateur…</option>
+            </select>
+          </div>
+          <div class="case-ops-list" id="tmpl-ed-default-op-list"></div>
         </div>
         <div id="tmpl-ed-warning" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(251,191,36,.12);border:1px solid var(--warn);color:var(--warn);font-size:12px;line-height:1.5"></div>
       </div>
@@ -3429,6 +3442,20 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
+  // v2.5.25 : badge warning si aucun operateur assigne (admin uniquement, evite le bruit cote operateur).
+  if(MAINT_ROLE === 'admin' && !(ev.operators && ev.operators.length)){
+    const noop = document.createElement('div');
+    noop.className = 'cal-event-noop';
+    noop.textContent = '!';
+    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
+    noop.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
+      // Ouvre directement la modale d'edition sur ce creneau.
+      try{ editCase(ev.id); }catch(_){ openPlanningDetailsModal([ev]); }
+    });
+    div.appendChild(noop);
+  }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
@@ -3952,11 +3979,19 @@ function openPlanningDetailsModal(events){
         '</div>' +
         '<div class="plan-det-case-time">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-          escHtml(ev.start) + ' – ' + escHtml(ev.end) +
+          escHtml(ev.start) + ' \u2013 ' + escHtml(ev.end) +
         '</div>' +
       '</div>' +
-      // Bloc opérateurs (nouveau : groupe assigné au créneau — partagé).
-      '<div class="plan-det-case-ops-label">Opérateurs assignés (' +
+      // v2.5.25 : bandeau warning si aucun operateur assigne (admin uniquement).
+      (MAINT_ROLE === 'admin' && !(Array.isArray(ev.operators) && ev.operators.length)
+        ? '<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);color:var(--warn,#f59e0b);font-size:13px;line-height:1.4;display:flex;align-items:center;gap:10px">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' +
+            '<span style="flex:1"><strong>Aucun op\u00e9rateur assign\u00e9.</strong> Personne ne saura qu\'il y a une t\u00e2che.</span>' +
+            '<button type="button" onclick="editCase(\'' + escAttr(ev.id) + '\')" style="background:var(--warn,#f59e0b);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Assigner</button>' +
+          '</div>'
+        : '') +
+      // Bloc op\u00e9rateurs (nouveau : groupe assign\u00e9 au cr\u00e9neau \u2014 partag\u00e9).
+      '<div class="plan-det-case-ops-label">Op\u00e9rateurs assign\u00e9s (' +
         (Array.isArray(ev.operators) ? ev.operators.length : 0) + ')</div>' +
       '<div style="margin-top:6px;margin-bottom:6px">' +
         ((Array.isArray(ev.operators) && ev.operators.length)
@@ -4249,7 +4284,8 @@ function renderCaseOperators(){
   const picker = document.getElementById('case-mod-operator-picker');
   if(list){
     if(!_CASE_OPERATORS.length){
-      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun opérateur assigné pour l\'instant.</div>';
+      // v2.5.25 : hint explicite en warning discret si vide.
+      list.innerHTML = '<div style="font-size:12px;color:var(--warn,#f59e0b);padding:6px 0;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg> Aucun op\u00e9rateur assign\u00e9 \u2014 personne ne saura qu\'il y a une t\u00e2che.</div>';
     } else {
       list.innerHTML = _CASE_OPERATORS.map(op =>
         `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">×</button></div>`
@@ -12110,12 +12146,19 @@ function renderTemplateManagePanel(){
       ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
       : '';
     const opsBadge = '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>';
+    // v2.5.25 : badge nb d'operateurs par defaut (warning si 0 pour un recurrent actif)
+    const defaultOps = Array.isArray(t.default_operators) ? t.default_operators : [];
+    const defaultOpsBadge = defaultOps.length
+      ? '<span class="tmpl-manage-badge" title="' + escAttr(defaultOps.map(u => u.nom).join(', ')) + '">\u{1F464} ' + defaultOps.length + ' op\u00e9rateur' + (defaultOps.length > 1 ? 's' : '') + ' par d\u00e9faut</span>'
+      : (t.recurrence_active
+          ? '<span class="tmpl-manage-badge" style="background:rgba(245,158,11,.18);color:var(--warn,#f59e0b);border-color:rgba(245,158,11,.35)" title="R\u00e9currence active mais aucun op\u00e9rateur par d\u00e9faut \u2014 les cr\u00e9neaux g\u00e9n\u00e9r\u00e9s seront orphelins.">\u26a0 Sans op\u00e9rateur</span>'
+          : '');
     return '<div class="tmpl-manage-item" data-tmpl-id="' + escAttr(t.id) + '">' +
       '<div class="tmpl-manage-toggle-wrap">' + toggleHtml + '</div>' +
       '<div class="tmpl-manage-info">' +
         '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
         (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
-        '<div class="tmpl-manage-meta">' + opsBadge + recurBadge + nextOcc + stats + lastUsed + '</div>' +
+        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + nextOcc + stats + lastUsed + '</div>' +
       '</div>' +
       '<div class="tmpl-manage-actions">' +
         '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">\u00c9diter</button>' +
@@ -12248,10 +12291,15 @@ async function saveEventAsTemplate(eventId){
 
 let _TMPL_EDIT_ID = null;
 let _TMPL_OPS = [];
+// v2.5.25 : opérateurs par défaut du template en cours d'édition [{id, nom}]
+let _TMPL_DEFAULT_OPS = [];
 
 async function openTemplateEditor(templateId){
   _TMPL_EDIT_ID = templateId || null;
   _TMPL_OPS = [];
+  _TMPL_DEFAULT_OPS = [];
+  // v2.5.25 : charge le catalogue d'operateurs en arriere-plan pour le picker.
+  try{ if(typeof _loadOperatorsCatalog === 'function') await _loadOperatorsCatalog(); }catch(_){}
   const m = document.getElementById('tmpl-editor-modal');
   const nameEl = document.getElementById('tmpl-ed-name');
   const descEl = document.getElementById('tmpl-ed-desc');
@@ -12286,6 +12334,8 @@ async function openTemplateEditor(templateId){
           machines: Array.isArray(o.machines) ? o.machines.slice() : [],
         };
       });
+      // v2.5.25 : charge les operateurs par defaut du template
+      _TMPL_DEFAULT_OPS = (t.default_operators || []).map(u => ({ id: u.id, nom: u.nom }));
       if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
@@ -12299,6 +12349,7 @@ async function openTemplateEditor(templateId){
     if(lblEl) lblEl.textContent = 'Créer';
   }
   renderTmplOpsList();
+  renderTmplDefaultOps();
   if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
   document.body.style.overflow = 'hidden';
   setTimeout(() => { nameEl?.focus(); }, 60);
@@ -12310,6 +12361,46 @@ function closeTemplateEditor(){
   document.body.style.overflow = '';
   _TMPL_EDIT_ID = null;
   _TMPL_OPS = [];
+  _TMPL_DEFAULT_OPS = [];
+}
+
+// v2.5.25 : rendu du picker + de la liste d'operateurs par defaut du template.
+function renderTmplDefaultOps(){
+  const list = document.getElementById('tmpl-ed-default-op-list');
+  const picker = document.getElementById('tmpl-ed-default-op-picker');
+  if(list){
+    if(!_TMPL_DEFAULT_OPS.length){
+      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0;font-style:italic">Aucun op\u00e9rateur par d\u00e9faut \u2014 les cr\u00e9neaux g\u00e9n\u00e9r\u00e9s seront orphelins.</div>';
+    } else {
+      list.innerHTML = _TMPL_DEFAULT_OPS.map(op =>
+        '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">' +
+          escHtml(op.nom || '') +
+          '<button type="button" onclick="removeTmplDefaultOp(' + op.id + ')" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">\u00d7</button>' +
+        '</div>'
+      ).join('');
+    }
+  }
+  if(picker){
+    const assigned = new Set(_TMPL_DEFAULT_OPS.map(o => o.id));
+    const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
+    picker.innerHTML = '<option value="">Ajouter un op\u00e9rateur\u2026</option>' +
+      available.map(u => '<option value="' + u.id + '">' + escHtml(u.nom) + '</option>').join('');
+  }
+}
+
+function addTmplDefaultOpFromPicker(sel){
+  const id = parseInt(sel.value, 10);
+  if(!id) return;
+  const user = (_OPERATORS_CATALOG || []).find(u => u.id === id);
+  if(!user) return;
+  if(_TMPL_DEFAULT_OPS.find(o => o.id === id)) return;
+  _TMPL_DEFAULT_OPS.push({ id: user.id, nom: user.nom });
+  renderTmplDefaultOps();
+}
+
+function removeTmplDefaultOp(id){
+  _TMPL_DEFAULT_OPS = _TMPL_DEFAULT_OPS.filter(o => o.id !== id);
+  renderTmplDefaultOps();
 }
 
 function addTmplOp(){
@@ -12403,7 +12494,9 @@ async function submitTemplateEditor(e){
     let r;
     // v2.4.29 : fusion avec les champs recurrence
     const recur = _readRecurFromForm();
-    const payload = Object.assign({ name, description: desc, ops }, recur);
+    // v2.5.25 : inclut la liste des ids d'operateurs par defaut
+    const defaultOpIds = (_TMPL_DEFAULT_OPS || []).map(u => u.id);
+    const payload = Object.assign({ name, description: desc, ops, default_operators: defaultOpIds }, recur);
     if(_TMPL_EDIT_ID){
       r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
         method:'PATCH', credentials:'include',
